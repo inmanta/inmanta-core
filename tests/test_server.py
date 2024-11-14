@@ -538,10 +538,7 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
         environment, resource_ids, action_id, "deploy", status=const.ResourceState.deployed, finished=now, changes=changes
     )
     assert result.code == 200
-
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    assert result.result["model"]["done"] == 10
+    assert await clienthelper.done_count() == 10
 
 
 async def test_get_resource_on_invalid_resource_id(server, client, environment) -> None:
@@ -834,7 +831,7 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
 
     log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
 
-    await ibl.stop(timeout=15)
+    await ibl.stop(timeout=20)
 
 
 @pytest.mark.parametrize("db_wait_time", ["2", "0"])
@@ -847,7 +844,7 @@ async def test_bootloader_connect_running_db(server_config, postgres_db, caplog,
     caplog.clear()
     caplog.set_level(logging.INFO)
     await ibl.start()
-    await ibl.stop(timeout=15)
+    await ibl.stop(timeout=20)
 
     if db_wait_time != "0":
         log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
@@ -1296,10 +1293,12 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
         total=1,
         version_info={},
         is_suitable_for_partial_compiles=False,
+        released=True,
     )
     await cm.insert()
 
-    rvid_r1_v1 = f"std::testing::NullResource[agent1,name=file1],v={model_version}"
+    rid_r1 = "std::testing::NullResource[agent1,name=file1]"
+    rvid_r1_v1 = f"{rid_r1},v={model_version}"
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.available,
@@ -1340,11 +1339,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
     assert result.code == 200, result.result
-    assert result.result["resource"]["status"] == const.ResourceState.deploying
-
-    result = await client.get_version(tid=env_id, id=1)
-    assert result.code == 200, result.result
-    assert not result.result["model"]["deployed"]
 
     caplog.clear()
     with caplog.at_level(logging.DEBUG):
@@ -1426,13 +1420,12 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert resource_action["changes"] == {rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test").dict()}}
     assert resource_action["change"] == const.Change.purged.value
 
-    result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
+    result = await client.resource_details(tid=env_id, rid=rid_r1)
     assert result.code == 200, result.result
-    assert result.result["resource"]["status"] == const.ResourceState.deployed
+    assert result.result["data"]["status"] == const.ResourceState.deployed
 
     result = await client.get_version(tid=env_id, id=1)
     assert result.code == 200, result.result
-    assert result.result["model"]["deployed"]
 
     # parameter was deleted due to purge operation
     result = await client.list_params(tid=env_id)

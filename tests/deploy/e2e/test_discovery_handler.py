@@ -29,7 +29,7 @@ from inmanta.data.model import BaseModel
 from inmanta.resources import DiscoveryResource, Id, resource
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import retry_limited
-from utils import wait_for_n_deployed_resources
+from utils import wait_for_n_deployed_resources, wait_until_deployment_finishes
 
 
 @pytest.fixture
@@ -262,11 +262,11 @@ async def test_discovery_resource_requires_provides(
     result = await client.release_version(environment, version, push=True)
     assert result.code == 200
 
-    await wait_for_n_deployed_resources(client, environment, version, n=len(resources))
+    await wait_until_deployment_finishes(client, environment)
 
-    result = await client.get_version(tid=environment, id=version)
+    result = await client.resource_list(tid=environment)
     assert result.code == 200
-    discovery_resources = [r for r in result.result["resources"] if r["resource_type"] == "test::MyDiscoveryResource"]
+    discovery_resources = [r for r in result.result["data"] if r["id_details"]["resource_type"] == "test::MyDiscoveryResource"]
     assert len(discovery_resources) == 1
     assert discovery_resources[0]["status"] == "skipped"
 

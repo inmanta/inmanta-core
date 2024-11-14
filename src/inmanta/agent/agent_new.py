@@ -24,15 +24,17 @@ import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Callable, Coroutine, Optional, Union
 
-from inmanta import config, const, protocol
+import inmanta.server.config as opt
+from inmanta import config, const, data, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
+from inmanta.data.model import AttributeStateChange, DataBaseReport, ResourceVersionIdStr
 from inmanta.deploy import scheduler
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
+from inmanta.server.services.databaseservice import DatabaseMonitor
 from inmanta.types import Apireturn
 from inmanta.util import (
     CronSchedule,
@@ -83,6 +85,18 @@ class Agent(SessionEndpoint):
         self._time_triggered_actions: set[ScheduledTask] = set()
 
         self._set_deploy_and_repair_intervals()
+
+    async def start(self) -> None:
+        # Make mypy happy
+        assert data.Resource._connection_pool is not None
+        self._db_monitor = DatabaseMonitor(
+            data.Resource._connection_pool,
+            opt.db_name.get(),
+            opt.db_host.get(),
+        )
+        self._db_monitor.start()
+
+        await super().start()
 
     def _set_deploy_and_repair_intervals(self) -> None:
         """
@@ -193,10 +207,11 @@ class Agent(SessionEndpoint):
     async def stop(self) -> None:
         if self.working:
             await self.stop_working()
+        if self._db_monitor:
+            await self._db_monitor.stop()
         threadpools_to_join = [self.thread_pool]
         await self.executor_manager.join(threadpools_to_join, const.SHUTDOWN_GRACE_IOLOOP * 0.9)
         self.thread_pool.shutdown(wait=False)
-
         await join_threadpools(threadpools_to_join)
         await super().stop()
 
@@ -340,6 +355,20 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods.get_status)
     async def get_status(self) -> Apireturn:
         return 200, collect_report(self)
+
+    @protocol.handle(methods_v2.get_db_status)
+    async def get_db_status(self) -> DataBaseReport:
+        if self._db_monitor is None:
+            return DataBaseReport(
+                connected=False,
+                database="",
+                host="",
+                max_pool=0,
+                open_connections=0,
+                free_connections=0,
+                pool_exhaustion_count=0,
+            )
+        return await self._db_monitor.get_status()
 
     def check_storage(self) -> dict[str, str]:
         """

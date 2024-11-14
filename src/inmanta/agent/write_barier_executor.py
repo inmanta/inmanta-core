@@ -22,10 +22,9 @@ import uuid
 from collections.abc import Mapping
 from copy import deepcopy
 
-import inmanta.types
 from inmanta import const
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployResult, DryrunResult, FailedResources, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, FailedResources, ResourceDetails, ResourceInstallSpec
 from inmanta.data.model import ResourceIdStr
 
 
@@ -58,7 +57,7 @@ class WriteBarierExecutor(executor.Executor):
     ) -> DryrunResult:
         return await self.delegate.dry_run(deepcopy(resource), dry_run_id)
 
-    async def get_facts(self, resource: ResourceDetails) -> inmanta.types.Apireturn:
+    async def get_facts(self, resource: ResourceDetails) -> FactResult:
         return await self.delegate.get_facts(deepcopy(resource))
 
     async def join(self) -> None:

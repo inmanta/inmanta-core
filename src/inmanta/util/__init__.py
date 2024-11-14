@@ -850,6 +850,7 @@ class ExhaustedPoolWatcher:
 
     def __init__(self, pool: asyncpg.pool.Pool) -> None:
         self._exhausted_pool_events_count: int = 0
+        self._last_report: int = 0
         self._pool: asyncpg.pool.Pool = pool
 
     def report_and_reset(self, logger: logging.Logger) -> None:
@@ -857,20 +858,18 @@ class ExhaustedPoolWatcher:
         Log how many exhausted pool events were recorded since the last time the counter
         was reset, if any, and reset the counter.
         """
-        if self._exhausted_pool_events_count > 0:
-            logger.warning("Database pool was exhausted %d times in the past 24h.", self._exhausted_pool_events_count)
-            self._reset_counter()
+        since_last = self._exhausted_pool_events_count - self._last_report
+        if since_last > 0:
+            logger.warning("Database pool was exhausted %d times in the past 24h.", since_last)
+            self._last_report = self._exhausted_pool_events_count
 
     def check_for_pool_exhaustion(self) -> None:
         """
         Checks if the database pool is exhausted
         """
-        pool_exhausted: bool = self._pool.get_size() == self._pool.get_max_size() and self._pool.get_idle_size() == 0
+        pool_exhausted: bool = (self._pool.get_size() == self._pool.get_max_size()) and self._pool.get_idle_size() == 0
         if pool_exhausted:
             self._exhausted_pool_events_count += 1
-
-    def _reset_counter(self) -> None:
-        self._exhausted_pool_events_count = 0
 
 
 def remove_comment_part_from_specifier(to_clean: str) -> str:

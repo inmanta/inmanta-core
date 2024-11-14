@@ -28,13 +28,12 @@ import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import DeployResult, DryrunResult, FailedResources, ResourceDetails
+from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.const import ParameterSource
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader
 from inmanta.resources import Resource
-from inmanta.types import Apireturn
 from inmanta.util import NamedLock, join_threadpools
 
 
@@ -183,7 +182,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 ctx.set_status(const.ResourceState.failed)
                 ctx.exception(
                     "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
-                    resource_id=resource.id,
+                    resource_id=str(resource.id),
                     exception=repr(e),
                 )
         finally:
@@ -372,23 +371,32 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                     assert dryrun_result is not None, "Dryrun result cannot be None"
                     return dryrun_result
 
-    async def get_facts(self, resource: ResourceDetails) -> Apireturn:
+    async def get_facts(self, resource: ResourceDetails) -> FactResult:
         """
         Get facts for a given resource
         :param resource: The resource for which to get facts.
         """
         provider = None
+        started = datetime.datetime.now().astimezone()
         try:
             try:
                 resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.getfact)
             except Exception:
-                return 500
+                return FactResult(
+                    resource_id=resource.rvid,
+                    action_id=None,
+                    parameters=[],
+                    started=started,
+                    finished=datetime.datetime.now().astimezone(),
+                    messages=[],
+                    success=False,
+                    error_msg=f"Unable to deserialize resource {resource.id}",
+                )
             assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj)
             async with self.activity_lock:
                 try:
                     with self._cache:
-                        started = datetime.datetime.now().astimezone()
                         provider = await self.get_provider(resource_obj)
                         result = await asyncio.get_running_loop().run_in_executor(
                             self.thread_pool, provider.check_facts, ctx, resource_obj
@@ -406,28 +414,46 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         # Add facts set via the set_fact() method of the HandlerContext
                         parameters.extend(ctx.facts)
 
-                    await self.client.set_parameters(tid=self.environment, parameters=parameters)
-                    finished = datetime.datetime.now().astimezone()
-                    await self.client.resource_action_update(
-                        tid=self.environment,
-                        resource_ids=[resource.rvid],
+                    return FactResult(
+                        resource_id=resource.rvid,
                         action_id=ctx.action_id,
-                        action=const.ResourceAction.getfact,
+                        parameters=parameters,
                         started=started,
-                        finished=finished,
+                        finished=datetime.datetime.now().astimezone(),
                         messages=ctx.logs,
+                        success=True,
                     )
 
                 except Exception:
-                    self.logger.exception("Unable to retrieve fact")
+                    error_msg = "Unable to retrieve facts for resource %s" % resource.id
+                    self.logger.exception(error_msg)
+                    return FactResult(
+                        resource_id=resource.rvid,
+                        action_id=ctx.action_id,
+                        parameters=[],
+                        started=started,
+                        finished=datetime.datetime.now().astimezone(),
+                        messages=ctx.logs,
+                        success=False,
+                        error_msg=error_msg,
+                    )
 
         except Exception:
-            self.logger.exception("Unable to find a handler for %s", resource.id)
-            return 500
+            error_msg = "Unable to find a handler for %s" % resource.id
+            self.logger.exception(error_msg)
+            return FactResult(
+                resource_id=resource.rvid,
+                action_id=None,
+                parameters=[],
+                started=started,
+                finished=datetime.datetime.now().astimezone(),
+                messages=[],
+                success=False,
+                error_msg=error_msg,
+            )
         finally:
             if provider is not None:
                 provider.close()
-        return 200
 
 
 class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):

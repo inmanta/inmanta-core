@@ -32,7 +32,7 @@ import asyncpg
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import DeployResult
+from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
@@ -100,7 +100,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: ResourceStatus,
+        status: Optional[ResourceStatus] = None,
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
         """
@@ -112,7 +112,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         :param resource: The resource to report state for.
         :param attribute_hash: The resource's attribute hash for which this state applies. No scheduler state is updated if the
             hash indicates the state information is stale.
-        :param status: The new resource status.
+        :param status: The new resource status. If none, the old one is kept.
         :param deployment_result: The result of the deploy, iff one just finished, otherwise None.
         """
 
@@ -252,6 +252,7 @@ class ResourceScheduler(TaskManager):
         if self._running:
             return
         self.reset()
+        await self.reset_resource_state()
         await self._initialize()
         self._running = True
 
@@ -419,6 +420,18 @@ class ResourceScheduler(TaskManager):
                 requires,
                 reason="Deploy was triggered because a new version has been released",
             )
+
+    async def reset_resource_state(self) -> None:
+        """
+        Update resources on the latest version of the model stuck in "deploying" state. This can occur when the Scheduler is
+        killed in the middle of a deployment.
+        """
+        cm_version = await ConfigurationModel.get_latest_version(self.environment)
+        if cm_version is None:
+            return
+        version = cm_version.version
+
+        await data.Resource.reset_resource_state(self.environment, version)
 
     async def _new_version(
         self,
@@ -598,7 +611,7 @@ class ResourceScheduler(TaskManager):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: ResourceStatus,
+        status: Optional[ResourceStatus] = None,
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
         if deployment_result is DeploymentResult.NEW:
@@ -612,7 +625,8 @@ class ResourceScheduler(TaskManager):
                 # There is also no need to send out events because a newer version will have been scheduled.
                 return
             state: ResourceState = self._state.resource_state[resource]
-            state.status = status
+            if status is not None:
+                state.status = status
             if deployment_result is not None:
                 # first update state, then send out events
                 self._deploying_latest.remove(resource)
@@ -620,6 +634,11 @@ class ResourceScheduler(TaskManager):
                 self._work.finished_deploy(resource)
                 if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
+                else:
+                    # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
+                    # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
+                    # (or skip) causes it to become dirty now.
+                    self._state.dirty.add(resource)
                 # propagate events
                 if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
                     provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
@@ -687,3 +706,6 @@ class ResourceScheduler(TaskManager):
 
     async def dryrun_update(self, env: uuid.UUID, dryrun_result: executor.DryrunResult) -> None:
         await self._state_update_delegate.dryrun_update(env, dryrun_result)
+
+    async def set_parameters(self, fact_result: FactResult) -> None:
+        await self._state_update_delegate.set_parameters(fact_result)

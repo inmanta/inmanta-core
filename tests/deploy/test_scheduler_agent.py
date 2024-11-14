@@ -31,12 +31,11 @@ from uuid import UUID
 import asyncpg
 import pytest
 
-import inmanta.types
 import utils
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.executor import DeployResult, DryrunResult, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.const import Change
 from inmanta.data import ResourceIdStr
@@ -120,7 +119,7 @@ class DummyExecutor(executor.Executor):
     async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
         self.dry_run_count += 1
 
-    async def get_facts(self, resource: ResourceDetails) -> inmanta.types.Apireturn:
+    async def get_facts(self, resource: ResourceDetails) -> None:
         self.facts_count += 1
 
     async def open_version(self, version: int) -> None:
@@ -249,6 +248,9 @@ class DummyStateManager(StateUpdateManager):
             if status:
                 assert scheduler._state.resource_state[resource].status == status
 
+    def set_parameters(self, fact_result: FactResult) -> None:
+        pass
+
     async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
         self.state[Id.parse_id(dryrun_result.rvid).resource_str()] = const.ResourceState.dry
 
@@ -276,6 +278,9 @@ class TestScheduler(ResourceScheduler):
     async def read_version(
         self,
     ) -> None:
+        pass
+
+    async def reset_resource_state(self) -> None:
         pass
 
     async def _initialize(
@@ -1087,6 +1092,68 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert len(agent.scheduler._work._waiting) == 0
     assert len(agent.scheduler._work.agent_queues) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+
+    #################################################################################################
+    # Verify resources are marked as dirty after event propagation causes success->failure transfer #
+    #################################################################################################
+    agent.executor_manager.reset_executor_counters()
+
+    # set up initial state
+    resources = make_resources(version=16, r1_value=4, r2_value=0, r3_value=0)
+    await agent.scheduler._new_version(16, resources, make_requires(resources))
+    await retry_limited_fast(lambda: rid2 in executor2.deploys)
+    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
+    # verify initial state
+    assert rid2 not in executor2.deploys
+    assert agent.executor_manager.executors["agent1"].execute_count == 0
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
+    assert agent.executor_manager.executors["agent3"].execute_count == 0
+    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
+        status=state.ResourceStatus.UP_TO_DATE,
+        deployment_result=state.DeploymentResult.DEPLOYED,
+        blocked=state.BlockedStatus.NO,
+    )
+    assert len(agent.scheduler._state.dirty) == 0
+
+    # release change for r1, sending event to r2 when it finishes
+    resources = make_resources(version=17, r1_value=5, r2_value=0, r3_value=0)
+    await agent.scheduler._new_version(17, resources, make_requires(resources))
+    await retry_limited_fast(lambda: rid2 in executor2.deploys)
+
+    # verify that r2 is still in an assumed good state, even though we're deploying it
+    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
+        status=state.ResourceStatus.UP_TO_DATE,
+        deployment_result=state.DeploymentResult.DEPLOYED,
+        blocked=state.BlockedStatus.NO,
+    )
+    assert len(agent.scheduler._state.dirty) == 0
+
+    # fail r2
+    # failed works just as well but skipped is even more of an edge case
+    executor2.deploys[rid2].set_result(const.ResourceState.skipped)
+    await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
+    assert rid2 not in executor2.deploys
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 2
+    assert agent.executor_manager.executors["agent3"].execute_count == 0
+    # verify that r2 is considered dirty now, despite being in an assumed good operational state
+    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
+        # we have no data indicating that operational state has deviated from desired state => still UP_TO_DATE
+        status=state.ResourceStatus.UP_TO_DATE,
+        deployment_result=state.DeploymentResult.SKIPPED,
+        blocked=state.BlockedStatus.NO,
+    )
+    assert agent.scheduler._state.dirty == {rid2}
+
+    # trigger a deploy, verify that r2 gets scheduled because it is dirty
+    await agent.scheduler.deploy(reason="Test")
+    await retry_limited_fast(lambda: rid2 in executor2.deploys)
+    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 3
+    assert agent.executor_manager.executors["agent3"].execute_count == 0
 
 
 async def test_receive_events(agent: TestAgent, make_resource_minimal):

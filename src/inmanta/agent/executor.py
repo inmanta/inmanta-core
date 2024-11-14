@@ -35,8 +35,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, cast
 from uuid import UUID
 
-import inmanta.types
-import inmanta.util
 import packaging.requirements
 from inmanta import const
 from inmanta.agent import config as cfg
@@ -472,6 +470,19 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
 
 
 @dataclass
+class FactResult:
+    resource_id: ResourceVersionIdStr
+    # Failed fact checks may have empty action_id
+    action_id: Optional[uuid.UUID]
+    started: datetime.datetime
+    finished: datetime.datetime
+    success: bool
+    parameters: list[dict[str, Any]]
+    messages: list[LogLine]
+    error_msg: Optional[str] = None
+
+
+@dataclass
 class DeployResult:
     rvid: ResourceVersionIdStr
     action_id: uuid.UUID
@@ -552,7 +563,7 @@ class Executor(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def get_facts(self, resource: ResourceDetails) -> inmanta.types.Apireturn:
+    async def get_facts(self, resource: ResourceDetails) -> FactResult:
         """
         Get facts for a given resource
         :param resource: The resource for which to get facts.

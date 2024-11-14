@@ -49,7 +49,7 @@ from asyncpg.protocol import Record
 import inmanta.db.versions
 from crontab import CronTab
 from inmanta import const, resources, util
-from inmanta.const import DATETIME_MIN_UTC, DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
+from inmanta.const import DATETIME_MIN_UTC, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import (
@@ -66,6 +66,7 @@ from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
+from inmanta.util import parse_timestamp
 
 LOGGER = logging.getLogger(__name__)
 
@@ -3246,7 +3247,7 @@ class AgentInstance(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list[TAgentInstance]:
         if process is not None:
-            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, process=process, connection=connection)
+            objects = await cls.get_list(expired=None, tid=tid, name=endpoint, connection=connection)
         else:
             objects = await cls.get_list(expired=None, tid=tid, name=endpoint, connection=connection)
         return objects
@@ -4004,14 +4005,17 @@ class LogLine(DataDocument):
         return cls(level=LogLevel(level).name, msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
 
     def __getstate__(self) -> str:
+        if "timestamp" not in self._data:
+            self._data["timestamp"] = datetime.datetime.now().astimezone()
         # make pickle use json to keep leaking stuff
         # Will make the objects into json-like things
         # This method exists only to keep IPC light compatible with the json based RPC
-        return json_encode(self)
+        return json_encode(self._data)
 
     def __setstate__(self, state: str) -> None:
         # This method exists only to keep IPC light compatible with the json based RPC
-        self.__dict__.update(json.loads(state))
+        self._data = json.loads(state)
+        self._data["timestamp"] = parse_timestamp(cast(str, self._data["timestamp"]))
 
 
 @stable_api
@@ -4567,6 +4571,7 @@ class Resource(BaseDocument):
         # version field is present in the attributes dictionary served out via the API.
         record["attributes"]["version"] = version
         record["provides"] = [resources.Id.set_version_in_id(id, version) for id in record["provides"]]
+        del record["status"]
 
     @classmethod
     async def get_last_non_deploying_state_for_dependencies(
@@ -4720,6 +4725,38 @@ class Resource(BaseDocument):
         query = "UPDATE resource SET status='deployed' WHERE environment=$1 AND model=$2 AND resource_id =ANY($3) "
         async with cls.get_connection(connection) as connection:
             await connection.execute(query, environment, version, resource_ids)
+
+    @classmethod
+    async def reset_resource_state(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        """
+        Update resources on the latest version of the model stuck in "deploying" state. The status will be reset to the latest
+        non deploying status.
+
+        :param environment: The environment impacted by this
+        :param version: The version of the model impacted by this
+        :param connection: The connection to use
+        """
+        query = f"""
+            UPDATE resource AS updated_r
+            SET status=inconsistent_r.last_non_deploying_status::TEXT::resourcestate
+            FROM (
+                SELECT r.resource_id, r.status, r.model, ps.last_non_deploying_status
+                FROM {Resource.table_name()} r
+                INNER JOIN {ResourcePersistentState.table_name()} ps ON r.resource_id = ps.resource_id
+                AND r.environment = ps.environment
+                WHERE r.environment=$1 AND r.model = $2 AND r.status = 'deploying'
+            ) AS inconsistent_r
+            WHERE inconsistent_r.resource_id = updated_r.resource_id AND inconsistent_r.model = updated_r.model
+        """
+        values = [cls._get_value(environment), cls._get_value(version)]
+        async with cls.get_connection(connection) as connection:
+            await connection.execute(query, *values)
 
     @classmethod
     async def get_resource_ids_with_status(
@@ -5409,8 +5446,6 @@ class ConfigurationModel(BaseDocument):
     pip_config: Optional[PipConfig] = None
 
     released: bool = False
-    deployed: bool = False
-    result: const.VersionState = const.VersionState.pending
     version_info: Optional[dict[str, object]] = None
     is_suitable_for_partial_compiles: bool
 
@@ -5422,20 +5457,10 @@ class ConfigurationModel(BaseDocument):
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
-        self._status = {}
-        self._done = 0
 
     @classmethod
     def get_valid_field_names(cls) -> list[str]:
-        return super().get_valid_field_names() + ["status", "model"]
-
-    @property
-    def done(self) -> int:
-        # Keep resources which are deployed in done, even when a repair operation
-        # changes its state to deploying again.
-        if self.deployed:
-            return self.total
-        return self._done
+        return super().get_valid_field_names() + ["model"]
 
     @classmethod
     async def create_for_partial_compile(
@@ -5564,8 +5589,6 @@ class ConfigurationModel(BaseDocument):
                 skipped_for_undeployable,
                 partial_base,
                 released,
-                deployed,
-                result,
                 is_suitable_for_partial_compiles,
                 pip_config
         """
@@ -5591,18 +5614,6 @@ class ConfigurationModel(BaseDocument):
             return cls(from_postgres=True, **fields)
 
     @classmethod
-    async def _get_status_field(cls, environment: uuid.UUID, values: str) -> dict[str, str]:
-        """
-        This field is required to ensure backward compatibility on the API.
-        """
-        result = {}
-        values = json.loads(values)
-        for value_entry in values:
-            entry_uuid = str(uuid.uuid5(environment, value_entry["id"]))
-            result[entry_uuid] = value_entry
-        return result
-
-    @classmethod
     async def get_list(
         cls,
         *,
@@ -5613,7 +5624,6 @@ class ConfigurationModel(BaseDocument):
         no_obj: Optional[bool] = None,
         lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
-        no_status: bool = False,  # don't load the status field
         **query: object,
     ) -> list["ConfigurationModel"]:
         # sanitize and validate order parameters
@@ -5631,24 +5641,15 @@ class ConfigurationModel(BaseDocument):
         if offset is not None:
             offset = int(offset)
 
-        transient_states = ",".join(["$" + str(i) for i in range(1, len(const.TRANSIENT_STATES) + 1)])
-        transient_states_values = [cls._get_value(s) for s in const.TRANSIENT_STATES]
-        (filterstr, values) = cls._get_composed_filter(col_name_prefix="c", offset=len(transient_states_values) + 1, **query)
-        values = transient_states_values + values
+        (filterstr, values) = cls._get_composed_filter(col_name_prefix="c", offset=1, **query)
+        values = values
         where_statement = f"WHERE {filterstr} " if filterstr else ""
         order_by_statement = f"ORDER BY {order_by_column} {order} " if order_by_column else ""
         limit_statement = f"LIMIT {limit} " if limit is not None and limit > 0 else ""
         offset_statement = f"OFFSET {offset} " if offset is not None and offset > 0 else ""
         lock_statement = f" {lock.value} " if lock is not None else ""
-        query_string = f"""SELECT c.*,
-                           SUM(CASE WHEN r.status NOT IN({transient_states}) THEN 1 ELSE 0 END) AS done,
-                           to_json(array(SELECT jsonb_build_object('status', r2.status, 'id', r2.resource_id)
-                                         FROM {Resource.table_name()} AS r2
-                                         WHERE c.environment=r2.environment AND c.version=r2.model
-                                        )
-                           ) AS status
-                    FROM {cls.table_name()} AS c LEFT OUTER JOIN {Resource.table_name()} AS r
-                    ON c.environment = r.environment AND c.version = r.model
+        query_string = f"""SELECT c.*
+                    FROM {cls.table_name()} AS c
                     {where_statement}
                     GROUP BY c.environment, c.version
                     {order_by_statement}
@@ -5660,29 +5661,11 @@ class ConfigurationModel(BaseDocument):
         for in_record in query_result:
             record = dict(in_record)
             if no_obj:
-                if no_status:
-                    record["status"] = {}
-                else:
-                    record["status"] = await cls._get_status_field(record["environment"], record["status"])
                 result.append(record)
             else:
-                done = record.pop("done")
-                if no_status:
-                    status = {}
-                    record.pop("status")
-                else:
-                    status = await cls._get_status_field(record["environment"], record.pop("status"))
                 obj = cls(from_postgres=True, **record)
-                obj._done = done
-                obj._status = status
                 result.append(obj)
         return result
-
-    def to_dict(self) -> JsonType:
-        dct = BaseDocument.to_dict(self)
-        dct["status"] = dict(self._status)
-        dct["done"] = self.done
-        return dct
 
     @classmethod
     async def version_exists(cls, environment: uuid.UUID, version: int) -> bool:
@@ -5845,65 +5828,6 @@ class ConfigurationModel(BaseDocument):
         of resources which should get a skipped_for_undeployable state
         """
         return self.skipped_for_undeployable
-
-    async def mark_done(self, *, connection: Optional[asyncpg.connection.Connection] = None) -> None:
-        """mark this deploy as done"""
-        subquery = f"""(EXISTS(
-                    SELECT 1
-                    FROM {Resource.table_name()}
-                    WHERE environment=$1 AND model=$2 AND status != $3
-                ))::boolean
-            """
-        query = f"""UPDATE {self.table_name()}
-                SET
-                deployed=True, result=(CASE WHEN {subquery} THEN $4::versionstate ELSE $5::versionstate END)
-                WHERE environment=$1 AND version=$2 RETURNING result
-            """
-        values = [
-            self._get_value(self.environment),
-            self._get_value(self.version),
-            self._get_value(const.ResourceState.deployed),
-            self._get_value(const.VersionState.failed),
-            self._get_value(const.VersionState.success),
-        ]
-        result = await self._fetchval(query, *values, connection=connection)
-        self.result = const.VersionState[result]
-        self.deployed = True
-
-    @classmethod
-    async def mark_done_if_done(
-        cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
-        async with cls.get_connection(connection) as con:
-            """
-            Performs the query to mark done if done. Expects to be called outside of any transaction that writes resource state
-            in order to prevent race conditions.
-            """
-            async with con.transaction():
-                query = f"""UPDATE {ConfigurationModel.table_name()}
-                                SET deployed=True,
-                                    result=(CASE WHEN (
-                                                 EXISTS(SELECT 1
-                                                        FROM {Resource.table_name()}
-                                                        WHERE environment=$1 AND model=$2 AND status != $3)
-                                                 )::boolean
-                                            THEN $4::versionstate
-                                            ELSE $5::versionstate END
-                                    )
-                                WHERE environment=$1 AND version=$2 AND
-                                      total=(SELECT COUNT(*)
-                                             FROM {Resource.table_name()}
-                                             WHERE environment=$1 AND model=$2 AND status = any($6::resourcestate[])
-                            )"""
-                values = [
-                    cls._get_value(environment),
-                    cls._get_value(version),
-                    cls._get_value(ResourceState.deployed),
-                    cls._get_value(const.VersionState.failed),
-                    cls._get_value(const.VersionState.success),
-                    cls._get_value(DONE_STATES),
-                ]
-                await cls._execute_query(query, *values, connection=con)
 
     @classmethod
     async def get_increment(

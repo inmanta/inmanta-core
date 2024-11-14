@@ -24,7 +24,7 @@ import uuid
 from collections import abc
 from collections.abc import Sequence
 from enum import Enum, StrEnum
-from typing import ClassVar, NewType, Optional, Self, Union
+from typing import ClassVar, Mapping, NewType, Optional, Self, Union
 
 import pydantic
 import pydantic.schema
@@ -90,7 +90,7 @@ class SliceStatus(BaseModel):
     """
 
     name: str
-    status: dict[str, ArgumentTypes]
+    status: Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]
 
 
 class FeatureStatus(BaseModel):
@@ -870,3 +870,40 @@ class PipConfig(BaseModel):
 
 
 LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
+
+
+class DataBaseReport(BaseModel):
+    """
+    :param max_pool: maximal pool size
+    :param free_pool: number of connections not in use in the pool
+    :param open_connections: number of connections currently open
+    :param free_connections: number of connections currently open and not in use
+    :param pool_exhaustion_time: nr of seconds since start we observed the pool to be exhausted
+    """
+
+    connected: bool
+    database: str
+    host: str
+    max_pool: int
+    free_pool: int
+    open_connections: int
+    free_connections: int
+    pool_exhaustion_time: float
+
+    def __add__(self, other: "DataBaseReport") -> "DataBaseReport":
+        if not isinstance(other, DataBaseReport):
+            return NotImplemented
+        if other.database != self.database:
+            return NotImplemented
+        if other.host != self.host:
+            return NotImplemented
+        return DataBaseReport(
+            connected=self.connected and other.connected,
+            database=self.database,
+            host=self.host,
+            max_pool=self.max_pool + other.max_pool,
+            free_pool=self.free_pool + other.free_pool,
+            open_connections=self.open_connections + other.open_connections,
+            free_connections=self.free_connections + other.free_connections,
+            pool_exhaustion_time=self.pool_exhaustion_time + other.pool_exhaustion_time,
+        )

@@ -24,6 +24,8 @@ import traceback
 import uuid
 from dataclasses import dataclass
 
+import pyformance
+
 from inmanta import const, data, resources
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployResult
@@ -110,33 +112,31 @@ class PoisonPill(Task):
 
 class Deploy(Task):
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str, reason: str | None = None) -> None:
-
-        # First do scheduler book keeping to establish what to do
-        version: int
-        resource_details: "state.ResourceDetails"
-        intent = await task_manager.get_resource_intent(self.resource, for_deploy=True)
-        if intent is None:
-            # Stale resource, can simply be dropped.
-            return
+        with pyformance.timer("internal.deploy").time():
+            # First do scheduler book keeping to establish what to do
+            version: int
+            resource_details: "state.ResourceDetails"
+            intent = await task_manager.get_resource_intent(self.resource, for_deploy=True)
+            if intent is None:
+                # Stale resource, can simply be dropped.
+                return
 
         # Resolve to exector form
         version = intent.model_version
         resource_details = intent.details
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
 
-        # Make id's
-        gid = uuid.uuid4()
-        action_id = uuid.uuid4()  # can this be gid ?
+            # Make id's
+            gid = uuid.uuid4()
+            action_id = uuid.uuid4()  # can this be gid ?
 
-        # The main difficulty off this code is exception handling
-        # We collect state here to report back in the finally block
-
-        # Status of the deploy for the executor/requires/provides
-        success: bool = True
+            # The main difficulty off this code is exception handling
+            # We collect state here to report back in the finally block
 
         # Full status of the deploy,
         # may be unset if we fail before signaling start to the server, will be set if we signaled start
         deploy_result: DeployResult | None = None
+        scheduler_deployment_result: state.DeploymentResult
 
         try:
             # This try catch block ensures we report at the end of the task
@@ -146,7 +146,7 @@ class Deploy(Task):
                 await task_manager.send_in_progress(action_id, executor_resource_details.rvid)
             except Exception:
                 # Unrecoverable, can't reach server
-                success = False
+                scheduler_deployment_result = state.DeploymentResult.FAILED
                 LOGGER.error(
                     "Failed to report the start of the deployment to the server for %s",
                     resource_details.resource_id,
@@ -174,16 +174,21 @@ class Deploy(Task):
                     traceback="".join(traceback.format_tb(e.__traceback__)),
                 )
                 deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
-                success = False
+                scheduler_deployment_result = state.DeploymentResult.FAILED
                 return
 
             assert reason is not None  # Should always be set for deploy
             # Deploy
             try:
-                deploy_result = await my_executor.execute(
-                    action_id, gid, executor_resource_details, reason, intent.dependencies
-                )
-                success = deploy_result.status == const.ResourceState.deployed
+                deploy_result = await my_executor.execute(action_id, gid, executor_resource_details, reason, intent.dependencies)
+                # Translate deploy result status to the new deployment result state
+                match deploy_result.status:
+                    case const.ResourceState.deployed:
+                        scheduler_deployment_result = state.DeploymentResult.DEPLOYED
+                    case const.ResourceState.skipped:
+                        scheduler_deployment_result = state.DeploymentResult.SKIPPED
+                    case _:
+                        scheduler_deployment_result = state.DeploymentResult.FAILED
             except Exception as e:
                 # This should not happen
 
@@ -199,26 +204,27 @@ class Deploy(Task):
                     traceback="".join(traceback.format_tb(e.__traceback__)),
                 )
                 deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
-                success = False
+                scheduler_deployment_result = state.DeploymentResult.FAILED
         finally:
             if deploy_result is not None:
                 # We signaled start, so we signal end
                 try:
                     await task_manager.send_deploy_done(deploy_result)
                 except Exception:
-                    success = False
+                    scheduler_deployment_result = state.DeploymentResult.FAILED
                     LOGGER.error(
                         "Failed to report the end of the deployment to the server for %s",
                         resource_details.resource_id,
                         exc_info=True,
                     )
-
             # Always notify scheduler
             await task_manager.report_resource_state(
                 resource=self.resource,
                 attribute_hash=resource_details.attribute_hash,
-                status=state.ResourceStatus.UP_TO_DATE if success else state.ResourceStatus.HAS_UPDATE,
-                deployment_result=state.DeploymentResult.DEPLOYED if success else state.DeploymentResult.FAILED,
+                status=(
+                    state.ResourceStatus.UP_TO_DATE if scheduler_deployment_result == state.DeploymentResult.DEPLOYED else None
+                ),
+                deployment_result=scheduler_deployment_result,
             )
 
 
@@ -288,4 +294,10 @@ class RefreshFact(Task):
             )
             return
 
-        await my_executor.get_facts(executor_resource_details)
+        fact_result = await my_executor.get_facts(executor_resource_details)
+        if fact_result.success:
+            await task_manager.set_parameters(
+                fact_result=fact_result,
+            )
+        else:
+            raise Exception(f"Error encountered while executing RefreshTask: {fact_result.error_msg}")
