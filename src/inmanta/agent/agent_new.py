@@ -78,8 +78,6 @@ class Agent(SessionEndpoint):
             data.Resource._connection_pool,
             opt.db_name.get(),
             opt.db_host.get(),
-            "scheduler",
-            str(self.environment),
         )
         self._db_monitor.start()
 

@@ -1143,8 +1143,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
         # we have no data indicating that operational state has deviated from desired state => still UP_TO_DATE
         status=state.ResourceStatus.UP_TO_DATE,
-        # latest deploy attempt failed
-        deployment_result=state.DeploymentResult.FAILED,
+        deployment_result=state.DeploymentResult.SKIPPED,
         blocked=state.BlockedStatus.NO,
     )
     assert agent.scheduler._state.dirty == {rid2}
