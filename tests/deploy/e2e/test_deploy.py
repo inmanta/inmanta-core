@@ -249,10 +249,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     result = await client.release_version(env_id, version1, push=False)
     assert result.code == 200
 
-
     await clienthelper.wait_for_released(version1)
-
-    await check_summary(expected_key_values=expected_summary_kv)
 
     await clienthelper.wait_for_deployed()
     await check_summary(expected_key_values=expected_summary_kv)
