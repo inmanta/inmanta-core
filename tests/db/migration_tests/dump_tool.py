@@ -325,7 +325,7 @@ async def test_dump_db(
     res = await client.reserve_version(env_id_3)
     assert res.code == 200
     version = res.result["data"]
-    await client.put_version(
+    res = await client.put_version(
         tid=env_id_3,
         version=version,
         resources=[
@@ -350,11 +350,55 @@ async def test_dump_db(
         },
         compiler_version=util.get_compiler_version(),
     )
+    assert res.code == 200
     res = await client.release_version(
         env_id_3, id=2, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
     )
     assert res.code == 200
     await wait_until_deployment_finishes(client, env_id_3)
+
+    # Make sure we have a new, unreleased resource
+    res = await client.halt_environment(env_id_3)
+    assert res.code == 200
+    res = await client.reserve_version(env_id_3)
+    assert res.code == 200
+    version = res.result["data"]
+    res = await client.put_version(
+        tid=env_id_3,
+        version=version,
+        resources=[
+            *get_resources(version)[0:-1],
+            {
+                "key": "key7",
+                "value": "val7",
+                "version": version,
+                "id": f"test::Resource[agent1,key=key7],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "key": "key8",
+                "value": "val8",
+                "version": version,
+                "id": f"test::Resource[agent1,key=key8],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+            },
+        ],
+        resource_state={
+            "test::Resource[agent1,key=key1]": const.ResourceState.available,
+            "test::Resource[agent1,key=key2]": const.ResourceState.available,
+            "test::Resource[agent1,key=key3]": const.ResourceState.available,
+            "test::Resource[agent1,key=key4]": const.ResourceState.undefined,
+            "test::Resource[agent1,key=key5]": const.ResourceState.available,
+            "test::Resource[agent1,key=key7]": const.ResourceState.available,
+            "test::Resource[agent1,key=key8]": const.ResourceState.available,
+        },
+        compiler_version=util.get_compiler_version(),
+    )
+    assert res.code == 200
 
     proc = await asyncio.create_subprocess_exec(
         "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outfile, "-O", "-U", postgres_db.user, database_name

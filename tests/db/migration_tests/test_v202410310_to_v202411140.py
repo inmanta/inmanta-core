@@ -68,3 +68,7 @@ async def test_add_new_resource_status_column(
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key7]")]
         is state.ResourceStatus.UP_TO_DATE
     )
+    assert (
+        resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key8]")]
+        is state.ResourceStatus.HAS_UPDATE
+    )

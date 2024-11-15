@@ -79,7 +79,7 @@ async def update(connection: Connection) -> None:
                 WHEN (
                     NOT EXISTS(
                         SELECT *
-                        FROM resource
+                        FROM resource AS r
                         WHERE r.environment=rps.environment
                             AND r.model>=(
                                 SELECT latest.version
