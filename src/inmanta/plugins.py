@@ -826,3 +826,7 @@ def deprecated(
     if function is not None:
         return inner(function)
     return inner
+
+class Dataclass:
+
+    pass
