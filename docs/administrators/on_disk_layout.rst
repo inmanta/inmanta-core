@@ -12,7 +12,7 @@ The server stores
        ├─ server/
            ├─ .inmanta_use_new_disk_layout   # marker file for new disk layout
            ├─ env_uuid_1/                    # uuid for this environment
-           │   ├─ executors/                 # storage are for all executors
+           │   ├─ executors/                 # storage for all executors
            │   │   ├─ venvs/                 # python virtual envs for all executors
            │   │   │  ├─ venv_blueprint_hash_1/
            │   │   │  ├─ venv_blueprint_hash_2/
@@ -46,13 +46,13 @@ In detail, the creation and cleanup policy for every file:
 
 
 +--------------------------------+-----------------------------------------+-----------------------------+---------------------------------------------------------------------------+
-| Path                           | Safe to removed when                    | Reconstructed               | Cleanup                                                                   |
+| Path                           | Safe to remove when                     | Reconstructed               | Automatic cleanup                                                                   |
 +================================+=========================================+=============================+===========================================================================+
 | `.inmanta_use_new_disk_layout` | Always                                  | At server start             |                                                                           |
 +--------------------------------+-----------------------------------------+-----------------------------+---------------------------------------------------------------------------+
 | `<env_id>`                     |                                         |                             | When environment is cleared or deleted                                    |
 +--------------------------------+-----------------------------------------+-----------------------------+---------------------------------------------------------------------------+
-| `executors`                    | Server is down or environment is halted | Environment or server start |                                                                           |
+| `executors`                    | Server is down or environment is halted | At environment or server start |                                                                           |
 +--------------------------------+-----------------------------------------+-----------------------------+---------------------------------------------------------------------------+
 | `executors/venvs`              | Server is down or environment is halted | When used                   | controlled by :inmanta.config:option:`agent.executor-venv-retention-time` |
 +--------------------------------+-----------------------------------------+-----------------------------+---------------------------------------------------------------------------+
@@ -64,5 +64,5 @@ In detail, the creation and cleanup policy for every file:
 +--------------------------------+-----------------------------------------+-----------------------------+---------------------------------------------------------------------------+
 | `compiler/.env`                | When not compiling                      | When performing a recompile |                                                                           |
 +--------------------------------+-----------------------------------------+-----------------------------+---------------------------------------------------------------------------+
-| `compiler/.env-py3.12`         | When no longer targeted by  `.env`      | When performing a recompile |                                                                           |
+| `compiler/.env-py3.12`         | When no longer targeted by `.env`       | When performing a recompile |                                                                           |
 +--------------------------------+-----------------------------------------+-----------------------------+---------------------------------------------------------------------------+
