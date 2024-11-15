@@ -843,6 +843,7 @@ async def agent_factory(server) -> AsyncIterator[Callable[[uuid.UUID], Awaitable
         scheduler_state_dir.mkdir(exist_ok=True)
         config.Config.set("config", "state-dir", str(scheduler_state_dir))
         a = Agent(environment)
+        agents.append(a)
         # Restore state-dir
         config.Config.set("config", "state-dir", str(server_state_dir))
 
@@ -872,7 +873,7 @@ async def agent_factory(server) -> AsyncIterator[Callable[[uuid.UUID], Awaitable
 
     yield create
 
-    await asyncio.gather(agent.stop() for agent in agents)
+    await asyncio.gather(*[agent.stop() for agent in agents])
 
 
 @pytest.fixture(scope="function")
