@@ -65,10 +65,35 @@ async def update(connection: Connection) -> None:
             )
             AND r.resource_id=rps.resource_id;
 
-        -- If the resource_status column is still NULL, we know it's an orphan
-        UPDATE public.resource_persistent_state
-        SET resource_status='ORPHAN'::new_resource_status
-        WHERE resource_status IS NULL;
+        -- If the resource_status column is still NULL, it's either an orphan or the resource belongs to a version newer
+        -- then the latest released version.
+        WITH latest_released_version_per_environment AS (
+            SELECT environment, MAX(version) AS version
+            FROM public.configurationmodel
+            WHERE released IS TRUE
+            GROUP BY environment
+        )
+        UPDATE public.resource_persistent_state AS rps
+        SET resource_status=(
+            CASE
+                WHEN (
+                    NOT EXISTS(
+                        SELECT *
+                        FROM resource
+                        WHERE r.environment=rps.environment
+                            AND r.model>=(
+                                SELECT latest.version
+                                FROM latest_released_version_per_environment AS latest
+                                WHERE latest.environment=rps.environment
+                            )
+                            AND r.resource_id=rps.resource_id
+                    )
+                )
+                THEN 'ORPHAN'::new_resource_status
+                ELSE 'HAS_UPDATE'::new_resource_status
+            END
+        )
+        WHERE rps.resource_status IS NULL;
 
         ALTER TABLE public.resource_persistent_state ALTER COLUMN resource_status SET NOT NULL;
     """
