@@ -2,10 +2,8 @@ On Disk Layout
 ====================
 
 The server stores
- - all data below the state directory, as configured by :inmanta.config:option:`config.state-dir`,
-which defaults to `/var/lib/inmanta`
- - all logs below the log directory, as configured by  :inmanta.config:option:`config.log-dir`,
-which defaults to `/var/log/inmanta`
+ - all data below the state directory, as configured by :inmanta.config:option:`config.state-dir`, which defaults to `/var/lib/inmanta`
+ - all logs below the log directory, as configured by  :inmanta.config:option:`config.log-dir`, which defaults to `/var/log/inmanta`
 
 
 .. code-block::

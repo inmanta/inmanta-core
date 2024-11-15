@@ -9,15 +9,15 @@ Architecture
 
 * The Inmanta **server**: This server manages the deployment process, it keeps track of all ongoing work.
   The server stores it state in PostgreSQL. All other state can be recovered after a server restart or failover.
-* A PostgreSQL database: The Inmanta server stores its state in a PostgreSQL database.
-* Environment: For multi-tenancy, one server can have multiple environments. Each environment performs its own deployments, without relation to other environments.
+* A **PostgreSQL database**: The Inmanta server stores its state in a PostgreSQL database.
+* **Environment**: For multi-tenancy, one server can have multiple environments. Each environment performs its own deployments, without relation to other environments.
 * The **compiler**: The compiler converts the source code into deployable resources and exports it to the server.
-* CLI and web-console: To control the server, you can use either the web-console or the command line tools. Both communicate
+* CLI and **web-console**: To control the server, you can use either the web-console or the command line tools. Both communicate
   through the server rest API.
-* The Inmanta **scheduler**: The scheduler manages the deployment process for one specific environment.
-* The Inmanta **executors**: The executors execute configuration changes on targets. A target can be a server, a network device or an API
+* The **scheduler**: The scheduler manages the deployment process for one specific environment.
+* The **executors**: The executors execute configuration changes on targets. A target can be a server, a network device or an API
   or cloud service. The scheduler will create as many executors as it requires.
-* Smart Adaptors: to be able to interface with target devices, the executors load smart adaptors, that allow the executor to communicate with the target device and enforce desired state on it
+* **Smart Adaptors**: to be able to interface with target devices, the executors load smart adaptors, that allow the executor to communicate with the target device and enforce desired state on it
 
 
 
