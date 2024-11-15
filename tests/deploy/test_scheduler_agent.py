@@ -32,7 +32,7 @@ import asyncpg
 import pytest
 
 import utils
-from inmanta import const, util
+from inmanta import const, data, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
@@ -340,7 +340,7 @@ async def config(inmanta_config, tmp_path):
 
 
 @pytest.fixture
-async def agent(environment, config):
+async def agent(environment, config, monkeypatch):
     """
     Provide a new agent, with a scheduler that uses the dummy executor
 
@@ -348,6 +348,21 @@ async def agent(environment, config):
     """
     out = TestAgent(environment)
     await out.start_working()
+
+    async def mark_orphans_mock(
+        environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(data.ResourcePersistentState, "mark_orphans", mark_orphans_mock)
+
+    async def mark_as_has_update_mock(
+        environment: UUID, resource_ids: set[ResourceIdStr], connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(data.ResourcePersistentState, "mark_as_has_update", mark_as_has_update_mock)
+
     yield out
     await out.stop_working()
 
