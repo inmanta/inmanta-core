@@ -230,9 +230,7 @@ class DummyStateManager(StateUpdateManager):
     def __init__(self):
         self.state: dict[ResourceIdStr, const.ResourceState] = {}
 
-    async def send_in_progress(
-        self, action_id: UUID, resource_id: ResourceVersionIdStr
-    ) -> dict[ResourceIdStr, const.ResourceState]:
+    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
         self.state[Id.parse_id(resource_id).resource_str()] = const.ResourceState.deploying
 
     async def send_deploy_done(self, result: DeployResult) -> None:
