@@ -15,12 +15,18 @@
 
     Contact: code@inmanta.com
 """
-from inmanta.plugins import plugin, Dataclass
+import dataclasses
+
+from inmanta.plugins import plugin
 
 
-class Virtualmachine(Dataclass):
+@dataclasses.dataclass
+class Virtualmachine:
     name: str
     os: str
     ram: int
     cpus: int
     disk: int
+
+
+# TODO: verify type correspondence

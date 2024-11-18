@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import dataclasses
 # pylint: disable-msg=R0902,R0904
 
 from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
@@ -90,6 +90,8 @@ class Entity(NamedType, WithComment):
         self.comment = comment
 
         self.normalized = False
+
+        self._paired_dataclass: Type[object] = None
 
     def normalize(self) -> None:
         for attribute in self.__default_values.values():
@@ -507,6 +509,19 @@ class Entity(NamedType, WithComment):
 
     def get_location(self) -> Location:
         return self.location
+
+    def pair_dataclass(self, dataclass: Type[object]) -> None:
+        assert self.normalized
+        # TODO: error reporting
+        assert dataclasses.is_dataclass(dataclass)
+        assert dataclass.__dataclass_params__.frozen
+
+        # all own fields are primitive
+        # No relations
+        # Only std::none as implementation
+
+        # Type correspondence
+        assert all(x.type == int for x in dataclasses.fields(test_data))
 
 
 # Kept for backwards compatibility. May be dropped from iso7 onwards.

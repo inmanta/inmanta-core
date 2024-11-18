@@ -96,6 +96,17 @@ class Type(Locatable):
         """
         return base_type
 
+    def as_python_type(self) -> "typing.Type | None":
+        """
+        Return a python type that can capture the values of this inmanta type
+
+        Returns None if this is not possible.
+        """
+
+    def to_python(self, instance: object) -> "object":
+        """
+        Convert an instance of this type to its python form
+        """
 
 class NamedType(Type, Named):
     def get_double_defined_exception(self, other: "NamedType") -> "DuplicateException":
@@ -145,6 +156,14 @@ class NullableType(Type):
         if not isinstance(other, NullableType):
             return NotImplemented
         return self.element_type == other.element_type
+
+    def as_python_type(self) -> "typing.Type | None":
+        return Optional[self.element_type.as_python_type()]
+
+    def to_python(self, instance: object) -> "object":
+        if instance is None:
+            return NoneValue()
+        return self.element_type.to_python(instance)
 
 
 @stable_api
@@ -229,6 +248,12 @@ class Number(Primitive):
     def type_string_internal(self) -> str:
         return self.type_string()
 
+    def as_python_type(self) -> "typing.Type | None":
+        return numbers.Number
+
+    def to_python(self, instance: object) -> "object":
+        return instance
+
 
 @stable_api
 class Float(Primitive):
@@ -265,6 +290,12 @@ class Float(Primitive):
     def type_string_internal(self) -> str:
         return self.type_string()
 
+    def as_python_type(self) -> "typing.Type | None":
+        return float
+
+    def to_python(self, instance: object) -> "object":
+        return instance
+
 
 @stable_api
 class Integer(Number):
@@ -290,6 +321,12 @@ class Integer(Number):
 
     def type_string(self) -> str:
         return "int"
+
+    def as_python_type(self) -> "typing.Type | None":
+        return int
+
+    def to_python(self, instance: object) -> "object":
+        return instance
 
 
 @stable_api
@@ -327,6 +364,12 @@ class Bool(Primitive):
 
     def get_location(self) -> None:
         return None
+
+    def as_python_type(self) -> "typing.Type | None":
+        return bool
+
+    def to_python(self, instance: object) -> "object":
+        return object
 
 
 @stable_api
@@ -370,6 +413,11 @@ class String(Primitive):
     def get_location(self) -> None:
         return None
 
+    def as_python_type(self) -> "typing.Type | None":
+        return str
+
+    def to_python(self, instance: object) -> "object":
+        return str(instance)
 
 @stable_api
 class List(Type):
@@ -403,6 +451,11 @@ class List(Type):
     def get_location(self) -> None:
         return None
 
+    def as_python_type(self) -> "typing.Type | None":
+        raise NotImplementedError()
+
+    def to_python(self, instance: object) -> "object":
+        raise NotImplementedError()
 
 @stable_api
 class TypedList(List):
@@ -452,6 +505,12 @@ class TypedList(List):
         if not isinstance(other, TypedList):
             return NotImplemented
         return self.element_type == other.element_type
+
+    def as_python_type(self) -> "typing.Type | None":
+        return list[self.element_type.as_python_type()]
+
+    def to_python(self, instance: object) -> "object":
+        return [self.element_type.to_python(instance) for element in instance]
 
 
 @stable_api
