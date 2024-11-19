@@ -309,9 +309,13 @@ class CodeLoader:
         except ImportError:
             LOGGER.exception("Unable to load module %s", mod_name)
 
-    def install_source(self, module_source: ModuleSource) -> bool:
+
+
+    # Called by forking_executor.InitCommand() -> once on executor init
+    # deploy_version <- inprocess executor._install<- IPE.ensure_code <- IPE.get_executor <- task
+    def install_source(self, module_source: ModuleSource) -> None:
         """
-        :return: True if this module install requires a reload
+        Ensure the given module source is available on disk.
         """
         # if the module is new, or update
         if module_source.name not in self.__modules or module_source.hash_value != self.__modules[module_source.name][0]:
@@ -365,35 +369,23 @@ class CodeLoader:
                         module_source.hash_value,
                         module_source.name,
                     )
-                    # Force (re)load, because we have it on disk, but not on the in-memory cache
-                    # We may have not loaded it
-                    return True
 
             # write the new source
             source_code = module_source.get_source_code()
             with open(source_file, "wb+") as fd:
                 fd.write(source_code)
-            return True
         else:
             LOGGER.debug(
                 "Not deploying code (hv=%s, module=%s) because of cache hit", module_source.hash_value, module_source.name
             )
-            return False
 
     def deploy_version(self, module_sources: Iterable[ModuleSource]) -> None:
-        to_reload: list[ModuleSource] = []
-
+        """
+        Ensure the given module sources are available on disk.
+        """
         sources = set(module_sources)
         for module_source in sources:
-            is_changed = self.install_source(module_source)
-            if is_changed:
-                to_reload.append(module_source)
-        # This whole mechanism can go if we spawn a new venv with the new code when required
-        if len(to_reload) > 0:
-            importlib.invalidate_caches()
-            for module_source in to_reload:
-                # (re)load the new source
-                self._load_module(module_source.name, module_source.hash_value)
+            self.install_source(module_source)
 
 
 class PluginModuleLoader(FileLoader):
