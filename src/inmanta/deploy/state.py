@@ -57,8 +57,11 @@ class ComplianceStatus(StrEnum):
     """
     Status of a resource's operational status with respect to its latest desired state, to the best of our knowledge.
     COMPLIANT: The operational state complies to latest resource intent as far as we know.
-    HAS_UPDATE: The resource intent has been updated since latest deploy attempt (if any), meaning we are not yet managing the new intent.
-    NON_COMPLIANT: The resource intent has not been updated since latest deploy attempt (if any) but we have reason to believe operational state might not comply with latest resource intent, based on a deploy attempt / compliance check for that intent.
+    HAS_UPDATE: The resource intent has been updated since latest deploy attempt (if any),
+        meaning we are not yet managing the new intent.
+    NON_COMPLIANT: The resource intent has not been updated since latest deploy attempt (if any)
+        but we have reason to believe operational state might not comply with latest resource intent,
+        based on a deploy attempt / compliance check for that intent.
     UNDEFINED: The resource status is undefined, because it has an unknown attribute.
     """
 

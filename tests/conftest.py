@@ -2471,15 +2471,6 @@ def resource_container(clean_reset):
             resource: LsmLike,
             fine_grained_resource_states: dict[ResourceIdStr, const.ResourceState],
         ) -> bool:
-            """
-            Report the resource states for the resources in this service instance to inmanta LSM. This method raises a SkipResource
-            exception when one of the given resource states is a transient state (i.e. it doesn't match the failed or deployed
-            state).
-
-            :param resource: This LifecycleTransfer resource.
-            :param fine_grained_resource_states: The resource state for each resource part of this service instance.
-            :return: True iff all the given resource states are equal to deployed.
-            """
             # If a resource is not in events, it means that it was deployed before so we can mark it as success
             is_failed = False
             skipped_resources = []
