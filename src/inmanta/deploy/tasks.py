@@ -226,7 +226,7 @@ class Deploy(Task):
                     resource=self.resource,
                     attribute_hash=resource_details.attribute_hash,
                     status=(
-                        state.ResourceStatus.COMPLIANT
+                        state.ComplianceStatus.COMPLIANT
                         if scheduler_deployment_result == state.DeploymentResult.DEPLOYED
                         else state.ComplianceStatus.NON_COMPLIANT
                     ),

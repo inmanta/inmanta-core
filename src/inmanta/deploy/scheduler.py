@@ -641,11 +641,17 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             # refresh resource details for latest model state
             details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
-            if details is None or details.attribute_hash != attribute_hash:
-                # The reported resource state is for a stale resource and therefore no longer relevant for state updates.
-                # There is also no need to send out events because a newer version will have been scheduled.
-                return
             state: ResourceState = self._state.resource_state[resource]
+
+            if details is None or details.attribute_hash != attribute_hash:
+                # We are stale but still the last deploy
+                # We can update the deployment_result (which is about last deploy)
+                # We can't update status (which is about active state only)
+                # None of the event propagation or other update happen either for the same reason
+                if deployment_result is not None:
+                    state.deployment_result = deployment_result
+                return
+
             if status is not None:
                 state.status = status
             if deployment_result is not None:

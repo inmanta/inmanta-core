@@ -2166,13 +2166,21 @@ def resource_container(clean_reset):
 
         fields = ("key", "value", "purged")
 
+    @resource("test::Deploy", agent="agent", id_attribute="key")
+    class DeployR(Resource):
+        """
+        Raise a SkipResource exception in the deploy() handler method.
+        """
+
+        fields = ("key", "value", "set_state_to_deployed", "purged")
+
     @resource("test::LSMLike", agent="agent", id_attribute="key")
     class LsmLike(Resource):
         """
         Raise a SkipResource exception in the deploy() handler method.
         """
 
-        fields = ("key", "value", "purged", "purged")
+        fields = ("key", "value", "purged")
 
     @resource("test::EventResource", agent="agent", id_attribute="key")
     class EventResource(PurgeableResource):
