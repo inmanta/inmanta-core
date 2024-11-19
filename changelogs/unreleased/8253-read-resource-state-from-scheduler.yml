@@ -1,0 +1,5 @@
+description: Read resource state from scheduler instead of reading from DB
+issue-nr: 8253
+change-type: minor
+destination-branches: [master]
+

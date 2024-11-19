@@ -27,7 +27,7 @@ from asyncpg import UniqueViolationError
 from inmanta import const, data
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
 from inmanta.protocol import Client
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.resources import Id
@@ -44,9 +44,7 @@ class StateUpdateManager(abc.ABC):
     """
 
     @abc.abstractmethod
-    async def send_in_progress(
-        self, action_id: UUID, resource_id: ResourceVersionIdStr
-    ) -> dict[ResourceIdStr, const.ResourceState]:
+    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
         # FIXME: get rid of version in the id
         pass
 
@@ -72,9 +70,7 @@ class ToServerUpdateManager(StateUpdateManager):
         self.client = client
         self.environment = environment
 
-    async def send_in_progress(
-        self, action_id: UUID, resource_id: ResourceVersionIdStr
-    ) -> dict[ResourceIdStr, const.ResourceState]:
+    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
         result = await self.client.resource_deploy_start(
             tid=self.environment,
             rvid=resource_id,
@@ -82,7 +78,6 @@ class ToServerUpdateManager(StateUpdateManager):
         )
         if result.code != 200 or result.result is None:
             raise Exception("Failed to report the start of the deployment to the server")
-        return {Id.parse_id(key).resource_str(): const.ResourceState[value] for key, value in result.result["data"].items()}
 
     async def send_deploy_done(self, result: DeployResult) -> None:
         changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {result.rvid: result.changes}
@@ -153,9 +148,7 @@ class ToDbUpdateManager(StateUpdateManager):
         log_record = resourceservice.ResourceActionLogLine(logger.name, log_level, message, ts)
         logger.handle(log_record)
 
-    async def send_in_progress(
-        self, action_id: UUID, resource_id: ResourceVersionIdStr
-    ) -> dict[ResourceIdStr, const.ResourceState]:
+    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
         resource_id_str = resource_id
         resource_id_parsed = Id.parse_id(resource_id_str)
 
@@ -196,13 +189,6 @@ class ToDbUpdateManager(StateUpdateManager):
 
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
-
-            # FIXME: shortcut to use scheduler state
-            result = await data.Resource.get_last_non_deploying_state_for_dependencies(
-                environment=self.environment, resource_version_id=resource_id_parsed, connection=connection
-            )
-
-            return {Id.parse_id(key).resource_str(): const.ResourceState[value] for key, value in result.items()}
 
     async def send_deploy_done(self, result: DeployResult) -> None:
         def error_and_log(message: str, **context: Any) -> None:

@@ -17,3 +17,4 @@ Administrator documentation
     administrators/support.rst
     administrators/upgrading_the_orchestrator.rst
     administrators/web-console.md
+    administrators/on_disk_layout.rst

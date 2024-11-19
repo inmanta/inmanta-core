@@ -116,14 +116,17 @@ class Deploy(Task):
             # First do scheduler book keeping to establish what to do
             version: int
             resource_details: "state.ResourceDetails"
-            intent = await task_manager.get_resource_intent(self.resource, for_deploy=True)
+            intent = await task_manager.get_resource_intent_for_deploy(self.resource)
             if intent is None:
                 # Stale resource, can simply be dropped.
                 return
 
             assert isinstance(task_manager, scheduler.ResourceScheduler)  # Make mypy happy
+            # Dependencies are always set when calling get_resource_intent_for_deploy
+            assert intent.dependencies is not None
             # Resolve to executor form
-            version, resource_details = intent
+            version = intent.model_version
+            resource_details = intent.details
             executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
 
             # Make id's
@@ -143,9 +146,7 @@ class Deploy(Task):
 
                 # Signal start to server
                 try:
-                    requires: dict[ResourceIdStr, const.ResourceState] = await task_manager.send_in_progress(
-                        action_id, executor_resource_details.rvid
-                    )
+                    await task_manager.send_in_progress(action_id, executor_resource_details.rvid)
                 except Exception:
                     # Unrecoverable, can't reach server
                     scheduler_deployment_result = state.DeploymentResult.FAILED
@@ -182,7 +183,9 @@ class Deploy(Task):
                 assert reason is not None  # Should always be set for deploy
                 # Deploy
                 try:
-                    deploy_result = await my_executor.execute(action_id, gid, executor_resource_details, reason, requires)
+                    deploy_result = await my_executor.execute(
+                        action_id, gid, executor_resource_details, reason, intent.dependencies
+                    )
                     await task_manager.cancel_periodic_repair_and_deploy_for_resource(executor_resource_details.rid)
                     # Translate deploy result status to the new deployment result state
                     match deploy_result.status:
@@ -225,7 +228,9 @@ class Deploy(Task):
                     resource=self.resource,
                     attribute_hash=resource_details.attribute_hash,
                     status=(
-                        state.ResourceStatus.UP_TO_DATE if scheduler_deployment_result == state.DeploymentResult.DEPLOYED else None
+                        state.ResourceStatus.UP_TO_DATE
+                        if scheduler_deployment_result == state.DeploymentResult.DEPLOYED
+                        else None
                     ),
                     deployment_result=scheduler_deployment_result,
                 )
@@ -285,7 +290,8 @@ class RefreshFact(Task):
             # Stale resource, can simply be dropped.
             return
         # FIXME, should not need resource details, only id, see related FIXME on executor side
-        version, resource_details = intent
+        version = intent.model_version
+        resource_details = intent.details
 
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
         try:
