@@ -13,4 +13,15 @@ import dataclasses
     compiler.do_compile()
 
 
-dataclasses
+
+def test_dataclass_load_bad(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import dataclasses::bad_sub
+""",
+        ministd=True,
+    )
+    compiler.do_compile()
+
+
+

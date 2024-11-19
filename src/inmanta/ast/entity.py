@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import dataclasses
+import importlib
 # pylint: disable-msg=R0902,R0904
 
 from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
@@ -94,6 +95,7 @@ class Entity(NamedType, WithComment):
         self._paired_dataclass: Type[object] = None
 
     def normalize(self) -> None:
+        self.normalized = True
         for attribute in self.__default_values.values():
             if attribute.default is not None:
                 default_type: Type = attribute.type.get_type(self.namespace)
@@ -510,18 +512,45 @@ class Entity(NamedType, WithComment):
     def get_location(self) -> Location:
         return self.location
 
-    def pair_dataclass(self, dataclass: Type[object]) -> None:
+    def pair_dataclass(self) -> None:
         assert self.normalized
+
         # TODO: error reporting
+        namespace = self.namespace.get_full_name()
+
+        dataclass_module = importlib.import_module("inmanta_plugins." + namespace.replace("::","."))
+        dataclass = getattr(dataclass_module, self.name)
+
         assert dataclasses.is_dataclass(dataclass)
         assert dataclass.__dataclass_params__.frozen
 
-        # all own fields are primitive
-        # No relations
+
+        dc_fields = {f.name: f for f in dataclasses.fields(dataclass)}
+
+        for rel_or_attr_name in self.get_all_attribute_names():
+            rel_or_attr = self.get_attribute(rel_or_attr_name)
+            match rel_or_attr:
+                case inmanta.ast.attribute.RelationAttribute() as rel:
+                    # No relations except for requires and provides
+                    assert rel.entity.get_full_name() == "std::Entity", rel_or_attr_name
+                case inmanta.ast.attribute.Attribute() as attr:
+                    field = dc_fields.pop(rel_or_attr_name)
+                    inm_type = attr.get_type()
+
+                    # all own fields are primitive
+                    assert inm_type.is_primitive()
+
+                    # Type correspondence
+                    py_type = inm_type.as_python_type()
+                    assert py_type
+                    assert issubclass(field.type, py_type)
+
+
+
         # Only std::none as implementation
 
-        # Type correspondence
-        assert all(x.type == int for x in dataclasses.fields(test_data))
+
+        #assert all(x.type == int for x in dataclasses.fields(dataclass))
 
 
 # Kept for backwards compatibility. May be dropped from iso7 onwards.

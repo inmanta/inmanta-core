@@ -20,7 +20,6 @@ import dataclasses
 from inmanta.plugins import plugin
 
 
-@dataclasses.dataclass(frozen=True)
 class Virtualmachine:
     name: str
     os: str

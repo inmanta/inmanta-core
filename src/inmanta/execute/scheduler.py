@@ -265,6 +265,11 @@ class Scheduler:
 
         self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
+        # Dataclass validation
+        data_class_root = self.types["std::Dataclass"]
+        for dataclass in data_class_root.get_all_child_entities():
+            dataclass.pair_dataclass()
+
     def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
     ) -> Sequence[tuple[Location, AnchorTarget]]:
