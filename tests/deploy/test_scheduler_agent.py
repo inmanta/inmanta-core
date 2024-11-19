@@ -1141,8 +1141,8 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     # verify that r2 is considered dirty now, despite being in an assumed good operational state
     assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
-        # we have no data indicating that operational state has deviated from desired state => still UP_TO_DATE
-        status=state.ComplianceStatus.COMPLIANT,
+        # We are skipped, so not compliant
+        status=state.ComplianceStatus.NON_COMPLIANT,
         deployment_result=state.DeploymentResult.SKIPPED,
         blocked=state.BlockedStatus.NO,
     )
