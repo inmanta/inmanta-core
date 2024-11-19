@@ -823,6 +823,11 @@ class ResourceScheduler(TaskManager):
                     if previous_deployment_result != DeploymentResult.DEPLOYED:
                         # This resource went from not deployed to deployed
                         # we have to inform its dependants regardless of event propagation
+                        # so that we can try to re-deploy them in case this resource's previous
+                        # failure was the reason they were skipped
+
+                        # TODO later: stop informing resource skipped because of
+                        #  a custom handler skip via this mechanism
 
                         provides = self._state.requires.provides_view().get(resource, set())
                         dependant_resources: Set[ResourceIdStr] = {
