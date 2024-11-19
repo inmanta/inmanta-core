@@ -160,7 +160,7 @@ async def test_formatting_exception_messages(
     assert "(exception: Exception('An\nError\tMessage')" in error_messages[0]["msg"]
 
 
-async def test_format_token_in_logline(server, agent, client, environment, resource_container, caplog):
+async def test_format_token_in_logline(server, agent, client, environment, resource_container, caplog, clienthelper):
     """Deploy a resource that logs a line that after formatting on the agent contains an invalid formatting character."""
     version = (await client.reserve_version(environment)).result["data"]
     resource_container.Provider.set("agent1", "key1", "incorrect_value")
@@ -189,17 +189,13 @@ async def test_format_token_in_logline(server, agent, client, environment, resou
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-    assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 1
-    assert result.result["model"]["result"] == "deploying"
 
     result = await client.get_version(environment, version)
     assert result.code == 200
     await wait_until_deployment_finishes(client, environment)
 
-    result = await client.get_version(environment, version)
-    assert result.result["model"]["done"] == 1
+    assert await clienthelper.done_count() == 1
 
     log_string = "Set key '%(key)s' to value '%(value)s'" % dict(key=resource["key"], value=resource["value"])
     assert log_string in caplog.text

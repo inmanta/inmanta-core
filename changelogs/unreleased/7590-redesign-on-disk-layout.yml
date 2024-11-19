@@ -6,5 +6,7 @@ destination-branches: [master]
 sections:
   minor-improvement: "{{description}}"
   upgrade-note: >
-    Any remaining file or directory part of the 'old' disk layout can safely be removed.
-    i.e. all files/directories in ``<state-dir>`` besides the ``server`` directory.
+    The on-disk layout of the server has been changed. After upgrade, old files can be cleaned up with the following commands:
+      - old environment files: `rm -rf /var/lib/inmanta/server/environments/`
+      - old agent config files: `rm -rf /var/lib/inmanta/server/agents/`
+      - old agent work folders (all folders formatted as uuids): `find /var/lib/inmanta -maxdepth 1 -regextype grep -regex '.*/[a-f0-9]\{8\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{12\}' -type d -delete`

@@ -40,6 +40,7 @@ from inmanta.agent.handler import (
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
 from inmanta.data.model import ResourceIdStr
+from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
@@ -160,12 +161,6 @@ if PYTEST_PLUGIN_MODE:
     from inmanta_tests import utils  # noqa: F401
 else:
     import utils
-
-# These elements were moved to inmanta.db.util to allow them to be used from other extensions.
-# This import statement is present to ensure backwards compatibility.
-from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, PGRestore  # noqa: F401
-from inmanta.db.util import clear_database as do_clean_hard  # noqa: F401
-from inmanta.db.util import postgres_get_custom_types as postgress_get_custom_types  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -705,7 +700,7 @@ async def server_config(
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
         config.Config.set("database", "password", pg_password)
-        config.Config.set("database", "connection_timeout", str(3))
+        config.Config.set("database", "db_connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
         config.Config.set("agent_rest_transport", "port", port)
@@ -782,7 +777,7 @@ async def server_multi(
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
         config.Config.set("database", "password", pg_password)
-        config.Config.set("database", "connection_timeout", str(3))
+        config.Config.set("database", "db_connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
         config.Config.set("agent_rest_transport", "port", port)
@@ -812,7 +807,7 @@ async def server_multi(
 
         yield ibl.restserver
         try:
-            await ibl.stop(timeout=15)
+            await ibl.stop(timeout=20)
         except concurrent.futures.TimeoutError:
             logger.exception("Timeout during stop of the server in teardown")
 
@@ -2522,26 +2517,21 @@ def resource_container(clean_reset):
             )
 
         # unhang waiters
-        result = await client.get_version(env_id, version)
-        assert result.code == 200
         now = time.time()
-        log_progress(result.result["model"]["done"], result.result["model"]["total"])
-        while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        done, total = await utils.get_done_and_total(client, env_id)
+
+        log_progress(done, total)
+        while (total - done) > 0:
             if now + timeout < time.time():
                 raise Exception("Timeout")
-            if (
-                wait_for_this_amount_of_resources_in_done
-                and result.result["model"]["done"] - wait_for_this_amount_of_resources_in_done >= 0
-            ):
+            if wait_for_this_amount_of_resources_in_done and done - wait_for_this_amount_of_resources_in_done >= 0:
                 break
-            result = await client.get_version(env_id, version)
-            log_progress(result.result["model"]["done"], result.result["model"]["total"])
+            done, total = await utils.get_done_and_total(client, env_id)
+            log_progress(done, total)
             waiter.acquire()
             waiter.notify_all()
             waiter.release()
             await asyncio.sleep(0.1)
-
-        return result
 
     async def wait_for_condition_with_waiters(wait_condition, timeout=10):
         """

@@ -537,7 +537,7 @@ class Executor(abc.ABC):
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-        requires: dict[ResourceIdStr, const.ResourceState],
+        requires: Mapping[ResourceIdStr, const.ResourceState],
     ) -> DeployResult:
         """
         Perform the actual deployment of the resource by calling the loaded handler code
