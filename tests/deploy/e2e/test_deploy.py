@@ -104,6 +104,10 @@ async def test_on_disk_layout(server, agent, environment):
     marker_file_path = state_dir / const.INMANTA_DISK_LAYOUT_VERSION
     assert pathlib.Path(marker_file_path).exists()
 
+    # Check that the version matches the established default version
+    with open(marker_file_path, "r") as file:
+        assert file.read() == str(const.DEFAULT_INMANTA_DISK_LAYOUT_VERSION)
+
 
 async def test_basics(agent, resource_container, clienthelper, client, environment):
     """
