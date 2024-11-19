@@ -641,9 +641,14 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             # refresh resource details for latest model state
             details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
+
+            if details is None:
+                # we are stale and removed
+                return
+
             state: ResourceState = self._state.resource_state[resource]
 
-            if details is None or details.attribute_hash != attribute_hash:
+            if details.attribute_hash != attribute_hash:
                 # We are stale but still the last deploy
                 # We can update the deployment_result (which is about last deploy)
                 # We can't update status (which is about active state only)
