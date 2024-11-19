@@ -210,18 +210,18 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         pass
 
 
-state_translation_table: dict[const.ResourceState, Tuple[state.DeploymentResult, state.BlockedStatus, state.ResourceStatus]] = {
+state_translation_table: dict[const.ResourceState, Tuple[state.DeploymentResult, state.BlockedStatus, state.ComplianceStatus]] = {
     # A table to translate the old states into the new states
     # None means don't care, mostly used for values we can't derive from the old state
-    const.ResourceState.unavailable: (None, state.BlockedStatus.NO, state.ResourceStatus.UNDEFINED),
+    const.ResourceState.unavailable: (None, state.BlockedStatus.NO, state.ComplianceStatus.UNDEFINED),
     const.ResourceState.skipped: (None, state.BlockedStatus.YES, None),
     const.ResourceState.dry: (None, None, None),  # don't care
     const.ResourceState.deployed: (state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO, None),
     const.ResourceState.failed: (state.DeploymentResult.FAILED, state.BlockedStatus.NO, None),
     const.ResourceState.deploying: (None, state.BlockedStatus.NO, None),
-    const.ResourceState.available: (None, state.BlockedStatus.NO, state.ResourceStatus.HAS_UPDATE),
-    const.ResourceState.undefined: (None, state.BlockedStatus.NO, state.ResourceStatus.UNDEFINED),
-    const.ResourceState.skipped_for_undefined: (None, state.BlockedStatus.YES, state.ResourceStatus.UNDEFINED),
+    const.ResourceState.available: (None, state.BlockedStatus.NO, state.ComplianceStatus.HAS_UPDATE),
+    const.ResourceState.undefined: (None, state.BlockedStatus.NO, state.ComplianceStatus.UNDEFINED),
+    const.ResourceState.skipped_for_undefined: (None, state.BlockedStatus.YES, state.ComplianceStatus.UNDEFINED),
 }
 
 
@@ -750,7 +750,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
 
     # assert pre resource state
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
-        status=state.ResourceStatus.UP_TO_DATE,
+        status=state.ComplianceStatus.COMPLIANT,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
     )
@@ -764,7 +764,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     await agent.scheduler._new_version(18, resources, make_requires(resources))
     # assert resource state after releasing changes
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
-        status=state.ResourceStatus.HAS_UPDATE,
+        status=state.ComplianceStatus.HAS_UPDATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
     )
@@ -776,7 +776,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
     # verify that state remained the same
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
-        status=state.ResourceStatus.HAS_UPDATE,
+        status=state.ComplianceStatus.HAS_UPDATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
     )
@@ -802,7 +802,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert len(agent.scheduler._work.agent_queues) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
-        status=state.ResourceStatus.UP_TO_DATE,
+        status=state.ComplianceStatus.COMPLIANT,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
     )
@@ -1110,7 +1110,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert agent.executor_manager.executors["agent2"].execute_count == 1
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
-        status=state.ResourceStatus.UP_TO_DATE,
+        status=state.ComplianceStatus.COMPLIANT,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=state.BlockedStatus.NO,
     )
@@ -1123,7 +1123,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
 
     # verify that r2 is still in an assumed good state, even though we're deploying it
     assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
-        status=state.ResourceStatus.UP_TO_DATE,
+        status=state.ComplianceStatus.COMPLIANT,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=state.BlockedStatus.NO,
     )
@@ -1140,7 +1140,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     # verify that r2 is considered dirty now, despite being in an assumed good operational state
     assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
         # we have no data indicating that operational state has deviated from desired state => still UP_TO_DATE
-        status=state.ResourceStatus.UP_TO_DATE,
+        status=state.ComplianceStatus.COMPLIANT,
         deployment_result=state.DeploymentResult.SKIPPED,
         blocked=state.BlockedStatus.NO,
     )
@@ -1340,7 +1340,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
 
     def assert_resource_state(
         resource: ResourceIdStr,
-        status: state.ResourceStatus,
+        status: state.ComplianceStatus,
         deployment_result: state.DeploymentResult,
         blocked_status: state.BlockedStatus,
         attribute_hash: str,
@@ -1389,49 +1389,49 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid7: deployed
     assert_resource_state(
         rid1,
-        state.ResourceStatus.HAS_UPDATE,
+        state.ComplianceStatus.HAS_UPDATE,
         state.DeploymentResult.NEW,
         state.BlockedStatus.YES,
         resources[rid1].attribute_hash,
     )
     assert_resource_state(
         rid2,
-        state.ResourceStatus.UP_TO_DATE,
+        state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.NO,
         resources[rid2].attribute_hash,
     )
     assert_resource_state(
         rid3,
-        state.ResourceStatus.UP_TO_DATE,
+        state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.NO,
         resources[rid3].attribute_hash,
     )
     assert_resource_state(
         rid4,
-        state.ResourceStatus.UNDEFINED,
+        state.ComplianceStatus.UNDEFINED,
         state.DeploymentResult.NEW,
         state.BlockedStatus.YES,
         resources[rid4].attribute_hash,
     )
     assert_resource_state(
         rid5,
-        state.ResourceStatus.UP_TO_DATE,
+        state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.NO,
         resources[rid5].attribute_hash,
     )
     assert_resource_state(
         rid6,
-        state.ResourceStatus.UP_TO_DATE,
+        state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.NO,
         resources[rid6].attribute_hash,
     )
     assert_resource_state(
         rid7,
-        state.ResourceStatus.UP_TO_DATE,
+        state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.NO,
         resources[rid7].attribute_hash,
@@ -1466,49 +1466,49 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid7: deployed
     assert_resource_state(
         rid1,
-        state.ResourceStatus.HAS_UPDATE,
+        state.ComplianceStatus.HAS_UPDATE,
         state.DeploymentResult.NEW,
         state.BlockedStatus.YES,
         resources[rid1].attribute_hash,
     )
     assert_resource_state(
         rid2,
-        state.ResourceStatus.HAS_UPDATE,
+        state.ComplianceStatus.HAS_UPDATE,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.YES,
         resources[rid2].attribute_hash,
     )
     assert_resource_state(
         rid3,
-        state.ResourceStatus.UP_TO_DATE,
+        state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.YES,
         resources[rid3].attribute_hash,
     )
     assert_resource_state(
         rid4,
-        state.ResourceStatus.UP_TO_DATE,
+        state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.NO,
         resources[rid4].attribute_hash,
     )
     assert_resource_state(
         rid5,
-        state.ResourceStatus.UNDEFINED,
+        state.ComplianceStatus.UNDEFINED,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.YES,
         resources[rid5].attribute_hash,
     )
     assert_resource_state(
         rid6,
-        state.ResourceStatus.UNDEFINED,
+        state.ComplianceStatus.UNDEFINED,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.YES,
         resources[rid6].attribute_hash,
     )
     assert_resource_state(
         rid7,
-        state.ResourceStatus.UP_TO_DATE,
+        state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.NO,
         resources[rid7].attribute_hash,
@@ -1532,49 +1532,49 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid7: deployed
     assert_resource_state(
         rid1,
-        state.ResourceStatus.HAS_UPDATE,
+        state.ComplianceStatus.HAS_UPDATE,
         state.DeploymentResult.NEW,
         state.BlockedStatus.YES,
         resources[rid1].attribute_hash,
     )
     assert_resource_state(
         rid2,
-        state.ResourceStatus.UP_TO_DATE,
+        state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.NO,
         resources[rid2].attribute_hash,
     )
     assert_resource_state(
         rid3,
-        state.ResourceStatus.UP_TO_DATE,
+        state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.YES,
         resources[rid3].attribute_hash,
     )
     assert_resource_state(
         rid4,
-        state.ResourceStatus.UP_TO_DATE,
+        state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.NO,
         resources[rid4].attribute_hash,
     )
     assert_resource_state(
         rid5,
-        state.ResourceStatus.UP_TO_DATE,
+        state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.NO,
         resources[rid5].attribute_hash,
     )
     assert_resource_state(
         rid6,
-        state.ResourceStatus.UNDEFINED,
+        state.ComplianceStatus.UNDEFINED,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.YES,
         resources[rid6].attribute_hash,
     )
     assert_resource_state(
         rid7,
-        state.ResourceStatus.UP_TO_DATE,
+        state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.NO,
         resources[rid7].attribute_hash,
@@ -1596,14 +1596,14 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
 
     assert_resource_state(
         rid8,
-        state.ResourceStatus.UNDEFINED,
+        state.ComplianceStatus.UNDEFINED,
         state.DeploymentResult.NEW,
         state.BlockedStatus.YES,
         resources[rid8].attribute_hash,
     )
     assert_resource_state(
         rid9,
-        state.ResourceStatus.UNDEFINED,
+        state.ComplianceStatus.UNDEFINED,
         state.DeploymentResult.NEW,
         state.BlockedStatus.YES,
         resources[rid9].attribute_hash,
@@ -1619,14 +1619,14 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
 
     assert_resource_state(
         rid8,
-        state.ResourceStatus.UP_TO_DATE,
+        state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
         state.BlockedStatus.NO,
         resources[rid8].attribute_hash,
     )
     assert_resource_state(
         rid9,
-        state.ResourceStatus.UNDEFINED,
+        state.ComplianceStatus.UNDEFINED,
         state.DeploymentResult.NEW,
         state.BlockedStatus.YES,
         resources[rid9].attribute_hash,

@@ -44,7 +44,7 @@ from inmanta.deploy.state import (
     ModelState,
     ResourceDetails,
     ResourceState,
-    ResourceStatus,
+    ComplianceStatus,
 )
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
@@ -107,7 +107,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: Optional[ResourceStatus] = None,
+        status: Optional[ComplianceStatus] = None,
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
         """
@@ -472,7 +472,7 @@ class ResourceScheduler(TaskManager):
                     self._work.delete_resource(resource)
                 elif resource in self._state.resources:
                     # It's a resource we know.
-                    if self._state.resource_state[resource].status is ResourceStatus.UNDEFINED:
+                    if self._state.resource_state[resource].status is ComplianceStatus.UNDEFINED:
                         # The resource has been undeployable in previous versions, but not anymore.
                         unblocked_resources.add(resource)
                     elif details.attribute_hash != self._state.resources[resource].attribute_hash:
@@ -632,7 +632,7 @@ class ResourceScheduler(TaskManager):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: Optional[ResourceStatus] = None,
+        status: ComplianceStatus,
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
         if deployment_result is DeploymentResult.NEW:
@@ -700,11 +700,11 @@ class ResourceScheduler(TaskManager):
         for dep_id in dependencies:
             resource_state_object: ResourceState = self._state.resource_state[dep_id]
             match resource_state_object:
-                case ResourceState(status=ResourceStatus.UNDEFINED):
+                case ResourceState(status=ComplianceStatus.UNDEFINED):
                     dependencies_state[dep_id] = const.ResourceState.undefined
                 case ResourceState(blocked=BlockedStatus.YES):
                     dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
-                case ResourceState(status=ResourceStatus.HAS_UPDATE):
+                case ResourceState(status=ComplianceStatus.HAS_UPDATE):
                     dependencies_state[dep_id] = const.ResourceState.available
                 case ResourceState(deployment_result=DeploymentResult.SKIPPED):
                     dependencies_state[dep_id] = const.ResourceState.skipped
