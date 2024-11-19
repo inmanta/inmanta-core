@@ -226,7 +226,9 @@ class Deploy(Task):
                     resource=self.resource,
                     attribute_hash=resource_details.attribute_hash,
                     status=(
-                        state.ResourceStatus.UP_TO_DATE if scheduler_deployment_result == state.DeploymentResult.DEPLOYED else None
+                        state.ResourceStatus.UP_TO_DATE
+                        if scheduler_deployment_result == state.DeploymentResult.DEPLOYED
+                        else None
                     ),
                     deployment_result=scheduler_deployment_result,
                 )
