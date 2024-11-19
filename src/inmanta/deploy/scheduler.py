@@ -40,11 +40,11 @@ from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
 from inmanta.deploy.state import (
     AgentStatus,
     BlockedStatus,
+    ComplianceStatus,
     DeploymentResult,
     ModelState,
     ResourceDetails,
     ResourceState,
-    ComplianceStatus,
 )
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
@@ -107,7 +107,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: Optional[ComplianceStatus] = None,
+        status: ComplianceStatus,
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
         """

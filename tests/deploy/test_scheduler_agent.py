@@ -210,7 +210,9 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         pass
 
 
-state_translation_table: dict[const.ResourceState, Tuple[state.DeploymentResult, state.BlockedStatus, state.ComplianceStatus]] = {
+state_translation_table: dict[
+    const.ResourceState, Tuple[state.DeploymentResult, state.BlockedStatus, state.ComplianceStatus]
+] = {
     # A table to translate the old states into the new states
     # None means don't care, mostly used for values we can't derive from the old state
     const.ResourceState.unavailable: (None, state.BlockedStatus.NO, state.ComplianceStatus.UNDEFINED),
