@@ -1757,7 +1757,7 @@ async def test_repair_does_not_trigger_for_blocked_resources(agent: TestAgent, m
     }
 
     await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
-    await retry_limited_fast(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
 
     # Both resources were deployed
     assert agent.executor_manager.executors["agent1"].execute_count == 2
@@ -1768,7 +1768,7 @@ async def test_repair_does_not_trigger_for_blocked_resources(agent: TestAgent, m
     agent.scheduler._state.resource_state[rid1].blocked = BlockedStatus.YES
 
     await agent.scheduler.repair(reason="Test triggered global repair")
-    await retry_limited_fast(fun=utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    await retry_limited_fast(fun=utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
 
     # Only r2 was deployed
     assert agent.executor_manager.executors["agent1"].execute_count == 1
