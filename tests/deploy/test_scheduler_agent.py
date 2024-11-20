@@ -215,15 +215,15 @@ state_translation_table: dict[
 ] = {
     # A table to translate the old states into the new states
     # None means don't care, mostly used for values we can't derive from the old state
-    const.ResourceState.unavailable: (None, state.BlockedStatus.NO, state.ComplianceStatus.UNDEFINED),
-    const.ResourceState.skipped: (None, state.BlockedStatus.YES, None),
+    const.ResourceState.unavailable: (None, state.BlockedStatus.NO, state.ComplianceStatus.FAILED),
+    const.ResourceState.skipped: (state.DeploymentResult.SKIPPED, None, None),
     const.ResourceState.dry: (None, None, None),  # don't care
     const.ResourceState.deployed: (state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO, None),
     const.ResourceState.failed: (state.DeploymentResult.FAILED, state.BlockedStatus.NO, None),
     const.ResourceState.deploying: (None, state.BlockedStatus.NO, None),
     const.ResourceState.available: (None, state.BlockedStatus.NO, state.ComplianceStatus.HAS_UPDATE),
-    const.ResourceState.undefined: (None, state.BlockedStatus.NO, state.ComplianceStatus.UNDEFINED),
-    const.ResourceState.skipped_for_undefined: (None, state.BlockedStatus.YES, state.ComplianceStatus.UNDEFINED),
+    const.ResourceState.undefined: (None, state.BlockedStatus.YES, state.ComplianceStatus.UNDEFINED),
+    const.ResourceState.skipped_for_undefined: (None, state.BlockedStatus.YES, None),
 }
 
 
