@@ -125,6 +125,12 @@ class TaskManager(StateUpdateManager, abc.ABC):
         :param deployment_result: The result of the deploy, iff one just finished, otherwise None.
         """
 
+    @abstractmethod
+    async def cancel_periodic_repair_and_deploy_for_resource(self, resource_id: ResourceIdStr) -> None:
+        """
+        Cancel individual periodic repair/deploy for the given resource.
+        """
+
 
 class TaskRunner:
     def __init__(self, endpoint: str, scheduler: "ResourceScheduler"):
@@ -886,7 +892,6 @@ class ResourceScheduler(TaskManager):
                         deploying=set(),
                     )
         await self.create_periodic_repair_and_deploy(resource)
-
 
     async def cancel_periodic_repair_and_deploy_for_resource(self, resource_id: ResourceIdStr) -> None:
         """

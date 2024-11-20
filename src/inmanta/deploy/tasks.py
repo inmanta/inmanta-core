@@ -121,7 +121,6 @@ class Deploy(Task):
                 # Stale resource, can simply be dropped.
                 return
 
-            assert isinstance(task_manager, scheduler.ResourceScheduler)  # Make mypy happy
             # Dependencies are always set when calling get_resource_intent_for_deploy
             assert intent.dependencies is not None
             # Resolve to executor form
