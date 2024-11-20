@@ -172,7 +172,15 @@ class ManagedExecutor(DummyExecutor):
         del self._deploys[resource_details.rid]
         self.execute_count += 1
 
-        return DeployResult(resource_details.rvid, action_id, status=result, blocked=BlockedStatus.NO, messages=[], changes={}, change=Change.nochange)
+        return DeployResult(
+            resource_details.rvid,
+            action_id,
+            status=result,
+            blocked=BlockedStatus.NO,
+            messages=[],
+            changes={},
+            change=Change.nochange,
+        )
 
 
 class DummyManager(executor.ExecutorManager[executor.Executor]):
