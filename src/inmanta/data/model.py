@@ -402,7 +402,7 @@ class LogLine(BaseModel):
     # Override the setting from the BaseModel class as such that the level field is
     # serialized using the name of the enum instead of its value. This is required
     # to make sure that data sent to the API endpoints resource_action_update
-    # and resource_deploy_done are serialized consistently using the name of the enum.
+    # and send_deploy_done are serialized consistently using the name of the enum.
     model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
 
     level: const.LogLevel

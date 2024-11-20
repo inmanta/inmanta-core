@@ -87,13 +87,13 @@ def slowdown_queries(
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_done", "resource_action_update"])
+@pytest.mark.parametrize("method_to_use", ["send_deploy_done", "resource_action_update"])
 async def test_4889_deadlock_delete_resource_action_update(
-    monkeypatch, server, client, environment: str, agent, endpoint_to_use: str
+    monkeypatch, server, client, environment: str, agent, method_to_use: str
 ) -> None:
     """
-    Verify that no deadlock exists between the delete of a version and the deploy_done/resource_action_update (background task)
-    on that same version.
+    Verify that no deadlock exists between the delete of a version and the
+    send_deploy_done/resource_action_update (background task) on that same version.
     """
     env_id: uuid.UUID = uuid.UUID(environment)
     update_manager = persistence.ToDbUpdateManager(client, env_id)
@@ -142,7 +142,7 @@ async def test_4889_deadlock_delete_resource_action_update(
     # request deploy_done
     now: datetime.datetime = datetime.datetime.now()
     deploy_done: abc.Awaitable[None] | abc.Awaitable[Result]
-    if endpoint_to_use == "resource_deploy_done":
+    if method_to_use == "send_deploy_done":
         deploy_done = update_manager.send_deploy_done(
             result=executor.DeployResult(
                 rvid=resource,
@@ -158,7 +158,7 @@ async def test_4889_deadlock_delete_resource_action_update(
                 change=const.Change.purged,
             )
         )
-    elif endpoint_to_use == "resource_action_update":
+    elif method_to_use == "resource_action_update":
         deploy_done = agent._client.resource_action_update(
             tid=env_id,
             resource_ids=[resource],

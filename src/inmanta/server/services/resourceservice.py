@@ -510,17 +510,10 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         change: const.Change,
         send_events: bool,
         keep_increment_cache: bool = False,
-        is_increment_notification: bool = False,
         only_update_from_states: Optional[set[const.ResourceState]] = None,
         *,
         connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
     ) -> Apireturn:
-        """
-        :param is_increment_notification: is this the increment calucation setting the deployed status,
-            instead of an actual deploy? Used to keep track of the last_success field on the resources,
-            which should not be updated for increments.
-        """
-
         def convert_legacy_state(
             status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]]
         ) -> Optional[const.ResourceState]:
@@ -685,15 +678,14 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                             if change is not None and change != Change.nochange:
                                 extra_fields["last_produced_events"] = finished
 
-                            if not is_increment_notification:
-                                if status == ResourceState.deployed:
-                                    extra_fields["last_success"] = resource_action.started
-                                if status not in {
-                                    ResourceState.deploying,
-                                    ResourceState.undefined,
-                                    ResourceState.skipped_for_undefined,
-                                }:
-                                    extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
+                            if status == ResourceState.deployed:
+                                extra_fields["last_success"] = resource_action.started
+                            if status not in {
+                                ResourceState.deploying,
+                                ResourceState.undefined,
+                                ResourceState.skipped_for_undefined,
+                            }:
+                                extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
 
                             await res.update_persistent_state(
                                 **extra_fields,

@@ -1341,7 +1341,7 @@ async def test_send_deploy_done(server, client, environment, agent, caplog, meth
             )
             assert result.code == 200, result.result
 
-    # Assert effect of resource_deploy_done call
+    # Assert effect of send_deploy_done call
     assert f"{rvid_r1_v1}: message" in caplog.messages
     assert f"{rvid_r1_v1}: test" in caplog.messages
 
