@@ -119,7 +119,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         :param resource: The resource to report state for.
         :param attribute_hash: The resource's attribute hash for which this state applies. No scheduler state is updated if the
             hash indicates the state information is stale.
-        :param status: The new resource status. If none, the old one is kept.
+        :param status: The new resource status.
         :param deployment_result: The result of the deploy, iff one just finished, otherwise None.
         """
 
@@ -657,8 +657,8 @@ class ResourceScheduler(TaskManager):
                     state.deployment_result = deployment_result
                 return
 
-            if status is not None:
-                state.status = status
+            # We are not stale
+            state.status = status
             if deployment_result is not None:
                 # first update state, then send out events
                 self._deploying_latest.remove(resource)

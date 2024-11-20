@@ -283,7 +283,7 @@ class ModelState:
                 return False
             # Unblock resource
             self.resource_state[resource].blocked = BlockedStatus.NO
-            if self.resource_state[resource].status is ComplianceStatus.HAS_UPDATE:
+            if self.resource_state[resource].status in [ComplianceStatus.HAS_UPDATE, ComplianceStatus.NON_COMPLIANT]:
                 self.dirty.add(resource)
             return True
 
