@@ -109,6 +109,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         attribute_hash: str,
         status: ComplianceStatus,
         deployment_result: Optional[DeploymentResult] = None,
+        blocked_status: Optional[BlockedStatus] = None,
     ) -> None:
         """
         Report new state for a resource. Since knowledge of deployment result implies a finished deploy, it must only be set
@@ -121,6 +122,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
             hash indicates the state information is stale.
         :param status: The new resource status.
         :param deployment_result: The result of the deploy, iff one just finished, otherwise None.
+        :param blocked_status: The blocked status of this resource
         """
 
 
@@ -319,7 +321,9 @@ class ResourceScheduler(TaskManager):
         if not self._running:
             return
         async with self._scheduler_lock:
-            self._state.dirty.update(self._state.resources.keys())
+            self._state.dirty.update(
+                [ResourceIdStr(key) for key, value in self._state.resource_state.items() if value.blocked != BlockedStatus.YES]
+            )
             self._work.deploy_with_context(
                 self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
             )
@@ -634,6 +638,7 @@ class ResourceScheduler(TaskManager):
         attribute_hash: str,
         status: ComplianceStatus,
         deployment_result: Optional[DeploymentResult] = None,
+        blocked_status: Optional[BlockedStatus] = None,
     ) -> None:
         if deployment_result is DeploymentResult.NEW:
             raise ValueError("report_resource_state should not be called to register new resources")
@@ -672,7 +677,7 @@ class ResourceScheduler(TaskManager):
                     # (or skip) causes it to become dirty now.
                     self._state.dirty.add(resource)
                 # propagate events
-                if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
+                if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False) and blocked_status != BlockedStatus.YES:
                     provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
                     event_listeners: Set[ResourceIdStr] = {
                         dependant

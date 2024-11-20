@@ -36,6 +36,7 @@ from inmanta import const, data, protocol, resources, tracing
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResource, LinkedDiscoveredResource, ResourceIdStr
+from inmanta.deploy.state import BlockedStatus
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
@@ -83,6 +84,15 @@ class SkipResource(Exception):
     """
     A handler should raise this exception when a resource should be skipped. The resource will be marked as skipped
     instead of failed.
+    The resource will be skipped with a BlockedStatus of NO.
+    """
+
+
+class DefaultSkipResource(Exception):
+    """
+    This is the exception that the default handler will raise when a resource should be skipped.
+    The resource will be skipped with a BlockedStatus of TRANSIENT, meaning that it is transient and dependent on its
+    dependencies state.
     """
 
 
@@ -249,6 +259,7 @@ class HandlerContext(LoggerABC):
             action_id = uuid.uuid4()
         self._action_id = action_id
         self._status: Optional[ResourceState] = None
+        self._blocked: Optional[BlockedStatus] = None
         self._logs: list[data.LogLine] = []
         self.logger: logging.Logger
         if logger is None:
@@ -289,6 +300,10 @@ class HandlerContext(LoggerABC):
         return self._status
 
     @property
+    def blocked(self) -> Optional[BlockedStatus]:
+        return self._blocked
+
+    @property
     def logs(self) -> list[data.LogLine]:
         return self._logs
 
@@ -297,6 +312,12 @@ class HandlerContext(LoggerABC):
         Set the status of the handler operation.
         """
         self._status = status
+
+    def set_blocked(self, blocked: BlockedStatus) -> None:
+        """
+        Set the blocked status of the handler operation.
+        """
+        self._blocked = blocked
 
     def is_dry_run(self) -> bool:
         """
@@ -811,6 +832,14 @@ class ResourceHandler(HandlerAPI[TResource]):
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
             )
+        except DefaultSkipResource as e:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.set_blocked(BlockedStatus.TRANSIENT)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped using the default exception: %(reason)s",
+                resource_id=resource.id,
+                reason=e.args,
+            )
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception(
@@ -875,6 +904,8 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                    id used in API calls
         :param resource: A clone of the desired resource state. The read method need to set values on this object.
         :raise SkipResource: Raise this exception when the handler should skip this resource
+        :raise DefaultSkipResource: Raise this exception when the handler should skip this resource and retry only
+            when its dependencies succeed.
         :raise ResourcePurged: Raise this exception when the resource does not exist yet.
         """
 
@@ -976,7 +1007,14 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
             )
-
+        except DefaultSkipResource as e:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.set_blocked(BlockedStatus.TRANSIENT)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped using the default exception: %(reason)s",
+                resource_id=resource.id,
+                reason=e.args,
+            )
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception(
@@ -1070,6 +1108,14 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
             ctx.set_status(const.ResourceState.skipped)
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
+            )
+        except DefaultSkipResource as e:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.set_blocked(BlockedStatus.TRANSIENT)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped using the default exception: %(reason)s",
+                resource_id=resource.id,
+                reason=e.args,
             )
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)

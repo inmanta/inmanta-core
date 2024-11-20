@@ -1,0 +1,5 @@
+description: Add BlockedStatus.TRANSIENT and differentiate between default and custom handler skip
+issue-nr: 8340
+change-type: minor
+destination-branches: [master]
+

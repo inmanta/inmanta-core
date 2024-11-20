@@ -43,6 +43,7 @@ from inmanta.agent.handler import HandlerContext
 from inmanta.const import Change, ResourceState
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.deploy.state import BlockedStatus
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
@@ -487,6 +488,7 @@ class DeployResult:
     rvid: ResourceVersionIdStr
     action_id: uuid.UUID
     status: ResourceState
+    blocked: BlockedStatus
     messages: list[LogLine]
     changes: dict[str, AttributeStateChange]
     change: Optional[Change]
@@ -501,6 +503,7 @@ class DeployResult:
             rvid=rvid,
             action_id=ctx.action_id,
             status=ctx.status or ResourceState.failed,
+            blocked=ctx.blocked if ctx.blocked is not None else BlockedStatus.NO,
             messages=ctx.logs,
             changes=ctx.changes,
             change=ctx.change,
@@ -512,6 +515,7 @@ class DeployResult:
             rvid=rvid,
             action_id=action_id,
             status=ResourceState.unavailable,
+            blocked=BlockedStatus.NO,
             messages=[message],
             changes={},
             change=Change.nochange,
