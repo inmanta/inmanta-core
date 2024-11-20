@@ -247,6 +247,12 @@ class ResourceScheduler(TaskManager):
 
         self._sched = Scheduler("Resource scheduler")
         self.resource_periodic_repairs: dict[ResourceIdStr, ScheduledTask] = {}
+
+        # Typing for repair/deploy timers :
+        #   - int: max number of seconds between consecutive repairs/deploys
+        #     on a per-resource basis.
+        #   - str: cron-like expression to schedule a periodic global repair/deploy
+        #     i.e. for all known resources.
         self._repair_timer: Union[int, str] = agent_config.agent_repair_interval.get()
 
         self.global_periodic_repair_task: ScheduledTask | None = None
@@ -256,7 +262,7 @@ class ResourceScheduler(TaskManager):
 
         self.global_periodic_deploy_task: ScheduledTask | None = None
 
-    async def clear_periodic_tasks(self) -> None:
+    def clear_periodic_tasks(self) -> None:
         """
         Cancel periodic deploys and repairs and clears the associated book-keeping dicts.
         """
@@ -270,7 +276,7 @@ class ResourceScheduler(TaskManager):
         if self.global_periodic_deploy_task is not None:
             self._sched.remove(self.global_periodic_deploy_task)
 
-    async def reset(self) -> None:
+    def reset(self) -> None:
         """
         Clear out all state and start empty
 
@@ -282,12 +288,12 @@ class ResourceScheduler(TaskManager):
         self._workers.clear()
         self._deploying_latest.clear()
 
-        await self.clear_periodic_tasks()
+        self.clear_periodic_tasks()
 
     async def start(self) -> None:
         if self._running:
             return
-        await self.reset()
+        self.reset()
         await self.reset_resource_state()
         await self._initialize()
         self._running = True
@@ -328,7 +334,7 @@ class ResourceScheduler(TaskManager):
         if not self._running:
             return
         self._running = False
-        await self.clear_periodic_tasks()
+        self.clear_periodic_tasks()
         await self._sched.stop()
         self._work.agent_queues.send_shutdown()
 
@@ -555,7 +561,6 @@ class ResourceScheduler(TaskManager):
                 self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
 
             for resource, details in resources.items():
-                await self.create_periodic_repair_and_deploy(resource)
                 if details.status is const.ResourceState.undefined:
                     blocked_resources.add(resource)
                     self._work.delete_resource(resource)
@@ -570,6 +575,8 @@ class ResourceScheduler(TaskManager):
                 else:
                     # It's a resource we don't know yet.
                     new_desired_state.add(resource)
+                    await self.create_periodic_repair_and_deploy(resource)
+
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 new_requires: Set[ResourceIdStr] = requires.get(resource, set())
                 added: Set[ResourceIdStr] = new_requires - old_requires
