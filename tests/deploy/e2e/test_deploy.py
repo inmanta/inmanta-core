@@ -867,3 +867,53 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
     await retry_limited(in_progress, 30)
 
     await resource_container.wait_for_done_with_waiters(client, environment, version)
+
+
+async def test_lsm_states(resource_container, server, client, clienthelper, environment, agent):
+    version = await clienthelper.get_version()
+
+    resource_container.Provider.set_fail("agent1", "key", 1)
+
+    rid1 = "test::Resource[agent1,key=key]"
+    rid2 = "test::Resource[agent1,key=key2]"
+    lsmrid = "test::LSMLike[agent1,key=key3]"
+
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+        },
+        {
+            "key": "key2",
+            "value": "value",
+            "id": f"{rid2},v={version}",
+            "requires": [rid1],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+        },
+        {
+            "key": "key3",
+            "value": "value",
+            "id": f"{lsmrid},v={version}",
+            "requires": [rid1, rid2],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+        },
+    ]
+    await clienthelper.set_auto_deploy(True)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed()
+
+    result = await client.resource_list(environment)
+    assert result.code == 200
+    state_map = {r["resource_id"]: r["status"] for r in result.result["data"]}
+    # One failure, one skip, in the depdencies
+    # response is failure
+    assert state_map == {rid1: "failed", rid2: "skipped", lsmrid: "failed"}

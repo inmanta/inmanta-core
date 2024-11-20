@@ -410,9 +410,7 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
 
         :param current_pid: The PID of this process
         """
-        for process in psutil.process_iter():
-            if process.pid == current_pid:
-                return process.children(recursive=True)
+        return psutil.Process(current_pid).children(recursive=True)
 
     def find_scheduler(children: list[Process]) -> Optional[Process]:
         """
@@ -423,17 +421,14 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
         current_scheduler = None
 
         for child in children:
-            match child.name():
-                case "python" | "python3":
-                    cmd_line_process = " ".join(child.cmdline())
-                    if "inmanta.app" in cmd_line_process and "scheduler" in cmd_line_process:
-                        assert current_scheduler is None, (
-                            f"A scheduler was already found: {current_scheduler} but we found "
-                            f"a new one: {child}, this is unexpected!"
-                        )
-                        current_scheduler = child
-                case _:
-                    continue
+            if "python" in child.name():
+                cmd_line_process = " ".join(child.cmdline())
+                if "inmanta.app" in cmd_line_process and "scheduler" in cmd_line_process:
+                    assert current_scheduler is None, (
+                        f"A scheduler was already found: {current_scheduler} but we found "
+                        f"a new one: {child}, this is unexpected!"
+                    )
+                    current_scheduler = child
         return current_scheduler
 
     def filter_relevant_processes(latest_scheduler: Process) -> SchedulerChildren:
@@ -453,7 +448,7 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
                     fork_server = child
                 case executor if "inmanta: executor process" in executor:
                     executors.append(child)
-                case "python" | "python3":
+                case py if "python" in py:
                     cmd_line_process = " ".join(child.cmdline())
                     resource_tracker_import = "from multiprocessing.resource_tracker"
                     if resource_tracker_import in cmd_line_process:
