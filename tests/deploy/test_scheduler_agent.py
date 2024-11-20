@@ -215,7 +215,7 @@ state_translation_table: dict[
 ] = {
     # A table to translate the old states into the new states
     # None means don't care, mostly used for values we can't derive from the old state
-    const.ResourceState.unavailable: (None, state.BlockedStatus.NO, state.ComplianceStatus.FAILED),
+    const.ResourceState.unavailable: (None, state.BlockedStatus.NO, state.ComplianceStatus.NON_COMPLIANT),
     const.ResourceState.skipped: (state.DeploymentResult.SKIPPED, None, None),
     const.ResourceState.dry: (None, None, None),  # don't care
     const.ResourceState.deployed: (state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO, None),
