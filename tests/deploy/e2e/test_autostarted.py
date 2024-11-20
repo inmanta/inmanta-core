@@ -422,13 +422,13 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
 
         for child in children:
             if "python" in child.name():
-                    cmd_line_process = " ".join(child.cmdline())
-                    if "inmanta.app" in cmd_line_process and "scheduler" in cmd_line_process:
-                        assert current_scheduler is None, (
-                            f"A scheduler was already found: {current_scheduler} but we found "
-                            f"a new one: {child}, this is unexpected!"
-                        )
-                        current_scheduler = child
+                cmd_line_process = " ".join(child.cmdline())
+                if "inmanta.app" in cmd_line_process and "scheduler" in cmd_line_process:
+                    assert current_scheduler is None, (
+                        f"A scheduler was already found: {current_scheduler} but we found "
+                        f"a new one: {child}, this is unexpected!"
+                    )
+                    current_scheduler = child
         return current_scheduler
 
     def filter_relevant_processes(latest_scheduler: Process) -> SchedulerChildren:
