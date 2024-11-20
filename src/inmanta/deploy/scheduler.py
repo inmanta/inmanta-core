@@ -885,6 +885,8 @@ class ResourceScheduler(TaskManager):
                         priority=priority,
                         deploying=set(),
                     )
+        await self.create_periodic_repair_and_deploy(resource)
+
 
     async def cancel_periodic_repair_and_deploy_for_resource(self, resource_id: ResourceIdStr) -> None:
         """

@@ -234,7 +234,6 @@ class Deploy(Task):
                     ),
                     deployment_result=scheduler_deployment_result,
                 )
-                await task_manager.create_periodic_repair_and_deploy(executor_resource_details.rid)
 
 
 @dataclass(frozen=True, kw_only=True)
