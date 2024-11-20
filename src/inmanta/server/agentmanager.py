@@ -91,9 +91,6 @@ Model in server         On Agent
 |               |
 +---------------+
 
-
-get_resources_for_agent
-
 resource_action_update
 
 dryrun_update
@@ -1468,14 +1465,6 @@ tags = {config_map_to_str(opt.influxdb_tags.get())}
             proc.pid,
             ",".join(sorted(expected_agents_in_up_state)),
         )
-
-    async def notify_agent_about_agent_map_update(self, env: data.Environment) -> None:
-        agent_client = self._agent_manager.get_agent_client(tid=env.id, endpoint="internal", live_agent_only=False)
-        if agent_client:
-            new_agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
-            self.add_background_task(agent_client.update_agent_map(new_agent_map))
-        else:
-            LOGGER.warning("Could not send update_agent_map() trigger for environment %s. Internal agent is down.", env.id)
 
     async def _wait_for_proc_bounded(
         self, procs: Iterable[subprocess.Process], timeout: float = const.SHUTDOWN_GRACE_HARD

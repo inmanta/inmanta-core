@@ -34,8 +34,10 @@ import inmanta.util
 import util.performance
 import utils
 from inmanta import data
+from inmanta.agent.executor import DeployResult
 from inmanta.const import ResourceState
-from inmanta.data.model import LatestReleasedResource, ResourceVersionIdStr
+from inmanta.data.model import LatestReleasedResource, ResourceIdStr, ResourceVersionIdStr
+from inmanta.deploy import persistence
 from inmanta.server.config import get_bind_port
 
 
@@ -559,7 +561,6 @@ async def test_deploy_summary(server, client, env_with_resources):
 
 @pytest.fixture
 async def very_big_env(server, client, environment, clienthelper, null_agent, instances: int) -> int:
-    agent = null_agent
     env_obj = await data.Environment.get_by_id(environment)
     await env_obj.set(data.AUTO_DEPLOY, True)
 
@@ -623,16 +624,27 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
             version = result.result["data"]
         await utils.wait_until_version_is_released(client, environment, version)
 
-        result = await agent._client.get_resources_for_agent(environment, f"agent{tenant_index}", incremental_deploy=True)
+        # Get all resources
+        result = await client.get_version(tid=environment, id=version)
         assert result.code == 200
-        assert result.result["resources"]
+        all_resources: list[dict[str, object]] = result.result["resources"]
 
-        async def deploy(resource) -> None:
+        # Filter out resources part of the increment
+        increment: set[ResourceIdStr]
+        increment, _ = await data.ConfigurationModel.get_increment(environment, version)
+        resources_in_increment_for_agent: list[dict[str, object]] = [
+            r for r in all_resources if r["resource_id"] in increment and r["agent"] == f"agent{tenant_index}"
+        ]
+
+        to_db_update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
+
+        async def deploy(resource: dict[str, object]) -> None:
             nonlocal deploy_counter
-            rid = resource["id"]
+            rid = ResourceIdStr(resource["resource_id"])
+            rvid = ResourceVersionIdStr(resource["resource_version_id"])
             actionid = uuid.uuid4()
             deploy_counter = deploy_counter + 1
-            await agent._client.resource_deploy_start(environment, rid, actionid)
+            await to_db_update_manager.send_in_progress(actionid, rvid)
             if "sub=4]" in rid:
                 return
             else:
@@ -642,9 +654,18 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                     status = ResourceState.skipped
                 else:
                     status = ResourceState.deployed
-                await agent._client.resource_deploy_done(environment, rid, actionid, status)
+                await to_db_update_manager.send_deploy_done(
+                    result=DeployResult(
+                        rvid=rvid,
+                        action_id=actionid,
+                        status=status,
+                        messages=[],
+                        changes={},
+                        change=None,
+                    )
+                )
 
-        await asyncio.gather(*(deploy(resource) for resource in result.result["resources"]))
+        await asyncio.gather(*(deploy(resource) for resource in resources_in_increment_for_agent))
 
     for iteration in [0, 1]:
         for tenant in range(instances):

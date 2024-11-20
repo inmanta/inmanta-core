@@ -33,7 +33,9 @@ import asyncpg
 import pytest
 
 from inmanta import const, data
+from inmanta.agent import executor
 from inmanta.data import model
+from inmanta.deploy import persistence
 from inmanta.protocol.common import Result
 
 
@@ -94,6 +96,7 @@ async def test_4889_deadlock_delete_resource_action_update(
     on that same version.
     """
     env_id: uuid.UUID = uuid.UUID(environment)
+    update_manager = persistence.ToDbUpdateManager(client, env_id)
 
     version: int = 1
     await data.ConfigurationModel(
@@ -125,8 +128,7 @@ async def test_4889_deadlock_delete_resource_action_update(
     assert result.code == 200
 
     action_id = uuid.uuid4()
-    result = await agent._client.resource_deploy_start(tid=env_id, rvid=resource, action_id=action_id)
-    assert result.code == 200, result.result
+    await update_manager.send_in_progress(action_id, resource)
 
     # artificially slow down queries to increase deadlock probability
     slowdown_queries(monkeypatch, cls=data.ResourceAction, query_funcs=["set_and_save"], delay=2)
@@ -139,19 +141,22 @@ async def test_4889_deadlock_delete_resource_action_update(
 
     # request deploy_done
     now: datetime.datetime = datetime.datetime.now()
-    deploy_done: abc.Awaitable[Result]
+    deploy_done: abc.Awaitable[None] | abc.Awaitable[Result]
     if endpoint_to_use == "resource_deploy_done":
-        deploy_done = agent._client.resource_deploy_done(
-            tid=env_id,
-            rvid=resource,
-            action_id=action_id,
-            status=const.ResourceState.deployed,
-            messages=[
-                model.LogLine(level=const.LogLevel.DEBUG, msg="message", kwargs={"keyword": 123, "none": None}, timestamp=now),
-                model.LogLine(level=const.LogLevel.INFO, msg="test", kwargs={}, timestamp=now),
-            ],
-            changes={"attr1": model.AttributeStateChange(current=None, desired="test")},
-            change=const.Change.purged,
+        deploy_done = update_manager.send_deploy_done(
+            result=executor.DeployResult(
+                rvid=resource,
+                action_id=action_id,
+                status=const.ResourceState.deployed,
+                messages=[
+                    data.LogLine.log(
+                        level=const.LogLevel.DEBUG, msg="message", kwargs={"keyword": 123, "none": None}, timestamp=now
+                    ),
+                    data.LogLine.log(level=const.LogLevel.INFO, msg="test", kwargs={}, timestamp=now),
+                ],
+                changes={"attr1": model.AttributeStateChange(current=None, desired="test")},
+                change=const.Change.purged,
+            )
         )
     elif endpoint_to_use == "resource_action_update":
         deploy_done = agent._client.resource_action_update(
@@ -174,9 +179,9 @@ async def test_4889_deadlock_delete_resource_action_update(
         raise ValueError("Unknown value for endpoint_to_use parameter")
 
     # wait for both concurrent requests
-    results: abc.Sequence[Result] = await asyncio.gather(deploy_done, delete())
-    assert all(result.code == 200 for result in results), "\n".join(
-        str(result.result) for result in results if result.code != 200
+    results: abc.Sequence[Result | None] = await asyncio.gather(deploy_done, delete())
+    assert all(result.code == 200 for result in results if isinstance(result, Result)), "\n".join(
+        str(result.result) for result in results if isinstance(result, Result) and result.code != 200
     )
 
 

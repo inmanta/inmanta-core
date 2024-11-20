@@ -486,17 +486,6 @@ def get_agent_process_details(tid: uuid.UUID, id: uuid.UUID, report: bool = Fals
 
 
 @typedmethod(
-    path="/agentmap", api=False, server_agent=True, enforce_auth=False, operation="POST", client_types=[], api_version=2
-)
-def update_agent_map(agent_map: dict[str, str]) -> None:
-    """
-    Notify an agent about the fact that the autostart_agent_map has been updated.
-
-    :param agent_map: The content of the new autostart_agent_map
-    """
-
-
-@typedmethod(
     path="/db_status", api=False, server_agent=True, enforce_auth=False, operation="POST", client_types=[], api_version=2
 )
 def get_db_status() -> DataBaseReport:
@@ -561,62 +550,6 @@ def get_resource_actions(
 
     :raises BadRequest: When the supplied parameters are not valid.
 
-    """
-
-
-@typedmethod(
-    path="/resource/<rvid>/deploy/done",
-    operation="POST",
-    agent_server=True,
-    arg_options={**methods.ENV_OPTS, **methods.RVID_OPTS},
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def resource_deploy_done(
-    tid: uuid.UUID,
-    rvid: model.ResourceVersionIdStr,
-    action_id: uuid.UUID,
-    status: ResourceState,
-    messages: list[model.LogLine] = [],
-    changes: dict[str, model.AttributeStateChange] = {},
-    change: Optional[Change] = None,
-) -> None:
-    """
-    Report to the server that an agent has finished the deployment of a certain resource.
-
-    :param tid: The id of the environment the resource belongs to
-    :param rvid: The resource version id of the resource for which the deployment is finished.
-    :param action_id: A unique ID associated with this resource deployment action. This should be the same ID that was
-                      passed to the `/resource/<resource_id>/deploy/start` API call.
-    :param status: The current status of the resource (if known)
-    :param messages: A list of log entries produced by the deployment action.
-    :param changes: A dict of changes to this resource. The key of this dict indicates the attributes/fields that
-                   have been changed. The value contains the new value and/or the original value.
-    :param change: The type of change that was done the given resource.
-    """
-
-
-@typedmethod(
-    path="/resource/<rvid>/deploy/start",
-    operation="POST",
-    agent_server=True,
-    arg_options={**methods.ENV_OPTS, **methods.RVID_OPTS},
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def resource_deploy_start(
-    tid: uuid.UUID,
-    rvid: model.ResourceVersionIdStr,
-    action_id: uuid.UUID,
-) -> dict[model.ResourceVersionIdStr, ResourceState]:
-    """
-    Report to the server that the agent will start the deployment of the given resource.
-
-    :param tid: The id of the environment the resource belongs to
-    :param rvid: The resource version id of the resource for which the deployment will start
-    :param action_id: A unique id used to track the action of this deployment
-    :return: A dict mapping the resource version id of each dependency of resource_id to
-             the last deployment status of that resource.
     """
 
 

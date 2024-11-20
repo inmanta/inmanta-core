@@ -888,6 +888,22 @@ async def null_agent(server, environment):
 
 
 @pytest.fixture(scope="function")
+async def null_agent_multi(server_multi, environment_multi):
+    """Construct an agent that does nothing"""
+    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
+
+    a = utils.NullAgent(environment_multi)
+
+    await a.start()
+
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+    await a.stop()
+
+
+@pytest.fixture(scope="function")
 async def agent_multi(server_multi, environment_multi):
     """Construct an agent that can execute using the resource container"""
     server = server_multi
