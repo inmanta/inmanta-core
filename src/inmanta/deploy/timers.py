@@ -18,8 +18,8 @@
 
 import asyncio
 import logging
-from collections.abc import Sequence, Coroutine
-from typing import Callable, Any
+from collections.abc import Coroutine, Sequence
+from typing import Any, Callable
 
 import inmanta.deploy.scheduler
 from inmanta.agent import config as agent_config
@@ -33,14 +33,18 @@ LOGGER = logging.getLogger(__name__)
 class ResourceTimer:
     resource: ResourceIdStr
 
-    repair_handle: asyncio.TimerHandle | None
+    repair_handle: asyncio.Task[None] | None
 
     def __init__(self, resource: ResourceIdStr):
         self.resource = resource
         self.repair_handle = None
 
     async def install_timer(
-        self, periodic_deploy_interval: int | None, periodic_repair_interval: int | None, is_dirty: bool, action_function: Callable[[ResourceIdStr, int], Coroutine[Any, Any, None]]
+        self,
+        periodic_deploy_interval: int | None,
+        periodic_repair_interval: int | None,
+        is_dirty: bool,
+        action_function: Callable[[ResourceIdStr, int], Coroutine[Any, Any, None]],
     ) -> None:
 
         next_execute_time: int
@@ -58,13 +62,15 @@ class ResourceTimer:
             return
 
         await asyncio.sleep(next_execute_time)
-        self.repair_handle = await action_function(self.resource, next_execute_time)
+        self.repair_handle = asyncio.create_task(action_function(self.resource, next_execute_time))
 
     def uninstall_timer(self) -> None:
         if self.repair_handle is not None:
             self.repair_handle.cancel()
 
-
+    def cancel(self) -> None:
+        if self.repair_handle:
+            self.repair_handle.cancel()
 class TimerManager:
     resource_timers: dict[ResourceIdStr, ResourceTimer]
 
@@ -92,12 +98,10 @@ class TimerManager:
     def register_resource(self, resource: ResourceIdStr) -> None:
         self.resource_timers[resource] = ResourceTimer(resource)
 
-    async def unregister_resource(self, resource: ResourceIdStr) -> None:
-        if resource not in self.resource_timers:
-            return
-
-        await self.resource_timers[resource].cancel()
-        del self.resource_timers[resource]
+    def unregister_resource(self, resource: ResourceIdStr) -> None:
+        if resource in self.resource_timers:
+            self.resource_timers[resource].cancel()
+            del self.resource_timers[resource]
 
     def reset(self) -> None:
         pass
@@ -157,6 +161,7 @@ class TimerManager:
                 reason=f"Global deploy triggered because of set cron {cron_expression}",
                 priority=TaskPriority.INTERVAL_DEPLOY,
             )
+
         task = self._sched.add_action(_action, cron_schedule)
         assert isinstance(task, ScheduledTask)
         return task
@@ -175,6 +180,7 @@ class TimerManager:
                 reason=f"Global repair triggered because of set cron {cron_expression}",
                 priority=TaskPriority.INTERVAL_REPAIR,
             )
+
         task = self._sched.add_action(_action, cron_schedule)
         assert isinstance(task, ScheduledTask)
         return task

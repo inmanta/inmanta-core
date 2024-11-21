@@ -558,7 +558,7 @@ class ResourceScheduler(TaskManager):
                 # acquired longer than required. The worst that can happen here is that we deploy the deleted resources one
                 # time too many, which is not so bad.
                 self._work.delete_resource(resource)
-                await self._timer_manager.unregister_resource(resource)
+                self._timer_manager.unregister_resource(resource)
 
     def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
