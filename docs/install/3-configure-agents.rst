@@ -144,7 +144,6 @@ configure the behavior of the manually started agent:
 
 * :inmanta.config:option:`config.state-dir`
 * :inmanta.config:option:`config.environment`
-* :inmanta.config:option:`config.agent-map`
 * :inmanta.config:option:`config.agent-deploy-splay-time`
 * :inmanta.config:option:`config.agent-deploy-interval`
 * :inmanta.config:option:`config.agent-repair-splay-time`
