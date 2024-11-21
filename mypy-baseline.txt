@@ -30,7 +30,6 @@ src/inmanta/server/config.py:0: error: Cannot infer type argument 1 of "Option" 
 src/inmanta/server/config.py:0: error: Cannot infer type argument 1 of "Option"  [misc]
 src/inmanta/server/config.py:0: error: Cannot infer type argument 1 of "Option"  [misc]
 src/inmanta/server/config.py:0: error: Cannot infer type argument 1 of "Option"  [misc]
-src/inmanta/server/config.py:0: error: Incompatible return value type (got "str | int | None", expected "int")  [return-value]
 src/inmanta/server/config.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 src/inmanta/server/config.py:0: error: No overload variant of "int" matches argument type "object"  [call-overload]
 src/inmanta/server/config.py:0: note: Possible overload variants:
@@ -1080,7 +1079,6 @@ src/inmanta/agent/forking_executor.py:0: note: See https://mypy.readthedocs.io/e
 src/inmanta/deploy/scheduler.py:0: error: Argument 1 to "parse_id" of "Id" has incompatible type "object"; expected "ResourceVersionIdStr | ResourceIdStr"  [arg-type]
 src/inmanta/deploy/scheduler.py:0: error: Argument "attribute_hash" to "ResourceDetails" has incompatible type "str | None"; expected "str"  [arg-type]
 src/inmanta/deploy/scheduler.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
-src/inmanta/server/services/compilerservice.py:0: error: Incompatible types in assignment (expression has type "bool | int | float | str | dict[str, str | int | bool]", variable has type "int")  [assignment]
 src/inmanta/validation_type.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "Mapping[str, object] | None")  [assignment]
 src/inmanta/server/services/userservice.py:0: error: Module "inmanta.data" does not explicitly export attribute "AuthMethod"  [attr-defined]
 src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for + ("None" and "timedelta")  [operator]

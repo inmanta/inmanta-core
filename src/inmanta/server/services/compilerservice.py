@@ -880,7 +880,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
 
     def _calculate_recompile_backoff_time(
         self,
-        wait_time: int,
+        wait_time: float,
         compile_requested: datetime.datetime,
         last_compile_completed: datetime.datetime,
         now: datetime.datetime,
@@ -902,7 +902,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         if env is None:
             LOGGER.error("Unable to find environment %s in the database.", compile.environment)
             return
-        wait_time = await env.get(data.RECOMPILE_BACKOFF)
+        wait_time: float = cast(float, await env.get(data.RECOMPILE_BACKOFF))
         if wait_time:
             LOGGER.info("The recompile_backoff environment setting is enabled and set to %s seconds.", wait_time)
         else:
