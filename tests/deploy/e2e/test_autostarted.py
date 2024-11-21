@@ -193,7 +193,6 @@ async def test_auto_deploy_no_splay(server, client, clienthelper: ClientHelper, 
     Verify that the new scheduler can actually fork
     """
     env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTOSTART_ON_START, True)
 
     version = await clienthelper.get_version()
