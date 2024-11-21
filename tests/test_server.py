@@ -696,7 +696,6 @@ async def test_invalid_sid(server, client, environment):
     Verify that API endpoints, that should only be called by an agent, return an HTTP 400
     if they are called without a session id.
     """
-    # request get_code with a compiler client that does not have a sid
     res = await client.discovered_resource_create(
         tid=environment,
         discovered_resource_id="test::Test[agent1,attr=val]",
