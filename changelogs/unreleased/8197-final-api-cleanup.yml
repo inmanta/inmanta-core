@@ -1,5 +1,5 @@
 ---
-description: Cleanup API endpoint and configuration options are are no longer used.
+description: Clean up API endpoints and configuration options that are no longer used.
 issue-nr: 8197
 issue-repo: inmanta-core
 change-type: major
