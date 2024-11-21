@@ -1142,14 +1142,14 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 2
     assert agent.executor_manager.executors["agent3"].execute_count == 1
-    # verify that r2 is considered dirty now, as it is skipped
+    # verify that r2 is considered dirty now because it is skipped and r3 because it depends on r2
     assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
         # We are skipped, so not compliant
         status=state.ComplianceStatus.NON_COMPLIANT,
         deployment_result=state.DeploymentResult.SKIPPED,
         blocked=state.BlockedStatus.NO,
     )
-    assert agent.scheduler._state.dirty == {rid2}
+    assert agent.scheduler._state.dirty == {rid2, rid3}
 
     # trigger a deploy, verify that r2 gets scheduled because it is dirty
     # r2 goes from fail -> deployed: make sure r3 is redeployed
