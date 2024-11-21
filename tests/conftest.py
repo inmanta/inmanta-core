@@ -2174,6 +2174,14 @@ def resource_container(clean_reset):
 
         fields = ("key", "value", "set_state_to_deployed", "purged")
 
+    @resource("test::LSMLike", agent="agent", id_attribute="key")
+    class LsmLike(Resource):
+        """
+        Raise a SkipResource exception in the deploy() handler method.
+        """
+
+        fields = ("key", "value", "purged")
+
     @resource("test::EventResource", agent="agent", id_attribute="key")
     class EventResource(PurgeableResource):
         """
@@ -2446,6 +2454,50 @@ def resource_container(clean_reset):
 
         def do_changes(self, ctx, resource, changes):
             ctx.info("This is not JSON serializable: %(val)s", val=Empty())
+
+    @provider("test::LSMLike", name="lsmlike")
+    class LSMLikeHandler(CRUDHandler[LsmLike]):
+        def deploy(
+            self,
+            ctx: handler.HandlerContext,
+            resource: LsmLike,
+            requires: dict[ResourceIdStr, const.ResourceState],
+        ) -> None:
+            self.pre(ctx, resource)
+            try:
+                all_resources_are_deployed_successfully = self._send_current_state(ctx, resource, requires)
+                if all_resources_are_deployed_successfully:
+                    ctx.set_status(const.ResourceState.deployed)
+                else:
+                    ctx.set_status(const.ResourceState.failed)
+            finally:
+                self.post(ctx, resource)
+
+        def _send_current_state(
+            self,
+            ctx: handler.HandlerContext,
+            resource: LsmLike,
+            fine_grained_resource_states: dict[ResourceIdStr, const.ResourceState],
+        ) -> bool:
+            # If a resource is not in events, it means that it was deployed before so we can mark it as success
+            is_failed = False
+            skipped_resources = []
+            # Convert inmanta.const.ResourceState to inmanta_lsm.model.ResourceState
+            for resource_id, state in fine_grained_resource_states.items():
+                if state == const.ResourceState.failed:
+                    is_failed = True
+                elif state == const.ResourceState.deployed:
+                    pass
+                else:
+                    # some transient state that is not failed and not success, so lets skip
+                    skipped_resources.append(f"skipped because the `{resource_id}` is `{state.value}`")
+
+            # failure takes precedence over transient
+            # transient takes precedence over success
+            if len(skipped_resources) > 0 and not is_failed:
+                raise SkipResource("\n".join(skipped_resources))
+
+            return not is_failed
 
     @resource("test::AgentConfig", agent="agent", id_attribute="agentname")
     class AgentConfig(PurgeableResource):
