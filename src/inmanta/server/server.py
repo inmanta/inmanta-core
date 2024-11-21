@@ -19,6 +19,7 @@
 import asyncio
 import json
 import logging
+import os
 import pathlib
 import uuid
 from typing import TYPE_CHECKING, Optional, Union, cast
@@ -83,9 +84,12 @@ class Server(protocol.ServerSlice):
 
         state_dir = config.state_dir.get()
 
-        # Add marker file to indicate we are using the new disk layout
-        path = pathlib.Path(state_dir) / const.INMANTA_USE_NEW_DISK_LAYOUT_FILENAME
-        path.touch()
+        # Check version of disk layout
+        path = pathlib.Path(state_dir) / const.INMANTA_DISK_LAYOUT_VERSION
+        if not os.path.exists(path):
+            # If the file doesn't exist, create and write the default version to it
+            with open(path, "w") as file:
+                file.write(str(const.DEFAULT_INMANTA_DISK_LAYOUT_VERSION))
 
         dir_map = {
             "server": ensure_directory_exist(state_dir, "server"),

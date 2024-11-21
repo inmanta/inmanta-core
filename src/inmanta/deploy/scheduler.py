@@ -316,14 +316,20 @@ class ResourceScheduler(TaskManager):
 
     async def repair(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_REPAIR) -> None:
         """
-        Trigger a repair, i.e. mark all resources as dirty, then trigger a deploy.
+        Trigger a repair, i.e. mark all unblocked resources as dirty, then trigger a deploy.
         """
+
+        def _should_deploy(resource: ResourceIdStr) -> bool:
+            if (resource_state := self._state.resource_state.get(resource)) is not None:
+                return not resource_state.blocked.is_blocked()
+            # No state was found for this resource. Should probably not happen
+            # but err on the side of caution and mark for redeploy.
+            return True
+
         if not self._running:
             return
         async with self._scheduler_lock:
-            self._state.dirty.update(
-                [ResourceIdStr(key) for key, value in self._state.resource_state.items() if value.blocked != BlockedStatus.YES]
-            )
+            self._state.dirty.update(resource for resource in self._state.resources.keys() if _should_deploy(resource))
             self._work.deploy_with_context(
                 self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
             )
@@ -460,13 +466,17 @@ class ResourceScheduler(TaskManager):
             for resource in deleted_resources:
                 self._work.delete_resource(resource)
 
+            # Resources with known deployable changes (new resources or old resources with deployable changes)
             new_desired_state: set[ResourceIdStr] = set()
             # Only contains the direct undeployable resources, not the transitive ones.
             blocked_resources: set[ResourceIdStr] = set()
             # Resources that were undeployable in a previous model version, but got unblocked. Not the transitive ones.
             unblocked_resources: set[ResourceIdStr] = set()
+
+            # Track potential changes in requires per resource
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
+
             for resource, details in up_to_date_resources.items():
                 self._state.add_up_to_date_resource(resource, details)
 
@@ -485,6 +495,7 @@ class ResourceScheduler(TaskManager):
                 else:
                     # It's a resource we don't know yet.
                     new_desired_state.add(resource)
+
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 new_requires: Set[ResourceIdStr] = requires.get(resource, set())
                 added: Set[ResourceIdStr] = new_requires - old_requires
