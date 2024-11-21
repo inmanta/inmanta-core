@@ -261,7 +261,7 @@ function __inmanta_workon_cli_port {
 
     declare result
     result=$(
-        "$INMANTA_WORKON_PYTHON" -c 'from inmanta.server.config import get_bind_port; print(get_bind_port());' 2> /dev/null
+        "$INMANTA_WORKON_PYTHON" -c 'from inmanta.server import config; print(config.server_bind_port.get());' 2> /dev/null
     )
 
     if [ ! "$?" -eq 0 ]; then

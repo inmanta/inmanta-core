@@ -1,0 +1,30 @@
+---
+description: Clean up API endpoints and configuration options that are no longer used.
+issue-nr: 8197
+issue-repo: inmanta-core
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: |
+    The following configuration options were removed:
+      - config.agent-map
+      - config.use_autostart_agent_map
+      - config.agent-names
+      - config.agent-get-resource-backoff
+      - unknown_handler.default
+      - server.auto-recompile-wait
+      - config.agent-interval
+      - config.agent-splay
+      - server_rest_transport.port
+    The following environment settings were removed:
+      - push_on_auto_deploy
+      - agent_trigger_method_on_auto_deploy
+      - environment_agent_trigger_method
+      - autostart_agent_map
+    The following internal API endpoints were removed:
+      - get_resources_for_agent: `GET /api/v1/resource`
+      - get_code: `GET api/v1/code/<id>`
+      - resource_event: `PUT api/v1/event/<id>`
+      - update_agent_map: `POST api/v2/agentmap`
+      - resource_deploy_done: `POST api/v2/resource/<rvid>/deploy/done`
+      - resource_deploy_start: `POST api/v2/resource/<rvid>/deploy/start`

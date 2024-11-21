@@ -23,19 +23,21 @@ from datetime import timezone
 import pytest
 
 from inmanta import const, data
+from inmanta.agent import executor
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
+from inmanta.deploy import persistence
 
 
 @pytest.fixture
 async def resource_deployer(client, environment, null_agent):
-    agent = null_agent
+    env_id = uuid.UUID(environment)
+    update_manager = persistence.ToDbUpdateManager(client, env_id)
 
     class ResourceDeploymentHelperFunctions:
         @classmethod
         async def start_deployment(cls, rvid: ResourceVersionIdStr) -> uuid.UUID:
             action_id = uuid.uuid4()
-            result = await agent._client.resource_deploy_start(tid=environment, rvid=rvid, action_id=action_id)
-            assert result.code == 200
+            await update_manager.send_in_progress(action_id, rvid)
             return action_id
 
         @classmethod
@@ -46,14 +48,16 @@ async def resource_deployer(client, environment, null_agent):
             change: const.Change = const.Change.created,
             status: const.ResourceState = const.ResourceState.deployed,
         ) -> None:
-            result = await agent._client.resource_deploy_done(
-                tid=environment,
-                rvid=rvid,
-                action_id=action_id,
-                status=status,
-                change=change,
+            await update_manager.send_deploy_done(
+                result=executor.DeployResult(
+                    rvid=rvid,
+                    action_id=action_id,
+                    status=status,
+                    messages=[],
+                    changes={},
+                    change=change,
+                )
             )
-            assert result.code == 200
 
         @classmethod
         async def deploy_resource(

@@ -27,8 +27,7 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import const, data
-from inmanta.server import SLICE_NOTIFICATION
-from inmanta.server.config import get_bind_port
+from inmanta.server import SLICE_NOTIFICATION, config
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.server.services.notificationservice import NotificationService
@@ -169,7 +168,7 @@ async def test_notifications_paging(server, client, environment_with_notificatio
     assert result.result["links"].get("next") is not None
     assert result.result["links"].get("prev") is None
 
-    port = get_bind_port()
+    port = config.server_bind_port.get()
     base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 

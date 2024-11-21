@@ -26,7 +26,7 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
-from inmanta.server.config import get_bind_port
+from inmanta.server import config
 from inmanta.util import parse_timestamp
 
 
@@ -146,7 +146,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     assert result.result["links"].get("next") is not None
     assert result.result["links"].get("prev") is None
 
-    port = get_bind_port()
+    port = config.server_bind_port.get()
     base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
