@@ -21,7 +21,7 @@ sections:
       - agent_trigger_method_on_auto_deploy
       - environment_agent_trigger_method
       - autostart_agent_map
-    The following API endpoint were removed:
+    The following internal API endpoint were removed:
       - get_resources_for_agent: `GET /api/v1/resource`
       - get_code: `GET api/v1/code/<id>`
       - resource_event: `PUT api/v1/event/<id>`
