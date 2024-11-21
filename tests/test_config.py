@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import logging
 import os
 import random
 import socket
@@ -30,7 +29,6 @@ from inmanta import protocol
 from inmanta.config import Config, Option, option_as_default
 from inmanta.const import ClientType
 from inmanta.server.protocol import Server, ServerSlice
-from utils import LogSequence
 
 
 def test_options(monkeypatch):
