@@ -194,7 +194,7 @@ async def test_gzip_encoding(server):
     """
     (hash, content, body) = make_random_file(size=1024)
 
-    port = opt.get_bind_port()
+    port = opt.server_bind_port.get()
     url = f"http://localhost:{port}/api/v1/file/{hash}"
 
     zipped, body = protocol.gzipped_json({"content": body})
@@ -1094,7 +1094,7 @@ async def test_ACOA_header(server):
     """
     Test if the server accepts gzipped encoding and returns gzipped encoding.
     """
-    port = opt.get_bind_port()
+    port = opt.server_bind_port.get()
     url = f"http://localhost:{port}/api/v1/environment"
 
     request = HTTPRequest(url=url, method="GET")
@@ -1136,7 +1136,7 @@ async def test_multi_version_method(unused_tcp_port, postgres_db, database_name,
     async_finalizer.add(rs.stop)
 
     # rest call
-    port = opt.get_bind_port()
+    port = opt.server_bind_port.get()
 
     request = HTTPRequest(
         url=f"http://localhost:{port}/api/v1/test", method="POST", body=json_encode({"project": {"name": "a", "value": "b"}})
@@ -1432,7 +1432,7 @@ async def test_malformed_json(server):
     """
     Tests sending malformed json to the server
     """
-    port = opt.get_bind_port()
+    port = opt.server_bind_port.get()
     url = f"http://localhost:{port}/api/v2/environment"
 
     request = HTTPRequest(url=url, method="PUT", body='{"name": env}')
@@ -1474,7 +1474,7 @@ async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_n
     async_finalizer.add(server.stop)
     async_finalizer.add(rs.stop)
 
-    port = opt.get_bind_port()
+    port = opt.server_bind_port.get()
     url = f"http://localhost:{port}/test/v1/project/afcb51dc-1043-42b6-bb99-b4fc88603126"
 
     request = HTTPRequest(url=url, method="GET")
@@ -1540,7 +1540,7 @@ async def test_2151_method_header_parameter_in_body(async_finalizer, unused_tcp_
 
     # Only parameter as header: should succeed
     request = tornado.httpclient.HTTPRequest(
-        url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
+        url=f"http://localhost:{opt.server_bind_port.get()}/api/v1/testmethod",
         method="POST",
         body=json_encode({"body_param": "body_param_value"}),
         headers={"X-Inmanta-Header-Param": param_value},
@@ -1550,7 +1550,7 @@ async def test_2151_method_header_parameter_in_body(async_finalizer, unused_tcp_
 
     # Only provide parameter in body: should succeed
     request = tornado.httpclient.HTTPRequest(
-        url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
+        url=f"http://localhost:{opt.server_bind_port.get()}/api/v1/testmethod",
         method="POST",
         body=json_encode({"header_param": param_value, "body_param": "body_param_value"}),
     )
@@ -1570,7 +1570,7 @@ async def test_2151_method_header_parameter_in_body(async_finalizer, unused_tcp_
     # Body and header contain different value for parameter: should fail
     param_different_value = "different_value"
     request = tornado.httpclient.HTTPRequest(
-        url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
+        url=f"http://localhost:{opt.server_bind_port.get()}/api/v1/testmethod",
         method="POST",
         body=json_encode({"header_param": param_value, "body_param": "body_param_value"}),
         headers={"X-Inmanta-Header-Param": param_different_value},
@@ -2047,7 +2047,7 @@ async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, asy
     assert response.code == 500
 
     # Test REST API without going through Python client
-    port = opt.get_bind_port()
+    port = opt.server_bind_port.get()
     client = AsyncHTTPClient()
 
     async def request(timestamp: datetime.datetime) -> tornado.httpclient.HTTPResponse:

@@ -15,6 +15,7 @@ sections:
       - server.auto-recompile-wait
       - config.agent-interval
       - config.agent-splay
+      - server_rest_transport.port
     The following environment settings were removed:
       - push_on_auto_deploy
       - agent_trigger_method_on_auto_deploy

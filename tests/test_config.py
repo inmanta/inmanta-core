@@ -32,6 +32,7 @@ from inmanta.const import ClientType
 from inmanta.server.protocol import Server, ServerSlice
 from utils import LogSequence
 
+
 def test_options(monkeypatch):
     configa = Option("test", "a", "markerA", "test a docs")
     configb = Option("test", "B", option_as_default(configa), "test b docs")

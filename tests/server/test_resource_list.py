@@ -38,7 +38,7 @@ from inmanta.agent.executor import DeployResult
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource, ResourceIdStr, ResourceVersionIdStr
 from inmanta.deploy import persistence
-from inmanta.server.config import get_bind_port
+from inmanta.server import config
 
 
 async def test_resource_list_no_released_version(server, client):
@@ -381,7 +381,7 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     assert result.result["links"].get("next") is not None
     assert result.result["links"].get("prev") is None
 
-    port = get_bind_port()
+    port = config.server_bind_port.get()
     base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
@@ -698,7 +698,7 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
         "total": very_big_env * 100,
     }
 
-    port = get_bind_port()
+    port = config.server_bind_port.get()
     base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 

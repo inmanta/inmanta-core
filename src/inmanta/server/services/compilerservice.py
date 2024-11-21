@@ -382,7 +382,7 @@ class CompileRun:
                     return False, None
 
             server_address = opt.server_address.get()
-            server_port = opt.get_bind_port()
+            server_port = opt.server_bind_port.get()
             cmd = [
                 "-vvv",
                 "export",

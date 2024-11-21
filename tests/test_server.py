@@ -1060,7 +1060,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
 
     # Use the next link for pagination
     next_page = result.result["links"]["next"]
-    port = opt.get_bind_port()
+    port = opt.server_bind_port.get()
     base_url = f"http://localhost:{port}"
     url = f"{base_url}{next_page}"
     client = AsyncHTTPClient()
@@ -1511,7 +1511,7 @@ async def test_start_location_no_redirect(server):
     """
     Ensure that there is no redirection for the "start" location. (issue #3497)
     """
-    port = opt.get_bind_port()
+    port = opt.server_bind_port.get()
     base_url = f"http://localhost:{port}/"
     http_client = AsyncHTTPClient()
     request = HTTPRequest(
@@ -1526,7 +1526,7 @@ async def test_redirect_dashboard_to_console(server, path):
     """
     Ensure that there is a redirection from the dashboard to the webconsole
     """
-    port = opt.get_bind_port()
+    port = opt.server_bind_port.get()
     base_url = f"http://localhost:{port}/dashboard{path}"
     result_url = f"http://localhost:{port}/console{path}"
     http_client = AsyncHTTPClient()

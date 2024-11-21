@@ -1623,22 +1623,30 @@ async def test_compileservice_calculate_recompile_backoff_time(mocked_compiler_s
     now = datetime.datetime.now()
     compile_requested = now - datetime.timedelta(seconds=1)
     last_compile_completed = now - datetime.timedelta(seconds=4)
-    waiting_time = compilerslice._calculate_recompile_backoff_time(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_backoff_time(
+        auto_recompile_wait, compile_requested, last_compile_completed, now
+    )
     assert waiting_time == 0
 
     compile_requested = now - datetime.timedelta(seconds=0.1)
     last_compile_completed = now - datetime.timedelta(seconds=1)
-    waiting_time = compilerslice._calculate_recompile_backoff_time(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_backoff_time(
+        auto_recompile_wait, compile_requested, last_compile_completed, now
+    )
     assert waiting_time == approx(1)
 
     compile_requested = now - datetime.timedelta(seconds=1)
     last_compile_completed = now - datetime.timedelta(seconds=0.1)
-    waiting_time = compilerslice._calculate_recompile_backoff_time(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_backoff_time(
+        auto_recompile_wait, compile_requested, last_compile_completed, now
+    )
     assert waiting_time == approx(1)
 
     compile_requested = now - datetime.timedelta(seconds=4)
     last_compile_completed = now - datetime.timedelta(seconds=1)
-    waiting_time = compilerslice._calculate_recompile_backoff_time(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_backoff_time(
+        auto_recompile_wait, compile_requested, last_compile_completed, now
+    )
     assert waiting_time == 0
 
 

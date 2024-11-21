@@ -105,17 +105,6 @@ server_db_connection_timeout = Option(
 )
 
 #############################
-# server_rest_transport
-#############################
-transport_port = Option(
-    "server_rest_transport",
-    "port",
-    8888,
-    "[DEPRECATED USE :inmanta.config:option:`server.bind-port`] The port on which the server listens for connections",
-    is_int,
-)
-
-#############################
 # Influxdb
 #############################
 influxdb_host = Option("influxdb", "host", "", "Hostname or IP of the influxdb server to send reports to", is_str)
@@ -136,36 +125,16 @@ server_bind_address = Option(
     "server",
     "bind-address",
     "127.0.0.1",
-    "A list of addresses on which the server will listen for connections. If this option is set, the "
-    ":inmanta.config:option:`server_rest_transport.port` option is ignored.",
+    "A list of addresses on which the server will listen for connections.",
     is_list,
 )
 server_bind_port = Option(
     "server",
     "bind-port",
     8888,
-    "The port on which the server will listen for connections. If this option is set, the "
-    ":inmanta.config:option:`server_rest_transport.port` option is ignored.",
+    "The port on which the server will listen for connections.",
     is_int,
 )
-
-
-def get_bind_port() -> int:
-    if Config.is_set("server", "bind-port") or Config.is_set("server", "bind-address"):
-        # Use new bind-port option
-        if Config.is_set("server_rest_transport", "port"):
-            warnings.warn(
-                "Ignoring the server_rest_transport.port config option since the new config options "
-                "server.bind-port/server.bind-address are used.",
-            )
-        return server_bind_port.get()
-    else:
-        # Fallback to old option
-        warnings.warn(
-            "The server_rest_transport.port config option is deprecated in favour of the server.bind-port option.",
-            category=DeprecationWarning,
-        )
-        return Config.get("server_rest_transport", "port", 8888)
 
 
 server_tz_aware_timestamps = Option(
