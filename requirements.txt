@@ -15,9 +15,6 @@ packaging==24.2
 pip==24.3.1
 ply==3.11
 pydantic==2.9.1
-# held back due to pydantic/pydantic#10494. pydantic-core is not a direct dependency:
-# when the issue is resolved, the dependency can be dropped altogether
-pydantic-core==2.23.3
 pyformance==0.4
 PyJWT==2.10.0
 pynacl==1.5.0
