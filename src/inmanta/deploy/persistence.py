@@ -27,7 +27,7 @@ from asyncpg import UniqueViolationError
 from inmanta import const, data
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
+from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.protocol import Client
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.resources import Id
@@ -44,12 +44,14 @@ class StateUpdateManager(abc.ABC):
     """
 
     @abc.abstractmethod
-    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
+    async def send_in_progress(
+        self, action_id: UUID, resource_version_id: ResourceVersionIdStr, resource_id: ResourceIdStr
+    ) -> None:
         # FIXME: get rid of version in the id
         pass
 
     @abc.abstractmethod
-    async def send_deploy_done(self, result: DeployResult) -> None:
+    async def send_deploy_done(self, result: DeployResult, resource_id: ResourceIdStr) -> None:
         pass
 
     @abc.abstractmethod
@@ -70,16 +72,18 @@ class ToServerUpdateManager(StateUpdateManager):
         self.client = client
         self.environment = environment
 
-    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
+    async def send_in_progress(
+        self, action_id: UUID, resource_version_id: ResourceVersionIdStr, resource_id: ResourceIdStr
+    ) -> None:
         result = await self.client.resource_deploy_start(
             tid=self.environment,
-            rvid=resource_id,
+            rvid=resource_version_id,
             action_id=action_id,
         )
         if result.code != 200 or result.result is None:
             raise Exception("Failed to report the start of the deployment to the server")
 
-    async def send_deploy_done(self, result: DeployResult) -> None:
+    async def send_deploy_done(self, result: DeployResult, resource_id: ResourceIdStr) -> None:
         changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {result.rvid: result.changes}
         response = await self.client.resource_deploy_done(
             tid=self.environment,
@@ -148,8 +152,13 @@ class ToDbUpdateManager(StateUpdateManager):
         log_record = resourceservice.ResourceActionLogLine(logger.name, log_level, message, ts)
         logger.handle(log_record)
 
-    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
-        resource_id_str = resource_id
+    async def send_in_progress(
+        self, action_id: UUID, resource_version_id: ResourceVersionIdStr, resource_id: ResourceIdStr
+    ) -> None:
+        """
+        Update the db to reflect that deployment has started for a given resource.
+        """
+        resource_id_str = resource_version_id
         resource_id_parsed = Id.parse_id(resource_id_str)
 
         async with data.Resource.get_connection() as connection:
@@ -190,7 +199,11 @@ class ToDbUpdateManager(StateUpdateManager):
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
-    async def send_deploy_done(self, result: DeployResult) -> None:
+    async def send_deploy_done(self, result: DeployResult, resource_id: ResourceIdStr) -> None:
+        """
+        Update the db to reflect the result of a deploy for a given resource.
+        """
+
         def error_and_log(message: str, **context: Any) -> None:
             """
             :param message: message to return both to logger and to remote caller

@@ -145,7 +145,9 @@ class Deploy(Task):
 
                 # Signal start to server
                 try:
-                    await task_manager.send_in_progress(action_id, executor_resource_details.rvid)
+                    await task_manager.send_in_progress(
+                        action_id, executor_resource_details.rvid, executor_resource_details.rid
+                    )
                 except Exception:
                     # Unrecoverable, can't reach server
                     scheduler_deployment_result = state.DeploymentResult.FAILED
@@ -185,7 +187,6 @@ class Deploy(Task):
                     deploy_result = await my_executor.execute(
                         action_id, gid, executor_resource_details, reason, intent.dependencies
                     )
-                    await task_manager.cancel_periodic_repair_and_deploy_for_resource(executor_resource_details.rid)
                     # Translate deploy result status to the new deployment result state
                     match deploy_result.status:
                         case const.ResourceState.deployed:
@@ -214,7 +215,7 @@ class Deploy(Task):
                 if deploy_result is not None:
                     # We signaled start, so we signal end
                     try:
-                        await task_manager.send_deploy_done(deploy_result)
+                        await task_manager.send_deploy_done(deploy_result, executor_resource_details.rid)
                     except Exception:
                         scheduler_deployment_result = state.DeploymentResult.FAILED
                         LOGGER.error(

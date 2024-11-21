@@ -69,8 +69,6 @@ class Agent(SessionEndpoint):
         self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self._client)
         self.working = False
 
-        self._set_deploy_and_repair_intervals()
-
     async def start(self) -> None:
         # Make mypy happy
         assert data.Resource._connection_pool is not None
@@ -83,15 +81,15 @@ class Agent(SessionEndpoint):
 
         await super().start()
 
-    def _set_deploy_and_repair_intervals(self) -> None:
-        """
-        Fetch the settings related to automatic deploys and repairs from the config
-        FIXME: These settings are not currently updated (unlike the old agent)
-            We should fix or remove this timer in the future.
-        """
-        # quick and dirty, fix later:
-        self.scheduler._repair_timer = cfg.agent_repair_interval.get()
-        self.scheduler._deploy_timer = cfg.agent_deploy_interval.get()
+    # def _set_deploy_and_repair_intervals(self) -> None:
+    #     """
+    #     Fetch the settings related to automatic deploys and repairs from the config
+    #     FIXME: These settings are not currently updated (unlike the old agent)
+    #         We should fix or remove this timer in the future.
+    #     """
+    #     # quick and dirty, fix later:
+    #     self.scheduler._repair_timer = cfg.agent_repair_interval.get()
+    #     self.scheduler._deploy_timer = cfg.agent_deploy_interval.get()
 
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
         assert self._env_id is not None

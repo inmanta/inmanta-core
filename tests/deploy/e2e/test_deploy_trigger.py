@@ -131,9 +131,8 @@ async def test_spontaneous_deploy(
         # Setting repair to a cron expression to disable individual repairs
         Config.set("config", "agent-repair-interval", "* * * * * * 2099")  # 2099 is the max crontab allowed value for year
 
-        # This is just so we can reuse the agent from the fixtures with the new config options
-        agent._set_deploy_and_repair_intervals()
-        agent.scheduler.trigger_global_deploy()
+        timer_manager = agent.scheduler._timer_manager
+        timer_manager.initialize(resources=[])
 
         resource_container.Provider.set_fail("agent1", "key1", 1)
 
@@ -199,9 +198,13 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     env_id = environment
     Config.set("config", "agent-repair-interval", agent_repair_interval)
 
-    # This is just so we can reuse the agent from the fixtures with the new config options
-    agent._set_deploy_and_repair_intervals()
-    agent.scheduler.trigger_global_repair()
+    # # This is just so we can reuse the agent from the fixtures with the new config options
+    # agent._set_deploy_and_repair_intervals()
+    # agent.scheduler.trigger_global_repair()
+
+    # agent._set_deploy_and_repair_intervals()
+    timer_manager = agent.scheduler._timer_manager
+    timer_manager.initialize(resources=[])
 
     version = await clienthelper.get_version()
 
