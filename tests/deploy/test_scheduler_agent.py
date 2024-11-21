@@ -23,7 +23,7 @@ import hashlib
 import json
 import typing
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Mapping, Optional, Sequence, Tuple
 from uuid import UUID
@@ -55,9 +55,11 @@ FAIL_DEPLOY: str = "fail_deploy"
 
 
 async def retry_limited_fast(
-    fun: Callable[[], bool],
+    fun: Callable[..., bool] | Callable[..., Awaitable[bool]],
     timeout: float = 0.1,
     interval: float = 0.005,
+    *args: object,
+    **kwargs: object,
 ) -> None:
     """
     Override defaults for the retry_limited function.
@@ -65,7 +67,7 @@ async def retry_limited_fast(
     The tests in this module have many invocations of it, where very fast resolution is expected, so we increase test
     performance by polling frequently and setting a low timeout.
     """
-    await util.retry_limited(fun, timeout=timeout, interval=interval)
+    await util.retry_limited(fun, timeout=timeout, interval=interval, *args, **kwargs)
 
 
 class DummyExecutor(executor.Executor):
@@ -394,7 +396,7 @@ async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
         ResourceIdStr(rid2): make_resource_minimal(rid2, values={"value": "a"}, requires=[rid1]),
     }
 
-    await agent.scheduler._new_version(5, resources, make_requires(resources))
+    await agent.scheduler._new_version(1, resources, make_requires(resources))
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
 
     assert agent.executor_manager.executors["agent1"].execute_count == 2
@@ -1752,3 +1754,34 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
     # All tasks were consumed
     queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
     assert len(queue) == 0
+
+
+async def test_repair_does_not_trigger_for_blocked_resources(agent: TestAgent, make_resource_minimal):
+    """
+    Ensure that repair doesn't schedule known blocked resources
+    """
+
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent1,name=2]")
+
+    resources = {
+        rid1: make_resource_minimal(rid=rid1, values={"value": "r1_value"}, requires=[]),
+        rid2: make_resource_minimal(rid=rid2, values={"value": "r2_value"}, requires=[]),
+    }
+
+    await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
+    await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
+
+    # Both resources were deployed
+    assert agent.executor_manager.executors["agent1"].execute_count == 2
+
+    agent.executor_manager.reset_executor_counters()
+
+    # mark r1 as blocked and trigger a repair
+    agent.scheduler._state.resource_state[rid1].blocked = BlockedStatus.YES
+
+    await agent.scheduler.repair(reason="Test triggered global repair")
+    await retry_limited_fast(fun=utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
+
+    # Only r2 was deployed
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
