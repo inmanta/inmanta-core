@@ -196,15 +196,13 @@ class ModelState:
         if resource in self.resource_state:
             if not is_transitive:
                 self.resource_state[resource].status = ComplianceStatus.UNDEFINED
-                self.resource_state[resource].blocked = BlockedStatus.YES
-            else:
-                self.resource_state[resource].blocked = BlockedStatus.TRANSIENT
+            self.resource_state[resource].blocked = BlockedStatus.YES
         else:
             resource_status = ComplianceStatus.UNDEFINED if not is_transitive else ComplianceStatus.HAS_UPDATE
             self.resource_state[resource] = ResourceState(
                 status=resource_status,
                 deployment_result=DeploymentResult.NEW,
-                blocked=BlockedStatus.TRANSIENT if is_transitive else BlockedStatus.YES,
+                blocked=BlockedStatus.YES,
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)

@@ -35,6 +35,7 @@ class ResourceState(str, Enum):
     cancelled = "cancelled"  # When a new version is pushed, in progress deploys are cancelled
     undefined = "undefined"  # The state of this resource is unknown at this moment in the orchestration process
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
+    transiently_skipped = "transiently_skipped"  # This resource is transient and dependent on its dependencies state.
 
 
 class NonDeployingResourceState(str, Enum):

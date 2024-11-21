@@ -29,10 +29,9 @@ import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, FailedResources, ResourceDetails
-from inmanta.agent.handler import DefaultSkipResource, HandlerAPI, SkipResource
+from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import ParameterSource
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
-from inmanta.deploy.state import BlockedStatus
 from inmanta.loader import CodeLoader
 from inmanta.resources import Resource
 from inmanta.util import NamedLock, join_threadpools
@@ -179,9 +178,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             except SkipResource as e:
                 ctx.set_status(const.ResourceState.skipped)
                 ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
-            except DefaultSkipResource as e:
-                ctx.set_status(const.ResourceState.skipped)
-                ctx.set_blocked(BlockedStatus.TRANSIENT)
+            except SkipResourceForDependencies as e:
+                ctx.set_status(const.ResourceState.transiently_skipped)
                 ctx.warning(
                     msg="Resource %(resource_id)s was skipped using the default exception: %(reason)s",
                     resource_id=resource.id,
