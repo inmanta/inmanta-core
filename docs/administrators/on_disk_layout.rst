@@ -10,7 +10,7 @@ The server stores
 
     /var/lib/inmanta
        ├─ server/
-           ├─ .inmanta_use_new_disk_layout   # marker file for new disk layout
+           ├─ .inmanta_disk_layout_version   # version of the disk layout
            ├─ env_uuid_1/                    # uuid for this environment
            │   ├─ executors/                 # storage for all executors
            │   │   ├─ venvs/                 # python virtual envs for all executors
@@ -48,7 +48,7 @@ In detail, the creation and cleanup policy for every file:
 +--------------------------------+-----------------------------------------+--------------------------------+---------------------------------------------------------------------------+
 | Path                           | Safe to remove when                     | Reconstructed                  | Automatic cleanup                                                         |
 +================================+=========================================+================================+===========================================================================+
-| `.inmanta_use_new_disk_layout` | Always                                  | At server start                |                                                                           |
+| `.inmanta_disk_layout_version` | Always                                  | At server start                |                                                                           |
 +--------------------------------+-----------------------------------------+--------------------------------+---------------------------------------------------------------------------+
 | `<env_id>`                     |                                         |                                | When environment is cleared or deleted                                    |
 +--------------------------------+-----------------------------------------+--------------------------------+---------------------------------------------------------------------------+
