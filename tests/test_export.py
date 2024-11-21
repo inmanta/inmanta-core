@@ -206,7 +206,6 @@ def test_unknown_in_id_requires(snippetcompiler, caplog):
         """,
         autostd=True,
     )
-    config.Config.set("unknown_handler", "default", "prune-resource")
     _version, json_value = snippetcompiler.do_export()
 
     assert len(json_value) == 2
@@ -244,7 +243,6 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
         """,
         autostd=True,
     )
-    config.Config.set("unknown_handler", "default", "prune-resource")
     _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 3

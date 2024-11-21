@@ -11,6 +11,7 @@ sections:
       - config.use_autostart_agent_map
       - config.agent-names
       - config.agent-get-resource-backoff
+      - unknown_handler.default
     The following environment settings were removed:
       - push_on_auto_deploy
       - agent_trigger_method_on_auto_deploy

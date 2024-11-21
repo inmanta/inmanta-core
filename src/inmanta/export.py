@@ -53,7 +53,6 @@ cfg_export = Option(
     "The list of exporters to use. This option is ignored when the --export-plugin option is used.",
     is_list,
 )
-cfg_unknown_handler = Option("unknown_handler", "default", "prune-agent", "default method to handle unknown values ", is_str)
 
 
 ModelDict = dict[str, Entity]
