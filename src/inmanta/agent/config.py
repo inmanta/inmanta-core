@@ -32,27 +32,6 @@ environment: Option[typing.Optional[uuid.UUID]] = Option(
     "config", "environment", None, "The environment this agent or compile belongs to", is_uuid_opt
 )
 
-agent_interval = Option(
-    "config",
-    "agent-interval",
-    600,
-    """[DEPRECATED] The run interval of the agent.
-Every run-interval seconds, the agent will check the current state of its resources against to desired state model""",
-    is_time,
-)
-
-agent_splay = Option(
-    "config",
-    "agent-splay",
-    600,
-    """[DEPRECATED] The splaytime added to the runinterval.
-Set this to 0 to disable splaytime.
- At startup the agent will choose a random number between 0 and "agent_splay.
-It will wait this number of second before performing the first deploy.
-Each subsequent deploy will start agent-interval seconds after the previous one.""",
-    is_time,
-)
-
 agent_reconnect_delay: Option[int] = Option(
     "config", "agent-reconnect-delay", 5, "Time to wait after a failed heartbeat message. DO NOT SET TO 0 ", is_int
 )
@@ -77,7 +56,6 @@ agent_deploy_interval: Option[int | str] = Option(
     " expression is used the :inmanta.config:option:`config.agent_deploy_splay_time` setting will be ignored."
     " Set this to 0 to disable the scheduled deploy runs.",
     is_time_or_cron,
-    predecessor_option=agent_interval,
 )
 agent_deploy_splay_time = Option(
     "config",
@@ -89,7 +67,6 @@ At startup the agent will choose a random number between 0 and agent-deploy-spla
 It will wait this number of second before performing the first deployment run.
 Each subsequent repair deployment will start agent-deploy-interval seconds after the previous one.""",
     is_time,
-    predecessor_option=agent_splay,
 )
 
 agent_repair_interval = Option(
