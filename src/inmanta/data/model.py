@@ -477,7 +477,7 @@ class PagingBoundaries:
     and "lowest".
 
     Let's show this in an example: a user requests the following:
-     - all Resources with name >= foo
+     - all Resources with name > foo
      - ASCENDING order
      - Page size = 10
 
@@ -494,7 +494,7 @@ class PagingBoundaries:
         ```
         Pagingboundary:
             end = foo1
-            start = foo10    # Reversed because these are meant to be used by the neighbouring pages
+            start = foo10 # Reversed because these are meant to map to like-named fields on neighbouring RequestedPagingBoundary
         ```
 
     :param start: largest value of current page for the primary sort column.

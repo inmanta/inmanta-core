@@ -162,8 +162,8 @@ class RequestedPagingBoundaries:
         Return the virtual paging boundaries that corresponds to the boundaries of an empty page response for this request.
 
         Concretely, this means swapping start and end, because the semantics of PagingBoundaries are opposite those of this
-        class: PagingBoundaries represents "current page" while this class represents "requested page";
-        max of current page = min of requested page and vice versa.
+        class: PagingBoundaries' boundary values map to RequestedPagingBoundaries` boundary values for the next and previous
+        pages, e.g. requested max = requested min of next page and vice versa.
 
         Known-issue: This method contains a potential off-by-one error here because both classes are exclusive of the boundary
         values. Issue: https://github.com/inmanta/inmanta-core/issues/7898#issuecomment-2404322678
