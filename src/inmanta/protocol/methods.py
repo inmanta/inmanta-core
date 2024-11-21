@@ -560,9 +560,8 @@ def release_version(
 
     :param tid: The id of the environment
     :param id: The version of the CM to deploy
-    :param push: Notify all agents to deploy the version
-    :param agent_trigger_method: Optional. Indicates whether the agents should perform a full or an incremental deploy when
-                                push is true.
+    :param push: [DEPRECATED] This argument is ignored.
+    :param agent_trigger_method: [DEPRECATED]: This argument is ignored.
 
     :return: Returns the following status codes:
             200: The version is released

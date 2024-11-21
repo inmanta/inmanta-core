@@ -919,11 +919,7 @@ def promote_desired_state_version(
 
     :param tid: The id of the environment
     :param version: The number of the version to promote
-    :param trigger_method: If set to 'push_incremental_deploy' or 'push_full_deploy',
-        the agents will perform an incremental or full deploy, respectively.
-        If set to 'no_push', the new version is not pushed to the agents.
-        If the parameter is not set (or set to null), the new version is pushed and
-        the environment setting 'environment_agent_trigger_method' decides if the deploy should be full or incremental
+    :param trigger_method: [DEPRECATED] This argument is ignored.
     """
 
 

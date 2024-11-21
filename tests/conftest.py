@@ -28,22 +28,14 @@ from tornado.httpclient import AsyncHTTPClient
 import _pytest.logging
 import toml
 from inmanta import logging as inmanta_logging
-from inmanta.agent.handler import (
-    CRUDHandler,
-    HandlerContext,
-    ResourceHandler,
-    ResourcePurged,
-    SkipResource,
-    TResource,
-    provider,
-)
+from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
 from inmanta.data.model import ResourceIdStr
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
-from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
+from inmanta.resources import PurgeableResource, Resource, resource
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
 
@@ -1007,8 +999,6 @@ async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str,
         if use_custom_env_settings:
             env_obj = await data.Environment.get_by_id(uuid.UUID(env_id))
             await env_obj.set(data.AUTO_DEPLOY, False)
-            await env_obj.set(data.PUSH_ON_AUTO_DEPLOY, False)
-            await env_obj.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
             await env_obj.set(data.RECOMPILE_BACKOFF, 0)
 
         return env_id
@@ -2514,65 +2504,6 @@ def resource_container(clean_reset):
                 raise SkipResource("\n".join(skipped_resources))
 
             return not is_failed
-
-    @resource("test::AgentConfig", agent="agent", id_attribute="agentname")
-    class AgentConfig(PurgeableResource):
-        """
-        A resource that can modify the agentmap for autostarted agents
-        """
-
-        fields = ("agentname", "uri", "autostart")
-
-        @staticmethod
-        def get_autostart(exp, obj):
-            try:
-                if not obj.autostart:
-                    raise IgnoreResourceException()
-            except Exception as e:
-                # When this attribute is not set, also ignore it
-                raise IgnoreResourceException() from e
-            return obj.autostart
-
-    @provider("test::AgentConfig", name="agentrest")
-    class AgentConfigHandler(CRUDHandler[AgentConfig]):
-        def _get_map(self) -> dict:
-            def call():
-                return self.get_client().get_setting(tid=self._agent.environment, id=data.AUTOSTART_AGENT_MAP)
-
-            value = self.run_sync(call)
-            return value.result["value"]
-
-        def _set_map(self, agent_config: dict) -> None:
-            def call():
-                return self.get_client().set_setting(
-                    tid=self._agent.environment, id=data.AUTOSTART_AGENT_MAP, value=agent_config
-                )
-
-            return self.run_sync(call)
-
-        def read_resource(self, ctx: HandlerContext, resource: AgentConfig) -> None:
-            agent_config = self._get_map()
-            ctx.set("map", agent_config)
-
-            if resource.agentname not in agent_config:
-                raise ResourcePurged()
-
-            resource.uri = agent_config[resource.agentname]
-
-        def create_resource(self, ctx: HandlerContext, resource: AgentConfig) -> None:
-            agent_config = ctx.get("map")
-            agent_config[resource.agentname] = resource.uri
-            self._set_map(agent_config)
-
-        def delete_resource(self, ctx: HandlerContext, resource: AgentConfig) -> None:
-            agent_config = ctx.get("map")
-            del agent_config[resource.agentname]
-            self._set_map(agent_config)
-
-        def update_resource(self, ctx: HandlerContext, changes: dict, resource: AgentConfig) -> None:
-            agent_config = ctx.get("map")
-            agent_config[resource.agentname] = resource.uri
-            self._set_map(agent_config)
 
     waiter = Condition()
 

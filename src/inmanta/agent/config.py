@@ -28,41 +28,8 @@ from inmanta.server.config import db_connection_pool_max_size, db_connection_poo
 LOGGER = logging.getLogger(__name__)
 
 # flake8: noqa: H904
-
-agent_map: Option[typing.Mapping[str, str]] = Option(
-    "config",
-    "agent-map",
-    dict,
-    """By default the agent assumes that all agent names map to the host on which the process is executed. With the
-agent map it can be mapped to other hosts. This value consists of a list of key/value pairs. The key is the name of the
-agent and the format of the value is described in :inmanta:entity:`std::AgentConfig`. When the configuration option
-config.use_autostart_agent_map is set to true, this option will be ignored.
-
-
-example: iaas_openstack=localhost,vm1=192.16.13.2""",
-    is_map,
-)
-
-use_autostart_agent_map = Option(
-    "config",
-    "use_autostart_agent_map",
-    False,
-    """If this option is set to true, the agent-map of this agent will be set to the autostart_agent_map configured on the
-    server. The agent_map will be kept up-to-date automatically.""",
-    is_bool,
-)
-
 environment: Option[typing.Optional[uuid.UUID]] = Option(
     "config", "environment", None, "The environment this agent or compile belongs to", is_uuid_opt
-)
-
-agent_names: Option[list[str]] = Option(
-    "config",
-    "agent-names",
-    lambda: ["$node-name"],  # wrap in lambda to make sure we don't pass mutable defaults
-    """Names of the agents this instance should deploy configuration for. When the configuration option
-config.use_autostart_agent_map is set to true, this option will be ignored.""",
-    is_list,
 )
 
 agent_interval = Option(
@@ -151,18 +118,6 @@ This option is ignored and a splay of 0 is used if 'agent_repair_interval' is a 
     is_time,
 )
 
-
-agent_get_resource_backoff: Option[float] = Option(
-    "config",
-    "agent-get-resource-backoff",
-    3,
-    "This is a load management feature. It ensures that the agent will not pull resources from the inmanta server"
-    " `<agent-get-resource-backoff>*<duration-last-pull-in-seconds>` seconds after the last time the agent pulled resources"
-    " from the server. Setting this option too low may result in a high load on the Inmanta server. Setting it too high"
-    " may result in long deployment times.",
-    is_float,
-)
-
 executor_venv_retention_time: Option[int] = Option(
     "agent",
     "executor-venv-retention-time",
@@ -222,14 +177,6 @@ def is_executor_mode(value: str | AgentExecutorMode) -> AgentExecutorMode:
         return value
     return AgentExecutorMode(value)
 
-
-agent_executor_mode = Option(
-    "agent",
-    "executor-mode",
-    AgentExecutorMode.threaded,
-    "EXPERIMENTAL: set the agent to use threads or fork subprocesses to create workers.",
-    is_executor_mode,
-)
 
 agent_executor_cap = Option[int](
     "agent",

@@ -19,7 +19,6 @@
 import asyncio
 import datetime
 import enum
-import json
 import logging
 import time
 import uuid
@@ -402,28 +401,27 @@ async def test_population_settings_dict_on_get_of_setting(init_dataclasses_and_l
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    async def assert_setting_in_db(expected_autostart_agent_map: dict[str, object]) -> None:
+    async def assert_setting_in_db(expected_available_versions_to_keep: int) -> None:
         """
-        Verify that the state of the setting.autostart_agent_map setting in the database matches the given
-        expected_autostart_agent_map dictionary.
+        Verify that the state of the setting.available_versions_to_keep setting in the database matches the given
+        expected_available_versions_to_keep.
         """
         async with data.Environment.get_connection() as connection:
-            query = f"SELECT setting->'{data.AUTOSTART_AGENT_MAP}' FROM {data.Environment.table_name()} WHERE id=$1"
+            query = f"SELECT setting->'{data.AVAILABLE_VERSIONS_TO_KEEP}' FROM {data.Environment.table_name()} WHERE id=$1"
             result = await connection.fetchval(query, env.id)
-            assert json.loads(result) == expected_autostart_agent_map
+            assert int(result) == expected_available_versions_to_keep
 
     # Get two environment object with an empty settings dict.
     env_obj1 = await data.Environment.get_by_id(env.id)
     env_obj2 = await data.Environment.get_by_id(env.id)
 
-    # Add autostart_agent_map key to settings dict
-    autostart_agent_map = {"test": ":local", "internal": ":local"}
-    await env_obj1.set(data.AUTOSTART_AGENT_MAP, dict(autostart_agent_map))
+    # Add AVAILABLE_VERSIONS_TO_KEEP key to settings dict
+    await env_obj1.set(data.AVAILABLE_VERSIONS_TO_KEEP, 5)
 
-    assert assert_setting_in_db(autostart_agent_map)
-    # Make sure that get for autostart_agent_map on env_obj2 object doesn't override setting with default value.
-    assert await env_obj2.get(data.AUTOSTART_AGENT_MAP) == autostart_agent_map
-    assert assert_setting_in_db(autostart_agent_map)
+    assert assert_setting_in_db(5)
+    # Make sure that get for AVAILABLE_VERSIONS_TO_KEEP on env_obj2 object doesn't override setting with default value.
+    assert await env_obj2.get(data.AVAILABLE_VERSIONS_TO_KEEP) == 5
+    assert assert_setting_in_db(5)
 
 
 async def test_agent_process(init_dataclasses_and_load_schema):

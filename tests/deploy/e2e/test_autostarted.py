@@ -104,9 +104,7 @@ async def setup_environment_with_agent(client, project_name):
     env_id = create_environment_result.result["environment"]["id"]
     env = await data.Environment.get_by_id(uuid.UUID(env_id))
 
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTO_DEPLOY, True)
-    await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
     await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
     await env.set(data.AUTOSTART_ON_START, True)
 
@@ -322,9 +320,7 @@ async def test_autostart_clear_agent_venv_on_delete(
     """
     resource_container.Provider.reset()
     env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTO_DEPLOY, True)
-    await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
     await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
     await env.set(data.AUTOSTART_ON_START, True)
 

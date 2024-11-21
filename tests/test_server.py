@@ -1542,10 +1542,10 @@ async def test_redirect_dashboard_to_console(server, path):
 async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     """
     This test is testing the functionality of cleaning up old agents in the database.
-    The test creates 2 environments and adds agents with various properties (some used in a version,
-    some in the agent map, and some with the primary ID set), and then tests that
-    the cleanup function correctly removes only the agents that meet the criteria for deletion.
-    Also verifies that only agents in envs that are not halted are cleaned up
+    The test creates 2 environments and adds agents with various properties (some used in a version
+    and some with the primary ID set), and then tests that the cleanup function correctly removes
+    only the agents that meet the criteria for deletion. Also verifies that only agents in envs that
+    are not halted are cleaned up
     """
 
     project = data.Project(name="test")
@@ -1555,16 +1555,6 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     await env1.insert()
     env2 = data.Environment(name="env2", project=project.id)
     await env2.insert()
-
-    await env1.set(data.AUTOSTART_AGENT_MAP, {"agent3": "", "internal": ""})
-    await env2.set(data.AUTOSTART_AGENT_MAP, {"agent1": "", "internal": ""})
-
-    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
-    # that it is an issue with the agent map
-    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
-    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
-    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
-    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
 
     if env1_halted:
         result = await client.halt_environment(env1.id)
@@ -1606,13 +1596,6 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     ).insert()
     # should not get purged as the id_primary is set -> not down
     await data.Agent(environment=env1.id, name="agent2", paused=False, id_primary=id_primary).insert()
-    # should not get purged as it is in the agent map
-    await data.Agent(
-        environment=env1.id,
-        name="agent3",
-        paused=False,
-        id_primary=None,
-    ).insert()
     # should not get purged as it is used in a version of the ConfigurationModel
     await data.Agent(
         environment=env1.id,
@@ -1627,7 +1610,7 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
         paused=False,
         id_primary=None,
     ).insert()
-    # agent with "agent1" as name but being present in the agent_map and in another env will not get purged:
+    # agent with "agent1" as name but in another env will get purged:
     await data.Agent(
         environment=env2.id,
         name="agent1",
@@ -1636,34 +1619,18 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     ).insert()
 
     agents_before_purge = await data.Agent.get_list()
-    assert len(agents_before_purge) == 6
-
-    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
-    # that it is an issue with the agent map
-    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
-    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
-    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
-    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
+    assert len(agents_before_purge) == 5
 
     await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
 
-    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
-    # that it is an issue with the agent map
-    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
-    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
-    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
-    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
-
     agents_after_purge = [(agent.environment, agent.name) for agent in await data.Agent.get_list()]
-    number_agents_env1_after_purge = 4 if env1_halted else 3
-    number_agents_env2_after_purge = 2 if env2_halted else 1
+    number_agents_env1_after_purge = 3 if env1_halted else 2
+    number_agents_env2_after_purge = 2 if env2_halted else 0
     assert len(agents_after_purge) == number_agents_env1_after_purge + number_agents_env2_after_purge
     if not (env1_halted or env2_halted):
         expected_agents_after_purge = [
             (env1.id, "agent2"),
-            (env1.id, "agent3"),
             (env1.id, "agent4"),
-            (env2.id, "agent1"),
         ]
         assert sorted(agents_after_purge) == sorted(expected_agents_after_purge)
 
