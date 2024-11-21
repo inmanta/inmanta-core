@@ -175,9 +175,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 )
                 if ctx.status is None:
                     ctx.set_status(const.ResourceState.deployed)
-            except SkipResource as e:
-                ctx.set_status(const.ResourceState.skipped)
-                ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
             except SkipResourceForDependencies as e:
                 ctx.set_status(const.ResourceState.transiently_skipped)
                 ctx.warning(
@@ -185,6 +182,9 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                     resource_id=resource.id,
                     reason=e.args,
                 )
+            except SkipResource as e:
+                ctx.set_status(const.ResourceState.skipped)
+                ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
             except Exception as e:
                 ctx.set_status(const.ResourceState.failed)
                 ctx.exception(

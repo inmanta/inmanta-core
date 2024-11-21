@@ -815,17 +815,17 @@ class ResourceHandler(HandlerAPI[TResource]):
                     ctx.set_status(const.ResourceState.deployed)
             else:
                 ctx.set_status(const.ResourceState.dry)
-        except SkipResource as e:
-            ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(
-                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
-            )
         except SkipResourceForDependencies as e:
             ctx.set_status(const.ResourceState.transiently_skipped)
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped using the default exception: %(reason)s",
                 resource_id=resource.id,
                 reason=e.args,
+            )
+        except SkipResource as e:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
             )
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
@@ -989,17 +989,17 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             else:
                 ctx.set_status(const.ResourceState.dry)
 
-        except SkipResource as e:
-            ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(
-                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
-            )
         except SkipResourceForDependencies as e:
             ctx.set_status(const.ResourceState.transiently_skipped)
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped using the default exception: %(reason)s",
                 resource_id=resource.id,
                 reason=e.args,
+            )
+        except SkipResource as e:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
             )
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
@@ -1090,17 +1090,17 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                 )
             else:
                 ctx.set_status(const.ResourceState.deployed)
-        except SkipResource as e:
-            ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(
-                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
-            )
         except SkipResourceForDependencies as e:
             ctx.set_status(const.ResourceState.transiently_skipped)
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped using the default exception: %(reason)s",
                 resource_id=resource.id,
                 reason=e.args,
+            )
+        except SkipResource as e:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
             )
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
