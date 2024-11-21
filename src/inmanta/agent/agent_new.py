@@ -81,16 +81,6 @@ class Agent(SessionEndpoint):
 
         await super().start()
 
-    # def _set_deploy_and_repair_intervals(self) -> None:
-    #     """
-    #     Fetch the settings related to automatic deploys and repairs from the config
-    #     FIXME: These settings are not currently updated (unlike the old agent)
-    #         We should fix or remove this timer in the future.
-    #     """
-    #     # quick and dirty, fix later:
-    #     self.scheduler._repair_timer = cfg.agent_repair_interval.get()
-    #     self.scheduler._deploy_timer = cfg.agent_deploy_interval.get()
-
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
         assert self._env_id is not None
         return forking_executor.MPManager(

@@ -198,11 +198,6 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     env_id = environment
     Config.set("config", "agent-repair-interval", agent_repair_interval)
 
-    # # This is just so we can reuse the agent from the fixtures with the new config options
-    # agent._set_deploy_and_repair_intervals()
-    # agent.scheduler.trigger_global_repair()
-
-    # agent._set_deploy_and_repair_intervals()
     timer_manager = agent.scheduler._timer_manager
     timer_manager.initialize(resources=[])
 

@@ -681,7 +681,6 @@ class ResourceScheduler(TaskManager):
         status: ComplianceStatus,
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
-        LOGGER.debug(f"report_resource_state {resource=} {status=} {deployment_result=}")
         if deployment_result is DeploymentResult.NEW:
             raise ValueError("report_resource_state should not be called to register new resources")
         async with self._scheduler_lock:
@@ -727,7 +726,7 @@ class ResourceScheduler(TaskManager):
                         # so that we can try to re-deploy them in case this resource's previous
                         # failure was the reason they were skipped
 
-                        # TODO later: stop informing resource skipped because of
+                        # FIXME: stop informing resource skipped because of
                         #  a custom handler skip via this mechanism
 
                         dependant_resources: set[ResourceIdStr] = set()
@@ -785,7 +784,7 @@ class ResourceScheduler(TaskManager):
                         deploying=set(),
                     )
 
-        # No matter deployment result, schedule a re-deploy for this resource
+        # No matter the deployment result, schedule a re-deploy for this resource
         await self._timer_manager.install_timer(resource)
 
     async def _get_last_non_deploying_state_for_dependencies(

@@ -1114,7 +1114,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert rid2 not in executor2.deploys
     assert agent.executor_manager.executors["agent1"].execute_count == 0
     assert agent.executor_manager.executors["agent2"].execute_count == 1
-    # r2 goes from new -> deployed: causes r3 to be redeployed. Is this desired ?
+    # r2 goes from new -> deployed: causes r3 to be redeployed.
     assert agent.executor_manager.executors["agent3"].execute_count == 1
     assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
         status=state.ComplianceStatus.COMPLIANT,
