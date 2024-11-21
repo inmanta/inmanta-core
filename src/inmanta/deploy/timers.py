@@ -71,6 +71,8 @@ class ResourceTimer:
     def cancel(self) -> None:
         if self.repair_handle:
             self.repair_handle.cancel()
+
+
 class TimerManager:
     resource_timers: dict[ResourceIdStr, ResourceTimer]
 
