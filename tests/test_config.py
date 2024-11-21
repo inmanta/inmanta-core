@@ -256,7 +256,7 @@ async def test_bind_address_ipv6(async_finalizer) -> None:
     assert result.code == 200
 
 
-async def test_bind_port(unused_tcp_port, async_finalizer, caplog):
+async def test_bind_port(unused_tcp_port, async_finalizer):
     @protocol.method(path="/test", operation="POST", client_types=[ClientType.api])
     async def test_endpoint():
         pass
@@ -279,44 +279,10 @@ async def test_bind_port(unused_tcp_port, async_finalizer, caplog):
         assert result.code == 200
         await rs.stop()
 
-    deprecation_line_log_line = (
-        "The server_rest_transport.port config option is deprecated in favour of the " "server.bind-port option."
-    )
-    ignoring_log_line = (
-        "Ignoring the server_rest_transport.port config option since the new config options "
-        "server.bind-port/server.bind-address are used."
-    )
-
-    # Old config option server_rest_transport.port is set
-    Config.load_config()
-    Config.set("server_rest_transport", "port", str(unused_tcp_port))
-    Config.set("client_rest_transport", "port", str(unused_tcp_port))
-    caplog.clear()
-    await assert_port_bound()
-    log_sequence = LogSequence(caplog, allow_errors=False)
-    log_sequence.contains("py.warnings", logging.WARNING, deprecation_line_log_line)
-    log_sequence.assert_not("py.warnings", logging.WARNING, ignoring_log_line)
-
-    # Old config option server_rest_transport.port and new config option server.bind-port are set together
-    Config.load_config()
-    Config.set("server_rest_transport", "port", str(unused_tcp_port))
-    Config.set("server", "bind-port", str(unused_tcp_port))
-    Config.set("client_rest_transport", "port", str(unused_tcp_port))
-    caplog.clear()
-    await assert_port_bound()
-    log_sequence = LogSequence(caplog, allow_errors=False)
-    log_sequence.assert_not("py.warnings", logging.WARNING, deprecation_line_log_line)
-    log_sequence.contains("py.warnings", logging.WARNING, ignoring_log_line)
-
-    # The new config option server.bind-port is set
     Config.load_config()
     Config.set("server", "bind-port", str(unused_tcp_port))
     Config.set("client_rest_transport", "port", str(unused_tcp_port))
-    caplog.clear()
     await assert_port_bound()
-    log_sequence = LogSequence(caplog, allow_errors=False)
-    log_sequence.assert_not("py.warnings", logging.WARNING, deprecation_line_log_line)
-    log_sequence.assert_not("py.warnings", logging.WARNING, ignoring_log_line)
 
 
 def test_option_is_list():

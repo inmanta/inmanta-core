@@ -1559,7 +1559,7 @@ async def test_2151_method_header_parameter_in_body(async_finalizer, unused_tcp_
 
     # Body and header contain the same value for parameter: should succeed
     request = tornado.httpclient.HTTPRequest(
-        url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
+        url=f"http://localhost:{opt.server_bind_port.get()}/api/v1/testmethod",
         method="POST",
         body=json_encode({"header_param": param_value, "body_param": "body_param_value"}),
         headers={"X-Inmanta-Header-Param": param_value},
