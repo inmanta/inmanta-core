@@ -17,7 +17,6 @@ updates:
       versions: [">=0.0.1"]
     - dependency-name: "pydantic"
       update-types: ["version-update:semver-major"]
-    - dependency-name: "pydantic-core" # pydantic/pydantic#10494
     - dependency-name: "execnet"
       update-types: ["version-update:semver-major"]
 - target-branch: iso7
@@ -34,6 +33,5 @@ updates:
       versions: [">=0.0.1"]
     - dependency-name: "pydantic"
       update-types: ["version-update:semver-major"]
-    - dependency-name: "pydantic-core" # pydantic/pydantic#10494
     - dependency-name: "execnet"
       update-types: ["version-update:semver-major"]

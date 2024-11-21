@@ -41,11 +41,11 @@ from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
 from inmanta.deploy.state import (
     AgentStatus,
     BlockedStatus,
+    ComplianceStatus,
     DeploymentResult,
     ModelState,
     ResourceDetails,
     ResourceState,
-    ResourceStatus,
 )
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
@@ -108,7 +108,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: Optional[ResourceStatus] = None,
+        status: ComplianceStatus,
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
         """
@@ -120,7 +120,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         :param resource: The resource to report state for.
         :param attribute_hash: The resource's attribute hash for which this state applies. No scheduler state is updated if the
             hash indicates the state information is stale.
-        :param status: The new resource status. If none, the old one is kept.
+        :param status: The new resource status.
         :param deployment_result: The result of the deploy, iff one just finished, otherwise None.
         """
 
@@ -486,7 +486,7 @@ class ResourceScheduler(TaskManager):
                     self._timer_manager.uninstall_timer(resource)
                 elif resource in self._state.resources:
                     # It's a resource we know.
-                    if self._state.resource_state[resource].status is ResourceStatus.UNDEFINED:
+                    if self._state.resource_state[resource].status is ComplianceStatus.UNDEFINED:
                         # The resource has been undeployable in previous versions, but not anymore.
                         unblocked_resources.add(resource)
                     elif details.attribute_hash != self._state.resources[resource].attribute_hash:
@@ -667,7 +667,7 @@ class ResourceScheduler(TaskManager):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: Optional[ResourceStatus] = None,
+        status: ComplianceStatus,
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
         LOGGER.debug(f"report_resource_state {resource=} {status=} {deployment_result=}")
@@ -676,13 +676,24 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             # refresh resource details for latest model state
             details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
-            if details is None or details.attribute_hash != attribute_hash:
-                # The reported resource state is for a stale resource and therefore no longer relevant for state updates.
-                # There is also no need to send out events because a newer version will have been scheduled.
+
+            if details is None:
+                # we are stale and removed
                 return
+
             state: ResourceState = self._state.resource_state[resource]
-            if status is not None:
-                state.status = status
+
+            if details.attribute_hash != attribute_hash:
+                # We are stale but still the last deploy
+                # We can update the deployment_result (which is about last deploy)
+                # We can't update status (which is about active state only)
+                # None of the event propagation or other update happen either for the same reason
+                if deployment_result is not None:
+                    state.deployment_result = deployment_result
+                return
+
+            # We are not stale
+            state.status = status
             if deployment_result is not None:
                 # first update state, then send out events
                 self._deploying_latest.remove(resource)
@@ -783,11 +794,11 @@ class ResourceScheduler(TaskManager):
         for dep_id in dependencies:
             resource_state_object: ResourceState = self._state.resource_state[dep_id]
             match resource_state_object:
-                case ResourceState(status=ResourceStatus.UNDEFINED):
+                case ResourceState(status=ComplianceStatus.UNDEFINED):
                     dependencies_state[dep_id] = const.ResourceState.undefined
                 case ResourceState(blocked=BlockedStatus.YES):
                     dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
-                case ResourceState(status=ResourceStatus.HAS_UPDATE):
+                case ResourceState(status=ComplianceStatus.HAS_UPDATE):
                     dependencies_state[dep_id] = const.ResourceState.available
                 case ResourceState(deployment_result=DeploymentResult.SKIPPED):
                     dependencies_state[dep_id] = const.ResourceState.skipped
