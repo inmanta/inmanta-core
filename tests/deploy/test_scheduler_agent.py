@@ -346,7 +346,7 @@ async def config(inmanta_config, tmp_path):
 
 
 @pytest.fixture
-async def agent(environment, config):
+async def agent(environment, config, disable_auto_repair_and_deploy):
     """
     Provide a new agent, with a scheduler that uses the dummy executor
 
@@ -383,6 +383,22 @@ def make_resource_minimal(environment):
 
     return make_resource_minimal
 
+@pytest.fixture
+def disable_auto_repair_and_deploy():
+    """
+    Disable periodic repair and deploy.
+    """
+
+    old_repair = Config.get("config", "agent-repair-interval")
+    old_deploy = Config.get("config", "agent-deploy-interval")
+
+    Config.set("config", "agent-repair-interval", '0')
+    Config.set("config", "agent-deploy-interval", '0')
+
+    yield
+
+    Config.set("config", "agent-repair-interval", str(old_repair))
+    Config.set("config", "agent-deploy-interval", str(old_deploy))
 
 async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
     """
