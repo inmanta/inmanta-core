@@ -747,7 +747,11 @@ class PythonEnvironment:
             self._write_pth_file()
 
     def can_activate(self) -> None:
-        """Can this venv be activated with this current python version?"""
+        """
+        Can this venv be activated with this current python version?
+
+        raises a VenvActivationFailedError exception if this is not the case
+        """
         # Make sure the venv hosts the same python version as the running process
         if sys.platform.startswith("linux"):
             # Check if the python binary exists in the environment's bin directory

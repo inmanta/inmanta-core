@@ -18,6 +18,7 @@
 
 import abc
 import asyncio
+import contextlib
 import datetime
 import json
 import logging
@@ -248,62 +249,59 @@ class CompileRun:
         versioned_venv_dir = ".env-py" + python_version
         versioned_venv_dir_full = os.path.join(project_dir, versioned_venv_dir)
 
-        # Determine the final action
-        # If we don't need to symlink, we return
-        do_create = False
-
-        if os.path.islink(venv_dir):
-            # We have a modern setup
-            try:
-                if os.path.samefile(venv_dir, versioned_venv_dir_full):
-                    # symlink creation is the last step => all good if it exists
-                    await self._info("Found existing venv")
-                    return None
-                else:
-                    # Wrong version
-                    os.unlink(venv_dir)
-                    await self._info(f"Creating new venv at {versioned_venv_dir_full}")
-                    do_create = True
-            except FileNotFoundError:
-                # Broken link or does not exist
-                await self._info(f"Creating new venv at {versioned_venv_dir_full}")
-                os.unlink(venv_dir)
-                do_create = True
-        elif not os.path.exists(venv_dir):
-            # Doesn't exist
-            do_create = True
-            await self._info(f"Creating new venv at {versioned_venv_dir_full}")
-        else:
-            # We have an older (< iso8) setup without symlink
-            virtual_env = VirtualEnv(venv_dir)
-            if virtual_env.exists():
-                try:
-                    virtual_env.can_activate()  # raises exception
-                    # version matches, move it to the correct folder
-                    os.rename(venv_dir, versioned_venv_dir_full)
-                    await self._info(f"Moving existing venv from {venv_dir} to {versioned_venv_dir_full}")
-                except VenvActivationFailedError:
-                    # Version doesn't match, move to alternative location
-                    os.rename(venv_dir, venv_dir + "_old")
-                    await self._info(f"Discarding existing venv from {venv_dir} to {venv_dir}_old, Creating new")
-                    do_create = True
-            else:
-                # otherwise broken
+        async def ensure_venv() -> None:
+            """
+            Ensures that a compatible venv exists at .venv-py<version>
+            """
+            if os.path.exists(versioned_venv_dir_full):
+                return
+            # migration from old .env
+            if os.path.exists(venv_dir) and not os.path.islink(venv_dir):
+                virtual_env = VirtualEnv(venv_dir)
+                if virtual_env.exists():
+                    with contextlib.suppress(VenvActivationFailedError):
+                        virtual_env.can_activate()  # raises exception
+                        # version matches, move it to the correct folder
+                        os.rename(venv_dir, versioned_venv_dir_full)
+                        await self._info(f"Moving existing venv from {venv_dir} to {versioned_venv_dir_full}")
+                        # All done
+                        return
+                # version doesn't match
                 os.rename(venv_dir, venv_dir + "_old")
                 await self._info(f"Discarding existing venv from {venv_dir} to {venv_dir}_old, Creating new")
-                do_create = True
 
-        if do_create:
+            # No there yet
+            await self._info(f"Creating new venv at {versioned_venv_dir_full}")
             virtual_env = VirtualEnv(versioned_venv_dir_full)
             virtual_env.init_env()
 
-        # Relative symlink is a bit exotic in python
-        try:
-            dir_fd = os.open(project_dir, os.O_RDONLY)
-            os.symlink(versioned_venv_dir, ".env", dir_fd=dir_fd)
-        finally:
-            if dir_fd:
-                os.close(dir_fd)
+        await ensure_venv()
+
+        async def link() -> None:
+            """
+            Ensures that a link from .venv to .venv-py<version> exists
+            """
+            is_link: bool = os.path.islink(venv_dir)
+            with contextlib.suppress(FileNotFoundError):
+                if is_link and os.path.samefile(venv_dir, versioned_venv_dir_full):
+                    await self._info("Found existing venv")
+                    return
+            if os.path.exists(venv_dir):
+                if is_link:
+                    os.unlink(venv_dir)
+                else:
+                    # TODO: open question: what if backup target already exists?
+                    os.rename(venv_dir, f"{venv_dir}_old")
+
+            # Relative symlink is a bit exotic in python
+            try:
+                dir_fd = os.open(project_dir, os.O_RDONLY)
+                os.symlink(versioned_venv_dir, ".env", dir_fd=dir_fd)
+            finally:
+                if dir_fd:
+                    os.close(dir_fd)
+
+        await link()
 
     async def run(self, force_update: Optional[bool] = False) -> tuple[bool, Optional[model.CompileData]]:
         """
