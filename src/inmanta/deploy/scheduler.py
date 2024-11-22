@@ -264,6 +264,7 @@ class ResourceScheduler(TaskManager):
             return
         self.reset()
         await self.reset_resource_state()
+
         await self._initialize()
         self._running = True
 
@@ -295,8 +296,6 @@ class ResourceScheduler(TaskManager):
             up_to_date_resources=up_to_date_resources,
             reason="Deploy was triggered because the scheduler was started",
         )
-
-        self._timer_manager.initialize(list(resources_to_deploy.keys()))  # is this correct
 
     async def stop(self) -> None:
         if not self._running:
@@ -486,7 +485,7 @@ class ResourceScheduler(TaskManager):
                 self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
                 # Install timers for these resources. They are
                 # up-to-date now, but we want to periodically repair/deploy them.
-                await self._timer_manager.install_timer(resource)
+                await self._timer_manager.install_timer(resource, is_dirty=False)
 
             for resource, details in resources.items():
                 if details.status is const.ResourceState.undefined:
@@ -683,6 +682,10 @@ class ResourceScheduler(TaskManager):
     ) -> None:
         if deployment_result is DeploymentResult.NEW:
             raise ValueError("report_resource_state should not be called to register new resources")
+
+        # Keep track of the last known state for this resource before leaving the scheduler lock
+        # to re-schedule an individual repair or deploy accordingly.
+        is_dirty: bool
         async with self._scheduler_lock:
             # refresh resource details for latest model state
             details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
@@ -719,6 +722,7 @@ class ResourceScheduler(TaskManager):
 
                 if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
+                    is_dirty = False
 
                     if previous_deployment_result != DeploymentResult.DEPLOYED:
                         # This resource went from not deployed to deployed
@@ -747,7 +751,7 @@ class ResourceScheduler(TaskManager):
                     # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
                     # (or skip) causes it to become dirty now.
                     self._state.dirty.add(resource)
-                    self._timer_manager.uninstall_timer(resource)
+                    is_dirty = True
 
                     if deployment_result is DeploymentResult.SKIPPED:
                         # Also add back dependents to the dirty set
@@ -785,7 +789,7 @@ class ResourceScheduler(TaskManager):
                     )
 
         # No matter the deployment result, schedule a re-deploy for this resource
-        await self._timer_manager.install_timer(resource)
+        await self._timer_manager.install_timer(resource, is_dirty=is_dirty)
 
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr

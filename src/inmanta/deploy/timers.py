@@ -18,7 +18,7 @@
 
 import asyncio
 import logging
-from collections.abc import Coroutine, Sequence
+from collections.abc import Coroutine
 from typing import Any, Callable
 
 import inmanta.deploy.scheduler
@@ -31,13 +31,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ResourceTimer:
-    resource: ResourceIdStr
-
-    repair_handle: asyncio.Task[None] | None
-
     def __init__(self, resource: ResourceIdStr):
-        self.resource = resource
-        self.repair_handle = None
+        self.resource: ResourceIdStr = resource
+        self.repair_handle: asyncio.Task[None] | None = None
+        self.is_installed: bool = False
 
     async def install_timer(
         self,
@@ -46,6 +43,18 @@ class ResourceTimer:
         is_dirty: bool,
         action_function: Callable[[ResourceIdStr, int], Coroutine[Any, Any, None]],
     ) -> None:
+        """
+        Make sure the underlying resource is marked for execution
+
+        :param periodic_deploy_interval: Per-resource deploy interval, assumed to be a positive int or None
+        :param periodic_repair_interval: Per-resource repair interval, assumed to be a positive int or None
+        :param is_dirty: Last known state of the resource at the timer install request time.
+        :param action_function: The function to execute
+        """
+        if self.is_installed:
+            return
+
+        self.is_installed = True
 
         next_execute_time: int
 
@@ -64,49 +73,69 @@ class ResourceTimer:
         await asyncio.sleep(next_execute_time)
         self.repair_handle = asyncio.create_task(action_function(self.resource, next_execute_time))
 
+        self.repair_handle.add_done_callback(lambda _: self.uninstall_timer())
+
+        await self.repair_handle
+
     def uninstall_timer(self) -> None:
-        if self.repair_handle is not None:
-            self.repair_handle.cancel()
+        self.is_installed = False
 
     def cancel(self) -> None:
-        if self.repair_handle:
+        if self.repair_handle is not None:
             self.repair_handle.cancel()
 
 
 class TimerManager:
-    resource_timers: dict[ResourceIdStr, ResourceTimer]
-
     def __init__(self, resource_scheduler: "inmanta.deploy.scheduler.ResourceScheduler"):
-        self.resource_timers = {}
+        self.resource_timers: dict[ResourceIdStr, ResourceTimer] = {}
 
         self.global_periodic_repair_task: ScheduledTask | None = None
         self.global_periodic_deploy_task: ScheduledTask | None = None
 
-        # Typing for repair/deploy timers :
-        #   - int: max number of seconds between consecutive repairs/deploys
-        #     on a per-resource basis.
-        #   - str: cron-like expression to schedule a periodic global repair/deploy
-        #     i.e. for all known resources.
-        self._deploy_timer: int | str | None = None
-        self._repair_timer: int | str | None = None
-
-        self._resource_scheduler = resource_scheduler
-
         self.periodic_repair_interval: int | None = None
         self.periodic_deploy_interval: int | None = None
 
+        # Back reference to the ResourceScheduler that was responsible for spawning this TimerManager
+        self._resource_scheduler = resource_scheduler
+
         self._sched = Scheduler("Resource scheduler")
+
+    def _initialize(self) -> None:
+        """
+        Set the periodic timers for repairs and deploys. Either per-resource if the
+        associated config option is passed as a positive integer, or globally if it
+        is passed as a cron expression string.
+        """
+        deploy_timer: int | str = agent_config.agent_deploy_interval.get()
+        repair_timer: int | str = agent_config.agent_repair_interval.get()
+
+        if isinstance(deploy_timer, str):
+            self.global_periodic_deploy_task = self.trigger_global_deploy(deploy_timer)
+        else:
+            self.periodic_deploy_interval = deploy_timer if deploy_timer > 0 else None
+
+        if isinstance(repair_timer, str):
+            self.global_periodic_repair_task = self.trigger_global_repair(repair_timer)
+        else:
+            self.periodic_repair_interval = repair_timer if repair_timer > 0 else None
 
     def register_resource(self, resource: ResourceIdStr) -> None:
         self.resource_timers[resource] = ResourceTimer(resource)
 
     def unregister_resource(self, resource: ResourceIdStr) -> None:
         if resource in self.resource_timers:
-            self.resource_timers[resource].cancel()
+            self.resource_timers[resource].uninstall_timer()
             del self.resource_timers[resource]
 
     def reset(self) -> None:
-        pass
+        self.stop()
+
+        self.global_periodic_repair_task = None
+        self.global_periodic_deploy_task = None
+        self.periodic_repair_interval = None
+        self.periodic_deploy_interval = None
+
+        self._initialize()
 
     def uninstall_timer(self, resource: ResourceIdStr) -> None:
         try:
@@ -114,40 +143,23 @@ class TimerManager:
         except KeyError:
             pass
 
-    async def install_timer(self, resource: ResourceIdStr) -> None:
+    async def install_timer(self, resource: ResourceIdStr, is_dirty: bool) -> None:
         if resource not in self.resource_timers:
             self.register_resource(resource)
         await self.resource_timers[resource].install_timer(
             periodic_deploy_interval=self.periodic_deploy_interval,
             periodic_repair_interval=self.periodic_repair_interval,
-            is_dirty=True,
+            is_dirty=is_dirty,
             action_function=self._resource_scheduler.repair_resource,
         )
 
     def stop(self) -> None:
-        for task in self.resource_timers.values():
-            task.uninstall_timer()
+        for timer in self.resource_timers.values():
+            timer.uninstall_timer()
 
-    def initialize(self, resources: Sequence[ResourceIdStr]) -> None:
-        self._deploy_timer = agent_config.agent_deploy_interval.get()
-        self._repair_timer = agent_config.agent_repair_interval.get()
-        if isinstance(self._deploy_timer, str):
-            self.global_periodic_deploy_task = self.trigger_global_deploy(self._deploy_timer)
-        else:
-            self.periodic_deploy_interval = self._deploy_timer if self._deploy_timer > 0 else None
-
-        if isinstance(self._repair_timer, str):
-            self.global_periodic_repair_task = self.trigger_global_repair(self._repair_timer)
-        else:
-            self.periodic_repair_interval = self._repair_timer if self._repair_timer > 0 else None
-
-        LOGGER.debug(
-            "Initializing timer manager with gpd %s gpr %s pd %s pr %s",
-            self.global_periodic_deploy_task,
-            self.global_periodic_repair_task,
-            self.periodic_deploy_interval,
-            self.periodic_repair_interval,
-        )
+        for task in [self.global_periodic_repair_task, self.global_periodic_deploy_task]:
+            if task:
+                self._sched.remove(task)
 
     def trigger_global_deploy(self, cron_expression: str) -> ScheduledTask:
         """
@@ -174,7 +186,6 @@ class TimerManager:
 
         :returns: the associated scheduled task.
         """
-
         cron_schedule = CronSchedule(cron=cron_expression)
 
         async def _action() -> None:

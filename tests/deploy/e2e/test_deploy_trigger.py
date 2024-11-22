@@ -132,7 +132,7 @@ async def test_spontaneous_deploy(
         Config.set("config", "agent-repair-interval", "* * * * * * 2099")  # 2099 is the max crontab allowed value for year
 
         timer_manager = agent.scheduler._timer_manager
-        timer_manager.initialize(resources=[])
+        timer_manager.reset()
 
         resource_container.Provider.set_fail("agent1", "key1", 1)
 
@@ -199,7 +199,7 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     Config.set("config", "agent-repair-interval", agent_repair_interval)
 
     timer_manager = agent.scheduler._timer_manager
-    timer_manager.initialize(resources=[])
+    timer_manager.reset()
 
     version = await clienthelper.get_version()
 
