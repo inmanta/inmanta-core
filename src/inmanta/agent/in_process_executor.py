@@ -178,7 +178,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             except SkipResourceForDependencies as e:
                 ctx.set_status(const.ResourceState.transiently_skipped)
                 ctx.warning(
-                    msg="Resource %(resource_id)s was skipped using the default exception: %(reason)s",
+                    msg="Resource %(resource_id)s was skipped: %(reason)s",
                     resource_id=resource.id,
                     reason=e.args,
                 )
