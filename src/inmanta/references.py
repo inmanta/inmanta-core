@@ -124,13 +124,14 @@ ArgumentTypes = typing.Annotated[
 class BaseModel(pydantic.BaseModel):
     """A base model class for references and mutators"""
 
-    id: uuid.UUID = pydantic.Field(default_factory=uuid.uuid4)
     type: ReferenceType
     args: list[ArgumentTypes]
 
 
 class ReferenceModel(BaseModel):
     """A reference"""
+
+    id: uuid.UUID = pydantic.Field(default_factory=uuid.uuid4)
 
 
 class MutatorModel(BaseModel):
