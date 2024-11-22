@@ -15,10 +15,9 @@
 
     Contact: code@inmanta.com
 """
+
 import dataclasses
 import importlib
-# pylint: disable-msg=R0902,R0904
-
 from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
 from inmanta.ast import (
@@ -37,6 +36,9 @@ from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, dataflow
 from inmanta.execute.util import AnyType, NoneValue
+
+# pylint: disable-msg=R0902,R0904
+
 
 try:
     from typing import TYPE_CHECKING
@@ -518,12 +520,11 @@ class Entity(NamedType, WithComment):
         # TODO: error reporting
         namespace = self.namespace.get_full_name()
 
-        dataclass_module = importlib.import_module("inmanta_plugins." + namespace.replace("::","."))
+        dataclass_module = importlib.import_module("inmanta_plugins." + namespace.replace("::", "."))
         dataclass = getattr(dataclass_module, self.name)
 
         assert dataclasses.is_dataclass(dataclass)
         assert dataclass.__dataclass_params__.frozen
-
 
         dc_fields = {f.name: f for f in dataclasses.fields(dataclass)}
 
@@ -545,12 +546,19 @@ class Entity(NamedType, WithComment):
                     assert py_type
                     assert issubclass(field.type, py_type)
 
-
-
         # Only std::none as implementation
+        for implement in self.get_implements():
+            for imp in implement.implementations:
+                assert imp.get_full_name() == "std::none"
 
+        # No index
 
-        #assert all(x.type == int for x in dataclasses.fields(dataclass))
+        assert not self.get_indices()
+
+        self._paired_dataclass = dataclass
+
+    def as_python_type(self) -> "typing.Type | None":
+        return self._paired_dataclass
 
 
 # Kept for backwards compatibility. May be dropped from iso7 onwards.

@@ -23,6 +23,7 @@ from collections.abc import Sequence
 from typing import Callable
 from typing import List as PythonList
 from typing import Optional
+import typing
 
 from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException
 from inmanta.execute.util import AnyType, NoneValue, Unknown
@@ -107,6 +108,7 @@ class Type(Locatable):
         """
         Convert an instance of this type to its python form
         """
+
 
 class NamedType(Type, Named):
     def get_double_defined_exception(self, other: "NamedType") -> "DuplicateException":
@@ -419,6 +421,7 @@ class String(Primitive):
     def to_python(self, instance: object) -> "object":
         return str(instance)
 
+
 @stable_api
 class List(Type):
     """
@@ -456,6 +459,7 @@ class List(Type):
 
     def to_python(self, instance: object) -> "object":
         raise NotImplementedError()
+
 
 @stable_api
 class TypedList(List):

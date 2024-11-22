@@ -18,6 +18,7 @@
 
 import asyncio
 import collections.abc
+import dataclasses
 import inspect
 import os
 import subprocess
@@ -31,7 +32,7 @@ from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeExce
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
-from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
+from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
@@ -336,6 +337,26 @@ class PluginReturn(PluginValue):
 
     VALUE_TYPE = "returned value"
     VALUE_NAME = "return value"
+
+    def to_model_domain(self, value: object, resolver: Resolver, queue: QueueScheduler, location: Location) -> object:
+
+        if dataclasses.is_dataclass(value):
+            if self.resolved_type.as_python_type() == type(value):
+                instance = self.resolved_type.get_instance(
+                    value.__dict__,
+                    resolver,
+                    queue,
+                    location,
+                    None,
+                )
+                # generate an implementation
+                for stmt in self.resolved_type.get_sub_constructor():
+                    stmt.emit(instance, queue)
+                return instance
+            assert False
+
+        self.validate(value)
+        return value
 
 
 class Plugin(NamedType, WithComment, metaclass=PluginMeta):
@@ -682,6 +703,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     def __call__(self, *args: object, **kwargs: object) -> object:
         """
         The function call itself
+
+        As a call, for backward compact
         """
         if self.deprecated:
             msg: str = f"Plugin '{self.get_full_name()}' is deprecated."
@@ -709,6 +732,42 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self.return_type.validate(value)
 
         return value
+
+    def call_in_context(
+        self,
+        args: Sequence[object],
+        kwargs: Mapping[str, object],
+        resolver: Resolver,
+        queue: QueueScheduler,
+        location: Location,
+    ) -> object:
+        """
+        The function call itself, with compiler context
+        """
+        if self.deprecated:
+            msg: str = f"Plugin '{self.get_full_name()}' is deprecated."
+            if self.replaced_by:
+                msg += f" It should be replaced by '{self.replaced_by}'."
+            warnings.warn(PluginDeprecationWarning(msg))
+        self.check_requirements()
+
+        def new_arg(arg: object) -> object:
+            if isinstance(arg, Context):
+                return arg
+            elif isinstance(arg, Unknown) and self.is_accept_unknowns():
+                return arg
+            else:
+                return DynamicProxy.return_value(arg)
+
+        new_args = [new_arg(arg) for arg in args]
+        new_kwargs = {k: new_arg(v) for k, v in kwargs.items()}
+
+        value = self.call(*new_args, **new_kwargs)
+
+        value = DynamicProxy.unwrap(value)
+
+        # Validate the returned value
+        return self.return_type.to_model_domain(value, resolver, queue, location)
 
     def get_full_name(self) -> str:
         return f"{self.ns.get_full_name()}::{self.__class__.__function_name__}"

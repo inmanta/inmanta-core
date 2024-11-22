@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import dataclasses
 
 from inmanta.plugins import plugin

@@ -9,3 +9,9 @@ end
 implement Virtualmachine using std::none
 
 Virtualmachine(name="A", os="B", ram=1, cpus=2, disk=10)
+
+one=make_virtual_machine()
+
+one.requires = one
+
+std::print(one)

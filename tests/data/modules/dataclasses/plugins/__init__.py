@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import dataclasses
 
 from inmanta.plugins import plugin
@@ -29,4 +30,6 @@ class Virtualmachine:
     disk: int
 
 
-# TODO: verify type correspondence
+@plugin
+def make_virtual_machine() -> "dataclasses::Virtualmachine":
+    return Virtualmachine(name="Test", os="linux", ram=5, cpus=2, disk=15)

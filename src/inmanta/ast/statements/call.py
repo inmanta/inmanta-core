@@ -262,7 +262,7 @@ class PluginFunction(Function):
             self.plugin(*args, **kwargs)
         else:
             try:
-                value = self.plugin(*args, **kwargs)
+                value = self.plugin.call_in_context(args, kwargs, resolver, queue, self.ast_node.location)
                 result.set_value(value if value is not None else NoneValue(), self.ast_node.location)
             except UnknownException as e:
                 result.set_value(e.unknown, self.ast_node.location)

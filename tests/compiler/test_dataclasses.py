@@ -1,5 +1,7 @@
 import dataclasses
 
+import pytest
+
 from inmanta import compiler
 
 
@@ -13,7 +15,6 @@ import dataclasses
     compiler.do_compile()
 
 
-
 def test_dataclass_load_bad(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
@@ -21,7 +22,5 @@ import dataclasses::bad_sub
 """,
         ministd=True,
     )
-    compiler.do_compile()
-
-
-
+    with pytest.raises(Exception):
+        compiler.do_compile()
