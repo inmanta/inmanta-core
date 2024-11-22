@@ -483,9 +483,9 @@ class ResourceScheduler(TaskManager):
 
             for resource, details in up_to_date_resources.items():
                 self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
-                # Install timers for these resources. They are
-                # up-to-date now, but we want to periodically repair/deploy them.
-                await self._timer_manager.install_timer(resource, is_dirty=False)
+                # Install timers for these resources. They are up-to-date now,
+                # but we want to make sure we periodically repair them.
+                await self._timer_manager.install_timer(resource, is_dirty=False, action=self.repair_resource)
 
             for resource, details in resources.items():
                 if details.status is const.ResourceState.undefined:
@@ -742,6 +742,8 @@ class ResourceScheduler(TaskManager):
                                 continue
                             if dependant_status.blocked is BlockedStatus.NO:
                                 dependant_resources.add(dependant)
+                                # Remove timers for unblocked dependant resources because
+                                # they are marked for deployment below.
                                 self._timer_manager.uninstall_timer(dependant)
 
                         concerned_resources.update(dependant_resources)
@@ -762,6 +764,7 @@ class ResourceScheduler(TaskManager):
                         }
                         self._state.dirty.update(dependant_resources)
                         for dependant in dependant_resources:
+                            # No point in re-trying dependants since this resource was skipped
                             self._timer_manager.uninstall_timer(dependant)
 
                 # propagate events
@@ -789,7 +792,7 @@ class ResourceScheduler(TaskManager):
                     )
 
         # No matter the deployment result, schedule a re-deploy for this resource
-        await self._timer_manager.install_timer(resource, is_dirty=is_dirty)
+        await self._timer_manager.install_timer(resource, is_dirty=is_dirty, action=self.repair_resource)
 
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr

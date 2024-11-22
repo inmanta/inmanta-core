@@ -1801,3 +1801,26 @@ async def test_repair_does_not_trigger_for_blocked_resources(agent: TestAgent, m
 
     # Only r2 was deployed
     assert agent.executor_manager.executors["agent1"].execute_count == 1
+
+
+async def test_timer_manager(agent: TestAgent, make_resource_minimal):
+
+    # Config.set("config", "agent-repair-interval", "2")
+    # Config.set("config", "agent-deploy-interval", "20")
+    #
+    # timer_manager = agent.scheduler._timer_manager
+    # timer_manager.reset()
+
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+    resources = {
+        rid1: make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+    }
+
+
+
+    await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
+    await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
+
+    # Both resources were deployed
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    a=2

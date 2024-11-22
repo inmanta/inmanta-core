@@ -36,12 +36,14 @@ class ResourceTimer:
         self.repair_handle: asyncio.Task[None] | None = None
         self.is_installed: bool = False
 
+        self.handle = None
+
     async def install_timer(
         self,
         periodic_deploy_interval: int | None,
         periodic_repair_interval: int | None,
         is_dirty: bool,
-        action_function: Callable[[ResourceIdStr, int], Coroutine[Any, Any, None]],
+        action_function: Callable[..., Coroutine[Any, Any, None]],
     ) -> None:
         """
         Make sure the underlying resource is marked for execution
@@ -53,6 +55,7 @@ class ResourceTimer:
         """
         if self.is_installed:
             return
+
 
         next_execute_time: int
 
@@ -71,6 +74,8 @@ class ResourceTimer:
             return
 
         self.is_installed = True
+
+        # TODO: wrap this into a coroutine that can be cancelled
         await asyncio.sleep(next_execute_time)
         self.repair_handle = asyncio.create_task(action_function(self.resource, next_execute_time))
 
@@ -97,6 +102,7 @@ class TimerManager:
         self.periodic_deploy_interval: int | None = None
 
         # Back reference to the ResourceScheduler that was responsible for spawning this TimerManager
+        # Used to schedule global repair/deploys. TODO: This feels hackish ??
         self._resource_scheduler = resource_scheduler
 
         self._sched = Scheduler("Resource scheduler")
@@ -139,19 +145,24 @@ class TimerManager:
         self._initialize()
 
     def uninstall_timer(self, resource: ResourceIdStr) -> None:
+        """
+        Remove the timer for a given resource (if it exists) and cancel
+        the associated deployment task (if any).
+        """
         try:
             self.resource_timers[resource].uninstall_timer()
+            self.resource_timers[resource].cancel()
         except KeyError:
             pass
 
-    async def install_timer(self, resource: ResourceIdStr, is_dirty: bool) -> None:
+    async def install_timer(self, resource: ResourceIdStr, is_dirty: bool, action: Callable[..., Coroutine[Any, Any, None]]) -> None:
         if resource not in self.resource_timers:
             self.register_resource(resource)
         await self.resource_timers[resource].install_timer(
             periodic_deploy_interval=self.periodic_deploy_interval,
             periodic_repair_interval=self.periodic_repair_interval,
             is_dirty=is_dirty,
-            action_function=self._resource_scheduler.repair_resource,
+            action_function=action,
         )
 
     def stop(self) -> None:
