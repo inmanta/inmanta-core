@@ -113,7 +113,6 @@ class DummyExecutor(executor.Executor):
             resource_details.rvid,
             action_id,
             status=result,
-            blocked=BlockedStatus.NO,
             messages=[],
             changes={},
             change=Change.nochange,
@@ -178,7 +177,6 @@ class ManagedExecutor(DummyExecutor):
             resource_details.rvid,
             action_id,
             status=result,
-            blocked=BlockedStatus.NO,
             messages=[],
             changes={},
             change=Change.nochange,
@@ -1404,7 +1402,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         rid1,
         state.ComplianceStatus.HAS_UPDATE,
         state.DeploymentResult.NEW,
-        state.BlockedStatus.TRANSIENT,
+        state.BlockedStatus.YES,
         resources[rid1].attribute_hash,
     )
     assert_resource_state(
@@ -1481,21 +1479,21 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         rid1,
         state.ComplianceStatus.HAS_UPDATE,
         state.DeploymentResult.NEW,
-        state.BlockedStatus.TRANSIENT,
+        state.BlockedStatus.YES,
         resources[rid1].attribute_hash,
     )
     assert_resource_state(
         rid2,
         state.ComplianceStatus.HAS_UPDATE,
         state.DeploymentResult.DEPLOYED,
-        state.BlockedStatus.TRANSIENT,
+        state.BlockedStatus.YES,
         resources[rid2].attribute_hash,
     )
     assert_resource_state(
         rid3,
         state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
-        state.BlockedStatus.TRANSIENT,
+        state.BlockedStatus.YES,
         resources[rid3].attribute_hash,
     )
     assert_resource_state(
@@ -1547,7 +1545,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         rid1,
         state.ComplianceStatus.HAS_UPDATE,
         state.DeploymentResult.NEW,
-        state.BlockedStatus.TRANSIENT,
+        state.BlockedStatus.YES,
         resources[rid1].attribute_hash,
     )
     assert_resource_state(
@@ -1561,7 +1559,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         rid3,
         state.ComplianceStatus.COMPLIANT,
         state.DeploymentResult.DEPLOYED,
-        state.BlockedStatus.TRANSIENT,
+        state.BlockedStatus.YES,
         resources[rid3].attribute_hash,
     )
     assert_resource_state(

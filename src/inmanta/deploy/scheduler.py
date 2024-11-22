@@ -321,7 +321,7 @@ class ResourceScheduler(TaskManager):
 
         def _should_deploy(resource: ResourceIdStr) -> bool:
             if (resource_state := self._state.resource_state.get(resource)) is not None:
-                return not resource_state.blocked.is_blocked()
+                return resource_state.blocked == BlockedStatus.NO
             # No state was found for this resource. Should probably not happen
             # but err on the side of caution and mark for redeploy.
             return True
