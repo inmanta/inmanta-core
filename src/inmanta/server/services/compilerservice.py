@@ -256,7 +256,7 @@ class CompileRun:
             # We have a modern setup
             try:
                 if os.path.samefile(venv_dir, versioned_venv_dir_full):
-                    # all good
+                    # symlink creation is the last step => all good if it exists
                     await self._info("Found existing venv")
                     return None
                 else:
