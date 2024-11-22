@@ -128,8 +128,8 @@ async def test_spontaneous_deploy(
         env_id = UUID(environment)
 
         Config.set("config", "agent-deploy-interval", agent_deploy_interval)
-        # Setting repair to a cron expression to disable individual repairs
-        Config.set("config", "agent-repair-interval", "* * * * * * 2099")  # 2099 is the max crontab allowed value for year
+        # Disable repairs
+        Config.set("config", "agent-repair-interval", "0")
 
         timer_manager = agent.scheduler._timer_manager
         timer_manager.reset()
@@ -197,6 +197,8 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     resource_container.Provider.reset()
     env_id = environment
     Config.set("config", "agent-repair-interval", agent_repair_interval)
+    # Disable deploys
+    Config.set("config", "agent-deploy-interval", "0")
 
     timer_manager = agent.scheduler._timer_manager
     timer_manager.reset()

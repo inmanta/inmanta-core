@@ -485,7 +485,7 @@ class ResourceScheduler(TaskManager):
                 self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
                 # Install timers for these resources. They are up-to-date now,
                 # but we want to make sure we periodically repair them.
-                await self._timer_manager.install_timer(resource, is_dirty=False, action=self.repair_resource)
+                self._timer_manager.install_timer(resource, is_dirty=False, action=self.repair_resource)
 
             for resource, details in resources.items():
                 if details.status is const.ResourceState.undefined:
@@ -792,7 +792,7 @@ class ResourceScheduler(TaskManager):
                     )
 
         # No matter the deployment result, schedule a re-deploy for this resource
-        await self._timer_manager.install_timer(resource, is_dirty=is_dirty, action=self.repair_resource)
+        self._timer_manager.install_timer(resource, is_dirty=is_dirty, action=self.repair_resource)
 
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr

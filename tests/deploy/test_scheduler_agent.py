@@ -25,7 +25,7 @@ import typing
 import uuid
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Mapping, Optional, Sequence, Tuple
+from typing import Any, Coroutine, Mapping, Optional, Sequence, Tuple
 from uuid import UUID
 
 import asyncpg
@@ -44,6 +44,7 @@ from inmanta.deploy import state, tasks
 from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import BlockedStatus
+from inmanta.deploy.timers import TimerManager
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
@@ -229,6 +230,19 @@ state_translation_table: dict[
 }
 
 
+class DummyTimerManager(TimerManager):
+    async def install_timer(
+        self, resource: ResourceIdStr, is_dirty: bool, action: Callable[..., Coroutine[Any, Any, None]]
+    ) -> None:
+        pass
+
+    def trigger_global_deploy(self, cron_expression: str) -> None:
+        pass
+
+    def trigger_global_repair(self, cron_expression: str) -> None:
+        pass
+
+
 class DummyStateManager(StateUpdateManager):
 
     def __init__(self):
@@ -280,6 +294,7 @@ class TestScheduler(ResourceScheduler):
         self.code_manager = DummyCodeManager(client)
         self.mock_versions = {}
         self._state_update_delegate = DummyStateManager()
+        self._timer_manager = DummyTimerManager(self)
 
     async def read_version(
         self,
@@ -346,7 +361,7 @@ async def config(inmanta_config, tmp_path):
 
 
 @pytest.fixture
-async def agent(environment, config, disable_auto_repair_and_deploy):
+async def agent(environment, config):
     """
     Provide a new agent, with a scheduler that uses the dummy executor
 
@@ -383,22 +398,6 @@ def make_resource_minimal(environment):
 
     return make_resource_minimal
 
-@pytest.fixture
-def disable_auto_repair_and_deploy():
-    """
-    Disable periodic repair and deploy.
-    """
-
-    old_repair = Config.get("config", "agent-repair-interval")
-    old_deploy = Config.get("config", "agent-deploy-interval")
-
-    Config.set("config", "agent-repair-interval", '0')
-    Config.set("config", "agent-deploy-interval", '0')
-
-    yield
-
-    Config.set("config", "agent-repair-interval", str(old_repair))
-    Config.set("config", "agent-deploy-interval", str(old_deploy))
 
 async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
     """
@@ -1801,26 +1800,3 @@ async def test_repair_does_not_trigger_for_blocked_resources(agent: TestAgent, m
 
     # Only r2 was deployed
     assert agent.executor_manager.executors["agent1"].execute_count == 1
-
-
-async def test_timer_manager(agent: TestAgent, make_resource_minimal):
-
-    # Config.set("config", "agent-repair-interval", "2")
-    # Config.set("config", "agent-deploy-interval", "20")
-    #
-    # timer_manager = agent.scheduler._timer_manager
-    # timer_manager.reset()
-
-    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
-    resources = {
-        rid1: make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
-    }
-
-
-
-    await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
-    await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
-
-    # Both resources were deployed
-    assert agent.executor_manager.executors["agent1"].execute_count == 1
-    a=2

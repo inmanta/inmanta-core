@@ -19,7 +19,7 @@
 import asyncio
 import logging
 from collections.abc import Coroutine
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import inmanta.deploy.scheduler
 from inmanta.agent import config as agent_config
@@ -33,12 +33,10 @@ LOGGER = logging.getLogger(__name__)
 class ResourceTimer:
     def __init__(self, resource: ResourceIdStr):
         self.resource: ResourceIdStr = resource
-        self.repair_handle: asyncio.Task[None] | None = None
+        self.repair_handle: asyncio.TimerHandle | None = None
         self.is_installed: bool = False
 
-        self.handle = None
-
-    async def install_timer(
+    def install_timer(
         self,
         periodic_deploy_interval: int | None,
         periodic_repair_interval: int | None,
@@ -55,7 +53,6 @@ class ResourceTimer:
         """
         if self.is_installed:
             return
-
 
         next_execute_time: int
 
@@ -75,13 +72,11 @@ class ResourceTimer:
 
         self.is_installed = True
 
-        # TODO: wrap this into a coroutine that can be cancelled
-        await asyncio.sleep(next_execute_time)
-        self.repair_handle = asyncio.create_task(action_function(self.resource, next_execute_time))
+        def action() -> None:
+            asyncio.ensure_future(action_function(self.resource, next_execute_time))
+            self.uninstall_timer()
 
-        self.repair_handle.add_done_callback(lambda _: self.uninstall_timer())
-
-        await self.repair_handle
+        self.repair_handle = asyncio.get_running_loop().call_later(next_execute_time, action)
 
     def uninstall_timer(self) -> None:
         self.is_installed = False
@@ -92,7 +87,7 @@ class ResourceTimer:
 
 
 class TimerManager:
-    def __init__(self, resource_scheduler: "inmanta.deploy.scheduler.ResourceScheduler"):
+    def __init__(self, resource_scheduler: Optional["inmanta.deploy.scheduler.ResourceScheduler"] = None):
         self.resource_timers: dict[ResourceIdStr, ResourceTimer] = {}
 
         self.global_periodic_repair_task: ScheduledTask | None = None
@@ -103,7 +98,8 @@ class TimerManager:
 
         # Back reference to the ResourceScheduler that was responsible for spawning this TimerManager
         # Used to schedule global repair/deploys. TODO: This feels hackish ??
-        self._resource_scheduler = resource_scheduler
+        if resource_scheduler:
+            self._resource_scheduler = resource_scheduler
 
         self._sched = Scheduler("Resource scheduler")
 
@@ -155,10 +151,10 @@ class TimerManager:
         except KeyError:
             pass
 
-    async def install_timer(self, resource: ResourceIdStr, is_dirty: bool, action: Callable[..., Coroutine[Any, Any, None]]) -> None:
+    def install_timer(self, resource: ResourceIdStr, is_dirty: bool, action: Callable[..., Coroutine[Any, Any, None]]) -> None:
         if resource not in self.resource_timers:
             self.register_resource(resource)
-        await self.resource_timers[resource].install_timer(
+        self.resource_timers[resource].install_timer(
             periodic_deploy_interval=self.periodic_deploy_interval,
             periodic_repair_interval=self.periodic_repair_interval,
             is_dirty=is_dirty,
