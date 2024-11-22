@@ -202,10 +202,6 @@ inmanta.test_agent_code_loading = 15
     res = await client.upload_code_batched(tid=environment, id=version_4, resources={"test::Test4": sources2})
     assert res.code == 200
 
-    # Try to pull binary file via v1 API, get a 400
-    result = await client.get_code(tid=environment, id=version_3, resource="test::Test4")
-    assert result.code == 400
-
     # Cache test
     # install sources for all three
     resource_install_specs_1: list[ResourceInstallSpec]

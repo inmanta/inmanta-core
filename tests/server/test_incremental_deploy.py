@@ -28,7 +28,10 @@ from uuid import UUID, uuid4
 import pytest
 
 from inmanta import const, data
+from inmanta.agent.executor import DeployResult
 from inmanta.const import Change, ResourceAction, ResourceState
+from inmanta.data import ResourceVersionIdStr, model
+from inmanta.deploy import persistence
 from inmanta.resources import Id
 from inmanta.server import SLICE_ORCHESTRATION, SLICE_RESOURCE
 from inmanta.server.services.orchestrationservice import OrchestrationService
@@ -137,9 +140,8 @@ class MultiVersionSetup:
             self.states_per_version[v][rvid] = state
         return rid
 
-    async def setup(
-        self, serverdirect: OrchestrationService, resource_service: ResourceService, env: data.Environment, sid: UUID
-    ):
+    async def setup(self, serverdirect: OrchestrationService, resource_service: ResourceService, env: data.Environment):
+        latest_released_version = -1
         for version in range(0, len(self.versions)):
             # allocate a bunch of versions!
             v = await env.get_next_version()
@@ -158,6 +160,7 @@ class MultiVersionSetup:
 
                 result, _ = await serverdirect.release_version(env, version, False)
                 assert result == 200
+                latest_released_version = version
 
             for rid, state in self.states_per_version[version].items():
                 # Start the deploy
@@ -185,6 +188,8 @@ class MultiVersionSetup:
                 )
                 assert result == 200
 
+        assert latest_released_version != -1
+
         # increments are disjoint
         pos, neg = await data.ConfigurationModel.get_increment(env.id, version)
         assert set(pos).isdisjoint(set(neg)), set(pos).intersection(set(neg))
@@ -196,36 +201,22 @@ class MultiVersionSetup:
             if self.states[resource["id"]] not in [ResourceState.skipped_for_undefined, ResourceState.undefined]
         } == set(pos).union(set(neg))
 
-        allresources = {}
-
-        for agent, results in self.results.items():
-            result, payload = await resource_service.get_resources_for_agent(
-                env, agent, version=None, incremental_deploy=True, sid=sid
-            )
-            assert result == 200
-            assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(results)
-            allresources.update({r["resource_id"]: r for r in payload["resources"]})
-
-        return allresources
-
 
 async def test_deploy(server, null_agent, environment, caplog, clienthelper):
     """
     Test basic deploy mechanism mocking
     """
-    agent = null_agent
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
         resource_service = server.get_slice(SLICE_RESOURCE)
-        sid = agent.sessionid
 
         # acquire env object
         env = await data.Environment.get_by_id(uuid.UUID(environment))
 
         version = await env.get_next_version()
 
-        def make_resources(version):
+        def make_resources(version: int):
             return [
                 {
                     "key": "key1",
@@ -304,18 +295,8 @@ async def test_deploy(server, null_agent, environment, caplog, clienthelper):
         )
         assert res == 200
 
-        result, payload = await resource_service.get_resources_for_agent(
-            env, "agent1", version=None, incremental_deploy=True, sid=sid
-        )
-        assert len(payload["resources"]) == 0
-
-        # Cannot request increment for specific version
-        result, _ = await resource_service.get_resources_for_agent(
-            env, "agent1", version=version, incremental_deploy=True, sid=sid
-        )
-        assert result == 500
-        result, _ = await resource_service.get_resources_for_agent(env, "agent1", version=v2, incremental_deploy=True, sid=sid)
-        assert result == 500
+        increment, _ = await data.ConfigurationModel.get_increment(environment, version=v2)
+        assert len(increment) == 0
 
     assert_no_warning(caplog)
 
@@ -325,12 +306,10 @@ def strip_version(v):
 
 
 async def test_deploy_scenarios(server, null_agent, environment, caplog):
-    agent = null_agent
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
         resource_service = server.get_slice(SLICE_RESOURCE)
-        sid = agent.sessionid
 
         # acquire env object
         env = await data.Environment.get_by_id(uuid.UUID(environment))
@@ -362,71 +341,16 @@ async def test_deploy_scenarios(server, null_agent, environment, caplog):
         setup.add_resource("R25", "UA1 D1", True)
         setup.add_resource("R26", "A1 UA1 D1", True)
 
-        await setup.setup(orchestration_service, resource_service, env, sid)
+        await setup.setup(orchestration_service, resource_service, env)
 
-    assert_no_warning(caplog)
-
-
-async def test_deploy_scenarios_removed_req_by_increment(server, null_agent, environment, caplog):
-    agent = null_agent
-    with caplog.at_level(logging.WARNING):
-        # acquire raw server
-        orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
-        resource_service = server.get_slice(SLICE_RESOURCE)
-        sid = agent.sessionid
-
-        # acquire env object
-        env = await data.Environment.get_by_id(uuid.UUID(environment))
-
-        setup = MultiVersionSetup()
-
-        id1 = setup.add_resource("R1", "A1 D1", False)
-        id2 = setup.add_resource("R2", "A1 D2", True, requires=[id1])
-
-        resources = await setup.setup(orchestration_service, resource_service, env, sid)
-        assert not resources[id2]["attributes"]["requires"]
-
-    assert_no_warning(caplog)
-
-
-async def test_deploy_scenarios_removed_req_by_increment2(server, environment, caplog, null_agent):
-    agent = null_agent
-    with caplog.at_level(logging.WARNING):
-        # acquire raw server
-        orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
-        resource_service = server.get_slice(SLICE_RESOURCE)
-
-        # acquire env object
-        env = await data.Environment.get_by_id(uuid.UUID(environment))
-
-        setup = MultiVersionSetup()
-
-        id1 = setup.add_resource("R1", "A1 D1", False)
-        id3 = setup.add_resource("R3", "A1 D2", True)
-        id4 = setup.add_resource("R4", "A1 D2", True, agent="agent2")
-        id2 = setup.add_resource("R2", "A1 D2", True, requires=[id1, id3, id4])
-
-        sid = agent.sessionid
-
-        try:
-            resources = await setup.setup(orchestration_service, resource_service, env, sid)
-            print(sorted(resources[id2]["attributes"]["requires"]))
-            print(sorted(sorted([id3, id4])))
-            assert sorted([strip_version(r) for r in resources[id2]["attributes"]["requires"]]) == sorted([id3, id4])
-
-        finally:
-            await agent.stop()
     assert_no_warning(caplog)
 
 
 async def test_deploy_scenarios_added_by_send_event(server, null_agent, environment, caplog):
-    agent = null_agent
-
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
         resource_service = server.get_slice(SLICE_RESOURCE)
-        sid = agent.sessionid
 
         # acquire env object
         env = await data.Environment.get_by_id(uuid.UUID(environment))
@@ -439,19 +363,17 @@ async def test_deploy_scenarios_added_by_send_event(server, null_agent, environm
         setup.add_resource("R4", "A1 D1", True, requires=[id3])
         setup.add_resource("R5", "A1 D1", False, requires=[id2])
 
-        await setup.setup(orchestration_service, resource_service, env, sid)
+        await setup.setup(orchestration_service, resource_service, env)
 
     assert_no_warning(caplog)
 
 
 async def test_deploy_scenarios_added_by_send_event_cad(server, null_agent, environment, caplog):
-    agent = null_agent
     # ensure CAD does not change send_event
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
         resource_service = server.get_slice(SLICE_RESOURCE)
-        sid = agent.sessionid
 
         # acquire env object
         env = await data.Environment.get_by_id(uuid.UUID(environment))
@@ -465,23 +387,15 @@ async def test_deploy_scenarios_added_by_send_event_cad(server, null_agent, envi
         setup.add_resource("R5", "A1 D1", False, requires=[id2])
 
         setup.add_resource("R6", "A1 D1", False, requires=[id1], agent="agent2")
-        await setup.setup(orchestration_service, resource_service, env, sid)
+        await setup.setup(orchestration_service, resource_service, env)
 
     assert_no_warning(caplog)
 
 
 async def test_deploy_cad_double(server, null_agent, environment, caplog, client, clienthelper):
-    agent = null_agent
-
-    # resource has CAD with send_events B requires A
-    # do full deploy
-    # then produce a change on A
-    # B is once more in the increment
-    sid = agent.sessionid
-
     version = await clienthelper.get_version()
-    rvid = f"test::Resource[agent1,key=key1],v={version}"
-    rvid2 = f"test::Resource[agent2,key=key2],v={version}"
+    rvid = ResourceVersionIdStr(f"test::Resource[agent1,key=key1],v={version}")
+    rvid2 = ResourceVersionIdStr(f"test::Resource[agent2,key=key2],v={version}")
 
     resources = [
         {
@@ -505,37 +419,38 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
     result = await client.release_version(environment, version, False)
     assert result.code == 200
 
-    async def deploy(rid, change: Change = Change.nochange):
-        actionid = uuid.uuid4()
-        result = await agent._client.resource_deploy_start(environment, rid, actionid)
-        assert result.code == 200
-        await agent._client.resource_deploy_done(
-            environment,
-            rid,
-            actionid,
-            status=ResourceState.deployed,
-            messages=[],
-            changes={},
-            change=change,
+    async def deploy(rvid: model.ResourceVersionIdStr, change: Change = Change.nochange):
+        update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
+        action_id = uuid.uuid4()
+        await update_manager.send_in_progress(action_id, rvid)
+        await update_manager.send_deploy_done(
+            result=DeployResult(
+                rvid=rvid,
+                action_id=action_id,
+                status=const.ResourceState.deployed,
+                messages=[],
+                changes={},
+                change=change,
+            )
         )
-        assert result.code == 200
 
-    result = await agent._client.get_resources_for_agent(environment, "agent2", incremental_deploy=True, sid=sid)
-    assert result.code == 200, result.result
-    assert len(result.result["resources"]) == 1
+    async def assert_resources_to_deploy(
+        environment: uuid.UUID, agent: str, version: int, expected_nr_of_resources: int
+    ) -> None:
+        increment, _ = await data.ConfigurationModel.get_increment(environment, version=version)
+        resource_for_agent = [rid for rid in increment if Id.parse_id(rid).agent_name == agent]
+        assert len(resource_for_agent) == expected_nr_of_resources
+
+    await assert_resources_to_deploy(UUID(environment), agent="agent2", version=version, expected_nr_of_resources=1)
 
     await deploy(rvid)
     await deploy(rvid2)
 
-    result = await agent._client.get_resources_for_agent(environment, "agent2", incremental_deploy=True, sid=sid)
-    assert result.code == 200, result.result
-    assert len(result.result["resources"]) == 0
+    await assert_resources_to_deploy(UUID(environment), agent="agent2", version=version, expected_nr_of_resources=0)
 
     await deploy(rvid, change=Change.updated)
 
-    result = await agent._client.get_resources_for_agent(environment, "agent2", incremental_deploy=True, sid=sid)
-    assert result.code == 200, result.result
-    assert len(result.result["resources"]) == 1
+    await assert_resources_to_deploy(UUID(environment), agent="agent2", version=version, expected_nr_of_resources=1)
 
 
 @pytest.mark.slowtest

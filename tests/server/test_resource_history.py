@@ -30,7 +30,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from inmanta import data
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceVersionIdStr
-from inmanta.server.config import get_bind_port
+from inmanta.server import config
 from inmanta.util import parse_timestamp
 
 
@@ -408,7 +408,7 @@ async def test_resource_history_paging(server, client, order_by_column, order, e
     assert result.result["links"].get("next") is not None
     assert result.result["links"].get("prev") is None
 
-    port = get_bind_port()
+    port = config.server_bind_port.get()
     base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 

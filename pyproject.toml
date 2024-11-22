@@ -55,6 +55,7 @@ public = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+addopts = "--cov-config=pyproject.toml"
 markers = [
     "slowtest",
     "link_check",

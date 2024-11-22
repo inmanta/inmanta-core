@@ -27,9 +27,8 @@ from asyncpg import UniqueViolationError
 from inmanta import const, data
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.protocol import Client
-from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.resources import Id
 from inmanta.server.services import resourceservice
 
@@ -61,71 +60,6 @@ class StateUpdateManager(abc.ABC):
     @abc.abstractmethod
     async def set_parameters(self, fact_result: FactResult) -> None:
         pass
-
-
-class ToServerUpdateManager(StateUpdateManager):
-    """
-    This is a temporary structure to help refactoring
-    """
-
-    def __init__(self, client: Client, environment: UUID) -> None:
-        self.client = client
-        self.environment = environment
-
-    async def send_in_progress(
-        self, action_id: UUID, resource_version_id: ResourceVersionIdStr, resource_id: ResourceIdStr
-    ) -> None:
-        result = await self.client.resource_deploy_start(
-            tid=self.environment,
-            rvid=resource_version_id,
-            action_id=action_id,
-        )
-        if result.code != 200 or result.result is None:
-            raise Exception("Failed to report the start of the deployment to the server")
-
-    async def send_deploy_done(self, result: DeployResult, resource_id: ResourceIdStr) -> None:
-        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {result.rvid: result.changes}
-        response = await self.client.resource_deploy_done(
-            tid=self.environment,
-            rvid=result.rvid,
-            action_id=result.action_id,
-            status=result.status,
-            messages=result.messages,
-            changes=changes,
-            change=result.change,
-        )
-        if response.code != 200:
-            LOGGER.error("Resource status update failed %s for %s ", response.result, result.rvid)
-
-    async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
-        await self.client.dryrun_update(
-            tid=env,
-            id=dryrun_result.dryrun_id,
-            resource=dryrun_result.rvid,
-            changes=dryrun_result.changes,
-        )
-        await self.client.resource_action_update(
-            tid=env,
-            resource_ids=[dryrun_result.rvid],
-            action_id=dryrun_result.dryrun_id,
-            action=const.ResourceAction.dryrun,
-            started=dryrun_result.started,
-            finished=dryrun_result.finished,
-            messages=dryrun_result.messages,
-            status=const.ResourceState.dry,
-        )
-
-    async def set_parameters(self, fact_result: FactResult) -> None:
-        await self.client.set_parameters(tid=self.environment, parameters=fact_result.parameters)
-        await self.client.resource_action_update(
-            tid=self.environment,
-            resource_ids=[fact_result.resource_id],
-            action_id=fact_result.action_id,
-            action=const.ResourceAction.getfact,
-            started=fact_result.started,
-            finished=fact_result.finished,
-            messages=fact_result.messages,
-        )
 
 
 class ToDbUpdateManager(StateUpdateManager):
@@ -194,7 +128,7 @@ class ToDbUpdateManager(StateUpdateManager):
                 try:
                     await resource_action.insert(connection=connection)
                 except UniqueViolationError:
-                    raise Conflict(message=f"A resource action with id {action_id} already exists.")
+                    raise ValueError(f"A resource action with id {action_id} already exists.")
 
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
@@ -211,7 +145,7 @@ class ToDbUpdateManager(StateUpdateManager):
             """
             ctx = ",".join([f"{k}: {v}" for k, v in context.items()])
             LOGGER.error("%s %s", message, ctx)
-            raise BadRequest(message)
+            raise ValueError(message)
 
         resource_id_str = result.rvid
         resource_id_parsed = Id.parse_id(resource_id_str)
@@ -256,7 +190,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     lock=data.RowLockMode.FOR_UPDATE,
                 )
                 if resource is None:
-                    raise NotFound("The resource with the given id does not exist in the given environment.")
+                    raise ValueError("The resource with the given id does not exist in the given environment.")
 
                 # no escape from terminal
                 if resource.status != status and resource.status in TERMINAL_STATES:
@@ -265,12 +199,11 @@ class ToDbUpdateManager(StateUpdateManager):
 
                 resource_action = await data.ResourceAction.get(action_id=action_id, connection=connection)
                 if resource_action is None:
-                    raise NotFound(
-                        f"No resource action exists for action_id {action_id}. Ensure "
-                        f"`/resource/<resource_id>/deploy/start` is called first. "
+                    raise ValueError(
+                        f"No resource action exists for action_id {action_id}. Ensure send_in_progress is called first."
                     )
                 if resource_action.finished is not None:
-                    raise Conflict(
+                    raise ValueError(
                         f"Resource action with id {resource_id_str} was already marked as done at {resource_action.finished}."
                     )
 
