@@ -23,6 +23,7 @@ import typing
 import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
+from dataclasses import dataclass
 from typing import Optional
 from uuid import UUID
 
@@ -36,13 +37,28 @@ from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
-from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
+from inmanta.deploy.state import (
+    AgentStatus,
+    BlockedStatus,
+    ComplianceStatus,
+    DeploymentResult,
+    ModelState,
+    ResourceDetails,
+    ResourceState,
+)
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact
 from inmanta.deploy.work import PrioritizedTask, TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ResourceIntent:
+    model_version: int
+    details: ResourceDetails
+    dependencies: Optional[Mapping[ResourceIdStr, const.ResourceState]]
 
 
 class TaskManager(StateUpdateManager, abc.ABC):
@@ -65,15 +81,22 @@ class TaskManager(StateUpdateManager, abc.ABC):
     async def get_resource_intent(
         self,
         resource: ResourceIdStr,
-        *,
-        for_deploy: bool = False,
-    ) -> Optional[tuple[int, ResourceDetails]]:
+    ) -> Optional[ResourceIntent]:
         """
         Returns the current version and the details for the given resource, or None if it is not (anymore) managed by the
         scheduler.
 
-        :param for_deploy: True iff the task will start deploying this intent. If set, must call report_resource_state later
-            with deployment result.
+        Acquires appropriate locks.
+        """
+
+    @abstractmethod
+    async def get_resource_intent_for_deploy(
+        self,
+        resource: ResourceIdStr,
+    ) -> Optional[ResourceIntent]:
+        """
+        Returns the current version details for the given resource along with the last non-deploying state for its dependencies,
+        or None if it is not (anymore) managed by the scheduler.
 
         Acquires appropriate locks.
         """
@@ -84,7 +107,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: Optional[ResourceStatus] = None,
+        status: ComplianceStatus,
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
         """
@@ -96,7 +119,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         :param resource: The resource to report state for.
         :param attribute_hash: The resource's attribute hash for which this state applies. No scheduler state is updated if the
             hash indicates the state information is stale.
-        :param status: The new resource status. If none, the old one is kept.
+        :param status: The new resource status.
         :param deployment_result: The result of the deploy, iff one just finished, otherwise None.
         """
 
@@ -291,12 +314,20 @@ class ResourceScheduler(TaskManager):
 
     async def repair(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_REPAIR) -> None:
         """
-        Trigger a repair, i.e. mark all resources as dirty, then trigger a deploy.
+        Trigger a repair, i.e. mark all unblocked resources as dirty, then trigger a deploy.
         """
+
+        def _should_deploy(resource: ResourceIdStr) -> bool:
+            if (resource_state := self._state.resource_state.get(resource)) is not None:
+                return not resource_state.blocked.is_blocked()
+            # No state was found for this resource. Should probably not happen
+            # but err on the side of caution and mark for redeploy.
+            return True
+
         if not self._running:
             return
         async with self._scheduler_lock:
-            self._state.dirty.update(self._state.resources.keys())
+            self._state.dirty.update(resource for resource in self._state.resources.keys() if _should_deploy(resource))
             self._work.deploy_with_context(
                 self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
             )
@@ -433,13 +464,17 @@ class ResourceScheduler(TaskManager):
             for resource in deleted_resources:
                 self._work.delete_resource(resource)
 
+            # Resources with known deployable changes (new resources or old resources with deployable changes)
             new_desired_state: set[ResourceIdStr] = set()
             # Only contains the direct undeployable resources, not the transitive ones.
             blocked_resources: set[ResourceIdStr] = set()
             # Resources that were undeployable in a previous model version, but got unblocked. Not the transitive ones.
             unblocked_resources: set[ResourceIdStr] = set()
+
+            # Track potential changes in requires per resource
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
+
             for resource, details in up_to_date_resources.items():
                 self._state.add_up_to_date_resource(resource, details)
 
@@ -449,7 +484,7 @@ class ResourceScheduler(TaskManager):
                     self._work.delete_resource(resource)
                 elif resource in self._state.resources:
                     # It's a resource we know.
-                    if self._state.resource_state[resource].status is ResourceStatus.UNDEFINED:
+                    if self._state.resource_state[resource].status is ComplianceStatus.UNDEFINED:
                         # The resource has been undeployable in previous versions, but not anymore.
                         unblocked_resources.add(resource)
                     elif details.attribute_hash != self._state.resources[resource].attribute_hash:
@@ -458,6 +493,7 @@ class ResourceScheduler(TaskManager):
                 else:
                     # It's a resource we don't know yet.
                     new_desired_state.add(resource)
+
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 new_requires: Set[ResourceIdStr] = requires.get(resource, set())
                 added: Set[ResourceIdStr] = new_requires - old_requires
@@ -572,31 +608,44 @@ class ResourceScheduler(TaskManager):
 
     # TaskManager interface
 
-    async def get_resource_intent(
-        self, resource: ResourceIdStr, *, for_deploy: bool = False
-    ) -> Optional[tuple[int, ResourceDetails]]:
+    def _get_resource_intent(self, resource: ResourceIdStr) -> Optional[ResourceDetails]:
+        """
+        Get intent of a given resource.
+        Always expected to be called under lock
+        """
+        try:
+            return self._state.resources[resource]
+        except KeyError:
+            # Stale resource
+            # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
+            # because of this check, and an intrinsic part of the locking design because it's preferred over wider
+            # locking for performance reasons.
+            return None
+
+    async def get_resource_intent(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
         async with self._scheduler_lock:
             # fetch resource details under lock
-            try:
-                result = self._state.version, self._state.resources[resource]
-            except KeyError:
-                # Stale resource
-                # May occur in rare races between new_version and acquiring the lock we're under here. This race is safe
-                # because of this check, and an intrinsic part of the locking design because it's preferred over wider
-                # locking for performance reasons.
+            resource_details = self._get_resource_intent(resource)
+            if resource_details is None:
                 return None
-            else:
-                if for_deploy:
-                    # still under lock => can safely add to non-stale in-progress set
-                    self._deploying_latest.add(resource)
-                return result
+            return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=None)
+
+    async def get_resource_intent_for_deploy(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
+        async with self._scheduler_lock:
+            # fetch resource details under lock
+            resource_details = self._get_resource_intent(resource)
+            if resource_details is None:
+                return None
+            dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
+            self._deploying_latest.add(resource)
+            return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=dependencies)
 
     async def report_resource_state(
         self,
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: Optional[ResourceStatus] = None,
+        status: ComplianceStatus,
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
         if deployment_result is DeploymentResult.NEW:
@@ -605,13 +654,24 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             # refresh resource details for latest model state
             details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
-            if details is None or details.attribute_hash != attribute_hash:
-                # The reported resource state is for a stale resource and therefore no longer relevant for state updates.
-                # There is also no need to send out events because a newer version will have been scheduled.
+
+            if details is None:
+                # we are stale and removed
                 return
+
             state: ResourceState = self._state.resource_state[resource]
-            if status is not None:
-                state.status = status
+
+            if details.attribute_hash != attribute_hash:
+                # We are stale but still the last deploy
+                # We can update the deployment_result (which is about last deploy)
+                # We can't update status (which is about active state only)
+                # None of the event propagation or other update happen either for the same reason
+                if deployment_result is not None:
+                    state.deployment_result = deployment_result
+                return
+
+            # We are not stale
+            state.status = status
             if deployment_result is not None:
                 # first update state, then send out events
                 self._deploying_latest.remove(resource)
@@ -647,13 +707,44 @@ class ResourceScheduler(TaskManager):
                             deploying=set(),
                         )
 
+    async def _get_last_non_deploying_state_for_dependencies(
+        self, resource: ResourceIdStr
+    ) -> Mapping[ResourceIdStr, const.ResourceState]:
+        """
+        Get resource state for every dependency of a given resource from the scheduler state.
+        The state is then converted to const.ResourceState.
+
+        Should only be called under scheduler lock.
+
+        :param resource: The id of the resource to find the dependencies for
+        """
+        requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.requires_view()
+        dependencies: Set[ResourceIdStr] = requires_view.get(resource, set())
+        dependencies_state = {}
+        for dep_id in dependencies:
+            resource_state_object: ResourceState = self._state.resource_state[dep_id]
+            match resource_state_object:
+                case ResourceState(status=ComplianceStatus.UNDEFINED):
+                    dependencies_state[dep_id] = const.ResourceState.undefined
+                case ResourceState(blocked=BlockedStatus.YES):
+                    dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
+                case ResourceState(status=ComplianceStatus.HAS_UPDATE):
+                    dependencies_state[dep_id] = const.ResourceState.available
+                case ResourceState(deployment_result=DeploymentResult.SKIPPED):
+                    dependencies_state[dep_id] = const.ResourceState.skipped
+                case ResourceState(deployment_result=DeploymentResult.DEPLOYED):
+                    dependencies_state[dep_id] = const.ResourceState.deployed
+                case ResourceState(deployment_result=DeploymentResult.FAILED):
+                    dependencies_state[dep_id] = const.ResourceState.failed
+                case _:
+                    raise Exception(f"Failed to parse the resource state for {dep_id}: {resource_state_object}")
+        return dependencies_state
+
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
 
-    async def send_in_progress(
-        self, action_id: UUID, resource_id: ResourceVersionIdStr
-    ) -> dict[ResourceIdStr, const.ResourceState]:
-        return await self._state_update_delegate.send_in_progress(action_id, resource_id)
+    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
+        await self._state_update_delegate.send_in_progress(action_id, resource_id)
 
     async def send_deploy_done(self, result: DeployResult) -> None:
         return await self._state_update_delegate.send_deploy_done(result)

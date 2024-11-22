@@ -28,9 +28,7 @@ async def test_consistent_resource_state_reporting(
 ) -> None:
     """Doesn't work for new scheduler, as every release is a deploy"""
     env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTO_DEPLOY, False)
-    await env.set(data.PUSH_ON_AUTO_DEPLOY, False)
     await env.set(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
     await env.set(data.AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
     await env.set(data.AUTOSTART_ON_START, True)
