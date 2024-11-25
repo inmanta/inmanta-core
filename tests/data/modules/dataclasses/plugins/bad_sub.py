@@ -28,5 +28,3 @@ class Virtualmachine:
     cpus: int
     disk: int
 
-
-# TODO: verify type correspondence
