@@ -293,13 +293,7 @@ class CompileRun:
                     # TODO: open question: what if backup target already exists?
                     os.rename(venv_dir, f"{venv_dir}_old")
 
-            # Relative symlink is a bit exotic in python
-            try:
-                dir_fd = os.open(project_dir, os.O_RDONLY)
-                os.symlink(versioned_venv_dir, ".env", dir_fd=dir_fd)
-            finally:
-                if dir_fd:
-                    os.close(dir_fd)
+            os.symlink(versioned_venv_dir, venv_dir)
 
         await link()
 
