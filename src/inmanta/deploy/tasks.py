@@ -145,9 +145,7 @@ class Deploy(Task):
 
                 # Signal start to server
                 try:
-                    await task_manager.send_in_progress(
-                        action_id, executor_resource_details.rvid
-                    )
+                    await task_manager.send_in_progress(action_id, executor_resource_details.rvid)
                 except Exception:
                     # Unrecoverable, can't reach server
                     scheduler_deployment_result = state.DeploymentResult.FAILED

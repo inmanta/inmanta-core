@@ -17,12 +17,10 @@
 """
 
 import asyncio
-import functools
 import logging
+import sys
 from collections.abc import Coroutine
 from typing import Any, Callable, Optional
-
-import sys
 
 import inmanta.deploy.scheduler
 from inmanta.agent import config as agent_config
@@ -36,7 +34,7 @@ LOGGER = logging.getLogger(__name__)
 class ResourceTimer:
     def __init__(self, resource: ResourceIdStr):
         self.resource: ResourceIdStr = resource
-        self.repair_handle: asyncio.Task | None = None
+        self.repair_handle: asyncio.Task[None] | None = None
 
         self.time_to_next_deploy = sys.maxsize
         self.next_schedule_handle: asyncio.TimerHandle | None = None
@@ -72,7 +70,6 @@ class ResourceTimer:
         if next_execute_time == sys.maxsize:
             return
 
-
         # We have to schedule the next deploy sooner than previously though:
         # Cancel previous schedule and re-schedule
         if next_execute_time < self.time_to_next_deploy:
@@ -102,6 +99,7 @@ class ResourceTimer:
         if self.repair_handle is not None:
             self.repair_handle.cancel()
 
+
 class TimerManager:
     def __init__(self, resource_scheduler: Optional["inmanta.deploy.scheduler.ResourceScheduler"] = None):
         self.resource_timers: dict[ResourceIdStr, ResourceTimer] = {}
@@ -126,7 +124,6 @@ class TimerManager:
         self.global_periodic_deploy_task = None
         self.periodic_repair_interval = None
         self.periodic_deploy_interval = None
-
 
     def stop(self) -> None:
         for timer in self.resource_timers.values():
@@ -202,9 +199,12 @@ class TimerManager:
             self.resource_timers[resource] = ResourceTimer(resource)
 
         # Check if timer needs updating
-        self.resource_timers[resource].ensure_timer(periodic_deploy_interval=self.periodic_deploy_interval,
-                                                    periodic_repair_interval=self.periodic_repair_interval, is_dirty=dirty,
-                                                    action_function=self._resource_scheduler.repair_resource)
+        self.resource_timers[resource].ensure_timer(
+            periodic_deploy_interval=self.periodic_deploy_interval,
+            periodic_repair_interval=self.periodic_repair_interval,
+            is_dirty=dirty,
+            action_function=self._resource_scheduler.repair_resource,
+        )
 
     def remove_resource(self, resource: ResourceIdStr) -> None:
         if resource in self.resource_timers:
