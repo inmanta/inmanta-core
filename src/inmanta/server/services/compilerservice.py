@@ -382,7 +382,7 @@ class CompileRun:
                     return False, None
 
             server_address = opt.server_address.get()
-            server_port = opt.get_bind_port()
+            server_port = opt.server_bind_port.get()
             cmd = [
                 "-vvv",
                 "export",
@@ -878,9 +878,9 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             return 200
         return 204
 
-    def _calculate_recompile_wait(
+    def _calculate_recompile_backoff_time(
         self,
-        wait_time: int,
+        wait_time: float,
         compile_requested: datetime.datetime,
         last_compile_completed: datetime.datetime,
         now: datetime.datetime,
@@ -894,31 +894,26 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
                 wait = max(0, wait_time - (now - last_compile_completed).total_seconds())
         return wait
 
-    async def _auto_recompile_wait(self, compile: data.Compile) -> None:
-        if config.Config.is_set("server", "auto-recompile-wait"):
-            wait_time = opt.server_autrecompile_wait.get()
-            LOGGER.warning(
-                "The server-auto-recompile-wait is enabled and set to %s seconds. "
-                "This option is deprecated in favor of the recompile_backoff environment setting.",
-                wait_time,
-            )
+    async def _recompile_backoff(self, compile: data.Compile) -> None:
+        """
+        If a recompile_backoff is set for the environment, this method waits until the backoff time has finished.
+        """
+        env = await data.Environment.get_by_id(compile.environment)
+        if env is None:
+            LOGGER.error("Unable to find environment %s in the database.", compile.environment)
+            return
+        wait_time: float = cast(float, await env.get(data.RECOMPILE_BACKOFF))
+        if wait_time:
+            LOGGER.info("The recompile_backoff environment setting is enabled and set to %s seconds.", wait_time)
         else:
-            env = await data.Environment.get_by_id(compile.environment)
-            if env is None:
-                LOGGER.error("Unable to find environment %s in the database.", compile.environment)
-                return
-            wait_time = await env.get(data.RECOMPILE_BACKOFF)
-            if wait_time:
-                LOGGER.info("The recompile_backoff environment setting is enabled and set to %s seconds.", wait_time)
-            else:
-                LOGGER.info("The recompile_backoff environment setting is disabled")
+            LOGGER.info("The recompile_backoff environment setting is disabled")
         last_run = await data.Compile.get_last_run(compile.environment)
         if not last_run:
             wait: float = 0
         else:
             assert last_run.completed is not None
             assert compile.requested is not None
-            wait = self._calculate_recompile_wait(
+            wait = self._calculate_recompile_backoff_time(
                 wait_time, compile.requested, last_run.completed, datetime.datetime.now().astimezone()
             )
         if wait > 0:
@@ -936,7 +931,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         Runs a compile request. At completion, looks for similar compile requests based on _compile_merge_key and marks
         those as completed as well.
         """
-        await self._auto_recompile_wait(compile)
+        await self._recompile_backoff(compile)
 
         compile_merge_key: Hashable = CompilerService._compile_merge_key(compile)
         merge_candidates: list[data.Compile] = [

@@ -51,11 +51,11 @@ from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data import ResourceIdStr
-from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceType, ResourceVersionIdStr
+from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, ResourceType
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceDetails
 from inmanta.moduletool import ModuleTool
-from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
+from inmanta.protocol import Client, SessionEndpoint, methods
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
 from inmanta.types import Apireturn
@@ -952,11 +952,6 @@ class NullAgent(SessionEndpoint):
         """
         await self.add_end_point_name(AGENT_SCHEDULER_ID)
 
-    @protocol.handle(methods_v2.update_agent_map)
-    async def update_agent_map(self, agent_map: dict[str, str]) -> None:
-        # Not used here
-        return 200
-
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
         self.enabled[agent] = enabled
@@ -974,20 +969,6 @@ class NullAgent(SessionEndpoint):
 
     @protocol.handle(methods.trigger_read_version, env="tid", agent="id")
     async def read_version(self, env: uuid.UUID) -> Apireturn:
-        return 200
-
-    @protocol.handle(methods.resource_event, env="tid", agent="id")
-    async def resource_event(
-        self,
-        env: uuid.UUID,
-        agent: str,
-        resource: ResourceVersionIdStr,
-        send_events: bool,
-        state: const.ResourceState,
-        change: const.Change,
-        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]],
-    ) -> Apireturn:
-        # Doesn't do anything
         return 200
 
     @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")

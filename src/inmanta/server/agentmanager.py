@@ -91,9 +91,6 @@ Model in server         On Agent
 |               |
 +---------------+
 
-
-get_resources_for_agent
-
 resource_action_update
 
 dryrun_update
@@ -1002,8 +999,7 @@ class AgentManager(ServerSlice, SessionListener):
 
 class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentlistener.EnvironmentListener):
     """
-    An instance of this class manages autostarted agent instance processes. It does not manage the logical agents as those
-    are managed by `:py:class:AgentManager`.
+    An instance of this class manages scheduler processes.
     """
 
     environment_service: "environmentservice.EnvironmentService"
@@ -1049,7 +1045,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
     async def _start_agents(self) -> None:
         """
-        Ensure that autostarted agents of each environment are started when AUTOSTART_ON_START is true. This method
+        Ensure that a scheduler is started for each environment having AUTOSTART_ON_START is true. This method
         is called on server start.
         """
         environments = await data.Environment.get_list()
@@ -1073,7 +1069,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         Stop all agents for this environment and close sessions
         """
         async with self.agent_lock:
-            LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
+            LOGGER.debug("Stopping scheduler for env %s", env.id)
             if env.id in self._agent_procs:
                 subproc = self._agent_procs[env.id]
                 self._stop_process(subproc)
@@ -1085,32 +1081,26 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             LOGGER.debug("Expiring all sessions for %s", env.id)
             await self._agent_manager.expire_all_sessions_for_environment(env.id)
 
-    async def _stop_autostarted_agents(
+    async def _stop_scheduler(
         self,
         env: data.Environment,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
-        Stop the autostarted agent process for this environment and expire all its sessions.
-        Does not expire non-autostarted agents' sessions.
+        Stop the scheduler for this environment and expire all its sessions.
 
         Must be called under the agent lock
         """
-        LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
+        LOGGER.debug("Stopping scheduler for environment %s", env.id)
         if env.id in self._agent_procs:
             subproc = self._agent_procs[env.id]
             self._stop_process(subproc)
             await self._wait_for_proc_bounded([subproc])
             del self._agent_procs[env.id]
 
-        # fetch the agent map after stopping the process to prevent races with agent map update notifying the process
-        agent_map: Mapping[str, str] = cast(
-            Mapping[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
-        )  # we know the type of this map
-
-        LOGGER.debug("Expiring sessions for autostarted agents %s", sorted(agent_map.keys()))
-        await self._agent_manager.expire_sessions_for_agents(env.id, agent_map.keys())
+        LOGGER.debug("Expiring session for scheduler in environment %s", env.id)
+        await self._agent_manager.expire_sessions_for_agents(env.id, endpoints={AGENT_SCHEDULER_ID})
 
     def _get_state_dir_for_agent_in_env(self, env_id: uuid.UUID) -> str:
         """
@@ -1139,7 +1129,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
     async def _terminate_agents(self) -> None:
         async with self.agent_lock:
-            LOGGER.debug("Stopping all autostarted agents")
+            LOGGER.debug("Stopping all schedulers")
             for proc in self._agent_procs.values():
                 self._stop_process(proc)
             await self._wait_for_proc_bounded(self._agent_procs.values())
@@ -1155,13 +1145,13 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> bool:
         """
-        Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
+        Ensure that the scheduler for the given environment, that should be autostarted, are started.
 
-        :param env: The environment to start the agents for
-        :param restart: Restart all agents even if the list of agents is up to date.
+        :param env: The environment to start the scheduler for.
+        :param restart: Restart the scheduler even if it's running.
         :param connection: The database connection to use. Must not be in a transaction context.
 
-        :return: True iff a new agent process was started.
+        :return: True iff a new scheduler process was started.
         """
         if no_start_scheduler:
             return False
@@ -1183,7 +1173,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 # silently ignore requests if this environment is halted
                 refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env, connection=connection)
                 if refreshed_env is None:
-                    raise Exception("Can't ensure agent: environment %s does not exist" % env)
+                    raise Exception("Can't ensure scheduler: environment %s does not exist" % env)
                 if refreshed_env.halted:
                     return False
 
@@ -1196,7 +1186,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 start_new_process: bool
                 if env not in self._agent_procs or self._agent_procs[env].returncode is not None:
                     # Start new process if none is currently running for this environment.
-                    # Otherwise trust that it tracks any changes to the agent map.
                     LOGGER.info("%s matches agents managed by server, ensuring they are started.", autostart_scheduler)
                     start_new_process = True
                 elif restart:
@@ -1205,7 +1194,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                         autostart_scheduler,
                         self._agent_procs[env],
                     )
-                    await self._stop_autostarted_agents(refreshed_env, connection=connection)
+                    await self._stop_scheduler(refreshed_env, connection=connection)
                     start_new_process = True
                 else:
                     start_new_process = False
@@ -1278,7 +1267,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         :return: A string that contains the config file content.
         """
         environment_id = str(env.id)
-        port: int = opt.get_bind_port()
+        port: int = opt.server_bind_port.get()
 
         privatestatedir: str = self._get_state_dir_for_agent_in_env(env.id)
 
@@ -1293,7 +1282,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 state-dir=%(statedir)s
 log-dir={global_config.log_dir.get()}
 
-use_autostart_agent_map=true
 environment=%(env_id)s
 
 agent-deploy-splay-time=%(agent_deploy_splay)d
@@ -1301,10 +1289,7 @@ agent-deploy-interval=%(agent_deploy_interval)s
 agent-repair-splay-time=%(agent_repair_splay)d
 agent-repair-interval=%(agent_repair_interval)s
 
-agent-get-resource-backoff=%(agent_get_resource_backoff)f
-
 [agent]
-executor-mode={agent_cfg.agent_executor_mode.get().name}
 executor-cap={agent_cfg.agent_executor_cap.get()}
 executor-retention-time={agent_cfg.agent_executor_retention_time.get()}
 
@@ -1320,7 +1305,6 @@ host=%(serveradress)s
             "agent_repair_splay": agent_repair_splay,
             "agent_repair_interval": agent_repair_interval,
             "serveradress": server_config.server_address.get(),
-            "agent_get_resource_backoff": agent_cfg.agent_get_resource_backoff.get(),
         }
 
         if server_config.server_enable_auth.get():
@@ -1468,14 +1452,6 @@ tags = {config_map_to_str(opt.influxdb_tags.get())}
             proc.pid,
             ",".join(sorted(expected_agents_in_up_state)),
         )
-
-    async def notify_agent_about_agent_map_update(self, env: data.Environment) -> None:
-        agent_client = self._agent_manager.get_agent_client(tid=env.id, endpoint="internal", live_agent_only=False)
-        if agent_client:
-            new_agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
-            self.add_background_task(agent_client.update_agent_map(new_agent_map))
-        else:
-            LOGGER.warning("Could not send update_agent_map() trigger for environment %s. Internal agent is down.", env.id)
 
     async def _wait_for_proc_bounded(
         self, procs: Iterable[subprocess.Process], timeout: float = const.SHUTDOWN_GRACE_HARD

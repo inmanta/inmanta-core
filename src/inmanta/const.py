@@ -358,9 +358,10 @@ INMANTA_REMOVED_SET_ID = "INMANTA_REMOVED_RESOURCE_SET_ID"
 INMANTA_VENV_STATUS_FILENAME = ".inmanta_venv_status"
 
 
-# File present in the root of the state dir to indicate that this orchestrator
-# uses the new disk layout.
-INMANTA_USE_NEW_DISK_LAYOUT_FILENAME = ".inmanta_use_new_disk_layout"
+# File present in the root of the state dir to indicate the version of disk layout that this orchestrator uses.
+INMANTA_DISK_LAYOUT_VERSION = ".inmanta_disk_layout_version"
+# If no file is present, create it with this version
+DEFAULT_INMANTA_DISK_LAYOUT_VERSION = 2
 
 
 # ID to represent the new scheduler as an agent
