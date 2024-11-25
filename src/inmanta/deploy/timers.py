@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import functools
 import logging
 from collections.abc import Coroutine
 from typing import Any, Callable, Optional
@@ -35,10 +36,12 @@ LOGGER = logging.getLogger(__name__)
 class ResourceTimer:
     def __init__(self, resource: ResourceIdStr):
         self.resource: ResourceIdStr = resource
-        self.repair_handle: asyncio.TimerHandle | None = None
-        self.is_installed: bool = False
+        self.repair_handle: asyncio.Task | None = None
 
-    def install_timer(
+        self.time_to_next_deploy = sys.maxsize
+        self.next_schedule_handle: asyncio.TimerHandle | None = None
+
+    def ensure_timer(
         self,
         periodic_deploy_interval: int | None,
         periodic_repair_interval: int | None,
@@ -53,8 +56,6 @@ class ResourceTimer:
         :param is_dirty: Last known state of the resource at the timer install request time.
         :param action_function: The function to execute
         """
-        if self.is_installed:
-            return
 
         next_execute_time: int
 
@@ -71,21 +72,35 @@ class ResourceTimer:
         if next_execute_time == sys.maxsize:
             return
 
-        self.is_installed = True
 
-        def action() -> None:
-            asyncio.ensure_future(action_function(self.resource, next_execute_time))
-            self.uninstall_timer()
+        # We have to schedule the next deploy sooner than previously though:
+        # Cancel previous schedule and re-schedule
+        if next_execute_time < self.time_to_next_deploy:
+            self.cancel_next_schedule()
 
-        self.repair_handle = asyncio.get_running_loop().call_later(next_execute_time, action)
+        # A deploy is already scheduled for this resource
+        if self.next_schedule_handle is not None:
+            return
 
-    def uninstall_timer(self) -> None:
-        self.is_installed = False
+        def _create_repair_task() -> None:
+            self.repair_handle = asyncio.create_task(action_function(self.resource, next_execute_time))
 
-    def cancel(self) -> None:
+        self.time_to_next_deploy = next_execute_time
+        self.next_schedule_handle = asyncio.get_running_loop().call_later(next_execute_time, _create_repair_task)
+
+    def cancel_next_schedule(self) -> None:
+        """
+        Cancel the callback that schedules the next repair task
+        """
+        if self.next_schedule_handle is not None:
+            self.next_schedule_handle.cancel()
+
+    def cancel_repair_task(self) -> None:
+        """
+        Cancel the underlying repair task itself
+        """
         if self.repair_handle is not None:
             self.repair_handle.cancel()
-
 
 class TimerManager:
     def __init__(self, resource_scheduler: Optional["inmanta.deploy.scheduler.ResourceScheduler"] = None):
@@ -104,7 +119,28 @@ class TimerManager:
 
         self._sched = Scheduler("Resource scheduler")
 
-    def _initialize(self) -> None:
+    def reset(self) -> None:
+        self.stop()
+
+        self.global_periodic_repair_task = None
+        self.global_periodic_deploy_task = None
+        self.periodic_repair_interval = None
+        self.periodic_deploy_interval = None
+
+
+    def stop(self) -> None:
+        for timer in self.resource_timers.values():
+            timer.cancel_next_schedule()
+
+        for task in [self.global_periodic_repair_task, self.global_periodic_deploy_task]:
+            if task:
+                self._sched.remove(task)
+
+    def join(self) -> None:
+        for timer in self.resource_timers.values():
+            timer.cancel_repair_task()
+
+    def initialize(self) -> None:
         """
         Set the periodic timers for repairs and deploys. Either per-resource if the
         associated config option is passed as a positive integer, or globally if it
@@ -122,53 +158,6 @@ class TimerManager:
             self.global_periodic_repair_task = self.trigger_global_repair(repair_timer)
         else:
             self.periodic_repair_interval = repair_timer if repair_timer > 0 else None
-
-    def register_resource(self, resource: ResourceIdStr) -> None:
-        self.resource_timers[resource] = ResourceTimer(resource)
-
-    def unregister_resource(self, resource: ResourceIdStr) -> None:
-        if resource in self.resource_timers:
-            self.resource_timers[resource].uninstall_timer()
-            del self.resource_timers[resource]
-
-    def reset(self) -> None:
-        self.stop()
-
-        self.global_periodic_repair_task = None
-        self.global_periodic_deploy_task = None
-        self.periodic_repair_interval = None
-        self.periodic_deploy_interval = None
-
-        self._initialize()
-
-    def uninstall_timer(self, resource: ResourceIdStr) -> None:
-        """
-        Remove the timer for a given resource (if it exists) and cancel
-        the associated deployment task (if any).
-        """
-        try:
-            self.resource_timers[resource].uninstall_timer()
-            self.resource_timers[resource].cancel()
-        except KeyError:
-            pass
-
-    def install_timer(self, resource: ResourceIdStr, is_dirty: bool, action: Callable[..., Coroutine[Any, Any, None]]) -> None:
-        if resource not in self.resource_timers:
-            self.register_resource(resource)
-        self.resource_timers[resource].install_timer(
-            periodic_deploy_interval=self.periodic_deploy_interval,
-            periodic_repair_interval=self.periodic_repair_interval,
-            is_dirty=is_dirty,
-            action_function=action,
-        )
-
-    def stop(self) -> None:
-        for timer in self.resource_timers.values():
-            timer.uninstall_timer()
-
-        for task in [self.global_periodic_repair_task, self.global_periodic_deploy_task]:
-            if task:
-                self._sched.remove(task)
 
     def trigger_global_deploy(self, cron_expression: str) -> ScheduledTask:
         """
@@ -206,6 +195,21 @@ class TimerManager:
         task = self._sched.add_action(_action, cron_schedule)
         assert isinstance(task, ScheduledTask)
         return task
+
+    def update_resource(self, resource: ResourceIdStr, dirty: bool = False) -> None:
+        # Create if it is not known yet
+        if resource not in self.resource_timers:
+            self.resource_timers[resource] = ResourceTimer(resource)
+
+        # Check if timer needs updating
+        self.resource_timers[resource].ensure_timer(periodic_deploy_interval=self.periodic_deploy_interval,
+                                                    periodic_repair_interval=self.periodic_repair_interval, is_dirty=dirty,
+                                                    action_function=self._resource_scheduler.repair_resource)
+
+    def remove_resource(self, resource: ResourceIdStr) -> None:
+        if resource in self.resource_timers:
+            self.resource_timers[resource].cancel_next_schedule()
+            del self.resource_timers[resource]
 
     def __repr__(self) -> str:
         return str(self.resource_timers)

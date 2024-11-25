@@ -272,6 +272,8 @@ class ResourceScheduler(TaskManager):
         """
         Initialize the scheduler state and continue the deployment where we were before the server was shutdown.
         """
+        self._timer_manager.initialize()
+
         async with data.ConfigurationModel.get_connection() as con:
             # Get resources from the database
             try:
@@ -306,6 +308,7 @@ class ResourceScheduler(TaskManager):
 
     async def join(self) -> None:
         await asyncio.gather(*[worker.join() for worker in self._workers.values()])
+        self._timer_manager.join()
 
     async def deploy(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_DEPLOY) -> None:
         """
@@ -485,7 +488,7 @@ class ResourceScheduler(TaskManager):
                 self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
                 # Install timers for these resources. They are up-to-date now,
                 # but we want to make sure we periodically repair them.
-                self._timer_manager.install_timer(resource, is_dirty=False, action=self.repair_resource)
+                self._timer_manager.update_resource(resource, dirty=False)
 
             for resource, details in resources.items():
                 if details.status is const.ResourceState.undefined:
@@ -493,7 +496,7 @@ class ResourceScheduler(TaskManager):
                     self._work.delete_resource(resource)
                     # These resources are blocked at the moment. Remove the timers for them
                     # Re-deploy will happen when (if) dependants successfully deploy
-                    self._timer_manager.uninstall_timer(resource)
+                    self._timer_manager.remove_resource(resource)
                 elif resource in self._state.resources:
                     # It's a resource we know.
                     if self._state.resource_state[resource].status is ComplianceStatus.UNDEFINED:
@@ -508,7 +511,7 @@ class ResourceScheduler(TaskManager):
                 else:
                     # It's a resource we don't know yet.
                     new_desired_state.add(resource)
-                    self._timer_manager.register_resource(resource)
+                    self._timer_manager.update_resource(resource)
 
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 new_requires: Set[ResourceIdStr] = requires.get(resource, set())
@@ -568,7 +571,7 @@ class ResourceScheduler(TaskManager):
                 # acquired longer than required. The worst that can happen here is that we deploy the deleted resources one
                 # time too many, which is not so bad.
                 self._work.delete_resource(resource)
-                self._timer_manager.unregister_resource(resource)
+                self._timer_manager.remove_resource(resource)
 
     def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
@@ -744,7 +747,7 @@ class ResourceScheduler(TaskManager):
                                 dependant_resources.add(dependant)
                                 # Remove timers for unblocked dependant resources because
                                 # they are marked for deployment below.
-                                self._timer_manager.uninstall_timer(dependant)
+                                self._timer_manager.remove_resource(dependant)
 
                         concerned_resources.update(dependant_resources)
 
@@ -765,7 +768,7 @@ class ResourceScheduler(TaskManager):
                         self._state.dirty.update(dependant_resources)
                         for dependant in dependant_resources:
                             # No point in re-trying dependants since this resource was skipped
-                            self._timer_manager.uninstall_timer(dependant)
+                            self._timer_manager.remove_resource(dependant)
 
                 # propagate events
                 if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
@@ -792,7 +795,7 @@ class ResourceScheduler(TaskManager):
                     )
 
         # No matter the deployment result, schedule a re-deploy for this resource
-        self._timer_manager.install_timer(resource, is_dirty=is_dirty, action=self.repair_resource)
+        self._timer_manager.update_resource(resource, dirty=is_dirty)
 
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr
@@ -831,7 +834,7 @@ class ResourceScheduler(TaskManager):
         return list(self._state.types_per_agent[agent])
 
     async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
-        self._timer_manager.uninstall_timer(Id.parse_id(resource_id).resource_str())
+        self._timer_manager.remove_resource(Id.parse_id(resource_id).resource_str())
         await self._state_update_delegate.send_in_progress(action_id, resource_id)
 
     async def send_deploy_done(self, result: DeployResult) -> None:

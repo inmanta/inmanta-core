@@ -132,7 +132,7 @@ async def test_spontaneous_deploy(
         Config.set("config", "agent-repair-interval", "0")
 
         timer_manager = agent.scheduler._timer_manager
-        timer_manager.reset()
+        timer_manager.initialize()
 
         resource_container.Provider.set_fail("agent1", "key1", 1)
 
@@ -201,7 +201,7 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     Config.set("config", "agent-deploy-interval", "0")
 
     timer_manager = agent.scheduler._timer_manager
-    timer_manager.reset()
+    timer_manager.initialize()
 
     version = await clienthelper.get_version()
 

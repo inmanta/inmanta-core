@@ -146,7 +146,7 @@ class Deploy(Task):
                 # Signal start to server
                 try:
                     await task_manager.send_in_progress(
-                        action_id, executor_resource_details.rvid, executor_resource_details.rid
+                        action_id, executor_resource_details.rvid
                     )
                 except Exception:
                     # Unrecoverable, can't reach server
@@ -215,7 +215,7 @@ class Deploy(Task):
                 if deploy_result is not None:
                     # We signaled start, so we signal end
                     try:
-                        await task_manager.send_deploy_done(deploy_result, executor_resource_details.rid)
+                        await task_manager.send_deploy_done(deploy_result)
                     except Exception:
                         scheduler_deployment_result = state.DeploymentResult.FAILED
                         LOGGER.error(
