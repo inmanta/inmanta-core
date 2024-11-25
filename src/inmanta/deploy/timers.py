@@ -21,6 +21,8 @@ import logging
 from collections.abc import Coroutine
 from typing import Any, Callable, Optional
 
+import sys
+
 import inmanta.deploy.scheduler
 from inmanta.agent import config as agent_config
 from inmanta.data.model import ResourceIdStr
@@ -56,19 +58,18 @@ class ResourceTimer:
 
         next_execute_time: int
 
-       if periodic_repair_interval is None:
-          periodic_repair_interval = maxint
-       if periodic_deploy_interval is None:
-           periodic_deploy_interval = maxint
-
+        if periodic_repair_interval is None:
+            periodic_repair_interval = sys.maxsize
+        if periodic_deploy_interval is None:
+            periodic_deploy_interval = sys.maxsize
 
         if is_dirty:
-              next_execute_time = min(periodic_deploy_interval, periodic_repair_interval)
+            next_execute_time = min(periodic_deploy_interval, periodic_repair_interval)
         else:
-              next_execute_time = periodic_repair_interval  
- 
-        if next_execute_time == maxint:
-             return
+            next_execute_time = periodic_repair_interval
+
+        if next_execute_time == sys.maxsize:
+            return
 
         self.is_installed = True
 

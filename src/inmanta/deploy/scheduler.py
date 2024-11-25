@@ -830,14 +830,12 @@ class ResourceScheduler(TaskManager):
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
 
-    async def send_in_progress(
-        self, action_id: UUID, resource_version_id: ResourceVersionIdStr, resource_id: ResourceIdStr
-    ) -> None:
-        self._timer_manager.uninstall_timer(resource_id)
-        await self._state_update_delegate.send_in_progress(action_id, resource_version_id, resource_id)
+    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
+        self._timer_manager.uninstall_timer(Id.parse_id(resource_id).resource_str())
+        await self._state_update_delegate.send_in_progress(action_id, resource_id)
 
-    async def send_deploy_done(self, result: DeployResult, resource_id: ResourceIdStr) -> None:
-        return await self._state_update_delegate.send_deploy_done(result, resource_id)
+    async def send_deploy_done(self, result: DeployResult) -> None:
+        return await self._state_update_delegate.send_deploy_done(result)
 
     async def dryrun_update(self, env: uuid.UUID, dryrun_result: executor.DryrunResult) -> None:
         await self._state_update_delegate.dryrun_update(env, dryrun_result)

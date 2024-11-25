@@ -43,14 +43,12 @@ class StateUpdateManager(abc.ABC):
     """
 
     @abc.abstractmethod
-    async def send_in_progress(
-        self, action_id: UUID, resource_version_id: ResourceVersionIdStr, resource_id: ResourceIdStr
-    ) -> None:
+    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
         # FIXME: get rid of version in the id
         pass
 
     @abc.abstractmethod
-    async def send_deploy_done(self, result: DeployResult, resource_id: ResourceIdStr) -> None:
+    async def send_deploy_done(self, result: DeployResult) -> None:
         pass
 
     @abc.abstractmethod
@@ -86,13 +84,11 @@ class ToDbUpdateManager(StateUpdateManager):
         log_record = resourceservice.ResourceActionLogLine(logger.name, log_level, message, ts)
         logger.handle(log_record)
 
-    async def send_in_progress(
-        self, action_id: UUID, resource_version_id: ResourceVersionIdStr, resource_id: ResourceIdStr
-    ) -> None:
+    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
+        resource_id_str = resource_id
         """
         Update the db to reflect that deployment has started for a given resource.
         """
-        resource_id_str = resource_version_id
         resource_id_parsed = Id.parse_id(resource_id_str)
 
         async with data.Resource.get_connection() as connection:
@@ -133,7 +129,7 @@ class ToDbUpdateManager(StateUpdateManager):
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
-    async def send_deploy_done(self, result: DeployResult, resource_id: ResourceIdStr) -> None:
+    async def send_deploy_done(self, result: DeployResult) -> None:
         """
         Update the db to reflect the result of a deploy for a given resource.
         """

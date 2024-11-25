@@ -248,13 +248,11 @@ class DummyStateManager(StateUpdateManager):
     def __init__(self):
         self.state: dict[ResourceIdStr, const.ResourceState] = {}
 
-    async def send_in_progress(
-        self, action_id: UUID, resource_version_id: ResourceVersionIdStr, resource_id: ResourceIdStr
-    ) -> None:
-        self.state[resource_id] = const.ResourceState.deploying
+    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
+        self.state[Id.parse_id(resource_id).resource_str()] = const.ResourceState.deploying
 
-    async def send_deploy_done(self, result: DeployResult, resource_id: ResourceIdStr) -> None:
-        self.state[resource_id] = result.status
+    async def send_deploy_done(self, result: DeployResult) -> None:
+        self.state[Id.parse_id(result.rvid).resource_str()] = result.status
 
     def check_with_scheduler(self, scheduler: ResourceScheduler) -> None:
         """Verify that the state we collected corresponds to the state as known by the scheduler"""
