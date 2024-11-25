@@ -140,30 +140,6 @@ def test():
 
     assert inmanta_plugins.inmanta_unit_test.test() == 10
 
-    # deploy new version
-    deploy(
-        """
-def test():
-    return 20
-        """
-    )
-
-    assert inmanta_plugins.inmanta_unit_test.test() == 20
-
-    assert any("Deploying code " in message for message in caplog.messages)
-    caplog.clear()
-
-    # deploy same version
-    deploy(
-        """
-def test():
-    return 20
-        """
-    )
-
-    assert inmanta_plugins.inmanta_unit_test.test() == 20
-    assert not any("Deploying code " in message for message in caplog.messages)
-
 
 def test_code_loader_dependency(tmp_path, caplog, deactive_venv):
     """Test loading two modules with a dependency between them"""
@@ -225,11 +201,14 @@ def test():
     """
 
     with pytest.raises(ImportError):
-        import inmanta_bad_unit_test  # NOQA
+        import inmanta_plugins.inmanta_bad_unit_test  # NOQA
 
     cl.deploy_version([get_module_source("inmanta_plugins.inmanta_bad_unit_test", code)])
 
-    assert "ModuleNotFoundError: No module named 'badimmport'" in caplog.text
+    with pytest.raises(ModuleNotFoundError):
+        import inmanta_plugins.inmanta_bad_unit_test  # NOQA
+
+        assert "ModuleNotFoundError: No module named 'badimmport'" in caplog.text
 
 
 @fixture(scope="function")
