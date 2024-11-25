@@ -47,12 +47,12 @@ from typing import BinaryIO, Callable, Generic, Optional, Sequence, TypeVar, Uni
 
 import asyncpg
 import click
+import pydantic
 from tornado import gen
 
 import packaging
 import packaging.requirements
 import packaging.utils
-import pydantic
 import pydantic_core
 from crontab import CronTab
 from inmanta import COMPILER_VERSION, const
