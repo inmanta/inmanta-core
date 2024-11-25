@@ -56,19 +56,19 @@ class ResourceTimer:
 
         next_execute_time: int
 
-        if periodic_repair_interval is not None and periodic_deploy_interval is not None:
-            if is_dirty:
-                next_execute_time = min(periodic_deploy_interval, periodic_repair_interval)
-            else:
-                next_execute_time = periodic_repair_interval
-        elif periodic_deploy_interval is not None:
-            if not is_dirty:
-                return
-            next_execute_time = periodic_deploy_interval
-        elif periodic_repair_interval is not None:
-            next_execute_time = periodic_repair_interval
+       if periodic_repair_interval is None:
+          periodic_repair_interval = maxint
+       if periodic_deploy_interval is None:
+           periodic_deploy_interval = maxint
+
+
+        if is_dirty:
+              next_execute_time = min(periodic_deploy_interval, periodic_repair_interval)
         else:
-            return
+              next_execute_time = periodic_repair_interval  
+ 
+        if next_execute_time == maxint:
+             return
 
         self.is_installed = True
 
