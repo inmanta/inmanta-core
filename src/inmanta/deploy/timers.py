@@ -20,7 +20,7 @@ import asyncio
 import logging
 import sys
 from collections.abc import Coroutine
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import inmanta.deploy.scheduler
 from inmanta.agent import config as agent_config
@@ -33,10 +33,13 @@ LOGGER = logging.getLogger(__name__)
 
 class ResourceTimer:
     def __init__(self, resource: ResourceIdStr):
+        """
+        :param resource: The resource for which to ensure periodic repairs.
+        """
         self.resource: ResourceIdStr = resource
-        self.repair_handle: asyncio.Task[None] | None = None
-
         self.time_to_next_deploy = sys.maxsize
+
+        self.repair_handle: asyncio.Task[None] | None = None
         self.next_schedule_handle: asyncio.TimerHandle | None = None
 
     def ensure_timer(
@@ -101,7 +104,11 @@ class ResourceTimer:
 
 
 class TimerManager:
-    def __init__(self, resource_scheduler: Optional["inmanta.deploy.scheduler.ResourceScheduler"] = None):
+    def __init__(self, resource_scheduler: "inmanta.deploy.scheduler.ResourceScheduler"):
+        """
+        :param resource_scheduler: Back reference to the ResourceScheduler that was responsible for
+            spawning this TimerManager.
+        """
         self.resource_timers: dict[ResourceIdStr, ResourceTimer] = {}
 
         self.global_periodic_repair_task: ScheduledTask | None = None
@@ -110,10 +117,7 @@ class TimerManager:
         self.periodic_repair_interval: int | None = None
         self.periodic_deploy_interval: int | None = None
 
-        # Back reference to the ResourceScheduler that was responsible for spawning this TimerManager
-        # Used to schedule global repair/deploys. TODO: This feels hackish ??
-        if resource_scheduler:
-            self._resource_scheduler = resource_scheduler
+        self._resource_scheduler = resource_scheduler
 
         self._sched = Scheduler("Resource scheduler")
 
