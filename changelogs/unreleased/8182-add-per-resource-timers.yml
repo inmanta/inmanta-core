@@ -1,11 +1,6 @@
 description: >
   Add support for periodic per-resource deploys and repairs.
-  When specified as a number of seconds, the ``AUTOSTART_AGENT_REPAIR_INTERVAL`` environment setting will now be
-  interpreted on a per-resource basis and ensure that no more than this many seconds go by between two repairs.
-  When specified as a string, a cron-like expression is expected and will periodically trigger a global
-  repair i.e. for all the resources at once.
-  Similarly, the ``AUTOSTART_AGENT_DEPLOY_INTERVAL`` environment setting can be used to set a periodic deploy
-  trigger on a per-resource basis.
+  When ``AUTOSTART_AGENT_REPAIR_INTERVAL``  or ``AUTOSTART_AGENT_DEPLOY_INTERVAL`` are specified as a number (not a cron epxression), they are interpreted on a per-resource basis. The timer will trigger after the interval has expired, after the last deploy of each individual resource.
 change-type: patch
 destination-branches: [master]
 
