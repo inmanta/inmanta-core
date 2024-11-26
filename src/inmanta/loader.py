@@ -309,8 +309,6 @@ class CodeLoader:
         except ImportError:
             LOGGER.exception("Unable to load module %s", mod_name)
 
-    # Called by forking_executor.InitCommand() -> once on executor init
-    # deploy_version <- inprocess executor._install<- IPE.ensure_code <- IPE.get_executor <- task
     def install_source(self, module_source: ModuleSource) -> None:
         """
         Ensure the given module source is available on disk.
