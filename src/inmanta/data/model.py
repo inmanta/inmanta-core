@@ -871,6 +871,9 @@ class PipConfig(BaseModel):
 
 LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
 
+class SchedulerStatusReport(BaseModel):
+    # TODO Naming
+    pass
 
 class DataBaseReport(BaseModel):
     """
