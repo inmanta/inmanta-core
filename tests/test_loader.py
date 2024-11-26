@@ -140,6 +140,17 @@ def test():
 
     assert inmanta_plugins.inmanta_unit_test.test() == 10
 
+    # deploy same version
+    deploy(
+        """
+def test():
+    return 10
+        """
+    )
+
+    assert inmanta_plugins.inmanta_unit_test.test() == 10
+    assert not any("Deploying code " in message for message in caplog.messages)
+
 
 def test_code_loader_dependency(tmp_path, caplog, deactive_venv):
     """Test loading two modules with a dependency between them"""
