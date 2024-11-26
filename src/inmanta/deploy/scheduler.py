@@ -511,7 +511,7 @@ class ResourceScheduler(TaskManager):
                 else:
                     # It's a resource we don't know yet.
                     new_desired_state.add(resource)
-                    self._timer_manager.update_resource(resource)
+                    self._timer_manager.update_resource(resource, dirty=False)
 
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 new_requires: Set[ResourceIdStr] = requires.get(resource, set())
@@ -666,6 +666,8 @@ class ResourceScheduler(TaskManager):
             return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=None)
 
     async def get_resource_intent_for_deploy(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
+        self._timer_manager.remove_resource(resource)
+
         async with self._scheduler_lock:
             # fetch resource details under lock
             resource_details = self._get_resource_intent(resource)
@@ -736,20 +738,16 @@ class ResourceScheduler(TaskManager):
                         # FIXME: stop informing resource skipped because of
                         #  a custom handler skip via this mechanism
 
-                        dependant_resources: set[ResourceIdStr] = set()
-
                         for dependant in provides:
                             if not self._state.resources.get(dependant, None):
                                 continue
                             if not (dependant_status := self._state.resource_state.get(dependant, None)):
                                 continue
                             if dependant_status.blocked is BlockedStatus.NO:
-                                dependant_resources.add(dependant)
+                                concerned_resources.add(dependant)
                                 # Remove timers for unblocked dependant resources because
                                 # they are marked for deployment below.
                                 self._timer_manager.remove_resource(dependant)
-
-                        concerned_resources.update(dependant_resources)
 
                 else:
                     # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
@@ -834,7 +832,6 @@ class ResourceScheduler(TaskManager):
         return list(self._state.types_per_agent[agent])
 
     async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
-        self._timer_manager.remove_resource(Id.parse_id(resource_id).resource_str())
         await self._state_update_delegate.send_in_progress(action_id, resource_id)
 
     async def send_deploy_done(self, result: DeployResult) -> None:

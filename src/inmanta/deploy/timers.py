@@ -197,7 +197,7 @@ class TimerManager:
         assert isinstance(task, ScheduledTask)
         return task
 
-    def update_resource(self, resource: ResourceIdStr, dirty: bool = False) -> None:
+    def update_resource(self, resource: ResourceIdStr, dirty: bool) -> None:
         # Create if it is not known yet
         if resource not in self.resource_timers:
             self.resource_timers[resource] = ResourceTimer(resource)
