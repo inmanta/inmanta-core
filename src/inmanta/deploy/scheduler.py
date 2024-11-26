@@ -379,14 +379,14 @@ class ResourceScheduler(TaskManager):
         result = {}
         for resource in resources_from_db:
             if const.ResourceState[resource["status"]] is const.ResourceState.undefined:
-                status = ResourceStatus.UNDEFINED
+                status = ComplianceStatus.UNDEFINED
             elif (
                 resource["attribute_hash"] == resource["last_deployed_attribute_hash"]
-                and resource["resource_status"] is ResourceStatus.UP_TO_DATE
+                and resource["resource_status"] is ComplianceStatus.COMPLIANT
             ):
-                status = ResourceStatus.UP_TO_DATE
+                status = ComplianceStatus.COMPLIANT
             else:
-                status = ResourceStatus.HAS_UPDATE
+                status = ComplianceStatus.HAS_UPDATE
             result[resource["resource_id"]] = ResourceDetails(
                 resource_id=resource["resource_id"],
                 attribute_hash=resource["attribute_hash"],
@@ -492,7 +492,7 @@ class ResourceScheduler(TaskManager):
                 self._state.add_up_to_date_resource(resource, details)
 
             for resource, details in resources.items():
-                if details.status is ResourceStatus.UNDEFINED:
+                if details.status is ComplianceStatus.UNDEFINED:
                     blocked_resources.add(resource)
                     self._work.delete_resource(resource)
                 elif resource in self._state.resources:

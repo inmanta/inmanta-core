@@ -42,7 +42,6 @@ from inmanta.data.model import (
     DiscoveredResource,
     LatestReleasedResource,
     LinkedDiscoveredResource,
-    LogLine,
     ReleasedResourceDetails,
     Resource,
     ResourceAction,

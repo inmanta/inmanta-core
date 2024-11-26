@@ -41,7 +41,7 @@ class RequiresProvidesMapping(BidirectionalManyMapping["ResourceIdStr", "Resourc
         return self.reverse_mapping()
 
 
-class ResourceStatus(StrEnum):
+class ComplianceStatus(StrEnum):
     """
     Status of a resource's operational status with respect to its latest desired state, to the best of our knowledge.
     COMPLIANT: The operational state complies to latest resource intent as far as we know.
@@ -66,7 +66,7 @@ class ResourceDetails:
     resource_id: "ResourceIdStr"
     attribute_hash: str
     attributes: Mapping[str, object] = dataclasses.field(hash=False)
-    status: ResourceStatus
+    status: ComplianceStatus
 
     id: "resources.Id" = dataclasses.field(init=False, compare=False, hash=False)
 
