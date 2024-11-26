@@ -46,8 +46,8 @@ from typing import BinaryIO, Callable, Generic, Optional, Sequence, TypeVar, Uni
 
 import asyncpg
 import click
-import pydantic
 import importlib_metadata
+import pydantic
 from tornado import gen
 
 import packaging
