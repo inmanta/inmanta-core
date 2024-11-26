@@ -493,6 +493,15 @@ def get_db_status() -> DataBaseReport:
     Get a report of the DB connection pool status
     """
 
+@typedmethod(
+    path="/scheduler_status",  operation="GET", api=True, timeout=5, arg_options=methods.ENV_OPTS, client_types=[ClientType.api]
+)
+def get_scheduler_status(
+    tid: uuid.UUID
+) -> model.SchedulerStatusReport:
+    """
+    Get a report of the resource scheduler status
+    """
 
 @typedmethod(
     path="/compiledata/<id>",
