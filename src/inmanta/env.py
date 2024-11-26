@@ -39,7 +39,7 @@ from itertools import chain
 from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
-from typing import Callable, NamedTuple, Optional, TypeVar, Tuple
+from typing import Callable, NamedTuple, Optional, Tuple, TypeVar
 
 import inmanta.util
 import packaging.requirements
@@ -412,32 +412,6 @@ class Pip(PipCommandBuilder):
         :param upgrade: make pip do an upgrade
         :param upgrade_strategy: what upgrade strategy to use
         """
-
-        cmd, constraints_files_clean, requirements_files_clean, sub_env = cls._prepare_command(
-            python_path,
-            config,
-            requirements,
-            requirements_files,
-            upgrade,
-            upgrade_strategy,
-            constraints_files,
-            paths,
-        )
-
-        cls.run_pip(cmd, sub_env, constraints_files_clean, requirements_files_clean)
-
-    @classmethod
-    def _prepare_command(
-        cls,
-        python_path: str,
-        config: PipConfig,
-        requirements: Optional[Sequence[packaging.requirements.Requirement]] = None,
-        requirements_files: Optional[list[str]] = None,
-        upgrade: bool = False,
-        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
-        constraints_files: Optional[list[str]] = None,
-        paths: Optional[list[LocalPackagePath]] = None,
-    ) -> Tuple[list[str], list[str], list[str], dict[str, str]]:
         # What
         requirements = requirements if requirements is not None else []
         clean_requirements_files = requirements_files if requirements_files is not None else []
@@ -513,7 +487,7 @@ class Pip(PipCommandBuilder):
             # The env var can both enable and disable
             sub_env["PIP_PRE"] = str(config.pre)
 
-        cls.run_pip(cmd, sub_env, constraints_files, requirements_files)
+        cls.run_pip(cmd, sub_env, constraints_files, clean_requirements_files)
 
     @classmethod
     def run_pip(cls, cmd: list[str], env: dict[str, str], constraints_files: list[str], requirements_files: list[str]) -> None:
@@ -610,6 +584,10 @@ class PythonEnvironment:
             if not self.python_path:
                 raise ValueError("The python_path cannot be an empty string.")
         self.site_packages_dir: str = self.get_site_dir_for_env_path(self.env_path)
+        self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
+        self._parent_python: Optional[str] = None
+
+
 
     @classmethod
     def get_python_path_for_env_path(cls, env_path: str) -> str:
@@ -648,7 +626,7 @@ class PythonEnvironment:
         Initialize the virtual environment.
         """
         self._parent_python = sys.executable
-        LOGGER.info("Initializing virtual environment at %s", self.env_path)
+        LOGGER.info("Using virtual environment at %s", self.env_path)
 
         # check if the virtual env exists
         if os.path.isdir(self.env_path) and os.listdir(self.env_path):
@@ -1279,8 +1257,6 @@ class VirtualEnv(ActiveEnv):
         self.env_path: str = env_path
         self.virtual_python: Optional[str] = None
         self._using_venv: bool = False
-        self._parent_python: Optional[str] = None
-        self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
 
     def validate_path(self, path: str) -> None:
         """
