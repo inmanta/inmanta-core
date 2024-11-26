@@ -43,7 +43,7 @@ from inmanta.data.model import ResourceVersionIdStr
 from inmanta.deploy import state, tasks
 from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ResourceScheduler
-from inmanta.deploy.state import BlockedStatus, ResourceStatus
+from inmanta.deploy.state import BlockedStatus, ComplianceStatus
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
@@ -377,7 +377,7 @@ def make_resource_minimal(environment):
         rid: ResourceIdStr,
         values: dict[str, object],
         requires: list[str],
-        status: state.ResourceStatus = state.ResourceStatus.HAS_UPDATE,
+        status: state.ComplianceStatus = state.ComplianceStatus.HAS_UPDATE,
     ) -> state.ResourceDetails:
         """Produce a resource that is valid to the scheduler"""
         attributes = dict(values)
@@ -1365,11 +1365,11 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         attribute_hash: str,
     ) -> None:
         """
-        Assert that the given resource has the given ResourceStatus, DeploymentResult and BlockedStatus.
+        Assert that the given resource has the given ComplianceStatus, DeploymentResult and BlockedStatus.
         If not, this method raises an AssertionError.
 
         :param resource: The resource of which the above-mentioned parameters have to be asserted.
-        :param status: The ResourceStatus to assert.
+        :param status: The ComplianceStatus to assert.
         :param deployment_result: The DeploymentResult to assert.
         :param blocked_status: The BlockedStatus to assert.
         :param attribute_hash: The hash of the attributes of the resource.
@@ -1388,7 +1388,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         ),
         rid2: make_resource_minimal(rid=rid2, values={"value": "a"}, requires=[rid5]),
         rid3: make_resource_minimal(rid=rid3, values={"value": "a"}, requires=[rid5, rid6]),
-        rid4: make_resource_minimal(rid=rid4, values={"value": "unknown"}, requires=[], status=ResourceStatus.UNDEFINED),
+        rid4: make_resource_minimal(rid=rid4, values={"value": "unknown"}, requires=[], status=ComplianceStatus.UNDEFINED),
         rid5: make_resource_minimal(rid=rid5, values={"value": "a"}, requires=[]),
         rid6: make_resource_minimal(rid=rid6, values={"value": "a"}, requires=[rid7]),
         rid7: make_resource_minimal(rid=rid7, values={"value": "a"}, requires=[]),
@@ -1459,9 +1459,9 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid5 and rid6 are undefined
     # Change the desired state of rid2
     resources[rid4] = make_resource_minimal(rid=rid4, values={"value": "a"}, requires=[])
-    resources[rid5] = make_resource_minimal(rid=rid5, values={"value": "unknown"}, requires=[], status=ResourceStatus.UNDEFINED)
+    resources[rid5] = make_resource_minimal(rid=rid5, values={"value": "unknown"}, requires=[], status=ComplianceStatus.UNDEFINED)
     resources[rid6] = make_resource_minimal(
-        rid=rid6, values={"value": "unknown"}, requires=[rid7], status=ResourceStatus.UNDEFINED
+        rid=rid6, values={"value": "unknown"}, requires=[rid7], status=ComplianceStatus.UNDEFINED
     )
     resources[rid2] = make_resource_minimal(rid=rid2, values={"value": "b"}, requires=[rid5])
     resources[rid3] = make_resource_minimal(rid=rid3, values={"value": "a"}, requires=[rid5, rid6])
@@ -1594,8 +1594,8 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     rid8 = ResourceIdStr("test::Resource[agent1,name=8]")
     rid9 = ResourceIdStr("test::Resource[agent1,name=9]")
     resources = {
-        rid8: make_resource_minimal(rid=rid8, values={"value": "unknown"}, requires=[], status=ResourceStatus.UNDEFINED),
-        rid9: make_resource_minimal(rid=rid9, values={"value": "unknown"}, requires=[rid8], status=ResourceStatus.UNDEFINED),
+        rid8: make_resource_minimal(rid=rid8, values={"value": "unknown"}, requires=[], status=ComplianceStatus.UNDEFINED),
+        rid9: make_resource_minimal(rid=rid9, values={"value": "unknown"}, requires=[rid8], status=ComplianceStatus.UNDEFINED),
     }
     await agent.scheduler._new_version(version=4, resources=resources, requires=make_requires(resources))
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")

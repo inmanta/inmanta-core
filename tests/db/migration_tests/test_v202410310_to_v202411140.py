@@ -44,31 +44,31 @@ async def test_add_new_resource_status_column(
     resource_state_by_resource_id = {record.resource_id: record.resource_status for record in resource_persistent_state}
     assert (
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key1]")]
-        is state.ResourceStatus.UP_TO_DATE
+        is state.ComplianceStatus.COMPLIANT
     )
     assert (
-        resource_state_by_resource_id[resources.ResourceIdStr("test::Fail[agent1,key=key2]")] is state.ResourceStatus.HAS_UPDATE
+        resource_state_by_resource_id[resources.ResourceIdStr("test::Fail[agent1,key=key2]")] is state.ComplianceStatus.HAS_UPDATE
     )
     assert (
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key3]")]
-        is state.ResourceStatus.HAS_UPDATE
+        is state.ComplianceStatus.HAS_UPDATE
     )
     assert (
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key4]")]
-        is state.ResourceStatus.UNDEFINED
+        is state.ComplianceStatus.UNDEFINED
     )
     assert (
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key5]")]
-        is state.ResourceStatus.HAS_UPDATE
+        is state.ComplianceStatus.HAS_UPDATE
     )
     assert (
-        resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key6]")] is state.ResourceStatus.ORPHAN
+        resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key6]")] is state.ComplianceStatus.ORPHAN
     )
     assert (
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key7]")]
-        is state.ResourceStatus.UP_TO_DATE
+        is state.ComplianceStatus.COMPLIANT
     )
     assert (
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key8]")]
-        is state.ResourceStatus.HAS_UPDATE
+        is state.ComplianceStatus.HAS_UPDATE
     )

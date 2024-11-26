@@ -80,7 +80,7 @@ class ResourceDetails:
 class DeploymentResult(StrEnum):
     """
     The result of a resource's last (finished) deploy. This result may be for an older version than the latest desired state.
-    See ResourceStatus for a resource's operational status with respect to its latest desired state.
+    See ComplianceStatus for a resource's operational status with respect to its latest desired state.
 
     NEW: Resource has never been deployed before.
     DEPLOYED: Last resource deployment was successful.

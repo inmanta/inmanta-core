@@ -4421,7 +4421,7 @@ class ResourcePersistentState(BaseDocument):
     # Last produced an event. i.e. the end time of the last deploy where we had an effective change
     # (change is not None and change != Change.nochange)
 
-    resource_status: state.ResourceStatus
+    resource_status: state.ComplianceStatus
 
     # status
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
@@ -5279,7 +5279,7 @@ class Resource(BaseDocument):
         await super().insert(connection=connection)
         # TODO: On conflict or is not exists or just make every update an upsert?
         resource_status = (
-            state.ResourceStatus.UNDEFINED if self.status is const.ResourceState.undefined else state.ResourceStatus.HAS_UPDATE
+            state.ComplianceStatus.UNDEFINED if self.status is const.ResourceState.undefined else state.ComplianceStatus.HAS_UPDATE
         )
         await self._execute_query(
             """
@@ -5307,9 +5307,9 @@ class Resource(BaseDocument):
         # TODO performance?
         for doc in documents:
             resource_status = (
-                state.ResourceStatus.UNDEFINED
+                state.ComplianceStatus.UNDEFINED
                 if doc.status is const.ResourceState.undefined
-                else state.ResourceStatus.HAS_UPDATE
+                else state.ComplianceStatus.HAS_UPDATE
             )
             await cls._execute_query(
                 """
@@ -5385,7 +5385,7 @@ class Resource(BaseDocument):
         last_produced_events: Optional[datetime.datetime] = None,
         last_deployed_attribute_hash: Optional[str] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
-        resource_status: Optional[state.ResourceStatus] = None,
+        resource_status: Optional[state.ComplianceStatus] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)

@@ -54,7 +54,7 @@ from inmanta.data.model import (
     VersionedResourceDetails,
 )
 from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
-from inmanta.deploy.state import ResourceStatus
+from inmanta.deploy.state import ComplianceStatus
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
@@ -580,9 +580,9 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                                 extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
 
                             if status is ResourceState.deployed:
-                                extra_fields["resource_status"] = ResourceStatus.UP_TO_DATE
+                                extra_fields["resource_status"] = ComplianceStatus.COMPLIANT
                             elif status is ResourceState.undefined:
-                                extra_fields["resource_status"] = ResourceStatus.UNDEFINED
+                                extra_fields["resource_status"] = ComplianceStatus.UNDEFINED
 
                             await res.update_persistent_state(
                                 **extra_fields,

@@ -241,7 +241,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     last_deployed_version=resource_id_parsed.version,
                     last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
-                    resource_status=state.ResourceStatus.UP_TO_DATE if status is const.ResourceState.deployed else None,
+                    resource_status=state.ComplianceStatus.COMPLIANT if status is const.ResourceState.deployed else None,
                     **extra_datetime_fields,
                     connection=connection,
                 )
