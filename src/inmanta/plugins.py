@@ -211,6 +211,15 @@ PLUGIN_TYPES = {
     None: Null(),  # Only NoneValue will pass validation
 }
 
+class PluginCallContext:
+    """
+    Internal state of a plugin call
+
+    Used to carry state from the argument validation to the return validation
+
+    """
+
+
 
 class PluginValue:
     """
