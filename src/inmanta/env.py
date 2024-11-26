@@ -587,8 +587,6 @@ class PythonEnvironment:
         self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
         self._parent_python: Optional[str] = None
 
-
-
     @classmethod
     def get_python_path_for_env_path(cls, env_path: str) -> str:
         """

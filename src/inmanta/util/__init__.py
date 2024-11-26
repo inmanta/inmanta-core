@@ -47,7 +47,6 @@ from typing import BinaryIO, Callable, Generic, Optional, Sequence, TypeVar, Uni
 
 import asyncpg
 import click
-import importlib_metadata
 import pydantic
 from tornado import gen
 
@@ -60,7 +59,6 @@ from inmanta import COMPILER_VERSION, const
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 from packaging.utils import NormalizedName
-from pydantic_core import Url
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
