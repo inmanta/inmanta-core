@@ -21,7 +21,7 @@ requires = [
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
-    "pydantic~=2.5",
+    "pydantic~=2.5,!=2.9.2",
     "pyformance~=0.4",
     "PyJWT~=2.0",
     "pynacl~=1.5",

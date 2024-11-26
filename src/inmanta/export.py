@@ -30,7 +30,7 @@ from inmanta import const, loader, protocol
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast.entity import Entity
-from inmanta.config import Option, is_list, is_str, is_uuid_opt
+from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.const import ResourceState
 from inmanta.data.model import PipConfig, ResourceVersionIdStr
 from inmanta.execute.proxy import DynamicProxy, UnknownException
@@ -53,7 +53,6 @@ cfg_export = Option(
     "The list of exporters to use. This option is ignored when the --export-plugin option is used.",
     is_list,
 )
-cfg_unknown_handler = Option("unknown_handler", "default", "prune-agent", "default method to handle unknown values ", is_str)
 
 
 ModelDict = dict[str, Entity]

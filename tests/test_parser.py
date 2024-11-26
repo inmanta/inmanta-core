@@ -1215,7 +1215,6 @@ def test_lexer():
     parse_code(
         """
 #test
-//test2
 a=0.5
 b=""
 """

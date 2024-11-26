@@ -44,19 +44,19 @@ class RequiresProvidesMapping(BidirectionalManyMapping["ResourceIdStr", "Resourc
 class ResourceStatus(StrEnum):
     """
     Status of a resource's operational status with respect to its latest desired state, to the best of our knowledge.
-
-    UP_TO_DATE: Resource has had at least one successful deploy for the latest desired state, and no compliance check has
-        reported a diff since. Is not affected by later deploy failures, i.e. the last known operational status is assumed to
-        hold until observed otherwise.
-    HAS_UPDATE: Resource's operational state does not match latest desired state, as far as we know. Either the resource
-        has never been (successfully) deployed, or was deployed for a different desired state or a compliance check revealed a
-        diff.
+    COMPLIANT: The operational state complies to latest resource intent as far as we know.
+    HAS_UPDATE: The resource intent has been updated since latest deploy attempt (if any),
+        meaning we are not yet managing the new intent.
+    NON_COMPLIANT: The resource intent has not been updated since latest deploy attempt (if any)
+        but we have reason to believe operational state might not comply with latest resource intent,
+        based on a deploy attempt / compliance check for that intent.
     UNDEFINED: The resource status is undefined, because it has an unknown attribute.
     ORPHAN: The resource has become an orphan, i.e. it is no longer present in the latest released model version.
     """
 
-    UP_TO_DATE = enum.auto()
+    COMPLIANT = enum.auto()
     HAS_UPDATE = enum.auto()
+    NON_COMPLIANT = enum.auto()
     UNDEFINED = enum.auto()
     ORPHAN = enum.auto()
 
@@ -133,7 +133,7 @@ class ResourceState:
 
     # FIXME: review / finalize resource state. Based on draft design in
     #   https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
-    status: ResourceStatus
+    status: ComplianceStatus
     deployment_result: DeploymentResult
     blocked: BlockedStatus
 
@@ -176,12 +176,12 @@ class ModelState:
         """
         self.resources[resource] = details
         if resource in self.resource_state:
-            self.resource_state[resource].status = ResourceStatus.UP_TO_DATE
+            self.resource_state[resource].status = ComplianceStatus.COMPLIANT
             self.resource_state[resource].deployment_result = DeploymentResult.DEPLOYED
             self.resource_state[resource].blocked = BlockedStatus.NO
         else:
             self.resource_state[resource] = ResourceState(
-                status=ResourceStatus.UP_TO_DATE, deployment_result=DeploymentResult.DEPLOYED, blocked=BlockedStatus.NO
+                status=ComplianceStatus.COMPLIANT, deployment_result=DeploymentResult.DEPLOYED, blocked=BlockedStatus.NO
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
@@ -199,10 +199,10 @@ class ModelState:
         self.resources[resource] = details
         if resource in self.resource_state:
             if not is_transitive:
-                self.resource_state[resource].status = ResourceStatus.UNDEFINED
+                self.resource_state[resource].status = ComplianceStatus.UNDEFINED
             self.resource_state[resource].blocked = BlockedStatus.YES
         else:
-            resource_status = ResourceStatus.UNDEFINED if not is_transitive else ResourceStatus.HAS_UPDATE
+            resource_status = ComplianceStatus.UNDEFINED if not is_transitive else ComplianceStatus.HAS_UPDATE
             self.resource_state[resource] = ResourceState(
                 status=resource_status,
                 deployment_result=DeploymentResult.NEW,
@@ -268,7 +268,7 @@ class ModelState:
             if self.resource_state[resource].blocked is BlockedStatus.NO:
                 # The resource is already unblocked.
                 return False
-            if self.resource_state[resource].status is ResourceStatus.UNDEFINED:
+            if self.resource_state[resource].status is ComplianceStatus.UNDEFINED:
                 # The resource is undefined.
                 return False
             if resource in known_blockers_cache:
@@ -289,13 +289,13 @@ class ModelState:
                 return False
             # Unblock resource
             self.resource_state[resource].blocked = BlockedStatus.NO
-            if self.resource_state[resource].status is ResourceStatus.HAS_UPDATE:
+            if self.resource_state[resource].status in [ComplianceStatus.HAS_UPDATE, ComplianceStatus.NON_COMPLIANT]:
                 self.dirty.add(resource)
             return True
 
         provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.requires.provides_view()
         self.resources[resource] = details
-        self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
+        self.resource_state[resource].status = ComplianceStatus.HAS_UPDATE
         todo: list[ResourceIdStr] = [resource]
         while todo:
             resource_id: ResourceIdStr = todo.pop()
@@ -315,11 +315,11 @@ class ModelState:
         """
         self.resources[resource] = details
         if resource in self.resource_state:
-            self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
+            self.resource_state[resource].status = ComplianceStatus.HAS_UPDATE
             self.resource_state[resource].blocked = BlockedStatus.NO
         else:
             self.resource_state[resource] = ResourceState(
-                status=ResourceStatus.HAS_UPDATE,
+                status=ComplianceStatus.HAS_UPDATE,
                 deployment_result=DeploymentResult.NEW,
                 blocked=BlockedStatus.NO,
             )
