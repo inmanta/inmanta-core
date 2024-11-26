@@ -585,7 +585,7 @@ class HandlerAPI(ABC, Generic[TResource]):
 
         resources_in_unexpected_state = filter_resources_in_unexpected_state(requires)
         if resources_in_unexpected_state:
-            ctx.set_resource_state(ContextResourceState.skipped)
+            ctx.set_resource_state(ContextResourceState.skipped_for_dependency)
             ctx.warning(
                 "Resource %(resource)s skipped because a dependency is in an unexpected state: %(unexpected_states)s",
                 resource=resource.id.resource_version_str(),
@@ -599,7 +599,7 @@ class HandlerAPI(ABC, Generic[TResource]):
             if _should_reload():
                 self.do_reload(ctx, resource)
         else:
-            ctx.set_resource_state(ContextResourceState.skipped)
+            ctx.set_resource_state(ContextResourceState.skipped_for_dependency)
             ctx.info(
                 "Resource %(resource)s skipped due to failed dependencies: %(failed)s",
                 resource=resource.id.resource_version_str(),

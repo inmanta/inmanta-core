@@ -109,6 +109,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         attribute_hash: str,
         status: ComplianceStatus,
         deployment_result: Optional[DeploymentResult] = None,
+        skipped_for_dependency: Optional[bool] = False,
     ) -> None:
         """
         Report new state for a resource. Since knowledge of deployment result implies a finished deploy, it must only be set
@@ -121,6 +122,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
             hash indicates the state information is stale.
         :param status: The new resource status.
         :param deployment_result: The result of the deploy, iff one just finished, otherwise None.
+        :param skipped_for_dependency: If the resource was skipped due to a dependency
         """
 
 
@@ -647,6 +649,7 @@ class ResourceScheduler(TaskManager):
         attribute_hash: str,
         status: ComplianceStatus,
         deployment_result: Optional[DeploymentResult] = None,
+        skipped_for_dependency: Optional[bool] = False,
     ) -> None:
         if deployment_result is DeploymentResult.NEW:
             raise ValueError("report_resource_state should not be called to register new resources")
@@ -670,7 +673,7 @@ class ResourceScheduler(TaskManager):
                     state.deployment_result = deployment_result
                 return
 
-            if deployment_result == DeploymentResult.SKIPPED_FOR_DEPENDENCIES:
+            if skipped_for_dependency:
                 state.blocked = BlockedStatus.TRANSIENT
             # We are not stale
             state.status = status

@@ -140,7 +140,7 @@ class Deploy(Task):
             # may be unset if we fail before signaling start to the server, will be set if we signaled start
             deploy_result: DeployResult | None = None
             scheduler_deployment_result: state.DeploymentResult
-
+            skipped_for_dependency: bool = False
             try:
                 # This try catch block ensures we report at the end of the task
 
@@ -193,7 +193,8 @@ class Deploy(Task):
                         case ContextResourceState.skipped:
                             scheduler_deployment_result = state.DeploymentResult.SKIPPED
                         case ContextResourceState.skipped_for_dependency:
-                            scheduler_deployment_result = state.DeploymentResult.SKIPPED_FOR_DEPENDENCIES
+                            scheduler_deployment_result = state.DeploymentResult.SKIPPED
+                            skipped_for_dependency = True
                         case _:
                             scheduler_deployment_result = state.DeploymentResult.FAILED
                 except Exception as e:
@@ -234,6 +235,7 @@ class Deploy(Task):
                         else state.ComplianceStatus.NON_COMPLIANT
                     ),
                     deployment_result=scheduler_deployment_result,
+                    skipped_for_dependency=skipped_for_dependency,
                 )
 
 
