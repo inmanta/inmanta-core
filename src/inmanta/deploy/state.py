@@ -80,12 +80,14 @@ class DeploymentResult(StrEnum):
     DEPLOYED: Last resource deployment was successful.
     FAILED: Last resource deployment was unsuccessful.
     SKIPPED: Resource skipped deployment.
+    SKIPPED_FOR_DEPENDENCY: Resource skipped deployment because of its dependencies.
     """
 
     NEW = enum.auto()
     DEPLOYED = enum.auto()
     FAILED = enum.auto()
     SKIPPED = enum.auto()
+    SKIPPED_FOR_DEPENDENCIES = enum.auto()
 
 
 class AgentStatus(StrEnum):

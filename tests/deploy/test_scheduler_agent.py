@@ -36,6 +36,7 @@ from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.handler import ContextResourceState
 from inmanta.config import Config
 from inmanta.const import Change
 from inmanta.data import ResourceIdStr
@@ -105,14 +106,14 @@ class DummyExecutor(executor.Executor):
         assert ("because" in reason) or ("Test" in reason)
         self.execute_count += 1
         result = (
-            const.ResourceState.failed
+            ContextResourceState.failed
             if resource_details.attributes.get(FAIL_DEPLOY, False) is True
-            else const.ResourceState.deployed
+            else ContextResourceState.deployed
         )
         return DeployResult(
             resource_details.rvid,
             action_id,
-            status=result,
+            resource_state=result,
             messages=[],
             changes={},
             change=Change.nochange,
@@ -176,7 +177,7 @@ class ManagedExecutor(DummyExecutor):
         return DeployResult(
             resource_details.rvid,
             action_id,
-            status=result,
+            resource_state=ContextResourceState(result),
             messages=[],
             changes={},
             change=Change.nochange,
