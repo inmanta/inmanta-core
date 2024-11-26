@@ -928,7 +928,7 @@ src/inmanta/server/diff.py:0: error: "object" has no attribute "__iter__"; maybe
 src/inmanta/server/diff.py:0: error: Incompatible return value type (got "str | None", expected "str")  [return-value]
 src/inmanta/protocol/openapi/converter.py:0: error: Returning Any from function declared to return "BaseModel | UUID | bool | int | float | datetime | str | Sequence[BaseModel | UUID | bool | int | float | datetime | str] | Mapping[str, BaseModel | UUID | bool | int | float | datetime | str] | None | JSONSerializable"  [no-any-return]
 src/inmanta/protocol/openapi/converter.py:0: error: Call to untyped function "ssl_enabled" in typed context  [no-untyped-call]
-src/inmanta/protocol/openapi/converter.py:0: error: Argument "url" to "Server" has incompatible type "str"; expected "Url"  [arg-type]
+src/inmanta/protocol/openapi/converter.py:0: error: Argument "url" to "Server" has incompatible type "str"; expected "AnyUrl"  [arg-type]
 src/inmanta/protocol/openapi/converter.py:0: error: Argument 1 to "Schema" has incompatible type "**dict[str, object]"; expected "str | None"  [arg-type]
 src/inmanta/protocol/openapi/converter.py:0: error: Argument 1 to "Schema" has incompatible type "**dict[str, object]"; expected "list[str] | None"  [arg-type]
 src/inmanta/protocol/openapi/converter.py:0: error: Argument 1 to "Schema" has incompatible type "**dict[str, object]"; expected "Schema | None"  [arg-type]
