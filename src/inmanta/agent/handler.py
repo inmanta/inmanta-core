@@ -26,6 +26,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections import abc
 from concurrent.futures import Future
+from enum import Enum
 from functools import partial
 from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overload
 
@@ -230,6 +231,20 @@ class LoggerABC(ABC):
         raise NotImplementedError
 
 
+class ContextResourceState(str, Enum):
+    """
+    Used by the HandlerContext to determine the state of the resource
+    Similar to const.ResourceState but with some states removed and with the added skipped_for_dependency state
+    """
+
+    skipped = "skipped"
+    deployed = "deployed"
+    failed = "failed"
+    dry = "dry"
+    skipped_for_dependency = "skipped_for_dependency"
+    unavailable = "unavailable"  # to be removed?
+
+
 @stable_api
 class HandlerContext(LoggerABC):
     """
@@ -258,6 +273,7 @@ class HandlerContext(LoggerABC):
             action_id = uuid.uuid4()
         self._action_id = action_id
         self._status: Optional[ResourceState] = None
+        self._resource_state: Optional[ContextResourceState] = None
         self._logs: list[data.LogLine] = []
         self.logger: logging.Logger
         if logger is None:
@@ -298,14 +314,36 @@ class HandlerContext(LoggerABC):
         return self._status
 
     @property
+    def resource_state(self) -> Optional[ContextResourceState]:
+        return self._resource_state
+
+    @property
     def logs(self) -> list[data.LogLine]:
         return self._logs
 
     def set_status(self, status: const.ResourceState) -> None:
         """
-        Set the status of the handler operation.
+        Set the status of the handler operation and translate it to ContextResourceState
         """
         self._status = status
+        try:
+            self._resource_state = ContextResourceState(status)
+        except ValueError:
+            # How to proceed? What about unavailable?
+            self.logger.warning(
+                "Called set_status with status %s which is not directly translatable to NewResourceState", status
+            )
+
+    def set_resource_state(self, new_state: ContextResourceState) -> None:
+        """
+        Set the state of the resource
+        """
+        self._resource_state = new_state
+        if new_state == ContextResourceState.skipped_for_dependency:
+            # This is the only state that is not present in const.ResourceState
+            self._status = const.ResourceState.skipped
+        else:
+            self._status = const.ResourceState(new_state)
 
     def is_dry_run(self) -> bool:
         """
@@ -547,7 +585,7 @@ class HandlerAPI(ABC, Generic[TResource]):
 
         resources_in_unexpected_state = filter_resources_in_unexpected_state(requires)
         if resources_in_unexpected_state:
-            ctx.set_status(const.ResourceState.skipped)
+            ctx.set_resource_state(ContextResourceState.skipped)
             ctx.warning(
                 "Resource %(resource)s skipped because a dependency is in an unexpected state: %(unexpected_states)s",
                 resource=resource.id.resource_version_str(),
@@ -561,7 +599,7 @@ class HandlerAPI(ABC, Generic[TResource]):
             if _should_reload():
                 self.do_reload(ctx, resource)
         else:
-            ctx.set_status(const.ResourceState.skipped)
+            ctx.set_resource_state(ContextResourceState.skipped)
             ctx.info(
                 "Resource %(resource)s skipped due to failed dependencies: %(failed)s",
                 resource=resource.id.resource_version_str(),
@@ -812,23 +850,23 @@ class ResourceHandler(HandlerAPI[TResource]):
             if not dry_run:
                 with tracing.span("do_changes"):
                     self.do_changes(ctx, resource, changes)
-                    ctx.set_status(const.ResourceState.deployed)
+                    ctx.set_resource_state(ContextResourceState.deployed)
             else:
-                ctx.set_status(const.ResourceState.dry)
+                ctx.set_resource_state(ContextResourceState.dry)
         except SkipResourceForDependencies as e:
-            ctx.set_status(const.ResourceState.transiently_skipped)
+            ctx.set_resource_state(ContextResourceState.skipped_for_dependency)
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped: %(reason)s",
                 resource_id=resource.id,
                 reason=e.args,
             )
         except SkipResource as e:
-            ctx.set_status(const.ResourceState.skipped)
+            ctx.set_resource_state(ContextResourceState.skipped)
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
             )
         except Exception as e:
-            ctx.set_status(const.ResourceState.failed)
+            ctx.set_resource_state(ContextResourceState.failed)
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
                 resource_id=resource.id,
@@ -985,24 +1023,24 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                     with tracing.span("update_resource"):
                         self.update_resource(ctx, dict(changes), desired)
 
-                ctx.set_status(const.ResourceState.deployed)
+                ctx.set_resource_state(ContextResourceState.deployed)
             else:
-                ctx.set_status(const.ResourceState.dry)
+                ctx.set_resource_state(ContextResourceState.dry)
 
         except SkipResourceForDependencies as e:
-            ctx.set_status(const.ResourceState.transiently_skipped)
+            ctx.set_resource_state(ContextResourceState.skipped_for_dependency)
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped: %(reason)s",
                 resource_id=resource.id,
                 reason=e.args,
             )
         except SkipResource as e:
-            ctx.set_status(const.ResourceState.skipped)
+            ctx.set_resource_state(ContextResourceState.skipped)
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
             )
         except Exception as e:
-            ctx.set_status(const.ResourceState.failed)
+            ctx.set_resource_state(ContextResourceState.failed)
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
                 resource_id=resource.id.resource_str(),
@@ -1081,7 +1119,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
 
             if result.code != 200:
                 assert result.result is not None  # Make mypy happy
-                ctx.set_status(const.ResourceState.failed)
+                ctx.set_resource_state(ContextResourceState.failed)
                 error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
                 ctx.error(
                     "Failed to report discovered resources to the server (status code: %(code)s)%(error_msg_from_server)s",
@@ -1089,21 +1127,21 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                     error_msg_from_server=error_msg_from_server,
                 )
             else:
-                ctx.set_status(const.ResourceState.deployed)
+                ctx.set_resource_state(ContextResourceState.deployed)
         except SkipResourceForDependencies as e:
-            ctx.set_status(const.ResourceState.transiently_skipped)
+            ctx.set_resource_state(ContextResourceState.skipped_for_dependency)
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped: %(reason)s",
                 resource_id=resource.id,
                 reason=e.args,
             )
         except SkipResource as e:
-            ctx.set_status(const.ResourceState.skipped)
+            ctx.set_resource_state(ContextResourceState.skipped)
             ctx.warning(
                 msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
             )
         except Exception as e:
-            ctx.set_status(const.ResourceState.failed)
+            ctx.set_resource_state(ContextResourceState.failed)
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
                 resource_id=resource.id.resource_str(),

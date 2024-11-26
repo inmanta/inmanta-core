@@ -39,8 +39,8 @@ import packaging.requirements
 from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
-from inmanta.agent.handler import HandlerContext
-from inmanta.const import Change, ResourceState
+from inmanta.agent.handler import ContextResourceState, HandlerContext
+from inmanta.const import Change
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
@@ -486,21 +486,31 @@ class FactResult:
 class DeployResult:
     rvid: ResourceVersionIdStr
     action_id: uuid.UUID
-    status: ResourceState
+    resource_state: ContextResourceState
     messages: list[LogLine]
     changes: dict[str, AttributeStateChange]
     change: Optional[Change]
+
+    @property
+    def status(self) -> const.ResourceState:
+        """
+        Translates the new ContextResourceState to the const.ResourceState that some of the code still uses
+        (mainly parts of the code that communicate with the server)
+        """
+        if self.resource_state == ContextResourceState.skipped_for_dependency:
+            return const.ResourceState.skipped
+        return const.ResourceState(self.resource_state)
 
     @classmethod
     def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext) -> "DeployResult":
         if ctx.status is None:
             ctx.warning("Deploy status field is None, failing!")
-            ctx.set_status(ResourceState.failed)
+            ctx.set_resource_state(ContextResourceState.failed)
 
         return DeployResult(
             rvid=rvid,
             action_id=ctx.action_id,
-            status=ctx.status or ResourceState.failed,
+            resource_state=ctx.resource_state or ContextResourceState.failed,
             messages=ctx.logs,
             changes=ctx.changes,
             change=ctx.change,
@@ -511,7 +521,7 @@ class DeployResult:
         return DeployResult(
             rvid=rvid,
             action_id=action_id,
-            status=ResourceState.unavailable,
+            resource_state=ContextResourceState.unavailable,
             messages=[message],
             changes={},
             change=Change.nochange,
