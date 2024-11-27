@@ -308,7 +308,7 @@ class ResourceScheduler(TaskManager):
 
     async def join(self) -> None:
         await asyncio.gather(*[worker.join() for worker in self._workers.values()])
-        self._timer_manager.join()
+        await self._timer_manager.join()
 
     async def deploy(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_DEPLOY) -> None:
         """
@@ -625,21 +625,6 @@ class ResourceScheduler(TaskManager):
         :param name: The name of the agent
         """
         return name in self._workers and self._workers[name].is_running()
-
-    async def repair_resource(self, resource: ResourceIdStr, repair_timer: int) -> None:
-        async with self._scheduler_lock:
-
-            if self._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy
-                return
-            to_deploy: set[ResourceIdStr] = {resource}
-
-            self._work.deploy_with_context(
-                to_deploy,
-                reason=f"Individual repair triggered for resource {resource} because last "
-                f"repair happened more than {repair_timer}s ago.",
-                priority=TaskPriority.INTERVAL_REPAIR,
-                deploying=self._deploying_latest,
-            )
 
     # TaskManager interface
 

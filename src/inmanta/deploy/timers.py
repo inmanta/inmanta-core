@@ -25,6 +25,7 @@ from typing import Any, Callable
 import inmanta.deploy.scheduler
 from inmanta.agent import config as agent_config
 from inmanta.data.model import ResourceIdStr
+from inmanta.deploy.state import BlockedStatus
 from inmanta.deploy.work import TaskPriority
 from inmanta.util import CronSchedule, ScheduledTask, Scheduler
 
@@ -32,22 +33,25 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ResourceTimer:
-    def __init__(self, resource: ResourceIdStr):
+    def __init__(self, resource: ResourceIdStr, scheduler: "inmanta.deploy.scheduler.ResourceScheduler"):
         """
         :param resource: The resource for which to ensure periodic repairs.
         """
         self.resource: ResourceIdStr = resource
         self.time_to_next_deploy = sys.maxsize
 
-        self.repair_handle: asyncio.Task[None] | None = None
+        # "Inner" asyncio task responsible for queuing a Deploy task
+        self.trigger_deploy: asyncio.Task[None] | None = None
+        # "Outer" handle to the soon-to-be-called trigger_deploy
         self.next_schedule_handle: asyncio.TimerHandle | None = None
+
+        self._resource_scheduler = scheduler
 
     def ensure_timer(
         self,
         periodic_deploy_interval: int | None,
         periodic_repair_interval: int | None,
         is_dirty: bool,
-        action_function: Callable[..., Coroutine[Any, Any, None]],
     ) -> None:
         """
         Make sure the underlying resource is marked for execution
@@ -65,25 +69,23 @@ class ResourceTimer:
         if periodic_deploy_interval is None:
             periodic_deploy_interval = sys.maxsize
 
+        action_function: Callable[[ResourceIdStr, int], Coroutine[Any, Any, None]]
         if is_dirty:
             next_execute_time = min(periodic_deploy_interval, periodic_repair_interval)
+            action_function = self._trigger_deploy_for_resource
         else:
             next_execute_time = periodic_repair_interval
+            action_function = self._trigger_repair_for_resource
 
         if next_execute_time == sys.maxsize:
             return
-
-        # We have to schedule the next deploy sooner than previously though:
-        # Cancel previous schedule and re-schedule
-        if next_execute_time < self.time_to_next_deploy:
-            self.cancel_next_schedule()
 
         # A deploy is already scheduled for this resource
         if self.next_schedule_handle is not None:
             return
 
         def _create_repair_task() -> None:
-            self.repair_handle = asyncio.create_task(action_function(self.resource, next_execute_time))
+            self.trigger_deploy = asyncio.create_task(action_function(self.resource, next_execute_time))
 
         self.time_to_next_deploy = next_execute_time
         self.next_schedule_handle = asyncio.get_running_loop().call_later(next_execute_time, _create_repair_task)
@@ -95,12 +97,42 @@ class ResourceTimer:
         if self.next_schedule_handle is not None:
             self.next_schedule_handle.cancel()
 
-    def cancel_repair_task(self) -> None:
+    async def join(self) -> None:
         """
-        Cancel the underlying repair task itself
+        Wait for the deploy trigger task to finish
         """
-        if self.repair_handle is not None:
-            self.repair_handle.cancel()
+        if self.trigger_deploy is not None:
+            await self.trigger_deploy
+
+    async def _trigger_repair_for_resource(self, resource: ResourceIdStr, timer: int) -> None:
+        async with self._resource_scheduler._scheduler_lock:
+
+            if self._resource_scheduler._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy
+                return
+            to_deploy: set[ResourceIdStr] = {resource}
+
+            self._resource_scheduler._work.deploy_with_context(
+                to_deploy,
+                reason=f"Individual repair triggered for resource {resource} because last "
+                f"repair happened more than {timer}s ago.",
+                priority=TaskPriority.INTERVAL_REPAIR,
+                deploying=self._resource_scheduler._deploying_latest,
+            )
+
+    async def _trigger_deploy_for_resource(self, resource: ResourceIdStr, timer: int) -> None:
+        async with self._resource_scheduler._scheduler_lock:
+
+            if self._resource_scheduler._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy
+                return
+            to_deploy: set[ResourceIdStr] = {resource}
+
+            self._resource_scheduler._work.deploy_with_context(
+                to_deploy,
+                reason=f"Individual deploy triggered for resource {resource} because last "
+                f"deploy happened more than {timer}s ago.",
+                priority=TaskPriority.INTERVAL_DEPLOY,
+                deploying=self._resource_scheduler._deploying_latest,
+            )
 
 
 class TimerManager:
@@ -137,9 +169,8 @@ class TimerManager:
             if task:
                 self._sched.remove(task)
 
-    def join(self) -> None:
-        for timer in self.resource_timers.values():
-            timer.cancel_repair_task()
+    async def join(self) -> None:
+        await asyncio.gather(*[timer.join() for timer in self.resource_timers.values()])
 
     def initialize(self) -> None:
         """
@@ -200,14 +231,13 @@ class TimerManager:
     def update_resource(self, resource: ResourceIdStr, dirty: bool) -> None:
         # Create if it is not known yet
         if resource not in self.resource_timers:
-            self.resource_timers[resource] = ResourceTimer(resource)
+            self.resource_timers[resource] = ResourceTimer(resource, self._resource_scheduler)
 
         # Check if timer needs updating
         self.resource_timers[resource].ensure_timer(
             periodic_deploy_interval=self.periodic_deploy_interval,
             periodic_repair_interval=self.periodic_repair_interval,
             is_dirty=dirty,
-            action_function=self._resource_scheduler.repair_resource,
         )
 
     def remove_resource(self, resource: ResourceIdStr) -> None:
