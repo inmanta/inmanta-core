@@ -276,6 +276,8 @@ class ResourceScheduler(TaskManager):
                 # No model version has been released yet.
                 return
 
+
+
             # Rely on the incremental calculation to determine which resources should be deployed and which not.
             increment: set[ResourceIdStr]
             increment, _ = await ConfigurationModel.get_increment(self.environment, version, connection=con)
@@ -373,7 +375,7 @@ class ResourceScheduler(TaskManager):
             environment=self.environment,
             version=version,
             projection=None,
-            projection_presistent=None,
+            projection_persistent=None,
             connection=connection,
         )
         result = {}

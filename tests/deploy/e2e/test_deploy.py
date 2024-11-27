@@ -240,9 +240,9 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     result = await data.ResourcePersistentState.get_list(environment=environment)
     for r in result:
         if r.agent == "agent1":
-            assert r.resource_status is ComplianceStatus.HAS_UPDATE
+            assert r.compliance_status is ComplianceStatus.HAS_UPDATE
         else:
-            assert r.resource_status is ComplianceStatus.COMPLIANT
+            assert r.compliance_status is ComplianceStatus.COMPLIANT
 
     version1, resources = await make_version(True)
     await clienthelper.put_version_simple(version=version1, resources=resources)
@@ -263,9 +263,9 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     result = await data.ResourcePersistentState.get_list(environment=environment)
     for r in result:
         if r.agent in {"agent1", "agentx"}:
-            assert r.resource_status is ComplianceStatus.HAS_UPDATE
+            assert r.compliance_status is ComplianceStatus.HAS_UPDATE
         else:
-            assert r.resource_status is ComplianceStatus.COMPLIANT
+            assert r.compliance_status is ComplianceStatus.COMPLIANT
 
     # deploy trigger
     await client.deploy(environment, agent_trigger_method=const.AgentTriggerMethod.push_incremental_deploy)
@@ -273,7 +273,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     await wait_full_success(client, environment)
 
     result = await data.ResourcePersistentState.get_list(environment=environment)
-    all(r.resource_status is ComplianceStatus.COMPLIANT for r in result)
+    all(r.compliance_status is ComplianceStatus.COMPLIANT for r in result)
 
 
 async def check_server_state_vs_scheduler_state(client, environment, scheduler):
@@ -501,7 +501,7 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
     result = await data.ResourcePersistentState.get_list(environment=environment)
     assert len(result) == 1
     assert result[0].resource_id == "test::Noprov[agent1,key=key1]"
-    assert result[0].resource_status is ComplianceStatus.HAS_UPDATE
+    assert result[0].compliance_status is ComplianceStatus.HAS_UPDATE
 
 
 @pytest.mark.parametrize("halted", [True, False])
@@ -657,10 +657,10 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
 
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
-    assert result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].resource_status is ComplianceStatus.HAS_UPDATE
-    assert result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].resource_status is ComplianceStatus.HAS_UPDATE
-    assert result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].resource_status is ComplianceStatus.HAS_UPDATE
-    assert result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].resource_status is ComplianceStatus.HAS_UPDATE
+    assert result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].compliance_status is ComplianceStatus.HAS_UPDATE
+    assert result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].compliance_status is ComplianceStatus.HAS_UPDATE
+    assert result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].compliance_status is ComplianceStatus.HAS_UPDATE
+    assert result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].compliance_status is ComplianceStatus.HAS_UPDATE
 
 
 class ResourceProvider:
@@ -865,7 +865,7 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
 
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
-    status_key2 = result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].resource_status
+    status_key2 = result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].compliance_status
     if dep_state.name in {"skip", "fail"}:
         assert status_key2 is ComplianceStatus.HAS_UPDATE
     else:
@@ -908,7 +908,7 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
 
     result = await data.ResourcePersistentState.get_list(environment=environment)
     assert len(result) == 1
-    assert result[0].resource_status is ComplianceStatus.HAS_UPDATE
+    assert result[0].compliance_status is ComplianceStatus.HAS_UPDATE
 
     await resource_container.wait_for_done_with_waiters(client, environment, version)
 
@@ -1010,11 +1010,11 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key1]")].resource_status is ComplianceStatus.COMPLIANT
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].resource_status is ComplianceStatus.HAS_UPDATE
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")].resource_status is ComplianceStatus.HAS_UPDATE
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")].resource_status is ComplianceStatus.UNDEFINED
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")].resource_status is ComplianceStatus.HAS_UPDATE
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key1]")].compliance_status is ComplianceStatus.COMPLIANT
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].compliance_status is ComplianceStatus.HAS_UPDATE
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")].compliance_status is ComplianceStatus.HAS_UPDATE
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")].compliance_status is ComplianceStatus.UNDEFINED
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")].compliance_status is ComplianceStatus.HAS_UPDATE
 
     # * Remove key1, so that it becomes orphan
     # * Make key2 no longer fail
@@ -1032,11 +1032,11 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key1]")].resource_status is ComplianceStatus.ORPHAN
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].resource_status is ComplianceStatus.COMPLIANT
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")].resource_status is ComplianceStatus.COMPLIANT
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")].resource_status is ComplianceStatus.COMPLIANT
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")].resource_status is ComplianceStatus.COMPLIANT
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key1]")].compliance_status is ComplianceStatus.ORPHAN
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].compliance_status is ComplianceStatus.COMPLIANT
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")].compliance_status is ComplianceStatus.COMPLIANT
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")].compliance_status is ComplianceStatus.COMPLIANT
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")].compliance_status is ComplianceStatus.COMPLIANT
 
     # Make key4 undefined again
     version = await clienthelper.get_version()
@@ -1053,11 +1053,11 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key1]")].resource_status is ComplianceStatus.COMPLIANT
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].resource_status is ComplianceStatus.COMPLIANT
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")].resource_status is ComplianceStatus.COMPLIANT
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")].resource_status is ComplianceStatus.UNDEFINED
-    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")].resource_status is ComplianceStatus.COMPLIANT
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key1]")].compliance_status is ComplianceStatus.COMPLIANT
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].compliance_status is ComplianceStatus.COMPLIANT
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")].compliance_status is ComplianceStatus.COMPLIANT
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")].compliance_status is ComplianceStatus.UNDEFINED
+    assert result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")].compliance_status is ComplianceStatus.COMPLIANT
 
 
 async def test_lsm_states(resource_container, server, client, clienthelper, environment, agent):

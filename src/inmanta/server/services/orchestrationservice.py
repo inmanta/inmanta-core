@@ -1145,22 +1145,6 @@ class OrchestrationService(protocol.ServerSlice):
                                 send_events=False,
                                 connection=connection_holder,
                             )
-                    if latest_version:
-                        (
-                            version,
-                            increment_ids,
-                            neg_increment,
-                            neg_increment_per_agent,
-                        ) = await self.resource_service.get_increment(
-                            env,
-                            version_id,
-                            connection=connection,
-                            run_ahead_lock=version_run_ahead_lock,
-                        )
-
-                        await self.resource_service.mark_deployed(
-                            env, neg_increment, now, version_id, connection=connection_holder
-                        )
 
                     # Setting the model's released field to True is the trigger for the agents
                     # to start pulling in the resources.

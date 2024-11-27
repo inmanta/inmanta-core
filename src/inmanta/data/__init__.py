@@ -62,6 +62,7 @@ from inmanta.data.model import (
     api_boundary_datetime_normalizer,
 )
 from inmanta.deploy import state
+from inmanta.deploy.state import DeploymentResult, BlockedStatus
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
@@ -4409,6 +4410,8 @@ class ResourcePersistentState(BaseDocument):
 
     # Field based on content from the resource actions
     last_deploy: Optional[datetime.datetime] = None
+    # The attribute hash of this resource as being deployed by the scheduler
+    current_intent_attribute_hash: Optional[str] = None
     # Last deployment completed of any kind, including marking-deployed-for-know-good-state for increments
     # i.e. the end time of the last deploy
     last_deployed_attribute_hash: Optional[str] = None
@@ -4421,7 +4424,9 @@ class ResourcePersistentState(BaseDocument):
     # Last produced an event. i.e. the end time of the last deploy where we had an effective change
     # (change is not None and change != Change.nochange)
 
-    resource_status: state.ComplianceStatus
+    is_orphan: bool
+    deployment_result: DeploymentResult
+    blocked_status: BlockedStatus
 
     # status
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
@@ -4929,7 +4934,7 @@ class Resource(BaseDocument):
         environment: uuid.UUID,
         version: int,
         projection: Optional[list[typing.LiteralString]],
-        projection_presistent: Optional[list[typing.LiteralString]],
+        projection_persistent: Optional[list[typing.LiteralString]],
         project_attributes: Optional[list[typing.LiteralString]] = None,
         *,
         connection: Optional[Connection] = None,
@@ -4953,7 +4958,7 @@ class Resource(BaseDocument):
             json_projection = ""
 
         query = f"""
-        SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_presistent, 'ps')} {json_projection}
+        SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_persistent, 'ps')} {json_projection}
             FROM {cls.table_name()} r JOIN resource_persistent_state ps ON r.resource_id = ps.resource_id
             WHERE r.environment=$1 AND ps.environment = $1 and r.model = $2;"""
 
@@ -5278,13 +5283,17 @@ class Resource(BaseDocument):
         self.make_hash()
         await super().insert(connection=connection)
         # TODO: On conflict or is not exists or just make every update an upsert?
-        resource_status = (
-            state.ComplianceStatus.UNDEFINED if self.status is const.ResourceState.undefined else state.ComplianceStatus.HAS_UPDATE
-        )
         await self._execute_query(
             """
             INSERT INTO resource_persistent_state (
-                environment, resource_id, resource_type, agent, resource_id_value, resource_status
+                environment,
+                resource_id,
+                resource_type,
+                agent,
+                resource_id_value,
+                is_orphan,
+                deployment_result,
+                blocked_status
             )
             VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT DO NOTHING
@@ -5294,7 +5303,9 @@ class Resource(BaseDocument):
             self.resource_type,
             self.agent,
             self.resource_id_value,
-            self._get_value(resource_status),
+            False,
+            state.DeploymentResult.NEW,
+            state.BlockedStatus.NO,
             connection=connection,
         )
 
@@ -5306,15 +5317,17 @@ class Resource(BaseDocument):
             doc.make_hash()
         # TODO performance?
         for doc in documents:
-            resource_status = (
-                state.ComplianceStatus.UNDEFINED
-                if doc.status is const.ResourceState.undefined
-                else state.ComplianceStatus.HAS_UPDATE
-            )
             await cls._execute_query(
                 """
                 INSERT INTO resource_persistent_state (
-                    environment, resource_id, resource_type, agent, resource_id_value, resource_status
+                    environment,
+                    resource_id,
+                    resource_type,
+                    agent,
+                    resource_id_value,
+                    is_orphan,
+                    deployment_result,
+                    blocked_status
                 )
                 VALUES ($1, $2, $3, $4, $5, $6)
                 ON CONFLICT DO NOTHING
@@ -5324,7 +5337,9 @@ class Resource(BaseDocument):
                 doc.resource_type,
                 doc.agent,
                 doc.resource_id_value,
-                cls._get_value(resource_status),
+                False,
+                state.DeploymentResult.NEW,
+                state.BlockedStatus.NO,
                 connection=connection,
             )
         await super().insert_many(documents, connection=connection)
@@ -6394,6 +6409,20 @@ class File(BaseDocument):
         result = await cls._fetch_query(query, content_hashes)
         return {cast(str, r["content_hash"]) for r in result}
 
+class Scheduler(BaseDocument):
+    """
+    :param environment: The environment this scheduler belongs to
+    :param last_processed_model_version: The latest released model version that was fully processed by the scheduler,
+                                         i.e. the in-memory scheduler state was updated correctly and this state was
+                                         flushed back to the resource_persistent_state database table, so that it can be
+                                         used to recover the scheduler state when the server starts.
+    """
+
+    environment: uuid.UUID
+    last_processed_model_version: int
+
+    __primary_key__ = ("environment",)
+
 
 _classes = [
     Project,
@@ -6417,6 +6446,7 @@ _classes = [
     User,
     DiscoveredResource,
     File,
+    Scheduler,
 ]
 
 

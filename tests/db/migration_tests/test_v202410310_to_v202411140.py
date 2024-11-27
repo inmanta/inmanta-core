@@ -41,7 +41,7 @@ async def test_add_new_resource_status_column(
 
     env = await Environment.get_one(name="dev-3")
     resource_persistent_state = await ResourcePersistentState.get_list(environment=env.id)
-    resource_state_by_resource_id = {record.resource_id: record.resource_status for record in resource_persistent_state}
+    resource_state_by_resource_id = {record.resource_id: record.compliance_status for record in resource_persistent_state}
     assert (
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key1]")]
         is state.ComplianceStatus.COMPLIANT
