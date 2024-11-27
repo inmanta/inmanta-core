@@ -993,6 +993,8 @@ class ActiveEnv(PythonEnvironment):
         """
         Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
         in that order.
+
+        Extra's are ignored entirely
         """
         inmanta_core_canonical = packaging.utils.canonicalize_name("inmanta-core")
 
@@ -1047,9 +1049,10 @@ class ActiveEnv(PythonEnvironment):
         for c in all_constraints:
             requirement = c.requirement
             req_name = NormalizedName(requirement.name)  # requirement is already canonical
+            if requirement.marker and not requirement.marker.evaluate():
+                continue
             if req_name not in installed_versions or (
                 not requirement.specifier.contains(installed_versions[req_name], prereleases=True)
-                and (not requirement.marker or (requirement.marker and requirement.marker.evaluate()))
             ):
                 version_conflict = VersionConflict(
                     requirement=requirement,
@@ -1099,6 +1102,8 @@ class ActiveEnv(PythonEnvironment):
         in the sense that it has been replaced with a more correct check defined in self.check(). This method is invoked
         when the `--no-strict-deps-check` commandline option is provided.
 
+        Extra's are ignored
+
         :param in_scope: A full pattern representing the package names that are considered in scope for the installed packages'
             compatibility check. Only in scope packages' dependencies will be considered for conflicts. The pattern is matched
             against an all-lowercase package name.
@@ -1123,8 +1128,11 @@ class ActiveEnv(PythonEnvironment):
         constraint_violations: set[VersionConflict] = {
             VersionConflict(constraint, installed_versions.get(constraint.name, None))
             for constraint in all_constraints
-            if constraint.name not in installed_versions
-            or not constraint.specifier.contains(installed_versions[constraint.name], prereleases=True)
+            if not constraint.marker or constraint.marker.evaluate()
+            if (
+                constraint.name not in installed_versions
+                or not constraint.specifier.contains(installed_versions[constraint.name], prereleases=True)
+            )
         }
 
         all_violations = constraint_violations_non_strict | constraint_violations_strict | constraint_violations
