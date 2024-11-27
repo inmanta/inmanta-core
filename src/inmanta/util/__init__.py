@@ -53,12 +53,12 @@ from tornado import gen
 import packaging
 import packaging.requirements
 import packaging.utils
+import pydantic_core
 from crontab import CronTab
 from inmanta import COMPILER_VERSION, const
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 from packaging.utils import NormalizedName
-from pydantic_core import Url
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -531,7 +531,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     if isinstance(o, JSONSerializable):
         return o.json_serialization_step()
 
-    if isinstance(o, (uuid.UUID, Url)):
+    if isinstance(o, (uuid.UUID, pydantic.AnyUrl, pydantic_core.Url)):
         return str(o)
 
     if isinstance(o, datetime.datetime):
