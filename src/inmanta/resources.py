@@ -258,12 +258,6 @@ def collect_references(value_reference_collector: ReferenceCollector, value: obj
             return value
 
 
-def get_reference_type(resolver: type[references.Reference]) -> type[references.ReferenceModel]:
-    """Get the resolver type key from the given resolver subclass"""
-    # TODO: make this more robust, this now assumes there is only one baseclass
-    return resolver.__orig_bases__[0].__args__[0]
-
-
 @stable_api
 class Resource(metaclass=ResourceMeta):
     """
@@ -480,11 +474,16 @@ class Resource(metaclass=ResourceMeta):
         # - mutators
         # TODO: do we need to introduce a default value on fields to prevent this mess? Not only the stored version but also
         #       all deploy testcases suffer from this.
+        extra = {}
         if const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS not in obj_map:
-            obj_map = {**obj_map, const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: True}
+            extra[const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS] = True
 
         if const.RESOURCE_ATTRIBUTE_MUTATORS not in obj_map or const.RESOURCE_ATTRIBUTE_REFERENCES not in obj_map:
-            obj_map = {**obj_map, const.RESOURCE_ATTRIBUTE_MUTATORS: [], const.RESOURCE_ATTRIBUTE_REFERENCES: []}
+            extra[const.RESOURCE_ATTRIBUTE_MUTATORS] = []
+            extra[const.RESOURCE_ATTRIBUTE_REFERENCES] = []
+
+        if extra:
+            obj_map = {**obj_map, **extra}
 
         obj = cls_resource(obj_id)
         obj.populate(obj_map, force_fields)
@@ -515,6 +514,9 @@ class Resource(metaclass=ResourceMeta):
 
         self.version = _id.version
 
+        self._references_model: dict[uuid.UUID, references.ReferenceModel] = {}
+        self._references: dict[uuid.UUID, references.Reference[references.RefValue]] = {}
+
     def __getitem__(self, key: str) -> object:
         """Support dict like access on the resource"""
         if key in self.fields:
@@ -531,28 +533,30 @@ class Resource(metaclass=ResourceMeta):
 
         raise KeyError()
 
+    def get_reference_value(self, id: uuid.UUID) -> references.RefValue:
+        """ Get a value of a reference
+        """
+        if id not in self._references:
+            if id not in self._references_model:
+                raise KeyError(f"The reference with id {id} is not defined in resource {self.id}")
+
+            model = self._references_model[id]
+            ref = references.reference.get_class(model.type).deserialize(model, self)
+            self._references[model.id] = ref
+
+        return self._references[id].get()
+
     def resolve_all_references(self) -> None:
         """Resolve all value references"""
         # TODO: already resolve references
         # TODO: always work with original and mutate the copy
-        unserialized_references = self.references
-        references_dict: dict[uuid.UUID, references.Reference] = {}
-        self.references = []
 
-        for ref in unserialized_references:
+        for ref in self.references:
             model = references.ReferenceModel(**ref)
-            value = references.reference.get_class(ref["type"]).deserialize(model, self, references_dict)
-            self.references.append(value)
-            references_dict[model.id] = value
-
-        self.references = list(references_dict.values())
-        self.mutators = [
-            references.mutator.get_class(mutator["type"]).deserialize(references.MutatorModel(**mutator), self, references_dict)
-            for mutator in self.mutators
-        ]
+            self._references_model[model.id] = model
 
         for mutator in self.mutators:
-            # TODO: can we do this in the upper loop?
+            mutator = references.mutator.get_class(mutator["type"]).deserialize(references.MutatorModel(**mutator), self)
             mutator.run()
 
     def populate(self, fields: dict[str, object], force_fields: bool = False) -> None:

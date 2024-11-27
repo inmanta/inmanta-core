@@ -20,6 +20,8 @@ import json
 import os
 import typing
 
+import pytest
+
 from inmanta import env, resources, util
 
 if typing.TYPE_CHECKING:
@@ -54,3 +56,26 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
 
     resource.resolve_all_references()
     assert not resource.fail
+
+
+def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """Test the use of references in the model and if they produce the correct serialized form."""
+    refs_module = os.path.join(modules_v2_dir, "refs")
+
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import refs
+        import std::testing
+
+        std::testing::NullResource(
+            name="test",
+            agentname="test",
+            fail=refs::create_bool_reference_cycle(name="CWD"),
+        )
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+    )
+
+    with pytest.raises(Exception):
+        # TODO: catch correct exception!
+        snippetcompiler.do_export()

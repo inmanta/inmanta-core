@@ -33,11 +33,13 @@ ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z
 PrimitiveTypes = str | float | int | bool
 
 
-class Value:
+class Dataclass:
     pass
 
 
-T = typing.TypeVar("T", bound=Value | PrimitiveTypes)
+type RefValue = Dataclass | PrimitiveTypes
+
+T = typing.TypeVar("T", bound=RefValue)
 
 
 class Argument(pydantic.BaseModel):
@@ -53,12 +55,10 @@ class Argument(pydantic.BaseModel):
 
     # TODO: we probably need a context like object so that it is easier to pass more data to this method
     @abc.abstractmethod
-    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference[T]"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource") -> object:
         """Get the value for the argument to be able to construct the reference again
 
         :param resource: The resource on which the reference has been defined
-        :param references: A mapping from id to reference. This mapping can be empty when this method is called. This mapping
-                           is only complete when the full deserialization process is complete.
         """
 
 
@@ -68,7 +68,7 @@ class LiteralArgument(Argument):
     type: typing.Literal["literal"] = "literal"
     value: PrimitiveTypes
 
-    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference[T]"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource") -> object:
         return self.value
 
 
@@ -78,8 +78,8 @@ class ReferenceArgument(Argument):
     type: typing.Literal["reference"] = "reference"
     id: uuid.UUID
 
-    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference[T]"]) -> object:
-        return ReferencePlaceHolder(self.id, references)
+    def get_arg_value(self, resource: "inmanta.resources.Resource") -> object:
+        return resource.get_reference_value(self.id)
 
 
 class GetArgument(Argument):
@@ -88,7 +88,7 @@ class GetArgument(Argument):
     type: typing.Literal["get"] = "get"
     dict_path_expression: str
 
-    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference[T]"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource") -> object:
         return None
 
 
@@ -100,7 +100,7 @@ class PythonTypeArgument(Argument):
     type: typing.Literal["python_type"] = "python_type"
     value: str
 
-    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference[T]"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource") -> object:
         return None
 
 
@@ -109,7 +109,7 @@ class ResourceArgument(Argument):
 
     type: typing.Literal["resource"] = "resource"
 
-    def get_arg_value(self, resource: "inmanta.resources.Resource", references: dict[uuid.UUID, "Reference[T]"]) -> object:
+    def get_arg_value(self, resource: "inmanta.resources.Resource") -> object:
         return resource
 
 
@@ -150,16 +150,15 @@ class Base:
         self._arguments: typing.Mapping[str, object] = kwargs
         self._model: typing.Optional[ReferenceModel] = None
         # TODO: do we want to enfore type correctness when creating a reference? This also has impact on how arguments are
-        # are serialized: based on instance types or on static types
+        #       are serialized: based on instance types or on static types
 
     @classmethod
     def deserialize(
         cls: typing.Type[C],
         ref: BaseModel,
         resource: "inmanta.resources.Resource",
-        references: dict[uuid.UUID, "Reference[T]"],
-    ) -> typing.Type[C]:
-        return cls(**{arg.name: arg.get_arg_value(resource, references) for arg in ref.args})
+    ) -> C:
+        return cls(**{arg.name: arg.get_arg_value(resource) for arg in ref.args})
 
     @abc.abstractmethod
     def serialize(self) -> BaseModel:
@@ -167,6 +166,7 @@ class Base:
 
     def serialize_arguments(self) -> list[ArgumentTypes]:
         """Serialize the arguments to this class"""
+        uuid.NAMESPACE_DNS
         parameters = inspect.get_annotations(self.__init__, eval_str=True)
 
         arguments: list[ArgumentTypes] = []
@@ -187,17 +187,6 @@ class Base:
                     raise TypeError(f"Unable to serialize argument {name} of {self}")
 
         return arguments
-
-    def get_argument(self, name: str) -> object:
-        """Get an argument from the reference."""
-        if name not in self._arguments:
-            raise KeyError(f"{type(self).__qualname__} does not have an argument with name {name}")
-
-        arg = self._arguments[name]
-        if isinstance(arg, Reference):
-            return arg.get()
-
-        return arg
 
     @property
     def arguments(self) -> collections.abc.Mapping[str, object]:
@@ -220,7 +209,7 @@ class Mutator(Base):
         return self._model
 
 
-class Reference(Base, typing.Generic[T]):
+class Reference[T: RefValue](Base):
     """Instances of this class can create references to a value and resolve them."""
 
     def __init__(self, **kwargs: object) -> None:
@@ -242,10 +231,9 @@ class Reference(Base, typing.Generic[T]):
 
     def serialize(self) -> ReferenceModel:
         """Emit the correct pydantic objects to serialize the reference in the exporter."""
-        if self._model:
-            return self._model
+        if not self._model:
+            self._model = ReferenceModel(type=self.type, args=self.serialize_arguments())
 
-        self._model = ReferenceModel(type=self.type, args=self.serialize_arguments())
         return self._model
 
     def _get_T(self) -> type[T]:
@@ -265,7 +253,7 @@ class Reference(Base, typing.Generic[T]):
         :return: A reference to the attribute
         """
         value_type = self._get_T()
-        if issubclass(value_type, Value) and name in value_type.__annotations__:
+        if issubclass(value_type, Dataclass) and name in value_type.__annotations__:
             return AttributeReference(
                 resolver=self,
                 attribute_name=name,
@@ -274,35 +262,13 @@ class Reference(Base, typing.Generic[T]):
         raise AttributeError(name=name, obj=self)
 
 
-class ReferencePlaceHolder(Reference[T]):
-    """This class is a placeholder that is used during deserialization. Once the entire tree has been deserialized, this
-    reference is replaced by the correct one. It inherits from Reference to make typing easier.
-    """
-
-    def __init__(self, id: uuid.UUID, references: collections.abc.Mapping[uuid.UUID, Reference]) -> None:
-        super().__init__()
-        self.id = id
-        self.references = references
-
-    def serialize(self) -> ReferenceModel:
-        raise ValueError("This reference is a placeholder and should never be serialized.")
-
-    def resolve(self) -> T:
-        """Get the value from the correct references"""
-        if self.id not in self.references:
-            raise ValueError(f"The reference with id {self.id} does not exist.")
-
-        return self.references[self.id].get()
-
-
-R = typing.TypeVar("R", bound=Reference)
-
+# TODO: ensure a stable attribute hash
 
 # TODO: we need to make sure that the executor knows it should load the mutator and executor code before running the handler
 #       of a resource that uses references.
 
 
-class reference:
+class reference[T: Reference[RefValue]]:
     """This decorator register a reference under a specific name"""
 
     _reference_classes: typing.ClassVar[dict[str, Reference]] = {}
@@ -336,10 +302,8 @@ class reference:
         cls._reference_classes = {}
 
 
-M = typing.TypeVar("M", bound=Mutator)
 
-
-class mutator:
+class mutator[T: Reference[RefValue]]:
     """This decorator register a mutator under a specific name"""
 
     _mutator_classes: typing.ClassVar[dict[str, Mutator]] = {}
@@ -350,7 +314,7 @@ class mutator:
         """
         self.name = name
 
-    def __call__(self, cls: type[M]) -> type[M]:
+    def __call__(self, cls: type[T]) -> type[T]:
         """Register a new mutator. If we already have it explictly delete it (reload)"""
         if self.name in mutator._mutator_classes:
             del mutator._mutator_classes[self.name]
@@ -379,7 +343,7 @@ class AttributeReference(Reference[T]):
 
     def __init__(
         self,
-        resolver: Reference[Value],
+        resolver: Reference[Dataclass],
         attribute_name: str,
         attribute_type: typing.Type[
             T
@@ -408,7 +372,7 @@ class ReplaceValue(Mutator):
         self.destination = destination
 
     def run(self) -> None:
-        value = self.value.get()
+        value = self.value
         dict_path_expr = dict_path.to_path(self.destination)
         dict_path_expr.set_element(self.resource, value)
 

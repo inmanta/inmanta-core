@@ -18,7 +18,7 @@ class BoolReference(Reference[bool]):
 
     def resolve(self) -> bool:
         """Resolve the reference"""
-        return os.getenv(self.get_argument("name")) == "true"
+        return os.getenv(self.name) == "true"
 
 
 @reference("refs::String")
@@ -30,10 +30,11 @@ class StringReference(Reference[str]):
         :param name: The name of the environment variable.
         """
         super().__init__(name=name)
+        self.name = name
 
     def resolve(self) -> str:
         """Resolve the reference"""
-        return self.get_argument("name")
+        return self.name
 
 
 @plugin
@@ -44,3 +45,12 @@ def create_bool_reference(name: "any") -> "bool":
 @plugin
 def create_string_reference(name: "any") -> "string":
     return StringReference(name=name)
+
+
+@plugin
+def create_bool_reference_cycle(name: "any") -> "bool":
+    # create a reference with a cycle
+    ref_cycle = StringReference(name)
+    ref_cycle._arguments["name"] = ref_cycle
+
+    return BoolReference(name=ref_cycle)
