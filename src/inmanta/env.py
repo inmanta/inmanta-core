@@ -1299,8 +1299,8 @@ class ActiveEnv(PythonEnvironment):
         constraint_violations: set[VersionConflict] = {
             VersionConflict(constraint, installed_versions.get(constraint.name, None))
             for constraint in all_constraints
-            if (not constraint.marker or constraint.marker.evaluate())
-            and (
+            if not constraint.marker or constraint.marker.evaluate()
+            if (
                 constraint.name not in installed_versions
                 or not constraint.specifier.contains(installed_versions[constraint.name], prereleases=True)
             )
