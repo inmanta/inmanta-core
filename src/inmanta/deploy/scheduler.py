@@ -109,7 +109,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         attribute_hash: str,
         status: ComplianceStatus,
         deployment_result: Optional[DeploymentResult] = None,
-        skipped_for_dependency: Optional[bool] = False,
+        skipped_for_dependency: bool = False,
     ) -> None:
         """
         Report new state for a resource. Since knowledge of deployment result implies a finished deploy, it must only be set
@@ -321,7 +321,7 @@ class ResourceScheduler(TaskManager):
 
         def _should_deploy(resource: ResourceIdStr) -> bool:
             if (resource_state := self._state.resource_state.get(resource)) is not None:
-                return resource_state.blocked == BlockedStatus.NO
+                return resource_state.blocked is BlockedStatus.NO
             # No state was found for this resource. Should probably not happen
             # but err on the side of caution and mark for redeploy.
             return True

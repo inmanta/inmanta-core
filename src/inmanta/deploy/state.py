@@ -107,7 +107,7 @@ class BlockedStatus(StrEnum):
     YES: The resource will retain its blocked status within this model version. For example: A resource that has unknowns
          or depends on a resource with unknowns.
     NO: The resource is not blocked
-    TRANSIENT: The resource is blocked on its dependencies
+    TRANSIENT: The resource is blocked but may recover within the same version. Concretely it is waiting for its dependencies to deploy successfully.
     """
 
     YES = enum.auto()
@@ -222,7 +222,7 @@ class ModelState:
             if resource_id in seen:
                 continue
             seen.add(resource_id)
-            if self.resource_state[resource_id].blocked == BlockedStatus.YES:
+            if self.resource_state[resource_id].blocked is BlockedStatus.YES:
                 # Resource is already blocked. All provides will be blocked as well.
                 continue
             else:
@@ -255,7 +255,7 @@ class ModelState:
 
             :return: True iff the given resource was unblocked.
             """
-            if not self.resource_state[resource].blocked is BlockedStatus.YES:
+            if self.resource_state[resource].blocked is not BlockedStatus.YES:
                 # The resource is already unblocked.
                 return False
             if self.resource_state[resource].status is ComplianceStatus.UNDEFINED:
@@ -264,14 +264,14 @@ class ModelState:
             if resource in known_blockers_cache:
                 # First check the blocked status of the cached known blocker for improved performance.
                 known_blocker: ResourceIdStr = known_blockers_cache[resource]
-                if self.resource_state[known_blocker].blocked == BlockedStatus.YES:
+                if self.resource_state[known_blocker].blocked is BlockedStatus.YES:
                     return False
                 else:
                     # Cache is out of date. Clear cache item.
                     del known_blockers_cache[resource]
             # Perform more expensive call by traversing all requirements of resource.
             blocked_dependency: ResourceIdStr | None = next(
-                (r for r in self.requires.get(resource, set()) if self.resource_state[r].blocked == BlockedStatus.YES), None
+                (r for r in self.requires.get(resource, set()) if self.resource_state[r].blocked is BlockedStatus.YES), None
             )
             if blocked_dependency:
                 # Resource is blocked, because a dependency is blocked.

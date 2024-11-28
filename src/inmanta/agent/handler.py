@@ -88,9 +88,11 @@ class SkipResource(Exception):
     """
 
 
+@stable_api
 class SkipResourceForDependencies(SkipResource):
     """
-    This is the exception that the default handler will raise when a resource should be skipped.
+    Raised by a handler when a resource is skipped for deploy because some of its dependencies are not in a deployed state for their latest intent.
+    The default handler raises this exception when appropriate.
     The resource will be skipped with a BlockedStatus of TRANSIENT, meaning that it is transient and dependent on its
     dependencies state.
     """
@@ -331,7 +333,7 @@ class HandlerContext(LoggerABC):
         except ValueError:
             # How to proceed? What about unavailable?
             self.logger.warning(
-                "Called set_status with status %s which is not directly translatable to NewResourceState", status
+                "Called set_status with status %s which is not directly translatable to ContextResourceState", status
             )
 
     def set_resource_state(self, new_state: ContextResourceState) -> None:
