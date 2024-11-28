@@ -59,7 +59,6 @@ class ResourceTimer:
         :param periodic_deploy_interval: Per-resource deploy interval, assumed to be a positive int or None
         :param periodic_repair_interval: Per-resource repair interval, assumed to be a positive int or None
         :param is_dirty: Last known state of the resource at the timer install request time.
-        :param action_function: The function to execute
         """
 
         next_execute_time: int
@@ -71,8 +70,10 @@ class ResourceTimer:
 
         action_function: Callable[[ResourceIdStr, int], Coroutine[Any, Any, None]]
         if is_dirty:
-            next_execute_time = min(periodic_deploy_interval, periodic_repair_interval)
-            action_function = self._trigger_deploy_for_resource
+            next_execute_time, action_function = min( 
+                      (periodic_deploy_interval,  self._trigger_deploy_for_resource) , 
+                      (periodic_repair_interval, self._trigger_repair_for_resource),  
+                      key=lambda x:x[0])
         else:
             next_execute_time = periodic_repair_interval
             action_function = self._trigger_repair_for_resource
