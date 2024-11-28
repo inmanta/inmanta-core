@@ -137,8 +137,6 @@ async def test_docs_snippets_unmanaged_resources_basic(
     """
     result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
     assert result.code == 200
-    result = await client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
-    assert result.code == 200
 
     cf_file_path = os.path.join(os.path.dirname(__file__), "../docs/model_developers/unmanaged_resources/basic_example.cf")
     with open(cf_file_path) as fh:
@@ -191,8 +189,6 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
     Test the shared_attributes_example code snippets used in the documentation to explain the usage of unmanaged_resources.
     """
     result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
-    assert result.code == 200
-    result = await client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
     assert result.code == 200
 
     cf_file_path = os.path.join(

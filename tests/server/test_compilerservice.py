@@ -1559,33 +1559,26 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
 
 
 @pytest.mark.parametrize(
-    "auto_recompile_wait,recompile_backoff,expected_log_message,expected_log_level",
+    "recompile_backoff,expected_log_message,expected_log_level",
     [
-        ("0", "2.1", "The recompile_backoff environment setting is enabled and set to 2.1 seconds", logging.INFO),
-        ("2", "0", "This option is deprecated in favor of the recompile_backoff environment setting.", logging.WARNING),
-        ("0", "0", "The recompile_backoff environment setting is disabled", logging.INFO),
+        ("2.1", "The recompile_backoff environment setting is enabled and set to 2.1 seconds", logging.INFO),
+        ("0", "The recompile_backoff environment setting is disabled", logging.INFO),
     ],
 )
-async def test_compileservice_auto_recompile_wait(
+async def test_compileservice_recompile_backoff(
     mocked_compiler_service_block,
     server,
     client,
     environment,
     caplog,
-    auto_recompile_wait,
-    recompile_backoff,
-    expected_log_message,
-    expected_log_level,
+    recompile_backoff: str,
+    expected_log_message: str,
+    expected_log_level: int,
 ):
     """
-    Test the auto-recompile-wait setting when multiple recompiles are requested in a short amount of time
+    Test the recompile_backoff setting when multiple recompiles are requested in a short amount of time
     """
     with caplog.at_level(logging.DEBUG):
-        if auto_recompile_wait == "0":
-            config.Config.get_instance().remove_option("server", "auto-recompile-wait")
-        else:
-            config.Config.set("server", "auto-recompile-wait", auto_recompile_wait)
-
         env = await data.Environment.get_by_id(environment)
         await env.set(data.RECOMPILE_BACKOFF, recompile_backoff)
         compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
@@ -1620,9 +1613,9 @@ async def test_compileservice_auto_recompile_wait(
         )
 
 
-async def test_compileservice_calculate_auto_recompile_wait(mocked_compiler_service_block, server):
+async def test_compileservice_calculate_recompile_backoff_time(mocked_compiler_service_block, server):
     """
-    Test the recompile waiting time calculation when auto-recompile-wait environment setting is enabled
+    Test the recompile backoff time calculation when the recompile_backoff environment setting is enabled
     """
     auto_recompile_wait = 2
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
@@ -1630,22 +1623,30 @@ async def test_compileservice_calculate_auto_recompile_wait(mocked_compiler_serv
     now = datetime.datetime.now()
     compile_requested = now - datetime.timedelta(seconds=1)
     last_compile_completed = now - datetime.timedelta(seconds=4)
-    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_backoff_time(
+        auto_recompile_wait, compile_requested, last_compile_completed, now
+    )
     assert waiting_time == 0
 
     compile_requested = now - datetime.timedelta(seconds=0.1)
     last_compile_completed = now - datetime.timedelta(seconds=1)
-    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_backoff_time(
+        auto_recompile_wait, compile_requested, last_compile_completed, now
+    )
     assert waiting_time == approx(1)
 
     compile_requested = now - datetime.timedelta(seconds=1)
     last_compile_completed = now - datetime.timedelta(seconds=0.1)
-    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_backoff_time(
+        auto_recompile_wait, compile_requested, last_compile_completed, now
+    )
     assert waiting_time == approx(1)
 
     compile_requested = now - datetime.timedelta(seconds=4)
     last_compile_completed = now - datetime.timedelta(seconds=1)
-    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_backoff_time(
+        auto_recompile_wait, compile_requested, last_compile_completed, now
+    )
     assert waiting_time == 0
 
 

@@ -121,17 +121,7 @@ class Deploy(Task):
             if intent is None:
                 # Stale resource, can simply be dropped.
                 return
-
-            # Dependencies are always set when calling get_resource_intent_for_deploy
-            assert intent.dependencies is not None
-            # Resolve to exector form
-            version = intent.model_version
-            resource_details = intent.details
-            executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
-
-            # Make id's
-            gid = uuid.uuid4()
-            action_id = uuid.uuid4()  # can this be gid ?
+            # From this point on, we HAVE to call report_resource_state to make the scheduler propagate state
 
             # The main difficulty off this code is exception handling
             # We collect state here to report back in the finally block
@@ -139,16 +129,29 @@ class Deploy(Task):
             # Full status of the deploy,
             # may be unset if we fail before signaling start to the server, will be set if we signaled start
             deploy_result: DeployResult | None = None
-            scheduler_deployment_result: state.DeploymentResult
+            scheduler_deployment_result: state.DeploymentResult = state.DeploymentResult.FAILED
             skipped_for_dependency: bool = False
             try:
                 # This try catch block ensures we report at the end of the task
 
-                # Signal start to server
+                # Dependencies are always set when calling get_resource_intent_for_deploy
+                assert intent.dependencies is not None
+                # Resolve to exector form
+                version = intent.model_version
+                resource_details = intent.details
+                executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(
+                    version, resource_details
+                )
+
+                # Make id's
+                gid = uuid.uuid4()
+                action_id = uuid.uuid4()  # can this be gid ?
+
+                # Signal start to DB
                 try:
                     await task_manager.send_in_progress(action_id, executor_resource_details.rvid)
                 except Exception:
-                    # Unrecoverable, can't reach server
+                    # Unrecoverable, can't reach DB
                     scheduler_deployment_result = state.DeploymentResult.FAILED
                     LOGGER.error(
                         "Failed to report the start of the deployment to the server for %s",
@@ -156,6 +159,9 @@ class Deploy(Task):
                         exc_info=True,
                     )
                     return
+                # From this point on, we HAVE to call send_deploy_done to make sure we are not stuck in deploying
+                # This is done by setting deploy_result
+                # The surrounding try_catch will call report_resource_state
 
                 # Get executor
                 try:
