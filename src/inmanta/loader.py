@@ -288,7 +288,12 @@ class CodeLoader:
 
     def load_module(self, mod_name: str, hv: str) -> None:
         """
-        Load a module
+        Ensure the given module is loaded.
+
+        :param mod_name: Name of the module to load
+        :param hv: hash value of the content of the module
+
+        :raises Exception: When the provided hash value is different from the one in the cache for this module.
         """
 
         # Importing a module -> only the first import loads the code
