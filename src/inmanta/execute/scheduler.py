@@ -32,7 +32,7 @@ from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineRelation, DefineTypeConstraint
 from inmanta.ast.type import TYPES, Type
 from inmanta.const import LOG_LEVEL_TRACE
-from inmanta.execute.proxy import UnsetException
+from inmanta.execute.proxy import UnsetException, MultiUnsetException
 from inmanta.execute.runtime import (
     DelayedResultVariable,
     ExecutionContext,
@@ -430,6 +430,10 @@ class Scheduler:
                 except UnsetException as e:
                     # some statements don't know all their dependencies up front,...
                     next.requeue_with_additional_requires(object(), e.get_result_variable())
+                except MultiUnsetException as e:
+                    # some statements don't know all their dependencies up front,...
+                    for rv in e.result_variables:
+                        next.requeue_with_additional_requires(object(), rv)
 
             # all safe stmts are done
             progress = False

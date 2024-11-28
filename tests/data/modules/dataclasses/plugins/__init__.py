@@ -39,3 +39,12 @@ def make_virtual_machine() -> "dataclasses::Virtualmachine":
 def eat_vm(inp: "dataclasses::Virtualmachine") -> None:
     print(inp)
     return None
+
+
+@plugin
+def select_vm(inp: "dataclasses::Virtualmachine[]", name: "string") -> "dataclasses::Virtualmachine?" :
+    for vm in inp:
+        if vm.name == name:
+            return vm
+
+    return None

@@ -1,3 +1,4 @@
+
 entity Virtualmachine extends std::Dataclass:
     string name
     string os
@@ -8,16 +9,40 @@ end
 
 implement Virtualmachine using std::none
 
+# Construct in model
 two = Virtualmachine(name="A", os="B", ram=1, cpus=2, disk=10)
 
+# Construct in python
 one=make_virtual_machine()
 
+# Relations work
 one.requires = one
 
-std::print(one)
-
+# from model into plugin
 eat_vm(one)
+# from python into plugin
 eat_vm(two)
 
-#three = Virtualmachine(name="A", os="B", ram=1, cpus=2)
-#eat_vm(three)
+# partial object into plugin
+three = Virtualmachine(name="B", os="B", ram=1, cpus=2)
+eat_vm(three)
+three.disk = 5
+
+
+# List into plugin
+vms = [one, two, three]
+selected = select_vm(vms, "A")
+
+# Preserves object identity
+# one = selected
+
+
+# List from relation into plugin
+
+
+
+
+# Return null
+assert_true = select_vm(vms, "z") == null
+assert_true = true
+

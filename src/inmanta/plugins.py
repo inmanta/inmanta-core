@@ -31,8 +31,8 @@ from inmanta import const, protocol, util
 from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException, WithComment
 from inmanta.ast.type import NamedType, Primitive
 from inmanta.config import Config
-from inmanta.execute.proxy import DynamicProxy
-from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable
+from inmanta.execute.proxy import DynamicProxy, MultiUnsetException
+from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, WrappedValueVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
@@ -211,8 +211,9 @@ PLUGIN_TYPES = {
     None: Null(),  # Only NoneValue will pass validation
 }
 
+DATACLASS_SELF_FIELD = " dataclass"
 
-def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, value: object) -> object:
+def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, value: object, location: Location) -> object:
     """
     Given a module domain value and an inmanta type, produce the corresponding python object
 
@@ -227,9 +228,37 @@ def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, valu
         return None
 
     base_type = expected_type.get_base_type()
+    # TODO: lists
     if isinstance(base_type, inmanta.ast.entity.Entity):
         if base_type._paired_dataclass is not None:
-            assert False
+            def make_dataclass(value: object) -> object:
+                assert isinstance(value, Instance)
+                if DATACLASS_SELF_FIELD in value.slots:
+                    return value.slots.get(DATACLASS_SELF_FIELD).get_value()
+                else:
+
+                    # Handle unsets
+                    unset = [v for k, v in value.slots.items() if
+                             k not in ["self", DATACLASS_SELF_FIELD, "requires", "provides"] if not v.is_ready()]
+                    if unset:
+                        raise MultiUnsetException("Unset values when converting instance to dataclass", unset)
+
+                    # Convert values
+                    # All values are primitive, so this is trivial
+                    kwargs = {k: v.get_value() for k, v in value.slots.items() if
+                              k not in ["self", DATACLASS_SELF_FIELD, "requires", "provides"]}
+                    out = base_type._paired_dataclass(**kwargs)
+
+                    dataclass_self = WrappedValueVariable(out)
+                    value.slots[DATACLASS_SELF_FIELD] = dataclass_self
+                    return out
+
+            if isinstance(value, list):
+                # TODO: collect unset
+                return [make_dataclass(v) for v in value]
+            else:
+                return make_dataclass(value)
+
         else:
             DynamicProxy.return_value(value)
 
@@ -381,18 +410,24 @@ class PluginReturn(PluginValue):
     VALUE_NAME = "return value"
 
     def to_model_domain(self, value: object, resolver: Resolver, queue: QueueScheduler, location: Location) -> object:
-
         if dataclasses.is_dataclass(value):
-            if self.resolved_type.as_python_type() == type(value):
-                instance = self.resolved_type.get_instance(
+            if isinstance(value, self.resolved_type.as_python_type()):
+                if value is None:
+                    return NoneValue()
+                base_type = self.resolved_type.get_base_type()
+                # TODO LISTS!!!
+                instance = base_type.get_instance(
                     value.__dict__,
                     resolver,
                     queue,
                     location,
                     None,
                 )
+
+                dataclass_self = WrappedValueVariable(value)
+                instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
                 # generate an implementation
-                for stmt in self.resolved_type.get_sub_constructor():
+                for stmt in base_type.get_sub_constructor():
                     stmt.emit(instance, queue)
                 return instance
             assert False
@@ -654,7 +689,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # would have raised as exception
             raise RuntimeException(None, f"{func}() missing {len(missing_args)} required {args_sort} arguments: {arg_names}")
 
-    def check_args(self, args: Sequence[object], kwargs: Mapping[str, object]) -> CheckedArgs:
+    def check_args(self, args: Sequence[object], kwargs: Mapping[str, object], location: Location) -> CheckedArgs:
         """
         Check if the arguments of the call match the function signature.
 
@@ -711,7 +746,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 is_unknown = True
             else:
                 # (4) Validate the input value
-                result = validate_and_convert_to_python_domain(arg.resolved_type, value)
+                result = validate_and_convert_to_python_domain(arg.resolved_type, value, location)
             converted_args.append(result)
 
         converted_kwargs = {}
@@ -806,19 +841,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 msg += f" It should be replaced by '{self.replaced_by}'."
             warnings.warn(PluginDeprecationWarning(msg))
         self.check_requirements()
-
-        def new_arg(arg: object) -> object:
-            if isinstance(arg, Context):
-                return arg
-            elif isinstance(arg, Unknown) and self.is_accept_unknowns():
-                return arg
-            else:
-                return DynamicProxy.return_value(arg)
-
-        new_args = [new_arg(arg) for arg in args]
-        new_kwargs = {k: new_arg(v) for k, v in kwargs.items()}
-
-        value = self.call(*new_args, **new_kwargs)
+        value = self.call(*args, **kwargs)
 
         value = DynamicProxy.unwrap(value)
 
