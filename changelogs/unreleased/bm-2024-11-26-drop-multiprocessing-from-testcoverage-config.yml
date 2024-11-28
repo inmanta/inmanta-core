@@ -1,0 +1,3 @@
+description: Effort to stabilize traffic light -> remove test coverage option
+change-type: patch
+destination-branches: [master]
