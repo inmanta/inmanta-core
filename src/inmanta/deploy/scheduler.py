@@ -109,7 +109,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         attribute_hash: str,
         status: ComplianceStatus,
         deployment_result: Optional[DeploymentResult] = None,
-        skipped_for_dependency: bool = False,
+        skipped_for_dependency: Optional[bool] = False,
     ) -> None:
         """
         Report new state for a resource. Since knowledge of deployment result implies a finished deploy, it must only be set
@@ -673,8 +673,6 @@ class ResourceScheduler(TaskManager):
                     state.deployment_result = deployment_result
                 return
 
-            if skipped_for_dependency:
-                state.blocked = BlockedStatus.TRANSIENT
             # We are not stale
             state.status = status
             if deployment_result is not None:
@@ -682,7 +680,15 @@ class ResourceScheduler(TaskManager):
                 self._deploying_latest.remove(resource)
                 state.deployment_result = deployment_result
                 self._work.finished_deploy(resource)
-                if deployment_result is DeploymentResult.DEPLOYED:
+                if skipped_for_dependency and state.blocked is not BlockedStatus.YES:
+                    dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
+                    mark_as_unblocked = True
+                    for resource_state in dependencies.values():
+                        if resource_state is not const.ResourceState.deployed:
+                            mark_as_unblocked = False
+                            break
+                    state.blocked = BlockedStatus.NO if mark_as_unblocked else BlockedStatus.TRANSIENT
+                if deployment_result is DeploymentResult.DEPLOYED or state.blocked is not BlockedStatus.NO:
                     self._state.dirty.discard(resource)
                 else:
                     # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might

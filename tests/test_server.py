@@ -32,7 +32,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import config, const, data, loader, resources, util
 from inmanta.agent import executor, handler
-from inmanta.agent.handler import ContextResourceState
+from inmanta.agent.handler import HandlerResourceState
 from inmanta.const import ParameterSource
 from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
@@ -1319,7 +1319,7 @@ async def test_send_deploy_done(server, client, environment, agent, caplog, meth
                 result=executor.DeployResult(
                     rvid=rvid_r1_v1,
                     action_id=action_id,
-                    resource_state=ContextResourceState.deployed,
+                    resource_state=HandlerResourceState.deployed,
                     messages=messages,
                     changes={"attr1": AttributeStateChange(current=None, desired="test")},
                     change=const.Change.purged,
@@ -1402,7 +1402,7 @@ async def test_send_deploy_done(server, client, environment, agent, caplog, meth
             result=executor.DeployResult(
                 rvid=rvid_r1_v1,
                 action_id=action_id,
-                resource_state=ContextResourceState.deployed,
+                resource_state=HandlerResourceState.deployed,
                 messages=[],
                 changes={"attr1": AttributeStateChange(current="test", desired="test2")},
                 change=const.Change.created,
@@ -1433,7 +1433,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
             result=executor.DeployResult(
                 rvid=rvid_r1_v1,
                 action_id=uuid.uuid4(),
-                resource_state=ContextResourceState.deployed,
+                resource_state=HandlerResourceState.deployed,
                 messages=[],
                 changes={},
                 change=const.Change.nochange,
@@ -1455,7 +1455,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
             result=executor.DeployResult(
                 rvid=rvid_r1_v1,
                 action_id=uuid.uuid4(),
-                resource_state=ContextResourceState.deployed,
+                resource_state=HandlerResourceState.deployed,
                 messages=[],
                 changes={},
                 change=const.Change.nochange,

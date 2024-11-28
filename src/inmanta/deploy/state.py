@@ -107,7 +107,8 @@ class BlockedStatus(StrEnum):
     YES: The resource will retain its blocked status within this model version. For example: A resource that has unknowns
          or depends on a resource with unknowns.
     NO: The resource is not blocked
-    TRANSIENT: The resource is blocked but may recover within the same version. Concretely it is waiting for its dependencies to deploy successfully.
+    TRANSIENT: The resource is blocked but may recover within the same version.
+        Concretely it is waiting for its dependencies to deploy successfully.
     """
 
     YES = enum.auto()
