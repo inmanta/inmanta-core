@@ -34,6 +34,7 @@ import pytest
 
 from inmanta import const, data
 from inmanta.agent import executor
+from inmanta.agent.handler import ContextResourceState
 from inmanta.data import model
 from inmanta.deploy import persistence
 from inmanta.protocol.common import Result
@@ -147,7 +148,7 @@ async def test_4889_deadlock_delete_resource_action_update(
             result=executor.DeployResult(
                 rvid=resource,
                 action_id=action_id,
-                status=const.ResourceState.deployed,
+                resource_state=ContextResourceState.deployed,
                 messages=[
                     data.LogLine.log(
                         level=const.LogLevel.DEBUG, msg="message", kwargs={"keyword": 123, "none": None}, timestamp=now

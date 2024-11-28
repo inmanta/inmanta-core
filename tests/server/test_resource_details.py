@@ -28,6 +28,7 @@ from dateutil.tz import UTC
 
 from inmanta import const, data, util
 from inmanta.agent import executor
+from inmanta.agent.handler import ContextResourceState
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.deploy import persistence
@@ -593,7 +594,7 @@ async def test_move_to_available_state(server, environment, client, clienthelper
             result=executor.DeployResult(
                 rvid=rvid,
                 action_id=action_id,
-                status=const.ResourceState.deployed,
+                resource_state=ContextResourceState.deployed,
                 messages=[],
                 changes={},
                 change=None,

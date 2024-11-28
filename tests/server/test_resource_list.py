@@ -35,6 +35,7 @@ import util.performance
 import utils
 from inmanta import data
 from inmanta.agent.executor import DeployResult
+from inmanta.agent.handler import ContextResourceState
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource, ResourceIdStr, ResourceVersionIdStr
 from inmanta.deploy import persistence
@@ -649,16 +650,16 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 return
             else:
                 if "sub=2]" in rid:
-                    status = ResourceState.failed
+                    status = ContextResourceState.failed
                 elif "sub=3]" in rid:
-                    status = ResourceState.skipped
+                    status = ContextResourceState.skipped
                 else:
-                    status = ResourceState.deployed
+                    status = ContextResourceState.deployed
                 await to_db_update_manager.send_deploy_done(
                     result=DeployResult(
                         rvid=rvid,
                         action_id=actionid,
-                        status=status,
+                        resource_state=status,
                         messages=[],
                         changes={},
                         change=None,

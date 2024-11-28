@@ -24,6 +24,7 @@ import pytest
 
 from inmanta import const, data
 from inmanta.agent import executor
+from inmanta.agent.handler import ContextResourceState
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.deploy import persistence
 
@@ -46,13 +47,13 @@ async def resource_deployer(client, environment, null_agent):
             rvid: ResourceVersionIdStr,
             action_id: uuid.UUID,
             change: const.Change = const.Change.created,
-            status: const.ResourceState = const.ResourceState.deployed,
+            status: ContextResourceState = ContextResourceState.deployed,
         ) -> None:
             await update_manager.send_deploy_done(
                 result=executor.DeployResult(
                     rvid=rvid,
                     action_id=action_id,
-                    status=status,
+                    resource_state=status,
                     messages=[],
                     changes={},
                     change=change,
@@ -64,7 +65,7 @@ async def resource_deployer(client, environment, null_agent):
             cls,
             rvid: ResourceVersionIdStr,
             change: const.Change = const.Change.created,
-            status: const.ResourceState = const.ResourceState.deployed,
+            status: ContextResourceState = ContextResourceState.deployed,
         ) -> None:
             action_id = await cls.start_deployment(rvid)
             await cls.deployment_finished(rvid, action_id, change, status)
@@ -108,7 +109,7 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
 
     # Perform deployment
     await resource_deployer.deploy_resource(rvid=rvid_r2_v1)
-    await resource_deployer.deploy_resource(rvid=rvid_r3_v1, status=const.ResourceState.failed)
+    await resource_deployer.deploy_resource(rvid=rvid_r3_v1, status=ContextResourceState.failed)
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v1)
 
     # Verify that events exist
@@ -215,7 +216,7 @@ async def test_events_api_endpoints_increment(server, client, environment, clien
 
     # Perform deployment
     await resource_deployer.deploy_resource(rvid=rvid_r2_v1)
-    await resource_deployer.deploy_resource(rvid=rvid_r3_v1, status=const.ResourceState.failed)
+    await resource_deployer.deploy_resource(rvid=rvid_r3_v1, status=ContextResourceState.failed)
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v1)
 
     # Verify that events exist
@@ -325,7 +326,7 @@ async def test_events_api_endpoints_events_across_versions(server, client, envir
     await clienthelper.put_version_simple(resources, version)
 
     # Deploy
-    await resource_deployer.deploy_resource(rvid=rvid_r3_v3, status=const.ResourceState.failed)
+    await resource_deployer.deploy_resource(rvid=rvid_r3_v3, status=ContextResourceState.failed)
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v3)
 
     # Assert events
