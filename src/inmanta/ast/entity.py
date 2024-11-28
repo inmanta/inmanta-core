@@ -34,7 +34,9 @@ from inmanta.ast import (
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import Float, NamedType, NullableType, Type
-from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, dataflow
+from inmanta.const import DATACLASS_SELF_FIELD
+from inmanta.execute.proxy import MultiUnsetException
+from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, WrappedValueVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
 
 # pylint: disable-msg=R0902,R0904
@@ -559,6 +561,38 @@ class Entity(NamedType, WithComment):
 
     def as_python_type(self) -> "typing.Type | None":
         return self._paired_dataclass
+
+    def to_python(self, instance: object) -> "object":
+        if self._paired_dataclass is None:
+            assert False
+
+        assert isinstance(instance, Instance)
+        if DATACLASS_SELF_FIELD in instance.slots:
+            return instance.slots.get(DATACLASS_SELF_FIELD).get_value()
+        else:
+
+            # Handle unsets
+            unset = [
+                v
+                for k, v in instance.slots.items()
+                if k not in ["self", DATACLASS_SELF_FIELD, "requires", "provides"]
+                if not v.is_ready()
+            ]
+            if unset:
+                raise MultiUnsetException("Unset values when converting instance to dataclass", unset)
+
+            # Convert values
+            # All values are primitive, so this is trivial
+            kwargs = {
+                k: v.get_value()
+                for k, v in instance.slots.items()
+                if k not in ["self", DATACLASS_SELF_FIELD, "requires", "provides"]
+            }
+            out = self._paired_dataclass(**kwargs)
+
+            dataclass_self = WrappedValueVariable(out)
+            instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
+            return out
 
 
 # Kept for backwards compatibility. May be dropped from iso7 onwards.

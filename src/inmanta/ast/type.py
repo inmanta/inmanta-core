@@ -19,11 +19,11 @@
 import copy
 import functools
 import numbers
+import typing
 from collections.abc import Sequence
 from typing import Callable
 from typing import List as PythonList
 from typing import Optional
-import typing
 
 from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException
 from inmanta.execute.util import AnyType, NoneValue, Unknown
@@ -107,17 +107,16 @@ class Type(Locatable):
     def to_python(self, instance: object) -> "object":
         """
         Convert an instance of this type to its python form
+
+        This method is not supported on all types, notably, the any type and the pure Entity type are not handeled
         """
 
-        from inmanta.execute.proxy import DynamicProxy
-        from inmanta.plugins import Context
+        raise NotImplementedError(f"Not implemented for {self}")
 
-        if isinstance(instance, Context):
-            return instance
-        elif isinstance(instance, Unknown):
-            return instance
-        else:
-            return DynamicProxy.return_value(instance)
+
+class AnyType(Type):
+
+    pass
 
 
 class NamedType(Type, Named):
@@ -524,7 +523,7 @@ class TypedList(List):
         return list[self.element_type.as_python_type()]
 
     def to_python(self, instance: object) -> "object":
-        return [self.element_type.to_python(instance) for element in instance]
+        return [self.element_type.to_python(element) for element in instance]
 
 
 @stable_api

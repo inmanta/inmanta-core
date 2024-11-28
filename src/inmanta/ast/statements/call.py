@@ -37,7 +37,7 @@ from inmanta.ast import (
 from inmanta.ast.statements import AttributeAssignmentLHS, ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.proxy import UnknownException, UnsetException, MultiUnsetException
+from inmanta.execute.proxy import MultiUnsetException, UnknownException, UnsetException
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, VariableABC, Waiter
 from inmanta.execute.util import NoneValue, Unknown
 
@@ -214,7 +214,7 @@ class PluginFunction(Function):
         self.plugin: plugins.Plugin = plugin
 
     def call_direct(self, args: list[object], kwargs: dict[str, object]) -> object:
-        processed_args = self.plugin.check_args(args, kwargs, self.ast_node.location)
+        processed_args = self.plugin.check_args(args, kwargs)
         no_unknows = not processed_args.unknows
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
@@ -248,7 +248,7 @@ class PluginFunction(Function):
         result: ResultVariable,
     ) -> None:
 
-        processed_args = self.plugin.check_args(args, kwargs, self.ast_node.location)
+        processed_args = self.plugin.check_args(args, kwargs)
         no_unknows = not processed_args.unknows
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
@@ -270,7 +270,7 @@ class PluginFunction(Function):
                 result.set_value(value if value is not None else NoneValue(), self.ast_node.location)
             except UnknownException as e:
                 result.set_value(e.unknown, self.ast_node.location)
-            except UnsetException | MultiUnsetException as e:
+            except (UnsetException, MultiUnsetException) as e:
                 call: str = str(self.plugin)
                 location: str = str(self.ast_node.location)
                 LOGGER.debug(

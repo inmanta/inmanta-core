@@ -31,6 +31,7 @@ from inmanta import const, protocol, util
 from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException, WithComment
 from inmanta.ast.type import NamedType, Primitive
 from inmanta.config import Config
+from inmanta.const import DATACLASS_SELF_FIELD
 from inmanta.execute.proxy import DynamicProxy, MultiUnsetException
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, WrappedValueVariable
 from inmanta.execute.util import NoneValue, Unknown
@@ -205,21 +206,21 @@ class Null(inmanta_type.Type):
 
 # Define some types which are used in the context of plugins.
 PLUGIN_TYPES = {
-    "any": inmanta_type.Type(),  # Any value will pass validation
-    "expression": inmanta_type.Type(),  # Any value will pass validation
+    "any": inmanta_type.AnyType(),  # Any value will pass validation
+    "expression": inmanta_type.AnyType(),  # Any value will pass validation
     "null": Null(),  # Only NoneValue will pass validation
     None: Null(),  # Only NoneValue will pass validation
 }
 
-DATACLASS_SELF_FIELD = " dataclass"
 
-def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, value: object, location: Location) -> object:
+def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, value: object) -> object:
     """
     Given a module domain value and an inmanta type, produce the corresponding python object
 
     Unknows are not handled by this method!
     """
     import inmanta.ast.entity
+
     expected_type.validate(value)
 
     if isinstance(value, NoneValue):
@@ -228,44 +229,40 @@ def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, valu
         return None
 
     base_type = expected_type.get_base_type()
-    # TODO: lists
-    if isinstance(base_type, inmanta.ast.entity.Entity):
-        if base_type._paired_dataclass is not None:
-            def make_dataclass(value: object) -> object:
-                assert isinstance(value, Instance)
-                if DATACLASS_SELF_FIELD in value.slots:
-                    return value.slots.get(DATACLASS_SELF_FIELD).get_value()
-                else:
-
-                    # Handle unsets
-                    unset = [v for k, v in value.slots.items() if
-                             k not in ["self", DATACLASS_SELF_FIELD, "requires", "provides"] if not v.is_ready()]
-                    if unset:
-                        raise MultiUnsetException("Unset values when converting instance to dataclass", unset)
-
-                    # Convert values
-                    # All values are primitive, so this is trivial
-                    kwargs = {k: v.get_value() for k, v in value.slots.items() if
-                              k not in ["self", DATACLASS_SELF_FIELD, "requires", "provides"]}
-                    out = base_type._paired_dataclass(**kwargs)
-
-                    dataclass_self = WrappedValueVariable(out)
-                    value.slots[DATACLASS_SELF_FIELD] = dataclass_self
-                    return out
-
-            if isinstance(value, list):
-                # TODO: collect unset
-                return [make_dataclass(v) for v in value]
-            else:
-                return make_dataclass(value)
-
-        else:
-            DynamicProxy.return_value(value)
-
-    return value
+    # TODO: do we want to handle primtive lists and dicts differently?
+    # if expected_type.is_primitive():
+    #    return value
+    if isinstance(base_type, inmanta.ast.entity.Entity) and base_type._paired_dataclass is not None:
+        return expected_type.to_python(value)
+    return DynamicProxy.return_value(value)
 
 
+def make_dataclass(value: object) -> object:
+    assert isinstance(value, Instance)
+    if DATACLASS_SELF_FIELD in value.slots:
+        return value.slots.get(DATACLASS_SELF_FIELD).get_value()
+    else:
 
+        # Handle unsets
+        unset = [
+            v
+            for k, v in value.slots.items()
+            if k not in ["self", DATACLASS_SELF_FIELD, "requires", "provides"]
+            if not v.is_ready()
+        ]
+        if unset:
+            raise MultiUnsetException("Unset values when converting instance to dataclass", unset)
+
+        # Convert values
+        # All values are primitive, so this is trivial
+        kwargs = {
+            k: v.get_value() for k, v in value.slots.items() if k not in ["self", DATACLASS_SELF_FIELD, "requires", "provides"]
+        }
+        out = base_type._paired_dataclass(**kwargs)
+
+        dataclass_self = WrappedValueVariable(out)
+        value.slots[DATACLASS_SELF_FIELD] = dataclass_self
+        return out
 
 
 class PluginCallContext:
@@ -275,7 +272,6 @@ class PluginCallContext:
     Used to carry state from the argument validation to the return validation
 
     """
-
 
 
 class PluginValue:
@@ -394,11 +390,9 @@ class PluginArgument(PluginValue):
             return "%s: %s = %s" % (self.arg_name, repr(self.arg_type), str(self.default_value))
         else:
             return "%s: %s" % (self.arg_name, repr(self.arg_type))
+
     def to_python_domain(self, value: object) -> object:
         return validate_and_convert_to_python_domain(self.resolved_type, value)
-
-
-
 
 
 class PluginReturn(PluginValue):
@@ -689,7 +683,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # would have raised as exception
             raise RuntimeException(None, f"{func}() missing {len(missing_args)} required {args_sort} arguments: {arg_names}")
 
-    def check_args(self, args: Sequence[object], kwargs: Mapping[str, object], location: Location) -> CheckedArgs:
+    def check_args(self, args: Sequence[object], kwargs: Mapping[str, object]) -> CheckedArgs:
         """
         Check if the arguments of the call match the function signature.
 
@@ -746,7 +740,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 is_unknown = True
             else:
                 # (4) Validate the input value
-                result = validate_and_convert_to_python_domain(arg.resolved_type, value, location)
+                result = validate_and_convert_to_python_domain(arg.resolved_type, value)
             converted_args.append(result)
 
         converted_kwargs = {}
@@ -769,11 +763,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 result = validate_and_convert_to_python_domain(kwarg.resolved_type, value)
             converted_kwargs[name] = result
 
-        return CheckedArgs(
-            args=converted_args,
-            kwargs=converted_kwargs,
-            unknows=is_unknown
-        )
+        return CheckedArgs(args=converted_args, kwargs=converted_kwargs, unknows=is_unknown)
 
     def emit_statement(self) -> "DynamicStatement":
         """

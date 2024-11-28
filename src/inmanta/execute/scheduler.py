@@ -32,7 +32,7 @@ from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineRelation, DefineTypeConstraint
 from inmanta.ast.type import TYPES, Type
 from inmanta.const import LOG_LEVEL_TRACE
-from inmanta.execute.proxy import UnsetException, MultiUnsetException
+from inmanta.execute.proxy import MultiUnsetException, UnsetException
 from inmanta.execute.runtime import (
     DelayedResultVariable,
     ExecutionContext,

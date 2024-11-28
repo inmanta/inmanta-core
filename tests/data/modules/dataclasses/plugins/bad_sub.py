@@ -27,4 +27,3 @@ class Virtualmachine:
     ram: int
     cpus: int
     disk: int
-

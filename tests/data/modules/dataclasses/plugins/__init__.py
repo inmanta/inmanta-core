@@ -42,7 +42,7 @@ def eat_vm(inp: "dataclasses::Virtualmachine") -> None:
 
 
 @plugin
-def select_vm(inp: "dataclasses::Virtualmachine[]", name: "string") -> "dataclasses::Virtualmachine?" :
+def select_vm(inp: "dataclasses::Virtualmachine[]", name: "string") -> "dataclasses::Virtualmachine?":
     for vm in inp:
         if vm.name == name:
             return vm
