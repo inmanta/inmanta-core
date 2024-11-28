@@ -275,8 +275,6 @@ class CompileRun:
             virtual_env = VirtualEnv(versioned_venv_dir_full)
             virtual_env.init_env()
 
-        await ensure_venv()
-
         async def link() -> None:
             """
             Ensures that a link from .venv to .venv-py<version> exists
@@ -290,11 +288,11 @@ class CompileRun:
                 if is_link:
                     os.unlink(venv_dir)
                 else:
-                    # TODO: open question: what if backup target already exists?
                     os.rename(venv_dir, f"{venv_dir}_old")
 
             os.symlink(versioned_venv_dir, venv_dir)
 
+        await ensure_venv()
         await link()
 
     async def run(self, force_update: Optional[bool] = False) -> tuple[bool, Optional[model.CompileData]]:
