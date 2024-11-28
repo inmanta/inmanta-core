@@ -70,20 +70,25 @@ class ResourceTimer:
 
         action_function: Callable[[ResourceIdStr, int], Coroutine[Any, Any, None]]
         if is_dirty:
-            next_execute_time, action_function = min( 
-                      (periodic_deploy_interval,  self._trigger_deploy_for_resource) , 
-                      (periodic_repair_interval, self._trigger_repair_for_resource),  
-                      key=lambda x:x[0])
+            next_execute_time, action_function = min(
+                (periodic_deploy_interval, self._trigger_deploy_for_resource),
+                (periodic_repair_interval, self._trigger_repair_for_resource),
+                key=lambda x: x[0],
+            )
         else:
             next_execute_time = periodic_repair_interval
             action_function = self._trigger_repair_for_resource
 
         if next_execute_time == sys.maxsize:
+            # Per-resource timers are disabled
             return
 
-        # A deploy is already scheduled for this resource
-        if self.next_schedule_handle is not None:
+        if next_execute_time == self.time_to_next_deploy:
+            # This timer is already in place
             return
+
+        # Cancel previous schedule and re-schedule
+        self.cancel_next_schedule()
 
         def _create_repair_task() -> None:
             self.trigger_deploy = asyncio.create_task(action_function(self.resource, next_execute_time))

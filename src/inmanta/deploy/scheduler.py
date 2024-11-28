@@ -91,19 +91,20 @@ class TaskManager(StateUpdateManager, abc.ABC):
         """
 
     @abstractmethod
-    async def get_resource_intent_for_deploy(
+    async def deploy_start(
         self,
         resource: ResourceIdStr,
     ) -> Optional[ResourceIntent]:
         """
-        Returns the current version details for the given resource along with the last non-deploying state for its dependencies,
-        or None if it is not (anymore) managed by the scheduler.
+        Register the start of deployment for the given resource and return its current version details
+        along with the last non-deploying state for its dependencies, or None if it is not (anymore)
+        managed by the scheduler.
 
         Acquires appropriate locks.
         """
 
     @abstractmethod
-    async def report_resource_state(
+    async def deploy_done(
         self,
         resource: ResourceIdStr,
         *,
@@ -112,7 +113,9 @@ class TaskManager(StateUpdateManager, abc.ABC):
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
         """
-        Report new state for a resource. Since knowledge of deployment result implies a finished deploy, it must only be set
+        Register the end of deployment for the given resource: update the resource state based on the deployment result
+        and inform its dependencies that deployment is finished.
+        Since knowledge of deployment result implies a finished deploy, it must only be set
         when a deploy has just finished.
 
         Acquires appropriate locks
@@ -511,7 +514,7 @@ class ResourceScheduler(TaskManager):
                 else:
                     # It's a resource we don't know yet.
                     new_desired_state.add(resource)
-                    self._timer_manager.update_resource(resource, dirty=False)
+                    self._timer_manager.update_resource(resource, dirty=True)
 
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 new_requires: Set[ResourceIdStr] = requires.get(resource, set())
@@ -650,7 +653,7 @@ class ResourceScheduler(TaskManager):
                 return None
             return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=None)
 
-    async def get_resource_intent_for_deploy(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
+    async def deploy_start(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
         self._timer_manager.remove_resource(resource)
 
         async with self._scheduler_lock:
@@ -662,7 +665,7 @@ class ResourceScheduler(TaskManager):
             self._deploying_latest.add(resource)
             return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=dependencies)
 
-    async def report_resource_state(
+    async def deploy_done(
         self,
         resource: ResourceIdStr,
         *,
@@ -730,9 +733,6 @@ class ResourceScheduler(TaskManager):
                                 continue
                             if dependant_status.blocked is BlockedStatus.NO:
                                 concerned_resources.add(dependant)
-                                # Remove timers for unblocked dependant resources because
-                                # they are marked for deployment below.
-                                self._timer_manager.remove_resource(dependant)
 
                 else:
                     # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
@@ -751,6 +751,7 @@ class ResourceScheduler(TaskManager):
                         self._state.dirty.update(dependant_resources)
                         for dependant in dependant_resources:
                             # No point in re-trying dependants since this resource was skipped
+                            # FIXME as part of https://github.com/inmanta/inmanta-core/issues/8423
                             self._timer_manager.remove_resource(dependant)
 
                 # propagate events
