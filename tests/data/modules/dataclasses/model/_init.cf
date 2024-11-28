@@ -8,10 +8,16 @@ end
 
 implement Virtualmachine using std::none
 
-Virtualmachine(name="A", os="B", ram=1, cpus=2, disk=10)
+two = Virtualmachine(name="A", os="B", ram=1, cpus=2, disk=10)
 
 one=make_virtual_machine()
 
 one.requires = one
 
 std::print(one)
+
+eat_vm(one)
+eat_vm(two)
+
+#three = Virtualmachine(name="A", os="B", ram=1, cpus=2)
+#eat_vm(three)

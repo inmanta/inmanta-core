@@ -33,3 +33,9 @@ class Virtualmachine:
 @plugin
 def make_virtual_machine() -> "dataclasses::Virtualmachine":
     return Virtualmachine(name="Test", os="linux", ram=5, cpus=2, disk=15)
+
+
+@plugin
+def eat_vm(inp: "dataclasses::Virtualmachine") -> None:
+    print(inp)
+    return None

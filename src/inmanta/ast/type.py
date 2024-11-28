@@ -109,6 +109,16 @@ class Type(Locatable):
         Convert an instance of this type to its python form
         """
 
+        from inmanta.execute.proxy import DynamicProxy
+        from inmanta.plugins import Context
+
+        if isinstance(instance, Context):
+            return instance
+        elif isinstance(instance, Unknown):
+            return instance
+        else:
+            return DynamicProxy.return_value(instance)
+
 
 class NamedType(Type, Named):
     def get_double_defined_exception(self, other: "NamedType") -> "DuplicateException":
@@ -163,8 +173,8 @@ class NullableType(Type):
         return Optional[self.element_type.as_python_type()]
 
     def to_python(self, instance: object) -> "object":
-        if instance is None:
-            return NoneValue()
+        if isinstance(instance, NoneValue):
+            return None
         return self.element_type.to_python(instance)
 
 

@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Seq
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
 from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException, WithComment
-from inmanta.ast.type import NamedType
+from inmanta.ast.type import NamedType, Primitive
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable
@@ -211,6 +211,34 @@ PLUGIN_TYPES = {
     None: Null(),  # Only NoneValue will pass validation
 }
 
+
+def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, value: object) -> object:
+    """
+    Given a module domain value and an inmanta type, produce the corresponding python object
+
+    Unknows are not handled by this method!
+    """
+    import inmanta.ast.entity
+    expected_type.validate(value)
+
+    if isinstance(value, NoneValue):
+        # if the type is not nullable, will fail when validating
+        # if the value is None, it becomes None
+        return None
+
+    base_type = expected_type.get_base_type()
+    if isinstance(base_type, inmanta.ast.entity.Entity):
+        if base_type._paired_dataclass is not None:
+            assert False
+        else:
+            DynamicProxy.return_value(value)
+
+    return value
+
+
+
+
+
 class PluginCallContext:
     """
     Internal state of a plugin call
@@ -337,6 +365,11 @@ class PluginArgument(PluginValue):
             return "%s: %s = %s" % (self.arg_name, repr(self.arg_type), str(self.default_value))
         else:
             return "%s: %s" % (self.arg_name, repr(self.arg_type))
+    def to_python_domain(self, value: object) -> object:
+        return validate_and_convert_to_python_domain(self.resolved_type, value)
+
+
+
 
 
 class PluginReturn(PluginValue):
@@ -366,6 +399,14 @@ class PluginReturn(PluginValue):
 
         self.validate(value)
         return value
+
+
+@dataclasses.dataclass
+class CheckedArgs:
+
+    args: list[object]
+    kwargs: dict[str, object]
+    unknows: bool
 
 
 class Plugin(NamedType, WithComment, metaclass=PluginMeta):
@@ -613,7 +654,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # would have raised as exception
             raise RuntimeException(None, f"{func}() missing {len(missing_args)} required {args_sort} arguments: {arg_names}")
 
-    def check_args(self, args: Sequence[object], kwargs: Mapping[str, object]) -> bool:
+    def check_args(self, args: Sequence[object], kwargs: Mapping[str, object]) -> CheckedArgs:
         """
         Check if the arguments of the call match the function signature.
 
@@ -657,15 +698,23 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         ]
         self.report_missing_arguments(missing_keyword_arguments, "keyword-only")
 
+        converted_args = []
+        is_unknown = False
+
         # Validate all positional arguments
         for position, value in enumerate(args):
             # (1) Get the corresponding argument, fails if we don't have one
             arg = self.get_arg(position)
 
-            # (4) Validate the input value
-            if not arg.validate(value):
-                return False
+            if isinstance(value, Unknown):
+                result = value
+                is_unknown = True
+            else:
+                # (4) Validate the input value
+                result = validate_and_convert_to_python_domain(arg.resolved_type, value)
+            converted_args.append(result)
 
+        converted_kwargs = {}
         # Validate all kw arguments
         for name, value in kwargs.items():
             # (1) Get the corresponding kwarg, fails if we don't have one
@@ -678,9 +727,18 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 raise RuntimeException(None, f"{self.get_full_name()}() got multiple values for argument '{name}'")
 
             # (4) Validate the input value
-            if not kwarg.validate(value):
-                return False
-        return True
+            if isinstance(value, Unknown):
+                result = value
+                is_unknown = True
+            else:
+                result = validate_and_convert_to_python_domain(kwarg.resolved_type, value)
+            converted_kwargs[name] = result
+
+        return CheckedArgs(
+            args=converted_args,
+            kwargs=converted_kwargs,
+            unknows=is_unknown
+        )
 
     def emit_statement(self) -> "DynamicStatement":
         """
@@ -722,18 +780,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             warnings.warn(PluginDeprecationWarning(msg))
         self.check_requirements()
 
-        def new_arg(arg: object) -> object:
-            if isinstance(arg, Context):
-                return arg
-            elif isinstance(arg, Unknown) and self.is_accept_unknowns():
-                return arg
-            else:
-                return DynamicProxy.return_value(arg)
-
-        new_args = [new_arg(arg) for arg in args]
-        new_kwargs = {k: new_arg(v) for k, v in kwargs.items()}
-
-        value = self.call(*new_args, **new_kwargs)
+        value = self.call(*args, **kwargs)
 
         value = DynamicProxy.unwrap(value)
 

@@ -26,6 +26,17 @@ class AnyType:
     Supertype for objects that are an instance of all types
     """
 
+    def to_python(self, value: object):
+        from inmanta.execute.proxy import DynamicProxy
+        from inmanta.plugins import Context
+
+        if isinstance(arg, Context):
+            return arg
+        elif isinstance(arg, Unknown):
+            return arg
+        else:
+            return DynamicProxy.return_value(value)
+
 
 @stable_api
 class Unknown(AnyType):
