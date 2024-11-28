@@ -33,16 +33,26 @@ three.disk = 5
 vms = [one, two, three]
 selected = select_vm(vms, "A")
 
+
 # Preserves object identity
 # one = selected
-
-
-# List from relation into plugin
-
-
-
 
 # Return null
 assert_true = select_vm(vms, "z") == null
 assert_true = true
 
+
+# List from relation into plugin
+entity VMCollector:
+end
+
+implement VMCollector using std::none
+
+VMCollector.vms [0:] -- Virtualmachine
+
+c1 = VMCollector()
+c1.vms += one
+c1.vms += two
+c1.vms += three
+
+other_selected = select_vm(c1.vms, "A")

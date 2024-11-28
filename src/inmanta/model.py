@@ -259,7 +259,7 @@ class Relation:
         return {n: Relation.from_dict(x) for n, x in lst.items()}
 
 
-class mEntity:
+class Entity:
     """
     An entity type
 
