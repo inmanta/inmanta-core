@@ -1,0 +1,6 @@
+description: Make compiler venv have the python version in the name
+issue-nr: 7732
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"
