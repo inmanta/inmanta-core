@@ -149,7 +149,7 @@ def test():
     )
 
     assert inmanta_plugins.inmanta_unit_test.test() == 10
-    assert not any("Deploying code " in message for message in caplog.messages)
+    assert any("Deploying code " in message for message in caplog.messages)
 
 
 def test_code_loader_dependency(tmp_path, caplog, deactive_venv):
@@ -214,6 +214,7 @@ def test():
     with pytest.raises(ImportError):
         import inmanta_plugins.inmanta_bad_unit_test  # NOQA
 
+    caplog.clear()
     cl.deploy_version([get_module_source("inmanta_plugins.inmanta_bad_unit_test", code)])
 
     with pytest.raises(ModuleNotFoundError):
