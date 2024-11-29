@@ -89,6 +89,9 @@ Handlers
 .. autoclass:: inmanta.agent.handler.SkipResource
     :show-inheritance:
     :members:
+.. autoclass:: inmanta.agent.handler.SkipResourceForDependencies
+    :show-inheritance:
+    :members:
 .. autoclass:: inmanta.agent.handler.ResourcePurged
     :members:
 .. autoclass:: inmanta.agent.handler.HandlerContext
