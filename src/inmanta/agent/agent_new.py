@@ -30,10 +30,13 @@ from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
+from inmanta.data import ResourceIdStr, model
 from inmanta.data.model import DataBaseReport, SchedulerStatusReport
 from inmanta.deploy import scheduler
+from inmanta.deploy.state import ResourceState
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
+from inmanta.protocol.exceptions import NotFound
 from inmanta.server.services.databaseservice import DatabaseMonitor
 from inmanta.types import Apireturn
 from inmanta.util import (
@@ -337,9 +340,19 @@ class Agent(SessionEndpoint):
     async def get_status(self) -> Apireturn:
         return 200, collect_report(self)
 
-    @protocol.handle(methods_v2.get_scheduler_status)
-    async def get_scheduler_status(self) -> SchedulerStatusReport:
-        return await self.scheduler.get_status()
+    # @protocol.handle(methods_v2.get_scheduler_resource_state, env="tid")
+    # async def get_scheduler_resource_state(self, env: uuid.UUID) -> Apireturn:
+    #     LOGGER.error("BLAH")
+    #     # assert env == self.environment
+    #     return 200, SchedulerStatusReport()
+    #     # return await self.scheduler.get_resource_state()
+
+    @protocol.handle(methods_v2.get_scheduler_resource_state, compile_id="id")
+    async def get_scheduler_resource_state(self, compile_id: uuid.UUID) -> Optional[model.CompileData]:
+        compile: Optional[data.Compile] = await data.Compile.get_by_id(compile_id)
+        if compile is None:
+            raise NotFound("The given compile id does not exist")
+        return compile.to_dto().compile_data
 
     @protocol.handle(methods_v2.get_db_status)
     async def get_db_status(self) -> DataBaseReport:

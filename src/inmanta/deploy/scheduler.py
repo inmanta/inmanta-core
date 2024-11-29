@@ -369,7 +369,7 @@ class ResourceScheduler(TaskManager):
             )
         )
 
-    async def get_status(self) -> SchedulerStatusReport:
+    async def get_resource_state(self) -> dict[ResourceIdStr, ResourceState]:
         """
         Check that the state of the resources in the DB corresponds
         to the internal state of the scheduler and return the internal
@@ -377,40 +377,69 @@ class ResourceScheduler(TaskManager):
         """
         resources_in_db: Mapping[ResourceIdStr, ResourceDetails]
 
-        _, resources_in_db, _ = await self._get_resources_in_latest_version()
+        try:
+            _, resources_in_db, _ = await self._get_resources_in_latest_version()
+        except KeyError:
+            return {}
 
-        state_translation_table: dict[
-            const.ResourceState, Tuple[state.DeploymentResult, state.BlockedStatus, state.ComplianceStatus]
-        ] = {
-            # A table to translate the old states into the new states
-            # None means don't care, mostly used for values we can't derive from the old state
-            const.ResourceState.unavailable: (None, state.BlockedStatus.NO, state.ComplianceStatus.NON_COMPLIANT),
-            const.ResourceState.skipped: (state.DeploymentResult.SKIPPED, None, None),
-            const.ResourceState.dry: (None, None, None),  # don't care
-            const.ResourceState.deployed: (state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO, None),
-            const.ResourceState.failed: (state.DeploymentResult.FAILED, state.BlockedStatus.NO, None),
-            const.ResourceState.deploying: (None, state.BlockedStatus.NO, None),
-            const.ResourceState.available: (None, state.BlockedStatus.NO, state.ComplianceStatus.HAS_UPDATE),
-            const.ResourceState.undefined: (None, state.BlockedStatus.YES, state.ComplianceStatus.UNDEFINED),
-            const.ResourceState.skipped_for_undefined: (None, state.BlockedStatus.YES, None),
-        }
-        discrepancy_map: Mapping[ResourceIdStr, list[Discrepancy]] = {}
+        def _build_discrepancy_map(resources_in_db: Mapping[ResourceIdStr, ResourceDetails]) -> dict[ResourceIdStr, list[Discrepancy]]:
+            """
+            For each resource in the given map, compare its persisted state in the database to its
+            state as it is assumed by the scheduler. Build and return a map of all detected discrepancies.
 
-        for rid, resource_details in resources_in_db.items():
-            resource_discrepancies: list[Discrepancy] = []
-            db_deploy_result, db_blocked_status, db_compliance_status = state_translation_table[resource_details.status]
-            if db_deploy_result:
-                if (sched_deploy_result := self._state.resource_state[rid].deployment_result) != db_deploy_result:
-                    resource_discrepancies.append(Discrepancy(expected=db_deploy_result, actual=sched_deploy_result))
-            if db_blocked_status:
-                if (sched_blocked_status := self._state.resource_state[rid].blocked) != db_blocked_status:
-                    resource_discrepancies.append(Discrepancy(expected=db_blocked_status, actual=sched_blocked_status))
-            if db_compliance_status:
-                if (compliance_status := self._state.resource_state[rid].status) != db_compliance_status:
-                    resource_discrepancies.append(Discrepancy(expected=db_compliance_status, actual=compliance_status))
+            :param resources_in_db: Map of the state of resources in the database
+            :return: A dict mapping each resource to the discrepancies related to it (if any)
+            """
+            state_translation_table: dict[
+                const.ResourceState, Tuple[state.DeploymentResult, state.BlockedStatus, state.ComplianceStatus]
+            ] = {
+                # A table to translate the old states into the new states
+                # None means don't care, mostly used for values we can't derive from the old state
+                const.ResourceState.unavailable: (None, state.BlockedStatus.NO, state.ComplianceStatus.NON_COMPLIANT),
+                const.ResourceState.skipped: (state.DeploymentResult.SKIPPED, None, None),
+                const.ResourceState.dry: (None, None, None),  # don't care
+                const.ResourceState.deployed: (state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO, None),
+                const.ResourceState.failed: (state.DeploymentResult.FAILED, state.BlockedStatus.NO, None),
+                const.ResourceState.deploying: (None, state.BlockedStatus.NO, None),
+                const.ResourceState.available: (None, state.BlockedStatus.NO, state.ComplianceStatus.HAS_UPDATE),
+                const.ResourceState.undefined: (None, state.BlockedStatus.YES, state.ComplianceStatus.UNDEFINED),
+                const.ResourceState.skipped_for_undefined: (None, state.BlockedStatus.YES, None),
+            }
+            discrepancy_map: Mapping[ResourceIdStr, list[Discrepancy]] = {}
 
-            if resource_discrepancies:
-                discrepancy_map[rid] = resource_discrepancies
+            for rid, resource_details in resources_in_db.items():
+                resource_discrepancies: list[Discrepancy] = []
+                db_deploy_result, db_blocked_status, db_compliance_status = state_translation_table[resource_details.status]
+
+                scheduler_resource_state: ResourceState | None = self._state.resource_state.get(rid)
+
+                if not scheduler_resource_state:
+                    resource_discrepancies.append(Discrepancy(expected="status for resource PLACEHOLDER", actual="no status for resource PLACEHOLDER"))
+                else:
+                    if db_deploy_result:
+                        if scheduler_resource_state.deployment_result != db_deploy_result:
+                            resource_discrepancies.append(Discrepancy(expected=db_deploy_result, actual=scheduler_resource_state.deployment_result))
+                    if db_blocked_status:
+                        if scheduler_resource_state.blocked != db_blocked_status:
+                            resource_discrepancies.append(Discrepancy(expected=db_blocked_status, actual=scheduler_resource_state.blocked))
+                    if db_compliance_status:
+                        if scheduler_resource_state.status != db_compliance_status:
+                            resource_discrepancies.append(Discrepancy(expected=db_compliance_status, actual=scheduler_resource_state.status))
+
+                if resource_discrepancies:
+                    discrepancy_map[rid] = resource_discrepancies
+
+            return discrepancy_map
+
+        def _log_discrepancies(discrepancies: Mapping[ResourceIdStr, list[Discrepancy]]) -> None:
+            for rid, discrepancies in discrepancies.items():
+                for discrepancy in discrepancies:
+                    LOGGER.info("Discrepancy for %s. Expected %s, got %s.", rid, discrepancy.expected, discrepancy.actual)
+
+        discrepancy_map = _build_discrepancy_map(resources_in_db)
+        _log_discrepancies(discrepancy_map)
+
+        return self._state.resource_state
 
     async def _build_resource_mappings_from_db(
         self, version: int, *, connection: Optional[asyncpg.connection.Connection] = None

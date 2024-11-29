@@ -494,14 +494,29 @@ def get_db_status() -> DataBaseReport:
     """
 
 @typedmethod(
-    path="/scheduler_status",  operation="GET", api=True, timeout=5, arg_options=methods.ENV_OPTS, client_types=[ClientType.api]
+    path="/scheduler_resource_state/<id>",
+    operation="GET",
+    client_types=[ClientType.api],
+    api_version=2,
 )
-def get_scheduler_status(
-    tid: uuid.UUID
-) -> model.SchedulerStatusReport:
+def get_scheduler_resource_state(id: uuid.UUID) -> Optional[model.CompileData]:
     """
-    Get a report of the resource scheduler status
+    Get the compile data for the given compile request.
+
+    :param id: The id of the compile.
     """
+
+
+
+# @typedmethod(
+#     path="/scheduler_resource_state",  operation="GET", api=True, timeout=5, arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2,
+# )
+# def get_scheduler_resource_state(
+#     tid: uuid.UUID
+# ) -> model.SchedulerStatusReport:
+#     """
+#     Get a report of the resource scheduler status
+#     """
 
 @typedmethod(
     path="/compiledata/<id>",
