@@ -504,6 +504,11 @@ class ResourceScheduler(TaskManager):
                     added_requires[resource] = added
                 if dropped:
                     dropped_requires[resource] = dropped
+                    if self._state.resource_state[resource].blocked is BlockedStatus.TRANSIENT:
+                        dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
+                        if all(dependencies[requires_id].deployed for requires_id in new_requires):
+                            self._state.resource_state[resource].blocked = BlockedStatus.NO
+                            unblocked_resources.add(resource)
                 # this loop is race-free, potentially slow, and completely synchronous
                 # => regularly pass control to the event loop to not block scheduler operation during update prep
                 await asyncio.sleep(0)
@@ -680,6 +685,8 @@ class ResourceScheduler(TaskManager):
                 self._deploying_latest.remove(resource)
                 state.deployment_result = deployment_result
                 self._work.finished_deploy(resource)
+                # Check if we need to mark a resource as transiently blocked
+                # Or if we can unblock a transiently blocked resource (its dependencies now succeed)
                 if skipped_for_dependency and state.blocked is not BlockedStatus.YES:
                     dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
                     mark_as_unblocked = True

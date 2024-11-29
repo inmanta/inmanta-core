@@ -90,8 +90,9 @@ class SkipResource(Exception):
 @stable_api
 class SkipResourceForDependencies(SkipResource):
     """
-    A handler should raise this exception when a resource should be skipped. The resource will be marked as skipped
-    instead of failed. We will try to deploy again when its dependencies are successfully deployed for their latest intent.
+    A handler should raise this exception when a resource should be skipped.
+    The resource will be marked as skipped instead of failed.
+    We will try to deploy again when its dependencies are successfully deployed for their latest intent.
     """
 
 

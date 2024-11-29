@@ -1,5 +1,9 @@
-description: Add BlockedStatus.TRANSIENT and differentiate between default and custom handler skip
+description: Added SkipResourceForDependencies exception.
 issue-nr: 8340
 change-type: minor
 destination-branches: [master]
-
+sections:
+  feature: >
+    Added SkipResourceForDependencies exception.
+    This exception can be raised by the handler when we want to skip a resource
+    and retry only when all of its dependencies succeed
