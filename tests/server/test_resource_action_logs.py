@@ -26,7 +26,7 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import const, data
-from inmanta.server.config import get_bind_port
+from inmanta.server import config
 
 # This resource ID has some garbage characters, to make sure the queries are good
 resource_id_a = r"std::testing::NullResource[agent1,name=/tmp#/%%/\_file1.txt]"
@@ -205,7 +205,7 @@ async def test_resource_logs_paging(server, client, order_by_column, order, env_
     assert result.result["links"].get("next") is not None
     assert result.result["links"].get("prev") is None
 
-    port = get_bind_port()
+    port = config.server_bind_port.get()
     base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 

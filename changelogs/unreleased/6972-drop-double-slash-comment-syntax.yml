@@ -1,0 +1,7 @@
+description: Drop // syntax for comments
+issue-nr: 6972
+change-type: major
+destination-branches: [master]
+sections:
+  deprecation-note: >
+    The // syntax for comments is no longer supported. Please use # for comments.

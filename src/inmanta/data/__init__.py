@@ -2279,23 +2279,6 @@ def convert_positive_float(value: Union[float, int, str]) -> float:
     return float_value
 
 
-def convert_agent_map(value: dict[str, str]) -> dict[str, str]:
-    if not isinstance(value, dict):
-        raise ValueError("Agent map should be a dict")
-
-    for key, v in value.items():
-        if not isinstance(key, str):
-            raise ValueError("The key of an agent map should be string")
-
-        if not isinstance(v, str):
-            raise ValueError("The value of an agent map should be string")
-
-    if "internal" not in value:
-        raise ValueError("The internal agent must be present in the autostart_agent_map")
-
-    return value
-
-
 def translate_to_postgres_type(type: str) -> str:
     if type not in TYPE_MAP:
         raise Exception("Type '" + type + "' is not a valid type for a settings entry")
@@ -2345,15 +2328,11 @@ TYPE_MAP = {
 }
 
 AUTO_DEPLOY = "auto_deploy"
-PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
-AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY = "agent_trigger_method_on_auto_deploy"
-ENVIRONMENT_AGENT_TRIGGER_METHOD = "environment_agent_trigger_method"
 AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
 AUTOSTART_AGENT_DEPLOY_SPLAY_TIME = "autostart_agent_deploy_splay_time"
 AUTOSTART_AGENT_REPAIR_INTERVAL = "autostart_agent_repair_interval"
 AUTOSTART_AGENT_REPAIR_SPLAY_TIME = "autostart_agent_repair_splay_time"
 AUTOSTART_ON_START = "autostart_on_start"
-AUTOSTART_AGENT_MAP = "autostart_agent_map"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
 AUTO_FULL_COMPILE = "auto_full_compile"
@@ -2501,31 +2480,6 @@ class Environment(BaseDocument):
             "that was compiled by the orchestrator itself.",
             validator=convert_boolean,
         ),
-        PUSH_ON_AUTO_DEPLOY: Setting(
-            name=PUSH_ON_AUTO_DEPLOY,
-            typ="bool",
-            default=True,
-            doc="Push a new version when it has been autodeployed.",
-            validator=convert_boolean,
-        ),
-        AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY: Setting(
-            name=AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY,
-            typ="enum",
-            default=const.AgentTriggerMethod.push_incremental_deploy.name,
-            validator=convert_agent_trigger_method,
-            doc="The agent trigger method to use when " + PUSH_ON_AUTO_DEPLOY + " is enabled",
-            allowed_values=[opt.name for opt in const.AgentTriggerMethod],
-        ),
-        ENVIRONMENT_AGENT_TRIGGER_METHOD: Setting(
-            name=ENVIRONMENT_AGENT_TRIGGER_METHOD,
-            typ="enum",
-            default=const.AgentTriggerMethod.push_incremental_deploy.name,
-            validator=convert_agent_trigger_method,
-            doc="The agent trigger method to use when no specific method is specified in the API call. "
-            "This determines the behavior of the 'Promote' button. "
-            f"For auto deploy, {AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} is used.",
-            allowed_values=[opt.name for opt in const.AgentTriggerMethod],
-        ),
         AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(
             name=AUTOSTART_AGENT_DEPLOY_INTERVAL,
             typ="str",
@@ -2572,15 +2526,6 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="Automatically start agents when the server starts instead of only just in time.",
-        ),
-        AUTOSTART_AGENT_MAP: Setting(
-            name=AUTOSTART_AGENT_MAP,
-            default={"internal": "local:"},
-            typ="dict",
-            validator=convert_agent_map,
-            doc="A dict with key the name of agents that should be automatically started. The value "
-            "is either an empty string or an agent map string. See also: :inmanta.config:option:`config.agent-map`",
-            agent_restart=True,
         ),
         SERVER_COMPILE: Setting(
             name=SERVER_COMPILE,
@@ -3524,29 +3469,20 @@ class Agent(BaseDocument):
     async def clean_up(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         query = """
 DELETE FROM public.agent AS a
-WHERE (environment, name) NOT IN (
-    SELECT DISTINCT environment_id as environment, agent as name
-    FROM (
-        -- agent is in the agent map
-        SELECT e.id as environment_id, map.key as agent
-        FROM public.environment e
-        CROSS JOIN LATERAL jsonb_each(e.settings->'autostart_agent_map') AS map(key, value)
-    ) in_agent_map
-)
--- have no primary ID set (that are down)
-AND id_primary IS NULL
--- not used by any version
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.resource AS re
-    WHERE a.environment=re.environment
-    AND a.name=re.agent
-)
-AND a.environment IN (
-    SELECT id
-    FROM public.environment
-    WHERE NOT halted
-);
+WHERE -- have no primary ID set (that are down)
+      id_primary IS NULL
+      -- not used by any version
+      AND NOT EXISTS (
+          SELECT 1
+          FROM public.resource AS re
+          WHERE a.environment=re.environment
+          AND a.name=re.agent
+      )
+      AND a.environment IN (
+          SELECT id
+          FROM public.environment
+          WHERE NOT halted
+      );
 """
         await cls._execute_query(query, connection=connection)
 
@@ -3675,7 +3611,9 @@ class Compile(BaseDocument):
 
     @classmethod
     # TODO: Use join
-    async def get_report(cls, compile_id: uuid.UUID) -> Optional[dict]:
+    async def get_report(
+        cls, compile_id: uuid.UUID, order_by: Optional[str] = None, order: Optional[str] = None
+    ) -> Optional[dict]:
         """
         Get the compile and the associated reports from the database
         """
@@ -3684,7 +3622,7 @@ class Compile(BaseDocument):
             return None
 
         dict_model = result.to_dict()
-        reports = await Report.get_list(compile=result.id)
+        reports = await Report.get_list(compile=result.id, order_by_column=order_by, order=order)
         dict_model["reports"] = [r.to_dict() for r in reports]
 
         return dict_model

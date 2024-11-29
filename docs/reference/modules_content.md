@@ -32,6 +32,7 @@ product suites or directly licensed.
 | gcp-interco        | Support for Google Cloud Platform interconnect resources                                                      |
 | juniper-ex         | Support for Juniper EX based devices using Netconf/YANG                                                       |
 | juniper-mx         | Support for Juniper MX based devices using Netconf/YANG                                                       |
+| juniper-srx        | Support for Juniper SRX based devices using Netconf/YANG                                                      |
 | kubernetes         | Support for managing resources on Kubernetes                                                                  |
 | libvirt            | Support for managing the lifecycle of virtual machines through libvirt                                        |
 | n5k-lan            | Support for Cisco Nexus 5000 datacenter switch using Netconfig and CLI                                        |

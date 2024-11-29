@@ -4,8 +4,8 @@ change-type: major
 destination-branches: [master]
 sections:
   upgrade-note: |
-    The fields ``deployed`` and ``result`` have been removed from all API endpoint and tools that report on versions.
-    Deploy status information is no longer maintained for individual versions, but only for the latest, active version.
+    The deployment status can only be correctly determined for the current moment.
+    For this reason the ``deployed`` and ``status`` field has been removed for all but the latest active version.
 
     | api endpoint | change | alternative |
     | ------------ | ------ | ------------|

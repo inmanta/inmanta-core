@@ -27,8 +27,10 @@ import pytest
 from dateutil.tz import UTC
 
 from inmanta import const, data, util
+from inmanta.agent import executor
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
+from inmanta.deploy import persistence
 from inmanta.util import parse_timestamp
 
 
@@ -522,7 +524,7 @@ async def test_move_to_available_state(server, environment, client, clienthelper
     resource_persistent_state table and should be determined based on the content of the
     resource table.
     """
-    agent = null_agent
+    env_id = uuid.UUID(environment)
     # Create model version1
     version1 = await clienthelper.get_version()
     result = await client.put_version(
@@ -582,22 +584,21 @@ async def test_move_to_available_state(server, environment, client, clienthelper
     #    * test::Resource[agent1,key=test1]
     #    * test::Resource[agent1,key=test2]
     # to deployed state
-    aclient = agent._client
+    update_manager = persistence.ToDbUpdateManager(client, env_id)
     for i in range(1, 3):
         action_id = uuid.uuid4()
-        result = await aclient.resource_deploy_start(
-            tid=environment,
-            rvid=f"test::Resource[agent1,key=test{i}],v={version1}",
-            action_id=action_id,
+        rvid = ResourceVersionIdStr(f"test::Resource[agent1,key=test{i}],v={version1}")
+        await update_manager.send_in_progress(action_id, rvid)
+        await update_manager.send_deploy_done(
+            result=executor.DeployResult(
+                rvid=rvid,
+                action_id=action_id,
+                status=const.ResourceState.deployed,
+                messages=[],
+                changes={},
+                change=None,
+            )
         )
-        assert result.code == 200
-        result = await aclient.resource_deploy_done(
-            tid=environment,
-            rvid=f"test::Resource[agent1,key=test{i}],v={version1}",
-            action_id=action_id,
-            status=const.ResourceState.deployed,
-        )
-        assert result.code == 200, result.result
 
     # Create a new version containing:
     #    * an updated desired state for resource test::Resource[agent1,key=test1]

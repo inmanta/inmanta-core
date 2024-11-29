@@ -28,7 +28,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from inmanta import data
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceVersionIdStr, VersionedResource
-from inmanta.server.config import get_bind_port
+from inmanta.server import config
 
 
 @pytest.fixture
@@ -188,7 +188,7 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     assert result.result["links"].get("next") is not None
     assert result.result["links"].get("prev") is None
 
-    port = get_bind_port()
+    port = config.server_bind_port.get()
     base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
