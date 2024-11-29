@@ -29,11 +29,11 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Seq
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
 from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException, WithComment
-from inmanta.ast.type import NamedType, Primitive
+from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.const import DATACLASS_SELF_FIELD
-from inmanta.execute.proxy import DynamicProxy, MultiUnsetException
-from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, WrappedValueVariable
+from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, WrappedValueVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
@@ -237,34 +237,6 @@ def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, valu
     return DynamicProxy.return_value(value)
 
 
-def make_dataclass(value: object) -> object:
-    assert isinstance(value, Instance)
-    if DATACLASS_SELF_FIELD in value.slots:
-        return value.slots.get(DATACLASS_SELF_FIELD).get_value()
-    else:
-
-        # Handle unsets
-        unset = [
-            v
-            for k, v in value.slots.items()
-            if k not in ["self", DATACLASS_SELF_FIELD, "requires", "provides"]
-            if not v.is_ready()
-        ]
-        if unset:
-            raise MultiUnsetException("Unset values when converting instance to dataclass", unset)
-
-        # Convert values
-        # All values are primitive, so this is trivial
-        kwargs = {
-            k: v.get_value() for k, v in value.slots.items() if k not in ["self", DATACLASS_SELF_FIELD, "requires", "provides"]
-        }
-        out = base_type._paired_dataclass(**kwargs)
-
-        dataclass_self = WrappedValueVariable(out)
-        value.slots[DATACLASS_SELF_FIELD] = dataclass_self
-        return out
-
-
 class PluginCallContext:
     """
     Internal state of a plugin call
@@ -405,7 +377,8 @@ class PluginReturn(PluginValue):
 
     def to_model_domain(self, value: object, resolver: Resolver, queue: QueueScheduler, location: Location) -> object:
         if dataclasses.is_dataclass(value):
-            if isinstance(value, self.resolved_type.as_python_type()):
+            python_type = self.resolved_type.as_python_type()
+            if python_type is not None and isinstance(value, python_type):
                 if value is None:
                     return NoneValue()
                 base_type = self.resolved_type.get_base_type()
@@ -434,7 +407,7 @@ class PluginReturn(PluginValue):
 class CheckedArgs:
 
     args: list[object]
-    kwargs: dict[str, object]
+    kwargs: Mapping[str, object]
     unknows: bool
 
 
@@ -734,7 +707,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         for position, value in enumerate(args):
             # (1) Get the corresponding argument, fails if we don't have one
             arg = self.get_arg(position)
-
+            result: object
             if isinstance(value, Unknown):
                 result = value
                 is_unknown = True
@@ -756,6 +729,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 raise RuntimeException(None, f"{self.get_full_name()}() got multiple values for argument '{name}'")
 
             # (4) Validate the input value
+            result: object
             if isinstance(value, Unknown):
                 result = value
                 is_unknown = True

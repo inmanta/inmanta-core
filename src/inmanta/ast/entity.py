@@ -18,6 +18,7 @@
 
 import dataclasses
 import importlib
+import typing
 from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
 from inmanta.ast import (

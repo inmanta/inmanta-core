@@ -1,5 +1,3 @@
-import dataclasses
-
 import pytest
 
 from inmanta import compiler

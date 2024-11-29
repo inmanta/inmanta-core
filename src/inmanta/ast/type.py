@@ -26,7 +26,7 @@ from typing import List as PythonList
 from typing import Optional
 
 from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException
-from inmanta.execute.util import AnyType, NoneValue, Unknown
+from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 
 try:
@@ -524,6 +524,9 @@ class TypedList(List):
 
     def to_python(self, instance: object) -> "object":
         return [self.element_type.to_python(element) for element in instance]
+
+    def is_primitive(self) -> bool:
+        return self.get_base_type().is_primitive()
 
 
 @stable_api

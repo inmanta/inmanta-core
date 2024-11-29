@@ -37,7 +37,6 @@ from inmanta.ast import (
 from inmanta.ast.type import Type
 from inmanta.execute import dataflow, proxy
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.tracking import Tracker
 from inmanta.execute.util import NoneValue, Unknown
 
 if TYPE_CHECKING:
@@ -908,44 +907,6 @@ class QueueScheduler:
     def remove_from_all(self, item: "Waiter") -> None:
         del self._allwaiters[item]
 
-    def get_tracker(self) -> Optional[Tracker]:
-        return None
-
-    def for_tracker(self, tracer: Tracker) -> "QueueScheduler":
-        return DelegateQueueScheduler(self, tracer)
-
-
-class DelegateQueueScheduler(QueueScheduler):
-    __slots__ = ("__delegate", "__tracker")
-
-    def __init__(self, delegate: QueueScheduler, tracker: Tracker):
-        self.__delegate = delegate
-        self.__tracker = tracker
-
-    def add_running(self, item: "Waiter") -> None:
-        self.__delegate.add_running(item)
-
-    def add_possible(self, rv: DelayedResultVariable) -> None:
-        self.__delegate.add_possible(rv)
-
-    def get_compiler(self) -> "Compiler":
-        return self.__delegate.get_compiler()
-
-    def get_types(self) -> dict[str, Type]:
-        return self.__delegate.get_types()
-
-    def add_to_all(self, item: "Waiter") -> None:
-        self.__delegate.add_to_all(item)
-
-    def remove_from_all(self, item: "Waiter") -> None:
-        self.__delegate.remove_from_all(item)
-
-    def get_tracker(self) -> Tracker:
-        return self.__tracker
-
-    def for_tracker(self, tracer: Tracker) -> QueueScheduler:
-        return DelegateQueueScheduler(self.__delegate, tracer)
-
 
 class Waiter:
     """
@@ -1263,7 +1224,6 @@ class Instance(ExecutionContext):
         "type",
         "sid",
         "implementations",
-        "trackers",
         "locations",
         "instance_node",
     )
@@ -1306,9 +1266,6 @@ class Instance(ExecutionContext):
 
         self.sid = id(self)
         self.implementations: "set[Implementation]" = set()
-
-        # see inmanta.ast.execute.scheduler.QueueScheduler
-        self.trackers: list[Tracker] = []
 
         self.locations: list[Location] = []
 
