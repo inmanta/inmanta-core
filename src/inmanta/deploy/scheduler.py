@@ -694,7 +694,7 @@ class ResourceScheduler(TaskManager):
                         if all(state is const.ResourceState.deployed for state in dependencies.values())
                         else BlockedStatus.TRANSIENT
                     )
-                if deployment_result is DeploymentResult.DEPLOYED or state.blocked is not BlockedStatus.NO:
+                if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
                 else:
                     # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
