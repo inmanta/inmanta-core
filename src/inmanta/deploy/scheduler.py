@@ -689,12 +689,11 @@ class ResourceScheduler(TaskManager):
                 # Or if we can unblock a transiently blocked resource (its dependencies now succeed)
                 if skipped_for_dependency and state.blocked is not BlockedStatus.YES:
                     dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
-                    mark_as_unblocked = True
-                    for resource_state in dependencies.values():
-                        if resource_state is not const.ResourceState.deployed:
-                            mark_as_unblocked = False
-                            break
-                    state.blocked = BlockedStatus.NO if mark_as_unblocked else BlockedStatus.TRANSIENT
+                    state.blocked = (
+                        BlockedStatus.NO
+                        if all(state is const.ResourceState.deployed for state in dependencies.values())
+                        else BlockedStatus.TRANSIENT
+                    )
                 if deployment_result is DeploymentResult.DEPLOYED or state.blocked is not BlockedStatus.NO:
                     self._state.dirty.discard(resource)
                 else:
