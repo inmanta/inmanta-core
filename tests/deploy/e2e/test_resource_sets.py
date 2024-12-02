@@ -24,7 +24,6 @@ from typing import Optional
 import utils
 from inmanta import const, data
 from inmanta.agent import executor
-from inmanta.agent.handler import HandlerResourceState
 from inmanta.deploy import persistence
 from inmanta.protocol.common import Result
 from inmanta.resources import ResourceIdStr, ResourceVersionIdStr
@@ -1274,7 +1273,7 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
         result=executor.DeployResult(
             rvid=rvid3,
             action_id=action_id,
-            resource_state=HandlerResourceState.deployed,
+            resource_state=const.HandlerResourceState.deployed,
             messages=[],
             changes={},
             change=const.Change.nochange,

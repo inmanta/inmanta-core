@@ -26,10 +26,9 @@ from dataclasses import dataclass
 
 import pyformance
 
-from inmanta import data, resources
+from inmanta import const, data, resources
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployResult
-from inmanta.agent.handler import HandlerResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType
 from inmanta.deploy import scheduler, state
 
@@ -194,11 +193,11 @@ class Deploy(Task):
                     )
                     # Translate deploy result status to the new deployment result state
                     match deploy_result.resource_state:
-                        case HandlerResourceState.deployed:
+                        case const.HandlerResourceState.deployed:
                             scheduler_deployment_result = state.DeploymentResult.DEPLOYED
-                        case HandlerResourceState.skipped:
+                        case const.HandlerResourceState.skipped:
                             scheduler_deployment_result = state.DeploymentResult.SKIPPED
-                        case HandlerResourceState.skipped_for_dependency:
+                        case const.HandlerResourceState.skipped_for_dependency:
                             scheduler_deployment_result = state.DeploymentResult.SKIPPED
                             skipped_for_dependency = True
                         case _:

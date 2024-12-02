@@ -29,7 +29,6 @@ import pytest
 
 from inmanta import const, data
 from inmanta.agent.executor import DeployResult
-from inmanta.agent.handler import HandlerResourceState
 from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.data import ResourceVersionIdStr, model
 from inmanta.deploy import persistence
@@ -428,7 +427,7 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
             result=DeployResult(
                 rvid=rvid,
                 action_id=action_id,
-                resource_state=HandlerResourceState.deployed,
+                resource_state=const.HandlerResourceState.deployed,
                 messages=[],
                 changes={},
                 change=change,

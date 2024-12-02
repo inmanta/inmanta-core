@@ -160,7 +160,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         try:
             provider = await self.get_provider(resource)
         except Exception:
-            ctx.set_resource_state(handler.HandlerResourceState.unavailable)
+            ctx.set_resource_state(const.HandlerResourceState.unavailable)
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=resource.id.resource_version_str())
             return
         else:
@@ -174,19 +174,19 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                     requires,
                 )
                 if ctx.status is None:
-                    ctx.set_resource_state(handler.HandlerResourceState.deployed)
+                    ctx.set_resource_state(const.HandlerResourceState.deployed)
             except SkipResourceForDependencies as e:
-                ctx.set_resource_state(handler.HandlerResourceState.skipped_for_dependency)
+                ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
                 ctx.warning(
                     msg="Resource %(resource_id)s was skipped: %(reason)s",
                     resource_id=resource.id,
                     reason=e.args,
                 )
             except SkipResource as e:
-                ctx.set_resource_state(handler.HandlerResourceState.skipped)
+                ctx.set_resource_state(const.HandlerResourceState.skipped)
                 ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
             except Exception as e:
-                ctx.set_resource_state(handler.HandlerResourceState.failed)
+                ctx.set_resource_state(const.HandlerResourceState.failed)
                 ctx.exception(
                     "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
                     resource_id=str(resource.id),

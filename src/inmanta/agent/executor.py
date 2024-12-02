@@ -39,7 +39,7 @@ import packaging.requirements
 from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
-from inmanta.agent.handler import HandlerContext, HandlerResourceState
+from inmanta.agent.handler import HandlerContext
 from inmanta.const import Change
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
@@ -486,7 +486,7 @@ class FactResult:
 class DeployResult:
     rvid: ResourceVersionIdStr
     action_id: uuid.UUID
-    resource_state: HandlerResourceState
+    resource_state: const.HandlerResourceState
     messages: list[LogLine]
     changes: dict[str, AttributeStateChange]
     change: Optional[Change]
@@ -497,7 +497,7 @@ class DeployResult:
         Translates the new HandlerResourceState to the const.ResourceState that some of the code still uses
         (mainly parts of the code that communicate with the server)
         """
-        if self.resource_state == HandlerResourceState.skipped_for_dependency:
+        if self.resource_state == const.HandlerResourceState.skipped_for_dependency:
             return const.ResourceState.skipped
         return const.ResourceState(self.resource_state)
 
@@ -505,12 +505,12 @@ class DeployResult:
     def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext) -> "DeployResult":
         if ctx.status is None:
             ctx.warning("Deploy status field is None, failing!")
-            ctx.set_resource_state(HandlerResourceState.failed)
+            ctx.set_resource_state(const.HandlerResourceState.failed)
 
         return DeployResult(
             rvid=rvid,
             action_id=ctx.action_id,
-            resource_state=ctx.resource_state or HandlerResourceState.failed,
+            resource_state=ctx.resource_state or const.HandlerResourceState.failed,
             messages=ctx.logs,
             changes=ctx.changes,
             change=ctx.change,
@@ -521,7 +521,7 @@ class DeployResult:
         return DeployResult(
             rvid=rvid,
             action_id=action_id,
-            resource_state=HandlerResourceState.unavailable,
+            resource_state=const.HandlerResourceState.unavailable,
             messages=[message],
             changes={},
             change=Change.nochange,

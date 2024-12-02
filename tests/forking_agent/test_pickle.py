@@ -21,8 +21,7 @@ import pickle
 import uuid
 
 from inmanta.agent.executor import DeployResult, DryrunResult
-from inmanta.agent.handler import HandlerResourceState
-from inmanta.const import Change
+from inmanta.const import Change, HandlerResourceState
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange
 
