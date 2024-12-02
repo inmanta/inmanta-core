@@ -270,3 +270,57 @@ class IteratorProxy(DynamicProxy):
     def __next__(self):
         i = self._get_instance()
         return DynamicProxy.return_value(next(i))
+
+
+# TODO: pick proper place for this. Might be inmanta.plugins or simply higher up in this file
+import typing
+import inmanta.ast.type
+from inmanta import plugin_typing
+
+
+# general idea for approach: try to evaluate (typing.get_type_hints equivalent) args and pass to to_dsl_type(). If it fails,
+#   call parse_dsl_type() instead.
+
+
+# TODO: name
+def parse_dsl_type(dsl_type: str) -> inmanta.ast.type.Type:
+    """
+    Parse a dsl type expression into the corresponding Type object.
+
+    Used for the legacy plugin annotations, as well as native Python annotations with typing.Annotated[..., InmantaType(...)]
+    for complex types that are not (yet) natively supported on the plugin interface.
+    """
+# TODO: remove comment
+def to_dsl_type(python_type: type[object]) -> inmanta.ast.type.Type:
+    """
+    :param python_type: The evaluated python type as provided in the Python type annotation.
+    """
+    # TODO: support implicit Any for each of these typing.get_args
+    if typing.get_origin(python_type)_is typing.Union:
+        bases: Sequence[inmanta.ast.type.Type] = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
+        # TODO: make NullableType if any is Optional
+        return inmanta.ast.type.Union(bases)
+    if typing.get_origin(t) is Sequence:
+        # TODO: more robust implementation
+        base: inmanta.ast.type.Type = typing.get_args(python_type)[0]
+        return inmanta.ast.type.TypedList(base)
+    if typing.get_origin(t) is typing.Annotated:
+        args: Sequence[object] = typing.get_args(python_type)
+        inmanta_types: Sequence[plugin_typing.InmantaType] = [arg if isinstance(arg, plugin_typing.InmantaType) for arg in args]
+        if inmanta_types:
+            if len(inmanta_types) > 1:
+                # TODO
+                raise Exception()
+            # TODO
+            return parse_dsl_type(inmanta_types[0].dsl_type)
+        # the annotation doesn't concern us => use base type
+        return to_dsl_type(args[0])
+    primitive_mapping: Mapping[type, str] = {
+        int: "int",
+        float: "float",
+        str: "string",
+        bool: "bool",
+    }
+    if python_type in primitive_mapping:
+        return inmanta.ast.type.TYPES[primitive_mapping[python_type]]
+    # TODO: continue implementation
