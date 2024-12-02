@@ -90,7 +90,7 @@ class SkipResource(Exception):
 @stable_api
 class SkipResourceForDependencies(SkipResource):
     """
-    A handler should raise this exception when a resource should be skipped.
+    A handler should raise this exception when a resource should be skipped as a result of unsuccessful dependencies.
     The resource will be marked as skipped instead of failed.
     We will try to deploy again when its dependencies are successfully deployed for their latest intent.
     """
@@ -331,7 +331,7 @@ class HandlerContext(LoggerABC):
         except ValueError:
             self._resource_state = HandlerResourceState.failed
             self.logger.warning(
-                "Called set_status with status %s which is not directly translatable to HandlerResourceState", status
+                "Called set_status with status %s which is not supported on the handler API", status
             )
 
     def set_resource_state(self, new_state: HandlerResourceState) -> None:
