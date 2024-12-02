@@ -471,7 +471,7 @@ class ResourceScheduler(TaskManager):
             # Only contains the direct undeployable resources, not the transitive ones.
             blocked_resources: set[ResourceIdStr] = set()
             # Resources that were undeployable in a previous model version, but got unblocked. Not the transitive ones.
-            unblocked_resources: set[ResourceIdStr] = set()
+            newly_defined: set[ResourceIdStr] = set()
 
             # Track potential changes in requires per resource
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
@@ -488,7 +488,7 @@ class ResourceScheduler(TaskManager):
                     # It's a resource we know.
                     if self._state.resource_state[resource].status is ComplianceStatus.UNDEFINED:
                         # The resource has been undeployable in previous versions, but not anymore.
-                        unblocked_resources.add(resource)
+                        newly_defined.add(resource)
                     elif details.attribute_hash != self._state.resources[resource].attribute_hash:
                         # The desired state has changed.
                         new_desired_state.add(resource)
@@ -498,25 +498,17 @@ class ResourceScheduler(TaskManager):
 
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 new_requires: Set[ResourceIdStr] = requires.get(resource, set())
-                added: Set[ResourceIdStr] = new_requires - old_requires
-                dropped: Set[ResourceIdStr] = old_requires - new_requires
-                if added:
-                    added_requires[resource] = added
-                if dropped:
-                    dropped_requires[resource] = dropped
-                    if self._state.resource_state[resource].blocked is BlockedStatus.TRANSIENT:
-                        dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
-                        if all(dependencies[requires_id].deployed for requires_id in new_requires):
-                            self._state.resource_state[resource].blocked = BlockedStatus.NO
-                            unblocked_resources.add(resource)
+                added_requires[resource] = new_requires - old_requires
+                dropped_requires[resource] = old_requires - new_requires
+
                 # this loop is race-free, potentially slow, and completely synchronous
                 # => regularly pass control to the event loop to not block scheduler operation during update prep
                 await asyncio.sleep(0)
 
             # A resource should not be present in more than one of these resource sets
-            assert len(new_desired_state | blocked_resources | unblocked_resources) == len(new_desired_state) + len(
+            assert len(new_desired_state | blocked_resources | newly_defined) == len(new_desired_state) + len(
                 blocked_resources
-            ) + len(unblocked_resources)
+            ) + len(newly_defined)
 
             # in the current implementation everything below the lock is synchronous, so it's not technically required. It is
             # however kept for two reasons:
@@ -531,8 +523,17 @@ class ResourceScheduler(TaskManager):
                     self._state.update_desired_state(resource, resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
+                    # If the resource is blocked transiently, and we drop at least one of its requirements
+                    # we check to see if the resource can now be unblocked
+                    # i.e. all of its dependencies are now compliant with the desired state.
+                    if (
+                        self._state.resource_state[resource].blocked is BlockedStatus.TRANSIENT
+                        and dropped_requires
+                        and await self._resource_can_be_unblocked(resource)
+                    ):
+                        self._state.resource_state[resource].blocked = BlockedStatus.NO
                 transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
-                for resource in unblocked_resources:
+                for resource in newly_defined:
                     self._state.mark_as_defined(resource, resources[resource])
                 # Update set of in-progress non-stale deploys by trimming resources with new state
                 self._deploying_latest.difference_update(
@@ -687,15 +688,24 @@ class ResourceScheduler(TaskManager):
                 self._work.finished_deploy(resource)
                 # Check if we need to mark a resource as transiently blocked
                 # Or if we can unblock a transiently blocked resource (its dependencies now succeed)
+                # We might already be unblocked if a dependency succeeds on another agent
+                # so skipped_for_dependency might be outdated
                 if skipped_for_dependency and state.blocked is not BlockedStatus.YES:
-                    dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
-                    state.blocked = (
-                        BlockedStatus.NO
-                        if all(state is const.ResourceState.deployed for state in dependencies.values())
-                        else BlockedStatus.TRANSIENT
-                    )
-                if deployment_result is DeploymentResult.DEPLOYED:
+                    state.blocked = BlockedStatus.NO if await self._resource_can_be_unblocked(resource) else BlockedStatus.TRANSIENT
+                if deployment_result is DeploymentResult.DEPLOYED or state.blocked is not BlockedStatus.NO:
+                    # Remove this resource from the dirty set if it is blocked or successfully deployed
                     self._state.dirty.discard(resource)
+                    if deployment_result is DeploymentResult.DEPLOYED:
+                        # If we have a successful deploy, we check to see if any of its dependents is blocked transiently
+                        # If they are, we unblock them.
+                        provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.provides_view()
+                        dependents: Set[ResourceIdStr] = provides_view.get(resource, set())
+                        for dependent in dependents:
+                            if self._state.resource_state[
+                                dependent
+                            ].blocked is BlockedStatus.TRANSIENT and await self._resource_can_be_unblocked(dependent):
+                                self._state.resource_state[dependent].blocked = BlockedStatus.NO
+                                self._state.dirty.add(dependent)
                 else:
                     # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
                     # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
@@ -724,6 +734,29 @@ class ResourceScheduler(TaskManager):
                             deploying=set(),
                         )
 
+    async def _get_resource_state_for_dependencies(self, resource: ResourceIdStr) -> Mapping[ResourceIdStr, ResourceState]:
+        """
+        Get resource state for every dependency of a given resource from the scheduler state.
+
+        Should only be called under scheduler lock.
+
+        :param resource: The id of the resource to find the dependencies for
+        """
+        requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.requires_view()
+        dependencies: Set[ResourceIdStr] = requires_view.get(resource, set())
+        return {dep_id: self._state.resource_state[dep_id] for dep_id in dependencies}
+
+    async def _resource_can_be_unblocked(self, resource: ResourceIdStr) -> bool:
+        """
+        Checks if a resource has all of its dependencies in a compliant state.
+
+        Should only be called under scheduler lock.
+
+        :param resource: The id of the resource to find the dependencies for
+        """
+        dependencies_state: Mapping[ResourceIdStr, ResourceState] = await self._get_resource_state_for_dependencies(resource)
+        return all(state.status is ComplianceStatus.COMPLIANT for state in dependencies_state.values())
+
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr
     ) -> Mapping[ResourceIdStr, const.ResourceState]:
@@ -735,11 +768,9 @@ class ResourceScheduler(TaskManager):
 
         :param resource: The id of the resource to find the dependencies for
         """
-        requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.requires_view()
-        dependencies: Set[ResourceIdStr] = requires_view.get(resource, set())
+        dependencies = await self._get_resource_state_for_dependencies(resource)
         dependencies_state = {}
-        for dep_id in dependencies:
-            resource_state_object: ResourceState = self._state.resource_state[dep_id]
+        for dep_id, resource_state_object in dependencies.items():
             match resource_state_object:
                 case ResourceState(status=ComplianceStatus.UNDEFINED):
                     dependencies_state[dep_id] = const.ResourceState.undefined
