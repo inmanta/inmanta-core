@@ -123,7 +123,7 @@ class EnvBlueprint:
         """
         if self._hash_cache is None:
             blueprint_dict: Dict[str, Any] = {
-                "pip_config": self.pip_config.dict(),
+                "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 "python_version": self.python_version,
             }
@@ -207,7 +207,7 @@ class ExecutorBlueprint(EnvBlueprint):
         """
         if self._hash_cache is None:
             blueprint_dict = {
-                "pip_config": self.pip_config.dict(),
+                "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 # Use the hash values and name to create a stable identity
                 "sources": [[source.hash_value, source.name, source.is_byte_code] for source in self.sources],
@@ -537,7 +537,7 @@ class Executor(abc.ABC):
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-        requires: dict[ResourceIdStr, const.ResourceState],
+        requires: Mapping[ResourceIdStr, const.ResourceState],
     ) -> DeployResult:
         """
         Perform the actual deployment of the resource by calling the loaded handler code

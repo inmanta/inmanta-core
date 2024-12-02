@@ -25,6 +25,8 @@ import shutil
 import uuid
 from uuid import UUID
 
+import pytest
+
 import inmanta.protocol
 from inmanta import const, data
 from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
@@ -98,6 +100,7 @@ async def populate_facts_and_parameters(client, env_id: str):
         )
 
 
+@pytest.mark.parametrize("auto_start_agent", [True])  # set config value
 async def test_dump_db(server, client, postgres_db, database_name):
     if False:
         # trick autocomplete to have autocomplete on client
@@ -118,7 +121,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     check_result(await client.create_environment(project_id=project_id, name="dev-2"))
 
-    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(env_id_1))
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(env_id_1), "compiler")
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../..", "data", "simple_project")
 
     # Get correct version

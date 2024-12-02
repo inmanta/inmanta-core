@@ -30,7 +30,7 @@ from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data.model import AttributeStateChange, DataBaseReport, ResourceVersionIdStr
+from inmanta.data.model import DataBaseReport
 from inmanta.deploy import scheduler
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
@@ -93,8 +93,6 @@ class Agent(SessionEndpoint):
             data.Resource._connection_pool,
             opt.db_name.get(),
             opt.db_host.get(),
-            "scheduler",
-            str(self.environment),
         )
         self._db_monitor.start()
 
@@ -209,10 +207,11 @@ class Agent(SessionEndpoint):
     async def stop(self) -> None:
         if self.working:
             await self.stop_working()
+        if self._db_monitor:
+            await self._db_monitor.stop()
         threadpools_to_join = [self.thread_pool]
         await self.executor_manager.join(threadpools_to_join, const.SHUTDOWN_GRACE_IOLOOP * 0.9)
         self.thread_pool.shutdown(wait=False)
-
         await join_threadpools(threadpools_to_join)
         await super().stop()
 
@@ -243,11 +242,6 @@ class Agent(SessionEndpoint):
         await self.executor_manager.join([], timeout=timeout)
         await self.scheduler.join()
         LOGGER.info("Scheduler stopped for environment %s", self.environment)
-
-    @protocol.handle(methods_v2.update_agent_map)
-    async def update_agent_map(self, agent_map: dict[str, str]) -> None:
-        # Not used here
-        pass
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
@@ -317,20 +311,6 @@ class Agent(SessionEndpoint):
         assert env == self.environment
         await self.scheduler.read_version()
         return 200
-
-    @protocol.handle(methods.resource_event, env="tid", agent="id")
-    async def resource_event(
-        self,
-        env: uuid.UUID,
-        agent: str,
-        resource: ResourceVersionIdStr,
-        send_events: bool,
-        state: const.ResourceState,
-        change: const.Change,
-        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]],
-    ) -> Apireturn:
-        # Doesn't do anything
-        pass
 
     @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
     async def run_dryrun(self, env: uuid.UUID, dry_run_id: uuid.UUID, agent: str, version: int) -> Apireturn:

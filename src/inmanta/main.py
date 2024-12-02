@@ -31,7 +31,7 @@ import texttable
 
 from inmanta import protocol, util
 from inmanta.config import Config, cmdline_rest_transport
-from inmanta.const import AgentAction, AgentTriggerMethod, ResourceAction
+from inmanta.const import AgentAction, DesiredStateVersionStatus, ResourceAction
 from inmanta.data.model import ResourceVersionIdStr
 from inmanta.resources import Id
 from inmanta.types import JsonType
@@ -613,22 +613,32 @@ def version(ctx: click.Context) -> None:
 @click.pass_obj
 def version_list(client: Client, environment: str) -> None:
     env_id = client.to_environment_id(environment)
-    versions = client.get_list("list_versions", "versions", arguments=dict(tid=env_id))
-
+    versions = client.get_list("list_desired_state_versions", "data", arguments=dict(tid=env_id))
     print_table(
-        ["Created at", "Version", "Released", "Deployed", "# Resources", "# Done", "State"],
-        [[x["date"], x["version"], x["released"], x["deployed"], x["total"], x["done"], x["result"]] for x in versions],
-        ["t", "t", "t", "t", "t", "t", "t"],
+        ["Created at", "Version", "Released", "# Resources", "State"],
+        [
+            [
+                x["date"],
+                x["version"],
+                str(
+                    x["status"]
+                    not in [DesiredStateVersionStatus.candidate.value, DesiredStateVersionStatus.skipped_candidate.value]
+                ),
+                x["total"],
+                x["status"],
+            ]
+            for x in versions
+        ],
+        ["t", "t", "t", "t", "t"],
     )
 
 
 @version.command(name="release")
 @click.option("--environment", "-e", help="The environment to use", required=True)
-@click.option("--push", "-p", help="Push the version to the deployment agents", is_flag=True)
+@click.option("--push", "-p", help="[Deprecated] will be ignored", is_flag=True)
 @click.option(
     "--full",
-    help="Make the agents execute a full deploy instead of an incremental deploy. "
-    "Should be used together with the --push option",
+    help="[Deprecated] will be ignored",
     is_flag=True,
 )
 @click.argument("version")
@@ -640,17 +650,17 @@ def version_release(client: Client, environment: str, push: bool, full: bool, ve
     VERSION: Version of the model to release
     """
     env_id = client.to_environment_id(environment)
-    if push:
-        trigger_method = AgentTriggerMethod.get_agent_trigger_method(full)
-        x = client.get_dict(
-            "release_version", "model", dict(tid=env_id, id=version, push=True, agent_trigger_method=trigger_method)
-        )
-    else:
-        x = client.get_dict("release_version", "model", dict(tid=env_id, id=version))
+
+    x = client.get_dict("release_version", "model", dict(tid=env_id, id=version))
 
     print_table(
-        ["Created at", "Version", "Released", "Deployed", "# Resources", "# Done", "State"],
-        [[x["date"], x["version"], x["released"], x["deployed"], x["total"], x["done"], x["result"]]],
+        [
+            "Created at",
+            "Version",
+            "Released",
+            "# Resources",
+        ],
+        [[x["date"], x["version"], x["released"], x["total"]]],
     )
 
 
@@ -797,29 +807,33 @@ def version_report(client: Client, environment: str, version: str, show_detailed
 def monitor_deploy(client: Client, environment: str) -> None:
     tid = client.to_environment_id(environment)
 
-    versions = cast(dict[str, list[dict[str, str]]], client.do_request("list_versions", arguments=dict(tid=tid)))
-    allversion = versions["versions"]
-    try:
-        first: dict[str, str] = next(version for version in allversion if version["result"] != "pending")
-    except StopIteration:
-        raise click.ClickException("Environment %s doesn't contain a released configuration model" % environment)
+    def get_stats() -> tuple[int, int]:
+        deploy_status = client.do_request("resource_list", arguments=dict(tid=tid, deploy_summary=True, limit=0))
 
-    total = int(first["total"])
-    done = int(first["done"])
+        summary = deploy_status["metadata"]["deploy_summary"]
+        done: int = (
+            summary["by_state"]["deployed"]
+            + summary["by_state"]["failed"]
+            + summary["by_state"]["skipped"]
+            + summary["by_state"]["skipped_for_undefined"]
+            + summary["by_state"]["unavailable"]
+            + summary["by_state"]["undefined"]
+        )
+        total: int = summary["total"]
+        return done, total
+
+    done, total = get_stats()
+
     last = done
-    ident = int(first["version"])
 
-    with click.progressbar(label="version:%d" % ident, length=total, show_pos=True, show_eta=False) as bar:
+    with click.progressbar(label="environment:%s" % environment, length=total, show_pos=True, show_eta=False) as bar:
         bar.update(done)
         while done != total:
             if done != last:
                 bar.update(done - last)
                 last = done
             sleep(1)
-            version = cast(
-                dict[str, dict[str, int]], client.get_dict("get_version", arguments=dict(tid=tid, id=int(ident), limit=0))
-            )
-            done = version["model"]["done"]
+            done, total = get_stats()
         if done != last:
             bar.update(done - last)
             last = done

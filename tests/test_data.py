@@ -19,7 +19,6 @@
 import asyncio
 import datetime
 import enum
-import json
 import logging
 import time
 import uuid
@@ -402,28 +401,27 @@ async def test_population_settings_dict_on_get_of_setting(init_dataclasses_and_l
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    async def assert_setting_in_db(expected_autostart_agent_map: dict[str, object]) -> None:
+    async def assert_setting_in_db(expected_available_versions_to_keep: int) -> None:
         """
-        Verify that the state of the setting.autostart_agent_map setting in the database matches the given
-        expected_autostart_agent_map dictionary.
+        Verify that the state of the setting.available_versions_to_keep setting in the database matches the given
+        expected_available_versions_to_keep.
         """
         async with data.Environment.get_connection() as connection:
-            query = f"SELECT setting->'{data.AUTOSTART_AGENT_MAP}' FROM {data.Environment.table_name()} WHERE id=$1"
+            query = f"SELECT setting->'{data.AVAILABLE_VERSIONS_TO_KEEP}' FROM {data.Environment.table_name()} WHERE id=$1"
             result = await connection.fetchval(query, env.id)
-            assert json.loads(result) == expected_autostart_agent_map
+            assert int(result) == expected_available_versions_to_keep
 
     # Get two environment object with an empty settings dict.
     env_obj1 = await data.Environment.get_by_id(env.id)
     env_obj2 = await data.Environment.get_by_id(env.id)
 
-    # Add autostart_agent_map key to settings dict
-    autostart_agent_map = {"test": ":local", "internal": ":local"}
-    await env_obj1.set(data.AUTOSTART_AGENT_MAP, dict(autostart_agent_map))
+    # Add AVAILABLE_VERSIONS_TO_KEEP key to settings dict
+    await env_obj1.set(data.AVAILABLE_VERSIONS_TO_KEEP, 5)
 
-    assert assert_setting_in_db(autostart_agent_map)
-    # Make sure that get for autostart_agent_map on env_obj2 object doesn't override setting with default value.
-    assert await env_obj2.get(data.AUTOSTART_AGENT_MAP) == autostart_agent_map
-    assert assert_setting_in_db(autostart_agent_map)
+    assert assert_setting_in_db(5)
+    # Make sure that get for AVAILABLE_VERSIONS_TO_KEEP on env_obj2 object doesn't override setting with default value.
+    assert await env_obj2.get(data.AVAILABLE_VERSIONS_TO_KEEP) == 5
+    assert assert_setting_in_db(5)
 
 
 async def test_agent_process(init_dataclasses_and_load_schema):
@@ -844,95 +842,6 @@ async def test_model_get_latest_version(init_dataclasses_and_load_schema):
     assert latest_version.version == 4
 
 
-async def test_model_set_ready(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    version = int(time.time())
-    cm = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm.insert()
-
-    assert cm.done == 0
-
-    name = "file"
-    key = "std::testing::NullResource[agent1,name=" + name + "]"
-    resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
-    await resource.insert()
-
-    assert cm.done == 0
-    await resource.update_fields(status=const.ResourceState.deployed)
-    cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
-    assert cm.done == 1
-
-
-@pytest.mark.parametrize(
-    "resource_state, should_be_deployed",
-    [
-        (const.ResourceState.unavailable, True),
-        (const.ResourceState.skipped, True),
-        (const.ResourceState.deployed, True),
-        (const.ResourceState.failed, True),
-        (const.ResourceState.deploying, False),
-        (const.ResourceState.available, False),
-        (const.ResourceState.cancelled, True),
-        (const.ResourceState.undefined, True),
-        (const.ResourceState.skipped_for_undefined, True),
-    ],
-)
-async def test_model_mark_done_if_done(init_dataclasses_and_load_schema, resource_state, should_be_deployed):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    version = int(time.time())
-    cm = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm.insert()
-
-    assert cm.done == 0
-
-    name = "file"
-    key = "std::testing::NullResource[agent1,path=" + name + "]"
-    resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
-    await resource.insert()
-
-    assert not cm.deployed
-    await data.ConfigurationModel.mark_done_if_done(env.id, cm.version)
-    cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
-    assert not cm.deployed
-    assert cm.done == 0
-
-    await resource.update_fields(status=resource_state)
-    await data.ConfigurationModel.mark_done_if_done(env.id, cm.version)
-    cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
-    assert cm.deployed == should_be_deployed
-    assert cm.done == (1 if should_be_deployed else 0)
-
-    # Make sure that a done resource stays in done even when a repair is running
-    await resource.update_fields(status=const.ResourceState.deploying)
-    cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
-    assert cm.deployed == should_be_deployed
-    assert cm.done == (1 if should_be_deployed else 0)
-
-
 async def test_model_get_list(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -976,7 +885,6 @@ async def test_model_get_list(init_dataclasses_and_load_schema):
         assert len(cms) == 2
         for c in cms:
             assert c.environment == env.id
-            assert c.done == 2
 
     cms = await data.ConfigurationModel.get_list(environment=uuid.uuid4())
     assert not cms
@@ -996,8 +904,6 @@ async def test_model_serialization(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
-    assert cm.done == 0
-
     name = "file"
     key = "std::testing::NullResource[agent1,name=" + name + "]"
     resource = data.Resource.new(
@@ -1014,12 +920,7 @@ async def test_model_serialization(init_dataclasses_and_load_schema):
     assert dct["environment"] == env.id
     assert dct["date"] == now
     assert not dct["released"]
-    assert not dct["deployed"]
-    assert dct["result"] == const.VersionState.pending
     assert dct["version_info"] == {}
-    assert dct["total"] == 1
-    assert dct["done"] == 1
-    assert dct["status"] == {str(uuid.uuid5(env.id, key)): {"id": key, "status": const.ResourceState.deployed.name}}
 
 
 async def test_model_delete_cascade(init_dataclasses_and_load_schema):
@@ -1094,59 +995,6 @@ async def test_model_get_version_nr_latest_version(init_dataclasses_and_load_sch
     assert await data.ConfigurationModel.get_version_nr_latest_version(uuid.uuid4()) is None
 
 
-@pytest.mark.parametrize(
-    "resource_state, version_state",
-    [
-        (const.ResourceState.deployed, const.VersionState.success),
-        (const.ResourceState.failed, const.VersionState.failed),
-        (const.ResourceState.undefined, const.VersionState.failed),
-        (const.ResourceState.skipped_for_undefined, const.VersionState.failed),
-        (const.ResourceState.cancelled, const.VersionState.failed),
-        (const.ResourceState.skipped, const.VersionState.failed),
-    ],
-)
-async def test_mark_done(init_dataclasses_and_load_schema, resource_state, version_state):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    version = int(time.time())
-    cm = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=2,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm.insert()
-
-    assert cm.done == 0
-
-    name1 = "file"
-    key1 = "std::testing::NullResource[agent1,name=" + name1 + "]"
-    resource1 = data.Resource.new(
-        environment=env.id, resource_version_id=key1 + ",v=%d" % version, attributes={"name": name1}, status=resource_state
-    )
-    await resource1.insert()
-
-    name2 = "file2"
-    key2 = "std::testing::NullResource[agent1,name=" + name2 + "]"
-    resource2 = data.Resource.new(
-        environment=env.id,
-        resource_version_id=key2 + ",v=%d" % version,
-        attributes={"name": name2},
-        status=const.ResourceState.deployed,
-    )
-    await resource2.insert()
-
-    assert cm.result == const.VersionState.pending
-    await cm.mark_done()
-    assert cm.result == version_state
-
-
 async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_client):
     project = data.Project(name="test")
     await project.insert()
@@ -1165,7 +1013,6 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_
         total=1,
         version_info={},
         released=False,
-        deployed=False,
         is_suitable_for_partial_compiles=False,
     )
     await cm2.insert()
@@ -1185,7 +1032,6 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_
         total=1,
         version_info={},
         released=False,
-        deployed=False,
         is_suitable_for_partial_compiles=False,
     )
     await cm2.insert()
@@ -1227,7 +1073,6 @@ async def test_get_resources(init_dataclasses_and_load_schema):
         total=1,
         version_info={},
         released=True,
-        deployed=True,
         is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
@@ -1270,7 +1115,6 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
         total=1,
         version_info={},
         released=True,
-        deployed=True,
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
@@ -1293,7 +1137,6 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
         total=1,
         version_info={},
         released=True,
-        deployed=True,
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
@@ -1315,7 +1158,6 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
             total=1,
             version_info={},
             released=True,
-            deployed=True,
             is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
@@ -1365,7 +1207,6 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
             total=2,
             version_info={},
             released=True,
-            deployed=True,
             is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
@@ -1400,7 +1241,6 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
         total=2,
         version_info={},
         released=True,
-        deployed=True,
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
@@ -1474,7 +1314,6 @@ async def test_escaped_resources(init_dataclasses_and_load_schema):
         total=1,
         version_info={},
         released=True,
-        deployed=True,
         is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
@@ -1510,7 +1349,6 @@ async def test_resource_provides(init_dataclasses_and_load_schema):
         total=1,
         version_info={},
         released=True,
-        deployed=True,
         is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
@@ -1561,7 +1399,6 @@ async def test_resource_hash(init_dataclasses_and_load_schema):
             total=1,
             version_info={},
             released=True,
-            deployed=True,
             is_suitable_for_partial_compiles=False,
         )
         await cm1.insert()
@@ -1632,7 +1469,6 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
         total=1,
         version_info={},
         released=True,
-        deployed=True,
         is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
@@ -1665,7 +1501,6 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
         total=1,
         version_info={},
         released=True,
-        deployed=True,
         is_suitable_for_partial_compiles=False,
     )
     await cm2.insert()
@@ -1708,7 +1543,6 @@ async def test_resources_report(init_dataclasses_and_load_schema):
         total=1,
         version_info={},
         released=True,
-        deployed=True,
         is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
@@ -1743,7 +1577,6 @@ async def test_resources_report(init_dataclasses_and_load_schema):
         total=1,
         version_info={},
         released=False,
-        deployed=False,
         is_suitable_for_partial_compiles=False,
     )
     await cm2.insert()
@@ -1772,7 +1605,6 @@ async def test_resources_report(init_dataclasses_and_load_schema):
         total=1,
         version_info={},
         released=True,
-        deployed=True,
         is_suitable_for_partial_compiles=False,
     )
     await cm3.insert()
@@ -1836,7 +1668,6 @@ async def test_resource_action(init_dataclasses_and_load_schema):
         total=1,
         version_info={},
         released=True,
-        deployed=True,
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
@@ -2462,7 +2293,6 @@ async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2
             total=1,
             version_info={},
             released=True,
-            deployed=True,
             is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
@@ -2562,7 +2392,6 @@ async def test_resources_json(init_dataclasses_and_load_schema):
         total=1,
         version_info={},
         released=True,
-        deployed=True,
         is_suitable_for_partial_compiles=False,
     )
     await cm.insert()

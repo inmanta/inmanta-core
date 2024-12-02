@@ -67,7 +67,7 @@ class OpenApiConverter:
         self.arg_option_handler = ArgOptionHandler(self.type_converter)
 
     def _collect_server_information(self) -> list[Server]:
-        bind_port = config.get_bind_port()
+        bind_port = config.server_bind_port.get()
         server_address = config.server_address.get()
         protocol = "https" if config.ssl_enabled() else "http"
         return [

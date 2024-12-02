@@ -10,18 +10,18 @@ requires = [
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab>=0.23,<2.0",
-    "cryptography>=36,<44",
+    "cryptography>=36,<45",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.17",
     "email-validator>=1,<3",
     "jinja2~=3.0",
     "more-itertools>=8,<11",
     # upper bound on packaging because we use a non-public API that might change in any (non-SemVer) version
-    "packaging>=21.3,<24.2",
+    "packaging>=21.3,<24.3",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
-    "pydantic~=2.5",
+    "pydantic~=2.5,!=2.9.2",
     "pyformance~=0.4",
     "PyJWT~=2.0",
     "pynacl~=1.5",

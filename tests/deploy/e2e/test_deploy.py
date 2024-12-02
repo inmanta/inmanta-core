@@ -101,8 +101,12 @@ async def test_on_disk_layout(server, agent, environment):
         assert sub_dir.exists()
 
     # Check for presence of the new disk layout marker file
-    marker_file_path = state_dir / const.INMANTA_USE_NEW_DISK_LAYOUT_FILENAME
+    marker_file_path = state_dir / const.INMANTA_DISK_LAYOUT_VERSION
     assert pathlib.Path(marker_file_path).exists()
+
+    # Check that the version matches the established default version
+    with open(marker_file_path, "r") as file:
+        assert file.read() == str(const.DEFAULT_INMANTA_DISK_LAYOUT_VERSION)
 
 
 async def test_basics(agent, resource_container, clienthelper, client, environment):
@@ -264,7 +268,7 @@ async def check_server_state_vs_scheduler_state(client, environment, scheduler):
 
         state_correspondence = {
             "deployed": DeploymentResult.DEPLOYED,
-            "skipped": DeploymentResult.FAILED,
+            "skipped": DeploymentResult.SKIPPED,
             "failed": DeploymentResult.FAILED,
         }
 
@@ -316,10 +320,7 @@ async def test_deploy_empty(server, client, clienthelper, environment, agent):
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-    assert result.result["model"]["deployed"]
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 0
-    assert result.result["model"]["result"] == const.VersionState.success.name
 
 
 @pytest.mark.skip("fine grained deploy trigger seems gone")
@@ -391,10 +392,7 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-    assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == len(resources)
-    assert result.result["model"]["result"] == "deploying"
 
     # The server will mark the full version as deployed even though the agent has not done anything yet.
     result = await client.get_version(environment, version)
@@ -478,9 +476,6 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
     assert result.code == 200
 
     await wait_until_deployment_finishes(client, environment)
-
-    result = await client.get_version(environment, version)
-    assert result.result["model"]["done"] == len(resources)
 
     result = await client.get_version(environment, version, include_logs=True)
 
@@ -773,18 +768,13 @@ async def test_deploy_and_events(
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-    assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 3
-    assert result.result["model"]["result"] == "deploying"
 
     result = await client.get_version(environment, version)
     assert result.code == 200
 
     await wait_until_deployment_finishes(client, environment)
-
-    result = await client.get_version(environment, version)
-    assert result.result["model"]["done"] == len(resources)
 
     # verify against result matrices
     assert dorun[dep_state.index][self_state.index] == (resource_container.Provider.readcount("agent1", "key3") > 0)
@@ -836,18 +826,12 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-    assert not result.result["model"]["deployed"]
-    assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 2
-    assert result.result["model"]["result"] == "deploying"
 
     result = await client.get_version(environment, version)
     assert result.code == 200
 
     await wait_until_deployment_finishes(client, environment)
-
-    result = await client.get_version(environment, version)
-    assert result.result["model"]["done"] == len(resources)
 
     assert dep_state.index == resource_container.Provider.reloadcount("agent1", "key2")
 
@@ -887,3 +871,53 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
     await retry_limited(in_progress, 30)
 
     await resource_container.wait_for_done_with_waiters(client, environment, version)
+
+
+async def test_lsm_states(resource_container, server, client, clienthelper, environment, agent):
+    version = await clienthelper.get_version()
+
+    resource_container.Provider.set_fail("agent1", "key", 1)
+
+    rid1 = "test::Resource[agent1,key=key]"
+    rid2 = "test::Resource[agent1,key=key2]"
+    lsmrid = "test::LSMLike[agent1,key=key3]"
+
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+        },
+        {
+            "key": "key2",
+            "value": "value",
+            "id": f"{rid2},v={version}",
+            "requires": [rid1],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+        },
+        {
+            "key": "key3",
+            "value": "value",
+            "id": f"{lsmrid},v={version}",
+            "requires": [rid1, rid2],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+        },
+    ]
+    await clienthelper.set_auto_deploy(True)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed()
+
+    result = await client.resource_list(environment)
+    assert result.code == 200
+    state_map = {r["resource_id"]: r["status"] for r in result.result["data"]}
+    # One failure, one skip, in the depdencies
+    # response is failure
+    assert state_map == {rid1: "failed", rid2: "skipped", lsmrid: "failed"}

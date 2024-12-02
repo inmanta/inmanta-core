@@ -49,7 +49,7 @@ from asyncpg.protocol import Record
 import inmanta.db.versions
 from crontab import CronTab
 from inmanta import const, resources, util
-from inmanta.const import DATETIME_MIN_UTC, DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
+from inmanta.const import DATETIME_MIN_UTC, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import (
@@ -2279,23 +2279,6 @@ def convert_positive_float(value: Union[float, int, str]) -> float:
     return float_value
 
 
-def convert_agent_map(value: dict[str, str]) -> dict[str, str]:
-    if not isinstance(value, dict):
-        raise ValueError("Agent map should be a dict")
-
-    for key, v in value.items():
-        if not isinstance(key, str):
-            raise ValueError("The key of an agent map should be string")
-
-        if not isinstance(v, str):
-            raise ValueError("The value of an agent map should be string")
-
-    if "internal" not in value:
-        raise ValueError("The internal agent must be present in the autostart_agent_map")
-
-    return value
-
-
 def translate_to_postgres_type(type: str) -> str:
     if type not in TYPE_MAP:
         raise Exception("Type '" + type + "' is not a valid type for a settings entry")
@@ -2345,15 +2328,11 @@ TYPE_MAP = {
 }
 
 AUTO_DEPLOY = "auto_deploy"
-PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
-AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY = "agent_trigger_method_on_auto_deploy"
-ENVIRONMENT_AGENT_TRIGGER_METHOD = "environment_agent_trigger_method"
 AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
 AUTOSTART_AGENT_DEPLOY_SPLAY_TIME = "autostart_agent_deploy_splay_time"
 AUTOSTART_AGENT_REPAIR_INTERVAL = "autostart_agent_repair_interval"
 AUTOSTART_AGENT_REPAIR_SPLAY_TIME = "autostart_agent_repair_splay_time"
 AUTOSTART_ON_START = "autostart_on_start"
-AUTOSTART_AGENT_MAP = "autostart_agent_map"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
 AUTO_FULL_COMPILE = "auto_full_compile"
@@ -2501,31 +2480,6 @@ class Environment(BaseDocument):
             "that was compiled by the orchestrator itself.",
             validator=convert_boolean,
         ),
-        PUSH_ON_AUTO_DEPLOY: Setting(
-            name=PUSH_ON_AUTO_DEPLOY,
-            typ="bool",
-            default=True,
-            doc="Push a new version when it has been autodeployed.",
-            validator=convert_boolean,
-        ),
-        AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY: Setting(
-            name=AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY,
-            typ="enum",
-            default=const.AgentTriggerMethod.push_incremental_deploy.name,
-            validator=convert_agent_trigger_method,
-            doc="The agent trigger method to use when " + PUSH_ON_AUTO_DEPLOY + " is enabled",
-            allowed_values=[opt.name for opt in const.AgentTriggerMethod],
-        ),
-        ENVIRONMENT_AGENT_TRIGGER_METHOD: Setting(
-            name=ENVIRONMENT_AGENT_TRIGGER_METHOD,
-            typ="enum",
-            default=const.AgentTriggerMethod.push_incremental_deploy.name,
-            validator=convert_agent_trigger_method,
-            doc="The agent trigger method to use when no specific method is specified in the API call. "
-            "This determines the behavior of the 'Promote' button. "
-            f"For auto deploy, {AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} is used.",
-            allowed_values=[opt.name for opt in const.AgentTriggerMethod],
-        ),
         AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(
             name=AUTOSTART_AGENT_DEPLOY_INTERVAL,
             typ="str",
@@ -2572,15 +2526,6 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="Automatically start agents when the server starts instead of only just in time.",
-        ),
-        AUTOSTART_AGENT_MAP: Setting(
-            name=AUTOSTART_AGENT_MAP,
-            default={"internal": "local:"},
-            typ="dict",
-            validator=convert_agent_map,
-            doc="A dict with key the name of agents that should be automatically started. The value "
-            "is either an empty string or an agent map string. See also: :inmanta.config:option:`config.agent-map`",
-            agent_restart=True,
         ),
         SERVER_COMPILE: Setting(
             name=SERVER_COMPILE,
@@ -3524,29 +3469,20 @@ class Agent(BaseDocument):
     async def clean_up(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         query = """
 DELETE FROM public.agent AS a
-WHERE (environment, name) NOT IN (
-    SELECT DISTINCT environment_id as environment, agent as name
-    FROM (
-        -- agent is in the agent map
-        SELECT e.id as environment_id, map.key as agent
-        FROM public.environment e
-        CROSS JOIN LATERAL jsonb_each(e.settings->'autostart_agent_map') AS map(key, value)
-    ) in_agent_map
-)
--- have no primary ID set (that are down)
-AND id_primary IS NULL
--- not used by any version
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.resource AS re
-    WHERE a.environment=re.environment
-    AND a.name=re.agent
-)
-AND a.environment IN (
-    SELECT id
-    FROM public.environment
-    WHERE NOT halted
-);
+WHERE -- have no primary ID set (that are down)
+      id_primary IS NULL
+      -- not used by any version
+      AND NOT EXISTS (
+          SELECT 1
+          FROM public.resource AS re
+          WHERE a.environment=re.environment
+          AND a.name=re.agent
+      )
+      AND a.environment IN (
+          SELECT id
+          FROM public.environment
+          WHERE NOT halted
+      );
 """
         await cls._execute_query(query, connection=connection)
 
@@ -3675,7 +3611,9 @@ class Compile(BaseDocument):
 
     @classmethod
     # TODO: Use join
-    async def get_report(cls, compile_id: uuid.UUID) -> Optional[dict]:
+    async def get_report(
+        cls, compile_id: uuid.UUID, order_by: Optional[str] = None, order: Optional[str] = None
+    ) -> Optional[dict]:
         """
         Get the compile and the associated reports from the database
         """
@@ -3684,7 +3622,7 @@ class Compile(BaseDocument):
             return None
 
         dict_model = result.to_dict()
-        reports = await Report.get_list(compile=result.id)
+        reports = await Report.get_list(compile=result.id, order_by_column=order_by, order=order)
         dict_model["reports"] = [r.to_dict() for r in reports]
 
         return dict_model
@@ -5446,8 +5384,6 @@ class ConfigurationModel(BaseDocument):
     pip_config: Optional[PipConfig] = None
 
     released: bool = False
-    deployed: bool = False
-    result: const.VersionState = const.VersionState.pending
     version_info: Optional[dict[str, object]] = None
     is_suitable_for_partial_compiles: bool
 
@@ -5459,20 +5395,10 @@ class ConfigurationModel(BaseDocument):
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
-        self._status = {}
-        self._done = 0
 
     @classmethod
     def get_valid_field_names(cls) -> list[str]:
-        return super().get_valid_field_names() + ["status", "model"]
-
-    @property
-    def done(self) -> int:
-        # Keep resources which are deployed in done, even when a repair operation
-        # changes its state to deploying again.
-        if self.deployed:
-            return self.total
-        return self._done
+        return super().get_valid_field_names() + ["model"]
 
     @classmethod
     async def create_for_partial_compile(
@@ -5601,8 +5527,6 @@ class ConfigurationModel(BaseDocument):
                 skipped_for_undeployable,
                 partial_base,
                 released,
-                deployed,
-                result,
                 is_suitable_for_partial_compiles,
                 pip_config
         """
@@ -5628,18 +5552,6 @@ class ConfigurationModel(BaseDocument):
             return cls(from_postgres=True, **fields)
 
     @classmethod
-    async def _get_status_field(cls, environment: uuid.UUID, values: str) -> dict[str, str]:
-        """
-        This field is required to ensure backward compatibility on the API.
-        """
-        result = {}
-        values = json.loads(values)
-        for value_entry in values:
-            entry_uuid = str(uuid.uuid5(environment, value_entry["id"]))
-            result[entry_uuid] = value_entry
-        return result
-
-    @classmethod
     async def get_list(
         cls,
         *,
@@ -5650,7 +5562,6 @@ class ConfigurationModel(BaseDocument):
         no_obj: Optional[bool] = None,
         lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
-        no_status: bool = False,  # don't load the status field
         **query: object,
     ) -> list["ConfigurationModel"]:
         # sanitize and validate order parameters
@@ -5668,24 +5579,15 @@ class ConfigurationModel(BaseDocument):
         if offset is not None:
             offset = int(offset)
 
-        transient_states = ",".join(["$" + str(i) for i in range(1, len(const.TRANSIENT_STATES) + 1)])
-        transient_states_values = [cls._get_value(s) for s in const.TRANSIENT_STATES]
-        (filterstr, values) = cls._get_composed_filter(col_name_prefix="c", offset=len(transient_states_values) + 1, **query)
-        values = transient_states_values + values
+        (filterstr, values) = cls._get_composed_filter(col_name_prefix="c", offset=1, **query)
+        values = values
         where_statement = f"WHERE {filterstr} " if filterstr else ""
         order_by_statement = f"ORDER BY {order_by_column} {order} " if order_by_column else ""
         limit_statement = f"LIMIT {limit} " if limit is not None and limit > 0 else ""
         offset_statement = f"OFFSET {offset} " if offset is not None and offset > 0 else ""
         lock_statement = f" {lock.value} " if lock is not None else ""
-        query_string = f"""SELECT c.*,
-                           SUM(CASE WHEN r.status NOT IN({transient_states}) THEN 1 ELSE 0 END) AS done,
-                           to_json(array(SELECT jsonb_build_object('status', r2.status, 'id', r2.resource_id)
-                                         FROM {Resource.table_name()} AS r2
-                                         WHERE c.environment=r2.environment AND c.version=r2.model
-                                        )
-                           ) AS status
-                    FROM {cls.table_name()} AS c LEFT OUTER JOIN {Resource.table_name()} AS r
-                    ON c.environment = r.environment AND c.version = r.model
+        query_string = f"""SELECT c.*
+                    FROM {cls.table_name()} AS c
                     {where_statement}
                     GROUP BY c.environment, c.version
                     {order_by_statement}
@@ -5697,29 +5599,11 @@ class ConfigurationModel(BaseDocument):
         for in_record in query_result:
             record = dict(in_record)
             if no_obj:
-                if no_status:
-                    record["status"] = {}
-                else:
-                    record["status"] = await cls._get_status_field(record["environment"], record["status"])
                 result.append(record)
             else:
-                done = record.pop("done")
-                if no_status:
-                    status = {}
-                    record.pop("status")
-                else:
-                    status = await cls._get_status_field(record["environment"], record.pop("status"))
                 obj = cls(from_postgres=True, **record)
-                obj._done = done
-                obj._status = status
                 result.append(obj)
         return result
-
-    def to_dict(self) -> JsonType:
-        dct = BaseDocument.to_dict(self)
-        dct["status"] = dict(self._status)
-        dct["done"] = self.done
-        return dct
 
     @classmethod
     async def version_exists(cls, environment: uuid.UUID, version: int) -> bool:
@@ -5882,65 +5766,6 @@ class ConfigurationModel(BaseDocument):
         of resources which should get a skipped_for_undeployable state
         """
         return self.skipped_for_undeployable
-
-    async def mark_done(self, *, connection: Optional[asyncpg.connection.Connection] = None) -> None:
-        """mark this deploy as done"""
-        subquery = f"""(EXISTS(
-                    SELECT 1
-                    FROM {Resource.table_name()}
-                    WHERE environment=$1 AND model=$2 AND status != $3
-                ))::boolean
-            """
-        query = f"""UPDATE {self.table_name()}
-                SET
-                deployed=True, result=(CASE WHEN {subquery} THEN $4::versionstate ELSE $5::versionstate END)
-                WHERE environment=$1 AND version=$2 RETURNING result
-            """
-        values = [
-            self._get_value(self.environment),
-            self._get_value(self.version),
-            self._get_value(const.ResourceState.deployed),
-            self._get_value(const.VersionState.failed),
-            self._get_value(const.VersionState.success),
-        ]
-        result = await self._fetchval(query, *values, connection=connection)
-        self.result = const.VersionState[result]
-        self.deployed = True
-
-    @classmethod
-    async def mark_done_if_done(
-        cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
-        async with cls.get_connection(connection) as con:
-            """
-            Performs the query to mark done if done. Expects to be called outside of any transaction that writes resource state
-            in order to prevent race conditions.
-            """
-            async with con.transaction():
-                query = f"""UPDATE {ConfigurationModel.table_name()}
-                                SET deployed=True,
-                                    result=(CASE WHEN (
-                                                 EXISTS(SELECT 1
-                                                        FROM {Resource.table_name()}
-                                                        WHERE environment=$1 AND model=$2 AND status != $3)
-                                                 )::boolean
-                                            THEN $4::versionstate
-                                            ELSE $5::versionstate END
-                                    )
-                                WHERE environment=$1 AND version=$2 AND
-                                      total=(SELECT COUNT(*)
-                                             FROM {Resource.table_name()}
-                                             WHERE environment=$1 AND model=$2 AND status = any($6::resourcestate[])
-                            )"""
-                values = [
-                    cls._get_value(environment),
-                    cls._get_value(version),
-                    cls._get_value(ResourceState.deployed),
-                    cls._get_value(const.VersionState.failed),
-                    cls._get_value(const.VersionState.success),
-                    cls._get_value(DONE_STATES),
-                ]
-                await cls._execute_query(query, *values, connection=con)
 
     @classmethod
     async def get_increment(

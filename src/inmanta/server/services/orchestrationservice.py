@@ -410,7 +410,7 @@ class OrchestrationService(protocol.ServerSlice):
                 n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP, connection=connection)
                 assert isinstance(n_versions, int)
                 versions = await data.ConfigurationModel.get_list(
-                    environment=env_item.id, connection=connection, no_status=True, order_by_column="version", order="DESC"
+                    environment=env_item.id, connection=connection, order_by_column="version", order="DESC"
                 )
                 if len(versions) > n_versions:
                     version_dict = {x.version: x for x in versions}
@@ -664,7 +664,7 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
-    ) -> abc.Collection[str]:
+    ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
                                 When a partial compile is done, it should contain all the resources that belong to the
@@ -677,8 +677,6 @@ class OrchestrationService(protocol.ServerSlice):
         :param removed_resource_sets: When a partial compile is done, this parameter should indicate the names of the resource
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
-
-        :return: all agents affected
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -812,12 +810,9 @@ class OrchestrationService(protocol.ServerSlice):
 
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
-            all_agents: abc.Set[str]
-
-            all_agents = {const.AGENT_SCHEDULER_ID}
-
-            for agent in all_agents:
-                await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
+            await self.agentmanager_service.ensure_agent_registered(
+                env, nodename=const.AGENT_SCHEDULER_ID, connection=connection
+            )
 
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
@@ -839,32 +834,21 @@ class OrchestrationService(protocol.ServerSlice):
                 await ra.insert(connection=connection)
 
         LOGGER.debug("Successfully stored version %d", version)
-        return list(all_agents)
 
     async def _trigger_auto_deploy(
         self,
         env: data.Environment,
         version: int,
-        *,
-        agents: Optional[abc.Sequence[str]] = None,
     ) -> None:
         """
         Triggers auto-deploy for stored resources. Must be called only after transaction that stores resources has been allowed
         to commit. If not respected, the auto deploy might work on stale data, likely resulting in resources hanging in the
         deploying state.
-
-        :argument agents: the list of agents we should restrict our notifications to. if it is None, we notify all agents if
-            PUSH_ON_AUTO_DEPLOY is set
         """
         auto_deploy = await env.get(data.AUTO_DEPLOY)
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)
-            push_on_auto_deploy = cast(bool, await env.get(data.PUSH_ON_AUTO_DEPLOY))
-            agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
-            agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
-            self.add_background_task(
-                self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy, agents=agents)
-            )
+            self.add_background_task(self.release_version(env, version, push=False, agent_trigger_method=None))
 
     def _create_unknown_parameter_daos_from_api_unknowns(
         self, env_id: uuid.UUID, version: int, unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None
@@ -1062,7 +1046,7 @@ class OrchestrationService(protocol.ServerSlice):
                     unknowns_in_partial_compile=self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
                 )
 
-                all_agents = await self._put_version(
+                await self._put_version(
                     env,
                     version,
                     merged_resources,
@@ -1076,7 +1060,7 @@ class OrchestrationService(protocol.ServerSlice):
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)
-            await self._trigger_auto_deploy(env, version, agents=all_agents)
+            await self._trigger_auto_deploy(env, version)
 
         return returnvalue
 
@@ -1089,7 +1073,6 @@ class OrchestrationService(protocol.ServerSlice):
         agent_trigger_method: Optional[const.AgentTriggerMethod] = None,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
-        agents: Optional[abc.Sequence[str]] = None,
     ) -> ReturnTupple:
         """
         :param agents: agents that have to be notified by the push, defaults to all
@@ -1183,10 +1166,9 @@ class OrchestrationService(protocol.ServerSlice):
                     # Setting the model's released field to True is the trigger for the agents
                     # to start pulling in the resources.
                     # This has to be done after the resources outside of the increment have been marked as deployed.
-                    await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
+                    await model.update_fields(released=True, connection=connection)
 
             if model.total == 0:
-                await model.mark_done(connection=connection)
                 return 200, {"model": model}
 
             if connection.is_in_transaction():

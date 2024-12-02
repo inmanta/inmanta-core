@@ -42,7 +42,7 @@ async def migrate_v202211230_to_v202212010(
 
     # When the bootloader is started, it also executes the migration to v202212010
     yield ibl.start
-    await ibl.stop(timeout=15)
+    await ibl.stop(timeout=20)
 
 
 async def test_added_environment_metrics_tables(

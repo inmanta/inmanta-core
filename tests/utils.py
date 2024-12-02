@@ -51,11 +51,11 @@ from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data import ResourceIdStr
-from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceType, ResourceVersionIdStr
+from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, ResourceType
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceDetails
 from inmanta.moduletool import ModuleTool
-from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
+from inmanta.protocol import Client, SessionEndpoint, methods
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
 from inmanta.types import Apireturn
@@ -379,19 +379,53 @@ async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     return versions.result
 
 
-async def wait_until_deployment_finishes(client: Client, environment: str, timeout: int = 10) -> None:
+async def get_done_and_total(
+    client: Client,
+    environment: str,
+) -> tuple[int, int]:
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    summary = result.result["metadata"]["deploy_summary"]
+    # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
+    #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
 
+    return (
+        (
+            summary["by_state"]["deployed"]
+            + summary["by_state"]["failed"]
+            + summary["by_state"]["skipped"]
+            + summary["by_state"]["skipped_for_undefined"]
+            + summary["by_state"]["unavailable"]
+            + summary["by_state"]["undefined"]
+        ),
+        summary["total"],
+    )
+
+
+async def get_done_count(
+    client: Client,
+    environment: str,
+) -> int:
+    return (await get_done_and_total(client, environment))[0]
+
+
+async def wait_until_deployment_finishes(
+    client: Client, environment: str, version: int = -1, timeout: int = 10, wait_for_n: int | None = None
+) -> None:
     async def done():
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
         # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
         #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
-        print(summary)
-        available = summary["by_state"]["available"]
-        deploying = summary["by_state"]["deploying"]
-        if available + deploying != 0:
-            return False
+        if wait_for_n is None:
+            available = summary["by_state"]["available"]
+            deploying = summary["by_state"]["deploying"]
+            if available + deploying != 0:
+                return False
+            total: int = summary["total"]
+        else:
+            total = wait_for_n
         return (
             summary["by_state"]["deployed"]
             + summary["by_state"]["failed"]
@@ -399,7 +433,7 @@ async def wait_until_deployment_finishes(client: Client, environment: str, timeo
             + summary["by_state"]["skipped_for_undefined"]
             + summary["by_state"]["unavailable"]
             + summary["by_state"]["undefined"]
-            == summary["total"]
+            >= total
         )
 
     await retry_limited(done, timeout)
@@ -458,12 +492,18 @@ class ClientHelper:
         if wait_for_released:
             await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
 
-    async def wait_for_released(self, version: int):
+    async def wait_for_released(self, version: int | None):
+        """
+        Version None means latest
+        """
         await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
 
-    async def is_released(self, version: int) -> bool:
+    async def is_released(self, version: int | None) -> bool:
+        """Version None means latest"""
         versions = await self.client.list_versions(tid=self.environment)
         assert versions.code == 200
+        if version is None:
+            return versions.result["versions"][0]["released"]
         lookup = {v["version"]: v["released"] for v in versions.result["versions"]}
         return lookup[version]
 
@@ -472,8 +512,15 @@ class ClientHelper:
             await self.wait_for_released(version)
         await wait_until_deployment_finishes(self.client, str(self.environment), timeout)
 
-    async def wait_full_success(self, environment: str) -> None:
-        await wait_full_success(self.client, environment)
+    async def wait_full_success(self) -> None:
+        await wait_full_success(self.client, self.environment)
+
+    async def done_count(self) -> int:
+        return await get_done_count(self.client, self.environment)
+
+    async def set_auto_deploy(self, auto: bool = True) -> None:
+        result = await self.client.set_setting(self.environment, data.AUTO_DEPLOY, auto)
+        assert result.code == 200
 
 
 def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: str = "value1") -> dict[str, Any]:
@@ -874,9 +921,7 @@ async def _deploy_resources(client, environment, resources, version, push, agent
     result = await client.release_version(environment, version, push, agent_trigger_method)
     assert result.code == 200
 
-    assert not result.result["model"]["deployed"]
-    assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == len(resources)
+    await wait_until_deployment_finishes(client, environment)
 
     result = await client.get_version(environment, version)
     assert result.code == 200
@@ -885,23 +930,7 @@ async def _deploy_resources(client, environment, resources, version, push, agent
 
 
 async def wait_for_n_deployed_resources(client, environment, version, n, timeout=5):
-    async def is_deployment_finished():
-        result = await client.get_version(environment, version)
-        assert result.code == 200
-        print(result.result["model"])
-        return result.result["model"]["done"] >= n
-
-    await retry_limited(is_deployment_finished, timeout)
-
-
-async def _wait_for_n_deploying(client, environment, version, n, timeout=10):
-    async def in_progress():
-        result = await client.get_version(environment, version)
-        assert result.code == 200
-        res = [res for res in result.result["resources"] if res["status"] == "deploying"]
-        return len(res) >= n
-
-    await retry_limited(in_progress, timeout)
+    await wait_until_deployment_finishes(client, environment, timeout=timeout, wait_for_n=n)
 
 
 class NullAgent(SessionEndpoint):
@@ -923,11 +952,6 @@ class NullAgent(SessionEndpoint):
         """
         await self.add_end_point_name(AGENT_SCHEDULER_ID)
 
-    @protocol.handle(methods_v2.update_agent_map)
-    async def update_agent_map(self, agent_map: dict[str, str]) -> None:
-        # Not used here
-        return 200
-
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
         self.enabled[agent] = enabled
@@ -945,20 +969,6 @@ class NullAgent(SessionEndpoint):
 
     @protocol.handle(methods.trigger_read_version, env="tid", agent="id")
     async def read_version(self, env: uuid.UUID) -> Apireturn:
-        return 200
-
-    @protocol.handle(methods.resource_event, env="tid", agent="id")
-    async def resource_event(
-        self,
-        env: uuid.UUID,
-        agent: str,
-        resource: ResourceVersionIdStr,
-        send_events: bool,
-        state: const.ResourceState,
-        change: const.Change,
-        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]],
-    ) -> Apireturn:
-        # Doesn't do anything
         return 200
 
     @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
