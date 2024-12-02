@@ -521,7 +521,7 @@ class DeployResult:
         return DeployResult(
             rvid=rvid,
             action_id=action_id,
-            resource_state=HandlerResourceState.failed,
+            resource_state=HandlerResourceState.unavailable,
             messages=[message],
             changes={},
             change=Change.nochange,

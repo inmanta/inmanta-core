@@ -242,6 +242,7 @@ class HandlerResourceState(str, Enum):
     failed = "failed"
     dry = "dry"
     skipped_for_dependency = "skipped_for_dependency"
+    unavailable = "unavailable"
 
 
 @stable_api

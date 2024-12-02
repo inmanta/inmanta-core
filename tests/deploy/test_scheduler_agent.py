@@ -1796,7 +1796,7 @@ async def test_state_of_skipped_resources_for_dependencies(agent: TestAgent, mak
     agent.executor_manager.register_managed_executor("agent2", executor2)
 
     resources = {
-        rid1: make_resource_minimal(rid=rid1, values={"value": "r1_value"}, requires=[]),
+        rid1: make_resource_minimal(rid=rid1, values={"value": "r1_value", FAIL_DEPLOY: True}, requires=[]),
         rid2: make_resource_minimal(rid=rid2, values={"value": "r2_value"}, requires=[rid1]),
     }
     await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))

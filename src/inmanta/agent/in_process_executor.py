@@ -160,7 +160,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         try:
             provider = await self.get_provider(resource)
         except Exception:
-            ctx.set_resource_state(handler.HandlerResourceState.failed)
+            ctx.set_resource_state(handler.HandlerResourceState.unavailable)
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=resource.id.resource_version_str())
             return
         else:
