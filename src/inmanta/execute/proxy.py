@@ -290,6 +290,8 @@ def parse_dsl_type(dsl_type: str) -> inmanta.ast.type.Type:
     Used for the legacy plugin annotations, as well as native Python annotations with typing.Annotated[..., InmantaType(...)]
     for complex types that are not (yet) natively supported on the plugin interface.
     """
+
+
 # TODO: remove comment
 def to_dsl_type(python_type: type[object]) -> inmanta.ast.type.Type:
     """
