@@ -104,6 +104,14 @@ class Type(Locatable):
         Returns None if this is not possible.
         """
 
+    def as_python_type_string(self) -> "str | None":
+        """
+        Return a python type that can capture the values of this inmanta type
+        As a string
+
+        Returns None if this is not possible.
+        """
+
     def to_python(self, instance: object) -> "object":
         """
         Convert an instance of this type to its python form
@@ -170,6 +178,9 @@ class NullableType(Type):
 
     def as_python_type(self) -> "typing.Type | None":
         return Optional[self.element_type.as_python_type()]
+
+    def as_python_type_string(self) -> "str | None":
+        return f"Optional[{self.element_type.as_python_type_string()}]"
 
     def to_python(self, instance: object) -> "object":
         if isinstance(instance, NoneValue):
@@ -262,6 +273,9 @@ class Number(Primitive):
     def as_python_type(self) -> "typing.Type | None":
         return numbers.Number
 
+    def as_python_type(self) -> "typing.Type | None":
+        return "numbers.Number"
+
     def to_python(self, instance: object) -> "object":
         return instance
 
@@ -304,6 +318,9 @@ class Float(Primitive):
     def as_python_type(self) -> "typing.Type | None":
         return float
 
+    def as_python_type_string(self) -> "typing.Type | None":
+        return "float"
+
     def to_python(self, instance: object) -> "object":
         return instance
 
@@ -335,6 +352,9 @@ class Integer(Number):
 
     def as_python_type(self) -> "typing.Type | None":
         return int
+
+    def as_python_type_string(self) -> "typing.Type | None":
+        return "int"
 
     def to_python(self, instance: object) -> "object":
         return instance
@@ -378,6 +398,9 @@ class Bool(Primitive):
 
     def as_python_type(self) -> "typing.Type | None":
         return bool
+
+    def as_python_type_string(self) -> "typing.Type | None":
+        return "bool"
 
     def to_python(self, instance: object) -> "object":
         return object
@@ -426,6 +449,9 @@ class String(Primitive):
 
     def as_python_type(self) -> "typing.Type | None":
         return str
+
+    def as_python_type_string(self) -> "str | None":
+        return "str"
 
     def to_python(self, instance: object) -> "object":
         return str(instance)
@@ -521,6 +547,9 @@ class TypedList(List):
 
     def as_python_type(self) -> "typing.Type | None":
         return list[self.element_type.as_python_type()]
+
+    def as_python_type_string(self) -> "str | None":
+        return f"list[{self.element_type.as_python_type_string()}]"
 
     def to_python(self, instance: object) -> "object":
         return [self.element_type.to_python(element) for element in instance]

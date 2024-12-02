@@ -20,11 +20,14 @@ import asyncio
 import collections.abc
 import dataclasses
 import inspect
+import numbers
 import os
 import subprocess
 import warnings
 from collections import abc
 from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Sequence, Type, TypeVar
+
+import typing_inspect
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
@@ -235,6 +238,35 @@ def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, valu
     if isinstance(base_type, inmanta.ast.entity.Entity) and base_type._paired_dataclass is not None:
         return expected_type.to_python(value)
     return DynamicProxy.return_value(value)
+
+
+python_to_model = {
+    str: inmanta_type.String(),
+    float: inmanta_type.Float(),
+    numbers.Number: inmanta_type.Number(),
+    int: inmanta_type.Integer(),
+    bool: inmanta_type.Bool(),
+}
+
+
+def primtive_python_type_to_model_domain(intype: Type) -> inmanta_type.Type:
+    if typing_inspect.is_generic_type(intype):
+        if typing_inspect.is_union_type(intype):
+            # only Optional should reach this
+            assert any(typing_inspect.is_optional_type(tt) for tt in typing_inspect.get_args(intype, evaluate=True))
+            other_types = [
+                tt for tt in typing_inspect.get_args(intype, evaluate=True) if not typing_inspect.is_optional_type(tt)
+            ]
+            assert len(other_types) == 1
+            return inmanta_type.NullableType(primtive_python_type_to_model_domain(other_types[0]))
+
+        orig = typing_inspect.get_origin(intype)
+        assert orig is not None  # Make mypy happy
+        assert issubclass(orig, list)  # Only one type of generic should get here
+        args = typing_inspect.get_args(intype, evaluate=True)
+        assert len(args) == 1
+        return inmanta_type.TypedList(primtive_python_type_to_model_domain(args[0]))
+    return python_to_model[intype]
 
 
 class PluginCallContext:

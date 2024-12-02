@@ -631,7 +631,7 @@ class DefineIndex(DefinitionStatement):
                         self, f"Index can not contain list attributes, Attribute ' {attribute}.{entity_type}' is a list"
                     )
 
-        entity_type.add_index([str(a) for a in self.attributes])
+        entity_type.add_index([str(a) for a in self.attributes], self)
 
 
 class PluginStatement(TypeDefinitionStatement):

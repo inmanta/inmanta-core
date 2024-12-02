@@ -23,6 +23,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
 from inmanta.ast import (
     CompilerException,
+    DataClassException,
+    DataClassMismatchException,
     DuplicateException,
     Locatable,
     Location,
@@ -52,7 +54,7 @@ if TYPE_CHECKING:
     from inmanta.ast import Namespaced
     from inmanta.ast.attribute import Attribute, RelationAttribute  # noqa: F401
     from inmanta.ast.statements import ExpressionStatement, Statement  # noqa: F401
-    from inmanta.ast.statements.define import DefineAttribute, DefineImport  # noqa: F401
+    from inmanta.ast.statements.define import DefineAttribute, DefineImport, DefineIndex  # noqa: F401
     from inmanta.execute.runtime import ExecutionContext, ResultVariable  # noqa: F401
 
 import inmanta.ast.attribute
@@ -88,6 +90,7 @@ class Entity(NamedType, WithComment):
         self.__default_values = {}  # type: Dict[str, DefineAttribute]
 
         self._index_def = []  # type: List[List[str]]
+        self._indexes = []  # type: list[DefineIndex]
         self._index = {}  # type: Dict[str,Instance]
         self.index_queue = {}  # type: Dict[str,List[Tuple[ResultVariable, Statement]]]
 
@@ -373,7 +376,7 @@ class Entity(NamedType, WithComment):
 
         return self.name == other.name and self.namespace == other.namespace
 
-    def add_index(self, attributes: list[str]) -> None:
+    def add_index(self, attributes: list[str], index_def: "DefineIndex") -> None:
         """
         Add an index over the given attributes.
         """
@@ -383,6 +386,7 @@ class Entity(NamedType, WithComment):
                 return
 
         self._index_def.append(sorted(attributes))
+        self._indexes.append(index_def)
         for child in self.child_entities:
             child.add_index(attributes)
 
@@ -523,11 +527,32 @@ class Entity(NamedType, WithComment):
         # TODO: error reporting
         namespace = self.namespace.get_full_name()
 
-        dataclass_module = importlib.import_module("inmanta_plugins." + namespace.replace("::", "."))
-        dataclass = getattr(dataclass_module, self.name)
+        module_name = "inmanta_plugins." + namespace.replace("::", ".")
+        dataclass_module = importlib.import_module(module_name)
+        dataclass_name = module_name + "." + self.name
+        dataclass = getattr(dataclass_module, self.name, None)
+        if dataclass is None:
+            raise DataClassMismatchException(
+                self,
+                None,
+                dataclass_name,
+                f"The dataclass {self.get_full_name()} defined at {self.location} has no corresponding python dataclass. Dataclasses must have a python counterpart that is a frozen dataclass.",
+            )
 
-        assert dataclasses.is_dataclass(dataclass)
-        assert dataclass.__dataclass_params__.frozen
+        if not dataclasses.is_dataclass(dataclass):
+            raise DataClassMismatchException(
+                self,
+                None,
+                dataclass_name,
+                f"The python object {module_name}.{dataclass.__name__} associated to  {self.get_full_name()} defined at {self.location} is not a dataclass. Dataclasses must have a python counterpart that is a frozen dataclass.",
+            )
+        if not dataclass.__dataclass_params__.frozen:
+            raise DataClassMismatchException(
+                self,
+                None,
+                dataclass_name,
+                f"The python object {module_name}.{dataclass.__name__} associated to  {self.get_full_name()} defined at {self.location} is not frozen. Dataclasses must be frozen.",
+            )
 
         dc_fields = {f.name: f for f in dataclasses.fields(dataclass)}
 
@@ -536,32 +561,78 @@ class Entity(NamedType, WithComment):
             match rel_or_attr:
                 case inmanta.ast.attribute.RelationAttribute() as rel:
                     # No relations except for requires and provides
-                    assert rel.entity.get_full_name() == "std::Entity", rel_or_attr_name
+                    if not rel.entity.get_full_name() == "std::Entity":
+                        raise DataClassException(
+                            self,
+                            f"The dataclass {self.get_full_name()} defined at {self.location} has a relation called {rel_or_attr_name}, defined at {rel.location}. Dataclasses are not allowed to have relations",
+                        )
                 case inmanta.ast.attribute.Attribute() as attr:
+                    if rel_or_attr_name not in dc_fields:
+                        raise DataClassMismatchException(
+                            self,
+                            dataclass,
+                            dataclass_name,
+                            f"The dataclass {self.get_full_name()} defined at {self.location} has an attribute {rel_or_attr_name}, defined at {attr.location} that has not counterpart in the python domain. All attributes of a dataclasses must be identical in both the python and inmanta domain",
+                        )
+                    #
                     field = dc_fields.pop(rel_or_attr_name)
                     inm_type = attr.get_type()
 
                     # all own fields are primitive
-                    assert inm_type.is_primitive()
-
+                    if not inm_type.is_primitive():
+                        raise DataClassException(
+                            self,
+                            f"The dataclass {self.get_full_name()} defined at {self.location} has an attribute {rel_or_attr_name}, defined at {attr.location} that is not primitive. All attributes of a dataclasses have to be of a primitive type.",
+                        )
                     # Type correspondence
                     py_type = inm_type.as_python_type()
-                    assert py_type
-                    assert issubclass(field.type, py_type)
+                    assert (
+                        py_type
+                    ), f"The inmanta type {inm_type} could not be converted to a python type, this should not happen"
+                    if not issubclass(field.type, py_type):
+                        raise DataClassMismatchException(
+                            self,
+                            dataclass,
+                            dataclass_name,
+                            f"The field {rel_or_attr_name} of dataclass {self.get_full_name()} defined at {self.location} does not have the same type as the same field on the associated dataclass.",
+                        )
+
+        if dc_fields:
+            raise DataClassMismatchException(
+                self,
+                dataclass,
+                dataclass_name,
+                f"The python object {module_name}.{dataclass.__name__} associated to  {self.get_full_name()} defined at {self.location} has fields that don't exist in the inmanta domain: {' '.join(dc_fields.keys())}. All attributes of a dataclasses must be identical in both the python and inmanta domain",
+            )
 
         # Only std::none as implementation
         for implement in self.get_implements():
             for imp in implement.implementations:
-                assert imp.get_full_name() == "std::none"
-
+                if imp.get_full_name() != "std::none":
+                    raise DataClassException(
+                        self,
+                        f"The dataclass {self.get_full_name()} defined at {self.location} has an implementation other than 'std::none', defined at {implement.location}. Dataclasses can only have std::none as implemenation.",
+                    )
         # No index
-
-        assert not self.get_indices()
+        if self.get_indices():
+            index_locations = ",".join([str(i.location) for i in self._indexes])
+            raise DataClassException(
+                self,
+                f"The dataclass {self.get_full_name()} defined at {self.location} has an indexes defined at {index_locations}. Dataclasses can not have any indexes.",
+            )
 
         self._paired_dataclass = dataclass
 
     def as_python_type(self) -> "typing.Type | None":
         return self._paired_dataclass
+
+    def as_python_type(self) -> "typing.Type | None":
+        if self._paired_dataclass is None:
+            return None
+        namespace = self.namespace.get_full_name()
+        module_name = "inmanta_plugins." + namespace.replace("::", ".")
+        dataclass_name = module_name + "." + self.name
+        return dataclass_name
 
     def to_python(self, instance: object) -> "object":
         if self._paired_dataclass is None:
@@ -594,10 +665,6 @@ class Entity(NamedType, WithComment):
             dataclass_self = WrappedValueVariable(out)
             instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
             return out
-
-
-# Kept for backwards compatibility. May be dropped from iso7 onwards.
-EntityLike = Entity
 
 
 class Implementation(NamedType):
