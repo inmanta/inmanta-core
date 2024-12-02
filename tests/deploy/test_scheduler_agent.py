@@ -236,10 +236,10 @@ class DummyTimerManager(TimerManager):
     ) -> None:
         pass
 
-    def trigger_global_deploy(self, cron_expression: str) -> None:
+    def _trigger_global_deploy(self, cron_expression: str) -> None:
         pass
 
-    def trigger_global_repair(self, cron_expression: str) -> None:
+    def _trigger_global_repair(self, cron_expression: str) -> None:
         pass
 
 

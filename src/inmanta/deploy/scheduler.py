@@ -275,7 +275,7 @@ class ResourceScheduler(TaskManager):
         """
         Initialize the scheduler state and continue the deployment where we were before the server was shutdown.
         """
-        self._timer_manager.initialize()
+        self._timer_manager._initialize()
 
         async with data.ConfigurationModel.get_connection() as con:
             # Get resources from the database
@@ -371,6 +371,32 @@ class ResourceScheduler(TaskManager):
                 priority=TaskPriority.FACT_REFRESH,
             )
         )
+
+    async def trigger_deploy_for_resource(self, resource: ResourceIdStr, reason: str, priority: TaskPriority) -> None:
+        """
+        Make sure the given resource is marked for deployment with at least the provided priority.
+        If the given priority is higher than the previous one (or if it didn't exist before), a new deploy
+        task will be scheduled with the provided reason.
+        """
+        async with self._scheduler_lock:
+            if resource not in self._state.resource_state:
+                # The resource was removed from the model by the time this method was triggered
+                return
+
+            if self._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy
+                return
+            to_deploy: set[ResourceIdStr] = {resource}
+
+            self._work.deploy_with_context(
+                to_deploy,
+                reason=reason,
+                priority=priority,
+                deploying=self._deploying_latest,
+            )
+
+
+
+
 
     async def _build_resource_mappings_from_db(
         self, version: int, *, connection: Optional[asyncpg.connection.Connection] = None
@@ -491,7 +517,7 @@ class ResourceScheduler(TaskManager):
                 self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
                 # Install timers for these resources. They are up-to-date now,
                 # but we want to make sure we periodically repair them.
-                self._timer_manager.update_resource(resource, dirty=False)
+                self._timer_manager.update_resource(resource, is_dirty=False)
 
             for resource, details in resources.items():
                 if details.status is const.ResourceState.undefined:
@@ -512,9 +538,11 @@ class ResourceScheduler(TaskManager):
                     # picked up by the scheduler eventually, and only then, after deployment
                     # action should be taken wrt timers.
                 else:
-                    # It's a resource we don't know yet.
+                    # It's a resource we don't know yet: it will be marked as dirty
+                    # and added to the scheduled work. Per-resource timers for this
+                    # resource will be set when (if) the associated deploy task completes
+                    # for this resource.
                     new_desired_state.add(resource)
-                    self._timer_manager.update_resource(resource, dirty=True)
 
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 new_requires: Set[ResourceIdStr] = requires.get(resource, set())
@@ -677,8 +705,11 @@ class ResourceScheduler(TaskManager):
             raise ValueError("report_resource_state should not be called to register new resources")
 
         # Keep track of the last known state for this resource before leaving the scheduler lock
-        # to re-schedule an individual repair or deploy accordingly.
+        # to re-schedule an individual repair or deploy accordingly:
+        #   If the deploy was successful, schedule a repair.
+        #   Otherwise, schedule whichever comes sooner between a repair and a deploy.
         is_dirty: bool
+
         async with self._scheduler_lock:
             # refresh resource details for latest model state
             details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
@@ -771,6 +802,7 @@ class ResourceScheduler(TaskManager):
                     task = Deploy(resource=resource)
                     assert task in self._work.agent_queues.in_progress
                     priority = self._work.agent_queues.in_progress[task]
+                    self._timer_manager.remove_resources(concerned_resources)
                     self._work.deploy_with_context(
                         concerned_resources,
                         reason=f"Deploying because an event was received from {resource}",
@@ -779,7 +811,7 @@ class ResourceScheduler(TaskManager):
                     )
 
         # No matter the deployment result, schedule a re-deploy for this resource
-        self._timer_manager.update_resource(resource, dirty=is_dirty)
+        self._timer_manager.update_resource(resource, is_dirty=is_dirty)
 
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr
