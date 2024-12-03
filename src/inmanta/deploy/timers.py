@@ -23,7 +23,6 @@ from typing import Sequence
 import inmanta.deploy.scheduler
 from inmanta.agent import config as agent_config
 from inmanta.data.model import ResourceIdStr
-from inmanta.deploy.state import BlockedStatus
 from inmanta.deploy.work import TaskPriority
 from inmanta.util import CronSchedule, ScheduledTask, Scheduler
 
@@ -100,36 +99,6 @@ class ResourceTimer:
         """
         if self.trigger_deploy is not None:
             await self.trigger_deploy
-
-    async def _trigger_repair_for_resource(self, resource: ResourceIdStr, timer: int) -> None:
-        async with self._resource_scheduler._scheduler_lock:
-
-            if self._resource_scheduler._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy
-                return
-            to_deploy: set[ResourceIdStr] = {resource}
-
-            self._resource_scheduler._work.deploy_with_context(
-                to_deploy,
-                reason=f"Individual repair triggered for resource {resource} because last "
-                f"repair happened more than {timer}s ago.",
-                priority=TaskPriority.INTERVAL_REPAIR,
-                deploying=self._resource_scheduler._deploying_latest,
-            )
-
-    async def _trigger_deploy_for_resource(self, resource: ResourceIdStr, timer: int) -> None:
-        async with self._resource_scheduler._scheduler_lock:
-
-            if self._resource_scheduler._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy
-                return
-            to_deploy: set[ResourceIdStr] = {resource}
-
-            self._resource_scheduler._work.deploy_with_context(
-                to_deploy,
-                reason=f"Individual deploy triggered for resource {resource} because last "
-                f"deploy happened more than {timer}s ago.",
-                priority=TaskPriority.INTERVAL_DEPLOY,
-                deploying=self._resource_scheduler._deploying_latest,
-            )
 
 
 class TimerManager:
@@ -240,7 +209,8 @@ class TimerManager:
         so that this method can decide whether a repair or a deploy should be scheduled.
 
         The scheduler is considered the authority. If a previous timer is already in place
-        for the given resource, it will be canceled first and a new one will be re-scheduled.
+        for the given resource, (which should not happen) it will be canceled first and a
+        new one will be re-scheduled.
 
         :param resource: the resource to re-deploy.
         :param is_dirty: If the resource is in an assumed bad state, we should re-deploy it
