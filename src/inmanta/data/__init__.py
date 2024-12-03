@@ -4519,6 +4519,9 @@ class ResourcePersistentState(BaseDocument):
         )
 
     def get_compliance_status(self) -> state.ComplianceStatus:
+        """
+        Return the ComplianceStatus associated with this resource_persistent_state.
+        """
         if self.is_orphan:
             return state.ComplianceStatus.ORPHAN
         elif self.is_undefined:
@@ -5357,7 +5360,11 @@ class Resource(BaseDocument):
             self.status is const.ResourceState.undefined,
             False,
             state.DeploymentResult.NEW.name,
-            state.BlockedStatus.NO.name,
+            (
+                state.BlockedStatus.YES.name
+                if self.status in (const.ResourceState.undefined, const.ResourceState.skipped_for_undefined)
+                else state.BlockedStatus.NO
+            ),
             connection=connection,
         )
 
@@ -5393,7 +5400,11 @@ class Resource(BaseDocument):
                 doc.status is const.ResourceState.undefined,
                 False,
                 state.DeploymentResult.NEW.name,
-                state.BlockedStatus.NO.name,
+                (
+                    state.BlockedStatus.YES.name
+                    if doc.status in (const.ResourceState.undefined, const.ResourceState.skipped_for_undefined)
+                    else state.BlockedStatus.NO
+                ),
                 connection=connection,
             )
         await super().insert_many(documents, connection=connection)

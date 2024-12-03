@@ -21,10 +21,10 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    * Add required columns to the resource_persistent_state table to be able to recover the scheduler
-      state on a restart of the server.
-    * Create scheduler table, that keeps track of the last model version that it processed,
+    * Create the scheduler table, that keeps track of the last model version processed by the scheduler,
       i.e. for which the scheduler state was written to the resource_persistent_state table.
+    * Add columns to the resource_persistent_state table required to be able to recover the scheduler
+      state on a restart of the server.
     """
     schema = """
         -- Create and populate the scheduler table.
@@ -47,6 +47,8 @@ async def update(connection: Connection) -> None:
             ADD COLUMN deployment_result varchar,
             ADD COLUMN blocked_status varchar;
 
+        -- Populate the new columns in the resource_persistent_state table for resources part of the
+        -- latest released model version.
         WITH latest_released_version_per_environment AS (
             SELECT environment, MAX(version) AS version
             FROM public.configurationmodel
@@ -56,18 +58,15 @@ async def update(connection: Connection) -> None:
         UPDATE public.resource_persistent_state AS rps
         SET
             current_intent_attribute_hash=r.attribute_hash,
-            is_undefined=(r.status = 'undefined'::resourcestate),
             is_orphan=FALSE,
+            is_undefined=(r.status = 'undefined'::resourcestate),
             deployment_result=(
                 CASE
                     WHEN r.status = 'skipped'::resourcestate
                         THEN 'SKIPPED'
                     WHEN rps.last_non_deploying_status = 'deployed'::non_deploying_resource_state
                         THEN 'DEPLOYED'
-                    WHEN (
-                        r.status = 'deploying'::resourcestate
-                        OR rps.last_non_deploying_status = 'available'::non_deploying_resource_state
-                    )
+                    WHEN rps.last_non_deploying_status = 'available'::non_deploying_resource_state
                         THEN 'NEW'
                         ELSE 'FAILED'
                 END
@@ -88,7 +87,6 @@ async def update(connection: Connection) -> None:
             )
             AND r.resource_id=rps.resource_id;
 
-
         -- If the current_intent_attribute_hash column is still NULL, it's either an orphan
         -- or the resource belongs to a version newer than the latest released version.
         WITH latest_released_version_per_environment AS (
@@ -99,7 +97,6 @@ async def update(connection: Connection) -> None:
         )
         UPDATE public.resource_persistent_state AS rps
         SET
-            is_undefined=FALSE,
             is_orphan=(
                 NOT EXISTS(
                     SELECT *
@@ -113,9 +110,10 @@ async def update(connection: Connection) -> None:
                         AND r.resource_id=rps.resource_id
                 )
             ),
-            -- We might fill in incorrect values for the deployment_result and the blocked_status here.
-            -- Tracking this accurately would require an expensive database query. These defaults are a
-            -- compromise between performance an accuracy.
+            -- We might fill in incorrect values for the is_undefined, deployment_result and the blocked_status.
+            -- Tracking this accurately would require an expensive database query. These defaults are a compromise
+            -- between performance an accuracy.
+            is_undefined=FALSE,
             deployment_result='NEW',
             blocked_status='NO'
         WHERE rps.current_intent_attribute_hash IS NULL;

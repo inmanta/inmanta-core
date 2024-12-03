@@ -297,21 +297,21 @@ class ResourceScheduler(TaskManager):
                         assert scheduler is not None
                         last_processed_model_version = scheduler.last_processed_model_version
                         if last_processed_model_version is not None:
-                            async with self._intent_lock:
-                                async with self._scheduler_lock:
-                                    # Restore scheduler state like it was before the scheduler went down
-                                    self._state = await ModelState.create_from_db(
-                                        self.environment, last_processed_model_version, connection=con
-                                    )
-                                    self._work.requires = self._state.requires.requires_view()
-                                    self._work.provides = self._state.requires.provides_view()
+                            # Restore scheduler state like it was before the scheduler went down
+                            self._state = await ModelState.create_from_db(
+                                self.environment, last_processed_model_version, connection=con
+                            )
+                            self._work.link_to_new_requires_provides_view(
+                                requires_view=self._state.requires.requires_view(),
+                                provides_view=self._state.requires.provides_view(),
+                            )
                         else:
                             # This case can occur in two different situations:
                             #   * A model version has been released, but the scheduler didn't process any version yet.
                             #     In this case there is no scheduler state to restore.
                             #   * We migrated the Inmanta server from an old version, that didn't have the resource state
                             #     tracking in the database, to a version that does. To cover this case, we rely on the
-                            #     incremental calculation to determine which resources have to be considered dirty and which
+                            #     increment calculation to determine which resources have to be considered dirty and which
                             #     not. This migration code path can be removed in a later major version.
                             await self._recover_scheduler_state_using_increments_calculation(connection=con)
 

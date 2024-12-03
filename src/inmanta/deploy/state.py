@@ -39,9 +39,17 @@ if TYPE_CHECKING:
 
 class RequiresProvidesMapping(BidirectionalManyMapping["ResourceIdStr", "ResourceIdStr"]):
     def requires_view(self) -> Mapping["ResourceIdStr", Set["ResourceIdStr"]]:
+        """
+        Returns a view of the requires relationship of this RequiresProvidesMapping. This view will be updated
+        whenever the RequiresProvidesMapping object is updated.
+        """
         return self
 
     def provides_view(self) -> Mapping["ResourceIdStr", Set["ResourceIdStr"]]:
+        """
+        Returns a view of the provides relationship of this RequiresProvidesMapping. This view will be updated
+        whenever the RequiresProvidesMapping object is updated.
+        """
         return self.reverse_mapping()
 
 
@@ -112,11 +120,17 @@ class DeploymentResult(StrEnum):
     @classmethod
     def from_resource_state(cls, resource_state: const.ResourceState) -> "DeploymentResult":
         # These are invalid ResourceStates at the end of a deployment.
-        assert resource_state not in {const.ResourceState.available, const.ResourceState.deploying, const.ResourceState.dry}
+        assert resource_state not in {
+            const.ResourceState.available,
+            const.ResourceState.deploying,
+            const.ResourceState.dry,
+            const.ResourceState.undefined,
+            const.ResourceState.skipped_for_undefined,
+        }
         match resource_state:
             case const.ResourceState.deployed:
                 return DeploymentResult.DEPLOYED
-            case const.ResourceState.skipped | const.ResourceState.undefined | const.ResourceState.skipped_for_undefined:
+            case const.ResourceState.skipped:
                 return DeploymentResult.SKIPPED
             case _:
                 return DeploymentResult.FAILED
