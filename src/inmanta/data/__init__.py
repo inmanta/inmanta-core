@@ -62,7 +62,6 @@ from inmanta.data.model import (
     api_boundary_datetime_normalizer,
 )
 from inmanta.deploy import state
-from inmanta.deploy.state import DeploymentResult, BlockedStatus
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
@@ -4424,12 +4423,80 @@ class ResourcePersistentState(BaseDocument):
     # Last produced an event. i.e. the end time of the last deploy where we had an effective change
     # (change is not None and change != Change.nochange)
 
+    is_undefined: bool
     is_orphan: bool
-    deployment_result: DeploymentResult
-    blocked_status: BlockedStatus
+    deployment_result: state.DeploymentResult
+    blocked_status: state.BlockedStatus
 
     # status
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
+
+    @classmethod
+    async def update_orphan_state(cls, environment: uuid.UUID, connection: Optional[Connection] = None) -> None:
+        query = f"""
+            WITH latest_released_version AS (
+                SELECT max(c.version) AS version
+                FROM {ConfigurationModel.table_name()} AS c
+                WHERE c.environment=$1 AND c.released
+            )
+            UPDATE {cls.table_name()} AS rps
+            SET
+                is_orphan=TRUE
+            WHERE
+                rps.environment=$1
+                AND NOT EXISTS(
+                    SELECT *
+                    FROM {Resource.table_name()} AS r
+                    WHERE (
+                        r.environment=$1
+                        AND r.model>=(SELECT version FROM latest_released_version)
+                        AND r.resource_id=rps.resource_id
+                    )
+                )
+                AND NOT rps.is_orphan
+        """
+        await cls._execute_query(query, environment, connection=connection)
+
+    @classmethod
+    async def update_resource_intent(
+        cls,
+        environment: uuid.UUID,
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        update_blocked_state: bool,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        """
+        Update the intent of the given resources in the resource_persistent_state table. This method is called
+        when the intent of a resource, as processed by the scheduler, changes. This method must not be called
+        for orphaned resources. The update_orphan_state() method should be used for that.
+
+        :param update_blocked_state: True iff this method should update the blocked_status column in the database.
+        """
+        assert all(resource_state.status is not state.ComplianceStatus.ORPHAN for (resource_state, _) in intent.values())
+        values = [
+            (
+                environment,
+                resource_id,
+                resource_details.attribute_hash,
+                resource_state.status is state.ComplianceStatus.UNDEFINED,
+                False,
+                *([resource_state.blocked.name] if update_blocked_state else []),
+            )
+            for resource_id, (resource_state, resource_details) in intent.items()
+        ]
+        async with cls.get_connection(connection=connection) as con:
+            await con.executemany(
+                f"""
+                    UPDATE {cls.table_name()}
+                    SET
+                        current_intent_attribute_hash=$3,
+                        is_undefined=$4,
+                        is_orphan=$5
+                        {", blocked_status=$6" if update_blocked_state else ""}
+                    WHERE environment=$1 AND resource_id=$2
+                """,
+                values,
+            )
 
     @classmethod
     async def trim(cls, environment: UUID, connection: Optional[Connection] = None) -> None:
@@ -4447,39 +4514,17 @@ class ResourcePersistentState(BaseDocument):
             connection=connection,
         )
 
-    @classmethod
-    async def mark_orphans(
-        cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
-        """
-        Mark resources that have become an orphan as such.
-
-        :param version: The version that should be considered the latest released version.
-        """
-        query = f"""
-            UPDATE {cls.table_name()} AS rps
-            SET resource_status='ORPHAN'::new_resource_status
-            WHERE rps.environment=$1
-                  AND NOT EXISTS(
-                      SELECT *
-                      FROM {Resource.table_name()} r
-                      WHERE r.environment=rps.environment
-                          AND r.model>=$2
-                          AND r.resource_id = rps.resource_id
-                  )
-        """
-        await cls._execute_query(query, environment, version, connection=connection)
-
-    @classmethod
-    async def mark_as_has_update(
-        cls, environment: UUID, resource_ids: set[ResourceIdStr], connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
-        query = f"""
-            UPDATE {cls.table_name()} AS rps
-            SET resource_status='HAS_UPDATE'::new_resource_status
-            WHERE rps.environment=$1 AND rps.resource_id=ANY($2)
-        """
-        await cls._execute_query(query, environment, resource_ids, connection=connection)
+    def get_compliance_status(self) -> state.ComplianceStatus:
+        if self.is_orphan:
+            return state.ComplianceStatus.ORPHAN
+        elif self.is_undefined:
+            return state.ComplianceStatus.UNDEFINED
+        elif self.current_intent_attribute_hash != self.last_deployed_attribute_hash:
+            return state.ComplianceStatus.HAS_UPDATE
+        elif self.deployment_result is state.DeploymentResult.DEPLOYED:
+            return state.ComplianceStatus.COMPLIANT
+        else:
+            return state.ComplianceStatus.NON_COMPLIANT
 
 
 @stable_api
@@ -4959,9 +5004,10 @@ class Resource(BaseDocument):
 
         query = f"""
         SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_persistent, 'ps')} {json_projection}
-            FROM {cls.table_name()} r JOIN resource_persistent_state ps ON r.resource_id = ps.resource_id
-            WHERE r.environment=$1 AND ps.environment = $1 and r.model = $2;"""
-
+        FROM {cls.table_name()} r JOIN resource_persistent_state ps
+                                    ON r.environment=ps.environment AND r.resource_id = ps.resource_id
+        WHERE r.environment=$1 AND r.model = $2;
+        """
         resource_records = await cls._fetch_query(query, environment, version, connection=connection)
         resources = [dict(record) for record in resource_records]
         for res in resources:
@@ -5291,11 +5337,12 @@ class Resource(BaseDocument):
                 resource_type,
                 agent,
                 resource_id_value,
+                is_undefined,
                 is_orphan,
                 deployment_result,
                 blocked_status
             )
-            VALUES ($1, $2, $3, $4, $5, $6)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ON CONFLICT DO NOTHING
             """,
             self.environment,
@@ -5303,9 +5350,10 @@ class Resource(BaseDocument):
             self.resource_type,
             self.agent,
             self.resource_id_value,
+            self.status is const.ResourceState.undefined,
             False,
-            state.DeploymentResult.NEW,
-            state.BlockedStatus.NO,
+            state.DeploymentResult.NEW.name,
+            state.BlockedStatus.NO.name,
             connection=connection,
         )
 
@@ -5325,11 +5373,12 @@ class Resource(BaseDocument):
                     resource_type,
                     agent,
                     resource_id_value,
+                    is_undefined,
                     is_orphan,
                     deployment_result,
                     blocked_status
                 )
-                VALUES ($1, $2, $3, $4, $5, $6)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 ON CONFLICT DO NOTHING
                 """,
                 doc.environment,
@@ -5337,9 +5386,10 @@ class Resource(BaseDocument):
                 doc.resource_type,
                 doc.agent,
                 doc.resource_id_value,
+                doc.status is const.ResourceState.undefined,
                 False,
-                state.DeploymentResult.NEW,
-                state.BlockedStatus.NO,
+                state.DeploymentResult.NEW.name,
+                state.BlockedStatus.NO.name,
                 connection=connection,
             )
         await super().insert_many(documents, connection=connection)
@@ -5400,7 +5450,7 @@ class Resource(BaseDocument):
         last_produced_events: Optional[datetime.datetime] = None,
         last_deployed_attribute_hash: Optional[str] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
-        resource_status: Optional[state.ComplianceStatus] = None,
+        deployment_result: Optional[state.DeploymentResult] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)
@@ -5414,8 +5464,8 @@ class Resource(BaseDocument):
             "last_deployed_version": last_deployed_version,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
-        if resource_status:
-            query_parts.append(f"resource_status={args(resource_status.name)}::new_resource_status")
+        if deployment_result:
+            query_parts.append(f"deployment_result={args(deployment_result.name)}")
         if not query_parts:
             return
         query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
@@ -6419,7 +6469,7 @@ class Scheduler(BaseDocument):
     """
 
     environment: uuid.UUID
-    last_processed_model_version: int
+    last_processed_model_version: Optional[int]
 
     __primary_key__ = ("environment",)
 

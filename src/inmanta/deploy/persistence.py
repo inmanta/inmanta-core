@@ -19,15 +19,15 @@
 import abc
 import datetime
 import logging
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID
 
-from asyncpg import UniqueViolationError
+from asyncpg import UniqueViolationError, Connection
 
 from inmanta import const, data
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data.model import ResourceVersionIdStr
+from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.deploy import state
 from inmanta.protocol import Client
 from inmanta.resources import Id
@@ -58,6 +58,20 @@ class StateUpdateManager(abc.ABC):
 
     @abc.abstractmethod
     async def set_parameters(self, fact_result: FactResult) -> None:
+        pass
+
+    @abc.abstractmethod
+    async def update_resource_intent(
+        self,
+        environment: UUID,
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        update_blocked_state: bool,
+        connection: Optional[Connection] = None
+    ) -> None:
+        pass
+
+    @abc.abstractmethod
+    async def update_orphan_state(self, environment: UUID, connection: Optional[Connection] = None) -> None:
         pass
 
 
@@ -241,7 +255,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     last_deployed_version=resource_id_parsed.version,
                     last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
-                    resource_status=state.ComplianceStatus.COMPLIANT if status is const.ResourceState.deployed else None,
+                    deployment_result=state.DeploymentResult.from_resource_state(status),
                     **extra_datetime_fields,
                     connection=connection,
                 )
@@ -282,3 +296,17 @@ class ToDbUpdateManager(StateUpdateManager):
             finished=fact_result.finished,
             messages=fact_result.messages,
         )
+
+    async def update_resource_intent(
+        self,
+        environment: UUID,
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        update_blocked_state: bool,
+        connection: Optional[Connection] = None
+    ) -> None:
+        await data.ResourcePersistentState.update_resource_intent(
+            environment, intent, update_blocked_state, connection=connection
+        )
+
+    async def update_orphan_state(self, environment: UUID, connection: Optional[Connection] = None) -> None:
+        await data.ResourcePersistentState.update_orphan_state(environment, connection=connection)

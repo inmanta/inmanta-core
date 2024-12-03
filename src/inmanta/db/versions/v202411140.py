@@ -21,7 +21,10 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Add `resource_status` field to the resource_persistent_state table and populate it.
+    * Add required columns to the resource_persistent_state table to be able to recover the scheduler
+      state on a restart of the server.
+    * Create scheduler table, that keeps track of the last model version that it processed,
+      i.e. for which the scheduler state was written to the resource_persistent_state table.
     """
     schema = """
         -- Create and populate the scheduler table.
@@ -33,9 +36,13 @@ async def update(connection: Connection) -> None:
 
         INSERT INTO public.scheduler (SELECT id, NULL FROM public.environment);
 
+        ALTER TABLE public.scheduler
+            ALTER COLUMN environment SET NOT NULL;
+
         -- Add additional columns to the resource_persistent_state table that are required by the scheduler.
         ALTER TABLE public.resource_persistent_state
             ADD COLUMN current_intent_attribute_hash varchar,
+            ADD COLUMN is_undefined boolean,
             ADD COLUMN is_orphan boolean,
             ADD COLUMN deployment_result varchar,
             ADD COLUMN blocked_status varchar;
@@ -49,10 +56,11 @@ async def update(connection: Connection) -> None:
         UPDATE public.resource_persistent_state AS rps
         SET
             current_intent_attribute_hash=r.attribute_hash,
+            is_undefined=(r.status = 'undefined'::resourcestate),
             is_orphan=FALSE,
             deployment_result=(
                 CASE
-                    WHEN r.status = 'undefined'::resourcestate OR r.status = 'skipped_for_undefined'::resourcestate
+                    WHEN r.status = 'skipped'::resourcestate
                         THEN 'SKIPPED'
                     WHEN rps.last_non_deploying_status = 'deployed'::non_deploying_resource_state
                         THEN 'DEPLOYED'
@@ -71,7 +79,6 @@ async def update(connection: Connection) -> None:
                     ELSE 'NO'
                 END
             )
-        )
         FROM resource AS r
         WHERE r.environment=rps.environment
             AND r.model=(
@@ -92,6 +99,7 @@ async def update(connection: Connection) -> None:
         )
         UPDATE public.resource_persistent_state AS rps
         SET
+            is_undefined=FALSE,
             is_orphan=(
                 NOT EXISTS(
                     SELECT *
@@ -105,12 +113,14 @@ async def update(connection: Connection) -> None:
                         AND r.resource_id=rps.resource_id
                 )
             ),
+            -- We might fill in incorrect values for the deployment_result and the blocked_status here.
+            -- Tracking this accurately would require an expensive database query. These defaults are a
+            -- compromise between performance an accuracy.
             deployment_result='NEW',
             blocked_status='NO'
         WHERE rps.current_intent_attribute_hash IS NULL;
 
         ALTER TABLE public.resource_persistent_state
-            ALTER COLUMN compliance_status SET NOT NULL,
             ALTER COLUMN is_undefined SET NOT NULL,
             ALTER COLUMN is_orphan SET NOT NULL,
             ALTER COLUMN deployment_result SET NOT NULL,

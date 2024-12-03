@@ -26,7 +26,7 @@ from inmanta.stable_api import stable_api
 
 class ResourceState(str, Enum):
     unavailable = "unavailable"  # This state is set by the agent when no handler is available for the resource
-    skipped = "skipped"  #
+    skipped = "skipped"
     dry = "dry"
     deployed = "deployed"
     failed = "failed"

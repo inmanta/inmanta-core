@@ -27,12 +27,14 @@ from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Mapping, Optional, Sequence, Tuple
 from uuid import UUID
+from asyncpg import Connection
+from contextlib import asynccontextmanager
 
 import asyncpg
 import pytest
 
 import utils
-from inmanta import const, data, util
+from inmanta import const, util, data
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
@@ -258,6 +260,17 @@ class DummyStateManager(StateUpdateManager):
     async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
         self.state[Id.parse_id(dryrun_result.rvid).resource_str()] = const.ResourceState.dry
 
+    async def update_resource_intent(
+        self,
+        environment: UUID,
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        update_blocked_state: bool,
+        connection: Optional[Connection] = None
+    ) -> None:
+        pass
+
+    async def update_orphan_state(self, environment: UUID, connection: Optional[Connection] = None) -> None:
+        pass
 
 def state_manager_check(agent: "TestAgent"):
     agent.scheduler._state_update_delegate.check_with_scheduler(agent.scheduler)
@@ -342,6 +355,11 @@ async def config(inmanta_config, tmp_path):
     Config.set("agent", "executor-venv-retention-time", "60")
     Config.set("agent", "executor-retention-time", "10")
 
+class DummyDatabaseConnection:
+
+    @asynccontextmanager
+    async def transaction(self):
+        yield None
 
 @pytest.fixture
 async def agent(environment, config, monkeypatch):
@@ -353,19 +371,18 @@ async def agent(environment, config, monkeypatch):
     out = TestAgent(environment)
     await out.start_working()
 
-    async def mark_orphans_mock(
-        environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
-        return None
+    def _initialize_mock() -> None:
+        pass
 
-    monkeypatch.setattr(data.ResourcePersistentState, "mark_orphans", mark_orphans_mock)
+    monkeypatch.setattr(ResourceScheduler, "_initialize", _initialize_mock)
 
-    async def mark_as_has_update_mock(
-        environment: UUID, resource_ids: set[ResourceIdStr], connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
-        return None
+    @asynccontextmanager
+    async def get_connection_mock(
+        connection: Optional[asyncpg.connection.Connection] = None
+    ):
+        yield DummyDatabaseConnection()
 
-    monkeypatch.setattr(data.ResourcePersistentState, "mark_as_has_update", mark_as_has_update_mock)
+    monkeypatch.setattr(data.BaseDocument, "get_connection", get_connection_mock)
 
     yield out
     await out.stop_working()

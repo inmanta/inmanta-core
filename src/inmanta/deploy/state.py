@@ -20,12 +20,15 @@ import contextlib
 import dataclasses
 import enum
 import itertools
+import uuid
 from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
+import asyncpg
 
+from inmanta import const
 from inmanta.util.collections import BidirectionalManyMapping
 
 if TYPE_CHECKING:
@@ -60,6 +63,19 @@ class ComplianceStatus(StrEnum):
     UNDEFINED = enum.auto()
     ORPHAN = enum.auto()
 
+    def is_dirty(self) -> bool:
+        """
+        Return True iff the status indicates the resource is not up-to-date and is ready to be deployed.
+        """
+        return self in [self.HAS_UPDATE, self.NON_COMPLIANT]
+
+    def is_deployable(self) -> bool:
+        """
+        Return True iff the status indicates the resource is ready to be deployed.
+        """
+        return self not in [self.UNDEFINED, self.ORPHAN]
+
+
 
 @dataclass(frozen=True)
 class ResourceDetails:
@@ -93,6 +109,19 @@ class DeploymentResult(StrEnum):
     FAILED = enum.auto()
     SKIPPED = enum.auto()
 
+    @classmethod
+    def from_resource_state(cls, resource_state: const.ResourceState) -> "DeploymentResult":
+        # These are invalid ResourceStates at the end of a deployment.
+        assert resource_state not in {
+            const.ResourceState.available, const.ResourceState.deploying, const.ResourceState.dry
+        }
+        match resource_state:
+            case const.ResourceState.deployed:
+                return DeploymentResult.DEPLOYED
+            case const.ResourceState.skipped | const.ResourceState.undefined | const.ResourceState.skipped_for_undefined:
+                return DeploymentResult.SKIPPED
+            case _:
+                return DeploymentResult.FAILED
 
 class AgentStatus(StrEnum):
     """
@@ -137,6 +166,18 @@ class ResourceState:
     deployment_result: DeploymentResult
     blocked: BlockedStatus
 
+    def is_dirty(self) -> bool:
+        """
+        Return True iff the status indicates the resource is not up-to-date and is ready to be deployed.
+        """
+        return self.status.is_dirty()
+
+    def is_deployable(self) -> bool:
+        """
+        Return True iff the status indicates the resource is ready to be deployed.
+        """
+        return self.status.is_deployable() and not self.blocked.is_blocked()
+
 
 @dataclass(kw_only=True)
 class ModelState:
@@ -161,6 +202,87 @@ class ModelState:
     types_per_agent: dict[str, dict["ResourceType", int]] = dataclasses.field(
         default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
     )
+
+    @classmethod
+    async def create_from_db(
+        cls, environment: uuid.UUID, last_processed_model_version: int, *, connection: asyncpg.connection.Connection
+    ) -> "ModelState":
+        """
+        Create a new instance of the ModelState object, by restoring the model state from the database.
+
+        :param environment: The environment the model state belongs to.
+        :param last_processed_model_version: The model version that was last processed by the scheduler, i.e. the version
+                                             associated with the state in the persistent_resource_state table.
+        """
+        from inmanta import data
+        result = ModelState(version=last_processed_model_version)
+        resource_records = await data.Resource.get_resources_for_version_raw_with_persistent_state(
+            environment=environment,
+            version=last_processed_model_version,
+            projection=["resource_id", "attributes", "attribute_hash"],
+            projection_persistent=["deployment_result", "blocked_status", "last_success", "last_produced_events"],
+            project_attributes=["requires", const.RESOURCE_ATTRIBUTE_SEND_EVENTS],
+            connection=connection,
+        )
+        by_resource_id = {r["resource_id"]: r for r in resource_records}
+        for res in resource_records:
+            resource_id = res["resource_id"]
+
+            # Populate resource_state
+            compliance_status: ComplianceStatus
+            if res["is_orphan"]:
+                compliance_status = ComplianceStatus.ORPHAN
+            elif res["is_undefined"]:
+                compliance_status = ComplianceStatus.UNDEFINED
+            elif res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]:
+                compliance_status = ComplianceStatus.HAS_UPDATE
+            elif DeploymentResult[res["deployment_result"]] is DeploymentResult.DEPLOYED:
+                compliance_status = ComplianceStatus.COMPLIANT
+            else:
+                compliance_status = ComplianceStatus.NON_COMPLIANT
+            resource_state = ResourceState(
+                status=compliance_status,
+                deployment_result=DeploymentResult[res["deployment_result"]],
+                blocked=BlockedStatus[res["blocked_status"]],
+            )
+            result.resource_state[resource_id] = resource_state
+
+            # Populate resources details
+            details = ResourceDetails(
+                resource_id=resource_id,
+                attribute_hash=res["attribute_hash"],
+                attributes=res["attributes"],
+                status=result.resource_state[resource_id].status,
+            )
+            result.resources[resource_id] = details
+
+            # Populate types_per_agent
+            result.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
+
+            # Populate requires
+            requires = {resources.Id.parse_id(req).resource_str() for req in res["requires"]}
+            result.requires[resource_id] = requires
+
+            # Check whether resource is dirty
+            if resource_state.is_deployable():
+                if resource_state.is_dirty():
+                    # Resource is dirty by itself.
+                    result.dirty.add(details.id.resource_str())
+                else:
+                    # Check whether the resource should be deployed because of an outstanding event.
+                    last_success = res["last_success"] or const.DATETIME_MIN_UTC
+                    for req in requires:
+                        req_res = by_resource_id[req]
+                        assert req_res is not None
+                        last_produced_events = req_res["last_produced_events"]
+                        if (
+                            last_produced_events is not None
+                            and last_produced_events > last_success
+                            and req_res[const.RESOURCE_ATTRIBUTE_SEND_EVENTS]
+                        ):
+                            result.dirty.add(details.id.resource_str())
+                            break
+        return result
 
     def reset(self) -> None:
         self.version = 0
@@ -242,7 +364,7 @@ class ModelState:
                 todo.extend(provides_view.get(resource_id, set()))
         return result
 
-    def mark_as_defined(self, resource: "ResourceIdStr", details: ResourceDetails) -> None:
+    def mark_as_defined(self, resource: "ResourceIdStr", details: ResourceDetails) -> Set["ResourceIdStr"]:
         """
         Mark the given resource as defined. If the given resource or any of its provides became unblocked, because of this,
         this method also updates the blocked status.
@@ -252,6 +374,7 @@ class ModelState:
 
         :param resource: The resource that became defined.
         :param details: The details of resource.
+        :return: All the resources that were transitively unblocked because of the given resource being unblocked.
         """
 
         # Cache used by the `update_blocked_status()` method to prevent the expensive check on the blocked
@@ -297,11 +420,15 @@ class ModelState:
         self.resources[resource] = details
         self.resource_state[resource].status = ComplianceStatus.HAS_UPDATE
         todo: list[ResourceIdStr] = [resource]
+        transitively_unblocked_resources = set()
         while todo:
             resource_id: ResourceIdStr = todo.pop()
             resource_was_unblocked: bool = update_blocked_status(resource_id)
             if resource_was_unblocked:
+                if resource_id != resource:
+                    transitively_unblocked_resources.add(resource_id)
                 todo.extend(provides_view.get(resource_id, set()))
+        return transitively_unblocked_resources
 
     def update_desired_state(
         self,

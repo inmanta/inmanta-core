@@ -19,15 +19,19 @@
 import base64
 import logging
 import typing
+from asyncio import timeout
 from typing import TypeVar
 
 import pytest
 
 from inmanta import const
+from inmanta.data import model
 from inmanta.agent.handler import ResourceHandler
 from inmanta.protocol import SessionClient, VersionMatch, common
 from inmanta.util import get_compiler_version
 from utils import _deploy_resources, log_contains, make_random_file, wait_until_deployment_finishes
+
+from tests.utils import retry_limited
 
 T = TypeVar("T")
 
@@ -243,4 +247,13 @@ async def test_deploy_handler_method(server, client, environment, agent, clienth
 
     # Exception is raised by handler
     resource_container.Provider.set_fail("agent1", "key1", 1)
-    assert const.ResourceState.failed == await deploy_resource()
+    # Trigger a repair run. Otherwise the resource will not re-deploy because the desired state didn't change.
+    result = await client.deploy(tid=environment, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+
+    async def resource_reached_failed_status() -> bool:
+        result = await client.resource_details(tid=environment, rid="test::Deploy[agent1,key=key1]")
+        assert result.code == 200
+        return result.result["data"]["status"] == model.ReleasedResourceState.failed.name
+
+    await retry_limited(resource_reached_failed_status, timeout=10)

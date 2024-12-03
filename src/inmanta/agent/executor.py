@@ -507,7 +507,7 @@ class DeployResult:
         )
 
     @classmethod
-    def undeployable(self, rvid: ResourceVersionIdStr, action_id: UUID, message: LogLine) -> "DeployResult":
+    def undeployable(cls, rvid: ResourceVersionIdStr, action_id: UUID, message: LogLine) -> "DeployResult":
         return DeployResult(
             rvid=rvid,
             action_id=action_id,
