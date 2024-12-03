@@ -23,8 +23,10 @@ from typing import Sequence
 import inmanta.deploy.scheduler
 from inmanta.agent import config as agent_config
 from inmanta.data.model import ResourceIdStr
+
+from inmanta import data
 from inmanta.deploy.work import TaskPriority
-from inmanta.util import CronSchedule, ScheduledTask, Scheduler
+from inmanta.util import CronSchedule, ScheduledTask, Scheduler, IntervalSchedule
 
 LOGGER = logging.getLogger(__name__)
 
@@ -109,29 +111,39 @@ class TimerManager:
         """
         self.resource_timers: dict[ResourceIdStr, ResourceTimer] = {}
 
-        self.global_periodic_repair_task: ScheduledTask | None = None
-        self.global_periodic_deploy_task: ScheduledTask | None = None
 
-        self.periodic_repair_interval: int | None = None
-        self.periodic_deploy_interval: int | None = None
+        self.periodic_per_resource_repair_interval: int | None = None
+        self.periodic_per_resource_deploy_interval: int | None = None
+
+        self.periodic_global_repair_cron: str | None = None
+        self.periodic_global_deploy_cron: str | None = None
 
         self._resource_scheduler = resource_scheduler
 
-        self._cron_scheduler = Scheduler("Resource scheduler")
+        self._cron_scheduler = Scheduler("TimerManager")
+
+        self.global_periodic_repair_task: ScheduledTask | None = None
+        self.global_periodic_deploy_task: ScheduledTask | None = None
+
+        self._env_settings_watcher_check_interval: float = 0.2
+        self.env_settings_watcher_task: ScheduledTask | None = None
 
     def reset(self) -> None:
         self.stop()
 
         self.global_periodic_repair_task = None
+        self.periodic_global_repair_cron = None
         self.global_periodic_deploy_task = None
-        self.periodic_repair_interval = None
-        self.periodic_deploy_interval = None
+        self.periodic_global_deploy_cron = None
+        self.periodic_per_resource_repair_interval = None
+        self.periodic_per_resource_deploy_interval = None
+        self.env_settings_watcher_task = None
 
     def stop(self) -> None:
         for timer in self.resource_timers.values():
             timer.cancel()
 
-        for task in [self.global_periodic_repair_task, self.global_periodic_deploy_task]:
+        for task in [self.global_periodic_repair_task, self.global_periodic_deploy_task, self.env_settings_watcher_task]:
             if task:
                 self._cron_scheduler.remove(task)
 
@@ -143,19 +155,102 @@ class TimerManager:
         Set the periodic timers for repairs and deploys. Either per-resource if the
         associated config option is passed as a positive integer, or globally if it
         is passed as a cron expression string.
+
+        Set the watcher task that periodically checks whether the environment
+        settings for periodic deploy and repairs have changed.
         """
         deploy_timer: int | str = agent_config.agent_deploy_interval.get()
         repair_timer: int | str = agent_config.agent_repair_interval.get()
 
         if isinstance(deploy_timer, str):
             self.global_periodic_deploy_task = self._trigger_global_deploy(deploy_timer)
+            self.periodic_global_deploy_cron = deploy_timer
         else:
-            self.periodic_deploy_interval = deploy_timer if deploy_timer > 0 else None
+            self.periodic_per_resource_deploy_interval = deploy_timer if deploy_timer > 0 else None
 
         if isinstance(repair_timer, str):
             self.global_periodic_repair_task = self._trigger_global_repair(repair_timer)
+            self.periodic_global_repair_cron = repair_timer
         else:
-            self.periodic_repair_interval = repair_timer if repair_timer > 0 else None
+            self.periodic_per_resource_repair_interval = repair_timer if repair_timer > 0 else None
+
+        self.env_settings_watcher_task = self._trigger_environment_settings_watcher()
+
+    def _trigger_environment_settings_watcher(self) -> ScheduledTask:
+        """
+        Trigger a watcher task that periodically checks for changes in the
+        environment settings for periodic deploys and repairs.
+
+        :returns: the associated scheduled task.
+        """
+
+        task = self._cron_scheduler.add_action(
+            self._check_environment_settings,
+            IntervalSchedule(self._env_settings_watcher_check_interval),
+            cancel_on_stop=True,
+            quiet_mode=True,
+        )
+
+        assert isinstance(task, ScheduledTask)
+        return task
+
+    async def _check_environment_settings(self) -> None:
+        """
+        Check if the settings for periodic repair and deploy have changed.
+        Take action accordingly, for each setting:
+            - check for type change from int (per-resource) to str (global) and vice versa
+            - check for value change
+        """
+
+        async with data.Environment.get_connection() as connection:
+            env = await data.Environment.get_by_id(self._resource_scheduler.environment, connection=connection)
+            assert env is not None, (
+                f"TimerManager cannot fetch settings for environment {self._resource_scheduler.environment} "
+                "because it does not exist. This shouldn't happen."
+            )
+            db_deploy_interval: str = await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection)
+            db_repair_interval: str = await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection)
+
+        db_per_resource_periodic_deploy: int | None = None
+        db_global_periodic_deploy: str | None = None
+        db_per_resource_periodic_repair: int | None = None
+        db_global_periodic_repair: str | None = None
+
+        try:
+            db_per_resource_periodic_deploy = int(db_deploy_interval)
+        except ValueError:
+            db_global_periodic_deploy = db_deploy_interval
+        try:
+            db_per_resource_periodic_repair = int(db_repair_interval)
+        except ValueError:
+            db_global_periodic_repair = db_repair_interval
+
+        if self.periodic_global_deploy_cron != db_global_periodic_deploy:
+            if self.periodic_global_deploy_cron is None:
+                # Deploys are now set globally, and no longer on a per-resource basis
+
+                self.periodic_per_resource_deploy_interval = None
+                self.remove_resources([resource for resource in self.resource_timers.keys()])
+
+            else:
+                # Global deploy schedule changed
+                self._cron_scheduler.remove(self.global_periodic_deploy_task)
+
+            self.periodic_global_deploy_cron = db_global_periodic_deploy
+
+            if self.periodic_global_deploy_cron:
+                self.global_periodic_deploy_task = self._trigger_global_deploy(self.periodic_global_deploy_cron)
+
+        elif self.periodic_per_resource_deploy_interval != db_per_resource_periodic_deploy:
+            pass
+
+
+
+        self.periodic_global_deploy_cron: str | None = None
+
+        self.periodic_per_resource_repair_interval: int | None = None
+        self.periodic_per_resource_deploy_interval: int | None = None
+
 
     def _trigger_global_deploy(self, cron_expression: str) -> ScheduledTask:
         """
@@ -244,14 +339,14 @@ class TimerManager:
             return (countdown, reason, priority)
 
         # Both periodic repairs and deploys are disabled on a per-resource basis.
-        if self.periodic_repair_interval is None and self.periodic_deploy_interval is None:
+        if self.periodic_per_resource_repair_interval is None and self.periodic_per_resource_deploy_interval is None:
             return
 
         if not is_dirty:
             # At the time of the call, the resource is in an assumed good state:
             # schedule a periodic repair for it if the repair setting is set on a per-resource basis
-            if self.periodic_repair_interval:
-                countdown, reason, priority = _setup_repair(self.periodic_repair_interval)
+            if self.periodic_per_resource_repair_interval:
+                countdown, reason, priority = _setup_repair(self.periodic_per_resource_repair_interval)
             else:
                 return
 
@@ -260,16 +355,16 @@ class TimerManager:
             # schedule a repair or a deploy, whichever has the shortest interval set
             # on a per-resource basis.
 
-            if self.periodic_repair_interval and self.periodic_deploy_interval:
-                if self.periodic_repair_interval < self.periodic_deploy_interval:
-                    countdown, reason, priority = _setup_repair(self.periodic_repair_interval)
+            if self.periodic_per_resource_repair_interval and self.periodic_per_resource_deploy_interval:
+                if self.periodic_per_resource_repair_interval < self.periodic_per_resource_deploy_interval:
+                    countdown, reason, priority = _setup_repair(self.periodic_per_resource_repair_interval)
                 else:
-                    countdown, reason, priority = _setup_deploy(self.periodic_deploy_interval)
-            elif self.periodic_repair_interval:
-                countdown, reason, priority = _setup_repair(self.periodic_repair_interval)
+                    countdown, reason, priority = _setup_deploy(self.periodic_per_resource_deploy_interval)
+            elif self.periodic_per_resource_repair_interval:
+                countdown, reason, priority = _setup_repair(self.periodic_per_resource_repair_interval)
             else:
                 assert self.periodic_deploy_interval is not None  # mypy
-                countdown, reason, priority = _setup_deploy(self.periodic_deploy_interval)
+                countdown, reason, priority = _setup_deploy(self.periodic_per_resource_deploy_interval)
 
         self.resource_timers[resource].cancel()
         self.resource_timers[resource].set_timer(
