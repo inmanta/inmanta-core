@@ -17,11 +17,8 @@
 """
 
 import asyncio
-import datetime
 import logging
-import sys
-from collections.abc import Coroutine
-from typing import Any, Callable, Sequence
+from typing import Sequence
 
 import inmanta.deploy.scheduler
 from inmanta.agent import config as agent_config
@@ -50,7 +47,6 @@ class ResourceTimer:
         :param scheduler: Back reference to the resource scheduler sitting on top of this class.
         """
         self.resource: ResourceIdStr = resource
-        self.time_to_next_deploy = sys.maxsize
 
         # "Inner" asyncio task responsible for queuing a Deploy task
         self.trigger_deploy: asyncio.Task[None] | None = None
@@ -58,9 +54,6 @@ class ResourceTimer:
         self.next_schedule_handle: asyncio.TimerHandle | None = None
 
         self._resource_scheduler = scheduler
-
-        # The datetime at which the next attempt to deploy this resource is scheduled at.
-        self.scheduled_execution_time: datetime.datetime | None = None
 
     def set_timer(
         self,
@@ -88,62 +81,11 @@ class ResourceTimer:
                 self._resource_scheduler.trigger_deploy_for_resource(self.resource, reason, priority)
             )
 
-        self.scheduled_execution_time = datetime.datetime.now() + datetime.timedelta(seconds=countdown)
-
         assert (
             self.next_schedule_handle is None
         ), f"Per-resource timer set twice for resource {self.resource}, this should not happen"
 
         self.next_schedule_handle = asyncio.get_running_loop().call_later(countdown, _create_repair_task)
-
-    def ensure_timer(
-        self,
-        periodic_deploy_interval: int | None,
-        periodic_repair_interval: int | None,
-        is_dirty: bool,
-    ) -> None:
-        """
-        Make sure the underlying resource is marked for execution
-
-        :param periodic_deploy_interval: Per-resource deploy interval, assumed to be a positive int or None
-        :param periodic_repair_interval: Per-resource repair interval, assumed to be a positive int or None
-        :param is_dirty: Last known state of the resource at the timer install request time.
-        """
-
-        next_execute_time: int
-
-        if periodic_repair_interval is None:
-            periodic_repair_interval = sys.maxsize
-        if periodic_deploy_interval is None:
-            periodic_deploy_interval = sys.maxsize
-
-        action_function: Callable[[ResourceIdStr, int], Coroutine[Any, Any, None]]
-        if is_dirty:
-            next_execute_time, action_function = min(
-                (periodic_deploy_interval, self._trigger_deploy_for_resource),
-                (periodic_repair_interval, self._trigger_repair_for_resource),
-                key=lambda x: x[0],
-            )
-        else:
-            next_execute_time = periodic_repair_interval
-            action_function = self._trigger_repair_for_resource
-
-        if next_execute_time == sys.maxsize:
-            # Per-resource timers are disabled
-            return
-
-        if next_execute_time == self.time_to_next_deploy:
-            # This timer is already in place
-            return
-
-        # Cancel previous schedule and re-schedule
-        self.cancel()
-
-        def _create_repair_task() -> None:
-            self.trigger_deploy = asyncio.create_task(action_function(self.resource, next_execute_time))
-
-        self.time_to_next_deploy = next_execute_time
-        self.next_schedule_handle = asyncio.get_running_loop().call_later(next_execute_time, _create_repair_task)
 
     def cancel(self) -> None:
         """
@@ -289,13 +231,16 @@ class TimerManager:
         """
         Make sure the given resource is marked for eventual re-deployment in the future.
 
-        This method will inspect the env variables REPAIR and DEPLOY TODO naming+description
+        This method will inspect self.periodic_repair_interval and self.periodic_deploy_interval
         to decide when re-deployment will happen and whether this timer is global (i.e. pertains
         to all resources) or specific to this resource.
 
         The is_dirty parameter lets the caller (i.e. the resource scheduler sitting on top
         of this TimerManager) give information regarding the last known state of the resource
         so that this method can decide whether a repair or a deploy should be scheduled.
+
+        The scheduler is considered the authority. If a previous timer is already in place
+        for the given resource, it will be canceled first and a new one will be re-scheduled.
 
         :param resource: the resource to re-deploy.
         :param is_dirty: If the resource is in an assumed bad state, we should re-deploy it
@@ -355,6 +300,7 @@ class TimerManager:
             else:
                 countdown, reason, priority = _setup_deploy(self.periodic_deploy_interval)
 
+        self.resource_timers[resource].cancel()
         self.resource_timers[resource].set_timer(
             countdown=countdown,
             reason=reason,
