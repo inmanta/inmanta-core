@@ -68,13 +68,13 @@ class ComplianceStatus(StrEnum):
         """
         Return True iff the status indicates the resource is not up-to-date and is ready to be deployed.
         """
-        return self in [self.HAS_UPDATE, self.NON_COMPLIANT]
+        return self in [ComplianceStatus.HAS_UPDATE, ComplianceStatus.NON_COMPLIANT]
 
     def is_deployable(self) -> bool:
         """
         Return True iff the status indicates the resource is ready to be deployed.
         """
-        return self not in [self.UNDEFINED, self.ORPHAN]
+        return self not in [ComplianceStatus.UNDEFINED, ComplianceStatus.ORPHAN]
 
 
 @dataclass(frozen=True)

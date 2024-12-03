@@ -303,11 +303,8 @@ class ResourceScheduler(TaskManager):
                                     self._state = await ModelState.create_from_db(
                                         self.environment, last_processed_model_version, connection=con
                                     )
-                                    self._work: work.ScheduledWork = work.ScheduledWork(
-                                        requires=self._state.requires.requires_view(),
-                                        provides=self._state.requires.provides_view(),
-                                        new_agent_notify=self._create_agent,
-                                    )
+                                    self._work.requires = self._state.requires.requires_view()
+                                    self._work.provides = self._state.requires.provides_view()
                         else:
                             # This case can occur in two different situations:
                             #   * A model version has been released, but the scheduler didn't process any version yet.
