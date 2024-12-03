@@ -4409,7 +4409,8 @@ class ResourcePersistentState(BaseDocument):
 
     # Field based on content from the resource actions
     last_deploy: Optional[datetime.datetime] = None
-    # The attribute hash of this resource as being deployed by the scheduler
+    # When a resource is updated in a new model version, it might take some time until this update reaches the scheduler.
+    # This is the attribute hash that the scheduler considers the last released attribute hash for the given resource.
     current_intent_attribute_hash: Optional[str] = None
     # Last deployment completed of any kind, including marking-deployed-for-know-good-state for increments
     # i.e. the end time of the last deploy
@@ -4433,6 +4434,9 @@ class ResourcePersistentState(BaseDocument):
 
     @classmethod
     async def update_orphan_state(cls, environment: uuid.UUID, connection: Optional[Connection] = None) -> None:
+        """
+        Set the is_orphan column to True on all resources in the given environment that became an orphan.
+        """
         query = f"""
             WITH latest_released_version AS (
                 SELECT max(c.version) AS version
