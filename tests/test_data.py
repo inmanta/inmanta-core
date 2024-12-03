@@ -33,9 +33,9 @@ from asyncpg.pool import Pool
 
 import utils
 from inmanta import const, data, util
-from inmanta.deploy import state
 from inmanta.const import AgentStatus, LogLevel
 from inmanta.data import ArgumentCollector, QueryType
+from inmanta.deploy import state
 from inmanta.resources import Id, ResourceVersionIdStr
 
 
@@ -117,7 +117,8 @@ async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> N
     exclude_enums = [state.DeploymentResult, state.BlockedStatus]  # These enums are modelled in the db using a varchar
     for cls in all_db_document_classes:
         enums: abc.Mapping[str, data.Field] = {
-            name: field for name, field in cls.get_field_metadata().items()
+            name: field
+            for name, field in cls.get_field_metadata().items()
             if issubclass(field.field_type, enum.Enum) and field.field_type not in exclude_enums
         }
         for enum_column, field in enums.items():

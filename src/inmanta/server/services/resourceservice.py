@@ -54,7 +54,6 @@ from inmanta.data.model import (
     VersionedResourceDetails,
 )
 from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
-from inmanta.deploy.state import DeploymentResult
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError

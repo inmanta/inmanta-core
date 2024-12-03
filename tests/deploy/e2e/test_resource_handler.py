@@ -19,19 +19,17 @@
 import base64
 import logging
 import typing
-from asyncio import timeout
 from typing import TypeVar
 
 import pytest
 
 from inmanta import const
-from inmanta.data import model
 from inmanta.agent.handler import ResourceHandler
+from inmanta.data import model
 from inmanta.protocol import SessionClient, VersionMatch, common
 from inmanta.util import get_compiler_version
-from utils import _deploy_resources, log_contains, make_random_file, wait_until_deployment_finishes
-
 from tests.utils import retry_limited
+from utils import _deploy_resources, log_contains, make_random_file, wait_until_deployment_finishes
 
 T = TypeVar("T")
 

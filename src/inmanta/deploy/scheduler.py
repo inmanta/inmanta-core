@@ -34,7 +34,7 @@ from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import DeployResult, FactResult
-from inmanta.data import ConfigurationModel, Environment, ResourcePersistentState, Scheduler
+from inmanta.data import ConfigurationModel, Environment, Scheduler
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
@@ -274,24 +274,26 @@ class ResourceScheduler(TaskManager):
                     async with con.transaction():
                         # Make sure there is an entry for this scheduler in the scheduler database table
                         await con.execute(
-                        f"""
+                            f"""
                                 INSERT INTO {data.Scheduler.table_name()}
                                 VALUES($1, NULL)
                                 ON CONFLICT DO NOTHING
                             """,
-                            self.environment
+                            self.environment,
                         )
 
                         # Retrieve latest released model version
-                        latest_release_model: Optional[data.ConfigurationModel] = await data.ConfigurationModel.get_latest_version(
-                            environment=self.environment, connection=con
+                        latest_release_model: Optional[data.ConfigurationModel] = (
+                            await data.ConfigurationModel.get_latest_version(environment=self.environment, connection=con)
                         )
                         if latest_release_model is None:
                             # No model version has been released yet. No scheduler state to restore from db.
                             return
 
                         # Check at which model version the scheduler was before it went down
-                        scheduler: Optional[data.Scheduler] = await Scheduler.get_one(environment=self.environment, connection=con)
+                        scheduler: Optional[data.Scheduler] = await Scheduler.get_one(
+                            environment=self.environment, connection=con
+                        )
                         assert scheduler is not None
                         last_processed_model_version = scheduler.last_processed_model_version
                         if last_processed_model_version is not None:
@@ -308,15 +310,18 @@ class ResourceScheduler(TaskManager):
                                     )
                         else:
                             # This case can occur in two different situations:
-                            #   * A model version has been released, but the scheduler didn't process any version yet. In this case
-                            #     there is no scheduler state to restore
-                            #   * We migrated the Inmanta server from an old version, that didn't have the resource state tracking
-                            #     in the database, to a version that does. To cover this case, we rely on the incremental calculation
-                            #     to determine which resources have to be considered dirty and which not. This migration code path can
-                            #     be removed in a later major version.
+                            #   * A model version has been released, but the scheduler didn't process any version yet.
+                            #     In this case there is no scheduler state to restore.
+                            #   * We migrated the Inmanta server from an old version, that didn't have the resource state
+                            #     tracking in the database, to a version that does. To cover this case, we rely on the
+                            #     incremental calculation to determine which resources have to be considered dirty and which
+                            #     not. This migration code path can be removed in a later major version.
                             await self._recover_scheduler_state_using_increments_calculation(connection=con)
 
-                        if last_processed_model_version is not None and last_processed_model_version < latest_release_model.version:
+                        if (
+                            last_processed_model_version is not None
+                            and last_processed_model_version < latest_release_model.version
+                        ):
                             # We restored the scheduler state from the database, but a newer, released version is available.
                             # Load the new desired state into the scheduler and start the deployment.
                             await self._read_version(intent_lock_acquired=True, scheduler_lock_acquired=True, connection=con)
@@ -328,9 +333,7 @@ class ResourceScheduler(TaskManager):
                                 priority=TaskPriority.NEW_VERSION_DEPLOY,
                             )
 
-    async def _recover_scheduler_state_using_increments_calculation(
-        self, *, connection: asyncpg.connection.Connection
-    ) -> None:
+    async def _recover_scheduler_state_using_increments_calculation(self, *, connection: asyncpg.connection.Connection) -> None:
         """
         This method exists for backwards compatibility reasons. It initializes the scheduler state
         by relying on the increments calculation logic. This method starts the deployment process.
@@ -358,7 +361,7 @@ class ResourceScheduler(TaskManager):
             start_deployment=False,
             intent_lock_acquired=True,
             scheduler_lock_acquired=True,
-            connection=connection
+            connection=connection,
         )
 
     async def stop(self) -> None:
@@ -511,7 +514,7 @@ class ResourceScheduler(TaskManager):
         *,
         intent_lock_acquired: bool = False,
         scheduler_lock_acquired: bool = False,
-        connection: Optional[asyncpg.connection.Connection] = None
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         try:
             version, resources, requires = await self._get_resources_in_latest_version(connection=connection)
@@ -630,7 +633,9 @@ class ResourceScheduler(TaskManager):
                             self._state.update_desired_state(resource, resources[resource])
                         for resource in added_requires.keys() | dropped_requires.keys():
                             self._state.update_requires(resource, requires[resource])
-                        transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
+                        transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(
+                            resources=blocked_resources
+                        )
                         transitively_unblocked_resources: set[ResourceIdStr] = set()
                         for resource in unblocked_resources:
                             transitively_unblocked_resources.update(self._state.mark_as_defined(resource, resources[resource]))
@@ -900,13 +905,11 @@ class ResourceScheduler(TaskManager):
         environment: UUID,
         intent: dict[ResourceIdStr, tuple[ResourceState, ResourceDetails]],
         update_blocked_state: bool,
-        connection: Optional[asyncpg.connection.Connection] = None
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         await self._state_update_delegate.update_resource_intent(
             environment, intent, update_blocked_state, connection=connection
         )
 
-    async def update_orphan_state(
-        self, environment: UUID, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
+    async def update_orphan_state(self, environment: UUID, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         await self._state_update_delegate.update_orphan_state(environment, connection=connection)

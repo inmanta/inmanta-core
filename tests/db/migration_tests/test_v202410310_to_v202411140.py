@@ -30,6 +30,7 @@ from inmanta.deploy import state
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
 
+
 def assert_resource_state(
     resource_persistent_state: ResourcePersistentState,
     is_undefined: bool,

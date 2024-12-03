@@ -26,6 +26,7 @@ from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
+
 import asyncpg
 
 from inmanta import const
@@ -76,7 +77,6 @@ class ComplianceStatus(StrEnum):
         return self not in [self.UNDEFINED, self.ORPHAN]
 
 
-
 @dataclass(frozen=True)
 class ResourceDetails:
     resource_id: "ResourceIdStr"
@@ -112,9 +112,7 @@ class DeploymentResult(StrEnum):
     @classmethod
     def from_resource_state(cls, resource_state: const.ResourceState) -> "DeploymentResult":
         # These are invalid ResourceStates at the end of a deployment.
-        assert resource_state not in {
-            const.ResourceState.available, const.ResourceState.deploying, const.ResourceState.dry
-        }
+        assert resource_state not in {const.ResourceState.available, const.ResourceState.deploying, const.ResourceState.dry}
         match resource_state:
             case const.ResourceState.deployed:
                 return DeploymentResult.DEPLOYED
@@ -122,6 +120,7 @@ class DeploymentResult(StrEnum):
                 return DeploymentResult.SKIPPED
             case _:
                 return DeploymentResult.FAILED
+
 
 class AgentStatus(StrEnum):
     """
@@ -215,6 +214,7 @@ class ModelState:
                                              associated with the state in the persistent_resource_state table.
         """
         from inmanta import data
+
         result = ModelState(version=last_processed_model_version)
         resource_records = await data.Resource.get_resources_for_version_raw_with_persistent_state(
             environment=environment,

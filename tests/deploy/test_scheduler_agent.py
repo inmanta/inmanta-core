@@ -25,16 +25,16 @@ import typing
 import uuid
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from typing import Mapping, Optional, Sequence, Tuple
 from uuid import UUID
-from asyncpg import Connection
-from contextlib import asynccontextmanager
 
 import asyncpg
 import pytest
+from asyncpg import Connection
 
 import utils
-from inmanta import const, util, data
+from inmanta import const, data, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
@@ -265,12 +265,13 @@ class DummyStateManager(StateUpdateManager):
         environment: UUID,
         intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
         update_blocked_state: bool,
-        connection: Optional[Connection] = None
+        connection: Optional[Connection] = None,
     ) -> None:
         pass
 
     async def update_orphan_state(self, environment: UUID, connection: Optional[Connection] = None) -> None:
         pass
+
 
 def state_manager_check(agent: "TestAgent"):
     agent.scheduler._state_update_delegate.check_with_scheduler(agent.scheduler)
@@ -355,11 +356,13 @@ async def config(inmanta_config, tmp_path):
     Config.set("agent", "executor-venv-retention-time", "60")
     Config.set("agent", "executor-retention-time", "10")
 
+
 class DummyDatabaseConnection:
 
     @asynccontextmanager
     async def transaction(self):
         yield None
+
 
 @pytest.fixture
 async def agent(environment, config, monkeypatch):
@@ -377,9 +380,7 @@ async def agent(environment, config, monkeypatch):
     monkeypatch.setattr(ResourceScheduler, "_initialize", _initialize_mock)
 
     @asynccontextmanager
-    async def get_connection_mock(
-        connection: Optional[asyncpg.connection.Connection] = None
-    ):
+    async def get_connection_mock(connection: Optional[asyncpg.connection.Connection] = None):
         yield DummyDatabaseConnection()
 
     monkeypatch.setattr(data.BaseDocument, "get_connection", get_connection_mock)
@@ -1476,7 +1477,9 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid5 and rid6 are undefined
     # Change the desired state of rid2
     resources[rid4] = make_resource_minimal(rid=rid4, values={"value": "a"}, requires=[])
-    resources[rid5] = make_resource_minimal(rid=rid5, values={"value": "unknown"}, requires=[], status=ComplianceStatus.UNDEFINED)
+    resources[rid5] = make_resource_minimal(
+        rid=rid5, values={"value": "unknown"}, requires=[], status=ComplianceStatus.UNDEFINED
+    )
     resources[rid6] = make_resource_minimal(
         rid=rid6, values={"value": "unknown"}, requires=[rid7], status=ComplianceStatus.UNDEFINED
     )

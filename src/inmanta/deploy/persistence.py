@@ -22,7 +22,7 @@ import logging
 from typing import Any, Optional
 from uuid import UUID
 
-from asyncpg import UniqueViolationError, Connection
+from asyncpg import Connection, UniqueViolationError
 
 from inmanta import const, data
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult
@@ -72,7 +72,7 @@ class StateUpdateManager(abc.ABC):
         environment: UUID,
         intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
         update_blocked_state: bool,
-        connection: Optional[Connection] = None
+        connection: Optional[Connection] = None,
     ) -> None:
         pass
 
@@ -308,7 +308,7 @@ class ToDbUpdateManager(StateUpdateManager):
         environment: UUID,
         intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
         update_blocked_state: bool,
-        connection: Optional[Connection] = None
+        connection: Optional[Connection] = None,
     ) -> None:
         await data.ResourcePersistentState.update_resource_intent(
             environment, intent, update_blocked_state, connection=connection

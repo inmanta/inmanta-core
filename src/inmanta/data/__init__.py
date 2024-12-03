@@ -6459,6 +6459,7 @@ class File(BaseDocument):
         result = await cls._fetch_query(query, content_hashes)
         return {cast(str, r["content_hash"]) for r in result}
 
+
 class Scheduler(BaseDocument):
     """
     :param environment: The environment this scheduler belongs to
