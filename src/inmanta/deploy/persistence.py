@@ -45,6 +45,12 @@ class StateUpdateManager(abc.ABC):
 
     @abc.abstractmethod
     async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
+        """
+        This method sets the state to in_progress.
+
+        It is important that this method is atomic: if it fails, we assume the state to be not set and will not re-set it
+
+        """
         # FIXME: get rid of version in the id
         pass
 
