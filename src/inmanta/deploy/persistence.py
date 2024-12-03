@@ -91,10 +91,10 @@ class ToDbUpdateManager(StateUpdateManager):
         logger.handle(log_record)
 
     async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
-        resource_id_str = resource_id
         """
         Update the db to reflect that deployment has started for a given resource.
         """
+        resource_id_str = resource_id
         resource_id_parsed = Id.parse_id(resource_id_str)
 
         async with data.Resource.get_connection() as connection:

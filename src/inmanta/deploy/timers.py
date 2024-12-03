@@ -18,13 +18,15 @@
 
 import asyncio
 import logging
-from typing import Sequence
+from typing import TYPE_CHECKING, Collection
 
-import inmanta.deploy.scheduler
+import inmanta.util as util
 from inmanta.agent import config as agent_config
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy.work import TaskPriority
-from inmanta.util import CronSchedule, ScheduledTask, Scheduler
+
+if TYPE_CHECKING:
+    from inmanta.deploy.scheduler import ResourceScheduler
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,7 +40,7 @@ class ResourceTimer:
     should be used.
     """
 
-    def __init__(self, resource: ResourceIdStr, scheduler: "inmanta.deploy.scheduler.ResourceScheduler"):
+    def __init__(self, resource: ResourceIdStr, scheduler: ResourceScheduler):
         """
         Instances of this class are expected to be created by a TimerManager.
 
@@ -69,10 +71,8 @@ class ResourceTimer:
 
         :param countdown: In this many seconds in the future, this method will ensure the underlying
             resource is scheduled for deploy.
-        :param reason: The reason argument that will be passed down
-            to the resource scheduler's `deploy_with_context` method.
-        :param priority: The priority argument that will be passed down
-            to the resource scheduler's `deploy_with_context` method.
+        :param reason: The reason argument that will be given for the deploy request.
+        :param priority: The priority argument that will be given for the deploy request.
         """
 
         def _create_repair_task() -> None:
@@ -92,6 +92,7 @@ class ResourceTimer:
         """
         if self.next_schedule_handle is not None:
             self.next_schedule_handle.cancel()
+        self.next_schedule_handle = None
 
     async def join(self) -> None:
         """
@@ -102,22 +103,22 @@ class ResourceTimer:
 
 
 class TimerManager:
-    def __init__(self, resource_scheduler: "inmanta.deploy.scheduler.ResourceScheduler"):
+    def __init__(self, resource_scheduler: ResourceScheduler):
         """
         :param resource_scheduler: Back reference to the ResourceScheduler that was responsible for
             spawning this TimerManager.
         """
         self.resource_timers: dict[ResourceIdStr, ResourceTimer] = {}
 
-        self.global_periodic_repair_task: ScheduledTask | None = None
-        self.global_periodic_deploy_task: ScheduledTask | None = None
+        self.global_periodic_repair_task: util.ScheduledTask | None = None
+        self.global_periodic_deploy_task: util.ScheduledTask | None = None
 
         self.periodic_repair_interval: int | None = None
         self.periodic_deploy_interval: int | None = None
 
         self._resource_scheduler = resource_scheduler
 
-        self._cron_scheduler = Scheduler("Resource scheduler")
+        self._cron_scheduler = util.Scheduler("Resource scheduler")
 
     def reset(self) -> None:
         self.stop()
@@ -131,14 +132,12 @@ class TimerManager:
         for timer in self.resource_timers.values():
             timer.cancel()
 
-        for task in [self.global_periodic_repair_task, self.global_periodic_deploy_task]:
-            if task:
-                self._cron_scheduler.remove(task)
+        self._cron_scheduler.stop()
 
     async def join(self) -> None:
         await asyncio.gather(*[timer.join() for timer in self.resource_timers.values()])
 
-    def _initialize(self) -> None:
+    def initialize(self) -> None:
         """
         Set the periodic timers for repairs and deploys. Either per-resource if the
         associated config option is passed as a positive integer, or globally if it
@@ -157,7 +156,7 @@ class TimerManager:
         else:
             self.periodic_repair_interval = repair_timer if repair_timer > 0 else None
 
-    def _trigger_global_deploy(self, cron_expression: str) -> ScheduledTask:
+    def _trigger_global_deploy(self, cron_expression: str) -> util.ScheduledTask:
         """
         Trigger a global deploy following a cron expression schedule.
         This does not affect previously started cron schedules.
@@ -165,7 +164,7 @@ class TimerManager:
         :returns: the associated scheduled task.
         """
 
-        cron_schedule = CronSchedule(cron=cron_expression)
+        cron_schedule = util.CronSchedule(cron=cron_expression)
 
         async def _action() -> None:
             await self._resource_scheduler.deploy(
@@ -174,17 +173,17 @@ class TimerManager:
             )
 
         task = self._cron_scheduler.add_action(_action, cron_schedule)
-        assert isinstance(task, ScheduledTask)
+        assert isinstance(task, util.ScheduledTask)
         return task
 
-    def _trigger_global_repair(self, cron_expression: str) -> ScheduledTask:
+    def _trigger_global_repair(self, cron_expression: str) -> util.ScheduledTask:
         """
         Trigger a global repair following a cron expression schedule.
         This does not affect previously started cron schedules.
 
         :returns: the associated scheduled task.
         """
-        cron_schedule = CronSchedule(cron=cron_expression)
+        cron_schedule = util.CronSchedule(cron=cron_expression)
 
         async def _action() -> None:
             await self._resource_scheduler.repair(
@@ -193,10 +192,10 @@ class TimerManager:
             )
 
         task = self._cron_scheduler.add_action(_action, cron_schedule)
-        assert isinstance(task, ScheduledTask)
+        assert isinstance(task, util.ScheduledTask)
         return task
 
-    def update_resource(self, resource: ResourceIdStr, is_dirty: bool) -> None:
+    def update_resource(self, resource: ResourceIdStr, is_compliant: bool) -> None:
         """
         Make sure the given resource is marked for eventual re-deployment in the future.
 
@@ -204,7 +203,7 @@ class TimerManager:
         to decide when re-deployment will happen and whether this timer is global (i.e. pertains
         to all resources) or specific to this resource.
 
-        The is_dirty parameter lets the caller (i.e. the resource scheduler sitting on top
+        The is_compliant parameter lets the caller (i.e. the resource scheduler sitting on top
         of this TimerManager) give information regarding the last known state of the resource
         so that this method can decide whether a repair or a deploy should be scheduled.
 
@@ -213,7 +212,7 @@ class TimerManager:
         new one will be re-scheduled.
 
         :param resource: the resource to re-deploy.
-        :param is_dirty: If the resource is in an assumed bad state, we should re-deploy it
+        :param is_compliant: If the resource is in an assumed bad state, we should re-deploy it
             at the soonest i.e. whichever interval is the smallest between per-resource deploy
             and per-resource repair. If it is in an assumed good state, mark the resource for
             repair (using the per-resource repair interval).
@@ -247,7 +246,7 @@ class TimerManager:
         if self.periodic_repair_interval is None and self.periodic_deploy_interval is None:
             return
 
-        if not is_dirty:
+        if is_compliant:
             # At the time of the call, the resource is in an assumed good state:
             # schedule a periodic repair for it if the repair setting is set on a per-resource basis
             if self.periodic_repair_interval:
@@ -287,7 +286,7 @@ class TimerManager:
             self.resource_timers[resource].cancel()
             del self.resource_timers[resource]
 
-    def remove_resources(self, resources: Sequence[ResourceIdStr]) -> None:
+    def remove_resources(self, resources: Collection[ResourceIdStr]) -> None:
         """
         Remove a batch of resources.
         """

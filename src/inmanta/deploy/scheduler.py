@@ -29,14 +29,13 @@ from uuid import UUID
 
 import asyncpg
 
-import inmanta.deploy.timers
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
-from inmanta.deploy import work
+from inmanta.deploy import timers, work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
 from inmanta.deploy.state import (
     AgentStatus,
@@ -222,9 +221,10 @@ class ResourceScheduler(TaskManager):
         # We uphold two locks to prevent concurrency conflicts between external events (e.g. new version or deploy request)
         # and the task executor background tasks.
         #
-        # - lock to block scheduler state access (both model state and scheduled work) during scheduler-wide state updates
-        #   (e.g. trigger deploy). A single lock suffices since all state accesses (both read and write) by the task runners are
-        #   short, synchronous operations (and therefore we wouldn't gain anything by allowing multiple readers).
+        # - lock to block scheduler state access (this includes model state, scheduled work and resource timers management)
+        #   during scheduler-wide state updates (e.g. trigger deploy). A single lock suffices since all state accesses
+        #   (both read and write) by the task runners are short, synchronous operations (and therefore we wouldn't gain
+        #   anything by allowing multiple readers).
         self._scheduler_lock: asyncio.Lock = asyncio.Lock()
         # - lock to serialize updates to the scheduler's intent (version, attributes, ...), e.g. process a new version.
         self._intent_lock: asyncio.Lock = asyncio.Lock()
@@ -247,7 +247,7 @@ class ResourceScheduler(TaskManager):
         self.executor_manager = executor_manager
         self._state_update_delegate = ToDbUpdateManager(client, environment)
 
-        self._timer_manager = inmanta.deploy.timers.TimerManager(self)
+        self._timer_manager = timers.TimerManager(self)
 
     def reset(self) -> None:
         """
@@ -275,7 +275,7 @@ class ResourceScheduler(TaskManager):
         """
         Initialize the scheduler state and continue the deployment where we were before the server was shutdown.
         """
-        self._timer_manager._initialize()
+        self._timer_manager.initialize()
 
         async with data.ConfigurationModel.get_connection() as con:
             # Get resources from the database
@@ -320,6 +320,7 @@ class ResourceScheduler(TaskManager):
         if not self._running:
             return
         async with self._scheduler_lock:
+            self._timer_manager.remove_resources(self._state.dirty)
             self._work.deploy_with_context(
                 self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
             )
@@ -340,6 +341,7 @@ class ResourceScheduler(TaskManager):
             return
         async with self._scheduler_lock:
             self._state.dirty.update(resource for resource in self._state.resources.keys() if _should_deploy(resource))
+            self._timer_manager.remove_resources(self._state.dirty)
             self._work.deploy_with_context(
                 self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
             )
@@ -386,7 +388,7 @@ class ResourceScheduler(TaskManager):
             if self._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy
                 return
             to_deploy: set[ResourceIdStr] = {resource}
-
+            self._timer_manager.remove_resource(resource)
             self._work.deploy_with_context(
                 to_deploy,
                 reason=reason,
@@ -509,48 +511,50 @@ class ResourceScheduler(TaskManager):
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
 
-            for resource, details in up_to_date_resources.items():
-                self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
-                # Install timers for these resources. They are up-to-date now,
-                # but we want to make sure we periodically repair them.
-                self._timer_manager.update_resource(resource, is_dirty=False)
+            async with self._scheduler_lock:
+                for resource, details in up_to_date_resources.items():
+                    self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
+                    # Install timers for these resources. They are up-to-date now,
+                    # but we want to make sure we periodically repair them.
+                    self._timer_manager.update_resource(resource, is_compliant=True)
 
-            for resource, details in resources.items():
-                if details.status is const.ResourceState.undefined:
-                    blocked_resources.add(resource)
-                    self._work.delete_resource(resource)
-                    # These resources are blocked at the moment. Remove the timers for them
-                    # Re-deploy will happen when (if) dependants successfully deploy
-                    self._timer_manager.remove_resource(resource)
-                elif resource in self._state.resources:
-                    # It's a resource we know.
-                    if self._state.resource_state[resource].status is ComplianceStatus.UNDEFINED:
-                        # The resource has been undeployable in previous versions, but not anymore.
-                        unblocked_resources.add(resource)
-                    elif details.attribute_hash != self._state.resources[resource].attribute_hash:
-                        # The desired state has changed.
+            async with self._scheduler_lock:
+                for resource, details in resources.items():
+                    if details.status is const.ResourceState.undefined:
+                        blocked_resources.add(resource)
+                        self._work.delete_resource(resource)
+                        # These resources are blocked at the moment. Remove the timers for them
+                        # Re-deploy will happen when (if) dependants successfully deploy
+                        self._timer_manager.remove_resource(resource)
+                    elif resource in self._state.resources:
+                        # It's a resource we know.
+                        if self._state.resource_state[resource].status is ComplianceStatus.UNDEFINED:
+                            # The resource has been undeployable in previous versions, but not anymore.
+                            unblocked_resources.add(resource)
+                        elif details.attribute_hash != self._state.resources[resource].attribute_hash:
+                            # The desired state has changed.
+                            new_desired_state.add(resource)
+                        # These resources will be picked up by the scheduler eventually:
+                        # cancel existing timers (if any).
+                        self._timer_manager.remove_resource(resource)
+                    else:
+                        # It's a resource we don't know yet: it will be marked as dirty
+                        # and added to the scheduled work. Per-resource timers for this
+                        # resource will be set when (if) the associated deploy task completes
+                        # for this resource.
                         new_desired_state.add(resource)
-                    # Nothing need to be done for these resources' timers yet. They will be
-                    # picked up by the scheduler eventually, and only then, after deployment
-                    # action should be taken wrt timers.
-                else:
-                    # It's a resource we don't know yet: it will be marked as dirty
-                    # and added to the scheduled work. Per-resource timers for this
-                    # resource will be set when (if) the associated deploy task completes
-                    # for this resource.
-                    new_desired_state.add(resource)
 
-                old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
-                new_requires: Set[ResourceIdStr] = requires.get(resource, set())
-                added: Set[ResourceIdStr] = new_requires - old_requires
-                dropped: Set[ResourceIdStr] = old_requires - new_requires
-                if added:
-                    added_requires[resource] = added
-                if dropped:
-                    dropped_requires[resource] = dropped
-                # this loop is race-free, potentially slow, and completely synchronous
-                # => regularly pass control to the event loop to not block scheduler operation during update prep
-                await asyncio.sleep(0)
+                    old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
+                    new_requires: Set[ResourceIdStr] = requires.get(resource, set())
+                    added: Set[ResourceIdStr] = new_requires - old_requires
+                    dropped: Set[ResourceIdStr] = old_requires - new_requires
+                    if added:
+                        added_requires[resource] = added
+                    if dropped:
+                        dropped_requires[resource] = dropped
+                    # this loop is race-free, potentially slow, and completely synchronous
+                    # => regularly pass control to the event loop to not block scheduler operation during update prep
+                    await asyncio.sleep(0)
 
             # A resource should not be present in more than one of these resource sets
             assert len(new_desired_state | blocked_resources | unblocked_resources) == len(new_desired_state) + len(
@@ -577,6 +581,10 @@ class ResourceScheduler(TaskManager):
                 self._deploying_latest.difference_update(
                     new_desired_state, deleted_resources, blocked_resources, transitively_blocked_resources
                 )
+                self._timer_manager.remove_resources(
+                    self._state.dirty | blocked_resources | transitively_blocked_resources | deleted_resources
+                )
+
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
                     self._state.dirty,
@@ -598,7 +606,6 @@ class ResourceScheduler(TaskManager):
                 # acquired longer than required. The worst that can happen here is that we deploy the deleted resources one
                 # time too many, which is not so bad.
                 self._work.delete_resource(resource)
-                self._timer_manager.remove_resource(resource)
 
     def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
@@ -675,10 +682,12 @@ class ResourceScheduler(TaskManager):
             resource_details = self._get_resource_intent(resource)
             if resource_details is None:
                 return None
+            resource_state = self._state.resource_state.get(resource)
+            if resource_state is None or resource_state.blocked.is_blocked():
+                return None
             return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=None)
 
     async def deploy_start(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
-        self._timer_manager.remove_resource(resource)
 
         async with self._scheduler_lock:
             # fetch resource details under lock
@@ -699,12 +708,6 @@ class ResourceScheduler(TaskManager):
     ) -> None:
         if deployment_result is DeploymentResult.NEW:
             raise ValueError("report_resource_state should not be called to register new resources")
-
-        # Keep track of the last known state for this resource before leaving the scheduler lock
-        # to re-schedule an individual repair or deploy accordingly:
-        #   If the deploy was successful, schedule a repair.
-        #   Otherwise, schedule whichever comes sooner between a repair and a deploy.
-        is_dirty: bool
 
         async with self._scheduler_lock:
             # refresh resource details for latest model state
@@ -742,7 +745,6 @@ class ResourceScheduler(TaskManager):
 
                 if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
-                    is_dirty = False
 
                     if previous_deployment_result != DeploymentResult.DEPLOYED:
                         # This resource went from not deployed to deployed
@@ -750,14 +752,14 @@ class ResourceScheduler(TaskManager):
                         # so that we can try to re-deploy them in case this resource's previous
                         # failure was the reason they were skipped
 
-                        # FIXME: stop informing resource skipped because of
-                        #  a custom handler skip via this mechanism
-
                         for dependant in provides:
                             if not self._state.resources.get(dependant, None):
                                 continue
                             if not (dependant_status := self._state.resource_state.get(dependant, None)):
                                 continue
+                            # FIXME: stop informing resource skipped because of
+                            #  a custom handler skip via this mechanism
+                            # change BlockedStatus.NO to BlockedStatus.TRANSIENT
                             if dependant_status.blocked is BlockedStatus.NO:
                                 concerned_resources.add(dependant)
 
@@ -766,7 +768,6 @@ class ResourceScheduler(TaskManager):
                     # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
                     # (or skip) causes it to become dirty now.
                     self._state.dirty.add(resource)
-                    is_dirty = True
 
                     if deployment_result is DeploymentResult.SKIPPED:
                         # Also add back dependents to the dirty set
@@ -776,10 +777,9 @@ class ResourceScheduler(TaskManager):
                             dependant for dependant in provides if self._state.resources.get(dependant, None) is not None
                         }
                         self._state.dirty.update(dependant_resources)
-                        for dependant in dependant_resources:
-                            # No point in re-trying dependants since this resource was skipped
-                            # FIXME as part of https://github.com/inmanta/inmanta-core/issues/8423
-                            self._timer_manager.remove_resource(dependant)
+                        self._timer_manager.remove_resources(dependant_resources)
+                        # No point in re-trying dependants since this resource was skipped
+                        # FIXME as part of https://github.com/inmanta/inmanta-core/issues/8423
 
                 # propagate events
                 if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
@@ -789,6 +789,8 @@ class ResourceScheduler(TaskManager):
                         if (dependant_details := self._state.resources.get(dependant, None)) is not None
                         # default to True for backward compatibility, i.e. not all resources have the field
                         if dependant_details.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
+                        if (dependant_status := self._state.resource_state.get(dependant, None)) is not None
+                        if dependant_status.blocked != BlockedStatus.YES
                     }
                     concerned_resources.update(event_listeners)
 
@@ -798,7 +800,7 @@ class ResourceScheduler(TaskManager):
                     task = Deploy(resource=resource)
                     assert task in self._work.agent_queues.in_progress
                     priority = self._work.agent_queues.in_progress[task]
-                    self._timer_manager.remove_resources(list(concerned_resources))
+                    self._timer_manager.remove_resources(concerned_resources)
                     self._work.deploy_with_context(
                         concerned_resources,
                         reason=f"Deploying because an event was received from {resource}",
@@ -806,8 +808,8 @@ class ResourceScheduler(TaskManager):
                         deploying=set(),
                     )
 
-        # No matter the deployment result, schedule a re-deploy for this resource
-        self._timer_manager.update_resource(resource, is_dirty=is_dirty)
+            # No matter the deployment result, schedule a re-deploy for this resource
+            self._timer_manager.update_resource(resource, is_compliant=(status is ComplianceStatus.COMPLIANT))
 
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr
