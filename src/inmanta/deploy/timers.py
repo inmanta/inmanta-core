@@ -298,6 +298,7 @@ class TimerManager:
             elif self.periodic_repair_interval:
                 countdown, reason, priority = _setup_repair(self.periodic_repair_interval)
             else:
+                assert self.periodic_deploy_interval is not None  # mypy
                 countdown, reason, priority = _setup_deploy(self.periodic_deploy_interval)
 
         self.resource_timers[resource].cancel()

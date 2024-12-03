@@ -798,7 +798,7 @@ class ResourceScheduler(TaskManager):
                     task = Deploy(resource=resource)
                     assert task in self._work.agent_queues.in_progress
                     priority = self._work.agent_queues.in_progress[task]
-                    self._timer_manager.remove_resources(concerned_resources)
+                    self._timer_manager.remove_resources(list(concerned_resources))
                     self._work.deploy_with_context(
                         concerned_resources,
                         reason=f"Deploying because an event was received from {resource}",
