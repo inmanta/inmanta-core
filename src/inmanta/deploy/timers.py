@@ -17,10 +17,10 @@
 """
 
 import asyncio
+import datetime
 import logging
 import sys
 from collections.abc import Coroutine
-import datetime
 from typing import Any, Callable, Sequence
 
 import inmanta.deploy.scheduler
@@ -41,6 +41,7 @@ class ResourceTimer:
     top of it. To create and delete resource timers, the TimerManager interface
     should be used.
     """
+
     def __init__(self, resource: ResourceIdStr, scheduler: "inmanta.deploy.scheduler.ResourceScheduler"):
         """
         Instances of this class are expected to be created by a TimerManager.
@@ -81,15 +82,19 @@ class ResourceTimer:
         :param priority: The priority argument that will be passed down
             to the resource scheduler's `deploy_with_context` method.
         """
+
         def _create_repair_task() -> None:
-            self.trigger_deploy = asyncio.create_task(self._resource_scheduler.trigger_deploy_for_resource(self.resource, reason, priority))
+            self.trigger_deploy = asyncio.create_task(
+                self._resource_scheduler.trigger_deploy_for_resource(self.resource, reason, priority)
+            )
 
         self.scheduled_execution_time = datetime.datetime.now() + datetime.timedelta(seconds=countdown)
 
-        assert self.next_schedule_handle is None, f"Per-resource timer set twice for resource {self.resource}, this should not happen"
+        assert (
+            self.next_schedule_handle is None
+        ), f"Per-resource timer set twice for resource {self.resource}, this should not happen"
 
         self.next_schedule_handle = asyncio.get_running_loop().call_later(countdown, _create_repair_task)
-
 
     def ensure_timer(
         self,
@@ -351,9 +356,9 @@ class TimerManager:
                 countdown, reason, priority = _setup_deploy(self.periodic_deploy_interval)
 
         self.resource_timers[resource].set_timer(
-            countdown = countdown,
-            reason = reason,
-            priority = priority,
+            countdown=countdown,
+            reason=reason,
+            priority=priority,
         )
 
     def remove_resource(self, resource: ResourceIdStr) -> None:

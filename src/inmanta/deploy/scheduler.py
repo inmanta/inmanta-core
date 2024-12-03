@@ -394,10 +394,6 @@ class ResourceScheduler(TaskManager):
                 deploying=self._deploying_latest,
             )
 
-
-
-
-
     async def _build_resource_mappings_from_db(
         self, version: int, *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> Mapping[ResourceIdStr, ResourceDetails]:
