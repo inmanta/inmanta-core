@@ -240,7 +240,7 @@ class DummyStateManager(StateUpdateManager):
         self.state[Id.parse_id(resource_id).resource_str()] = const.ResourceState.deploying
 
     async def send_deploy_done(self, result: DeployResult) -> None:
-        self.state[Id.parse_id(result.rvid).resource_str()] = result.status
+        self.state[result.resource_id] = result.status
 
     def check_with_scheduler(self, scheduler: ResourceScheduler) -> None:
         """Verify that the state we collected corresponds to the state as known by the scheduler"""

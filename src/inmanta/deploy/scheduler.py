@@ -102,28 +102,6 @@ class TaskManager(StateUpdateManager, abc.ABC):
         Acquires appropriate locks.
         """
 
-    @abstractmethod
-    async def report_resource_state(
-        self,
-        resource: ResourceIdStr,
-        *,
-        attribute_hash: str,
-        status: ComplianceStatus,
-        deployment_result: Optional[DeploymentResult] = None,
-    ) -> None:
-        """
-        Report new state for a resource. Since knowledge of deployment result implies a finished deploy, it must only be set
-        when a deploy has just finished.
-
-        Acquires appropriate locks
-
-        :param resource: The resource to report state for.
-        :param attribute_hash: The resource's attribute hash for which this state applies. No scheduler state is updated if the
-            hash indicates the state information is stale.
-        :param status: The new resource status.
-        :param deployment_result: The result of the deploy, iff one just finished, otherwise None.
-        """
-
 
 class TaskRunner:
     def __init__(self, endpoint: str, scheduler: "ResourceScheduler"):
@@ -782,73 +760,6 @@ class ResourceScheduler(TaskManager):
             self._deploying_latest.add(resource)
             return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=dependencies)
 
-    async def report_resource_state(
-        self,
-        resource: ResourceIdStr,
-        *,
-        attribute_hash: str,
-        status: ComplianceStatus,
-        deployment_result: Optional[DeploymentResult] = None,
-    ) -> None:
-        if deployment_result is DeploymentResult.NEW:
-            raise ValueError("report_resource_state should not be called to register new resources")
-
-        async with self._scheduler_lock:
-            # refresh resource details for latest model state
-            details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
-
-            if details is None:
-                # we are stale and removed
-                return
-
-            state: ResourceState = self._state.resource_state[resource]
-
-            if details.attribute_hash != attribute_hash:
-                # We are stale but still the last deploy
-                # We can update the deployment_result (which is about last deploy)
-                # We can't update status (which is about active state only)
-                # None of the event propagation or other update happen either for the same reason
-                if deployment_result is not None:
-                    state.deployment_result = deployment_result
-                return
-
-            # We are not stale
-            state.status = status
-            if deployment_result is not None:
-                # first update state, then send out events
-                self._deploying_latest.remove(resource)
-                state.deployment_result = deployment_result
-                self._work.finished_deploy(resource)
-                if deployment_result is DeploymentResult.DEPLOYED:
-                    self._state.dirty.discard(resource)
-                else:
-                    # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
-                    # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
-                    # (or skip) causes it to become dirty now.
-                    self._state.dirty.add(resource)
-                # propagate events
-                if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
-                    provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
-                    event_listeners: Set[ResourceIdStr] = {
-                        dependant
-                        for dependant in provides
-                        if (dependant_details := self._state.resources.get(dependant, None)) is not None
-                        # default to True for backward compatibility, i.e. not all resources have the field
-                        if dependant_details.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
-                    }
-                    if event_listeners:
-                        # do not pass deploying tasks because for event propagation we really want to start a new one,
-                        # even if the current intent is already being deployed
-                        task = Deploy(resource=resource)
-                        assert task in self._work.agent_queues.in_progress
-                        priority = self._work.agent_queues.in_progress[task]
-                        self._work.deploy_with_context(
-                            event_listeners,
-                            reason=f"Deploying because an event was received from {resource}",
-                            priority=priority,
-                            deploying=set(),
-                        )
-
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr
     ) -> Mapping[ResourceIdStr, const.ResourceState]:
@@ -889,7 +800,75 @@ class ResourceScheduler(TaskManager):
         await self._state_update_delegate.send_in_progress(action_id, resource_id)
 
     async def send_deploy_done(self, result: DeployResult) -> None:
-        return await self._state_update_delegate.send_deploy_done(result)
+        try:
+            await self.update_scheduler_state_for_finished_deploy(result)
+        finally:
+            # Write deployment result to the database
+            await self._state_update_delegate.send_deploy_done(result)
+
+    async def update_scheduler_state_for_finished_deploy(self, result: DeployResult) -> None:
+        """
+        Update the state of the scheduler based on the DeploymentResult of the given resource.
+        """
+        resource_id = result.resource_id
+        if result.deployment_result is DeploymentResult.NEW:
+            raise ValueError("report_resource_state should not be called to register new resources")
+
+        async with self._scheduler_lock:
+            # refresh resource details for latest model state
+            details: Optional[ResourceDetails] = self._state.resources.get(resource_id, None)
+
+            if details is None:
+                # we are stale and removed
+                return
+
+            state: ResourceState = self._state.resource_state[resource_id]
+
+            if details.attribute_hash != result.attribute_hash:
+                # We are stale but still the last deploy
+                # We can update the deployment_result (which is about last deploy)
+                # We can't update status (which is about active state only)
+                # None of the event propagation or other update happen either for the same reason
+                state.deployment_result = result.deployment_result
+                return
+
+            # We are not stale
+            state.status = (
+                ComplianceStatus.COMPLIANT if result.status is const.ResourceState.deployed else ComplianceStatus.NON_COMPLIANT
+            )
+            # first update state, then send out events
+            self._deploying_latest.remove(resource_id)
+            state.deployment_result = result.deployment_result
+            self._work.finished_deploy(resource_id)
+            if result.deployment_result is DeploymentResult.DEPLOYED:
+                self._state.dirty.discard(resource_id)
+            else:
+                # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
+                # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
+                # (or skip) causes it to become dirty now.
+                self._state.dirty.add(resource_id)
+            # propagate events
+            if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
+                provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource_id, set())
+                event_listeners: Set[ResourceIdStr] = {
+                    dependant
+                    for dependant in provides
+                    if (dependant_details := self._state.resources.get(dependant, None)) is not None
+                    # default to True for backward compatibility, i.e. not all resources have the field
+                    if dependant_details.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
+                }
+                if event_listeners:
+                    # do not pass deploying tasks because for event propagation we really want to start a new one,
+                    # even if the current intent is already being deployed
+                    task = Deploy(resource=resource_id)
+                    assert task in self._work.agent_queues.in_progress
+                    priority = self._work.agent_queues.in_progress[task]
+                    self._work.deploy_with_context(
+                        event_listeners,
+                        reason=f"Deploying because an event was received from {resource_id}",
+                        priority=priority,
+                        deploying=set(),
+                    )
 
     async def dryrun_update(self, env: uuid.UUID, dryrun_result: executor.DryrunResult) -> None:
         await self._state_update_delegate.dryrun_update(env, dryrun_result)

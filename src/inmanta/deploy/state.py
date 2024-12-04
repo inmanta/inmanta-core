@@ -117,24 +117,6 @@ class DeploymentResult(StrEnum):
     FAILED = enum.auto()
     SKIPPED = enum.auto()
 
-    @classmethod
-    def from_resource_state(cls, resource_state: const.ResourceState) -> "DeploymentResult":
-        # These are invalid ResourceStates at the end of a deployment.
-        assert resource_state not in {
-            const.ResourceState.available,
-            const.ResourceState.deploying,
-            const.ResourceState.dry,
-            const.ResourceState.undefined,
-            const.ResourceState.skipped_for_undefined,
-        }
-        match resource_state:
-            case const.ResourceState.deployed:
-                return DeploymentResult.DEPLOYED
-            case const.ResourceState.skipped:
-                return DeploymentResult.SKIPPED
-            case _:
-                return DeploymentResult.FAILED
-
 
 class AgentStatus(StrEnum):
     """
