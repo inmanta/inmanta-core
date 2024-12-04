@@ -40,7 +40,7 @@ class ResourceTimer:
     should be used.
     """
 
-    def __init__(self, resource: ResourceIdStr, scheduler: ResourceScheduler):
+    def __init__(self, resource: ResourceIdStr, scheduler: "ResourceScheduler"):
         """
         Instances of this class are expected to be created by a TimerManager.
 
@@ -103,7 +103,7 @@ class ResourceTimer:
 
 
 class TimerManager:
-    def __init__(self, resource_scheduler: ResourceScheduler):
+    def __init__(self, resource_scheduler: "ResourceScheduler"):
         """
         :param resource_scheduler: Back reference to the ResourceScheduler that was responsible for
             spawning this TimerManager.
