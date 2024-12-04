@@ -682,9 +682,6 @@ class ResourceScheduler(TaskManager):
             resource_details = self._get_resource_intent(resource)
             if resource_details is None:
                 return None
-            resource_state = self._state.resource_state.get(resource)
-            if resource_state is None or resource_state.blocked.is_blocked():
-                return None
             return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=None)
 
     async def deploy_start(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
@@ -693,6 +690,9 @@ class ResourceScheduler(TaskManager):
             # fetch resource details under lock
             resource_details = self._get_resource_intent(resource)
             if resource_details is None:
+                return None
+            resource_state = self._state.resource_state.get(resource)
+            if resource_state is None or resource_state.blocked.is_blocked():
                 return None
             dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
             self._deploying_latest.add(resource)
