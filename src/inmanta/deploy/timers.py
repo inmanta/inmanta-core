@@ -63,7 +63,7 @@ class ResourceTimer:
         priority: TaskPriority,
     ) -> None:
         """
-        Main interface expected to be called once per timer by the TimerManager instance sitting on
+        Main interface expected to be called by the TimerManager instance sitting on
         top of this class.
 
         Schedule the underlying resource for execution in <countdown> seconds with
