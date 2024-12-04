@@ -142,6 +142,9 @@ class TimerManager:
         Set the periodic timers for repairs and deploys. Either per-resource if the
         associated config option is passed as a positive integer, or globally if it
         is passed as a cron expression string.
+
+        Should only be called once when initializing the resource scheduler.
+        After each call to reset(), this method can be called again once.
         """
         deploy_timer: int | str = agent_config.agent_deploy_interval.get()
         repair_timer: int | str = agent_config.agent_repair_interval.get()
