@@ -523,16 +523,7 @@ class ResourceScheduler(TaskManager):
                     self._state.update_desired_state(resource, resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
-                    # If the resource is blocked transiently, and we drop at least one of its requirements
-                    # we check to see if the resource can now be unblocked
-                    # i.e. all of its dependencies are now compliant with the desired state.
-                    if (
-                        self._state.resource_state[resource].blocked is BlockedStatus.TRANSIENT
-                        and dropped_requires
-                        and await self._resource_can_be_unblocked(resource)
-                    ):
-                        self._state.resource_state[resource].blocked = BlockedStatus.NO
-                        self._state.dirty.add(resource)
+
                 transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
                 for resource in newly_defined:
                     self._state.mark_as_defined(resource, resources[resource])
@@ -694,7 +685,7 @@ class ResourceScheduler(TaskManager):
                 if state.blocked is not BlockedStatus.YES:
                     if skipped_for_dependency or state.blocked is BlockedStatus.TRANSIENT:
                         state.blocked = (
-                            BlockedStatus.NO if await self._resource_can_be_unblocked(resource) else BlockedStatus.TRANSIENT
+                            BlockedStatus.NO if self._state.resource_can_be_unblocked(resource) else BlockedStatus.TRANSIENT
                         )
                 if deployment_result is DeploymentResult.DEPLOYED:
                     # FIXME: Also discard blocked resources from the dirty set
@@ -728,29 +719,6 @@ class ResourceScheduler(TaskManager):
                             deploying=set(),
                         )
 
-    async def _get_resource_state_for_dependencies(self, resource: ResourceIdStr) -> Mapping[ResourceIdStr, ResourceState]:
-        """
-        Get resource state for every dependency of a given resource from the scheduler state.
-
-        Should only be called under scheduler lock.
-
-        :param resource: The id of the resource to find the dependencies for
-        """
-        requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.requires_view()
-        dependencies: Set[ResourceIdStr] = requires_view.get(resource, set())
-        return {dep_id: self._state.resource_state[dep_id] for dep_id in dependencies}
-
-    async def _resource_can_be_unblocked(self, resource: ResourceIdStr) -> bool:
-        """
-        Checks if a resource has all of its dependencies in a compliant state.
-
-        Should only be called under scheduler lock.
-
-        :param resource: The id of the resource to find the dependencies for
-        """
-        dependencies_state: Mapping[ResourceIdStr, ResourceState] = await self._get_resource_state_for_dependencies(resource)
-        return all(state.status is ComplianceStatus.COMPLIANT for state in dependencies_state.values())
-
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr
     ) -> Mapping[ResourceIdStr, const.ResourceState]:
@@ -762,7 +730,10 @@ class ResourceScheduler(TaskManager):
 
         :param resource: The id of the resource to find the dependencies for
         """
-        dependencies = await self._get_resource_state_for_dependencies(resource)
+        requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.requires_view()
+        dependencies: Mapping[ResourceIdStr, ResourceState] = {
+            dep_id: self._state.resource_state[dep_id] for dep_id in requires_view.get(resource, set())
+        }
         dependencies_state = {}
         for dep_id, resource_state_object in dependencies.items():
             match resource_state_object:
