@@ -266,7 +266,7 @@ class ModelState:
                 resource_id=resource_id,
                 attribute_hash=res["attribute_hash"],
                 attributes=res["attributes"],
-                status=result.resource_state[resource_id].status,
+                status=compliance_status,
             )
             result.resources[resource_id] = details
 

@@ -28,10 +28,11 @@ import pytest
 from inmanta import config, const, data, execute
 from inmanta.config import Config
 from inmanta.data import SERVER_COMPILE, ResourceIdStr
-from inmanta.deploy.state import ComplianceStatus, DeploymentResult
+from inmanta.deploy.state import BlockedStatus, ComplianceStatus, DeploymentResult
 from inmanta.server import SLICE_PARAM, SLICE_SERVER
 from inmanta.util import get_compiler_version
 from utils import (
+    assert_resource_persistent_state,
     log_contains,
     resource_action_consistency_check,
     retry_limited,
@@ -237,12 +238,29 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     assert 1 == summary["by_state"]["failed"]
     assert 4 == summary["by_state"]["skipped"]
 
+    # Assert that the resource_persistent_state table is consistent.
     result = await data.ResourcePersistentState.get_list(environment=environment)
-    for r in result:
-        if r.agent == "agent1":
-            assert r.get_compliance_status() is ComplianceStatus.NON_COMPLIANT
-        else:
-            assert r.get_compliance_status() is ComplianceStatus.COMPLIANT
+    rid_to_rps = {r.resource_id: r for r in result}
+    for agent in ["agent1", "agent2", "agent3"]:
+        for key in ["key", "key2", "key3", "key4", "key5"]:
+            match (agent, key):
+                case ("agent1", "key3"):
+                    deployment_result = DeploymentResult.FAILED
+                    compliance_status = ComplianceStatus.NON_COMPLIANT
+                case ("agent1", _):
+                    deployment_result = DeploymentResult.SKIPPED
+                    compliance_status = ComplianceStatus.NON_COMPLIANT
+                case _:
+                    deployment_result = DeploymentResult.DEPLOYED
+                    compliance_status = ComplianceStatus.COMPLIANT
+            assert_resource_persistent_state(
+                resource_persistent_state=rid_to_rps[ResourceIdStr(f"test::Resourcex[{agent},key={key}]")],
+                is_undefined=False,
+                is_orphan=False,
+                deployment_result=deployment_result,
+                blocked_status=BlockedStatus.NO,
+                expected_compliance_status=compliance_status,
+            )
 
     version1, resources = await make_version(True)
     await clienthelper.put_version_simple(version=version1, resources=resources)
@@ -260,20 +278,64 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     await resource_action_consistency_check()
     assert resource_container.Provider.readcount("agentx", "key") == 0
 
+    # Assert that the resource_persistent_state table is consistent.
     result = await data.ResourcePersistentState.get_list(environment=environment)
-    for r in result:
-        if r.agent in {"agent1", "agentx"}:
-            assert r.get_compliance_status() is ComplianceStatus.NON_COMPLIANT
-        else:
-            assert r.get_compliance_status() is ComplianceStatus.COMPLIANT
+    rid_to_rps = {r.resource_id: r for r in result}
+    for agent in ["agent1", "agent2", "agent3"]:
+        for key in ["key", "key2", "key3", "key4", "key5"]:
+            match (agent, key):
+                case ("agent1", "key3"):
+                    deployment_result = DeploymentResult.FAILED
+                    compliance_status = ComplianceStatus.NON_COMPLIANT
+                case ("agent1", _):
+                    deployment_result = DeploymentResult.SKIPPED
+                    compliance_status = ComplianceStatus.NON_COMPLIANT
+                case _:
+                    deployment_result = DeploymentResult.DEPLOYED
+                    compliance_status = ComplianceStatus.COMPLIANT
+            assert_resource_persistent_state(
+                resource_persistent_state=rid_to_rps[ResourceIdStr(f"test::Resourcex[{agent},key={key}]")],
+                is_undefined=False,
+                is_orphan=False,
+                deployment_result=deployment_result,
+                blocked_status=BlockedStatus.NO,
+                expected_compliance_status=compliance_status,
+            )
+    assert_resource_persistent_state(
+        resource_persistent_state=rid_to_rps[ResourceIdStr("test::Resourcex[agentx,key=key]")],
+        is_undefined=False,
+        is_orphan=False,
+        deployment_result=DeploymentResult.NEW,
+        blocked_status=BlockedStatus.NO,
+        expected_compliance_status=ComplianceStatus.HAS_UPDATE,
+    )
 
     # deploy trigger
     await client.deploy(environment, agent_trigger_method=const.AgentTriggerMethod.push_incremental_deploy)
 
     await wait_full_success(client, environment)
 
+    # Assert that the resource_persistent_state table is consistent.
     result = await data.ResourcePersistentState.get_list(environment=environment)
-    all(r.get_compliance_status() is ComplianceStatus.COMPLIANT for r in result)
+    rid_to_rps = {r.resource_id: r for r in result}
+    for agent in ["agent1", "agent2", "agent3"]:
+        for key in ["key", "key2", "key3", "key4", "key5"]:
+            assert_resource_persistent_state(
+                resource_persistent_state=rid_to_rps[ResourceIdStr(f"test::Resourcex[{agent},key={key}]")],
+                is_undefined=False,
+                is_orphan=False,
+                deployment_result=DeploymentResult.DEPLOYED,
+                blocked_status=BlockedStatus.NO,
+                expected_compliance_status=ComplianceStatus.COMPLIANT,
+            )
+    assert_resource_persistent_state(
+        resource_persistent_state=rid_to_rps[ResourceIdStr("test::Resourcex[agentx,key=key]")],
+        is_undefined=False,
+        is_orphan=False,
+        deployment_result=DeploymentResult.NEW,
+        blocked_status=BlockedStatus.NO,
+        expected_compliance_status=ComplianceStatus.HAS_UPDATE,
+    )
 
 
 async def check_server_state_vs_scheduler_state(client, environment, scheduler):
@@ -498,10 +560,17 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
     logs = result.result["resources"][0]["actions"][0]["messages"]
     assert any("traceback" in log["kwargs"] for log in logs), "\n".join(result.result["resources"][0]["actions"][0]["messages"])
 
-    result = await data.ResourcePersistentState.get_list(environment=environment)
-    assert len(result) == 1
-    assert result[0].resource_id == "test::Noprov[agent1,key=key1]"
-    assert result[0].get_compliance_status() is ComplianceStatus.NON_COMPLIANT
+    resource_persistent_state = await data.ResourcePersistentState.get_one(
+        environment=environment, resource_id="test::Noprov[agent1,key=key1]"
+    )
+    assert_resource_persistent_state(
+        resource_persistent_state=resource_persistent_state,
+        is_undefined=False,
+        is_orphan=False,
+        deployment_result=DeploymentResult.FAILED,
+        blocked_status=BlockedStatus.NO,
+        expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
+    )
 
 
 @pytest.mark.parametrize("halted", [True, False])
@@ -655,24 +724,18 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
     assert states["test::Resource[agent1,key=key4]"] == "skipped"
     assert states["test::Resource[agent1,key=key5]"] == "skipped"
 
-    result = await data.ResourcePersistentState.get_list(environment=environment)
-    result_per_resource_id = {r.resource_id: r for r in result}
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].get_compliance_status()
-        is ComplianceStatus.NON_COMPLIANT
-    )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].get_compliance_status()
-        is ComplianceStatus.NON_COMPLIANT
-    )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].get_compliance_status()
-        is ComplianceStatus.NON_COMPLIANT
-    )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Fail[agent1,key=key]")].get_compliance_status()
-        is ComplianceStatus.NON_COMPLIANT
-    )
+    for rid, status in states.items():
+        resource_persistent_state = await data.ResourcePersistentState.get_one(
+            environment=environment, resource_id=ResourceIdStr(rid)
+        )
+        assert_resource_persistent_state(
+            resource_persistent_state=resource_persistent_state,
+            is_undefined=False,
+            is_orphan=False,
+            deployment_result=DeploymentResult.FAILED if status == "failed" else DeploymentResult.SKIPPED,
+            blocked_status=BlockedStatus.NO,
+            expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
+        )
 
 
 class ResourceProvider:
@@ -877,11 +940,16 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
 
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
-    status_key2 = result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].get_compliance_status()
-    if dep_state.name in {"skip", "fail"}:
-        assert status_key2 is ComplianceStatus.NON_COMPLIANT
-    else:
-        assert status_key2 is ComplianceStatus.COMPLIANT
+    assert_resource_persistent_state(
+        resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")],
+        is_undefined=False,
+        is_orphan=False,
+        deployment_result=DeploymentResult.SKIPPED if dep_state.name in {"skip", "fail"} else DeploymentResult.DEPLOYED,
+        blocked_status=BlockedStatus.NO,
+        expected_compliance_status=(
+            ComplianceStatus.NON_COMPLIANT if dep_state.name in {"skip", "fail"} else ComplianceStatus.COMPLIANT
+        ),
+    )
 
 
 async def test_inprogress(resource_container, server, client, clienthelper, environment, agent):
@@ -920,14 +988,21 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
 
     result = await data.ResourcePersistentState.get_list(environment=environment)
     assert len(result) == 1
-    assert result[0].get_compliance_status() is ComplianceStatus.HAS_UPDATE
+    assert_resource_persistent_state(
+        resource_persistent_state=result[0],
+        is_undefined=False,
+        is_orphan=False,
+        deployment_result=DeploymentResult.NEW,
+        blocked_status=BlockedStatus.NO,
+        expected_compliance_status=ComplianceStatus.HAS_UPDATE,
+    )
 
     await resource_container.wait_for_done_with_waiters(client, environment, version)
 
 
 async def test_resource_status(resource_container, server, client, clienthelper, environment, agent):
     """
-    Verify that the resource_status column in the resource_persistent_state table contains correct date.
+    Verify that the resource_status column in the resource_persistent_state table contains correct data.
     """
     resource_container.Provider.reset()
     env_id = environment
@@ -1022,25 +1097,45 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key1]")].get_compliance_status()
-        is ComplianceStatus.COMPLIANT
+    assert_resource_persistent_state(
+        resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key1]")],
+        is_undefined=False,
+        is_orphan=False,
+        deployment_result=DeploymentResult.DEPLOYED,
+        blocked_status=BlockedStatus.NO,
+        expected_compliance_status=ComplianceStatus.COMPLIANT,
     )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].get_compliance_status()
-        is ComplianceStatus.NON_COMPLIANT
+    assert_resource_persistent_state(
+        resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")],
+        is_undefined=False,
+        is_orphan=False,
+        deployment_result=DeploymentResult.FAILED,
+        blocked_status=BlockedStatus.NO,
+        expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
     )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")].get_compliance_status()
-        is ComplianceStatus.NON_COMPLIANT
+    assert_resource_persistent_state(
+        resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")],
+        is_undefined=False,
+        is_orphan=False,
+        deployment_result=DeploymentResult.SKIPPED,
+        blocked_status=BlockedStatus.NO,
+        expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
     )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")].get_compliance_status()
-        is ComplianceStatus.UNDEFINED
+    assert_resource_persistent_state(
+        resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")],
+        is_undefined=True,
+        is_orphan=False,
+        deployment_result=DeploymentResult.NEW,
+        blocked_status=BlockedStatus.YES,
+        expected_compliance_status=ComplianceStatus.UNDEFINED,
     )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")].get_compliance_status()
-        is ComplianceStatus.NON_COMPLIANT
+    assert_resource_persistent_state(
+        resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")],
+        is_undefined=False,
+        is_orphan=False,
+        deployment_result=DeploymentResult.NEW,
+        blocked_status=BlockedStatus.YES,
+        expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
     )
 
     # * Remove key1, so that it becomes orphan
@@ -1059,26 +1154,15 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key1]")].get_compliance_status()
-        is ComplianceStatus.ORPHAN
-    )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].get_compliance_status()
-        is ComplianceStatus.COMPLIANT
-    )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")].get_compliance_status()
-        is ComplianceStatus.COMPLIANT
-    )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")].get_compliance_status()
-        is ComplianceStatus.COMPLIANT
-    )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")].get_compliance_status()
-        is ComplianceStatus.COMPLIANT
-    )
+    for i in range(1, 6):
+        assert_resource_persistent_state(
+            resource_persistent_state=result_per_resource_id[ResourceIdStr(f"test::Resource[agent1,key=key{i}]")],
+            is_undefined=False,
+            is_orphan=(i == 1),
+            deployment_result=DeploymentResult.DEPLOYED,
+            blocked_status=BlockedStatus.NO,
+            expected_compliance_status=ComplianceStatus.ORPHAN if i == 1 else ComplianceStatus.COMPLIANT,
+        )
 
     # Make key4 undefined again
     version = await clienthelper.get_version()
@@ -1095,25 +1179,30 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key1]")].get_compliance_status()
-        is ComplianceStatus.COMPLIANT
+    for i in range(1, 4):
+        assert_resource_persistent_state(
+            resource_persistent_state=result_per_resource_id[ResourceIdStr(f"test::Resource[agent1,key=key{i}]")],
+            is_undefined=False,
+            is_orphan=False,
+            deployment_result=DeploymentResult.DEPLOYED,
+            blocked_status=BlockedStatus.NO,
+            expected_compliance_status=ComplianceStatus.COMPLIANT,
+        )
+    assert_resource_persistent_state(
+        resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")],
+        is_undefined=True,
+        is_orphan=False,
+        deployment_result=DeploymentResult.DEPLOYED,
+        blocked_status=BlockedStatus.YES,
+        expected_compliance_status=ComplianceStatus.UNDEFINED,
     )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")].get_compliance_status()
-        is ComplianceStatus.COMPLIANT
-    )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")].get_compliance_status()
-        is ComplianceStatus.COMPLIANT
-    )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")].get_compliance_status()
-        is ComplianceStatus.UNDEFINED
-    )
-    assert (
-        result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")].get_compliance_status()
-        is ComplianceStatus.COMPLIANT
+    assert_resource_persistent_state(
+        resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")],
+        is_undefined=False,
+        is_orphan=False,
+        deployment_result=DeploymentResult.DEPLOYED,
+        blocked_status=BlockedStatus.YES,
+        expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
     )
 
 

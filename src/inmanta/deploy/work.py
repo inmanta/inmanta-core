@@ -319,6 +319,9 @@ class ScheduledWork:
         requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]],
         provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]],
     ) -> None:
+        """
+        Link the requires and provides fields to the views given by the arguments.
+        """
         # This method should only be called during the initialization phase of the scheduler. No work should be scheduled yet.
         assert len(self.agent_queues) == 0
         self.requires = requires_view

@@ -52,6 +52,7 @@ from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data import ResourceIdStr
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, ResourceType
+from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceDetails
 from inmanta.moduletool import ModuleTool
@@ -416,10 +417,6 @@ async def wait_until_deployment_finishes(
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
-        import pprint
-
-        pprint.pprint(result.result)
-        print(summary)
         # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
         #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
         if wait_for_n is None:
@@ -1022,3 +1019,29 @@ async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:
         # Agent queue doesn't exist -> Tasks have not been queued yet
         return False
     return agent_queue._unfinished_tasks == 0
+
+
+def assert_resource_persistent_state(
+    resource_persistent_state: data.ResourcePersistentState,
+    is_undefined: bool,
+    is_orphan: bool,
+    deployment_result: state.DeploymentResult,
+    blocked_status: state.BlockedStatus,
+    expected_compliance_status: state.ComplianceStatus,
+) -> None:
+    assert (
+        resource_persistent_state.is_undefined == is_undefined
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.is_undefined} != {is_undefined})"
+    assert (
+        resource_persistent_state.is_orphan == is_orphan
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.is_orphan} != {is_orphan})"
+    assert (
+        resource_persistent_state.deployment_result is deployment_result
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.deployment_result} != {deployment_result})"
+    assert (
+        resource_persistent_state.blocked_status is blocked_status
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.blocked_status} != {blocked_status})"
+    assert resource_persistent_state.get_compliance_status() is expected_compliance_status, (
+        f"{resource_persistent_state.resource_id}"
+        f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance_status})"
+    )

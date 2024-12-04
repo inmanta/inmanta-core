@@ -4526,7 +4526,11 @@ class ResourcePersistentState(BaseDocument):
             return state.ComplianceStatus.ORPHAN
         elif self.is_undefined:
             return state.ComplianceStatus.UNDEFINED
-        elif self.current_intent_attribute_hash != self.last_deployed_attribute_hash:
+        elif self.blocked_status is state.BlockedStatus.YES:
+            return state.ComplianceStatus.NON_COMPLIANT
+        elif (
+            self.last_deployed_attribute_hash is None or self.current_intent_attribute_hash != self.last_deployed_attribute_hash
+        ):
             return state.ComplianceStatus.HAS_UPDATE
         elif self.deployment_result is state.DeploymentResult.DEPLOYED:
             return state.ComplianceStatus.COMPLIANT
@@ -5363,7 +5367,7 @@ class Resource(BaseDocument):
             (
                 state.BlockedStatus.YES.name
                 if self.status in (const.ResourceState.undefined, const.ResourceState.skipped_for_undefined)
-                else state.BlockedStatus.NO
+                else state.BlockedStatus.NO.name
             ),
             connection=connection,
         )
@@ -5403,7 +5407,7 @@ class Resource(BaseDocument):
                 (
                     state.BlockedStatus.YES.name
                     if doc.status in (const.ResourceState.undefined, const.ResourceState.skipped_for_undefined)
-                    else state.BlockedStatus.NO
+                    else state.BlockedStatus.NO.name
                 ),
                 connection=connection,
             )

@@ -26,23 +26,11 @@ import pytest
 from inmanta import resources
 from inmanta.data import Environment, ResourcePersistentState, Scheduler
 from inmanta.deploy import state
+from inmanta.deploy.state import ComplianceStatus
+from utils import assert_resource_persistent_state
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
-
-
-def assert_resource_state(
-    resource_persistent_state: ResourcePersistentState,
-    is_undefined: bool,
-    is_orphan: bool,
-    deployment_result: state.DeploymentResult,
-    blocked_status: state.BlockedStatus,
-) -> None:
-    assert resource_persistent_state.is_undefined == is_undefined
-    assert resource_persistent_state.is_orphan == is_orphan
-    assert resource_persistent_state.deployment_result is deployment_result
-    assert resource_persistent_state.blocked_status is blocked_status
-    # TODO: EXTEND
 
 
 @pytest.mark.parametrize("no_agent", [True])
@@ -62,61 +50,69 @@ async def test_add_new_resource_status_column(
     env = await Environment.get_one(name="dev-3")
     resource_persistent_state = await ResourcePersistentState.get_list(environment=env.id)
     resource_state_by_resource_id = {record.resource_id: record for record in resource_persistent_state}
-    assert_resource_state(
+    assert_resource_persistent_state(
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key1]")],
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked_status=state.BlockedStatus.NO,
+        expected_compliance_status=ComplianceStatus.COMPLIANT,
     )
-    assert_resource_state(
+    assert_resource_persistent_state(
         resource_state_by_resource_id[resources.ResourceIdStr("test::Fail[agent1,key=key2]")],
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeploymentResult.FAILED,
         blocked_status=state.BlockedStatus.NO,
+        expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
     )
-    assert_resource_state(
+    assert_resource_persistent_state(
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key3]")],
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeploymentResult.SKIPPED,
         blocked_status=state.BlockedStatus.NO,
+        expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
     )
-    assert_resource_state(
+    assert_resource_persistent_state(
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key4]")],
         is_undefined=True,
         is_orphan=False,
         deployment_result=state.DeploymentResult.NEW,
         blocked_status=state.BlockedStatus.YES,
+        expected_compliance_status=ComplianceStatus.UNDEFINED,
     )
-    assert_resource_state(
+    assert_resource_persistent_state(
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key5]")],
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeploymentResult.NEW,
         blocked_status=state.BlockedStatus.YES,
+        expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
     )
-    assert_resource_state(
+    assert_resource_persistent_state(
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key6]")],
         is_undefined=False,
         is_orphan=True,
-        # The deployment status is not accurate here, because it's an orphan. Tracking this accurately
+        # The deployment_result field is not accurate, because it's an orphan. Tracking this accurately
         # would require an expensive query in the database migration script.
         deployment_result=state.DeploymentResult.NEW,
         blocked_status=state.BlockedStatus.NO,
+        expected_compliance_status=ComplianceStatus.ORPHAN,
     )
-    assert_resource_state(
+    assert_resource_persistent_state(
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key7]")],
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked_status=state.BlockedStatus.NO,
+        expected_compliance_status=ComplianceStatus.COMPLIANT,
     )
-    assert_resource_state(
+    assert_resource_persistent_state(
         resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key8]")],
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeploymentResult.NEW,
         blocked_status=state.BlockedStatus.NO,
+        expected_compliance_status=ComplianceStatus.HAS_UPDATE,
     )
