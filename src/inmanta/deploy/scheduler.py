@@ -532,7 +532,7 @@ class ResourceScheduler(TaskManager):
                         and await self._resource_can_be_unblocked(resource)
                     ):
                         self._state.resource_state[resource].blocked = BlockedStatus.NO
-                        # FIXME: Add to the dirty set?
+                        self._state.dirty.add(resource)
                 transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
                 for resource in newly_defined:
                     self._state.mark_as_defined(resource, resources[resource])
@@ -700,17 +700,6 @@ class ResourceScheduler(TaskManager):
                     # FIXME: Also discard blocked resources from the dirty set
                     # Remove this resource from the dirty set if it is successfully deployed
                     self._state.dirty.discard(resource)
-                    if deployment_result is DeploymentResult.DEPLOYED:
-                        # If we have a successful deploy, we check to see if any of its dependents is blocked transiently
-                        # If they are, we unblock them.
-                        provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.provides_view()
-                        dependents: Set[ResourceIdStr] = provides_view.get(resource, set())
-                        for dependent in dependents:
-                            if self._state.resource_state[
-                                dependent
-                            ].blocked is BlockedStatus.TRANSIENT and await self._resource_can_be_unblocked(dependent):
-                                self._state.resource_state[dependent].blocked = BlockedStatus.NO
-                                # FIXME: add dependent to dirty set here?
                 else:
                     # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
                     # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
