@@ -18,14 +18,18 @@
 
 import abc
 import collections
+import hashlib
 import inspect
+import json
 import typing
 import uuid
+from typing import Tuple
 
 import pydantic
 
 import inmanta
 from inmanta.util import dict_path
+from inmanta import util
 
 # from inmanta.dataclass import Value  # The base class for data classes: see the specific design
 
@@ -53,7 +57,6 @@ class Argument(pydantic.BaseModel):
     """ The name of the argument in the reference constructor
     """
 
-    # TODO: we probably need a context like object so that it is easier to pass more data to this method
     @abc.abstractmethod
     def get_arg_value(self, resource: "inmanta.resources.Resource") -> object:
         """Get the value for the argument to be able to construct the reference again
@@ -131,7 +134,7 @@ class BaseModel(pydantic.BaseModel):
 class ReferenceModel(BaseModel):
     """A reference"""
 
-    id: uuid.UUID = pydantic.Field(default_factory=uuid.uuid4)
+    id: uuid.UUID
 
 
 class MutatorModel(BaseModel):
@@ -149,7 +152,7 @@ class Base:
     def __init__(self, **kwargs: object) -> None:
         self._arguments: typing.Mapping[str, object] = kwargs
         self._model: typing.Optional[ReferenceModel] = None
-        # TODO: do we want to enfore type correctness when creating a reference? This also has impact on how arguments are
+        # TODO: do we want to enforce type correctness when creating a reference? This also has impact on how arguments are
         #       are serialized: based on instance types or on static types
 
     @classmethod
@@ -164,9 +167,8 @@ class Base:
     def serialize(self) -> BaseModel:
         """Serialize to be able to add them to a resource"""
 
-    def serialize_arguments(self) -> list[ArgumentTypes]:
+    def serialize_arguments(self) -> Tuple[uuid.UUID, list[ArgumentTypes]]:
         """Serialize the arguments to this class"""
-        uuid.NAMESPACE_DNS
         parameters = inspect.get_annotations(self.__init__, eval_str=True)
 
         arguments: list[ArgumentTypes] = []
@@ -186,7 +188,10 @@ class Base:
                 case _:
                     raise TypeError(f"Unable to serialize argument {name} of {self}")
 
-        return arguments
+        data = json.dumps(arguments, default=util.api_boundary_json_encoder, sort_keys=True)
+        hasher = hashlib.md5()
+        hasher.update(data.encode())
+        return uuid.uuid3(uuid.NAMESPACE_OID, hasher.digest()), arguments
 
     @property
     def arguments(self) -> collections.abc.Mapping[str, object]:
@@ -205,7 +210,8 @@ class Mutator(Base):
         if self._model:
             return self._model
 
-        self._model = MutatorModel(type=self.type, args=self.serialize_arguments())
+        arg_id, arguments = self.serialize_arguments()
+        self._model = MutatorModel(type=self.type, args=arguments)
         return self._model
 
 
@@ -232,7 +238,8 @@ class Reference[T: RefValue](Base):
     def serialize(self) -> ReferenceModel:
         """Emit the correct pydantic objects to serialize the reference in the exporter."""
         if not self._model:
-            self._model = ReferenceModel(type=self.type, args=self.serialize_arguments())
+            argument_id, arguments = self.serialize_arguments()
+            self._model = ReferenceModel(id=argument_id, type=self.type, args=arguments)
 
         return self._model
 
@@ -261,8 +268,6 @@ class Reference[T: RefValue](Base):
             )
         raise AttributeError(name=name, obj=self)
 
-
-# TODO: ensure a stable attribute hash
 
 # TODO: we need to make sure that the executor knows it should load the mutator and executor code before running the handler
 #       of a resource that uses references.

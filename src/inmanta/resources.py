@@ -548,7 +548,6 @@ class Resource(metaclass=ResourceMeta):
 
     def resolve_all_references(self) -> None:
         """Resolve all value references"""
-        # TODO: already resolve references
         # TODO: always work with original and mutate the copy
 
         for ref in self.references:

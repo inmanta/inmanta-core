@@ -19,6 +19,7 @@
 import json
 import os
 import typing
+import uuid
 
 import pytest
 
@@ -50,7 +51,13 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
     )
     _, res_dict = snippetcompiler.do_export()
     assert len(res_dict) == 1
-    data = json.dumps(res_dict.popitem()[1].serialize(), default=util.api_boundary_json_encoder)
+    serialized = res_dict.popitem()[1].serialize()
+
+    # validate that our UUID is stable
+    assert serialized["references"][0].id == uuid.UUID("541c1529-a48e-347f-b3bc-992e03ac54ef")
+    assert serialized["references"][1].id == uuid.UUID("154575d1-df13-3dec-afd2-ca8c86b55f18")
+
+    data = json.dumps(serialized, default=util.api_boundary_json_encoder)
 
     resource = resources.Resource.deserialize(json.loads(data))
 
