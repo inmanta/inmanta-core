@@ -21,6 +21,7 @@ import datetime
 import functools
 import logging
 import os
+import platform
 import queue
 import re
 import shutil
@@ -42,7 +43,7 @@ from inmanta import config, data
 from inmanta.const import INMANTA_REMOVED_SET_ID, ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
-from inmanta.env import PythonEnvironment
+from inmanta.env import PythonEnvironment, VirtualEnv
 from inmanta.export import cfg_env
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER, protocol
@@ -52,7 +53,7 @@ from inmanta.server.services.compilerservice import CompilerService, CompileRun,
 from inmanta.server.services.notificationservice import NotificationService
 from inmanta.util import ensure_directory_exist
 from server.conftest import EnvironmentFactory
-from utils import LogSequence, report_db_index_usage, retry_limited, wait_for_version
+from utils import LogSequence, log_contains, report_db_index_usage, retry_limited, wait_for_version
 
 logger = logging.getLogger("inmanta.test.server.compilerservice")
 
@@ -401,6 +402,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
 
 @pytest.mark.slowtest
+@pytest.mark.parametrize("no_agent", [True])
 async def test_compile_runner(environment_factory: EnvironmentFactory, server, client, tmpdir):
     testmarker_env = "TESTMARKER"
     no_marker = "__no__marker__"
@@ -439,7 +441,7 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     compile, stages = await _compile_and_assert(env=env, export=True, meta={"type": "Test"})
     assert stages["Init"]["returncode"] == 0
     assert stages["Cloning repository"]["returncode"] == 0
-    assert stages["Creating venv"]["returncode"] == 0
+    assert stages["Venv check"]["returncode"] == 0
     assert stages["Installing modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
@@ -450,10 +452,11 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     # no export
     compile, stages = await _compile_and_assert(env=env, export=False)
     assert stages["Init"]["returncode"] == 0
+    assert stages["Venv check"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print} {no_marker}" in out
-    assert len(stages) == 2
+    assert len(stages) == 3
     assert compile.version is None
 
     # env vars
@@ -462,45 +465,49 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     assert len(compile.request.requested_environment_variables) == 1
     assert stages["Init"]["returncode"] == 0
     assert f"Using extra environment variables during compile TESTMARKER='{marker}'" in stages["Init"]["outstream"]
+    assert stages["Venv check"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print} {marker}" in out
-    assert len(stages) == 2
+    assert len(stages) == 3
     assert compile.version is None
 
     # switch branch
     compile, stages = await _compile_and_assert(env=env2, export=False)
     assert stages["Init"]["returncode"] == 0
     assert stages[f"Switching branch from {env.repo_branch} to {env2.repo_branch}"]["returncode"] == 0
+    assert stages["Venv check"]["returncode"] == 0
     assert stages["Installing modules"]["returncode"] == 0
-    assert stages["Recompiling configuration model"]["returncode"] == 0
-    out = stages["Recompiling configuration model"]["outstream"]
-    assert f"{marker_print2} {no_marker}" in out
-    assert len(stages) == 4
-    assert compile.version is None
-
-    # update with no update
-    compile, stages = await _compile_and_assert(env=env2, export=False, update=True)
-    assert stages["Init"]["returncode"] == 0
-    assert stages["Pulling updates"]["returncode"] == 0
-    assert stages["Uninstall inmanta packages from the compiler venv"]["returncode"] == 0
-    assert stages["Updating modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print2} {no_marker}" in out
     assert len(stages) == 5
     assert compile.version is None
 
+    # update with no update
+    compile, stages = await _compile_and_assert(env=env2, export=False, update=True)
+    assert stages["Init"]["returncode"] == 0
+    assert stages["Venv check"]["returncode"] == 0
+    assert stages["Pulling updates"]["returncode"] == 0
+    assert stages["Uninstall inmanta packages from the compiler venv"]["returncode"] == 0
+    assert stages["Updating modules"]["returncode"] == 0
+    assert stages["Recompiling configuration model"]["returncode"] == 0
+    out = stages["Recompiling configuration model"]["outstream"]
+    assert f"{marker_print2} {no_marker}" in out
+    assert len(stages) == 6
+    assert compile.version is None
+
     environment_factory.write_main(make_main(marker_print3))
     compile, stages = await _compile_and_assert(env=env2, export=False, update=True)
     assert stages["Init"]["returncode"] == 0
+    assert stages["Venv check"]["returncode"] == 0
     assert stages["Pulling updates"]["returncode"] == 0
     assert stages["Uninstall inmanta packages from the compiler venv"]["returncode"] == 0
     assert stages["Updating modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print3} {no_marker}" in out
-    assert len(stages) == 5
+    assert len(stages) == 6
     assert compile.version is None
 
     # Ensure that the pip binary created in the venv of the compiler service works correctly
@@ -1982,8 +1989,14 @@ async def test_environment_delete_removes_env_directories_on_server(
     assert result.code == 200
 
     async def wait_for_compile() -> bool:
-        result = await client.is_compiling(env_id)
-        return result.code == 204
+        result = await client.get_compile_reports(tid=env_id)
+        assert result.code == 200
+        if len(result.result["data"]) == 0:
+            # The compile request is registered in the database asynchronously with respect to the notify_change() API call.
+            # Here we check that the compile request finished.
+            return False
+        # Check whether the compilation finished.
+        return result.result["data"][0]["completed"] is not None
 
     await utils.retry_limited(wait_for_compile, 15)
 
@@ -2017,3 +2030,87 @@ async def test_overlapping_env_vars(mocked_compiler_service, server, client, env
             env_vars={"var": "val", "test": "123"},
             mergeable_env_vars={"var": "otherval", "somekey": "someval"},
         )
+
+
+class Mockreport:
+
+    async def update_streams(self, out: str = "", err: str = "") -> None:
+        pass
+
+
+async def test_venv_use_and_reuse(tmp_path, caplog):
+    caplog.at_level(logging.DEBUG)
+
+    # Set up mock
+    project = tmp_path / "project"
+    venv = project / ".env"
+    project.mkdir()
+    run = CompileRun(None, str(project))
+    run.stage = Mockreport()
+
+    # Create a venv
+    await run.ensure_compiler_venv()
+    assert venv.exists()
+    log_contains(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Creating new venv at")
+    caplog.clear()
+
+    # re-use the venv
+    await run.ensure_compiler_venv()
+    log_contains(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Found existing venv")
+
+
+async def test_venv_upgrade_version_match(tmp_path, caplog):
+    """
+    1. Make a venv in the old layout and upgrade it
+    2. Test we can handle re-creation of the venv
+    """
+    caplog.at_level(logging.DEBUG)
+
+    # Set up mock
+    project = tmp_path / "project"
+    project.mkdir()
+    venv = project / ".env"
+    run = CompileRun(None, str(project))
+    run.stage = Mockreport()
+
+    # make venv on old location, correct version
+    VirtualEnv(str(venv)).init_env()
+
+    await run.ensure_compiler_venv()
+    log_contains(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Moving existing venv from")
+    caplog.clear()
+    assert venv.exists()
+
+    # remove actual venv
+    python_version = ".".join(platform.python_version_tuple()[0:2])
+    versioned_venv_dir = ".env-py" + python_version
+    versioned_venv_dir_full = project / versioned_venv_dir
+    shutil.rmtree(str(versioned_venv_dir_full))
+
+    await run.ensure_compiler_venv()
+    log_contains(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Creating new venv at")
+    assert venv.exists()
+
+
+async def test_venv_upgrade_version_mismatch(tmp_path, caplog):
+    # Make fake venv of wrong version
+
+    caplog.at_level(logging.DEBUG)
+
+    # Old setup
+    project = tmp_path / "project2"
+    project.mkdir()
+    venv = project / ".env"
+
+    run = CompileRun(None, str(project))
+    run.stage = Mockreport()
+
+    # This venv is a bit broken, but the code sees it wrong version
+    # Because it doesn't have the right version
+    venv.mkdir()
+    (venv / "bin").mkdir()
+    (venv / "bin" / "python").touch()
+
+    await run.ensure_compiler_venv()
+    log_contains(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Discarding existing venv from")
+    assert (project / ".env").exists()
