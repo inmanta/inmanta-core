@@ -1971,8 +1971,14 @@ async def test_environment_delete_removes_env_directories_on_server(
     assert result.code == 200
 
     async def wait_for_compile() -> bool:
-        result = await client.is_compiling(env_id)
-        return result.code == 204
+        result = await client.get_compile_reports(tid=env_id)
+        assert result.code == 200
+        if len(result.result["data"]) == 0:
+            # The compile request is registered in the database asynchronously with respect to the notify_change() API call.
+            # Here we check that the compile request finished.
+            return False
+        # Check whether the compilation finished.
+        return result.result["data"][0]["completed"] is not None
 
     await utils.retry_limited(wait_for_compile, 15)
 
