@@ -532,6 +532,7 @@ class ResourceScheduler(TaskManager):
                         and await self._resource_can_be_unblocked(resource)
                     ):
                         self._state.resource_state[resource].blocked = BlockedStatus.NO
+                        # FIXME: Add to the dirty set?
                 transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
                 for resource in newly_defined:
                     self._state.mark_as_defined(resource, resources[resource])
@@ -690,10 +691,14 @@ class ResourceScheduler(TaskManager):
                 # Or if we can unblock a transiently blocked resource (its dependencies now succeed)
                 # We might already be unblocked if a dependency succeeds on another agent
                 # so skipped_for_dependency might be outdated
-                if skipped_for_dependency and state.blocked is not BlockedStatus.YES:
-                    state.blocked = BlockedStatus.NO if await self._resource_can_be_unblocked(resource) else BlockedStatus.TRANSIENT
-                if deployment_result is DeploymentResult.DEPLOYED or state.blocked is not BlockedStatus.NO:
-                    # Remove this resource from the dirty set if it is blocked or successfully deployed
+                if state.blocked is not BlockedStatus.YES:
+                    if skipped_for_dependency or state.blocked is BlockedStatus.TRANSIENT:
+                        state.blocked = (
+                            BlockedStatus.NO if await self._resource_can_be_unblocked(resource) else BlockedStatus.TRANSIENT
+                        )
+                if deployment_result is DeploymentResult.DEPLOYED:
+                    # FIXME: Also discard blocked resources from the dirty set
+                    # Remove this resource from the dirty set if it is successfully deployed
                     self._state.dirty.discard(resource)
                     if deployment_result is DeploymentResult.DEPLOYED:
                         # If we have a successful deploy, we check to see if any of its dependents is blocked transiently
@@ -705,7 +710,7 @@ class ResourceScheduler(TaskManager):
                                 dependent
                             ].blocked is BlockedStatus.TRANSIENT and await self._resource_can_be_unblocked(dependent):
                                 self._state.resource_state[dependent].blocked = BlockedStatus.NO
-                                self._state.dirty.add(dependent)
+                                # FIXME: add dependent to dirty set here?
                 else:
                     # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
                     # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
