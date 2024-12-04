@@ -706,30 +706,29 @@ class ResourceScheduler(TaskManager):
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
 
-        def _propagate_events(resource: ResourceIdStr, send_recovery_events: bool, details: ResourceDetails) -> None:
+        def _propagate_events(details: ResourceDetails, send_recovery_events: bool) -> None:
             """
             Helper method for event propagation. Should be called under the scheduler lock.
             This method will inform dependant resources:
 
                 - If this resource successfully recovered, we must inform all dependant resources
-                  that were previously skipped by the default handler.
+                  that are not blocked.
                 - If event propagation (SEND) is configured for this resource, inform all
                   dependant resources with event propagation (RECEIVE), regardless of deployment
                   result.
 
-            :param resource: The resource that has just finished deploying
-            :param send_recovery_events: This resource went from 'not deployed' to 'deployed', the
-
-
+            :param details: Details for the given resource that has just finished deploying.
+            :param send_recovery_events: This resource went from 'not deployed' to 'deployed',
+                inform unblocked dependants that they might be able to progress.
             """
-
+            resource_id: ResourceIdStr = details.resource_id
             # Set of dependant resources that are interested in deploys of the current resource
             concerned_resources: set[ResourceIdStr] = set()
-            provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
+            provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource_id, set())
 
-            reason = f"Deploying because an event was received from {resource}"
+            reason = f"Deploying because an event was received from {resource_id}"
             if send_recovery_events:
-                reason = f"Deploying because of successful deployment of dependency {resource}"
+                reason = f"Deploying because of successful deployment of dependency {resource_id}"
 
                 # This resource went from not deployed to deployed
                 # we have to inform its dependants regardless of event propagation
@@ -745,9 +744,8 @@ class ResourceScheduler(TaskManager):
                     #  a custom handler skip via this mechanism
                     # change BlockedStatus.NO to BlockedStatus.TRANSIENT
                     # when https://github.com/inmanta/inmanta-core/pull/8383 is in
+                    # FIXME: also update docstring to reflect this change
 
-                    # TODO
-                    #  - create follow up ticket for this blocked on Joãos' PR
                     if dependant_status.blocked is BlockedStatus.NO:
                         concerned_resources.add(dependant)
 
@@ -771,7 +769,7 @@ class ResourceScheduler(TaskManager):
             if concerned_resources:
                 # do not pass deploying tasks because for event propagation we really want to start a new one,
                 # even if the current intent is already being deployed
-                task = Deploy(resource=resource)
+                task = Deploy(resource=resource_id)
                 assert task in self._work.agent_queues.in_progress
                 priority = self._work.agent_queues.in_progress[task]
                 self._timer_manager.remove_resources(concerned_resources)
@@ -831,7 +829,7 @@ class ResourceScheduler(TaskManager):
                     self._state.dirty.add(resource)
 
                 # propagate events
-                _propagate_events(resource, has_recovered, details)
+                _propagate_events(details, has_recovered)
 
             # No matter the deployment result, schedule a re-deploy for this resource
             self._timer_manager.update_resource(resource, is_compliant=(status is ComplianceStatus.COMPLIANT))
