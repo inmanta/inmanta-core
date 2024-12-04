@@ -128,8 +128,8 @@ class Deploy(Task):
             # Full status of the deploy,
             # may be unset if we fail before signaling start to the server, will be set if we signaled start
             deploy_result: DeployResult | None = None
-            scheduler_deployment_result: state.DeploymentResult = state.DeploymentResult.FAILED
-            skipped_for_dependency: bool = False
+            # Checks if a failure occurred along this method. If it happens, set the resource state as failed.
+            failed_scheduler_deploy: bool = False
             try:
                 # This try catch block ensures we report at the end of the task
 
@@ -151,7 +151,7 @@ class Deploy(Task):
                     await task_manager.send_in_progress(action_id, executor_resource_details.rvid)
                 except Exception:
                     # Unrecoverable, can't reach DB
-                    scheduler_deployment_result = state.DeploymentResult.FAILED
+                    failed_scheduler_deploy = True
                     LOGGER.error(
                         "Failed to report the start of the deployment to the server for %s",
                         resource_details.resource_id,
@@ -182,7 +182,7 @@ class Deploy(Task):
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
-                    scheduler_deployment_result = state.DeploymentResult.FAILED
+                    failed_scheduler_deploy = True
                     return
 
                 assert reason is not None  # Should always be set for deploy
@@ -191,17 +191,7 @@ class Deploy(Task):
                     deploy_result = await my_executor.execute(
                         action_id, gid, executor_resource_details, reason, intent.dependencies
                     )
-                    # Translate deploy result status to the new deployment result state
-                    match deploy_result.resource_state:
-                        case const.HandlerResourceState.deployed:
-                            scheduler_deployment_result = state.DeploymentResult.DEPLOYED
-                        case const.HandlerResourceState.skipped:
-                            scheduler_deployment_result = state.DeploymentResult.SKIPPED
-                        case const.HandlerResourceState.skipped_for_dependency:
-                            scheduler_deployment_result = state.DeploymentResult.SKIPPED
-                            skipped_for_dependency = True
-                        case _:
-                            scheduler_deployment_result = state.DeploymentResult.FAILED
+
                 except Exception as e:
                     # This should not happen
 
@@ -217,14 +207,14 @@ class Deploy(Task):
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
-                    scheduler_deployment_result = state.DeploymentResult.FAILED
+                    failed_scheduler_deploy = True
             finally:
                 if deploy_result is not None:
                     # We signaled start, so we signal end
                     try:
                         await task_manager.send_deploy_done(deploy_result)
                     except Exception:
-                        scheduler_deployment_result = state.DeploymentResult.FAILED
+                        failed_scheduler_deploy = True
                         LOGGER.error(
                             "Failed to report the end of the deployment to the server for %s",
                             resource_details.resource_id,
@@ -234,13 +224,11 @@ class Deploy(Task):
                 await task_manager.report_resource_state(
                     resource=self.resource,
                     attribute_hash=resource_details.attribute_hash,
-                    status=(
-                        state.ComplianceStatus.COMPLIANT
-                        if scheduler_deployment_result == state.DeploymentResult.DEPLOYED
-                        else state.ComplianceStatus.NON_COMPLIANT
+                    resource_state=(
+                        const.HandlerResourceState.failed
+                        if failed_scheduler_deploy or deploy_result is None
+                        else deploy_result.resource_state
                     ),
-                    deployment_result=scheduler_deployment_result,
-                    skipped_for_dependency=skipped_for_dependency,
                 )
 
 

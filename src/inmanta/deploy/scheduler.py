@@ -107,9 +107,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: ComplianceStatus,
-        deployment_result: Optional[DeploymentResult] = None,
-        skipped_for_dependency: Optional[bool] = False,
+        resource_state: const.HandlerResourceState,
     ) -> None:
         """
         Report new state for a resource. Since knowledge of deployment result implies a finished deploy, it must only be set
@@ -120,9 +118,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         :param resource: The resource to report state for.
         :param attribute_hash: The resource's attribute hash for which this state applies. No scheduler state is updated if the
             hash indicates the state information is stale.
-        :param status: The new resource status.
-        :param deployment_result: The result of the deploy, iff one just finished, otherwise None.
-        :param skipped_for_dependency: If the resource was skipped due to a dependency
+        :param resource_state: The state of the resource as reported by the handler
         """
 
 
@@ -645,12 +641,20 @@ class ResourceScheduler(TaskManager):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: ComplianceStatus,
-        deployment_result: Optional[DeploymentResult] = None,
-        skipped_for_dependency: Optional[bool] = False,
+        resource_state: const.HandlerResourceState,
     ) -> None:
-        if deployment_result is DeploymentResult.NEW:
-            raise ValueError("report_resource_state should not be called to register new resources")
+        # Translate deploy result status to the new deployment result state
+        match resource_state:
+            case const.HandlerResourceState.deployed:
+                deployment_result = DeploymentResult.DEPLOYED
+            case const.HandlerResourceState.skipped | const.HandlerResourceState.skipped_for_dependency:
+                deployment_result = DeploymentResult.SKIPPED
+            case _:
+                deployment_result = DeploymentResult.FAILED
+
+        status = (
+            ComplianceStatus.COMPLIANT if deployment_result == DeploymentResult.DEPLOYED else ComplianceStatus.NON_COMPLIANT
+        )
 
         async with self._scheduler_lock:
             # refresh resource details for latest model state
@@ -681,9 +685,12 @@ class ResourceScheduler(TaskManager):
                 # Check if we need to mark a resource as transiently blocked
                 # Or if we can unblock a transiently blocked resource (its dependencies now succeed)
                 # We might already be unblocked if a dependency succeeds on another agent
-                # so skipped_for_dependency might be outdated
+                # so HandlerResourceState.skipped_for_dependency might be outdated
                 if state.blocked is not BlockedStatus.YES:
-                    if skipped_for_dependency or state.blocked is BlockedStatus.TRANSIENT:
+                    if (
+                        resource_state is const.HandlerResourceState.skipped_for_dependency
+                        or state.blocked is BlockedStatus.TRANSIENT
+                    ):
                         state.blocked = (
                             BlockedStatus.NO if self._state.resource_can_be_unblocked(resource) else BlockedStatus.TRANSIENT
                         )

@@ -346,7 +346,7 @@ class ModelState:
         if (
             dropped_requires
             and self.resource_state[resource].blocked is BlockedStatus.TRANSIENT
-            and self.resource_can_be_unblocked()
+            and self.resource_can_be_unblocked(resource)
         ):
             self.resource_state[resource].blocked = BlockedStatus.NO
             self.dirty.add(resource)
