@@ -282,12 +282,10 @@ class TimerManager:
 
     def remove_resource(self, resource: ResourceIdStr) -> None:
         """
-        Stop managing the timer for the given resource and
-        cancel the associated re-deployment, if any.
+        Cancel the associated re-deployment (if any) for the given resource.
         """
         if resource in self.resource_timers:
             self.resource_timers[resource].cancel()
-            del self.resource_timers[resource]
 
     def remove_resources(self, resources: Collection[ResourceIdStr]) -> None:
         """
@@ -295,3 +293,10 @@ class TimerManager:
         """
         for resource in resources:
             self.remove_resource(resource)
+
+    def update_resources(self, resources: Collection[ResourceIdStr], is_compliant: bool) -> None:
+        """
+        Make sure the given resources are marked for eventual re-deployment in the future.
+        """
+        for resource in resources:
+            self.update_resource(resource, is_compliant)
