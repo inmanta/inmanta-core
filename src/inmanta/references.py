@@ -28,8 +28,8 @@ from typing import Tuple
 import pydantic
 
 import inmanta
-from inmanta.util import dict_path
 from inmanta import util
+from inmanta.util import dict_path
 
 # from inmanta.dataclass import Value  # The base class for data classes: see the specific design
 
@@ -305,7 +305,6 @@ class reference[T: Reference[RefValue]]:
     def reset(cls) -> None:
         """Reset the registered reference classes"""
         cls._reference_classes = {}
-
 
 
 class mutator[T: Reference[RefValue]]:

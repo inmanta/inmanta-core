@@ -534,8 +534,7 @@ class Resource(metaclass=ResourceMeta):
         raise KeyError()
 
     def get_reference_value(self, id: uuid.UUID) -> references.RefValue:
-        """ Get a value of a reference
-        """
+        """Get a value of a reference"""
         if id not in self._references:
             if id not in self._references_model:
                 raise KeyError(f"The reference with id {id} is not defined in resource {self.id}")
