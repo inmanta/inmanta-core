@@ -208,8 +208,9 @@ class Deploy(Task):
                     # We signaled start, so we signal end
                     try:
                         await task_manager.send_deploy_done(deploy_result)
+                        failed_to_send_deploy_done = False
                     except Exception:
-                        deploy_result.resource_state = const.HandlerResourceState.failed
+                        failed_to_send_deploy_done = True
                         LOGGER.error(
                             "Failed to report the end of the deployment to the server for %s",
                             resource_details.resource_id,
@@ -220,7 +221,9 @@ class Deploy(Task):
                     resource=self.resource,
                     attribute_hash=resource_details.attribute_hash,
                     resource_state=(
-                        const.HandlerResourceState.failed if deploy_result is None else deploy_result.resource_state
+                        const.HandlerResourceState.failed
+                        if deploy_result is None or failed_to_send_deploy_done
+                        else deploy_result.resource_state
                     ),
                 )
 
