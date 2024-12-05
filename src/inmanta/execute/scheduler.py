@@ -46,7 +46,6 @@ from inmanta.execute.runtime import (
     Waiter,
     WaiterSet,
 )
-from inmanta.execute.tracking import ModuleTracker
 
 if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, NamedType, Statement  # noqa: F401
@@ -267,6 +266,7 @@ class Scheduler:
 
         # Dataclass validation
         data_class_root = self.types["std::Dataclass"]
+        assert isinstance(data_class_root, Entity)
         for dataclass in data_class_root.get_all_child_entities():
             dataclass.pair_dataclass()
 
@@ -393,7 +393,7 @@ class Scheduler:
 
         # emit all top level statements
         for block in blocks:
-            block.context.emit(queue.for_tracker(ModuleTracker(block)))
+            block.context.emit(queue)
 
         # start an evaluation loop
         i = 0

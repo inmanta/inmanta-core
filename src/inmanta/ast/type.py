@@ -20,14 +20,16 @@ import copy
 import functools
 import numbers
 import typing
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Callable
 from typing import List as PythonList
 from typing import Optional
 
 from inmanta import references
+import typing_inspect
+
 from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException
-from inmanta.execute.util import AnyType, NoneValue, Unknown
+from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 
 try:
@@ -37,6 +39,8 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement
+
+inmantaLiteral = typing.Union[str, int, float, bool, Sequence["inmantaLiteral"], dict[str, "inmantaLiteral"]]
 
 
 @stable_api
@@ -98,26 +102,29 @@ class Type(Locatable):
         """
         return base_type
 
-    def as_python_type(self) -> "typing.Type | None":
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        """
+        Return if the python type corresponds to this inmanta type
+        """
+
+    def as_python_type_string(self) -> "str | None":
         """
         Return a python type that can capture the values of this inmanta type
+        As a string
 
         Returns None if this is not possible.
         """
+
+    def has_custom_to_python(self) -> bool:
+        return False
 
     def to_python(self, instance: object) -> "object":
         """
         Convert an instance of this type to its python form
 
-        This method is not supported on all types, notably, the any type and the pure Entity type are not handeled
+        should only be called if has_custom_to_python is True
         """
-
         raise NotImplementedError(f"Not implemented for {self}")
-
-
-class AnyType(Type):
-
-    pass
 
 
 class NamedType(Type, Named):
@@ -169,13 +176,38 @@ class NullableType(Type):
             return NotImplemented
         return self.element_type == other.element_type
 
-    def as_python_type(self) -> "typing.Type | None":
-        return Optional[self.element_type.as_python_type()]
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        if not typing_inspect.is_optional_type(pytype):
+            return False
+        # remove options from union
+        other_types = [tp for tp in typing_inspect.get_args(pytype) if not typing_inspect.is_optional_type(tp)]
+        return self.get_base_type().corresponds_to(typing.Union[*other_types])
+
+    def as_python_type_string(self) -> "str | None":
+        return f"{self.element_type.as_python_type_string()} | None"
 
     def to_python(self, instance: object) -> "object":
         if isinstance(instance, NoneValue):
             return None
         return self.element_type.to_python(instance)
+
+    def has_custom_to_python(self) -> bool:
+        return self.element_type.has_custom_to_python()
+
+    def is_primitive(self) -> bool:
+        return self.element_type.is_primitive()
+
+
+class AnyType(Type):
+
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        return True
+
+    def as_python_type_string(self) -> "str | None":
+        return "object"
+
+    def has_custom_to_python(self) -> bool:
+        return False
 
 
 @stable_api
@@ -213,6 +245,10 @@ class Primitive(Type):
     def __eq__(self, other: object) -> bool:
         if other.__class__ != self.__class__:
             return NotImplemented
+        return True
+
+    def has_custom_to_python(self) -> bool:
+        # All primitives can be trivially converted
         return True
 
 
@@ -259,8 +295,11 @@ class Number(Primitive):
     def type_string_internal(self) -> str:
         return self.type_string()
 
-    def as_python_type(self) -> "typing.Type | None":
-        return numbers.Number
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        return pytype in [int, float]
+
+    def as_python_type_string(self) -> "typing.Type | None":
+        return "numbers.Number"
 
     def to_python(self, instance: object) -> "object":
         return instance
@@ -302,8 +341,11 @@ class Float(Primitive):
     def type_string_internal(self) -> str:
         return self.type_string()
 
-    def as_python_type(self) -> "typing.Type | None":
-        return float
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        return pytype is float
+
+    def as_python_type_string(self) -> "typing.Type | None":
+        return "float"
 
     def to_python(self, instance: object) -> "object":
         return instance
@@ -335,8 +377,11 @@ class Integer(Number):
     def type_string(self) -> str:
         return "int"
 
-    def as_python_type(self) -> "typing.Type | None":
-        return int
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        return pytype is int
+
+    def as_python_type_string(self) -> "typing.Type | None":
+        return "int"
 
     def to_python(self, instance: object) -> "object":
         return instance
@@ -380,8 +425,11 @@ class Bool(Primitive):
     def get_location(self) -> None:
         return None
 
-    def as_python_type(self) -> "typing.Type | None":
-        return bool
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        return pytype is bool
+
+    def as_python_type_string(self) -> "typing.Type | None":
+        return "bool"
 
     def to_python(self, instance: object) -> "object":
         return object
@@ -429,8 +477,11 @@ class String(Primitive):
     def get_location(self) -> None:
         return None
 
-    def as_python_type(self) -> "typing.Type | None":
-        return str
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        return pytype is str
+
+    def as_python_type_string(self) -> "str | None":
+        return "str"
 
     def to_python(self, instance: object) -> "object":
         return str(instance)
@@ -468,11 +519,19 @@ class List(Type):
     def get_location(self) -> None:
         return None
 
-    def as_python_type(self) -> "typing.Type | None":
-        raise NotImplementedError()
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        if not typing_inspect.is_generic_type(pytype):
+            return issubclass(pytype, Sequence)
 
-    def to_python(self, instance: object) -> "object":
-        raise NotImplementedError()
+        origin = typing_inspect.get_origin(pytype)
+        return issubclass(origin, Sequence)
+
+    def as_python_type_string(self) -> "str | None":
+        return f"list[object]"
+
+    def has_custom_to_python(self) -> bool:
+        # Any can not be converted
+        return False
 
 
 @stable_api
@@ -524,11 +583,30 @@ class TypedList(List):
             return NotImplemented
         return self.element_type == other.element_type
 
-    def as_python_type(self) -> "typing.Type | None":
-        return list[self.element_type.as_python_type()]
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        if not typing_inspect.is_generic_type(pytype):
+            return issubclass(pytype, Sequence)
+
+        origin = typing_inspect.get_origin(pytype)
+        if not issubclass(origin, Sequence):
+            return False
+
+        args = typing_inspect.get_args(pytype, True)
+        if len(args) != 1:
+            return False
+        return self.get_base_type().corresponds_to(args[0])
+
+    def as_python_type_string(self) -> "str | None":
+        return f"list[{self.element_type.as_python_type_string()}]"
 
     def to_python(self, instance: object) -> "object":
         return [self.element_type.to_python(element) for element in instance]
+
+    def has_custom_to_python(self) -> bool:
+        return self.element_type.has_custom_to_python()
+
+    def is_primitive(self) -> bool:
+        return self.get_base_type().is_primitive()
 
 
 @stable_api
@@ -591,6 +669,25 @@ class Dict(Type):
     def get_location(self) -> None:
         return None
 
+    def as_python_type_string(self) -> "str | None":
+        return "dict"
+
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        if not typing_inspect.is_generic_type(pytype):
+            return issubclass(pytype, Mapping)
+
+        origin = typing_inspect.get_origin(pytype)
+        if not issubclass(origin, Mapping):
+            return False
+
+        args = typing_inspect.get_args(pytype, True)
+        if len(args) != 2:
+            return False
+
+        if args[0] != str:
+            return False
+        return True
+
 
 @stable_api
 class TypedDict(Dict):
@@ -621,6 +718,33 @@ class TypedDict(Dict):
     def get_location(self) -> None:
         return None
 
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        if not typing_inspect.is_generic_type(pytype):
+            return issubclass(pytype, Mapping)
+
+        origin = typing_inspect.get_origin(pytype)
+        if not issubclass(origin, Mapping):
+            return False
+
+        args = typing_inspect.get_args(pytype, True)
+        if len(args) != 2:
+            return False
+
+        if args[0] != str:
+            return False
+        return self.element_type.corresponds_to(args[1])
+
+    def as_python_type_string(self) -> "str | None":
+        return f"dict[str, {self.element_type.as_python_type_string()}]"
+
+    def has_custom_to_python(self) -> bool:
+        return self.element_type.has_custom_to_python()
+
+    def to_python(self, instance: object) -> "object":
+        assert isinstance(instance, dict)
+        base = self.get_base_type()
+        return {k: base.to_python(v) for k, v in instance.items()}
+
 
 @stable_api
 class LiteralDict(TypedDict):
@@ -633,11 +757,14 @@ class LiteralDict(TypedDict):
         TypedDict.__init__(self, Literal())
 
     def type_string(self) -> str:
-        return "dict"
+        return "dict[str, object]"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, LiteralDict):
             return NotImplemented
+        return True
+
+    def is_primitive(self) -> bool:
         return True
 
 
@@ -663,6 +790,19 @@ class Union(Type):
     def type_string_internal(self) -> str:
         return "Union[%s]" % ",".join(t.type_string_internal() for t in self.types)
 
+    def as_python_type_string(self) -> "str | None":
+        types = [tp.as_python_type_string() for tp in self.types]
+        if any((tp is None for tp in types)):
+            return None
+        return f"Union[{', '.join(types)}]"
+
+    def has_custom_to_python(self) -> bool:
+        # If we mix convertible and non convertible, it won't work, so we avoid it
+        return False
+
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        raise NotImplementedError("No unions can be specified on the plugin boundary")
+
 
 @stable_api
 class Literal(Union):
@@ -676,6 +816,19 @@ class Literal(Union):
 
     def type_string_internal(self) -> str:
         return "Literal"
+
+    def as_python_type_string(self) -> "str | None":
+        # Keep it simple
+        return "object"
+
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        # Infinite recursive type, avoid the mess
+        if pytype in [int, float, bool, str]:
+            return True
+        if List.corresponds_to(self, pytype):
+            return True
+        if Dict.corresponds_to(self, pytype):
+            return True
 
 
 @stable_api
@@ -749,6 +902,23 @@ class ConstraintType(NamedType):
 
     def get_double_defined_exception(self, other: "NamedType") -> DuplicateException:
         return DuplicateException(self, other, "TypeConstraint %s is already defined" % (self.get_full_name()))
+
+    def get_base_type(self) -> "Type":
+        assert self.basetype is not None
+        return self.basetype
+
+    def has_custom_to_python(self) -> bool:
+        # Substitute for base type for now
+        return self.get_base_type().has_custom_to_python()
+
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        return self.get_base_type().corresponds_to(pytype)
+
+    def as_python_type_string(self) -> "str | None":
+        return self.get_base_type().as_python_type_string()
+
+    def to_python(self, instance: object) -> "object":
+        return self.get_base_type().to_python(instance)
 
 
 def create_function(tp: ConstraintType, expression: "ExpressionStatement"):

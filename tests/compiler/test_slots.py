@@ -44,7 +44,6 @@ from inmanta.execute.dataflow import (
 )
 from inmanta.execute.runtime import (
     AttributeVariable,
-    DelegateQueueScheduler,
     ExecutionUnit,
     HangUnit,
     Instance,
@@ -81,7 +80,6 @@ def test_slots_rt():
     assert_slotted(OptionVariable(r, i, qs))
 
     assert_slotted(qs)
-    assert_slotted(DelegateQueueScheduler(qs, None))
 
     assert_slotted(Waiter(qs))
 

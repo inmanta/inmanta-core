@@ -859,6 +859,33 @@ class DirectExecuteException(TypingException):
         return 11
 
 
+class DataClassException(TypingException):
+    """Exception in relation to dataclasses"""
+
+    def __init__(self, entity: "Entity", msg: str) -> None:
+        super().__init__(entity, msg)
+        self.entity = entity
+
+    def importantance(self) -> int:
+        return 9
+
+
+class DataClassMismatchException(DataClassException):
+    def __init__(
+        self,
+        entity: "Entity",
+        dataclass: "type.Type[object] | None",
+        dataclass_python_name: str,
+        msg: str,
+    ) -> None:
+        """
+        :param dataclass
+        """
+        super().__init__(entity, msg)
+        self.dataclass = dataclass
+        self.dataclass_python_name = dataclass_python_name
+
+
 class KeyException(RuntimeException):
     pass
 

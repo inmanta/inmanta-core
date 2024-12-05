@@ -18,6 +18,7 @@
 
 import abc
 import collections
+import dataclasses
 import hashlib
 import inspect
 import json
@@ -31,17 +32,20 @@ import inmanta
 from inmanta import util
 from inmanta.util import dict_path
 
-# from inmanta.dataclass import Value  # The base class for data classes: see the specific design
-
 ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z0-9_]+::)+[A-Z][A-z0-9_-]*$")]
 PrimitiveTypes = str | float | int | bool
 
 
-class Dataclass:
-    pass
+@typing.runtime_checkable
+class DataclassProtocol(typing.Protocol):
+    """Protocol use to only allow classes that have been annotated as dataclass"""
+
+    @property
+    def __dataclass_fields__(self) -> Mapping[str, Field]:
+        r"""Return the fields of the dataclass."""
 
 
-type RefValue = Dataclass | PrimitiveTypes
+type RefValue = PrimitiveTypes | DataclassProtocol
 
 T = typing.TypeVar("T", bound=RefValue)
 
@@ -265,7 +269,7 @@ class Reference[T: RefValue](Base):
         :return: A reference to the attribute
         """
         value_type = self._get_T()
-        if issubclass(value_type, Dataclass) and name in value_type.__annotations__:
+        if dataclasses.is_dataclass(value_type) and name in value_type.__annotations__:
             return AttributeReference(
                 resolver=self,
                 attribute_name=name,
@@ -352,7 +356,7 @@ class AttributeReference(Reference[T]):
 
     def __init__(
         self,
-        resolver: Reference[Dataclass],
+        resolver: Reference[DataclassProtocol],
         attribute_name: str,
         attribute_type: typing.Type[
             T

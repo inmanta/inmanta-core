@@ -1,8 +1,7 @@
-import dataclasses
-
 import pytest
 
 from inmanta import compiler
+from inmanta.ast import DataClassException
 
 
 def test_dataclass_load(snippetcompiler):
@@ -22,5 +21,5 @@ import dataclasses::bad_sub
 """,
         ministd=True,
     )
-    with pytest.raises(Exception):
+    with pytest.raises(DataClassException, match="Dataclasses must have a python counterpart that is a frozen dataclass"):
         compiler.do_compile()

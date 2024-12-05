@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
 class MultiUnsetException(RuntimeException):
 
-    def __init__(self, msg: str, result_variables: "list[ResultVariable]") -> None:
+    def __init__(self, msg: str, result_variables: "list[ResultVariable[object]]") -> None:
         RuntimeException.__init__(self, None, msg)
         self.result_variables = result_variables
 
