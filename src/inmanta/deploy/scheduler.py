@@ -518,7 +518,7 @@ class ResourceScheduler(TaskManager):
                 for resource in new_desired_state:
                     self._state.update_desired_state(resource, resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
-                    self._state.update_requires(resource, requires[resource])
+                    self._state.update_requires(resource, requires[resource], dropped_requires=any(dropped_requires))
 
                 transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
                 for resource in newly_defined:

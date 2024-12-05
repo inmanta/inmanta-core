@@ -328,22 +328,17 @@ class ModelState:
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.add(resource)
 
-    def update_requires(
-        self,
-        resource: ResourceIdStr,
-        requires: Set[ResourceIdStr],
-    ) -> None:
+    def update_requires(self, resource: ResourceIdStr, requires: Set[ResourceIdStr], dropped_requires: bool) -> None:
         """
         Update the requires relation for a resource. Updates the reverse relation accordingly.
         """
-        previous_requires = self.requires.get(resource, set())
         self.requires[resource] = requires
         # If the resource is blocked transiently, and we drop at least one of its requirements
         # we check to see if the resource can now be unblocked
         # i.e. all of its dependencies are now compliant with the desired state.
         if (
             self.resource_state[resource].blocked is BlockedStatus.TRANSIENT
-            and previous_requires - requires
+            and dropped_requires
             and self.are_dependencies_compliant(resource)
         ):
             self.resource_state[resource].blocked = BlockedStatus.NO
