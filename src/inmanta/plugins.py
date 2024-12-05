@@ -220,7 +220,7 @@ class Null(inmanta_type.Type):
         return "None"
 
     def corresponds_to(self, pytype: typing.Type) -> bool:
-        return pytype == type(None)
+        return pytype is type(None)
 
     def has_custom_to_python(self) -> bool:
         return True
@@ -446,7 +446,7 @@ class PluginReturn(PluginValue):
                 if dataclasses.is_dataclass(value):
                     # TODO LISTS!!!
                     instance = base_type.get_instance(
-                        value.__dict__,
+                        {k: v if v is not None else NoneValue() for k, v in value.__dict__.items()},
                         resolver,
                         queue,
                         location,

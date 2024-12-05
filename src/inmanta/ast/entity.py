@@ -537,7 +537,8 @@ class Entity(NamedType, WithComment):
                 self,
                 None,
                 dataclass_name,
-                f"The dataclass {self.get_full_name()} defined at {self.location} has no corresponding python dataclass. Dataclasses must have a python counterpart that is a frozen dataclass.",
+                f"The dataclass {self.get_full_name()} defined at {self.location} has no corresponding python dataclass. "
+                "Dataclasses must have a python counterpart that is a frozen dataclass.",
             )
 
         if not dataclasses.is_dataclass(dataclass):
@@ -545,14 +546,18 @@ class Entity(NamedType, WithComment):
                 self,
                 None,
                 dataclass_name,
-                f"The python object {module_name}.{dataclass.__name__} associated to  {self.get_full_name()} defined at {self.location} is not a dataclass. Dataclasses must have a python counterpart that is a frozen dataclass.",
+                f"The python object {module_name}.{dataclass.__name__} associated to  {self.get_full_name()} "
+                f"defined at {self.location} is not a dataclass. "
+                "Dataclasses must have a python counterpart that is a frozen dataclass.",
             )
         if not dataclass.__dataclass_params__.frozen:
             raise DataClassMismatchException(
                 self,
                 None,
                 dataclass_name,
-                f"The python object {module_name}.{dataclass.__name__} associated to  {self.get_full_name()} defined at {self.location} is not frozen. Dataclasses must have a python counterpart that is a frozen dataclass.",
+                f"The python object {module_name}.{dataclass.__name__} associated to  {self.get_full_name()} "
+                f"defined at {self.location} is not frozen. "
+                "Dataclasses must have a python counterpart that is a frozen dataclass.",
             )
 
         dc_fields = {f.name: f for f in dataclasses.fields(dataclass)}
@@ -565,12 +570,14 @@ class Entity(NamedType, WithComment):
                     # No relations except for requires and provides
                     if not rel.entity.get_full_name() == "std::Entity":
                         failures.append(
-                            f"a relation called {rel_or_attr_name} is defined at {rel.location}. Dataclasses are not allowed to have relations"
+                            f"a relation called {rel_or_attr_name} is defined at {rel.location}. "
+                            "Dataclasses are not allowed to have relations"
                         )
                 case inmanta.ast.attribute.Attribute() as attr:
                     if rel_or_attr_name not in dc_fields:
                         failures.append(
-                            f"The attribute {rel_or_attr_name} has no counterpart in the python domain. All attributes of a dataclasses must be identical in both the python and inmanta domain.",
+                            f"The attribute {rel_or_attr_name} has no counterpart in the python domain. "
+                            "All attributes of a dataclasses must be identical in both the python and inmanta domain.",
                         )
                         continue
                     field = dc_fields.pop(rel_or_attr_name)
@@ -579,18 +586,22 @@ class Entity(NamedType, WithComment):
                     # all own fields are primitive
                     if not inm_type.is_primitive():
                         failures.append(
-                            f"The attribute {rel_or_attr_name} of type `{inm_type}` is not primitive. All attributes of a dataclasses have to be of a primitive type.",
+                            f"The attribute {rel_or_attr_name} of type `{inm_type}` is not primitive. "
+                            "All attributes of a dataclasses have to be of a primitive type.",
                         )
                         continue
                     # Type correspondence
                     if not inm_type.corresponds_to(field.type):
                         failures.append(
-                            f"The attribute {rel_or_attr_name} does not have the same type as the associated field in the python domain. All attributes of a dataclasses must be identical in both the python and inmanta domain.",
+                            f"The attribute {rel_or_attr_name} does not have the same type as "
+                            "the associated field in the python domain. "
+                            "All attributes of a dataclasses must be identical in both the python and inmanta domain.",
                         )
 
         for dcfield in dc_fields.keys():
             failures.append(
-                f"The field {dcfield} doesn't exist in the inmanta domain. All attributes of a dataclasses must be identical in both the python and inmanta domain",
+                f"The field {dcfield} doesn't exist in the inmanta domain. "
+                "All attributes of a dataclasses must be identical in both the python and inmanta domain",
             )
 
         if failures:
@@ -601,8 +612,8 @@ class Entity(NamedType, WithComment):
                 self,
                 dataclass,
                 dataclass_name,
-                f"The dataclass {self.get_full_name()} defined at {self.location} does not match the corresponding python dataclass at {python_file}:{python_lnr}. {len(failures)} errors:\n"
-                + msgs,
+                f"The dataclass {self.get_full_name()} defined at {self.location} does not match"
+                f" the corresponding python dataclass at {python_file}:{python_lnr}. {len(failures)} errors:\n" + msgs,
             )
 
         # Only std::none as implementation
@@ -611,14 +622,17 @@ class Entity(NamedType, WithComment):
                 if imp.get_full_name() != "std::none":
                     raise DataClassException(
                         self,
-                        f"The dataclass {self.get_full_name()} defined at {self.location} has an implementation other than 'std::none', defined at {implement.location}. Dataclasses can only have std::none as implemenation.",
+                        f"The dataclass {self.get_full_name()} defined at {self.location} "
+                        f"has an implementation other than 'std::none', defined at {implement.location}. "
+                        "Dataclasses can only have std::none as implemenation.",
                     )
         # No index
         if self.get_indices():
             index_locations = ",".join([str(i.location) for i in self._indexes])
             raise DataClassException(
                 self,
-                f"The dataclass {self.get_full_name()} defined at {self.location} has an indexes defined at {index_locations}. Dataclasses can not have any indexes.",
+                f"The dataclass {self.get_full_name()} defined at {self.location} has an indexes "
+                f"defined at {index_locations}. Dataclasses can not have any indexes.",
             )
 
         self._paired_dataclass = dataclass
