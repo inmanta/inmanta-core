@@ -41,7 +41,7 @@ class DataclassProtocol(typing.Protocol):
     """Protocol use to only allow classes that have been annotated as dataclass"""
 
     @property
-    def __dataclass_fields__(self) -> Mapping[str, Field]:
+    def __dataclass_fields__(self) -> collections.abc.Mapping[str, dataclasses.Field]:
         r"""Return the fields of the dataclass."""
 
 

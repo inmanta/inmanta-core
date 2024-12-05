@@ -25,9 +25,9 @@ from typing import Callable
 from typing import List as PythonList
 from typing import Optional
 
-from inmanta import references
 import typing_inspect
 
+from inmanta import references
 from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
