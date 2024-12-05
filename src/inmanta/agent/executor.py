@@ -497,7 +497,7 @@ class DeployResult:
         Translates the new HandlerResourceState to the const.ResourceState that some of the code still uses
         (mainly parts of the code that communicate with the server)
         """
-        if self.resource_state == const.HandlerResourceState.skipped_for_dependency:
+        if self.resource_state is const.HandlerResourceState.skipped_for_dependency:
             return const.ResourceState.skipped
         return const.ResourceState(self.resource_state)
 

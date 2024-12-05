@@ -467,7 +467,7 @@ class ResourceScheduler(TaskManager):
             # Only contains the direct undeployable resources, not the transitive ones.
             blocked_resources: set[ResourceIdStr] = set()
             # Resources that were undeployable in a previous model version, but got unblocked. Not the transitive ones.
-            newly_defined: set[ResourceIdStr] = set()
+            newly_defined: set[ResourceIdStr] = set()  # resources that were previously undefined but not anymore
 
             # Track potential changes in requires per resource
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
@@ -653,7 +653,7 @@ class ResourceScheduler(TaskManager):
                 deployment_result = DeploymentResult.FAILED
 
         status = (
-            ComplianceStatus.COMPLIANT if deployment_result == DeploymentResult.DEPLOYED else ComplianceStatus.NON_COMPLIANT
+            ComplianceStatus.COMPLIANT if deployment_result is DeploymentResult.DEPLOYED else ComplianceStatus.NON_COMPLIANT
         )
 
         async with self._scheduler_lock:
@@ -684,7 +684,7 @@ class ResourceScheduler(TaskManager):
                 self._work.finished_deploy(resource)
                 # Check if we need to mark a resource as transiently blocked
                 # Or if we can unblock a transiently blocked resource (its dependencies now succeed)
-                # We might already be unblocked if a dependency succeeds on another agent
+                # We might already be unblocked if a dependency succeeded on another agent, e.g. while waiting for the lock
                 # so HandlerResourceState.skipped_for_dependency might be outdated
                 if state.blocked is not BlockedStatus.YES:
                     if (
@@ -695,7 +695,7 @@ class ResourceScheduler(TaskManager):
                             BlockedStatus.NO if self._state.resource_can_be_unblocked(resource) else BlockedStatus.TRANSIENT
                         )
                 if deployment_result is DeploymentResult.DEPLOYED:
-                    # FIXME: Also discard blocked resources from the dirty set
+                    # FIXME: Also discard blocked resources from the dirty set if we block it transiently
                     # Remove this resource from the dirty set if it is successfully deployed
                     self._state.dirty.discard(resource)
                 else:
