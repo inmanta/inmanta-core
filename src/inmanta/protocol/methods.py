@@ -490,21 +490,6 @@ def list_versions(tid: uuid.UUID, start: Optional[int] = None, limit: Optional[i
     """
 
 
-#
-# @method(path="/scheduler_info", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
-# def get_scheduler_info(
-#     tid: uuid.UUID
-# ):
-#     """
-#     TODO
-#     """
-
-
-@method(path="/versionon", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
-def get_scheduler_info(tid: uuid.UUID):
-    pass
-
-
 @method(path="/version/<id>", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def get_version(
     tid: uuid.UUID, id: int, include_logs: Optional[bool] = None, log_filter: Optional[str] = None, limit: Optional[int] = None
