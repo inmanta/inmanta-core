@@ -929,7 +929,7 @@ async def test_skipped_for_dependency(resource_container, server, client, client
     """
     version = await clienthelper.get_version()
 
-    resource_container.Provider.set_skip("agent1", "key", 1)
+    resource_container.Provider.set_skip("agent1", "key", 2)
 
     rid1 = "test::Resource[agent1,key=key]"
     rid2 = "test::Resource[agent1,key=key2]"
@@ -966,5 +966,42 @@ async def test_skipped_for_dependency(resource_container, server, client, client
     assert scheduler._state.resource_state[rid1] == ResourceState(
         status=ComplianceStatus.NON_COMPLIANT,
         deployment_result=DeploymentResult.SKIPPED,
+        blocked=BlockedStatus.NO,
+    )
+
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+        },
+        {
+            "key": "key2",
+            "value": "value",
+            "id": f"{rid2},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+        },
+    ]
+    await clienthelper.set_auto_deploy(True)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed()
+
+    assert scheduler._state.resource_state[rid1] == ResourceState(
+        status=ComplianceStatus.NON_COMPLIANT,
+        deployment_result=DeploymentResult.SKIPPED,
+        blocked=BlockedStatus.NO,
+    )
+
+    assert scheduler._state.resource_state[rid2] == ResourceState(
+        status=ComplianceStatus.COMPLIANT,
+        deployment_result=DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
     )
