@@ -963,3 +963,8 @@ async def test_skipped_for_dependency(resource_container, server, client, client
         deployment_result=DeploymentResult.SKIPPED,
         blocked=BlockedStatus.TRANSIENT,
     )
+    assert scheduler._state.resource_state[rid1] == ResourceState(
+        status=ComplianceStatus.NON_COMPLIANT,
+        deployment_result=DeploymentResult.SKIPPED,
+        blocked=BlockedStatus.NO,
+    )

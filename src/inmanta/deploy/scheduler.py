@@ -692,7 +692,7 @@ class ResourceScheduler(TaskManager):
                         or state.blocked is BlockedStatus.TRANSIENT
                     ):
                         state.blocked = (
-                            BlockedStatus.NO if self._state.resource_can_be_unblocked(resource) else BlockedStatus.TRANSIENT
+                            BlockedStatus.NO if self._state.are_dependencies_compliant(resource) else BlockedStatus.TRANSIENT
                         )
                 if deployment_result is DeploymentResult.DEPLOYED:
                     # FIXME: Also discard blocked resources from the dirty set if we block it transiently
@@ -738,11 +738,10 @@ class ResourceScheduler(TaskManager):
         :param resource: The id of the resource to find the dependencies for
         """
         requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self._state.requires.requires_view()
-        dependencies: Mapping[ResourceIdStr, ResourceState] = {
-            dep_id: self._state.resource_state[dep_id] for dep_id in requires_view.get(resource, set())
-        }
+        dependencies: Set[ResourceIdStr] = requires_view.get(resource, set())
         dependencies_state = {}
-        for dep_id, resource_state_object in dependencies.items():
+        for dep_id in dependencies:
+            resource_state_object: ResourceState = self._state.resource_state[dep_id]
             match resource_state_object:
                 case ResourceState(status=ComplianceStatus.UNDEFINED):
                     dependencies_state[dep_id] = const.ResourceState.undefined

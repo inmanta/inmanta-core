@@ -128,8 +128,6 @@ class Deploy(Task):
             # Full status of the deploy,
             # may be unset if we fail before signaling start to the server, will be set if we signaled start
             deploy_result: DeployResult | None = None
-            # Checks if a failure occurred along this method. If it happens, set the resource state as failed.
-            failed_scheduler_deploy: bool = False
             try:
                 # This try catch block ensures we report at the end of the task
 
@@ -151,7 +149,6 @@ class Deploy(Task):
                     await task_manager.send_in_progress(action_id, executor_resource_details.rvid)
                 except Exception:
                     # Unrecoverable, can't reach DB
-                    failed_scheduler_deploy = True
                     LOGGER.error(
                         "Failed to report the start of the deployment to the server for %s",
                         resource_details.resource_id,
@@ -182,7 +179,6 @@ class Deploy(Task):
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
-                    failed_scheduler_deploy = True
                     return
 
                 assert reason is not None  # Should always be set for deploy
@@ -207,14 +203,13 @@ class Deploy(Task):
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
-                    failed_scheduler_deploy = True
             finally:
                 if deploy_result is not None:
                     # We signaled start, so we signal end
                     try:
                         await task_manager.send_deploy_done(deploy_result)
                     except Exception:
-                        failed_scheduler_deploy = True
+                        deploy_result.resource_state = const.HandlerResourceState.failed
                         LOGGER.error(
                             "Failed to report the end of the deployment to the server for %s",
                             resource_details.resource_id,
@@ -225,9 +220,7 @@ class Deploy(Task):
                     resource=self.resource,
                     attribute_hash=resource_details.attribute_hash,
                     resource_state=(
-                        const.HandlerResourceState.failed
-                        if failed_scheduler_deploy or deploy_result is None
-                        else deploy_result.resource_state
+                        const.HandlerResourceState.failed if deploy_result is None else deploy_result.resource_state
                     ),
                 )
 

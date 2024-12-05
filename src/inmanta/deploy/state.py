@@ -202,11 +202,9 @@ class ModelState:
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
 
-    def resource_can_be_unblocked(self, resource: ResourceIdStr) -> bool:
+    def are_dependencies_compliant(self, resource: ResourceIdStr) -> bool:
         """
         Checks if a resource has all of its dependencies in a compliant state.
-
-        Should only be called under scheduler lock.
 
         :param resource: The id of the resource to find the dependencies for
         """
@@ -338,18 +336,18 @@ class ModelState:
         """
         Update the requires relation for a resource. Updates the reverse relation accordingly.
         """
-        self.requires[resource] = requires
         # If the resource is blocked transiently, and we drop at least one of its requirements
         # we check to see if the resource can now be unblocked
         # i.e. all of its dependencies are now compliant with the desired state.
-        dropped_requires = self.requires[resource] - requires
         if (
-            dropped_requires
-            and self.resource_state[resource].blocked is BlockedStatus.TRANSIENT
-            and self.resource_can_be_unblocked(resource)
+            self.resource_state[resource].blocked is BlockedStatus.TRANSIENT
+            and self.requires[resource] - requires
+            and self.are_dependencies_compliant(resource)
         ):
             self.resource_state[resource].blocked = BlockedStatus.NO
             self.dirty.add(resource)
+
+        self.requires[resource] = requires
 
     def drop(self, resource: ResourceIdStr) -> None:
         """
