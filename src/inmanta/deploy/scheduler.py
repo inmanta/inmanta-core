@@ -580,7 +580,7 @@ class ResourceScheduler(TaskManager):
                     self._state.dirty | blocked_resources | transitively_blocked_resources | deleted_resources
                 )
 
-                # Install timers for these resources. They are up-to-date now,
+                # Install timers for initial up-to-date resources. They are up-to-date now,
                 # but we want to make sure we periodically repair them.
                 self._timer_manager.update_resources(up_to_date_resources, is_compliant=True)
 
