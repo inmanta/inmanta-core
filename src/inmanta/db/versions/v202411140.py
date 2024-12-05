@@ -36,9 +36,6 @@ async def update(connection: Connection) -> None:
 
         INSERT INTO public.scheduler (SELECT id, NULL FROM public.environment);
 
-        ALTER TABLE public.scheduler
-            ALTER COLUMN environment SET NOT NULL;
-
         -- Add additional columns to the resource_persistent_state table that are required by the scheduler.
         ALTER TABLE public.resource_persistent_state
             ADD COLUMN current_intent_attribute_hash varchar,
