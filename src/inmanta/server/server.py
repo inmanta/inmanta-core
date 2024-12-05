@@ -33,7 +33,7 @@ from inmanta.protocol import exceptions, handle, methods, methods_v2
 from inmanta.protocol.common import HTML_CONTENT_WITH_UTF8_CHARSET, ReturnValue, attach_warnings
 from inmanta.protocol.openapi.converter import OpenApiConverter
 from inmanta.protocol.openapi.model import OpenAPI
-from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT, protocol, SLICE_AGENT_MANAGER
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT, protocol
 from inmanta.types import Apireturn, JsonType, Warnings
 from inmanta.util import ensure_directory_exist
 

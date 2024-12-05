@@ -35,7 +35,6 @@ LOGGER = logging.getLogger(__name__)
 
 
 class DatabaseMonitor:
-
     def __init__(
         self,
         pool: asyncpg.pool.Pool,

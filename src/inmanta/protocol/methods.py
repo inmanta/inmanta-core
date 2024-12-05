@@ -489,6 +489,7 @@ def list_versions(tid: uuid.UUID, start: Optional[int] = None, limit: Optional[i
                   If None, a default limit (set to 1000) is applied.
     """
 
+
 #
 # @method(path="/scheduler_info", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 # def get_scheduler_info(
@@ -498,11 +499,11 @@ def list_versions(tid: uuid.UUID, start: Optional[int] = None, limit: Optional[i
 #     TODO
 #     """
 
+
 @method(path="/versionon", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
-def get_scheduler_info(
-    tid: uuid.UUID
-):
+def get_scheduler_info(tid: uuid.UUID):
     pass
+
 
 @method(path="/version/<id>", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def get_version(
@@ -1033,6 +1034,7 @@ def trigger_read_version(tid: uuid.UUID) -> int:
 
     :param tid: The environment this agent is defined in
     """
+
 
 @typedmethod(
     path="/scheduler/state",

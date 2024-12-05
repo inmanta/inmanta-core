@@ -24,7 +24,7 @@ import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
 from dataclasses import dataclass
-from typing import Optional, Tuple, NamedTuple
+from typing import NamedTuple, Optional, Tuple
 from uuid import UUID
 
 import asyncpg
@@ -34,8 +34,8 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.data import ConfigurationModel, Environment
-from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr, SchedulerStatusReport
-from inmanta.deploy import work, state
+from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.deploy import state, work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
 from inmanta.deploy.state import (
     AgentStatus,
@@ -197,6 +197,7 @@ class Discrepancy(NamedTuple):
     Records a discrepancy for a resource between its status in the database
     and its status in the scheduler state.
     """
+
     expected: str
     actual: str
 
@@ -382,7 +383,9 @@ class ResourceScheduler(TaskManager):
         except KeyError:
             return {}
 
-        def _build_discrepancy_map(resources_in_db: Mapping[ResourceIdStr, ResourceDetails]) -> dict[ResourceIdStr, list[Discrepancy]]:
+        def _build_discrepancy_map(
+            resources_in_db: Mapping[ResourceIdStr, ResourceDetails]
+        ) -> dict[ResourceIdStr, list[Discrepancy]]:
             """
             For each resource in the given map, compare its persisted state in the database to its
             state as it is assumed by the scheduler. Build and return a map of all detected discrepancies.
@@ -414,17 +417,25 @@ class ResourceScheduler(TaskManager):
                 scheduler_resource_state: ResourceState | None = self._state.resource_state.get(rid)
 
                 if not scheduler_resource_state:
-                    resource_discrepancies.append(Discrepancy(expected="status for resource PLACEHOLDER", actual="no status for resource PLACEHOLDER"))
+                    resource_discrepancies.append(
+                        Discrepancy(expected="status for resource PLACEHOLDER", actual="no status for resource PLACEHOLDER")
+                    )
                 else:
                     if db_deploy_result:
                         if scheduler_resource_state.deployment_result != db_deploy_result:
-                            resource_discrepancies.append(Discrepancy(expected=db_deploy_result, actual=scheduler_resource_state.deployment_result))
+                            resource_discrepancies.append(
+                                Discrepancy(expected=db_deploy_result, actual=scheduler_resource_state.deployment_result)
+                            )
                     if db_blocked_status:
                         if scheduler_resource_state.blocked != db_blocked_status:
-                            resource_discrepancies.append(Discrepancy(expected=db_blocked_status, actual=scheduler_resource_state.blocked))
+                            resource_discrepancies.append(
+                                Discrepancy(expected=db_blocked_status, actual=scheduler_resource_state.blocked)
+                            )
                     if db_compliance_status:
                         if scheduler_resource_state.status != db_compliance_status:
-                            resource_discrepancies.append(Discrepancy(expected=db_compliance_status, actual=scheduler_resource_state.status))
+                            resource_discrepancies.append(
+                                Discrepancy(expected=db_compliance_status, actual=scheduler_resource_state.status)
+                            )
 
                 if resource_discrepancies:
                     discrepancy_map[rid] = resource_discrepancies

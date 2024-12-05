@@ -18,7 +18,6 @@
 
 import logging
 import time
-import uuid
 from uuid import UUID
 
 import pytest
@@ -106,7 +105,7 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
     "agent_deploy_interval",
     [
         "2",
-        # "*/2 * * * * * *"
+        "*/2 * * * * * *"
     ],
 )
 async def test_spontaneous_deploy(
@@ -161,17 +160,16 @@ async def test_spontaneous_deploy(
         result = await client.release_version(env_id, version, False)
         assert result.code == 200
 
-
         # result = await client.get_compile_data(uuid.UUID(environment))
         # assert result.code == 200, result
-
-        result = await client.get_scheduler_resource_state(uuid.UUID(environment))
-        assert result.code == 200, result
 
         assert result.result["model"]["released"]
 
         result = await client.get_version(env_id, version)
         assert result.code == 200
+
+        result = await client.get_scheduler_status(env_id)
+        assert result.code == 200, result
 
         await clienthelper.wait_for_deployed()
 

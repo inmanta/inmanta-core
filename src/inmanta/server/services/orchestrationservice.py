@@ -40,7 +40,8 @@ from inmanta.data.model import (
     ResourceDiff,
     ResourceIdStr,
     ResourceMinimal,
-    ResourceVersionIdStr, SchedulerStatusReport,
+    ResourceVersionIdStr,
+    SchedulerStatusReport,
 )
 from inmanta.db.util import ConnectionInTransaction
 from inmanta.protocol import handle, methods, methods_v2
@@ -452,10 +453,6 @@ class OrchestrationService(protocol.ServerSlice):
         }
 
         return 200, d
-
-
-
-
 
     @handle(methods.get_version, version_id="id", env="tid")
     async def get_version(
@@ -1314,7 +1311,6 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
     ) -> SchedulerStatusReport:
-
         await self.autostarted_agent_manager._ensure_scheduler(env.id)
         client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
         if client is not None:

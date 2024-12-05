@@ -30,13 +30,10 @@ from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data import ResourceIdStr, model
 from inmanta.data.model import DataBaseReport, SchedulerStatusReport
 from inmanta.deploy import scheduler
-from inmanta.deploy.state import ResourceState
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
-from inmanta.protocol.exceptions import NotFound
 from inmanta.server.services.databaseservice import DatabaseMonitor
 from inmanta.types import Apireturn
 from inmanta.util import (
@@ -119,7 +116,6 @@ class Agent(SessionEndpoint):
         self._repair_splay_value = random.randint(0, repair_splay_time)
 
     def _enable_time_triggers(self) -> None:
-
         def periodic_schedule(
             kind: str,
             action: Callable[[], Coroutine[object, None, object]],
@@ -340,16 +336,11 @@ class Agent(SessionEndpoint):
     async def get_status(self) -> Apireturn:
         return 200, collect_report(self)
 
-
-
     @protocol.handle(methods.trigger_get_status, env="tid")
     async def get_scheduler_resource_state(self, env: uuid.UUID) -> SchedulerStatusReport:
         assert env == self.environment
         resource_state = await self.scheduler.get_resource_state()
         return SchedulerStatusReport(resource_state=resource_state)
-
-
-
 
     @protocol.handle(methods_v2.get_db_status)
     async def get_db_status(self) -> DataBaseReport:

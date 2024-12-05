@@ -458,7 +458,6 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     resources = make_resources(version=1, r1_value=0, r2_value=0, r3_value=0)
     await agent.scheduler._new_version(1, resources, make_requires(resources))
 
-
     def done():
         for agent_name in ("agent1", "agent2", "agent3"):
             queue = agent.scheduler._work.agent_queues._agent_queues.get(agent_name)
