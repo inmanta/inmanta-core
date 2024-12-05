@@ -241,24 +241,21 @@ PLUGIN_TYPES = {
 
 def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, value: object) -> object:
     """
-    Given a module domain value and an inmanta type, produce the corresponding python object
+    Given a model domain value and an inmanta type, produce the corresponding python object
 
-    Unknows are not handled by this method!
+    Unknowns are not handled by this method!
     """
     import inmanta.ast.entity
 
     expected_type.validate(value)
 
     if isinstance(value, NoneValue):
-        # if the type is not nullable, will fail when validating
+        # if the type is not nullable, it will fail when validating
         # if the value is None, it becomes None
         return None
 
     base_type = expected_type.get_base_type()
-    # TODO: do we want to handle primtive lists and dicts differently?
-    # if expected_type.is_primitive():
-    #    return value
-    if isinstance(base_type, inmanta.ast.entity.Entity) and base_type._paired_dataclass is not None:
+    if base_type.has_custom_to_python():
         return expected_type.to_python(value)
     return DynamicProxy.return_value(value)
 
@@ -274,13 +271,18 @@ python_to_model = {
 }
 
 
-def primtive_python_type_to_model_domain(intype: Type) -> inmanta_type.Type:
+def primitive_python_type_to_model_domain(intype: Type) -> inmanta_type.Type:
+    """
+    Convert a primtive python type to the model domain
+
+    Currently only used to construct explainer messages
+    """
     if typing_inspect.is_union_type(intype):
         # only Optional should reach this
         assert any(typing_inspect.is_optional_type(tt) for tt in typing_inspect.get_args(intype, evaluate=True))
         other_types = [tt for tt in typing_inspect.get_args(intype, evaluate=True) if not typing_inspect.is_optional_type(tt)]
         assert len(other_types) == 1
-        return inmanta_type.NullableType(primtive_python_type_to_model_domain(other_types[0]))
+        return inmanta_type.NullableType(primitive_python_type_to_model_domain(other_types[0]))
     if typing_inspect.is_generic_type(intype):
         orig = typing_inspect.get_origin(intype)
         assert orig is not None  # Make mypy happy
@@ -289,12 +291,12 @@ def primtive_python_type_to_model_domain(intype: Type) -> inmanta_type.Type:
             args = typing_inspect.get_args(intype, evaluate=True)
             assert len(args) == 2
             assert issubclass(args[0], str)  # TODO
-            return inmanta_type.TypedDict(primtive_python_type_to_model_domain(args[1]))
+            return inmanta_type.TypedDict(primitive_python_type_to_model_domain(args[1]))
         else:
             assert issubclass(orig, list)  # Only one type of generic should get here
             args = typing_inspect.get_args(intype, evaluate=True)
             assert len(args) == 1
-            return inmanta_type.TypedList(primtive_python_type_to_model_domain(args[0]))
+            return inmanta_type.TypedList(primitive_python_type_to_model_domain(args[0]))
     return python_to_model[intype]
 
 
@@ -437,29 +439,17 @@ class PluginReturn(PluginValue):
     VALUE_NAME = "return value"
 
     def to_model_domain(self, value: object, resolver: Resolver, queue: QueueScheduler, location: Location) -> object:
+        # Basic unwrap
+        value = DynamicProxy.unwrap(value)
+
+        # Post process dataclasses
         base_type = self.resolved_type.get_base_type()
         is_datclass_based = isinstance(base_type, entity.Entity) and base_type._paired_dataclass is not None
-
         if is_datclass_based:
 
             def make_dc(value: object) -> object:
-                if dataclasses.is_dataclass(value):
-                    def convert_none(x: object | None) -> object:
-                        return x if x is not None else NoneValue()
-
-                    instance = base_type.get_instance(
-                        {k.name: convert_none(getattr(value, k.name)) for k in dataclasses.fields(value)},
-                        resolver,
-                        queue,
-                        location,
-                        None,
-                    )
-                    dataclass_self = WrappedValueVariable(value)
-                    instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
-                    # generate an implementation
-                    for stmt in base_type.get_sub_constructor():
-                        stmt.emit(instance, queue)
-                    return instance
+                if isinstance(value, base_type._paired_dataclass):
+                    return base_type.from_python(value, resolver, queue, location)
                 else:
                     raise RuntimeException(None, f"Invalid value '{value}', expected {base_type.type_string()}")
 
@@ -885,9 +875,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             warnings.warn(PluginDeprecationWarning(msg))
         self.check_requirements()
         value = self.call(*args, **kwargs)
-
-        value = DynamicProxy.unwrap(value)
-
         # Validate the returned value
         return self.return_type.to_model_domain(value, resolver, queue, location)
 

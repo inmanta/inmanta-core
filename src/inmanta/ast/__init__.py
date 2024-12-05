@@ -871,6 +871,11 @@ class DataClassException(TypingException):
 
 
 class DataClassMismatchException(DataClassException):
+    """
+    Exception due to a mismatch between both version of a dataclass
+
+    """
+
     def __init__(
         self,
         entity: "Entity",
@@ -879,7 +884,7 @@ class DataClassMismatchException(DataClassException):
         msg: str,
     ) -> None:
         """
-        :param dataclass
+        :param dataclass python dataclass, None if absent
         """
         super().__init__(entity, msg)
         self.dataclass = dataclass

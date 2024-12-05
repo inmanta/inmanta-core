@@ -104,6 +104,8 @@ class Type(Locatable):
     def corresponds_to(self, pytype: typing.Type) -> bool:
         """
         Return if the python type corresponds to this inmanta type
+
+        Used only on the plugin boundary
         """
 
     def as_python_type_string(self) -> "str | None":
@@ -112,9 +114,16 @@ class Type(Locatable):
         As a string
 
         Returns None if this is not possible.
+
+        Used only on the plugin boundary
         """
 
     def has_custom_to_python(self) -> bool:
+        """
+        Indicates if a special to_python conversion should be used
+
+        Used only on the plugin boundary
+        """
         return False
 
     def to_python(self, instance: object) -> "object":
@@ -175,11 +184,15 @@ class NullableType(Type):
             return NotImplemented
         return self.element_type == other.element_type
 
+    def is_primitive(self) -> bool:
+        return self.element_type.is_primitive()
+
     def corresponds_to(self, pytype: typing.Type) -> bool:
         if not typing_inspect.is_optional_type(pytype):
             return False
         # remove options from union
         other_types = [tp for tp in typing_inspect.get_args(pytype) if not typing_inspect.is_optional_type(tp)]
+        # Typing union conveniently returns the base type if that is the only element
         return self.element_type.corresponds_to(typing.Union[*other_types])
 
     def as_python_type_string(self) -> "str | None":
@@ -192,9 +205,6 @@ class NullableType(Type):
 
     def has_custom_to_python(self) -> bool:
         return self.element_type.has_custom_to_python()
-
-    def is_primitive(self) -> bool:
-        return self.element_type.is_primitive()
 
 
 class AnyType(Type):
@@ -578,6 +588,9 @@ class TypedList(List):
             return NotImplemented
         return self.element_type == other.element_type
 
+    def is_primitive(self) -> bool:
+        return self.get_base_type().is_primitive()
+
     def corresponds_to(self, pytype: typing.Type) -> bool:
         if not typing_inspect.is_generic_type(pytype):
             return issubclass(pytype, Sequence)
@@ -599,9 +612,6 @@ class TypedList(List):
 
     def has_custom_to_python(self) -> bool:
         return self.element_type.has_custom_to_python()
-
-    def is_primitive(self) -> bool:
-        return self.get_base_type().is_primitive()
 
 
 @stable_api
@@ -669,8 +679,10 @@ class Dict(Type):
 
     def corresponds_to(self, pytype: typing.Type) -> bool:
         if not typing_inspect.is_generic_type(pytype):
+            # None generic dict is fine
             return issubclass(pytype, Mapping)
 
+        # Generic dict
         origin = typing_inspect.get_origin(pytype)
         if not issubclass(origin, Mapping):
             return False
@@ -679,6 +691,7 @@ class Dict(Type):
         if len(args) != 2:
             return False
 
+        # always require dict[str,
         if args[0] != str:
             return False
         return True
@@ -715,8 +728,10 @@ class TypedDict(Dict):
 
     def corresponds_to(self, pytype: typing.Type) -> bool:
         if not typing_inspect.is_generic_type(pytype):
+            # None generic dict is fine
             return issubclass(pytype, Mapping)
 
+        # generic dict
         origin = typing_inspect.get_origin(pytype)
         if not issubclass(origin, Mapping):
             return False
@@ -725,8 +740,11 @@ class TypedDict(Dict):
         if len(args) != 2:
             return False
 
+        # first argument is always str
         if args[0] != str:
             return False
+
+        # second is base type
         return self.element_type.corresponds_to(args[1])
 
     def as_python_type_string(self) -> "str | None":

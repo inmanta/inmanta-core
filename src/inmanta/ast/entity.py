@@ -102,6 +102,9 @@ class Entity(NamedType, WithComment):
         self.normalized = False
 
         self._paired_dataclass: Type[object] = None
+        # Entities can be paired up to python dataclasses
+        # If such a sibling exists, the type is kept here
+        # Every instance of such entity can cary the associated python object in a slot called `DATACLASS_SELF_FIELD`
 
     def normalize(self) -> None:
         self.normalized = True
@@ -523,14 +526,21 @@ class Entity(NamedType, WithComment):
         return self.location
 
     def pair_dataclass(self) -> None:
+        """
+        Attach the associated dataclass in the python domain
+
+        should only be called on children of std::Dataclass
+        should be called after normalization
+        """
         assert self.normalized
 
-        # TODO: error reporting
+        # Find the dataclass name
         namespace = self.namespace.get_full_name()
-
         module_name = "inmanta_plugins." + namespace.replace("::", ".")
-        dataclass_module = importlib.import_module(module_name)
         dataclass_name = module_name + "." + self.name
+
+        # Find the dataclass
+        dataclass_module = importlib.import_module(module_name)
         dataclass = getattr(dataclass_module, self.name, None)
         if dataclass is None:
             raise DataClassMismatchException(
@@ -560,6 +570,7 @@ class Entity(NamedType, WithComment):
                 "Dataclasses must have a python counterpart that is a frozen dataclass.",
             )
 
+        # Validate fields, collect errors
         dc_fields = {f.name: f for f in dataclasses.fields(dataclass)}
         failures = []
 
@@ -598,6 +609,7 @@ class Entity(NamedType, WithComment):
                             "All attributes of a dataclasses must be identical in both the python and inmanta domain.",
                         )
 
+        # Anything left in the dict has no counterpart
         for dcfield in dc_fields.keys():
             failures.append(
                 f"The field {dcfield} doesn't exist in the inmanta domain. "
@@ -681,6 +693,33 @@ class Entity(NamedType, WithComment):
             dataclass_self = WrappedValueVariable(out)
             instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
             return out
+
+    def from_python(self, value: object, resolver: Resolver, queue: QueueScheduler, location: Location) -> Instance:
+        """
+        Construct the instance for the associated python object
+
+        Should only be called on objects of the proper type,
+         i.e. for which 'corresponds_to' returns True
+         i.e. instances of the associated dataclass
+        """
+        assert isinstance(value, self._paired_dataclass)
+
+        def convert_none(x: object | None) -> object:
+            return x if x is not None else NoneValue()
+
+        instance = self.get_instance(
+            {k.name: convert_none(getattr(value, k.name)) for k in dataclasses.fields(value)},
+            resolver,
+            queue,
+            location,
+            None,
+        )
+        dataclass_self = WrappedValueVariable(value)
+        instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
+        # generate an implementation
+        for stmt in self.get_sub_constructor():
+            stmt.emit(instance, queue)
+        return instance
 
 
 class Implementation(NamedType):
