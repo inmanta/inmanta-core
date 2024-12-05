@@ -161,6 +161,11 @@ class Base:
         ref: BaseModel,
         resource: "inmanta.resources.Resource",
     ) -> C:
+        """Deserialize the reference or mutator.
+
+        :param ref: The model of the reference to deserialize
+        :param resource: The resource to use as a read-only reference
+        """
         return cls(**{arg.name: arg.get_arg_value(resource) for arg in ref.args})
 
     @abc.abstractmethod

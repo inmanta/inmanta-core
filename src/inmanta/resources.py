@@ -472,8 +472,6 @@ class Resource(metaclass=ResourceMeta):
         # - receive_events
         # - references
         # - mutators
-        # TODO: do we need to introduce a default value on fields to prevent this mess? Not only the stored version but also
-        #       all deploy testcases suffer from this.
         extra = {}
         if const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS not in obj_map:
             extra[const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS] = True
@@ -547,8 +545,6 @@ class Resource(metaclass=ResourceMeta):
 
     def resolve_all_references(self) -> None:
         """Resolve all value references"""
-        # TODO: always work with original and mutate the copy
-
         for ref in self.references:
             model = references.ReferenceModel(**ref)
             self._references_model[model.id] = model
@@ -569,9 +565,7 @@ class Resource(metaclass=ResourceMeta):
                 self.requires.add(Id.parse_id(require))
 
     def set_version(self, version: int) -> None:
-        """
-        Set the version of this resource
-        """
+        """Set the version of this resource"""
         self.version = version
         self.id.version = version
 
