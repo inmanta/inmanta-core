@@ -251,7 +251,7 @@ class Compiler:
         dataclass = DefineEntity(
             ns,
             LocatableString("Dataclass", nullrange, 0, ns),
-            LocatableString("The entity all other entities inherit from.", nullrange, 0, ns),
+            LocatableString("Base Dataclass.", nullrange, 0, ns),
             [
                 LocatableString("std::Entity", nullrange, 0, ns),
             ],

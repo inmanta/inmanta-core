@@ -444,9 +444,11 @@ class PluginReturn(PluginValue):
 
             def make_dc(value: object) -> object:
                 if dataclasses.is_dataclass(value):
-                    # TODO LISTS!!!
+                    def convert_none(x: object | None) -> object:
+                        return x if x is not None else NoneValue()
+
                     instance = base_type.get_instance(
-                        {k: v if v is not None else NoneValue() for k, v in value.__dict__.items()},
+                        {k.name: convert_none(getattr(value, k.name)) for k in dataclasses.fields(value)},
                         resolver,
                         queue,
                         location,
