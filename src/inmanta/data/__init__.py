@@ -4391,6 +4391,11 @@ class ResourceAction(BaseDocument):
 
 
 class ResourcePersistentState(BaseDocument):
+    """
+    To avoid write contention, the `ComplianceStatus` is split up in different fields that are written from different code
+    paths. See get_compliance_status() for the associated logic.
+    """
+
     @classmethod
     def table_name(cls) -> str:
         return "resource_persistent_state"
