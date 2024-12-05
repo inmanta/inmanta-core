@@ -220,7 +220,7 @@ class Null(inmanta_type.Type):
         return "None"
 
     def corresponds_to(self, pytype: typing.Type) -> bool:
-        return pytype == type(None)
+        return pytype is type(None)
 
     def has_custom_to_python(self) -> bool:
         return True
@@ -438,21 +438,43 @@ class PluginReturn(PluginValue):
 
     def to_model_domain(self, value: object, resolver: Resolver, queue: QueueScheduler, location: Location) -> object:
         base_type = self.resolved_type.get_base_type()
-        if dataclasses.is_dataclass(value) and isinstance(base_type, entity.Entity) and base_type._paired_dataclass is not None:
-            # TODO LISTS!!!
-            instance = base_type.get_instance(
-                value.__dict__,
-                resolver,
-                queue,
-                location,
-                None,
-            )
-            dataclass_self = WrappedValueVariable(value)
-            instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
-            # generate an implementation
-            for stmt in base_type.get_sub_constructor():
-                stmt.emit(instance, queue)
-            return instance
+        is_datclass_based = isinstance(base_type, entity.Entity) and base_type._paired_dataclass is not None
+
+        if is_datclass_based:
+
+            def make_dc(value: object) -> object:
+                if dataclasses.is_dataclass(value):
+                    # TODO LISTS!!!
+                    instance = base_type.get_instance(
+                        {k: v if v is not None else NoneValue() for k, v in value.__dict__.items()},
+                        resolver,
+                        queue,
+                        location,
+                        None,
+                    )
+                    dataclass_self = WrappedValueVariable(value)
+                    instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
+                    # generate an implementation
+                    for stmt in base_type.get_sub_constructor():
+                        stmt.emit(instance, queue)
+                    return instance
+                else:
+                    raise RuntimeException(None, f"Invalid value '{value}', expected {base_type.type_string()}")
+
+            outer_type = self.resolved_type
+
+            if isinstance(outer_type, inmanta_type.NullableType):
+                if isinstance(value, NoneValue):
+                    return value
+                outer_type = outer_type.element_type
+
+            if isinstance(outer_type, inmanta_type.List):
+                if isinstance(value, Sequence):
+                    return [make_dc(v) for v in value]
+                else:
+                    raise RuntimeException(None, f"Invalid value '{value}', expected {self.resolved_type.type_string()}")
+            else:
+                return make_dc(value)
 
         self.validate(value)
         return value

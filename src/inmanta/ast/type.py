@@ -181,7 +181,7 @@ class NullableType(Type):
             return False
         # remove options from union
         other_types = [tp for tp in typing_inspect.get_args(pytype) if not typing_inspect.is_optional_type(tp)]
-        return self.get_base_type().corresponds_to(typing.Union[*other_types])
+        return self.element_type.corresponds_to(typing.Union[*other_types])
 
     def as_python_type_string(self) -> "str | None":
         return f"{self.element_type.as_python_type_string()} | None"
@@ -527,7 +527,7 @@ class List(Type):
         return issubclass(origin, Sequence)
 
     def as_python_type_string(self) -> "str | None":
-        return f"list[object]"
+        return "list[object]"
 
     def has_custom_to_python(self) -> bool:
         # Any can not be converted
@@ -757,7 +757,7 @@ class LiteralDict(TypedDict):
         TypedDict.__init__(self, Literal())
 
     def type_string(self) -> str:
-        return "dict[str, object]"
+        return "dict"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, LiteralDict):

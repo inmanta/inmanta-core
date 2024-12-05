@@ -225,7 +225,7 @@ class {problem.entity.name}:
         for rel_or_attr_name in sorted(problem.entity.get_all_attribute_names()):
             rel_or_attr = problem.entity.get_attribute(rel_or_attr_name)
             match rel_or_attr:
-                case inmanta.ast.attribute.RelationAttribute() as rel:
+                case inmanta.ast.attribute.RelationAttribute():
                     pass
                 case inmanta.ast.attribute.Attribute() as attr:
                     python += f"   {attr.name}: {attr.type.as_python_type_string()}\n"
