@@ -54,6 +54,11 @@ from inmanta.resources import Id
 
 LOGGER = logging.getLogger(__name__)
 
+class UnmanagedResource(Exception):
+    """
+    An exception that indicates that a resource is not managed by the orchestrator.
+    """
+    pass
 
 @dataclass(frozen=True)
 class ResourceIntent:
@@ -802,13 +807,18 @@ class ResourceScheduler(TaskManager):
     async def send_deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
         try:
             await self.update_scheduler_state_for_finished_deploy(attribute_hash, result)
-        finally:
-            # Write deployment result to the database
+        except UnmanagedResource:
+            # The resource is no longer managed, no need to update the database state.
+            pass
+        else:
+            # Write deployment result to the database.
             await self._state_update_delegate.send_deploy_done(attribute_hash, result)
 
     async def update_scheduler_state_for_finished_deploy(self, attribute_hash: str, result: DeployResult) -> None:
         """
         Update the state of the scheduler based on the DeploymentResult of the given resource.
+
+        :raise UnmanagedResource: This update is about a resource that is no longer managed by the server.
         """
         resource_id = result.resource_id
         if result.deployment_result is DeploymentResult.NEW:
@@ -820,7 +830,7 @@ class ResourceScheduler(TaskManager):
 
             if details is None:
                 # we are stale and removed
-                return
+                raise UnmanagedResource()
 
             state: ResourceState = self._state.resource_state[resource_id]
 
