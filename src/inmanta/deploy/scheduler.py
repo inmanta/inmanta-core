@@ -799,14 +799,14 @@ class ResourceScheduler(TaskManager):
     async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
         await self._state_update_delegate.send_in_progress(action_id, resource_id)
 
-    async def send_deploy_done(self, result: DeployResult) -> None:
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
         try:
-            await self.update_scheduler_state_for_finished_deploy(result)
+            await self.update_scheduler_state_for_finished_deploy(attribute_hash, result)
         finally:
             # Write deployment result to the database
-            await self._state_update_delegate.send_deploy_done(result)
+            await self._state_update_delegate.send_deploy_done(attribute_hash, result)
 
-    async def update_scheduler_state_for_finished_deploy(self, result: DeployResult) -> None:
+    async def update_scheduler_state_for_finished_deploy(self, attribute_hash: str, result: DeployResult) -> None:
         """
         Update the state of the scheduler based on the DeploymentResult of the given resource.
         """
@@ -824,7 +824,7 @@ class ResourceScheduler(TaskManager):
 
             state: ResourceState = self._state.resource_state[resource_id]
 
-            if details.attribute_hash != result.attribute_hash:
+            if details.attribute_hash != attribute_hash:
                 # We are stale but still the last deploy
                 # We can update the deployment_result (which is about last deploy)
                 # We can't update status (which is about active state only)

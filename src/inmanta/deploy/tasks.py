@@ -202,14 +202,12 @@ class Deploy(Task):
                         error=str(e),
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
-                    deploy_result = DeployResult.undeployable(
-                        executor_resource_details.rvid, resource_details.attribute_hash, action_id, log_line
-                    )
+                    deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
             finally:
                 if deploy_result is not None:
                     # We signaled start, so we signal end
                     try:
-                        await task_manager.send_deploy_done(deploy_result)
+                        await task_manager.send_deploy_done(resource_details.attribute_hash, deploy_result)
                     except Exception:
                         LOGGER.error(
                             "Failed to report the end of the deployment to the server for %s",

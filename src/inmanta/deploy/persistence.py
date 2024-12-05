@@ -55,7 +55,7 @@ class StateUpdateManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def send_deploy_done(self, result: DeployResult) -> None:
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
         pass
 
     @abc.abstractmethod
@@ -147,7 +147,7 @@ class ToDbUpdateManager(StateUpdateManager):
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
-    async def send_deploy_done(self, result: DeployResult) -> None:
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
         def error_and_log(message: str, **context: Any) -> None:
             """
             :param message: message to return both to logger and to remote caller

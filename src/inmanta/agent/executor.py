@@ -487,7 +487,6 @@ class FactResult:
 class DeployResult:
     rvid: ResourceVersionIdStr
     resource_id: ResourceIdStr = dataclasses.field(init=False)
-    attribute_hash: str
     action_id: uuid.UUID
     status: ResourceState
     messages: list[LogLine]
@@ -495,13 +494,13 @@ class DeployResult:
     change: Optional[Change]
     deployment_result: state.DeploymentResult
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.status in {*const.TRANSIENT_STATES, *const.UNDEPLOYABLE_STATES, const.ResourceState.dry}:
             raise Exception(f"Resource state {self.status} is not a valid state for a DeployResult.")
         self.resource_id = Id.parse_id(self.rvid).resource_str()
 
     @classmethod
-    def from_ctx(cls, rvid: ResourceVersionIdStr, attribute_hash: str, ctx: HandlerContext) -> "DeployResult":
+    def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext) -> "DeployResult":
         if ctx.status is None:
             ctx.warning("Deploy status field is None, failing!")
             ctx.set_status(ResourceState.failed)
@@ -514,7 +513,6 @@ class DeployResult:
                 deployment_result = state.DeploymentResult.FAILED
         return DeployResult(
             rvid=rvid,
-            attribute_hash=attribute_hash,
             action_id=ctx.action_id,
             status=ctx.status or ResourceState.failed,
             messages=ctx.logs,
@@ -524,10 +522,9 @@ class DeployResult:
         )
 
     @classmethod
-    def undeployable(cls, rvid: ResourceVersionIdStr, attribute_hash: str, action_id: UUID, message: LogLine) -> "DeployResult":
+    def undeployable(cls, rvid: ResourceVersionIdStr, action_id: UUID, message: LogLine) -> "DeployResult":
         return DeployResult(
             rvid=rvid,
-            attribute_hash=attribute_hash,
             action_id=action_id,
             status=ResourceState.unavailable,
             messages=[message],

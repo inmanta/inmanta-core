@@ -239,7 +239,7 @@ class DummyStateManager(StateUpdateManager):
     async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
         self.state[Id.parse_id(resource_id).resource_str()] = const.ResourceState.deploying
 
-    async def send_deploy_done(self, result: DeployResult) -> None:
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
         self.state[result.resource_id] = result.status
 
     def check_with_scheduler(self, scheduler: ResourceScheduler) -> None:
