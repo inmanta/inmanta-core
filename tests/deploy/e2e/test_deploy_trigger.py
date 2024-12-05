@@ -103,10 +103,7 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
 
 @pytest.mark.parametrize(
     "agent_deploy_interval",
-    [
-        "2",
-        "*/2 * * * * * *"
-    ],
+    ["2", "*/2 * * * * * *"],
 )
 async def test_spontaneous_deploy(
     server,
