@@ -35,7 +35,14 @@ except ImportError:
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute
     from inmanta.ast.entity import Entity
-    from inmanta.execute.runtime import Instance
+    from inmanta.execute.runtime import Instance, ResultVariable
+
+
+class MultiUnsetException(RuntimeException):
+
+    def __init__(self, msg: str, result_variables: "list[ResultVariable]") -> None:
+        RuntimeException.__init__(self, None, msg)
+        self.result_variables = result_variables
 
 
 class UnsetException(RuntimeException):

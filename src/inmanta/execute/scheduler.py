@@ -32,7 +32,7 @@ from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineRelation, DefineTypeConstraint
 from inmanta.ast.type import TYPES, Type
 from inmanta.const import LOG_LEVEL_TRACE
-from inmanta.execute.proxy import UnsetException
+from inmanta.execute.proxy import MultiUnsetException, UnsetException
 from inmanta.execute.runtime import (
     DelayedResultVariable,
     ExecutionContext,
@@ -265,6 +265,11 @@ class Scheduler:
 
         self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
+        # Dataclass validation
+        data_class_root = self.types["std::Dataclass"]
+        for dataclass in data_class_root.get_all_child_entities():
+            dataclass.pair_dataclass()
+
     def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
     ) -> Sequence[tuple[Location, AnchorTarget]]:
@@ -425,6 +430,10 @@ class Scheduler:
                 except UnsetException as e:
                     # some statements don't know all their dependencies up front,...
                     next.requeue_with_additional_requires(object(), e.get_result_variable())
+                except MultiUnsetException as e:
+                    # some statements don't know all their dependencies up front,...
+                    for rv in e.result_variables:
+                        next.requeue_with_additional_requires(object(), rv)
 
             # all safe stmts are done
             progress = False

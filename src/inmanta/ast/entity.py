@@ -16,8 +16,8 @@
     Contact: code@inmanta.com
 """
 
-# pylint: disable-msg=R0902,R0904
-
+import dataclasses
+import importlib
 from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
 from inmanta.ast import (
@@ -34,8 +34,13 @@ from inmanta.ast import (
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import Float, NamedType, NullableType, Type
-from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, dataflow
+from inmanta.const import DATACLASS_SELF_FIELD
+from inmanta.execute.proxy import MultiUnsetException
+from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, WrappedValueVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
+
+# pylint: disable-msg=R0902,R0904
+
 
 try:
     from typing import TYPE_CHECKING
@@ -91,7 +96,10 @@ class Entity(NamedType, WithComment):
 
         self.normalized = False
 
+        self._paired_dataclass: Type[object] = None
+
     def normalize(self) -> None:
+        self.normalized = True
         for attribute in self.__default_values.values():
             if attribute.default is not None:
                 default_type: Type = attribute.type.get_type(self.namespace)
@@ -507,6 +515,84 @@ class Entity(NamedType, WithComment):
 
     def get_location(self) -> Location:
         return self.location
+
+    def pair_dataclass(self) -> None:
+        assert self.normalized
+
+        # TODO: error reporting
+        namespace = self.namespace.get_full_name()
+
+        dataclass_module = importlib.import_module("inmanta_plugins." + namespace.replace("::", "."))
+        dataclass = getattr(dataclass_module, self.name)
+
+        assert dataclasses.is_dataclass(dataclass)
+        assert dataclass.__dataclass_params__.frozen
+
+        dc_fields = {f.name: f for f in dataclasses.fields(dataclass)}
+
+        for rel_or_attr_name in self.get_all_attribute_names():
+            rel_or_attr = self.get_attribute(rel_or_attr_name)
+            match rel_or_attr:
+                case inmanta.ast.attribute.RelationAttribute() as rel:
+                    # No relations except for requires and provides
+                    assert rel.entity.get_full_name() == "std::Entity", rel_or_attr_name
+                case inmanta.ast.attribute.Attribute() as attr:
+                    field = dc_fields.pop(rel_or_attr_name)
+                    inm_type = attr.get_type()
+
+                    # all own fields are primitive
+                    assert inm_type.is_primitive()
+
+                    # Type correspondence
+                    py_type = inm_type.as_python_type()
+                    assert py_type
+                    assert issubclass(field.type, py_type)
+
+        # Only std::none as implementation
+        for implement in self.get_implements():
+            for imp in implement.implementations:
+                assert imp.get_full_name() == "std::none"
+
+        # No index
+
+        assert not self.get_indices()
+
+        self._paired_dataclass = dataclass
+
+    def as_python_type(self) -> "typing.Type | None":
+        return self._paired_dataclass
+
+    def to_python(self, instance: object) -> "object":
+        if self._paired_dataclass is None:
+            assert False
+
+        assert isinstance(instance, Instance)
+        if DATACLASS_SELF_FIELD in instance.slots:
+            return instance.slots.get(DATACLASS_SELF_FIELD).get_value()
+        else:
+
+            # Handle unsets
+            unset = [
+                v
+                for k, v in instance.slots.items()
+                if k not in ["self", DATACLASS_SELF_FIELD, "requires", "provides"]
+                if not v.is_ready()
+            ]
+            if unset:
+                raise MultiUnsetException("Unset values when converting instance to dataclass", unset)
+
+            # Convert values
+            # All values are primitive, so this is trivial
+            kwargs = {
+                k: v.get_value()
+                for k, v in instance.slots.items()
+                if k not in ["self", DATACLASS_SELF_FIELD, "requires", "provides"]
+            }
+            out = self._paired_dataclass(**kwargs)
+
+            dataclass_self = WrappedValueVariable(out)
+            instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
+            return out
 
 
 # Kept for backwards compatibility. May be dropped from iso7 onwards.

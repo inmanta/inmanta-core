@@ -368,6 +368,7 @@ DEFAULT_INMANTA_DISK_LAYOUT_VERSION = 2
 # ID to represent the new scheduler as an agent
 AGENT_SCHEDULER_ID = "$__scheduler"
 
+DATACLASS_SELF_FIELD = " dataclass"
 
 # resource attributes for event propagation
 RESOURCE_ATTRIBUTE_SEND_EVENTS: typing.Final[str] = "send_event"
