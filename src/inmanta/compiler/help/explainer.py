@@ -21,7 +21,7 @@ import os
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
-from typing import Generic, Optional, TypeVar
+from typing import Generic, Optional, TypeVar, get_type_hints
 
 from jinja2 import Environment, PackageLoader
 
@@ -233,10 +233,12 @@ class {problem.entity.name}:
 
         if problem.dataclass is not None:
             # make inmanta presentation
+            hints = get_type_hints(problem.dataclass)
             model = f"\n\nTo update the inmanta entity. replace following code at {problem.entity.location}\n\n"
-            model += f"entity {problem.entity.name} extends std::Dataclass::\n"
-            for field in dataclasses.fields(problem.dataclass):
-                model += f"    {primtive_python_type_to_model_domain(field.type)} {field.name}\n"
+            model += f"entity {problem.entity.name} extends std::Dataclass:\n"
+            for field in sorted(dataclasses.fields(problem.dataclass), key=lambda x: x.name):
+                type = hints[field.name]
+                model += f"    {primtive_python_type_to_model_domain(type)} {field.name}\n"
 
             model += "end\n"
 

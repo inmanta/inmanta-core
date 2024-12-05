@@ -18,6 +18,7 @@
 
 import dataclasses
 import importlib
+import inspect
 import typing
 from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
@@ -388,7 +389,7 @@ class Entity(NamedType, WithComment):
         self._index_def.append(sorted(attributes))
         self._indexes.append(index_def)
         for child in self.child_entities:
-            child.add_index(attributes)
+            child.add_index(attributes, index_def)
 
     def get_indices(self) -> list[list[str]]:
         return self._index_def
@@ -551,10 +552,11 @@ class Entity(NamedType, WithComment):
                 self,
                 None,
                 dataclass_name,
-                f"The python object {module_name}.{dataclass.__name__} associated to  {self.get_full_name()} defined at {self.location} is not frozen. Dataclasses must be frozen.",
+                f"The python object {module_name}.{dataclass.__name__} associated to  {self.get_full_name()} defined at {self.location} is not frozen. Dataclasses must have a python counterpart that is a frozen dataclass.",
             )
 
         dc_fields = {f.name: f for f in dataclasses.fields(dataclass)}
+        failures = []
 
         for rel_or_attr_name in self.get_all_attribute_names():
             rel_or_attr = self.get_attribute(rel_or_attr_name)
@@ -562,47 +564,45 @@ class Entity(NamedType, WithComment):
                 case inmanta.ast.attribute.RelationAttribute() as rel:
                     # No relations except for requires and provides
                     if not rel.entity.get_full_name() == "std::Entity":
-                        raise DataClassException(
-                            self,
-                            f"The dataclass {self.get_full_name()} defined at {self.location} has a relation called {rel_or_attr_name}, defined at {rel.location}. Dataclasses are not allowed to have relations",
+                        failures.append(
+                            f"a relation called {rel_or_attr_name} is defined at {rel.location}. Dataclasses are not allowed to have relations"
                         )
                 case inmanta.ast.attribute.Attribute() as attr:
                     if rel_or_attr_name not in dc_fields:
-                        raise DataClassMismatchException(
-                            self,
-                            dataclass,
-                            dataclass_name,
-                            f"The dataclass {self.get_full_name()} defined at {self.location} has an attribute {rel_or_attr_name}, defined at {attr.location} that has not counterpart in the python domain. All attributes of a dataclasses must be identical in both the python and inmanta domain",
+                        failures.append(
+                            f"The attribute {rel_or_attr_name} has no counterpart in the python domain. All attributes of a dataclasses must be identical in both the python and inmanta domain.",
                         )
-                    #
+                        continue
                     field = dc_fields.pop(rel_or_attr_name)
                     inm_type = attr.get_type()
 
                     # all own fields are primitive
                     if not inm_type.is_primitive():
-                        raise DataClassException(
-                            self,
-                            f"The dataclass {self.get_full_name()} defined at {self.location} has an attribute {rel_or_attr_name}, defined at {attr.location} that is not primitive. All attributes of a dataclasses have to be of a primitive type.",
+                        failures.append(
+                            f"The attribute {rel_or_attr_name} of type `{inm_type}` is not primitive. All attributes of a dataclasses have to be of a primitive type.",
                         )
+                        continue
                     # Type correspondence
-                    py_type = inm_type.as_python_type()
-                    assert (
-                        py_type
-                    ), f"The inmanta type {inm_type} could not be converted to a python type, this should not happen"
-                    if not issubclass(field.type, py_type):
-                        raise DataClassMismatchException(
-                            self,
-                            dataclass,
-                            dataclass_name,
-                            f"The field {rel_or_attr_name} of dataclass {self.get_full_name()} defined at {self.location} does not have the same type as the same field on the associated dataclass.",
+                    if not inm_type.corresponds_to(field.type):
+                        failures.append(
+                            f"The attribute {rel_or_attr_name} does not have the same type as the associated field in the python domain. All attributes of a dataclasses must be identical in both the python and inmanta domain.",
                         )
 
-        if dc_fields:
+        for dcfield in dc_fields.keys():
+            failures.append(
+                f"The field {dcfield} doesn't exist in the inmanta domain. All attributes of a dataclasses must be identical in both the python and inmanta domain",
+            )
+
+        if failures:
+            python_file = inspect.getfile(dataclass)
+            _, python_lnr = inspect.getsourcelines(dataclass)
+            msgs = "\n".join(" " * 4 + "-" + failure for failure in failures)
             raise DataClassMismatchException(
                 self,
                 dataclass,
                 dataclass_name,
-                f"The python object {module_name}.{dataclass.__name__} associated to  {self.get_full_name()} defined at {self.location} has fields that don't exist in the inmanta domain: {' '.join(dc_fields.keys())}. All attributes of a dataclasses must be identical in both the python and inmanta domain",
+                f"The dataclass {self.get_full_name()} defined at {self.location} does not match the corresponding python dataclass at {python_file}:{python_lnr}. {len(failures)} errors:\n"
+                + msgs,
             )
 
         # Only std::none as implementation
@@ -623,10 +623,10 @@ class Entity(NamedType, WithComment):
 
         self._paired_dataclass = dataclass
 
-    def as_python_type(self) -> "typing.Type | None":
-        return self._paired_dataclass
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        return self._paired_dataclass == pytype
 
-    def as_python_type(self) -> "typing.Type | None":
+    def as_python_type_string(self) -> "str | None":
         if self._paired_dataclass is None:
             return None
         namespace = self.namespace.get_full_name()
@@ -634,15 +634,17 @@ class Entity(NamedType, WithComment):
         dataclass_name = module_name + "." + self.name
         return dataclass_name
 
+    def has_custom_to_python(self) -> bool:
+        return self._paired_dataclass is not None
+
     def to_python(self, instance: object) -> "object":
         if self._paired_dataclass is None:
-            assert False
+            assert False, f"This class {self.get_full_name()} has no associated python type, this conversion is not supported"
 
         assert isinstance(instance, Instance)
         if DATACLASS_SELF_FIELD in instance.slots:
             return instance.slots.get(DATACLASS_SELF_FIELD).get_value()
         else:
-
             # Handle unsets
             unset = [
                 v
@@ -714,6 +716,15 @@ class Implementation(NamedType):
 
     def get_location(self) -> Location:
         return self.location
+
+    def as_python_type_string(self) -> "str | None":
+        raise NotImplementedError("Implementations should not be arguments to plugins, this code is not expected to be called")
+
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        raise NotImplementedError("Implementations should not be arguments to plugins, this code is not expected to be called")
+
+    def to_python(self, instance: object) -> "object":
+        raise NotImplementedError("Implementations should not be arguments to plugins, this code is not expected to be called")
 
 
 class Implement(Locatable):

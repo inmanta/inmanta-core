@@ -23,6 +23,7 @@ import inspect
 import numbers
 import os
 import subprocess
+import typing
 import warnings
 from collections import abc
 from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Sequence, Type, TypeVar
@@ -31,7 +32,16 @@ import typing_inspect
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
-from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException, WithComment
+from inmanta.ast import (
+    LocatableString,
+    Location,
+    Namespace,
+    Range,
+    RuntimeException,
+    TypeNotFoundException,
+    WithComment,
+    entity,
+)
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.const import DATACLASS_SELF_FIELD
@@ -206,6 +216,19 @@ class Null(inmanta_type.Type):
     def type_string_internal(self) -> str:
         return self.type_string()
 
+    def as_python_type_string(self) -> "str | None":
+        return "None"
+
+    def corresponds_to(self, pytype: typing.Type) -> bool:
+        return pytype == type(None)
+
+    def has_custom_to_python(self) -> bool:
+        return True
+
+    def to_python(self, instance: object) -> "object":
+        assert instance is None
+        return None
+
 
 # Define some types which are used in the context of plugins.
 PLUGIN_TYPES = {
@@ -246,26 +269,32 @@ python_to_model = {
     numbers.Number: inmanta_type.Number(),
     int: inmanta_type.Integer(),
     bool: inmanta_type.Bool(),
+    dict: inmanta_type.LiteralDict(),
+    list: inmanta_type.LiteralList(),
 }
 
 
 def primtive_python_type_to_model_domain(intype: Type) -> inmanta_type.Type:
+    if typing_inspect.is_union_type(intype):
+        # only Optional should reach this
+        assert any(typing_inspect.is_optional_type(tt) for tt in typing_inspect.get_args(intype, evaluate=True))
+        other_types = [tt for tt in typing_inspect.get_args(intype, evaluate=True) if not typing_inspect.is_optional_type(tt)]
+        assert len(other_types) == 1
+        return inmanta_type.NullableType(primtive_python_type_to_model_domain(other_types[0]))
     if typing_inspect.is_generic_type(intype):
-        if typing_inspect.is_union_type(intype):
-            # only Optional should reach this
-            assert any(typing_inspect.is_optional_type(tt) for tt in typing_inspect.get_args(intype, evaluate=True))
-            other_types = [
-                tt for tt in typing_inspect.get_args(intype, evaluate=True) if not typing_inspect.is_optional_type(tt)
-            ]
-            assert len(other_types) == 1
-            return inmanta_type.NullableType(primtive_python_type_to_model_domain(other_types[0]))
-
         orig = typing_inspect.get_origin(intype)
         assert orig is not None  # Make mypy happy
-        assert issubclass(orig, list)  # Only one type of generic should get here
-        args = typing_inspect.get_args(intype, evaluate=True)
-        assert len(args) == 1
-        return inmanta_type.TypedList(primtive_python_type_to_model_domain(args[0]))
+
+        if issubclass(orig, dict):
+            args = typing_inspect.get_args(intype, evaluate=True)
+            assert len(args) == 2
+            assert issubclass(args[0], str)  # TODO
+            return inmanta_type.TypedDict(primtive_python_type_to_model_domain(args[1]))
+        else:
+            assert issubclass(orig, list)  # Only one type of generic should get here
+            args = typing_inspect.get_args(intype, evaluate=True)
+            assert len(args) == 1
+            return inmanta_type.TypedList(primtive_python_type_to_model_domain(args[0]))
     return python_to_model[intype]
 
 
@@ -408,28 +437,22 @@ class PluginReturn(PluginValue):
     VALUE_NAME = "return value"
 
     def to_model_domain(self, value: object, resolver: Resolver, queue: QueueScheduler, location: Location) -> object:
-        if dataclasses.is_dataclass(value):
-            python_type = self.resolved_type.as_python_type()
-            if python_type is not None and isinstance(value, python_type):
-                if value is None:
-                    return NoneValue()
-                base_type = self.resolved_type.get_base_type()
-                # TODO LISTS!!!
-                instance = base_type.get_instance(
-                    value.__dict__,
-                    resolver,
-                    queue,
-                    location,
-                    None,
-                )
-
-                dataclass_self = WrappedValueVariable(value)
-                instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
-                # generate an implementation
-                for stmt in base_type.get_sub_constructor():
-                    stmt.emit(instance, queue)
-                return instance
-            assert False
+        base_type = self.resolved_type.get_base_type()
+        if dataclasses.is_dataclass(value) and isinstance(base_type, entity.Entity) and base_type._paired_dataclass is not None:
+            # TODO LISTS!!!
+            instance = base_type.get_instance(
+                value.__dict__,
+                resolver,
+                queue,
+                location,
+                None,
+            )
+            dataclass_self = WrappedValueVariable(value)
+            instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
+            # generate an implementation
+            for stmt in base_type.get_sub_constructor():
+                stmt.emit(instance, queue)
+            return instance
 
         self.validate(value)
         return value
@@ -849,6 +872,15 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
     def type_string(self) -> str:
         return self.get_full_name()
+
+    def as_python_type_string(self) -> "str | None":
+        raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
+
+    def corresponds_to(self, pytype: Type) -> bool:
+        raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
+
+    def to_python(self, instance: object) -> "object":
+        raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
 
 
 @stable_api
