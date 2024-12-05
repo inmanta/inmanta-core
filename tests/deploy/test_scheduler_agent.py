@@ -45,7 +45,7 @@ from inmanta.data.model import ResourceVersionIdStr
 from inmanta.deploy import state, tasks
 from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ResourceScheduler
-from inmanta.deploy.state import BlockedStatus, ComplianceStatus
+from inmanta.deploy.state import BlockedStatus, ComplianceStatus, DeploymentResult
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
@@ -111,6 +111,11 @@ class DummyExecutor(executor.Executor):
             if resource_details.attributes.get(FAIL_DEPLOY, False) is True
             else const.ResourceState.deployed
         )
+        deployment_result = (
+            DeploymentResult.FAILED
+            if resource_details.attributes.get(FAIL_DEPLOY, False) is True
+            else DeploymentResult.DEPLOYED
+        )
         return DeployResult(
             resource_details.rvid,
             action_id,
@@ -118,6 +123,7 @@ class DummyExecutor(executor.Executor):
             messages=[],
             changes={},
             change=Change.nochange,
+            deployment_result=deployment_result,
         )
 
     async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
@@ -175,7 +181,23 @@ class ManagedExecutor(DummyExecutor):
         del self._deploys[resource_details.rid]
         self.execute_count += 1
 
-        return DeployResult(resource_details.rvid, action_id, status=result, messages=[], changes={}, change=Change.nochange)
+        deployment_result: state.DeploymentResult
+        match result:
+            case const.ResourceState.deployed:
+                deployment_result = state.DeploymentResult.DEPLOYED
+            case const.ResourceState.skipped:
+                deployment_result = state.DeploymentResult.SKIPPED
+            case _:
+                deployment_result = state.DeploymentResult.FAILED
+        return DeployResult(
+            resource_details.rvid,
+            action_id,
+            status=result,
+            messages=[],
+            changes={},
+            change=Change.nochange,
+            deployment_result=deployment_result,
+        )
 
 
 class DummyManager(executor.ExecutorManager[executor.Executor]):

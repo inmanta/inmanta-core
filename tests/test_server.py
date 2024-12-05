@@ -33,9 +33,9 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from inmanta import config, const, data, loader, resources, util
 from inmanta.agent import executor, handler
 from inmanta.const import ParameterSource
-from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
+from inmanta.data import AUTO_DEPLOY, ResourceIdStr, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
-from inmanta.deploy import persistence
+from inmanta.deploy import persistence, state
 from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
@@ -1262,13 +1262,14 @@ async def test_send_deploy_done(server, client, environment, agent, caplog, meth
     )
     await cm.insert()
 
-    rid_r1 = "std::testing::NullResource[agent1,name=file1]"
+    rid_r1 = ResourceIdStr("std::testing::NullResource[agent1,name=file1]")
     rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1},v={model_version}")
+    attributes = {"purge_on_delete": False, "purged": True, "requires": []}
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.available,
         resource_version_id=rvid_r1_v1,
-        attributes={"purge_on_delete": False, "purged": True, "requires": []},
+        attributes=attributes,
     ).insert()
 
     # Add parameter for resource
@@ -1315,6 +1316,7 @@ async def test_send_deploy_done(server, client, environment, agent, caplog, meth
         ]
         if method_to_use == "send_deploy_done":
             await update_manager.send_deploy_done(
+                attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes),
                 result=executor.DeployResult(
                     rvid=rvid_r1_v1,
                     action_id=action_id,
@@ -1322,7 +1324,8 @@ async def test_send_deploy_done(server, client, environment, agent, caplog, meth
                     messages=messages,
                     changes={"attr1": AttributeStateChange(current=None, desired="test")},
                     change=const.Change.purged,
-                )
+                    deployment_result=state.DeploymentResult.DEPLOYED,
+                ),
             )
         else:
             result = await agent._client.resource_action_update(
@@ -1398,6 +1401,7 @@ async def test_send_deploy_done(server, client, environment, agent, caplog, meth
     # A new send_deploy_done call for the same action_id should result in a ValueError
     with pytest.raises(ValueError):
         await update_manager.send_deploy_done(
+            attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes),
             result=executor.DeployResult(
                 rvid=rvid_r1_v1,
                 action_id=action_id,
@@ -1405,7 +1409,8 @@ async def test_send_deploy_done(server, client, environment, agent, caplog, meth
                 messages=[],
                 changes={"attr1": AttributeStateChange(current="test", desired="test2")},
                 change=const.Change.created,
-            )
+                deployment_result=state.DeploymentResult.DEPLOYED,
+            ),
         )
 
 
@@ -1426,12 +1431,14 @@ async def test_send_deploy_done_invalid_state(server, client, environment, agent
     )
     await cm.insert()
 
-    rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
+    rid_r1_v1 = ResourceIdStr("std::testing::NullResource[agent1,name=file1]")
+    rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1_v1},v={model_version}")
+    attributes = {"purge_on_delete": False, "requires": []}
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.available,
         resource_version_id=rvid_r1_v1,
-        attributes={"purge_on_delete": False, "requires": []},
+        attributes=attributes,
     ).insert()
 
     action_id = uuid.uuid4()
@@ -1440,6 +1447,7 @@ async def test_send_deploy_done_invalid_state(server, client, environment, agent
 
     with pytest.raises(ValueError) as exec_info:
         await update_manager.send_deploy_done(
+            attribute_hash=util.make_attribute_hash(resource_id=rid_r1_v1, attributes=attributes),
             result=executor.DeployResult(
                 rvid=rvid_r1_v1,
                 action_id=action_id,
@@ -1447,9 +1455,10 @@ async def test_send_deploy_done_invalid_state(server, client, environment, agent
                 messages=[],
                 changes={"attr1": AttributeStateChange(current=None, desired="test")},
                 change=const.Change.created,
-            )
+                deployment_result=state.DeploymentResult.DEPLOYED,
+            ),
         )
-    assert "No transient state can be used to mark a deployment as done" in str(exec_info.value)
+    assert "Resource state ResourceState.deploying is not a valid state for a deployment result." in str(exec_info.value)
 
 
 async def test_send_deploy_done_error_handling(server, client, environment, agent):
@@ -1472,6 +1481,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
     # Resource doesn't exist
     with pytest.raises(ValueError) as exec_info:
         await update_manager.send_deploy_done(
+            attribute_hash="",
             result=executor.DeployResult(
                 rvid=rvid_r1_v1,
                 action_id=uuid.uuid4(),
@@ -1479,7 +1489,8 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
                 messages=[],
                 changes={},
                 change=const.Change.nochange,
-            )
+                deployment_result=state.DeploymentResult.DEPLOYED,
+            ),
         )
     assert "The resource with the given id does not exist in the given environment" in str(exec_info.value)
 
@@ -1494,6 +1505,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
     # Resource action doesn't exist
     with pytest.raises(ValueError) as exec_info:
         await update_manager.send_deploy_done(
+            attribute_hash="",
             result=executor.DeployResult(
                 rvid=rvid_r1_v1,
                 action_id=uuid.uuid4(),
@@ -1501,7 +1513,8 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
                 messages=[],
                 changes={},
                 change=const.Change.nochange,
-            )
+                deployment_result=state.DeploymentResult.DEPLOYED,
+            ),
         )
     assert "No resource action exists for action_id" in str(exec_info.value)
 

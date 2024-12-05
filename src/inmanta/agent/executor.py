@@ -496,7 +496,7 @@ class DeployResult:
 
     def __post_init__(self) -> None:
         if self.status in {*const.TRANSIENT_STATES, *const.UNDEPLOYABLE_STATES, const.ResourceState.dry}:
-            raise Exception(f"Resource state {self.status} is not a valid state for a DeployResult.")
+            raise ValueError(f"Resource state {self.status} is not a valid state for a deployment result.")
         self.resource_id = Id.parse_id(self.rvid).resource_str()
 
     @classmethod

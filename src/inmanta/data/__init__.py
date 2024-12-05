@@ -20,7 +20,6 @@ import asyncio
 import copy
 import datetime
 import enum
-import hashlib
 import json
 import logging
 import re
@@ -62,7 +61,6 @@ from inmanta.data.model import (
     api_boundary_datetime_normalizer,
 )
 from inmanta.deploy import state
-from inmanta.protocol.common import custom_json_encoder
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -4638,15 +4636,7 @@ class Resource(BaseDocument):
         return {r["resource_id"] + ",v=" + str(version): const.ResourceState(r["last_non_deploying_status"]) for r in result}
 
     def make_hash(self) -> None:
-        character = json.dumps(
-            {k: v for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]},
-            default=custom_json_encoder,
-            sort_keys=True,  # sort the keys for stable hashes when using dicts, see #5306
-        )
-        m = hashlib.md5()
-        m.update(self.resource_id.encode("utf-8"))
-        m.update(character.encode("utf-8"))
-        self.attribute_hash = m.hexdigest()
+        self.attribute_hash = util.make_attribute_hash(self.resource_id, self.attributes)
 
     @classmethod
     async def get_resources(

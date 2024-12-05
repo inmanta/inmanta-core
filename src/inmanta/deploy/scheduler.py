@@ -54,11 +54,14 @@ from inmanta.resources import Id
 
 LOGGER = logging.getLogger(__name__)
 
+
 class UnmanagedResource(Exception):
     """
     An exception that indicates that a resource is not managed by the orchestrator.
     """
+
     pass
+
 
 @dataclass(frozen=True)
 class ResourceIntent:

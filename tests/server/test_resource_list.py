@@ -34,11 +34,11 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 import inmanta.util
 import util.performance
 import utils
-from inmanta import data
+from inmanta import data, util
 from inmanta.agent.executor import DeployResult
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource, ResourceIdStr, ResourceVersionIdStr
-from inmanta.deploy import persistence
+from inmanta.deploy import persistence, state
 from inmanta.server import config
 
 
@@ -790,6 +790,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 else:
                     status = ResourceState.deployed
                 await to_db_update_manager.send_deploy_done(
+                    attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resource),
                     result=DeployResult(
                         rvid=rvid,
                         action_id=actionid,
@@ -797,7 +798,8 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                         messages=[],
                         changes={},
                         change=None,
-                    )
+                        deployment_result=state.DeploymentResult.DEPLOYED,
+                    ),
                 )
 
         await asyncio.gather(*(deploy(resource) for resource in resources_in_increment_for_agent))

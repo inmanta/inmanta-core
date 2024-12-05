@@ -22,9 +22,9 @@ from collections import abc
 from typing import Optional
 
 import utils
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.agent import executor
-from inmanta.deploy import persistence
+from inmanta.deploy import persistence, state
 from inmanta.protocol.common import Result
 from inmanta.resources import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
@@ -1270,6 +1270,7 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     rvid3 = ResourceVersionIdStr(f"test::Resource[agent1,key=key3],v={version}")
     await update_manager.send_in_progress(action_id=action_id, resource_id=rvid3)
     await update_manager.send_deploy_done(
+        attribute_hash=util.make_attribute_hash(ResourceIdStr("test::Resource[agent1,key=key3]"), attributes=resources[2]),
         result=executor.DeployResult(
             rvid=rvid3,
             action_id=action_id,
@@ -1277,7 +1278,8 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
             messages=[],
             changes={},
             change=const.Change.nochange,
-        )
+            deployment_result=state.DeploymentResult.DEPLOYED,
+        ),
     )
 
     # Partial compile
