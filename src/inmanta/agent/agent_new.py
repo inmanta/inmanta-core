@@ -340,19 +340,16 @@ class Agent(SessionEndpoint):
     async def get_status(self) -> Apireturn:
         return 200, collect_report(self)
 
-    # @protocol.handle(methods_v2.get_scheduler_resource_state, env="tid")
-    # async def get_scheduler_resource_state(self, env: uuid.UUID) -> Apireturn:
-    #     LOGGER.error("BLAH")
-    #     # assert env == self.environment
-    #     return 200, SchedulerStatusReport()
-    #     # return await self.scheduler.get_resource_state()
 
-    @protocol.handle(methods_v2.get_scheduler_resource_state, compile_id="id")
-    async def get_scheduler_resource_state(self, compile_id: uuid.UUID) -> Optional[model.CompileData]:
-        compile: Optional[data.Compile] = await data.Compile.get_by_id(compile_id)
-        if compile is None:
-            raise NotFound("The given compile id does not exist")
-        return compile.to_dto().compile_data
+
+    @protocol.handle(methods.trigger_get_status, env="tid")
+    async def get_scheduler_resource_state(self, env: uuid.UUID) -> SchedulerStatusReport:
+        assert env == self.environment
+        resource_state = await self.scheduler.get_resource_state()
+        return SchedulerStatusReport(resource_state=resource_state)
+
+
+
 
     @protocol.handle(methods_v2.get_db_status)
     async def get_db_status(self) -> DataBaseReport:

@@ -899,7 +899,7 @@ LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
 
 class SchedulerStatusReport(BaseModel):
     # TODO Naming
-    pass
+    resource_state:  Mapping[ResourceIdStr, object]
 
 class DataBaseReport(BaseModel):
     """

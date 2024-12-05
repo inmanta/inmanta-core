@@ -24,7 +24,7 @@ from typing import Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
-from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig, ResourceIdStr
+from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig, ResourceIdStr, SchedulerStatusReport
 from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
@@ -354,6 +354,7 @@ def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSetting
     """
 
 
+
 @typedmethod(
     path="/environment_settings/<id>",
     operation="DELETE",
@@ -391,6 +392,21 @@ def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> Ret
     :param format: Use 'openapi' to get the schema in json format, leave empty or use 'swagger' to get the Swagger-UI view
     """
 
+@typedmethod(
+    path="/scheduler_status",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    api=True,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_scheduler_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
+    """
+    Inspect the scheduler state from the given environment.
+
+    :param tid: The id of the environment in which to inspect the scheduler.
+
+    """
 
 @typedmethod(
     path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
@@ -492,31 +508,6 @@ def get_db_status() -> DataBaseReport:
     """
     Get a report of the DB connection pool status
     """
-
-@typedmethod(
-    path="/scheduler_resource_state/<id>",
-    operation="GET",
-    client_types=[ClientType.api],
-    api_version=2,
-)
-def get_scheduler_resource_state(id: uuid.UUID) -> Optional[model.CompileData]:
-    """
-    Get the compile data for the given compile request.
-
-    :param id: The id of the compile.
-    """
-
-
-
-# @typedmethod(
-#     path="/scheduler_resource_state",  operation="GET", api=True, timeout=5, arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2,
-# )
-# def get_scheduler_resource_state(
-#     tid: uuid.UUID
-# ) -> model.SchedulerStatusReport:
-#     """
-#     Get a report of the resource scheduler status
-#     """
 
 @typedmethod(
     path="/compiledata/<id>",

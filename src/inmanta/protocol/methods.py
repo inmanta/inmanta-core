@@ -25,7 +25,7 @@ from typing import Any, Literal, Optional, Union
 from inmanta import const, data, resources
 from inmanta.const import ResourceState
 from inmanta.data import model
-from inmanta.data.model import PipConfig
+from inmanta.data.model import PipConfig, SchedulerStatusReport
 from inmanta.protocol import exceptions
 from inmanta.protocol.common import ArgOption
 from inmanta.protocol.decorators import method, typedmethod
@@ -489,6 +489,20 @@ def list_versions(tid: uuid.UUID, start: Optional[int] = None, limit: Optional[i
                   If None, a default limit (set to 1000) is applied.
     """
 
+#
+# @method(path="/scheduler_info", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
+# def get_scheduler_info(
+#     tid: uuid.UUID
+# ):
+#     """
+#     TODO
+#     """
+
+@method(path="/versionon", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
+def get_scheduler_info(
+    tid: uuid.UUID
+):
+    pass
 
 @method(path="/version/<id>", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def get_version(
@@ -1018,6 +1032,22 @@ def trigger_read_version(tid: uuid.UUID) -> int:
     Notify the scheduler that a new version has been released
 
     :param tid: The environment this agent is defined in
+    """
+
+@typedmethod(
+    path="/scheduler/state",
+    operation="GET",
+    server_agent=True,
+    enforce_auth=False,
+    timeout=5,
+    arg_options=AGENT_ENV_OPTS,
+    client_types=[],
+)
+def trigger_get_status(tid: uuid.UUID) -> SchedulerStatusReport:
+    """
+    Get a snapshot of the scheduler state
+
+    :param tid: The id of the environment.
     """
 
 

@@ -40,7 +40,7 @@ from inmanta.data.model import (
     ResourceDiff,
     ResourceIdStr,
     ResourceMinimal,
-    ResourceVersionIdStr,
+    ResourceVersionIdStr, SchedulerStatusReport,
 )
 from inmanta.db.util import ConnectionInTransaction
 from inmanta.protocol import handle, methods, methods_v2
@@ -452,6 +452,10 @@ class OrchestrationService(protocol.ServerSlice):
         }
 
         return 200, d
+
+
+
+
 
     @handle(methods.get_version, version_id="id", env="tid")
     async def get_version(
@@ -1304,6 +1308,18 @@ class OrchestrationService(protocol.ServerSlice):
         version_diff = to_state.generate_diff(from_state)
 
         return version_diff
+
+    @handle(methods_v2.get_scheduler_status, env="tid")
+    async def get_scheduler_status(
+        self,
+        env: data.Environment,
+    ) -> SchedulerStatusReport:
+
+        await self.autostarted_agent_manager._ensure_scheduler(env.id)
+        client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
+        if client is not None:
+            status = await client.trigger_get_status(tid=env.id)
+            return status
 
     def convert_resources(self, resources: list[data.Resource]) -> dict[ResourceIdStr, diff.Resource]:
         return {res.resource_id: diff.Resource(resource_id=res.resource_id, attributes=res.attributes) for res in resources}
