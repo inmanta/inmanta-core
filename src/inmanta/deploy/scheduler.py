@@ -254,67 +254,64 @@ class ResourceScheduler(TaskManager):
         """
         Initialize the scheduler state and continue the deployment where we were before the server was shutdown.
         """
-        async with self._intent_lock:
-            async with self._scheduler_lock:
-                async with data.Scheduler.get_connection() as con:
-                    async with con.transaction():
-                        # Make sure there is an entry for this scheduler in the scheduler database table
-                        await con.execute(
-                            f"""
-                                INSERT INTO {data.Scheduler.table_name()}
-                                VALUES($1, NULL)
-                                ON CONFLICT DO NOTHING
-                            """,
-                            self.environment,
-                        )
+        async with self._intent_lock, self._scheduler_lock, data.Scheduler.get_connection() as con, con.transaction():
+            # Make sure there is an entry for this scheduler in the scheduler database table
+            await con.execute(
+                f"""
+                    INSERT INTO {data.Scheduler.table_name()}
+                    VALUES($1, NULL)
+                    ON CONFLICT DO NOTHING
+                """,
+                self.environment,
+            )
 
-                        # Retrieve latest released model version
-                        latest_release_model: Optional[data.ConfigurationModel] = (
-                            await data.ConfigurationModel.get_latest_version(environment=self.environment, connection=con)
-                        )
-                        if latest_release_model is None:
-                            # No model version has been released yet. No scheduler state to restore from db.
-                            return
+            # Retrieve latest released model version
+            latest_release_model: Optional[data.ConfigurationModel] = (
+                await data.ConfigurationModel.get_latest_version(environment=self.environment, connection=con)
+            )
+            if latest_release_model is None:
+                # No model version has been released yet. No scheduler state to restore from db.
+                return
 
-                        # Check at which model version the scheduler was before it went down
-                        scheduler: Optional[data.Scheduler] = await Scheduler.get_one(
-                            environment=self.environment, connection=con
-                        )
-                        assert scheduler is not None
-                        last_processed_model_version = scheduler.last_processed_model_version
-                        if last_processed_model_version is not None:
-                            # Restore scheduler state like it was before the scheduler went down
-                            self._state = await ModelState.create_from_db(
-                                self.environment, last_processed_model_version, connection=con
-                            )
-                            self._work.link_to_new_requires_provides_view(
-                                requires_view=self._state.requires.requires_view(),
-                                provides_view=self._state.requires.provides_view(),
-                            )
-                        else:
-                            # This case can occur in two different situations:
-                            #   * A model version has been released, but the scheduler didn't process any version yet.
-                            #     In this case there is no scheduler state to restore.
-                            #   * We migrated the Inmanta server from an old version, that didn't have the resource state
-                            #     tracking in the database, to a version that does. To cover this case, we rely on the
-                            #     increment calculation to determine which resources have to be considered dirty and which
-                            #     not. This migration code path can be removed in a later major version.
-                            await self._recover_scheduler_state_using_increments_calculation(connection=con)
+            # Check at which model version the scheduler was before it went down
+            scheduler: Optional[data.Scheduler] = await Scheduler.get_one(
+                environment=self.environment, connection=con
+            )
+            assert scheduler is not None
+            last_processed_model_version = scheduler.last_processed_model_version
+            if last_processed_model_version is not None:
+                # Restore scheduler state like it was before the scheduler went down
+                self._state = await ModelState.create_from_db(
+                    self.environment, last_processed_model_version, connection=con
+                )
+                self._work.link_to_new_requires_provides_view(
+                    requires_view=self._state.requires.requires_view(),
+                    provides_view=self._state.requires.provides_view(),
+                )
+            else:
+                # This case can occur in two different situations:
+                #   * A model version has been released, but the scheduler didn't process any version yet.
+                #     In this case there is no scheduler state to restore.
+                #   * We migrated the Inmanta server from an old version, that didn't have the resource state
+                #     tracking in the database, to a version that does. To cover this case, we rely on the
+                #     increment calculation to determine which resources have to be considered dirty and which
+                #     not. This migration code path can be removed in a later major version.
+                await self._recover_scheduler_state_using_increments_calculation(connection=con)
 
-                        if (
-                            last_processed_model_version is not None
-                            and last_processed_model_version < latest_release_model.version
-                        ):
-                            # We restored the scheduler state from the database, but a newer, released version is available.
-                            # Load the new desired state into the scheduler and start the deployment.
-                            await self._read_version(intent_lock_acquired=True, scheduler_lock_acquired=True, connection=con)
-                        else:
-                            # No newer model version exists. Start deploying everything in dirty set.
-                            self._work.deploy_with_context(
-                                self._state.dirty,
-                                reason="Deploy was triggered because the scheduler was started",
-                                priority=TaskPriority.NEW_VERSION_DEPLOY,
-                            )
+            if (
+                last_processed_model_version is not None
+                and last_processed_model_version < latest_release_model.version
+            ):
+                # We restored the scheduler state from the database, but a newer, released version is available.
+                # Load the new desired state into the scheduler and start the deployment.
+                await self._read_version(intent_lock_acquired=True, scheduler_lock_acquired=True, connection=con)
+            else:
+                # No newer model version exists. Start deploying everything in dirty set.
+                self._work.deploy_with_context(
+                    self._state.dirty,
+                    reason="Deploy was triggered because the scheduler was started",
+                    priority=TaskPriority.NEW_VERSION_DEPLOY,
+                )
 
     async def _recover_scheduler_state_using_increments_calculation(self, *, connection: asyncpg.connection.Connection) -> None:
         """
