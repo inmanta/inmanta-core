@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Seq
 import typing_inspect
 
 import inmanta.ast.type as inmanta_type
-from inmanta import const, protocol, util
+from inmanta import const, protocol, util, references
 from inmanta.ast import (
     LocatableString,
     Location,
@@ -443,10 +443,10 @@ class PluginReturn(PluginValue):
         if is_datclass_based:
 
             def make_dc(value: object) -> object:
-                if dataclasses.is_dataclass(value):
+                if dataclasses.is_dataclass(value) or isinstance(value, references.Reference):
                     # TODO LISTS!!!
                     instance = base_type.get_instance(
-                        {k: v if v is not None else NoneValue() for k, v in value.__dict__.items()},
+                        {k: v if v is not None else NoneValue() for k, v in dataclasses.astuple(value)},
                         resolver,
                         queue,
                         location,

@@ -1,0 +1,6 @@
+
+entity Test extends std::Dataclass:
+    string value
+end
+
+implement Test using std::none

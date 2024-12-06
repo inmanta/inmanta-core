@@ -40,11 +40,13 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
         snippet="""
         import refs
         import std::testing
+        
+        test_ref = refs::create_test(value=refs::create_string_reference(name="CWD"))
 
         std::testing::NullResource(
             name="test",
             agentname="test",
-            fail=refs::create_bool_reference(name=refs::create_string_reference(name="CWD")),
+            fail=refs::create_bool_reference(name=test_ref.value),
         )
         """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],

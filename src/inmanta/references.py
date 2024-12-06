@@ -224,7 +224,19 @@ class Mutator(Base):
         return self._model
 
 
-class Reference[T: RefValue](Base):
+class RefMeta(type):
+    """ A metaclass to make Reference work with dataclasses"""
+
+    def __getattr__(cls, name: str) -> object:
+        """ Act as a dataclass if required """
+        if name == dataclasses._FIELDS:
+            print(name)
+
+        return type.__getstate__(cls)
+
+
+
+class Reference[T: RefValue](Base, metaclass=RefMeta):
     """Instances of this class can create references to a value and resolve them."""
 
     def __init__(self, **kwargs: object) -> None:
@@ -269,12 +281,12 @@ class Reference[T: RefValue](Base):
         :return: A reference to the attribute
         """
         value_type = self._get_T()
-        if dataclasses.is_dataclass(value_type) and name in value_type.__annotations__:
-            return AttributeReference(
-                resolver=self,
-                attribute_name=name,
-                attribute_type=value_type.__annotations__[name],
-            )
+        if dataclasses.is_dataclass(value_type) and name in dataclasses.fields(value_type):
+                return AttributeReference(
+                    resolver=self,
+                    attribute_name=name,
+                    attribute_type=value_type.__annotations__[name],
+                )
         raise AttributeError(name=name, obj=self)
 
 

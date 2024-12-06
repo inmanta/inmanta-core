@@ -1,6 +1,6 @@
 import os
+import dataclasses
 
-from inmanta.ast.type import String
 from inmanta.references import reference, Reference
 from inmanta.plugins import plugin
 
@@ -9,7 +9,7 @@ from inmanta.plugins import plugin
 class BoolReference(Reference[bool]):
     """A reference to fetch environment variables"""
 
-    def __init__(self, name: str | Reference[str]) -> None:
+    def __init__(self, name: str) -> None:
         """
         :param name: The name of the environment variable.
         """
@@ -25,7 +25,7 @@ class BoolReference(Reference[bool]):
 class StringReference(Reference[str]):
     """A reference to fetch environment variables"""
 
-    def __init__(self, name: str | Reference[str]) -> None:
+    def __init__(self, name: str) -> None:
         """
         :param name: The name of the environment variable.
         """
@@ -54,3 +54,29 @@ def create_bool_reference_cycle(name: "any") -> "bool":
     ref_cycle._arguments["name"] = ref_cycle
 
     return BoolReference(name=ref_cycle)
+
+
+@dataclasses.dataclass(frozen=True)
+class Test:
+    value: str
+
+
+@reference("refs::TestReference")
+class TestReference(Reference[Test]):
+    """A reference that returns a dataclass"""
+
+    def __init__(self, value: str) -> None:
+        """
+        :param value: The value
+        """
+        super().__init__(value=value)
+        self.value = value
+
+    def resolve(self) -> Test:
+        """Resolve test references"""
+        return Test(value=self.value)
+
+
+@plugin
+def create_test(value: "string") -> "refs::Test":
+    return TestReference(value=value)
