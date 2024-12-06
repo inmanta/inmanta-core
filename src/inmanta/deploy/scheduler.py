@@ -711,9 +711,9 @@ class ResourceScheduler(TaskManager):
 
             state: ResourceState = self._state.resource_state[resource]
 
-            recovered_from_failure: bool = (
-                deployment_result is DeploymentResult.DEPLOYED
-                and state.deployment_result not in (DeploymentResult.DEPLOYED, DeploymentResult.NEW)
+            recovered_from_failure: bool = deployment_result is DeploymentResult.DEPLOYED and state.deployment_result not in (
+                DeploymentResult.DEPLOYED,
+                DeploymentResult.NEW,
             )
 
             if details.attribute_hash != attribute_hash:
