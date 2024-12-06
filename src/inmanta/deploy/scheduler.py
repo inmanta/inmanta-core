@@ -18,6 +18,7 @@
 
 import abc
 import asyncio
+import json
 import logging
 import typing
 import uuid
@@ -33,7 +34,7 @@ from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import DeployResult, FactResult
-from inmanta.data import ConfigurationModel, Environment
+from inmanta.data import ConfigurationModel, Environment, Scheduler
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
@@ -52,6 +53,14 @@ from inmanta.protocol import Client
 from inmanta.resources import Id
 
 LOGGER = logging.getLogger(__name__)
+
+
+class UnmanagedResource(Exception):
+    """
+    An exception that indicates that a resource is not managed by the orchestrator.
+    """
+
+    pass
 
 
 @dataclass(frozen=True)
@@ -99,28 +108,6 @@ class TaskManager(StateUpdateManager, abc.ABC):
         or None if it is not (anymore) managed by the scheduler.
 
         Acquires appropriate locks.
-        """
-
-    @abstractmethod
-    async def report_resource_state(
-        self,
-        resource: ResourceIdStr,
-        *,
-        attribute_hash: str,
-        status: ComplianceStatus,
-        deployment_result: Optional[DeploymentResult] = None,
-    ) -> None:
-        """
-        Report new state for a resource. Since knowledge of deployment result implies a finished deploy, it must only be set
-        when a deploy has just finished.
-
-        Acquires appropriate locks
-
-        :param resource: The resource to report state for.
-        :param attribute_hash: The resource's attribute hash for which this state applies. No scheduler state is updated if the
-            hash indicates the state information is stale.
-        :param status: The new resource status.
-        :param deployment_result: The result of the deploy, iff one just finished, otherwise None.
         """
 
 
@@ -267,17 +254,71 @@ class ResourceScheduler(TaskManager):
         """
         Initialize the scheduler state and continue the deployment where we were before the server was shutdown.
         """
-        async with data.ConfigurationModel.get_connection() as con:
-            # Get resources from the database
-            try:
-                version, resources, requires = await self._get_resources_in_latest_version(connection=con)
-            except KeyError:
-                # No model version has been released yet.
+        async with self._intent_lock, self._scheduler_lock, data.Scheduler.get_connection() as con, con.transaction():
+            # Make sure there is an entry for this scheduler in the scheduler database table
+            await con.execute(
+                f"""
+                    INSERT INTO {data.Scheduler.table_name()}
+                    VALUES($1, NULL)
+                    ON CONFLICT DO NOTHING
+                """,
+                self.environment,
+            )
+
+            # Retrieve latest released model version
+            latest_release_model: Optional[data.ConfigurationModel] = await data.ConfigurationModel.get_latest_version(
+                environment=self.environment, connection=con
+            )
+            if latest_release_model is None:
+                # No model version has been released yet. No scheduler state to restore from db.
                 return
 
-            # Rely on the incremental calculation to determine which resources should be deployed and which not.
-            increment: set[ResourceIdStr]
-            increment, _ = await ConfigurationModel.get_increment(self.environment, version, connection=con)
+            # Check at which model version the scheduler was before it went down
+            scheduler: Optional[data.Scheduler] = await Scheduler.get_one(environment=self.environment, connection=con)
+            assert scheduler is not None
+            last_processed_model_version = scheduler.last_processed_model_version
+            if last_processed_model_version is not None:
+                # Restore scheduler state like it was before the scheduler went down
+                self._state = await ModelState.create_from_db(self.environment, last_processed_model_version, connection=con)
+                self._work.link_to_new_requires_provides_view(
+                    requires_view=self._state.requires.requires_view(),
+                    provides_view=self._state.requires.provides_view(),
+                )
+            else:
+                # This case can occur in two different situations:
+                #   * A model version has been released, but the scheduler didn't process any version yet.
+                #     In this case there is no scheduler state to restore.
+                #   * We migrated the Inmanta server from an old version, that didn't have the resource state
+                #     tracking in the database, to a version that does. To cover this case, we rely on the
+                #     increment calculation to determine which resources have to be considered dirty and which
+                #     not. This migration code path can be removed in a later major version.
+                await self._recover_scheduler_state_using_increments_calculation(connection=con)
+
+            if last_processed_model_version is not None and last_processed_model_version < latest_release_model.version:
+                # We restored the scheduler state from the database, but a newer, released version is available.
+                # Load the new desired state into the scheduler and start the deployment.
+                await self._read_version(intent_lock_acquired=True, scheduler_lock_acquired=True, connection=con)
+            else:
+                # No newer model version exists. Start deploying everything in dirty set.
+                self._work.deploy_with_context(
+                    self._state.dirty,
+                    reason="Deploy was triggered because the scheduler was started",
+                    priority=TaskPriority.NEW_VERSION_DEPLOY,
+                )
+
+    async def _recover_scheduler_state_using_increments_calculation(self, *, connection: asyncpg.connection.Connection) -> None:
+        """
+        This method exists for backwards compatibility reasons. It initializes the scheduler state
+        by relying on the increments calculation logic. This method starts the deployment process.
+        """
+        try:
+            version, resources, requires = await self._get_resources_in_latest_version(connection=connection)
+        except KeyError:
+            # No model version has been released yet.
+            return
+        # Rely on the incremental calculation to determine which resources should be deployed and which not.
+        increment: set[ResourceIdStr]
+        increment, _ = await ConfigurationModel.get_increment(self.environment, version, connection=connection)
 
         resources_to_deploy: Mapping[ResourceIdStr, ResourceDetails] = {rid: resources[rid] for rid in increment}
         up_to_date_resources: Mapping[ResourceIdStr, ResourceDetails] = {
@@ -290,6 +331,10 @@ class ResourceScheduler(TaskManager):
             requires=requires,
             up_to_date_resources=up_to_date_resources,
             reason="Deploy was triggered because the scheduler was started",
+            start_deployment=False,
+            intent_lock_acquired=True,
+            scheduler_lock_acquired=True,
+            connection=connection,
         )
 
     async def stop(self) -> None:
@@ -368,19 +413,31 @@ class ResourceScheduler(TaskManager):
 
         :return: resource_mapping {id -> resource details}
         """
-        async with data.Resource.get_connection(connection) as con:
-            resources_from_db = await data.Resource.get_resources_for_version(self.environment, version, connection=con)
-
-        resource_mapping = {
-            resource.resource_id: ResourceDetails(
-                resource_id=resource.resource_id,
-                attribute_hash=resource.attribute_hash,
-                attributes=resource.attributes,
-                status=resource.status,
+        resources_from_db = await data.Resource.get_resources_for_version_raw_with_persistent_state(
+            environment=self.environment,
+            version=version,
+            projection=None,
+            projection_persistent=None,
+            connection=connection,
+        )
+        result = {}
+        for resource in resources_from_db:
+            if const.ResourceState[resource["status"]] is const.ResourceState.undefined:
+                status = ComplianceStatus.UNDEFINED
+            elif (
+                resource["attribute_hash"] == resource["last_deployed_attribute_hash"]
+                and DeploymentResult[resource["deployment_result"]] is DeploymentResult.DEPLOYED
+            ):
+                status = ComplianceStatus.COMPLIANT
+            else:
+                status = ComplianceStatus.HAS_UPDATE
+            result[resource["resource_id"]] = ResourceDetails(
+                resource_id=resource["resource_id"],
+                attribute_hash=resource["attribute_hash"],
+                attributes=json.loads(resource["attributes"]),
+                status=status,
             )
-            for resource in resources_from_db
-        }
-        return resource_mapping
+        return result
 
     def _construct_requires_mapping(
         self, resources: Mapping[ResourceIdStr, ResourceDetails]
@@ -423,8 +480,17 @@ class ResourceScheduler(TaskManager):
         """
         if not self._running:
             return
+        await self._read_version()
+
+    async def _read_version(
+        self,
+        *,
+        intent_lock_acquired: bool = False,
+        scheduler_lock_acquired: bool = False,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
         try:
-            version, resources, requires = await self._get_resources_in_latest_version()
+            version, resources, requires = await self._get_resources_in_latest_version(connection=connection)
         except KeyError:
             # No model version has been released yet.
             return
@@ -434,6 +500,9 @@ class ResourceScheduler(TaskManager):
                 resources,
                 requires,
                 reason="Deploy was triggered because a new version has been released",
+                intent_lock_acquired=intent_lock_acquired,
+                scheduler_lock_acquired=scheduler_lock_acquired,
+                connection=connection,
             )
 
     async def reset_resource_state(self) -> None:
@@ -455,9 +524,20 @@ class ResourceScheduler(TaskManager):
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
         up_to_date_resources: Optional[Mapping[ResourceIdStr, ResourceDetails]] = None,
         reason: str = "Deploy was triggered because a new version has been released",
+        start_deployment: bool = True,
+        intent_lock_acquired: bool = False,
+        scheduler_lock_acquired: bool = False,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
+        """
+        :param intent_lock_acquired: True iff the self._intent_lock was already acquired before entering this method.
+        :param scheduler_lock_acquired: True iff the self._scheduler_lock was already acquired before entering this method.
+        """
+        intent_lock = self._intent_lock if not intent_lock_acquired else asyncio.Lock()
+        scheduler_lock = self._scheduler_lock if not scheduler_lock_acquired else asyncio.Lock()
         up_to_date_resources = {} if up_to_date_resources is None else up_to_date_resources
-        async with self._intent_lock:
+        async with data.Scheduler.get_connection(connection=connection) as con, con.transaction(), intent_lock:
             # Inspect new state and compare it with the old one before acquiring scheduler the lock.
             # This is safe because we only read intent-related state here, for which we've already acquired the lock
             deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
@@ -479,7 +559,7 @@ class ResourceScheduler(TaskManager):
                 self._state.add_up_to_date_resource(resource, details)
 
             for resource, details in resources.items():
-                if details.status is const.ResourceState.undefined:
+                if details.status is ComplianceStatus.UNDEFINED:
                     blocked_resources.add(resource)
                     self._work.delete_resource(resource)
                 elif resource in self._state.resources:
@@ -511,12 +591,12 @@ class ResourceScheduler(TaskManager):
                 blocked_resources
             ) + len(unblocked_resources)
 
-            # in the current implementation everything below the lock is synchronous, so it's not technically required. It is
-            # however kept for two reasons:
+            # in the current implementation everything below the lock is synchronous, so it's not technically required.
+            # It is however kept for two reasons:
             # 1. pass context once more to event loop before starting on the sync path
-            #   (could be achieved with a simple sleep(0) if desired)
+            #    (could be achieved with a simple sleep(0) if desired)
             # 2. clarity: it clearly signifies that this is the atomic and performance-sensitive part
-            async with self._scheduler_lock:
+            async with scheduler_lock:
                 self._state.version = version
                 for resource in blocked_resources:
                     self._state.block_resource(resource, resources[resource], is_transitive=False)
@@ -525,33 +605,66 @@ class ResourceScheduler(TaskManager):
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
                 transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
+                transitively_unblocked_resources: set[ResourceIdStr] = set()
                 for resource in unblocked_resources:
-                    self._state.mark_as_defined(resource, resources[resource])
+                    transitively_unblocked_resources.update(self._state.mark_as_defined(resource, resources[resource]))
                 # Update set of in-progress non-stale deploys by trimming resources with new state
                 self._deploying_latest.difference_update(
                     new_desired_state, deleted_resources, blocked_resources, transitively_blocked_resources
                 )
                 # ensure deploy for ALL dirty resources, not just the new ones
-                self._work.deploy_with_context(
-                    self._state.dirty,
-                    reason=reason,
-                    priority=TaskPriority.NEW_VERSION_DEPLOY,
-                    deploying=self._deploying_latest,
-                    added_requires=added_requires,
-                    dropped_requires=dropped_requires,
-                )
+                if start_deployment:
+                    self._work.deploy_with_context(
+                        self._state.dirty,
+                        reason=reason,
+                        priority=TaskPriority.NEW_VERSION_DEPLOY,
+                        deploying=self._deploying_latest,
+                        added_requires=added_requires,
+                        dropped_requires=dropped_requires,
+                    )
                 for resource in deleted_resources:
                     self._state.drop(resource)
                 for resource in blocked_resources | transitively_blocked_resources:
                     self._work.delete_resource(resource)
 
-            # Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added
-            # again by a deploy trigger (because we dropped them outside the lock).
+                # Updating the blocked state should be done under the scheduler lock, because this state is written
+                # by both the deploy and the new version code path.
+                resources_with_updated_blocked_state: Set[ResourceIdStr] = (
+                    blocked_resources
+                    | transitively_blocked_resources
+                    | unblocked_resources
+                    | transitively_unblocked_resources
+                    | up_to_date_resources.keys()
+                )
+
+                await self.update_resource_intent(
+                    self.environment,
+                    intent={
+                        rid: (self._state.resource_state[rid], self._state.resources[rid])
+                        for rid in resources_with_updated_blocked_state
+                    },
+                    update_blocked_state=True,
+                    connection=con,
+                )
+
+            # Once more, drop all resources that do not exist in this version from the scheduled work,
+            # in case they got added again by a deploy trigger (because we dropped them outside the lock).
             for resource in deleted_resources:
-                # Delete the deleted resources outside the _scheduler_lock, because we do not want to keep the _scheduler_lock
-                # acquired longer than required. The worst that can happen here is that we deploy the deleted resources one
-                # time too many, which is not so bad.
+                # Delete the deleted resources outside the _scheduler_lock, because we do not want to keep
+                # the _scheduler_lock acquired longer than required. The worst that can happen here is that
+                # we deploy the deleted resources one time too many, which is not so bad.
                 self._work.delete_resource(resource)
+
+            # Update intent for resources with new desired state
+            await self.update_resource_intent(
+                self.environment,
+                intent={rid: (self._state.resource_state[rid], self._state.resources[rid]) for rid in new_desired_state},
+                update_blocked_state=False,
+                connection=con,
+            )
+            # Mark orphaned resources
+            await self.update_orphan_state(self.environment, connection=con)
+            await self.set_last_processed_model_version(self.environment, version, connection=con)
 
     def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
@@ -640,73 +753,6 @@ class ResourceScheduler(TaskManager):
             self._deploying_latest.add(resource)
             return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=dependencies)
 
-    async def report_resource_state(
-        self,
-        resource: ResourceIdStr,
-        *,
-        attribute_hash: str,
-        status: ComplianceStatus,
-        deployment_result: Optional[DeploymentResult] = None,
-    ) -> None:
-        if deployment_result is DeploymentResult.NEW:
-            raise ValueError("report_resource_state should not be called to register new resources")
-
-        async with self._scheduler_lock:
-            # refresh resource details for latest model state
-            details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
-
-            if details is None:
-                # we are stale and removed
-                return
-
-            state: ResourceState = self._state.resource_state[resource]
-
-            if details.attribute_hash != attribute_hash:
-                # We are stale but still the last deploy
-                # We can update the deployment_result (which is about last deploy)
-                # We can't update status (which is about active state only)
-                # None of the event propagation or other update happen either for the same reason
-                if deployment_result is not None:
-                    state.deployment_result = deployment_result
-                return
-
-            # We are not stale
-            state.status = status
-            if deployment_result is not None:
-                # first update state, then send out events
-                self._deploying_latest.remove(resource)
-                state.deployment_result = deployment_result
-                self._work.finished_deploy(resource)
-                if deployment_result is DeploymentResult.DEPLOYED:
-                    self._state.dirty.discard(resource)
-                else:
-                    # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
-                    # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
-                    # (or skip) causes it to become dirty now.
-                    self._state.dirty.add(resource)
-                # propagate events
-                if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
-                    provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource, set())
-                    event_listeners: Set[ResourceIdStr] = {
-                        dependant
-                        for dependant in provides
-                        if (dependant_details := self._state.resources.get(dependant, None)) is not None
-                        # default to True for backward compatibility, i.e. not all resources have the field
-                        if dependant_details.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
-                    }
-                    if event_listeners:
-                        # do not pass deploying tasks because for event propagation we really want to start a new one,
-                        # even if the current intent is already being deployed
-                        task = Deploy(resource=resource)
-                        assert task in self._work.agent_queues.in_progress
-                        priority = self._work.agent_queues.in_progress[task]
-                        self._work.deploy_with_context(
-                            event_listeners,
-                            reason=f"Deploying because an event was received from {resource}",
-                            priority=priority,
-                            deploying=set(),
-                        )
-
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr
     ) -> Mapping[ResourceIdStr, const.ResourceState]:
@@ -746,11 +792,103 @@ class ResourceScheduler(TaskManager):
     async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
         await self._state_update_delegate.send_in_progress(action_id, resource_id)
 
-    async def send_deploy_done(self, result: DeployResult) -> None:
-        return await self._state_update_delegate.send_deploy_done(result)
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
+        try:
+            await self.update_scheduler_state_for_finished_deploy(attribute_hash, result)
+        except UnmanagedResource:
+            # The resource is no longer managed, no need to update the database state.
+            pass
+        else:
+            # Write deployment result to the database.
+            await self._state_update_delegate.send_deploy_done(attribute_hash, result)
+
+    async def update_scheduler_state_for_finished_deploy(self, attribute_hash: str, result: DeployResult) -> None:
+        """
+        Update the state of the scheduler based on the DeploymentResult of the given resource.
+
+        :raise UnmanagedResource: This update is about a resource that is no longer managed by the server.
+        """
+        resource_id = result.resource_id
+        if result.deployment_result is DeploymentResult.NEW:
+            raise ValueError("report_resource_state should not be called to register new resources")
+
+        async with self._scheduler_lock:
+            # refresh resource details for latest model state
+            details: Optional[ResourceDetails] = self._state.resources.get(resource_id, None)
+
+            if details is None:
+                # we are stale and removed
+                raise UnmanagedResource()
+
+            state: ResourceState = self._state.resource_state[resource_id]
+
+            if details.attribute_hash != attribute_hash:
+                # We are stale but still the last deploy
+                # We can update the deployment_result (which is about last deploy)
+                # We can't update status (which is about active state only)
+                # None of the event propagation or other update happen either for the same reason
+                state.deployment_result = result.deployment_result
+                return
+
+            # We are not stale
+            state.status = (
+                ComplianceStatus.COMPLIANT if result.status is const.ResourceState.deployed else ComplianceStatus.NON_COMPLIANT
+            )
+            # first update state, then send out events
+            self._deploying_latest.remove(resource_id)
+            state.deployment_result = result.deployment_result
+            self._work.finished_deploy(resource_id)
+            if result.deployment_result is DeploymentResult.DEPLOYED:
+                self._state.dirty.discard(resource_id)
+            else:
+                # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
+                # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
+                # (or skip) causes it to become dirty now.
+                self._state.dirty.add(resource_id)
+            # propagate events
+            if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
+                provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource_id, set())
+                event_listeners: Set[ResourceIdStr] = {
+                    dependant
+                    for dependant in provides
+                    if (dependant_details := self._state.resources.get(dependant, None)) is not None
+                    # default to True for backward compatibility, i.e. not all resources have the field
+                    if dependant_details.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
+                }
+                if event_listeners:
+                    # do not pass deploying tasks because for event propagation we really want to start a new one,
+                    # even if the current intent is already being deployed
+                    task = Deploy(resource=resource_id)
+                    assert task in self._work.agent_queues.in_progress
+                    priority = self._work.agent_queues.in_progress[task]
+                    self._work.deploy_with_context(
+                        event_listeners,
+                        reason=f"Deploying because an event was received from {resource_id}",
+                        priority=priority,
+                        deploying=set(),
+                    )
 
     async def dryrun_update(self, env: uuid.UUID, dryrun_result: executor.DryrunResult) -> None:
         await self._state_update_delegate.dryrun_update(env, dryrun_result)
 
     async def set_parameters(self, fact_result: FactResult) -> None:
         await self._state_update_delegate.set_parameters(fact_result)
+
+    async def update_resource_intent(
+        self,
+        environment: UUID,
+        intent: dict[ResourceIdStr, tuple[ResourceState, ResourceDetails]],
+        update_blocked_state: bool,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        await self._state_update_delegate.update_resource_intent(
+            environment, intent, update_blocked_state, connection=connection
+        )
+
+    async def update_orphan_state(self, environment: UUID, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        await self._state_update_delegate.update_orphan_state(environment, connection=connection)
+
+    async def set_last_processed_model_version(
+        self, environment: UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        await self._state_update_delegate.set_last_processed_model_version(environment, version, connection=connection)

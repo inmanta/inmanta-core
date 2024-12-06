@@ -282,7 +282,7 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     # assert f7.result["parameter"]["value"] == ""
 
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
-    assert result.code == 200
+    assert result.code == 200, result.result
 
     await wait_until_deployment_finishes(client, environment)
 

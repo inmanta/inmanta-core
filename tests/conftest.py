@@ -805,7 +805,7 @@ async def server_multi(
 
 
 @pytest.fixture(scope="function")
-async def auto_start_agent():
+async def auto_start_agent() -> bool:
     """Marker fixture, indicates if we expect scheduler autostart.
     If set to False, any attempt to start the scheduler results in failure"""
     return False
@@ -823,39 +823,57 @@ async def clienthelper(client, environment):
 
 
 @pytest.fixture(scope="function")
-async def agent(server, environment):
+async def agent_factory(server) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    agents: list[Agent] = []
+
+    async def create(environment: uuid.UUID) -> Agent:
+        # Mock scheduler state-dir: outside of tests this happens
+        # when the scheduler config is loaded, before starting the scheduler
+        server_state_dir = config.Config.get("config", "state-dir")
+        scheduler_state_dir = pathlib.Path(server_state_dir) / "server" / str(environment)
+        scheduler_state_dir.mkdir(exist_ok=True)
+        config.Config.set("config", "state-dir", str(scheduler_state_dir))
+        a = Agent(environment)
+        agents.append(a)
+        # Restore state-dir
+        config.Config.set("config", "state-dir", str(server_state_dir))
+
+        executor = InProcessExecutorManager(
+            environment,
+            a._client,
+            asyncio.get_event_loop(),
+            logger,
+            a.thread_pool,
+            str(pathlib.Path(a._storage["executors"]) / "code"),
+            str(pathlib.Path(a._storage["executors"]) / "venvs"),
+            False,
+        )
+
+        executor = WriteBarierExecutorManager(executor)
+
+        a.executor_manager = executor
+        a.scheduler.executor_manager = executor
+        a.scheduler.code_manager = utils.DummyCodeManager(a._client)
+        await a.start()
+        await utils.retry_limited(
+            lambda: agentmanager.get_agent_client(tid=environment, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=True)
+            is not None,
+            timeout=10,
+        )
+        return a
+
+    yield create
+
+    await asyncio.gather(*[agent.stop() for agent in agents])
+
+
+@pytest.fixture(scope="function")
+async def agent(server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]]) -> AsyncIterator[Agent]:
     """Construct an agent that can execute using the resource container"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
-    # Mock scheduler state-dir: outside of tests this happens
-    # when the scheduler config is loaded, before starting the scheduler
-    server_state_dir = config.Config.get("config", "state-dir")
-    scheduler_state_dir = pathlib.Path(server_state_dir) / "server" / str(environment)
-    scheduler_state_dir.mkdir(exist_ok=True)
-    config.Config.set("config", "state-dir", str(scheduler_state_dir))
-    a = Agent(environment)
-    # Restore state-dir
-    config.Config.set("config", "state-dir", str(server_state_dir))
-
-    executor = InProcessExecutorManager(
-        environment,
-        a._client,
-        asyncio.get_event_loop(),
-        logger,
-        a.thread_pool,
-        str(pathlib.Path(a._storage["executors"]) / "code"),
-        str(pathlib.Path(a._storage["executors"]) / "venvs"),
-        False,
-    )
-
-    executor = WriteBarierExecutorManager(executor)
-
-    a.executor_manager = executor
-    a.scheduler.executor_manager = executor
-    a.scheduler.code_manager = utils.DummyCodeManager(a._client)
-
-    await a.start()
-
+    a: Agent = await agent_factory(uuid.UUID(environment))
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     yield a
