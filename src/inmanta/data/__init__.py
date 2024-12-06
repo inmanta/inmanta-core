@@ -6015,14 +6015,14 @@ class ConfigurationModel(BaseDocument):
 
         outset: set[ResourceIdStr] = {res["resource_id"] for res in increment}
         original_provides: dict[str, list[ResourceIdStr]] = defaultdict(list)
-        send_events: list[ResourceIdStr] = []
+        send_events: set[ResourceIdStr] = set()
 
         # build lookup tables
         for res in resources:
             for req in res["requires"]:
                 original_provides[req].append(res["resource_id"])
             if res["send_event"]:
-                send_events.append(res["resource_id"])
+                send_events.add(res["resource_id"])
 
         # recursively include stuff potentially receiving events from nodes in the increment
         increment_work: list[ResourceIdStr] = list(outset)
