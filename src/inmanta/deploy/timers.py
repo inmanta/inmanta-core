@@ -124,6 +124,7 @@ class TimerManager:
     async def reset(self) -> None:
         await self.stop()
 
+        self._cron_scheduler = util.Scheduler("Resource scheduler")
         self.global_periodic_repair_task = None
         self.global_periodic_deploy_task = None
         self.periodic_repair_interval = None
