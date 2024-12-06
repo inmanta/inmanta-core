@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import contextlib
 import logging
 from collections.abc import Collection
 from typing import TYPE_CHECKING
@@ -307,4 +308,5 @@ class TimerManager:
         """
         self.stop_timers(resources)
         for resource in resources:
-            del self.resource_timers[resource]
+            with contextlib.suppress(KeyError):
+                del self.resource_timers[resource]
