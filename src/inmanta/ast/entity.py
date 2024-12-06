@@ -625,7 +625,7 @@ class Entity(NamedType, WithComment):
                 dataclass,
                 dataclass_name,
                 f"The dataclass {self.get_full_name()} defined at {self.location} does not match"
-                f" the corresponding python dataclass at {python_file}:{python_lnr}. {len(failures)} errors:\n" + msgs,
+                f" the corresponding python dataclass at {python_file}:{python_lnr}. {len(failures)} errors:\n" + msgs + "\n",
             )
 
         # Only std::none as implementation
