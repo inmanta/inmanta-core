@@ -385,10 +385,9 @@ class ResourceScheduler(TaskManager):
 
             if self._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy
                 return
-            to_deploy: set[ResourceIdStr] = {resource}
             self._timer_manager.stop_timer(resource)
             self._work.deploy_with_context(
-                to_deploy,
+                {resource},
                 reason=reason,
                 priority=priority,
                 deploying=self._deploying_latest,
@@ -570,7 +569,6 @@ class ResourceScheduler(TaskManager):
                     self._state.dirty | undefined | blocked_for_undefined_dep
                 )
                 self._timer_manager.remove_timers(deleted_resources)
-
                 # Install timers for initial up-to-date resources. They are up-to-date now,
                 # but we want to make sure we periodically repair them.
                 self._timer_manager.update_timers(up_to_date_resources, are_compliant=True)
@@ -675,11 +673,10 @@ class ResourceScheduler(TaskManager):
             return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=None)
 
     async def deploy_start(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
-
         async with self._scheduler_lock:
             # fetch resource details under lock
             resource_details = self._get_resource_intent(resource)
-            if resource_details is None or self._state.resource_state[resource].blocked is BlockedStatus.YES::
+            if resource_details is None or self._state.resource_state[resource].blocked is BlockedStatus.YES:
                 return None
             dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
             self._deploying_latest.add(resource)
