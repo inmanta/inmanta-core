@@ -898,6 +898,11 @@ class PipConfig(BaseModel):
 LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
 
 
+class SchedulerStatusReport(BaseModel):
+    # TODO Naming
+    resource_state: Mapping[ResourceIdStr, object]
+
+
 class DataBaseReport(BaseModel):
     """
     :param max_pool: maximal pool size

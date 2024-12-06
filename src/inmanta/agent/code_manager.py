@@ -34,7 +34,6 @@ LOGGER = logging.getLogger(__name__)
 
 
 class CouldNotResolveCode(Exception):
-
     def __init__(self, resource_type: str, version: int, error_message: str) -> None:
         self.msg = f"Failed to get source code for {resource_type} version={version}, result={error_message}"
         super().__init__(self.msg)

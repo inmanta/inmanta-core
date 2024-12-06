@@ -67,7 +67,6 @@ class StateUpdateManager(abc.ABC):
 
 
 class ToDbUpdateManager(StateUpdateManager):
-
     def __init__(self, client: Client, environment: UUID) -> None:
         self.environment = environment
         # TODO: The client is only here temporarily while we fix the dryrun_update

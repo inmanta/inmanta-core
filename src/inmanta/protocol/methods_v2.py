@@ -393,6 +393,23 @@ def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> Ret
 
 
 @typedmethod(
+    path="/scheduler_status",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    api=True,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_scheduler_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
+    """
+    Inspect the scheduler state from the given environment.
+
+    :param tid: The id of the environment in which to inspect the scheduler.
+
+    """
+
+
+@typedmethod(
     path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
 def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:

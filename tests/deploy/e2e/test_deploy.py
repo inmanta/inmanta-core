@@ -120,12 +120,17 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     env_id = environment
     scheduler = agent.scheduler
 
+    introspect_state = await client.get_scheduler_status(env_id)
+    assert introspect_state.code == 200, introspect_state
+
     resource_container.Provider.reset()
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
     resource_container.Provider.set("agent2", "key", "value")
     resource_container.Provider.set("agent3", "key", "value")
     resource_container.Provider.set_fail("agent1", "key3", 2)
+    introspect_state = await client.get_scheduler_status(env_id)
+    assert introspect_state.code == 200, introspect_state
 
     async def make_version(is_different=False):
         """
@@ -206,7 +211,8 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         return version
 
     logger.info("setup done")
-
+    introspect_state = await client.get_scheduler_status(env_id)
+    assert introspect_state.code == 200, introspect_state
     version1, resources = await make_version()
     await clienthelper.put_version_simple(version=version1, resources=resources)
 
@@ -221,6 +227,9 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     logger.info("first version released")
 
     await clienthelper.wait_for_deployed()
+
+    introspect_state = await client.get_scheduler_status(env_id)
+    assert introspect_state.code == 200, introspect_state
 
     await check_scheduler_state(resources, scheduler)
     await resource_action_consistency_check()
@@ -240,7 +249,8 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     version1, resources = await make_version(True)
     await clienthelper.put_version_simple(version=version1, resources=resources)
     await make_marker_version()
-
+    introspect_state = await client.get_scheduler_status(env_id)
+    assert introspect_state.code == 200, introspect_state
     # deploy and wait until one is ready
     result = await client.release_version(env_id, version1, push=False)
     await clienthelper.wait_for_released(version1)
@@ -251,6 +261,8 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     await resource_action_consistency_check()
     assert resource_container.Provider.readcount("agentx", "key") == 0
+    introspect_state = await client.get_scheduler_status(env_id)
+    assert introspect_state.code == 200, introspect_state
 
     # deploy trigger
     await client.deploy(environment, agent_trigger_method=const.AgentTriggerMethod.push_incremental_deploy)
@@ -791,7 +803,6 @@ dep_states_reload = [
 
 @pytest.mark.parametrize("dep_state", dep_states_reload, ids=lambda x: x.name)
 async def test_reload(server, client, clienthelper, environment, resource_container, dep_state, agent):
-
     resource_container.Provider.reset()
 
     version = await clienthelper.get_version()

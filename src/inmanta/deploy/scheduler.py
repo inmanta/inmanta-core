@@ -24,7 +24,7 @@ import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
 from dataclasses import dataclass
-from typing import Optional
+from typing import NamedTuple, Optional, Tuple
 from uuid import UUID
 
 import asyncpg
@@ -35,7 +35,7 @@ from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
-from inmanta.deploy import work
+from inmanta.deploy import state, work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
 from inmanta.deploy.state import (
     AgentStatus,
@@ -190,6 +190,16 @@ class TaskRunner:
         if self._task is None or self._task.done():
             return
         await self._task
+
+
+class Discrepancy(NamedTuple):
+    """
+    Records a discrepancy for a resource between its status in the database
+    and its status in the scheduler state.
+    """
+
+    expected: str
+    actual: str
 
 
 class ResourceScheduler(TaskManager):
@@ -359,6 +369,88 @@ class ResourceScheduler(TaskManager):
                 priority=TaskPriority.FACT_REFRESH,
             )
         )
+
+    async def get_resource_state(self) -> dict[ResourceIdStr, ResourceState]:
+        """
+        Check that the state of the resources in the DB corresponds
+        to the internal state of the scheduler and return the internal
+        state
+        """
+        resources_in_db: Mapping[ResourceIdStr, ResourceDetails]
+
+        try:
+            _, resources_in_db, _ = await self._get_resources_in_latest_version()
+        except KeyError:
+            return {}
+
+        def _build_discrepancy_map(
+            resources_in_db: Mapping[ResourceIdStr, ResourceDetails]
+        ) -> dict[ResourceIdStr, list[Discrepancy]]:
+            """
+            For each resource in the given map, compare its persisted state in the database to its
+            state as it is assumed by the scheduler. Build and return a map of all detected discrepancies.
+
+            :param resources_in_db: Map of the state of resources in the database
+            :return: A dict mapping each resource to the discrepancies related to it (if any)
+            """
+            state_translation_table: dict[
+                const.ResourceState, Tuple[state.DeploymentResult, state.BlockedStatus, state.ComplianceStatus]
+            ] = {
+                # A table to translate the old states into the new states
+                # None means don't care, mostly used for values we can't derive from the old state
+                const.ResourceState.unavailable: (None, state.BlockedStatus.NO, state.ComplianceStatus.NON_COMPLIANT),
+                const.ResourceState.skipped: (state.DeploymentResult.SKIPPED, None, None),
+                const.ResourceState.dry: (None, None, None),  # don't care
+                const.ResourceState.deployed: (state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO, None),
+                const.ResourceState.failed: (state.DeploymentResult.FAILED, state.BlockedStatus.NO, None),
+                const.ResourceState.deploying: (None, state.BlockedStatus.NO, None),
+                const.ResourceState.available: (None, state.BlockedStatus.NO, state.ComplianceStatus.HAS_UPDATE),
+                const.ResourceState.undefined: (None, state.BlockedStatus.YES, state.ComplianceStatus.UNDEFINED),
+                const.ResourceState.skipped_for_undefined: (None, state.BlockedStatus.YES, None),
+            }
+            discrepancy_map: Mapping[ResourceIdStr, list[Discrepancy]] = {}
+
+            for rid, resource_details in resources_in_db.items():
+                resource_discrepancies: list[Discrepancy] = []
+                db_deploy_result, db_blocked_status, db_compliance_status = state_translation_table[resource_details.status]
+
+                scheduler_resource_state: ResourceState | None = self._state.resource_state.get(rid)
+
+                if not scheduler_resource_state:
+                    resource_discrepancies.append(
+                        Discrepancy(expected="status for resource PLACEHOLDER", actual="no status for resource PLACEHOLDER")
+                    )
+                else:
+                    if db_deploy_result:
+                        if scheduler_resource_state.deployment_result != db_deploy_result:
+                            resource_discrepancies.append(
+                                Discrepancy(expected=db_deploy_result, actual=scheduler_resource_state.deployment_result)
+                            )
+                    if db_blocked_status:
+                        if scheduler_resource_state.blocked != db_blocked_status:
+                            resource_discrepancies.append(
+                                Discrepancy(expected=db_blocked_status, actual=scheduler_resource_state.blocked)
+                            )
+                    if db_compliance_status:
+                        if scheduler_resource_state.status != db_compliance_status:
+                            resource_discrepancies.append(
+                                Discrepancy(expected=db_compliance_status, actual=scheduler_resource_state.status)
+                            )
+
+                if resource_discrepancies:
+                    discrepancy_map[rid] = resource_discrepancies
+
+            return discrepancy_map
+
+        def _log_discrepancies(discrepancies: Mapping[ResourceIdStr, list[Discrepancy]]) -> None:
+            for rid, discrepancies in discrepancies.items():
+                for discrepancy in discrepancies:
+                    LOGGER.info("Discrepancy for %s. Expected %s, got %s.", rid, discrepancy.expected, discrepancy.actual)
+
+        discrepancy_map = _build_discrepancy_map(resources_in_db)
+        _log_discrepancies(discrepancy_map)
+
+        return self._state.resource_state
 
     async def _build_resource_mappings_from_db(
         self, version: int, *, connection: Optional[asyncpg.connection.Connection] = None
@@ -707,6 +799,28 @@ class ResourceScheduler(TaskManager):
                             deploying=set(),
                         )
 
+    def translate_resource_state(self, resource_state_object: ResourceState) -> const.ResourceState | None:
+        """
+        Project a ResourceState (multi-vector object) into a const.ResourceState (single string denoting its status).
+        """
+        match resource_state_object:
+            case ResourceState(status=ComplianceStatus.UNDEFINED):
+                resource_state = const.ResourceState.undefined
+            case ResourceState(blocked=BlockedStatus.YES):
+                resource_state = const.ResourceState.skipped_for_undefined
+            case ResourceState(status=ComplianceStatus.HAS_UPDATE):
+                resource_state = const.ResourceState.available
+            case ResourceState(deployment_result=DeploymentResult.SKIPPED):
+                resource_state = const.ResourceState.skipped
+            case ResourceState(deployment_result=DeploymentResult.DEPLOYED):
+                resource_state = const.ResourceState.deployed
+            case ResourceState(deployment_result=DeploymentResult.FAILED):
+                resource_state = const.ResourceState.failed
+            case _:
+                raise Exception(f"Cannot translate resource state: {resource_state_object}")
+
+        return resource_state
+
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr
     ) -> Mapping[ResourceIdStr, const.ResourceState]:
@@ -723,21 +837,7 @@ class ResourceScheduler(TaskManager):
         dependencies_state = {}
         for dep_id in dependencies:
             resource_state_object: ResourceState = self._state.resource_state[dep_id]
-            match resource_state_object:
-                case ResourceState(status=ComplianceStatus.UNDEFINED):
-                    dependencies_state[dep_id] = const.ResourceState.undefined
-                case ResourceState(blocked=BlockedStatus.YES):
-                    dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
-                case ResourceState(status=ComplianceStatus.HAS_UPDATE):
-                    dependencies_state[dep_id] = const.ResourceState.available
-                case ResourceState(deployment_result=DeploymentResult.SKIPPED):
-                    dependencies_state[dep_id] = const.ResourceState.skipped
-                case ResourceState(deployment_result=DeploymentResult.DEPLOYED):
-                    dependencies_state[dep_id] = const.ResourceState.deployed
-                case ResourceState(deployment_result=DeploymentResult.FAILED):
-                    dependencies_state[dep_id] = const.ResourceState.failed
-                case _:
-                    raise Exception(f"Failed to parse the resource state for {dep_id}: {resource_state_object}")
+            dependencies_state[dep_id] = self.translate_resource_state(resource_state_object)
         return dependencies_state
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
