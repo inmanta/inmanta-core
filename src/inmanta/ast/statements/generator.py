@@ -73,7 +73,6 @@ from inmanta.execute.runtime import (
     VariableResolver,
     WrappedValueVariable,
 )
-from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
 
 try:
@@ -151,15 +150,13 @@ class SubConstructor(RequiresEmitStatement):
         if not condition:
             return None
 
-        myqueue = queue.for_tracker(ImplementsTracker(self, instance))
-
         implementations = self.implements.implementations
 
         for impl in implementations:
             if instance.add_implementation(impl):
                 # generate a subscope/namespace for each loop
                 xc = ExecutionContext(impl.statements, instance.for_namespace(impl.statements.namespace))
-                xc.emit(myqueue)
+                xc.emit(queue)
 
         return None
 
@@ -1182,8 +1179,6 @@ class Constructor(ExpressionStatement):
         # generate an implementation
         for stmt in type_class.get_sub_constructor():
             stmt.emit(object_instance, queue)
-
-        object_instance.trackers.append(queue.get_tracker())
 
         return object_instance
 

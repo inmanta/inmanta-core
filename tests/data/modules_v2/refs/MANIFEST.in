@@ -1,0 +1,4 @@
+include inmanta_plugins/refs/setup.cfg
+recursive-include inmanta_plugins/refs/model *.cf
+graft inmanta_plugins/refs/files
+graft inmanta_plugins/refs/templates
