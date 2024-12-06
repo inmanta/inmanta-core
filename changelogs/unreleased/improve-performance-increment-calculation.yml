@@ -1,0 +1,6 @@
+---
+description: Improve the performance of the increment calculation.
+change-type: patch
+destination-branches: [iso7]
+sections:
+  minor-improvement: "{{description}}"
