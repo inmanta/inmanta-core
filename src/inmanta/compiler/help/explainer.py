@@ -240,7 +240,7 @@ class {problem.entity.name}:
             for field in sorted(dataclasses.fields(problem.dataclass), key=lambda x: x.name):
                 type = hints[field.name]
                 try:
-                    type_str = primitive_python_type_to_model_domain(type)
+                    type_str = primitive_python_type_to_model_domain(type).type_string()
                 except Exception:
                     logging.info(
                         "Could not construct inmanta type for field %s with python type %s",

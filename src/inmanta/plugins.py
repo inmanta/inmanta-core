@@ -798,7 +798,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 raise RuntimeException(None, f"{self.get_full_name()}() got multiple values for argument '{name}'")
 
             # (4) Validate the input value
-            result: object
             if isinstance(value, Unknown):
                 result = value
                 is_unknown = True

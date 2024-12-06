@@ -101,7 +101,7 @@ class Entity(NamedType, WithComment):
 
         self.normalized = False
 
-        self._paired_dataclass: Type[object] = None
+        self._paired_dataclass: typing.Type[object] | None = None
         # Entities can be paired up to python dataclasses
         # If such a sibling exists, the type is kept here
         # Every instance of such entity can cary the associated python object in a slot called `DATACLASS_SELF_FIELD`
@@ -657,7 +657,7 @@ class Entity(NamedType, WithComment):
             return None
         namespace = self.namespace.get_full_name()
         module_name = "inmanta_plugins." + namespace.replace("::", ".")
-        dataclass_name = module_name + "." + self.name
+        dataclass_name: str = module_name + "." + self.name
         return dataclass_name
 
     def has_custom_to_python(self) -> bool:

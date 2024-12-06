@@ -291,8 +291,6 @@ implement Test_no_doc using b
     )
     anchormap = compiler.anchormap()
 
-    assert len(anchormap) == 10
-
     checkmap = {(r.lnr, r.start_char, r.end_char): t.docstring for r, t in anchormap}
 
     def verify_anchor(flnr, s, e, docs):
@@ -300,6 +298,9 @@ implement Test_no_doc using b
 
     for f, t in sorted(anchormap, key=lambda x: x[0].lnr):
         print("%s:%d -> %s docstring: %s" % (f, f.end_char, t, t.docstring))
+
+    assert len(anchormap) == 11
+
     verify_anchor(4, 5, 18, "returns the length of the string")
     verify_anchor(5, 5, 17, None)
     verify_anchor(14, 5, 9, "this is a test entity")

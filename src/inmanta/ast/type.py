@@ -107,6 +107,7 @@ class Type(Locatable):
 
         Used only on the plugin boundary
         """
+        raise NotImplementedError()
 
     def as_python_type_string(self) -> "str | None":
         """
@@ -187,7 +188,7 @@ class NullableType(Type):
     def is_primitive(self) -> bool:
         return self.element_type.is_primitive()
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: typing.Type[object]) -> bool:
         if not typing_inspect.is_optional_type(pytype):
             return False
         # remove options from union
@@ -308,7 +309,7 @@ class Number(Primitive):
     def corresponds_to(self, pytype: typing.Type) -> bool:
         return pytype in [int, float]
 
-    def as_python_type_string(self) -> "typing.Type | None":
+    def as_python_type_string(self) -> "str | None":
         return "numbers.Number"
 
     def to_python(self, instance: object) -> "object":
@@ -353,7 +354,7 @@ class Float(Primitive):
     def corresponds_to(self, pytype: typing.Type) -> bool:
         return pytype is float
 
-    def as_python_type_string(self) -> "typing.Type | None":
+    def as_python_type_string(self) -> "str | None":
         return "float"
 
     def to_python(self, instance: object) -> "object":
@@ -388,7 +389,7 @@ class Integer(Number):
     def corresponds_to(self, pytype: typing.Type) -> bool:
         return pytype is int
 
-    def as_python_type_string(self) -> "typing.Type | None":
+    def as_python_type_string(self) -> "str | None":
         return "int"
 
     def to_python(self, instance: object) -> "object":
@@ -434,7 +435,7 @@ class Bool(Primitive):
     def corresponds_to(self, pytype: typing.Type) -> bool:
         return pytype is bool
 
-    def as_python_type_string(self) -> "typing.Type | None":
+    def as_python_type_string(self) -> "str | None":
         return "bool"
 
     def to_python(self, instance: object) -> "object":
@@ -608,6 +609,7 @@ class TypedList(List):
         return f"list[{self.element_type.as_python_type_string()}]"
 
     def to_python(self, instance: object) -> "object":
+        assert isinstance(instance, Sequence), f"This method can only be called on iterables, not on {type(instance)}"
         return [self.element_type.to_python(element) for element in instance]
 
     def has_custom_to_python(self) -> bool:
@@ -842,6 +844,7 @@ class Literal(Union):
             return True
         if Dict.corresponds_to(self, pytype):
             return True
+        return False
 
 
 @stable_api
