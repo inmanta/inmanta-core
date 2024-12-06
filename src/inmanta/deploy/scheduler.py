@@ -706,80 +706,6 @@ class ResourceScheduler(TaskManager):
         deployment_result: Optional[DeploymentResult] = None,
     ) -> None:
 
-        def _propagate_events(details: ResourceDetails, send_recovery_events: bool) -> None:
-            """
-            Helper method for event propagation. Should be called under the scheduler lock.
-            This method will inform dependant resources:
-
-                - If this resource successfully recovered, we must inform all dependant resources
-                  that are not blocked.
-                - If event propagation (SEND) is configured for this resource, inform all
-                  dependant resources with event propagation (RECEIVE), regardless of deployment
-                  result.
-
-            :param details: Details for the given resource that has just finished deploying.
-            :param send_recovery_events: This resource went from 'not deployed' to 'deployed',
-                inform unblocked dependants that they might be able to progress.
-            """
-            resource_id: ResourceIdStr = details.resource_id
-            # Set of dependant resources that are interested in deploys of the current resource
-            concerned_resources: set[ResourceIdStr] = set()
-            provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource_id, set())
-
-            reason = f"Deploying because an event was received from {resource_id}"
-            if send_recovery_events:
-                reason = f"Deploying because of successful deployment of dependency {resource_id}"
-
-                # This resource went from not deployed to deployed
-                # we have to inform its dependants regardless of event propagation
-                # so that we can try to re-deploy them in case this resource's previous
-                # failure was the reason they were skipped
-
-                for dependant in provides:
-                    if not self._state.resources.get(dependant, None):
-                        continue
-                    if not (dependant_status := self._state.resource_state.get(dependant, None)):
-                        continue
-                    # FIXME: stop informing resource skipped because of
-                    #  a custom handler skip via this mechanism
-                    # change BlockedStatus.NO to BlockedStatus.TRANSIENT
-                    # when https://github.com/inmanta/inmanta-core/pull/8383 is in
-                    # FIXME: also update docstring to reflect this change
-
-                    if dependant_status.blocked is BlockedStatus.NO:
-                        concerned_resources.add(dependant)
-
-            # These resources might be able to progress now -> add them to the dirty set
-            self._state.dirty.update(concerned_resources)
-
-            event_listeners: set[ResourceIdStr] = set()
-            if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
-                event_listeners = {
-                    dependant
-                    for dependant in provides
-                    if (dependant_details := self._state.resources.get(dependant, None)) is not None
-                    # default to True for backward compatibility, i.e. not all resources have the field
-                    if dependant_details.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
-                    if (dependant_status := self._state.resource_state.get(dependant, None)) is not None
-                    if dependant_status.blocked != BlockedStatus.YES
-                }
-
-            concerned_resources |= event_listeners
-
-            if concerned_resources:
-                # do not pass deploying tasks because for event propagation we really want to start a new one,
-                # even if the current intent is already being deployed
-                task = Deploy(resource=resource_id)
-                assert task in self._work.agent_queues.in_progress
-                priority = self._work.agent_queues.in_progress[task]
-                self._timer_manager.remove_resources(concerned_resources)
-                self._work.deploy_with_context(
-                    concerned_resources,
-                    reason=reason,
-                    priority=priority,
-                    deploying=set(),
-                )
-
         if deployment_result is DeploymentResult.NEW:
             raise ValueError("report_resource_state should not be called to register new resources")
 
@@ -793,13 +719,22 @@ class ResourceScheduler(TaskManager):
 
             state: ResourceState = self._state.resource_state[resource]
 
+            recovered_from_failure: bool = (
+                deployment_result is DeploymentResult.DEPLOYED
+                state.deployment_result is not DeploymentResult.DEPLOYED
+            )
+
             if details.attribute_hash != attribute_hash:
                 # We are stale but still the last deploy
                 # We can update the deployment_result (which is about last deploy)
                 # We can't update status (which is about active state only)
                 # None of the event propagation or other update happen either for the same reason
+                # except for the event to notify dependents of failure recovery (to unblock skipped for dependencies)
+                # because we might otherwise miss the recovery.
                 if deployment_result is not None:
                     state.deployment_result = deployment_result
+                    if recovered_from_failure:
+                        self._send_events(details, stale_deploy=True, recovered_from_failure=True)
                 return
 
             # We are not stale
@@ -808,20 +743,11 @@ class ResourceScheduler(TaskManager):
                 # first update state, then send out events
                 self._deploying_latest.remove(resource)
 
-                previous_deployment_result = state.deployment_result
-
                 state.deployment_result = deployment_result
                 self._work.finished_deploy(resource)
 
-                # Keep track of recovery for this resource (went from "not DEPLOYED" to "DEPLOYED")
-                # for event propagation
-                has_recovered: bool = False
-
                 if deployment_result is DeploymentResult.DEPLOYED:
                     self._state.dirty.discard(resource)
-
-                    if previous_deployment_result != DeploymentResult.DEPLOYED:
-                        has_recovered = True
                 else:
                     # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
                     # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
@@ -829,10 +755,77 @@ class ResourceScheduler(TaskManager):
                     self._state.dirty.add(resource)
 
                 # propagate events
-                _propagate_events(details, has_recovered)
+                self._send_events(details, recovered_from_failure=recovered_from_failure)
 
             # No matter the deployment result, schedule a re-deploy for this resource
             self._timer_manager.update_resource(resource, is_compliant=(status is ComplianceStatus.COMPLIANT))
+
+    def _send_events(
+        sending_resource: ResourceDetails,
+        *,
+        stale_deploy: bool = False,
+        recovered_from_failure: bool,
+    ) -> None:
+        """
+        Send events to the appropriate dependents of the given resources. Sends out normal events to declared event listeners
+        unless this was triggered by a stale deploy. Additionally, if this was triggered by a failure recovery, it unblocks
+        skipped dependents where appropriate and sends them an event to deploy.
+
+        Expects to be called under the scheduler lock.
+
+        :param sending_resource: Details for the given resource that has just finished deploying.
+        :param state_deploy: The events are triggered by a stale deploy. Only recovery events will be sent.
+        :param recovered_from_failure: This resource went from 'not deployed' to 'deployed',
+            inform unblocked dependants that they might be able to progress.
+        """
+        resource_id: ResourceIdStr = details.resource_id
+        provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource_id, set())
+
+        event_listeners: Set[ResourceIdStr]
+        recovery_listeners: Set[ResourceIdStr]
+
+        if stale_deploy or not details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
+            event_listeners = {}
+        else:
+            event_listeners = {
+                dependent
+                for dependent in provides
+                if (dependent_details := self._state.resources.get(dependent, None)) is not None
+                # default to True for backward compatibility, i.e. not all resources have the field
+                if dependent_details.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
+                if self._state.resource_state[dependent].blocked is BlockedStatus.NO
+            }
+
+        if not recovered_from_failure:
+            recovery_listeners = {}
+        else:
+            recovery_listeners = {
+                for dependent in provides
+                if self._state.resource_state[dependent].blocked is BlockedStatus.TRANSIENT
+            }
+            # These resources might be able to progress now -> unblock them in addition to sending the event
+            self._state.dirty.update(recovery_listeners)
+            for skipped_dependent in recovery_listeners:
+                self._state.resource_state[skipped_dependent].blocked = BlockedStatus.NO
+
+        all_listeners: Set[ResourceIdStr] = event_listeners | recovery_listeners
+        if all_listeners:
+            # do not pass deploying tasks because for event propagation we really want to start a new one,
+            # even if the current intent is already being deployed
+            task = Deploy(resource=resource_id)
+            assert task in self._work.agent_queues.in_progress
+            priority = self._work.agent_queues.in_progress[task]
+            self._timer_manager.remove_resources(all_listeners)
+            self._work.deploy_with_context(
+                all_listeners,
+                reason=(
+                    f"Deploying because a recovery event was received from {resource_id}"
+                    if send_recovery_event:
+                    else f"Deploying because an event was received from {resource_id}"
+                ),
+                priority=priority,
+                deploying=set(),
+            )
 
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr
