@@ -444,6 +444,7 @@ class ResourceScheduler(TaskManager):
 
         def _log_discrepancies(discrepancies: Mapping[ResourceIdStr, list[Discrepancy]]) -> None:
             for rid, discrepancies in discrepancies.items():
+                LOGGER.error(f"discrepancies {discrepancies=}")
                 for discrepancy in discrepancies:
                     LOGGER.info("Discrepancy for %s. Expected %s, got %s.", rid, discrepancy.expected, discrepancy.actual)
 

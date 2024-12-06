@@ -1315,7 +1315,7 @@ class OrchestrationService(protocol.ServerSlice):
         client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
         if client is not None:
             status = await client.trigger_get_status(tid=env.id)
-            return status
+            return SchedulerStatusReport(resource_state=status.result)
 
     def convert_resources(self, resources: list[data.Resource]) -> dict[ResourceIdStr, diff.Resource]:
         return {res.resource_id: diff.Resource(resource_id=res.resource_id, attributes=res.attributes) for res in resources}

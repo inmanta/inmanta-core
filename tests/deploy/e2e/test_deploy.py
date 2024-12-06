@@ -38,6 +38,7 @@ from utils import (
     wait_full_success,
     wait_until_deployment_finishes,
 )
+from inmanta.resources import Id
 
 logger = logging.getLogger(__name__)
 
@@ -115,13 +116,12 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         - Construction of initial model state
         - Retrieval of data when a new version is released
         - Use test::Resourcex to ensure the executor doesn't mutate the input
+        - Test the endpoint to check scheduler internal state against the DB.
     """
 
     env_id = environment
     scheduler = agent.scheduler
 
-    introspect_state = await client.get_scheduler_status(env_id)
-    assert introspect_state.code == 200, introspect_state
 
     resource_container.Provider.reset()
     # set the deploy environment
@@ -129,8 +129,12 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     resource_container.Provider.set("agent2", "key", "value")
     resource_container.Provider.set("agent3", "key", "value")
     resource_container.Provider.set_fail("agent1", "key3", 2)
-    introspect_state = await client.get_scheduler_status(env_id)
-    assert introspect_state.code == 200, introspect_state
+
+    result = await client.get_scheduler_status(env_id)
+    assert result.code == 200
+
+    expected_state = {"resource_state": {}}
+    assert result.result["data"] == expected_state
 
     async def make_version(is_different=False):
         """
@@ -211,25 +215,38 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         return version
 
     logger.info("setup done")
-    introspect_state = await client.get_scheduler_status(env_id)
-    assert introspect_state.code == 200, introspect_state
     version1, resources = await make_version()
     await clienthelper.put_version_simple(version=version1, resources=resources)
 
     logger.info("first version pushed")
 
+
+    result = await client.get_scheduler_status(env_id)
+    assert result.code == 200
+
+    expected_state = {"resource_state": {}}
+    assert result.result["data"] == expected_state
+
     # deploy and wait until one is ready
     result = await client.release_version(env_id, version1)
     assert result.code == 200
 
+
+
     await clienthelper.wait_for_released(version1)
+
 
     logger.info("first version released")
 
     await clienthelper.wait_for_deployed()
 
-    introspect_state = await client.get_scheduler_status(env_id)
-    assert introspect_state.code == 200, introspect_state
+    new_resource_expected_status = {'blocked': 'no', 'deployment_result': 'new', 'status': 'has_update'}
+    deployed_resource_expected_status = {'blocked': 'no', 'deployment_result': 'deployed', 'status': 'compliant'}
+    expected_state = {"resource_state": {Id.parse_id(resource["id"]).resource_str(): deployed_resource_expected_status for resource in resources}}
+
+    result = await client.get_scheduler_status(env_id)
+    assert result.code == 200
+    assert result.result["data"] == expected_state
 
     await check_scheduler_state(resources, scheduler)
     await resource_action_consistency_check()
@@ -932,3 +949,4 @@ async def test_lsm_states(resource_container, server, client, clienthelper, envi
     # One failure, one skip, in the depdencies
     # response is failure
     assert state_map == {rid1: "failed", rid2: "skipped", lsmrid: "failed"}
+

@@ -30,7 +30,7 @@ from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data.model import DataBaseReport, SchedulerStatusReport
+from inmanta.data.model import DataBaseReport
 from inmanta.deploy import scheduler
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
@@ -337,10 +337,10 @@ class Agent(SessionEndpoint):
         return 200, collect_report(self)
 
     @protocol.handle(methods.trigger_get_status, env="tid")
-    async def get_scheduler_resource_state(self, env: uuid.UUID) -> SchedulerStatusReport:
+    async def get_scheduler_resource_state(self, env: uuid.UUID) -> Apireturn:
         assert env == self.environment
         resource_state = await self.scheduler.get_resource_state()
-        return SchedulerStatusReport(resource_state=resource_state)
+        return 200, resource_state
 
     @protocol.handle(methods_v2.get_db_status)
     async def get_db_status(self) -> DataBaseReport:

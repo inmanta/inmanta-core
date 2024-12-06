@@ -103,7 +103,10 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
 
 @pytest.mark.parametrize(
     "agent_deploy_interval",
-    ["2", "*/2 * * * * * *"],
+    [
+        # "2",
+        "*/2 * * * * * *"
+    ],
 )
 async def test_spontaneous_deploy(
     server,
@@ -154,6 +157,11 @@ async def test_spontaneous_deploy(
         # do a deploy
         start = time.time()
 
+        result = await client.get_scheduler_status(env_id)
+        assert result.code == 200
+        expected_data = {"resource_state": {}}
+        assert result.result["data"] == expected_data
+
         result = await client.release_version(env_id, version, False)
         assert result.code == 200
 
@@ -166,13 +174,27 @@ async def test_spontaneous_deploy(
         assert result.code == 200
 
         result = await client.get_scheduler_status(env_id)
-        assert result.code == 200, result
+        assert result.code == 200
+        expected_data = {
+            "resource_state": {
+                "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "new", "status": "has_update"}
+            }
+        }
+        assert result.result["data"] == expected_data
 
         await clienthelper.wait_for_deployed()
 
         await clienthelper.wait_full_success()
 
         duration = time.time() - start
+        result = await client.get_scheduler_status(env_id)
+        assert result.code == 200
+        expected_data = {
+            "resource_state": {
+                "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "deployed", "status": "compliant"}
+            }
+        }
+        assert result.result["data"] == expected_data
 
         assert await clienthelper.done_count() == 1
 

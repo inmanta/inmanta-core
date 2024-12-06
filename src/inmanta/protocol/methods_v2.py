@@ -396,7 +396,6 @@ def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> Ret
     path="/scheduler_status",
     operation="GET",
     arg_options=methods.ENV_OPTS,
-    api=True,
     client_types=[ClientType.api],
     api_version=2,
 )
