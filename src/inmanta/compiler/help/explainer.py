@@ -17,6 +17,7 @@
 """
 
 import dataclasses
+import logging
 import os
 import re
 from abc import ABC, abstractmethod
@@ -31,7 +32,7 @@ from inmanta.ast.statements import AssignStatement
 from inmanta.ast.statements.generator import Constructor, IndexCollisionException
 from inmanta.execute.runtime import OptionVariable
 from inmanta.module import ModuleV2InV1PathException
-from inmanta.plugins import primtive_python_type_to_model_domain
+from inmanta.plugins import primitive_python_type_to_model_domain
 
 
 def bold(content: Optional[str] = None) -> str:
@@ -221,7 +222,8 @@ class DataclassExplainer(Explainer[DataClassMismatchException]):
 @dataclasses.dataclass(frozen=True)
 class {problem.entity.name}:
 """
-
+        if problem.entity.comment:
+            python += f"""   \"""{problem.entity.comment}\"""\n"""
         for rel_or_attr_name in sorted(problem.entity.get_all_attribute_names()):
             rel_or_attr = problem.entity.get_attribute(rel_or_attr_name)
             match rel_or_attr:
@@ -234,11 +236,23 @@ class {problem.entity.name}:
         if problem.dataclass is not None:
             # make inmanta presentation
             hints = get_type_hints(problem.dataclass)
-            model = f"\n\nTo update the inmanta entity. replace following code at {problem.entity.location}\n\n"
+            model = f"\n\nAlternatively, to update the inmanta entity replace following code at {problem.entity.location}\n\n"
             model += f"entity {problem.entity.name} extends std::Dataclass:\n"
+            if problem.dataclass.__doc__:
+                model += f"""   \"""{problem.dataclass.__doc__}\"""\n"""
             for field in sorted(dataclasses.fields(problem.dataclass), key=lambda x: x.name):
                 type = hints[field.name]
-                model += f"    {primtive_python_type_to_model_domain(type)} {field.name}\n"
+                try:
+                    type_str = primitive_python_type_to_model_domain(type).type_string()
+                except Exception:
+                    logging.info(
+                        "Could not construct inmanta type for field %s with python type %s",
+                        field.name,
+                        str(type),
+                        exc_info=True,
+                    )
+                    type_str = "ERROR"
+                model += f"   {type_str} {field.name}\n"
 
             model += "end\n"
 

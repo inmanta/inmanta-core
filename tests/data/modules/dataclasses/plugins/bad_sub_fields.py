@@ -16,10 +16,17 @@
     Contact: code@inmanta.com
 """
 
+import dataclasses
 
+
+@dataclasses.dataclass(frozen=True)
 class Virtualmachine:
+    """Python comment"""
+
     name: str
-    os: str
-    ram: int
+    os: list[str]
+    it: int
+    ot: int
     cpus: int
-    disk: int
+    disk: dict[int, str]
+    other: dict[str, bool]

@@ -88,7 +88,6 @@ class FunctionCall(ReferenceStatement):
         if isinstance(func, InmantaType.Primitive):
             self.function = Cast(self, func)
         elif isinstance(func, plugins.Plugin):
-            # TODO: type check args
             self.function = PluginFunction(self, func)
         else:
             raise RuntimeException(self, "Can not call '%s', can only call plugin or primitive type cast" % self.name)

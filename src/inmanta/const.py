@@ -368,8 +368,6 @@ DEFAULT_INMANTA_DISK_LAYOUT_VERSION = 2
 # ID to represent the new scheduler as an agent
 AGENT_SCHEDULER_ID = "$__scheduler"
 
-DATACLASS_SELF_FIELD = " dataclass"
-
 # resource attributes for event propagation
 RESOURCE_ATTRIBUTE_SEND_EVENTS: typing.Final[str] = "send_event"
 RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: typing.Final[str] = "receive_events"
@@ -377,3 +375,6 @@ RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: typing.Final[str] = "receive_events"
 # resource attributes for references
 RESOURCE_ATTRIBUTE_REFERENCES: typing.Final[str] = "references"
 RESOURCE_ATTRIBUTE_MUTATORS: typing.Final[str] = "mutators"
+
+# Field in an instance to link it to the associated dataclass
+# Because it starts with a space, it can never collide with a valid attribute defined in the model

@@ -17,6 +17,7 @@
 """
 
 import traceback
+import typing
 from abc import abstractmethod
 from functools import lru_cache
 from typing import Dict, List, Optional, Union
@@ -871,15 +872,20 @@ class DataClassException(TypingException):
 
 
 class DataClassMismatchException(DataClassException):
+    """
+    Exception due to a mismatch between both version of a dataclass
+
+    """
+
     def __init__(
         self,
         entity: "Entity",
-        dataclass: "type.Type[object] | None",
+        dataclass: "typing.Type[object] | None",
         dataclass_python_name: str,
         msg: str,
     ) -> None:
         """
-        :param dataclass
+        :param dataclass python dataclass, None if absent
         """
         super().__init__(entity, msg)
         self.dataclass = dataclass
