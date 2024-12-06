@@ -683,16 +683,17 @@ class ResourceScheduler(TaskManager):
                 state.deployment_result = deployment_result
                 self._work.finished_deploy(resource)
                 # Check if we need to mark a resource as transiently blocked
-                # Or if we can unblock a transiently blocked resource (its dependencies now succeed)
+                # We only do that if it is not already blocked (BlockedStatus.YES)
                 # We might already be unblocked if a dependency succeeded on another agent, e.g. while waiting for the lock
-                # so HandlerResourceState.skipped_for_dependency might be outdated
+                # so HandlerResourceState.skipped_for_dependency might be outdated, we have an inconsistency between the
+                # state of the dependencies and the exception that was raised by the handler.
+                # If all dependencies are compliant we don't want to transiently block this resource.
                 if (
                     state.blocked is not BlockedStatus.YES
                     and resource_state is const.HandlerResourceState.skipped_for_dependency
+                    and not self._state.are_dependencies_compliant(resource)
                 ):
-                    state.blocked = (
-                        BlockedStatus.NO if self._state.are_dependencies_compliant(resource) else BlockedStatus.TRANSIENT
-                    )
+                    state.blocked = BlockedStatus.TRANSIENT
                 if deployment_result is DeploymentResult.DEPLOYED:
                     # FIXME: Also discard blocked resources from the dirty set if we block it transiently
                     # Remove this resource from the dirty set if it is successfully deployed
