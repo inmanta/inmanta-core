@@ -688,6 +688,7 @@ class ResourceScheduler(TaskManager):
         resource_state: const.HandlerResourceState,
     ) -> None:
         # Translate deploy result status to the new deployment result state
+        deployment_result: DeploymentResult
         match resource_state:
             case const.HandlerResourceState.deployed:
                 deployment_result = DeploymentResult.DEPLOYED
@@ -730,38 +731,37 @@ class ResourceScheduler(TaskManager):
 
             # We are not stale
             state.status = status
-            if deployment_result is not None:
-                # first update state, then send out events
-                self._deploying_latest.remove(resource)
 
-                state.deployment_result = deployment_result
-                self._work.finished_deploy(resource)
+            # first update state, then send out events
+            self._deploying_latest.remove(resource)
+            state.deployment_result = deployment_result
+            self._work.finished_deploy(resource)
 
-                # Check if we need to mark a resource as transiently blocked
-                # We only do that if it is not already blocked (BlockedStatus.YES)
-                # We might already be unblocked if a dependency succeeded on another agent, e.g. while waiting for the lock
-                # so HandlerResourceState.skipped_for_dependency might be outdated, we have an inconsistency between the
-                # state of the dependencies and the exception that was raised by the handler.
-                # If all dependencies are compliant we don't want to transiently block this resource.
-                if (
-                    state.blocked is not BlockedStatus.YES
-                    and resource_state is const.HandlerResourceState.skipped_for_dependency
-                    and not self._state.are_dependencies_compliant(resource)
-                ):
-                    state.blocked = BlockedStatus.TRANSIENT
-                    # Remove this resource from the dirty set when we block it
-                    self._state.dirty.discard(resource)
-                elif deployment_result is DeploymentResult.DEPLOYED:
-                    # Remove this resource from the dirty set if it is successfully deployed
-                    self._state.dirty.discard(resource)
-                else:
-                    # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
-                    # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
-                    # (or skip) causes it to become dirty now.
-                    self._state.dirty.add(resource)
+            # Check if we need to mark a resource as transiently blocked
+            # We only do that if it is not already blocked (BlockedStatus.YES)
+            # We might already be unblocked if a dependency succeeded on another agent, e.g. while waiting for the lock
+            # so HandlerResourceState.skipped_for_dependency might be outdated, we have an inconsistency between the
+            # state of the dependencies and the exception that was raised by the handler.
+            # If all dependencies are compliant we don't want to transiently block this resource.
+            if (
+                state.blocked is not BlockedStatus.YES
+                and resource_state is const.HandlerResourceState.skipped_for_dependency
+                and not self._state.are_dependencies_compliant(resource)
+            ):
+                state.blocked = BlockedStatus.TRANSIENT
+                # Remove this resource from the dirty set when we block it
+                self._state.dirty.discard(resource)
+            elif deployment_result is DeploymentResult.DEPLOYED:
+                # Remove this resource from the dirty set if it is successfully deployed
+                self._state.dirty.discard(resource)
+            else:
+                # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
+                # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
+                # (or skip) causes it to become dirty now.
+                self._state.dirty.add(resource)
 
-                # propagate events
-                self._send_events(details, recovered_from_failure=recovered_from_failure)
+            # propagate events
+            self._send_events(details, recovered_from_failure=recovered_from_failure)
 
             # No matter the deployment result, schedule a re-deploy for this resource unless it's blocked
             if state.blocked is BlockedStatus.NO:

@@ -243,6 +243,12 @@ class DummyTimerManager(TimerManager):
     ) -> None:
         pass
 
+    def update_timer(self, resource: ResourceIdStr, *, is_compliant: bool) -> None:
+        pass
+
+    def stop_timer(self, resource: ResourceIdStr) -> None:
+        pass
+
     def _trigger_global_deploy(self, cron_expression: str) -> None:
         pass
 
