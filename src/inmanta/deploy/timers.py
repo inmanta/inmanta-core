@@ -79,9 +79,7 @@ class ResourceTimer:
         """
 
         def _create_repair_task() -> None:
-            self.trigger_deploy = asyncio.create_task(
-                self._resource_scheduler.deploy_resource(self.resource, reason, priority)
-            )
+            self.trigger_deploy = asyncio.create_task(self._resource_scheduler.deploy_resource(self.resource, reason, priority))
 
         if self.next_schedule_handle is not None:
             raise Exception(f"Per-resource timer set twice for resource {self.resource}, this should not happen")
@@ -287,7 +285,7 @@ class TimerManager:
         Make sure the given resources are marked for eventual re-deployment in the future.
         """
         for resource in resources:
-            self.update_timer(resource, is_compliant)
+            self.update_timer(resource, is_compliant=are_compliant)
 
     def stop_timer(self, resource: ResourceIdStr) -> None:
         """

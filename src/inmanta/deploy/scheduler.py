@@ -565,9 +565,7 @@ class ResourceScheduler(TaskManager):
                 #    - in the dirty set (because they will be picked up by the scheduler eventually)
                 #    - blocked: must not be deployed
                 #    - deleted from the model
-                self._timer_manager.stop_timers(
-                    self._state.dirty | undefined | blocked_for_undefined_dep
-                )
+                self._timer_manager.stop_timers(self._state.dirty | undefined | blocked_for_undefined_dep)
                 self._timer_manager.remove_timers(deleted_resources)
                 # Install timers for initial up-to-date resources. They are up-to-date now,
                 # but we want to make sure we periodically repair them.
@@ -713,8 +711,7 @@ class ResourceScheduler(TaskManager):
             state: ResourceState = self._state.resource_state[resource]
 
             recovered_from_failure: bool = (
-                deployment_result is DeploymentResult.DEPLOYED
-                state.deployment_result is not DeploymentResult.DEPLOYED
+                deployment_result is DeploymentResult.DEPLOYED and state.deployment_result is not DeploymentResult.DEPLOYED
             )
 
             if details.attribute_hash != attribute_hash:
@@ -766,10 +763,11 @@ class ResourceScheduler(TaskManager):
                 self._send_events(details, recovered_from_failure=recovered_from_failure)
 
             # No matter the deployment result, schedule a re-deploy for this resource unless it's blocked
-            if state.blocked is NO:
+            if state.blocked is BlockedStatus.NO:
                 self._timer_manager.update_timer(resource, is_compliant=(status is ComplianceStatus.COMPLIANT))
 
     def _send_events(
+        self,
         sending_resource: ResourceDetails,
         *,
         stale_deploy: bool = False,
@@ -787,13 +785,13 @@ class ResourceScheduler(TaskManager):
         :param recovered_from_failure: This resource went from 'not deployed' to 'deployed',
             inform unblocked dependants that they might be able to progress.
         """
-        resource_id: ResourceIdStr = details.resource_id
+        resource_id: ResourceIdStr = sending_resource.resource_id
         provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource_id, set())
 
         event_listeners: Set[ResourceIdStr]
         recovery_listeners: Set[ResourceIdStr]
 
-        if stale_deploy or not details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
+        if stale_deploy or not sending_resource.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
             event_listeners = {}
         else:
             event_listeners = {
@@ -809,8 +807,7 @@ class ResourceScheduler(TaskManager):
             recovery_listeners = {}
         else:
             recovery_listeners = {
-                for dependent in provides
-                if self._state.resource_state[dependent].blocked is BlockedStatus.TRANSIENT
+                dependent for dependent in provides if self._state.resource_state[dependent].blocked is BlockedStatus.TRANSIENT
             }
             # These resources might be able to progress now -> unblock them in addition to sending the event
             self._state.dirty.update(recovery_listeners)
@@ -829,7 +826,7 @@ class ResourceScheduler(TaskManager):
                 all_listeners,
                 reason=(
                     f"Deploying because a recovery event was received from {resource_id}"
-                    if send_recovery_event:
+                    if recovered_from_failure
                     else f"Deploying because an event was received from {resource_id}"
                 ),
                 priority=priority,
