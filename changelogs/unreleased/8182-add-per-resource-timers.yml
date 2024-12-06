@@ -1,0 +1,10 @@
+description: >
+  Add support for periodic per-resource deploys and repairs.
+  When ``AUTOSTART_AGENT_REPAIR_INTERVAL``  or ``AUTOSTART_AGENT_DEPLOY_INTERVAL`` are specified
+  as a number (not a cron expression), they are interpreted on a per-resource basis.
+  The timer will trigger after the interval has expired, after the last deploy of each individual resource.
+change-type: minor
+destination-branches: [master]
+sections:
+  upgrade-note: "{{description}}"
+
