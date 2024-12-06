@@ -37,6 +37,20 @@ class ResourceState(str, Enum):
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
 
 
+class HandlerResourceState(str, Enum):
+    """
+    The resource states that the resource handler may report via the HandlerContext (with the set_resource_state method)
+    when it performs a resource action.
+    """
+
+    skipped = "skipped"
+    deployed = "deployed"
+    failed = "failed"
+    dry = "dry"
+    skipped_for_dependency = "skipped_for_dependency"
+    unavailable = "unavailable"
+
+
 class NonDeployingResourceState(str, Enum):
     unavailable = ResourceState.unavailable.value
     skipped = ResourceState.skipped.value
