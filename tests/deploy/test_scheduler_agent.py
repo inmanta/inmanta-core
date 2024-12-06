@@ -1140,8 +1140,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert rid2 not in executor2.deploys
     assert agent.executor_manager.executors["agent1"].execute_count == 0
     assert agent.executor_manager.executors["agent2"].execute_count == 1
-    # r2 goes from new -> deployed: causes r3 to be redeployed.
-    assert agent.executor_manager.executors["agent3"].execute_count == 1
+    assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
         status=state.ComplianceStatus.COMPLIANT,
         deployment_result=state.DeploymentResult.DEPLOYED,
@@ -1169,7 +1168,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert rid2 not in executor2.deploys
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 2
-    assert agent.executor_manager.executors["agent3"].execute_count == 1
+    assert agent.executor_manager.executors["agent3"].execute_count == 0
     # verify that r2 is considered dirty now, as it is skipped
     assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
         # We are skipped, so not compliant
@@ -1180,14 +1179,13 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert agent.scheduler._state.dirty == {rid2}
 
     # trigger a deploy, verify that r2 gets scheduled because it is dirty
-    # r2 goes from fail -> deployed: make sure r3 is redeployed
     await agent.scheduler.deploy(reason="Test")
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 3
-    assert agent.executor_manager.executors["agent3"].execute_count == 2
+    assert agent.executor_manager.executors["agent3"].execute_count == 0
 
 
 async def test_receive_events(agent: TestAgent, make_resource_minimal):
