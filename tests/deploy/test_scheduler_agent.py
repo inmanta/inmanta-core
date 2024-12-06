@@ -97,7 +97,7 @@ class DummyExecutor(executor.Executor):
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-        requires: dict[ResourceIdStr, const.ResourceState],
+        requires: dict[ResourceIdStr, const.HandlerResourceState],
     ) -> DeployResult:
         assert reason
         # Actual reason or test reason
@@ -105,14 +105,14 @@ class DummyExecutor(executor.Executor):
         assert ("because" in reason) or ("Test" in reason)
         self.execute_count += 1
         result = (
-            const.ResourceState.failed
+            const.HandlerResourceState.failed
             if resource_details.attributes.get(FAIL_DEPLOY, False) is True
-            else const.ResourceState.deployed
+            else const.HandlerResourceState.deployed
         )
         return DeployResult(
             resource_details.rvid,
             action_id,
-            status=result,
+            resource_state=result,
             messages=[],
             changes={},
             change=Change.nochange,
@@ -147,16 +147,16 @@ class ManagedExecutor(DummyExecutor):
 
     def __init__(self) -> None:
         super().__init__()
-        self._deploys: dict[ResourceIdStr, asyncio.Future[const.ResourceState]] = {}
+        self._deploys: dict[ResourceIdStr, asyncio.Future[const.HandlerResourceState]] = {}
 
     @property
-    def deploys(self) -> Mapping[ResourceIdStr, asyncio.Future[const.ResourceState]]:
+    def deploys(self) -> Mapping[ResourceIdStr, asyncio.Future[const.HandlerResourceState]]:
         return self._deploys
 
     async def stop(self) -> None:
         # resolve hanging futures to prevent test hanging during teardown
         for deploy in self._deploys.values():
-            deploy.set_result(const.ResourceState.undefined)
+            deploy.set_result(const.HandlerResourceState.failed)
 
     async def execute(
         self,
@@ -164,16 +164,23 @@ class ManagedExecutor(DummyExecutor):
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-        requires: dict[ResourceIdStr, const.ResourceState],
+        requires: dict[ResourceIdStr, const.HandlerResourceState],
     ) -> DeployResult:
         assert resource_details.rid not in self._deploys
         self._deploys[resource_details.rid] = asyncio.get_running_loop().create_future()
         # wait until the test case sets desired resource state
-        result: const.ResourceState = await self._deploys[resource_details.rid]
+        result: const.HandlerResourceState = await self._deploys[resource_details.rid]
         del self._deploys[resource_details.rid]
         self.execute_count += 1
 
-        return DeployResult(resource_details.rvid, action_id, status=result, messages=[], changes={}, change=Change.nochange)
+        return DeployResult(
+            resource_details.rvid,
+            action_id,
+            resource_state=const.HandlerResourceState(result),
+            messages=[],
+            changes={},
+            change=Change.nochange,
+        )
 
 
 class DummyManager(executor.ExecutorManager[executor.Executor]):
@@ -466,9 +473,9 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         return True
 
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
 
     await retry_limited_fast(done)
 
@@ -502,7 +509,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     await agent.scheduler._new_version(2, resources, make_requires(resources))
     # model handler failure
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.failed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.failed)
     # wait until r2 is done
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
 
@@ -512,7 +519,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
 
     # finish up: set r2 result and wait until it's done
-    executor2.deploys[rid2].set_result(const.ResourceState.failed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.failed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 2)
     assert agent.executor_manager.executors["agent1"].execute_count == 0
     assert agent.executor_manager.executors["agent2"].execute_count == 2
@@ -574,10 +581,10 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
 
     # finish up
     # finish r2 deploy, failing it once more, twice
-    executor2.deploys[rid2].set_result(const.ResourceState.failed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.failed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.failed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.failed)
     assert agent.scheduler._work._waiting.keys() == {rid3}, f"{rid3} should still be waiting for {rid2}"
     # wait until r3 is done (executed after r2)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent3"].execute_count == 1)
@@ -601,7 +608,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     # call repair, verify that only r1 is scheduled because r2 and r3 are running or scheduled respectively
     await agent.scheduler.repair(reason="Test")
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 0
@@ -610,7 +617,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert len(agent.scheduler._work.agent_queues) == 0
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
     # finish deploy
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent3"].execute_count == 1)
     state_manager_check(agent)
 
@@ -645,10 +652,10 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert tasks.Deploy(resource=rid1) in agent.scheduler._work.agent_queues._in_progress
 
     # finish r1 and a single r2
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     assert agent.executor_manager.executors["agent2"].execute_count == 0
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     assert len(agent.scheduler._work._waiting) == 0
@@ -664,11 +671,11 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert tasks.Deploy(resource=rid2) in agent.scheduler._work.agent_queues._in_progress
 
     # finish all deploys
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 2)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 3)
     # verify total number of deploys
     assert agent.executor_manager.executors["agent1"].execute_count == 2
@@ -728,14 +735,14 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     state_manager_check(agent)
 
     # finish up: finish all waiting deploys
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 2)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 2)
     # verify total number of deploys
@@ -775,7 +782,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert rid1 in agent.scheduler._state.dirty
 
     # finish stale deploy
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
     # verify that state remained the same
@@ -794,9 +801,9 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid1)]
 
     # finish all deploys
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     # assert final state and total deploys
     assert agent.executor_manager.executors["agent1"].execute_count == 2
@@ -846,7 +853,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid1)]
 
     # finish last deploy
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 0
@@ -916,7 +923,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     await agent.scheduler._new_version(5, resources, make_requires(resources))
 
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent3")
 
     assert agent.executor_manager.executors["agent1"].execute_count == 1
@@ -931,7 +938,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     resources = make_resources(version=6, r1_value=0, r2_value=1, r3_value=0)
     await agent.scheduler._new_version(6, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     assert agent.executor_manager.executors["agent1"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 0
@@ -941,7 +948,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     resources = make_resources(version=7, r1_value=1, r2_value=1, r3_value=0)
     await agent.scheduler._new_version(7, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     # verify that r3 didn't get an event, i.e. it did not deploy and it is not scheduled or executing
@@ -959,7 +966,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     await agent.scheduler._new_version(8, resources, make_requires(resources))
     # assert that r2 got deployed through event propagation
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent3"].execute_count == 0
@@ -1003,10 +1010,10 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
     # finish up: deploy r2 twice
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.failed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.failed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 2)
 
     # verify total number of deploys
@@ -1043,7 +1050,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
     # finish stale r2 deploy and verify that it does not send out an event
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     assert agent.executor_manager.executors["agent1"].execute_count == 0
@@ -1054,7 +1061,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
     # finish up: deploy r2 and r3 (this time it does get an event from non-stale r2)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent3"].execute_count == 1)
 
     # verify total number of deploys
@@ -1088,7 +1095,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
     # finish stale r2 deploy and verify that it doesn't send out an event
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
     assert agent.executor_manager.executors["agent1"].execute_count == 0
     assert agent.executor_manager.executors["agent2"].execute_count == 1
@@ -1106,7 +1113,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     resources = make_resources(version=16, r1_value=4, r2_value=0, r3_value=0)
     await agent.scheduler._new_version(16, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
     # verify initial state
     assert rid2 not in executor2.deploys
@@ -1135,7 +1142,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
 
     # fail r2
     # failed works just as well but skipped is even more of an edge case
-    executor2.deploys[rid2].set_result(const.ResourceState.skipped)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.skipped)
     await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
     assert rid2 not in executor2.deploys
     assert agent.executor_manager.executors["agent1"].execute_count == 1
@@ -1153,7 +1160,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     # trigger a deploy, verify that r2 gets scheduled because it is dirty
     await agent.scheduler.deploy(reason="Test")
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 3
@@ -1774,3 +1781,32 @@ async def test_repair_does_not_trigger_for_blocked_resources(agent: TestAgent, m
 
     # Only r2 was deployed
     assert agent.executor_manager.executors["agent1"].execute_count == 1
+
+
+async def test_state_of_skipped_resources_for_dependencies(agent: TestAgent, make_resource_minimal):
+    """
+    Ensure that when a resource is skipped for its dependencies the scheduler marks it with BlockedStatus.TRANSIENT
+    """
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent2,name=2]")
+
+    # make agent2's executors managed, leave the agent1 auto fails
+    executor2: ManagedExecutor = ManagedExecutor()
+    agent.executor_manager.register_managed_executor("agent2", executor2)
+
+    resources = {
+        rid1: make_resource_minimal(rid=rid1, values={"value": "r1_value", FAIL_DEPLOY: True}, requires=[]),
+        rid2: make_resource_minimal(rid=rid2, values={"value": "r2_value"}, requires=[rid1]),
+    }
+    await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
+    await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
+
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.skipped_for_dependency)
+    await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent2")
+
+    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
+        # We are skipped, so not compliant
+        status=state.ComplianceStatus.NON_COMPLIANT,
+        deployment_result=state.DeploymentResult.SKIPPED,
+        blocked=state.BlockedStatus.TRANSIENT,
+    )
