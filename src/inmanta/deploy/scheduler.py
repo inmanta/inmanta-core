@@ -247,7 +247,7 @@ class ResourceScheduler(TaskManager):
 
         self._timer_manager = timers.TimerManager(self)
 
-    def reset(self) -> None:
+    async def reset(self) -> None:
         """
         Clear out all state and start empty
 
@@ -258,12 +258,12 @@ class ResourceScheduler(TaskManager):
         self._work.reset()
         self._workers.clear()
         self._deploying_latest.clear()
-        self._timer_manager.reset()
+        await self._timer_manager.reset()
 
     async def start(self) -> None:
         if self._running:
             return
-        self.reset()
+        await self.reset()
         await self.reset_resource_state()
 
         await self._initialize()
