@@ -222,7 +222,8 @@ class DataclassExplainer(Explainer[DataClassMismatchException]):
 @dataclasses.dataclass(frozen=True)
 class {problem.entity.name}:
 """
-
+        if problem.entity.comment:
+            python += f"""   \"""{problem.entity.comment}\"""\n"""
         for rel_or_attr_name in sorted(problem.entity.get_all_attribute_names()):
             rel_or_attr = problem.entity.get_attribute(rel_or_attr_name)
             match rel_or_attr:
@@ -237,6 +238,8 @@ class {problem.entity.name}:
             hints = get_type_hints(problem.dataclass)
             model = f"\n\nAlternatively, to update the inmanta entity replace following code at {problem.entity.location}\n\n"
             model += f"entity {problem.entity.name} extends std::Dataclass:\n"
+            if problem.dataclass.__doc__:
+                model += f"""   \"""{problem.dataclass.__doc__}\"""\n"""
             for field in sorted(dataclasses.fields(problem.dataclass), key=lambda x: x.name):
                 type = hints[field.name]
                 try:
@@ -249,7 +252,7 @@ class {problem.entity.name}:
                         exc_info=True,
                     )
                     type_str = "ERROR"
-                model += f"    {type_str} {field.name}\n"
+                model += f"   {type_str} {field.name}\n"
 
             model += "end\n"
 

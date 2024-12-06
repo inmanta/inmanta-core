@@ -1,4 +1,5 @@
 entity Virtualmachine extends std::Dataclass:
+    """inmanta comment"""
     string name # normal
     string[]? os # mismatch on ?[]
     string it # basetype mismatch

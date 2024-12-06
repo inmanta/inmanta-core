@@ -19,8 +19,13 @@
 import pytest
 
 from inmanta import compiler
-from inmanta.ast import DataClassException, DataClassMismatchException, WrappingRuntimeException, AttributeException, \
-    RuntimeException
+from inmanta.ast import (
+    AttributeException,
+    DataClassException,
+    DataClassMismatchException,
+    RuntimeException,
+    WrappingRuntimeException,
+)
 from inmanta.compiler.help.explainer import DataclassExplainer
 
 
@@ -117,21 +122,25 @@ import dataclasses::bad_sub_fields
         "-The attribute ot does not have the same type as the associated field in the python domain. All attributes of a dataclasses must be identical in both the python and inmanta domain.",
         "-The attribute ram has no counterpart in the python domain. All attributes of a dataclasses must be identical in both the python and inmanta domain.",
         "-The attribute disk does not have the same type as the associated field in the python domain. All attributes of a dataclasses must be identical in both the python and inmanta domain.",
-        "-The field cpus doesn't exist in the inmanta domain. All attributes of a dataclasses must be identical in both the python and inmanta domain"
+        "-The field cpus doesn't exist in the inmanta domain. All attributes of a dataclasses must be identical in both the python and inmanta domain",
     ]
     for line in field_lines:
         assert line in message
     # regexes
-    assert e.match( "-a relation called subs is defined at .*/bad_sub_fields.cf:13:16. Dataclasses are not allowed to have relations")
+    assert e.match(
+        "-a relation called subs is defined at .*/bad_sub_fields.cf:.* Dataclasses are not allowed to have relations"
+    )
 
     # explainer
     explanation = DataclassExplainer().explain(e.value)[0]
-    assert """To update the python class, add the following code to inmanta_plugins.dataclasses.bad_sub_fields.Virtualmachine:
+    assert (
+        """To update the python class, add the following code to inmanta_plugins.dataclasses.bad_sub_fields.Virtualmachine:
 
 import dataclasses
 
 @dataclasses.dataclass(frozen=True)
 class Virtualmachine:
+   \"""inmanta comment\"""
    disk: dict[str, object]
    it: str
    name: str
@@ -139,19 +148,23 @@ class Virtualmachine:
    ot: list[str]
    other: dict[str, object]
    ram: int
-""" in explanation
+"""
+        in explanation
+    )
 
-    assert """entity Virtualmachine extends std::Dataclass:
-    int cpus
-    ERROR disk
-    int it
-    string name
-    string[] os
-    int ot
-    dict other
-end""" in explanation
-
-
+    assert (
+        """entity Virtualmachine extends std::Dataclass:
+   \""" Python comment \"""
+   int cpus
+   ERROR disk
+   int it
+   string name
+   string[] os
+   int ot
+   dict other
+end"""
+        in explanation
+    )
 
 
 def test_dataclass_instance_failure(snippetcompiler):
@@ -172,5 +185,3 @@ two = dataclasses::make_bad_virtual_machine()""",
     cause = cause.get_causes()[0]
     assert isinstance(cause, RuntimeException)
     assert "Invalid value 'root', expected int (reported in dataclasses::make_bad_virtual_machine()" in str(cause)
-
-

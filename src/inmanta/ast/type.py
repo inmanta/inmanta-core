@@ -307,7 +307,7 @@ class Number(Primitive):
         return self.type_string()
 
     def corresponds_to(self, pytype: typing.Type) -> bool:
-        return pytype in [int, float]
+        return pytype in [int, float, numbers.Number]
 
     def as_python_type_string(self) -> "str | None":
         return "numbers.Number"
@@ -526,6 +526,9 @@ class List(Type):
         return None
 
     def corresponds_to(self, pytype: typing.Type) -> bool:
+        if typing_inspect.is_union_type(pytype):
+            return False
+
         if not typing_inspect.is_generic_type(pytype):
             return issubclass(pytype, Sequence)
 
@@ -593,6 +596,9 @@ class TypedList(List):
         return self.get_base_type().is_primitive()
 
     def corresponds_to(self, pytype: typing.Type) -> bool:
+        if typing_inspect.is_union_type(pytype):
+            return False
+
         if not typing_inspect.is_generic_type(pytype):
             return issubclass(pytype, Sequence)
 
@@ -603,7 +609,7 @@ class TypedList(List):
         args = typing_inspect.get_args(pytype, True)
         if len(args) != 1:
             return False
-        return self.get_base_type().corresponds_to(args[0])
+        return self.element_type.corresponds_to(args[0])
 
     def as_python_type_string(self) -> "str | None":
         return f"list[{self.element_type.as_python_type_string()}]"
@@ -680,6 +686,9 @@ class Dict(Type):
         return "dict"
 
     def corresponds_to(self, pytype: typing.Type) -> bool:
+        if typing_inspect.is_union_type(pytype):
+            return False
+
         if not typing_inspect.is_generic_type(pytype):
             # None generic dict is fine
             return issubclass(pytype, Mapping)
@@ -729,6 +738,9 @@ class TypedDict(Dict):
         return None
 
     def corresponds_to(self, pytype: typing.Type) -> bool:
+        if typing_inspect.is_union_type(pytype):
+            return False
+
         if not typing_inspect.is_generic_type(pytype):
             # None generic dict is fine
             return issubclass(pytype, Mapping)

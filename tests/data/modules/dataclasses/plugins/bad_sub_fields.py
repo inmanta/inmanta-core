@@ -21,6 +21,8 @@ import dataclasses
 
 @dataclasses.dataclass(frozen=True)
 class Virtualmachine:
+    """Python comment"""
+
     name: str
     os: list[str]
     it: int
