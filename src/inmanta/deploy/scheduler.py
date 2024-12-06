@@ -266,24 +266,20 @@ class ResourceScheduler(TaskManager):
             )
 
             # Retrieve latest released model version
-            latest_release_model: Optional[data.ConfigurationModel] = (
-                await data.ConfigurationModel.get_latest_version(environment=self.environment, connection=con)
+            latest_release_model: Optional[data.ConfigurationModel] = await data.ConfigurationModel.get_latest_version(
+                environment=self.environment, connection=con
             )
             if latest_release_model is None:
                 # No model version has been released yet. No scheduler state to restore from db.
                 return
 
             # Check at which model version the scheduler was before it went down
-            scheduler: Optional[data.Scheduler] = await Scheduler.get_one(
-                environment=self.environment, connection=con
-            )
+            scheduler: Optional[data.Scheduler] = await Scheduler.get_one(environment=self.environment, connection=con)
             assert scheduler is not None
             last_processed_model_version = scheduler.last_processed_model_version
             if last_processed_model_version is not None:
                 # Restore scheduler state like it was before the scheduler went down
-                self._state = await ModelState.create_from_db(
-                    self.environment, last_processed_model_version, connection=con
-                )
+                self._state = await ModelState.create_from_db(self.environment, last_processed_model_version, connection=con)
                 self._work.link_to_new_requires_provides_view(
                     requires_view=self._state.requires.requires_view(),
                     provides_view=self._state.requires.provides_view(),
@@ -298,10 +294,7 @@ class ResourceScheduler(TaskManager):
                 #     not. This migration code path can be removed in a later major version.
                 await self._recover_scheduler_state_using_increments_calculation(connection=con)
 
-            if (
-                last_processed_model_version is not None
-                and last_processed_model_version < latest_release_model.version
-            ):
+            if last_processed_model_version is not None and last_processed_model_version < latest_release_model.version:
                 # We restored the scheduler state from the database, but a newer, released version is available.
                 # Load the new desired state into the scheduler and start the deployment.
                 await self._read_version(intent_lock_acquired=True, scheduler_lock_acquired=True, connection=con)
@@ -544,11 +537,7 @@ class ResourceScheduler(TaskManager):
         intent_lock = self._intent_lock if not intent_lock_acquired else asyncio.Lock()
         scheduler_lock = self._scheduler_lock if not scheduler_lock_acquired else asyncio.Lock()
         up_to_date_resources = {} if up_to_date_resources is None else up_to_date_resources
-        async with (
-            data.Scheduler.get_connection(connection=connection) as con,
-            con.transaction(),
-            intent_lock
-        ):
+        async with data.Scheduler.get_connection(connection=connection) as con, con.transaction(), intent_lock:
             # Inspect new state and compare it with the old one before acquiring scheduler the lock.
             # This is safe because we only read intent-related state here, for which we've already acquired the lock
             deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
@@ -615,9 +604,7 @@ class ResourceScheduler(TaskManager):
                     self._state.update_desired_state(resource, resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
-                transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(
-                    resources=blocked_resources
-                )
+                transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
                 transitively_unblocked_resources: set[ResourceIdStr] = set()
                 for resource in unblocked_resources:
                     transitively_unblocked_resources.update(self._state.mark_as_defined(resource, resources[resource]))
@@ -671,14 +658,13 @@ class ResourceScheduler(TaskManager):
             # Update intent for resources with new desired state
             await self.update_resource_intent(
                 self.environment,
-                intent={
-                    rid: (self._state.resource_state[rid], self._state.resources[rid]) for rid in new_desired_state
-                },
+                intent={rid: (self._state.resource_state[rid], self._state.resources[rid]) for rid in new_desired_state},
                 update_blocked_state=False,
                 connection=con,
             )
             # Mark orphaned resources
             await self.update_orphan_state(self.environment, connection=con)
+            await self.set_last_processed_model_version(self.environment, version, connection=con)
 
     def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
@@ -901,3 +887,8 @@ class ResourceScheduler(TaskManager):
 
     async def update_orphan_state(self, environment: UUID, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         await self._state_update_delegate.update_orphan_state(environment, connection=connection)
+
+    async def set_last_processed_model_version(
+        self, environment: UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        await self._state_update_delegate.set_last_processed_model_version(environment, version, connection=connection)

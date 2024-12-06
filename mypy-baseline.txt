@@ -69,7 +69,7 @@ src/inmanta/deploy/state.py:0: error: Enum index should be a string (actual inde
 src/inmanta/deploy/state.py:0: error: Invalid index type "object" for "dict[ResourceIdStr, ResourceState]"; expected type "ResourceIdStr"  [index]
 src/inmanta/deploy/state.py:0: error: Argument "resource_id" to "ResourceDetails" has incompatible type "object"; expected "ResourceIdStr"  [arg-type]
 src/inmanta/deploy/state.py:0: error: Argument "attribute_hash" to "ResourceDetails" has incompatible type "object"; expected "str"  [arg-type]
-src/inmanta/deploy/state.py:0: error: Argument "attributes" to "ResourceDetails" has incompatible type "object"; expected "Mapping[str, object]"  [arg-type]
+src/inmanta/deploy/state.py:0: error: Argument 1 to "loads" has incompatible type "object"; expected "str | bytes | bytearray"  [arg-type]
 src/inmanta/deploy/state.py:0: error: Invalid index type "object" for "dict[ResourceIdStr, ResourceDetails]"; expected type "ResourceIdStr"  [index]
 src/inmanta/deploy/state.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/deploy/state.py:0: error: Invalid index type "object" for "RequiresProvidesMapping"; expected type "ResourceIdStr"  [index]

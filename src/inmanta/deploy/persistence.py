@@ -19,6 +19,7 @@
 import abc
 import datetime
 import logging
+import uuid
 from typing import Any, Optional
 from uuid import UUID
 
@@ -79,6 +80,15 @@ class StateUpdateManager(abc.ABC):
     @abc.abstractmethod
     async def update_orphan_state(self, environment: UUID, connection: Optional[Connection] = None) -> None:
         pass
+
+    @abc.abstractmethod
+    async def set_last_processed_model_version(
+        self, environment: uuid.UUID, version: int, connection: Optional[Connection] = None
+    ) -> None:
+        """
+        Set the last model version that was processed by the scheduler.
+        """
+        await data.Scheduler.set_last_processed_model_version(environment, version, connection=connection)
 
 
 class ToDbUpdateManager(StateUpdateManager):
@@ -316,3 +326,8 @@ class ToDbUpdateManager(StateUpdateManager):
 
     async def update_orphan_state(self, environment: UUID, connection: Optional[Connection] = None) -> None:
         await data.ResourcePersistentState.update_orphan_state(environment, connection=connection)
+
+    async def set_last_processed_model_version(
+        self, environment: uuid.UUID, version: int, connection: Optional[Connection] = None
+    ) -> None:
+        await data.Scheduler.set_last_processed_model_version(environment, version, connection=connection)

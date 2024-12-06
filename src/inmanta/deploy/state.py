@@ -20,6 +20,7 @@ import contextlib
 import dataclasses
 import enum
 import itertools
+import json
 import uuid
 from collections import defaultdict
 from collections.abc import Mapping, Set
@@ -209,14 +210,23 @@ class ModelState:
         :param last_processed_model_version: The model version that was last processed by the scheduler, i.e. the version
                                              associated with the state in the persistent_resource_state table.
         """
-        from inmanta import data
+        from inmanta import data, resources
 
         result = ModelState(version=last_processed_model_version)
         resource_records = await data.Resource.get_resources_for_version_raw_with_persistent_state(
             environment=environment,
             version=last_processed_model_version,
             projection=["resource_id", "attributes", "attribute_hash"],
-            projection_persistent=["deployment_result", "blocked_status", "last_success", "last_produced_events"],
+            projection_persistent=[
+                "is_orphan",
+                "is_undefined",
+                "current_intent_attribute_hash",
+                "last_deployed_attribute_hash",
+                "deployment_result",
+                "blocked_status",
+                "last_success",
+                "last_produced_events",
+            ],
             project_attributes=["requires", const.RESOURCE_ATTRIBUTE_SEND_EVENTS],
             connection=connection,
         )
@@ -247,7 +257,7 @@ class ModelState:
             details = ResourceDetails(
                 resource_id=resource_id,
                 attribute_hash=res["attribute_hash"],
-                attributes=res["attributes"],
+                attributes=json.loads(res["attributes"]),
                 status=compliance_status,
             )
             result.resources[resource_id] = details

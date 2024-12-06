@@ -294,6 +294,11 @@ class DummyStateManager(StateUpdateManager):
     async def update_orphan_state(self, environment: UUID, connection: Optional[Connection] = None) -> None:
         pass
 
+    async def set_last_processed_model_version(
+        self, environment: UUID, version: int, connection: Optional[Connection] = None
+    ) -> None:
+        pass
+
 
 def state_manager_check(agent: "TestAgent"):
     agent.scheduler._state_update_delegate.check_with_scheduler(agent.scheduler)

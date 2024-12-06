@@ -6488,6 +6488,21 @@ class Scheduler(BaseDocument):
 
     __primary_key__ = ("environment",)
 
+    @classmethod
+    async def set_last_processed_model_version(
+        cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        await cls._execute_query(
+            f"""
+            UPDATE {cls.table_name()}
+            SET last_processed_model_version=$1
+            WHERE environment=$2
+            """,
+            version,
+            environment,
+            connection=connection,
+        )
+
 
 _classes = [
     Project,
