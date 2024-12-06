@@ -30,10 +30,10 @@ from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data.model import DataBaseReport
+from inmanta.data.model import DataBaseReport, SchedulerStatusReport
 from inmanta.deploy import scheduler
 from inmanta.deploy.work import TaskPriority
-from inmanta.protocol import SessionEndpoint, methods, methods_v2
+from inmanta.protocol import SessionEndpoint, TypedClient, methods, methods_v2
 from inmanta.server.services.databaseservice import DatabaseMonitor
 from inmanta.types import Apireturn
 from inmanta.util import (
@@ -50,7 +50,7 @@ from inmanta.util import (
 LOGGER = logging.getLogger("inmanta.scheduler")
 
 
-class Agent(SessionEndpoint):
+class Agent(SessionEndpoint, TypedClient):
     """
     This is the new scheduler, adapted to the agent protocol
 
@@ -336,11 +336,12 @@ class Agent(SessionEndpoint):
     async def get_status(self) -> Apireturn:
         return 200, collect_report(self)
 
-    @protocol.handle(methods.trigger_get_status, env="tid")
-    async def get_scheduler_resource_state(self, env: uuid.UUID) -> Apireturn:
-        assert env == self.environment
-        resource_state = await self.scheduler.get_resource_state()
-        return 200, resource_state
+    @protocol.handle(methods_v2.trigger_get_status, env="tid")
+    async def get_scheduler_resource_state(self, env: data.Environment) -> SchedulerStatusReport:
+        assert env.id == self.environment, f"{env.id=}, {self.environment=}"
+        report = await self.scheduler.get_resource_state()
+        LOGGER.debug(f"{report=}")
+        return report
 
     @protocol.handle(methods_v2.get_db_status)
     async def get_db_status(self) -> DataBaseReport:

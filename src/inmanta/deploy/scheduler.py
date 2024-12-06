@@ -34,7 +34,7 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.data import ConfigurationModel, Environment
-from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr, SchedulerStatusReport
 from inmanta.deploy import state, work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
 from inmanta.deploy.state import (
@@ -370,18 +370,21 @@ class ResourceScheduler(TaskManager):
             )
         )
 
-    async def get_resource_state(self) -> dict[ResourceIdStr, ResourceState]:
+    async def get_resource_state(self) -> SchedulerStatusReport:
         """
         Check that the state of the resources in the DB corresponds
         to the internal state of the scheduler and return the internal
         state
         """
+        LOGGER.error("FLAG1.5")
+
         resources_in_db: Mapping[ResourceIdStr, ResourceDetails]
 
         try:
-            _, resources_in_db, _ = await self._get_resources_in_latest_version()
+            latest_version, resources_in_db, _ = await self._get_resources_in_latest_version()
         except KeyError:
-            return {}
+            LOGGER.error("FLAG1.6")
+            return SchedulerStatusReport(resource_state={}, discrepancies={})
 
         def _build_discrepancy_map(
             resources_in_db: Mapping[ResourceIdStr, ResourceDetails]
@@ -408,34 +411,58 @@ class ResourceScheduler(TaskManager):
                 const.ResourceState.undefined: (None, state.BlockedStatus.YES, state.ComplianceStatus.UNDEFINED),
                 const.ResourceState.skipped_for_undefined: (None, state.BlockedStatus.YES, None),
             }
-            discrepancy_map: Mapping[ResourceIdStr, list[Discrepancy]] = {}
 
-            for rid, resource_details in resources_in_db.items():
-                resource_discrepancies: list[Discrepancy] = []
-                db_deploy_result, db_blocked_status, db_compliance_status = state_translation_table[resource_details.status]
+            discrepancy_map: dict[ResourceIdStr, list[Discrepancy]] = {}
 
-                scheduler_resource_state: ResourceState | None = self._state.resource_state.get(rid)
-
-                if not scheduler_resource_state:
-                    resource_discrepancies.append(
-                        Discrepancy(expected="status for resource PLACEHOLDER", actual="no status for resource PLACEHOLDER")
+            # Resources only present in the DB but missing from the scheduler
+            only_in_db = resources_in_db.keys() - self._state.resource_state.keys()
+            for rid in only_in_db:
+                discrepancy_map[rid] = [
+                    Discrepancy(
+                        expected=(
+                            f"Resource {rid} is present in the DB (model version {latest_version}). "
+                            "It is expected in the scheduler's resource_state map."
+                        ),
+                        actual=f"Resource {rid} is missing from the scheduler's resource_state map.",
                     )
-                else:
-                    if db_deploy_result:
-                        if scheduler_resource_state.deployment_result != db_deploy_result:
-                            resource_discrepancies.append(
-                                Discrepancy(expected=db_deploy_result, actual=scheduler_resource_state.deployment_result)
-                            )
-                    if db_blocked_status:
-                        if scheduler_resource_state.blocked != db_blocked_status:
-                            resource_discrepancies.append(
-                                Discrepancy(expected=db_blocked_status, actual=scheduler_resource_state.blocked)
-                            )
-                    if db_compliance_status:
-                        if scheduler_resource_state.status != db_compliance_status:
-                            resource_discrepancies.append(
-                                Discrepancy(expected=db_compliance_status, actual=scheduler_resource_state.status)
-                            )
+                ]
+
+            # Resources only present in the scheduler but missing from the DB
+            only_in_scheduler = self._state.resource_state.keys() - resources_in_db.keys()
+            for rid in only_in_scheduler:
+                discrepancy_map[rid] = [
+                    Discrepancy(
+                        expected=(
+                            f"Resource {rid} is not present in the DB (model version {latest_version}). "
+                            "It shouldn't be in the scheduler's resource_state map."
+                        ),
+                        actual=f"Resource {rid} is present in the scheduler's resource_state map.",
+                    )
+                ]
+
+            # For resources in both the DB and the scheduler, check for discrepancies in state
+            for rid in resources_in_db.keys() & self._state.resource_state.keys():
+                resource_discrepancies: list[Discrepancy] = []
+
+                db_resource_details = resources_in_db[rid]
+                db_deploy_result, db_blocked_status, db_compliance_status = state_translation_table[db_resource_details.status]
+
+                scheduler_resource_state: ResourceState = self._state.resource_state[rid]
+                if db_deploy_result:
+                    if scheduler_resource_state.deployment_result != db_deploy_result:
+                        resource_discrepancies.append(
+                            Discrepancy(expected=db_deploy_result, actual=scheduler_resource_state.deployment_result)
+                        )
+                if db_blocked_status:
+                    if scheduler_resource_state.blocked != db_blocked_status:
+                        resource_discrepancies.append(
+                            Discrepancy(expected=db_blocked_status, actual=scheduler_resource_state.blocked)
+                        )
+                if db_compliance_status:
+                    if scheduler_resource_state.status != db_compliance_status:
+                        resource_discrepancies.append(
+                            Discrepancy(expected=db_compliance_status, actual=scheduler_resource_state.status)
+                        )
 
                 if resource_discrepancies:
                     discrepancy_map[rid] = resource_discrepancies
@@ -450,8 +477,8 @@ class ResourceScheduler(TaskManager):
 
         discrepancy_map = _build_discrepancy_map(resources_in_db)
         _log_discrepancies(discrepancy_map)
-
-        return self._state.resource_state
+        LOGGER.error("FLAG2")
+        return SchedulerStatusReport(resource_state=self._state.resource_state, discrepancies=discrepancy_map)
 
     async def _build_resource_mappings_from_db(
         self, version: int, *, connection: Optional[asyncpg.connection.Connection] = None

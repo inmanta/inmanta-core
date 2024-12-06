@@ -20,7 +20,8 @@ import asyncio
 import logging
 import pathlib
 import uuid
-from typing import Mapping, Optional
+from collections.abc import Sequence
+from typing import Mapping, NamedTuple, Optional
 from uuid import UUID
 
 import pytest
@@ -29,6 +30,7 @@ from inmanta import config, const, data, execute
 from inmanta.config import Config
 from inmanta.data import SERVER_COMPILE
 from inmanta.deploy.state import DeploymentResult
+from inmanta.resources import Id
 from inmanta.server import SLICE_PARAM, SLICE_SERVER
 from inmanta.util import get_compiler_version
 from utils import (
@@ -38,7 +40,6 @@ from utils import (
     wait_full_success,
     wait_until_deployment_finishes,
 )
-from inmanta.resources import Id
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +123,6 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     env_id = environment
     scheduler = agent.scheduler
 
-
     resource_container.Provider.reset()
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
@@ -130,11 +130,11 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     resource_container.Provider.set("agent3", "key", "value")
     resource_container.Provider.set_fail("agent1", "key3", 2)
 
-    result = await client.get_scheduler_status(env_id)
-    assert result.code == 200
-
-    expected_state = {"resource_state": {}}
-    assert result.result["data"] == expected_state
+    # result = await client.get_scheduler_status(env_id)
+    # assert result.code == 200
+    #
+    # expected_state = {"resource_state": {}}
+    # assert result.result["data"] == expected_state
 
     async def make_version(is_different=False):
         """
@@ -148,9 +148,9 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
             resources.extend(
                 [
                     {
-                        "key": "key",
+                        "key": "key1",
                         "value": "value",
-                        "id": "test::Resourcex[%s,key=key],v=%d" % (agent, version),
+                        "id": "test::Resourcex[%s,key=key1],v=%d" % (agent, version),
                         "requires": ["test::Resourcex[%s,key=key3],v=%d" % (agent, version)],
                         "purged": False,
                         "send_event": False,
@@ -160,7 +160,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                         "key": "key2",
                         "value": "value",
                         "id": "test::Resourcex[%s,key=key2],v=%d" % (agent, version),
-                        "requires": ["test::Resourcex[%s,key=key],v=%d" % (agent, version)],
+                        "requires": ["test::Resourcex[%s,key=key1],v=%d" % (agent, version)],
                         "purged": not is_different,
                         "send_event": False,
                         "attributes": {"A": "B"},
@@ -189,7 +189,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                         "id": "test::Resourcex[%s,key=key5],v=%d" % (agent, version),
                         "requires": [
                             "test::Resourcex[%s,key=key4],v=%d" % (agent, version),
-                            "test::Resourcex[%s,key=key],v=%d" % (agent, version),
+                            "test::Resourcex[%s,key=key1],v=%d" % (agent, version),
                         ],
                         "purged": False,
                         "send_event": False,
@@ -220,33 +220,51 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     logger.info("first version pushed")
 
-
     result = await client.get_scheduler_status(env_id)
     assert result.code == 200
 
-    expected_state = {"resource_state": {}}
+    expected_state = {"resource_state": {}, "discrepancies": {}}
     assert result.result["data"] == expected_state
 
     # deploy and wait until one is ready
     result = await client.release_version(env_id, version1)
     assert result.code == 200
 
-
-
     await clienthelper.wait_for_released(version1)
-
 
     logger.info("first version released")
 
     await clienthelper.wait_for_deployed()
 
-    new_resource_expected_status = {'blocked': 'no', 'deployment_result': 'new', 'status': 'has_update'}
-    deployed_resource_expected_status = {'blocked': 'no', 'deployment_result': 'deployed', 'status': 'compliant'}
-    expected_state = {"resource_state": {Id.parse_id(resource["id"]).resource_str(): deployed_resource_expected_status for resource in resources}}
+    deployed_resource_expected_status = {"blocked": "no", "deployment_result": "deployed", "status": "compliant"}
+    failed_resource_expected_status = {"blocked": "no", "deployment_result": "failed", "status": "non_compliant"}
+    skipped_resource_expected_status = {"blocked": "no", "deployment_result": "skipped", "status": "non_compliant"}
+
+    class ExpectedResourceStatus(NamedTuple):
+        rid: str
+        expected_status: dict[str, str]
+
+    def build_expected_state(all_resources: Sequence[str], specific_resources: Sequence[ExpectedResourceStatus]):
+        expected_state = {
+            "resource_state": {
+                Id.parse_id(resource["id"]).resource_str(): deployed_resource_expected_status for resource in all_resources
+            },
+            "discrepancies": {},
+        }
+        for resource_status in specific_resources:
+            expected_state["resource_state"][resource_status.rid] = resource_status.expected_status
+
+        return expected_state
+
+    v1_expected_result = []
+    for i in range(1, 6):
+        rid = f"test::Resourcex[agent1,key=key{i}]"
+        result = failed_resource_expected_status if i == 3 else skipped_resource_expected_status
+        v1_expected_result.append(ExpectedResourceStatus(rid=rid, expected_status=result))
 
     result = await client.get_scheduler_status(env_id)
     assert result.code == 200
-    assert result.result["data"] == expected_state
+    assert result.result["data"] == build_expected_state(resources, v1_expected_result)
 
     await check_scheduler_state(resources, scheduler)
     await resource_action_consistency_check()
@@ -285,6 +303,10 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     await client.deploy(environment, agent_trigger_method=const.AgentTriggerMethod.push_incremental_deploy)
 
     await wait_full_success(client, environment)
+
+    result = await client.get_scheduler_status(env_id)
+    assert result.code == 200
+    assert result.result["data"] == build_expected_state(resources, [])
 
 
 async def check_server_state_vs_scheduler_state(client, environment, scheduler):
@@ -949,4 +971,3 @@ async def test_lsm_states(resource_container, server, client, clienthelper, envi
     # One failure, one skip, in the depdencies
     # response is failure
     assert state_map == {rid1: "failed", rid2: "skipped", lsmrid: "failed"}
-

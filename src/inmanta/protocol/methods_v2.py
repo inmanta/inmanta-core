@@ -409,6 +409,23 @@ def get_scheduler_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
 
 
 @typedmethod(
+    path="/scheduler/state",
+    operation="GET",
+    server_agent=True,
+    enforce_auth=False,
+    arg_options=methods.ENV_OPTS,
+    client_types=[],
+    api_version=2,
+)
+def trigger_get_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
+    """
+    Get a snapshot of the scheduler state
+
+    :param tid: The id of the environment.
+    """
+
+
+@typedmethod(
     path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
 def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
