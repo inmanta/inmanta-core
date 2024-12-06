@@ -128,11 +128,11 @@ class TimerManager:
         self.periodic_repair_interval = None
         self.periodic_deploy_interval = None
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         for timer in self.resource_timers.values():
             timer.cancel()
 
-        self._cron_scheduler.stop()
+        await self._cron_scheduler.stop()
 
     async def join(self) -> None:
         await asyncio.gather(*[timer.join() for timer in self.resource_timers.values()])

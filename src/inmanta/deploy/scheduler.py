@@ -304,7 +304,7 @@ class ResourceScheduler(TaskManager):
         if not self._running:
             return
         self._running = False
-        self._timer_manager.stop()
+        await self._timer_manager.stop()
         self._work.agent_queues.send_shutdown()
 
     async def join(self) -> None:
@@ -711,7 +711,8 @@ class ResourceScheduler(TaskManager):
             state: ResourceState = self._state.resource_state[resource]
 
             recovered_from_failure: bool = (
-                deployment_result is DeploymentResult.DEPLOYED and state.deployment_result is not DeploymentResult.DEPLOYED
+                deployment_result is DeploymentResult.DEPLOYED
+                and state.deployment_result not in (DeploymentResult.DEPLOYED, DeploymentResult.NEW)
             )
 
             if details.attribute_hash != attribute_hash:
@@ -798,9 +799,9 @@ class ResourceScheduler(TaskManager):
                 dependent
                 for dependent in provides
                 if (dependent_details := self._state.resources.get(dependent, None)) is not None
+                if self._state.resource_state[dependent].blocked is BlockedStatus.NO
                 # default to True for backward compatibility, i.e. not all resources have the field
                 if dependent_details.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
-                if self._state.resource_state[dependent].blocked is BlockedStatus.NO
             }
 
         if not recovered_from_failure:
@@ -830,6 +831,8 @@ class ResourceScheduler(TaskManager):
                     else f"Deploying because an event was received from {resource_id}"
                 ),
                 priority=priority,
+                # report no ongoing deploys because ongoing deploys can not capture the event. We desire new deploys
+                # to be scheduled, even if any are ongoing for the same intent.
                 deploying=set(),
             )
 
