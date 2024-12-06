@@ -792,7 +792,7 @@ class ResourceScheduler(TaskManager):
         recovery_listeners: Set[ResourceIdStr]
 
         if stale_deploy or not sending_resource.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
-            event_listeners = {}
+            event_listeners = set()
         else:
             event_listeners = {
                 dependent
@@ -804,7 +804,7 @@ class ResourceScheduler(TaskManager):
             }
 
         if not recovered_from_failure:
-            recovery_listeners = {}
+            recovery_listeners = set()
         else:
             recovery_listeners = {
                 dependent for dependent in provides if self._state.resource_state[dependent].blocked is BlockedStatus.TRANSIENT
