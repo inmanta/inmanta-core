@@ -200,7 +200,7 @@ class TimerManager:
         assert isinstance(task, util.ScheduledTask)
         return task
 
-    def update_timer(self, resource: ResourceIdStr, is_compliant: bool) -> None:
+    def update_timer(self, resource: ResourceIdStr, *, is_compliant: bool) -> None:
         """
         Make sure the given resource is marked for eventual re-deployment in the future.
 
@@ -282,7 +282,7 @@ class TimerManager:
             priority=priority,
         )
 
-    def update_timers(self, resources: Collection[ResourceIdStr], is_compliant: bool) -> None:
+    def update_timers(self, resources: Collection[ResourceIdStr], *, are_compliant: bool) -> None:
         """
         Make sure the given resources are marked for eventual re-deployment in the future.
         """

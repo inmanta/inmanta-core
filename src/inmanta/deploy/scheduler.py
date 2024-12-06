@@ -503,7 +503,7 @@ class ResourceScheduler(TaskManager):
             # Resources with known deployable changes (new resources or old resources with deployable changes)
             new_desired_state: set[ResourceIdStr] = set()
             # Only contains the direct undeployable resources, not the transitive ones.
-            blocked_resources: set[ResourceIdStr] = set()
+            undefined: set[ResourceIdStr] = set()
             # Resources that were undeployable in a previous model version, but got unblocked. Not the transitive ones.
             unblocked_resources: set[ResourceIdStr] = set()
 
@@ -516,7 +516,7 @@ class ResourceScheduler(TaskManager):
 
             for resource, details in resources.items():
                 if details.status is const.ResourceState.undefined:
-                    blocked_resources.add(resource)
+                    undefined.add(resource)
                     self._work.delete_resource(resource)
                 elif resource in self._state.resources:
                     # It's a resource we know.
@@ -527,10 +527,6 @@ class ResourceScheduler(TaskManager):
                         # The desired state has changed.
                         new_desired_state.add(resource)
                 else:
-                    # It's a resource we don't know yet: it will be marked as dirty
-                    # and added to the scheduled work. Per-resource timers for this
-                    # resource will be set when (if) the associated deploy task completes
-                    # for this resource.
                     new_desired_state.add(resource)
 
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
@@ -546,8 +542,8 @@ class ResourceScheduler(TaskManager):
                 await asyncio.sleep(0)
 
             # A resource should not be present in more than one of these resource sets
-            assert len(new_desired_state | blocked_resources | unblocked_resources) == len(new_desired_state) + len(
-                blocked_resources
+            assert len(new_desired_state | undefined | unblocked_resources) == len(new_desired_state) + len(
+                undefined
             ) + len(unblocked_resources)
 
             # in the current implementation everything below the lock is synchronous, so it's not technically required. It is
@@ -557,33 +553,32 @@ class ResourceScheduler(TaskManager):
             # 2. clarity: it clearly signifies that this is the atomic and performance-sensitive part
             async with self._scheduler_lock:
                 self._state.version = version
-                for resource in blocked_resources:
+                for resource in undefined:
                     self._state.block_resource(resource, resources[resource], is_transitive=False)  # Removes from the dirty set
                 for resource in new_desired_state:
                     self._state.update_desired_state(resource, resources[resource])  # Updates the dirty set
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
-                transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
+                blocked_for_undefined_dep: Set[ResourceIdStr] = self._state.block_provides(resources=undefined)
                 for resource in unblocked_resources:
                     self._state.mark_as_defined(resource, resources[resource])  # Updates the dirty set
                 # Update set of in-progress non-stale deploys by trimming resources with new state
                 self._deploying_latest.difference_update(
-                    new_desired_state, deleted_resources, blocked_resources, transitively_blocked_resources
+                    new_desired_state, deleted_resources, undefined, blocked_for_undefined_dep
                 )
 
                 # Remove timers for resources that are:
                 #    - in the dirty set (because they will be picked up by the scheduler eventually)
-                #    - blocked: no point in re-trying them, re-deploy will happen when (if) dependants successfully deploy
+                #    - blocked: must not be deployed
                 #    - deleted from the model
-
                 self._timer_manager.stop_timers(
-                    self._state.dirty | blocked_resources | transitively_blocked_resources
+                    self._state.dirty | undefined | blocked_for_undefined_dep
                 )
                 self._timer_manager.remove_timers(deleted_resources)
 
                 # Install timers for initial up-to-date resources. They are up-to-date now,
                 # but we want to make sure we periodically repair them.
-                self._timer_manager.update_timers(up_to_date_resources, is_compliant=True)
+                self._timer_manager.update_timers(up_to_date_resources, are_compliant=True)
 
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
@@ -596,7 +591,7 @@ class ResourceScheduler(TaskManager):
                 )
                 for resource in deleted_resources:
                     self._state.drop(resource)  # Removes from the dirty set
-                for resource in blocked_resources | transitively_blocked_resources:
+                for resource in undefined | blocked_for_undefined_dep:
                     self._work.delete_resource(resource)
 
             # Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added
@@ -689,10 +684,7 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             # fetch resource details under lock
             resource_details = self._get_resource_intent(resource)
-            if resource_details is None:
-                return None
-            resource_state = self._state.resource_state.get(resource)
-            if resource_state is None or resource_state.blocked.is_blocked():
+            if resource_details is None or self._state.resource_state[resource].blocked is BlockedStatus.YES::
                 return None
             dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
             self._deploying_latest.add(resource)
