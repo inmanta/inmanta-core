@@ -1318,7 +1318,7 @@ async def test_send_deploy_done(server, client, environment, agent, caplog, meth
                 result=executor.DeployResult(
                     rvid=rvid_r1_v1,
                     action_id=action_id,
-                    status=const.ResourceState.deployed,
+                    resource_state=const.HandlerResourceState.deployed,
                     messages=messages,
                     changes={"attr1": AttributeStateChange(current=None, desired="test")},
                     change=const.Change.purged,
@@ -1401,55 +1401,12 @@ async def test_send_deploy_done(server, client, environment, agent, caplog, meth
             result=executor.DeployResult(
                 rvid=rvid_r1_v1,
                 action_id=action_id,
-                status=const.ResourceState.deployed,
+                resource_state=const.HandlerResourceState.deployed,
                 messages=[],
                 changes={"attr1": AttributeStateChange(current="test", desired="test2")},
                 change=const.Change.created,
             )
         )
-
-
-async def test_send_deploy_done_invalid_state(server, client, environment, agent, caplog):
-    """
-    Ensure proper error handling when a transient state is passed to the `send_deploy_done` method.
-    """
-    env_id = uuid.UUID(environment)
-
-    model_version = 1
-    cm = data.ConfigurationModel(
-        environment=env_id,
-        version=model_version,
-        date=datetime.now().astimezone(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm.insert()
-
-    rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
-    await data.Resource.new(
-        environment=env_id,
-        status=const.ResourceState.available,
-        resource_version_id=rvid_r1_v1,
-        attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
-
-    action_id = uuid.uuid4()
-    update_manager = persistence.ToDbUpdateManager(client, env_id)
-    await update_manager.send_in_progress(action_id, rvid_r1_v1)
-
-    with pytest.raises(ValueError) as exec_info:
-        await update_manager.send_deploy_done(
-            result=executor.DeployResult(
-                rvid=rvid_r1_v1,
-                action_id=action_id,
-                status=const.ResourceState.deploying,
-                messages=[],
-                changes={"attr1": AttributeStateChange(current=None, desired="test")},
-                change=const.Change.created,
-            )
-        )
-    assert "No transient state can be used to mark a deployment as done" in str(exec_info.value)
 
 
 async def test_send_deploy_done_error_handling(server, client, environment, agent):
@@ -1475,7 +1432,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
             result=executor.DeployResult(
                 rvid=rvid_r1_v1,
                 action_id=uuid.uuid4(),
-                status=const.ResourceState.deployed,
+                resource_state=const.HandlerResourceState.deployed,
                 messages=[],
                 changes={},
                 change=const.Change.nochange,
@@ -1497,7 +1454,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
             result=executor.DeployResult(
                 rvid=rvid_r1_v1,
                 action_id=uuid.uuid4(),
-                status=const.ResourceState.deployed,
+                resource_state=const.HandlerResourceState.deployed,
                 messages=[],
                 changes={},
                 change=const.Change.nochange,

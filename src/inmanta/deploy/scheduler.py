@@ -108,8 +108,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: ComplianceStatus,
-        deployment_result: Optional[DeploymentResult] = None,
+        resource_state: const.HandlerResourceState,
     ) -> None:
         """
         Register the end of deployment for the given resource: update the resource state based on the deployment result
@@ -122,8 +121,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         :param resource: The resource to report state for.
         :param attribute_hash: The resource's attribute hash for which this state applies. No scheduler state is updated if the
             hash indicates the state information is stale.
-        :param status: The new resource status.
-        :param deployment_result: The result of the deploy, iff one just finished, otherwise None.
+        :param resource_state: The state of the resource as reported by the handler
         """
 
 
@@ -332,7 +330,7 @@ class ResourceScheduler(TaskManager):
 
         def _should_deploy(resource: ResourceIdStr) -> bool:
             if (resource_state := self._state.resource_state.get(resource)) is not None:
-                return not resource_state.blocked.is_blocked()
+                return resource_state.blocked is BlockedStatus.NO
             # No state was found for this resource. Should probably not happen
             # but err on the side of caution and mark for redeploy.
             return True
@@ -505,7 +503,7 @@ class ResourceScheduler(TaskManager):
             # Only contains the direct undeployable resources, not the transitive ones.
             undefined: set[ResourceIdStr] = set()
             # Resources that were undeployable in a previous model version, but got unblocked. Not the transitive ones.
-            unblocked_resources: set[ResourceIdStr] = set()
+            newly_defined: set[ResourceIdStr] = set()  # resources that were previously undefined but not anymore
 
             # Track potential changes in requires per resource
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
@@ -522,7 +520,7 @@ class ResourceScheduler(TaskManager):
                     # It's a resource we know.
                     if self._state.resource_state[resource].status is ComplianceStatus.UNDEFINED:
                         # The resource has been undeployable in previous versions, but not anymore.
-                        unblocked_resources.add(resource)
+                        newly_defined.add(resource)
                     elif details.attribute_hash != self._state.resources[resource].attribute_hash:
                         # The desired state has changed.
                         new_desired_state.add(resource)
@@ -531,20 +529,17 @@ class ResourceScheduler(TaskManager):
 
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 new_requires: Set[ResourceIdStr] = requires.get(resource, set())
-                added: Set[ResourceIdStr] = new_requires - old_requires
-                dropped: Set[ResourceIdStr] = old_requires - new_requires
-                if added:
-                    added_requires[resource] = added
-                if dropped:
-                    dropped_requires[resource] = dropped
+                added_requires[resource] = new_requires - old_requires
+                dropped_requires[resource] = old_requires - new_requires
+
                 # this loop is race-free, potentially slow, and completely synchronous
                 # => regularly pass control to the event loop to not block scheduler operation during update prep
                 await asyncio.sleep(0)
 
             # A resource should not be present in more than one of these resource sets
-            assert len(new_desired_state | undefined | unblocked_resources) == len(new_desired_state) + len(
-                undefined
-            ) + len(unblocked_resources)
+            assert len(new_desired_state | undefined | newly_defined) == (
+                len(new_desired_state) + len(undefined) + len(newly_defined)
+            )
 
             # in the current implementation everything below the lock is synchronous, so it's not technically required. It is
             # however kept for two reasons:
@@ -560,7 +555,7 @@ class ResourceScheduler(TaskManager):
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
                 blocked_for_undefined_dep: Set[ResourceIdStr] = self._state.block_provides(resources=undefined)
-                for resource in unblocked_resources:
+                for resource in newly_defined:
                     self._state.mark_as_defined(resource, resources[resource])  # Updates the dirty set
                 # Update set of in-progress non-stale deploys by trimming resources with new state
                 self._deploying_latest.difference_update(
@@ -695,12 +690,20 @@ class ResourceScheduler(TaskManager):
         resource: ResourceIdStr,
         *,
         attribute_hash: str,
-        status: ComplianceStatus,
-        deployment_result: Optional[DeploymentResult] = None,
+        resource_state: const.HandlerResourceState,
     ) -> None:
+        # Translate deploy result status to the new deployment result state
+        match resource_state:
+            case const.HandlerResourceState.deployed:
+                deployment_result = DeploymentResult.DEPLOYED
+            case const.HandlerResourceState.skipped | const.HandlerResourceState.skipped_for_dependency:
+                deployment_result = DeploymentResult.SKIPPED
+            case _:
+                deployment_result = DeploymentResult.FAILED
 
-        if deployment_result is DeploymentResult.NEW:
-            raise ValueError("report_resource_state should not be called to register new resources")
+        status = (
+            ComplianceStatus.COMPLIANT if deployment_result is DeploymentResult.DEPLOYED else ComplianceStatus.NON_COMPLIANT
+        )
 
         async with self._scheduler_lock:
             # refresh resource details for latest model state
@@ -739,7 +742,22 @@ class ResourceScheduler(TaskManager):
                 state.deployment_result = deployment_result
                 self._work.finished_deploy(resource)
 
-                if deployment_result is DeploymentResult.DEPLOYED:
+                # Check if we need to mark a resource as transiently blocked
+                # We only do that if it is not already blocked (BlockedStatus.YES)
+                # We might already be unblocked if a dependency succeeded on another agent, e.g. while waiting for the lock
+                # so HandlerResourceState.skipped_for_dependency might be outdated, we have an inconsistency between the
+                # state of the dependencies and the exception that was raised by the handler.
+                # If all dependencies are compliant we don't want to transiently block this resource.
+                if (
+                    state.blocked is not BlockedStatus.YES
+                    and resource_state is const.HandlerResourceState.skipped_for_dependency
+                    and not self._state.are_dependencies_compliant(resource)
+                ):
+                    state.blocked = BlockedStatus.TRANSIENT
+                    # Remove this resource from the dirty set when we block it
+                    self._state.dirty.discard(resource)
+                elif deployment_result is DeploymentResult.DEPLOYED:
+                    # Remove this resource from the dirty set if it is successfully deployed
                     self._state.dirty.discard(resource)
                 else:
                     # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
@@ -750,8 +768,9 @@ class ResourceScheduler(TaskManager):
                 # propagate events
                 self._send_events(details, recovered_from_failure=recovered_from_failure)
 
-            # No matter the deployment result, schedule a re-deploy for this resource
-            self._timer_manager.update_timer(resource, is_compliant=(status is ComplianceStatus.COMPLIANT))
+            # No matter the deployment result, schedule a re-deploy for this resource unless it's blocked
+            if state.blocked is NO:
+                self._timer_manager.update_timer(resource, is_compliant=(status is ComplianceStatus.COMPLIANT))
 
     def _send_events(
         sending_resource: ResourceDetails,

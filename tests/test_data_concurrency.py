@@ -147,7 +147,7 @@ async def test_4889_deadlock_delete_resource_action_update(
             result=executor.DeployResult(
                 rvid=resource,
                 action_id=action_id,
-                status=const.ResourceState.deployed,
+                resource_state=const.HandlerResourceState.deployed,
                 messages=[
                     data.LogLine.log(
                         level=const.LogLevel.DEBUG, msg="message", kwargs={"keyword": 123, "none": None}, timestamp=now
