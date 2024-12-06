@@ -34,13 +34,26 @@ except ImportError:
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute
     from inmanta.ast.entity import Entity
-    from inmanta.execute.runtime import Instance
+    from inmanta.execute.runtime import Instance, ResultVariable
+
+
+class MultiUnsetException(RuntimeException):
+    """
+    This exception is thrown when multiple attributes are accessed that were not yet
+    available (i.e. it has not been frozen yet).
+    """
+
+    def __init__(self, msg: str, result_variables: "list[ResultVariable[object]]") -> None:
+        RuntimeException.__init__(self, None, msg)
+        self.result_variables = result_variables
 
 
 class UnsetException(RuntimeException):
     """
     This exception is thrown when an attribute is accessed that was not yet
     available (i.e. it has not been frozen yet).
+
+    Also used when objects are finalized, this dual use makes the typing completely wrong
     """
 
     def __init__(self, msg: str, instance: Optional["Instance"] = None, attribute: Optional["Attribute"] = None) -> None:
