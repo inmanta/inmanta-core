@@ -18,9 +18,10 @@
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Collection
+from collections.abc import Collection
+from typing import TYPE_CHECKING
 
-import inmanta.util as util
+from inmanta import util
 from inmanta.agent import config as agent_config
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy.work import TaskPriority
@@ -69,6 +70,8 @@ class ResourceTimer:
         Schedule the underlying resource for execution in <countdown> seconds with
         the given reason and priority.
 
+        Should not be called if the timer is already active.
+
         :param countdown: In this many seconds in the future, this method will ensure the underlying
             resource is scheduled for deploy.
         :param reason: The reason argument that will be given for the deploy request.
@@ -77,12 +80,11 @@ class ResourceTimer:
 
         def _create_repair_task() -> None:
             self.trigger_deploy = asyncio.create_task(
-                self._resource_scheduler.trigger_deploy_for_resource(self.resource, reason, priority)
+                self._resource_scheduler.deploy_resource(self.resource, reason, priority)
             )
 
-        assert (
-            self.next_schedule_handle is None
-        ), f"Per-resource timer set twice for resource {self.resource}, this should not happen"
+        if self.next_schedule_handle is not None:
+            raise Exception(f"Per-resource timer set twice for resource {self.resource}, this should not happen")
 
         self.next_schedule_handle = asyncio.get_running_loop().call_later(countdown, _create_repair_task)
 
@@ -198,7 +200,7 @@ class TimerManager:
         assert isinstance(task, util.ScheduledTask)
         return task
 
-    def update_resource(self, resource: ResourceIdStr, is_compliant: bool) -> None:
+    def update_timer(self, resource: ResourceIdStr, is_compliant: bool) -> None:
         """
         Make sure the given resource is marked for eventual re-deployment in the future.
 
@@ -280,23 +282,31 @@ class TimerManager:
             priority=priority,
         )
 
-    def remove_resource(self, resource: ResourceIdStr) -> None:
-        """
-        Cancel the associated re-deployment (if any) for the given resource.
-        """
-        if resource in self.resource_timers:
-            self.resource_timers[resource].cancel()
-
-    def remove_resources(self, resources: Collection[ResourceIdStr]) -> None:
-        """
-        Remove a batch of resources.
-        """
-        for resource in resources:
-            self.remove_resource(resource)
-
-    def update_resources(self, resources: Collection[ResourceIdStr], is_compliant: bool) -> None:
+    def update_timers(self, resources: Collection[ResourceIdStr], is_compliant: bool) -> None:
         """
         Make sure the given resources are marked for eventual re-deployment in the future.
         """
         for resource in resources:
-            self.update_resource(resource, is_compliant)
+            self.update_timer(resource, is_compliant)
+
+    def stop_timer(self, resource: ResourceIdStr) -> None:
+        """
+        Cancel the associated timer (if any) for re-deployment for the given resource.
+        """
+        if resource in self.resource_timers:
+            self.resource_timers[resource].cancel()
+
+    def stop_timers(self, resources: Collection[ResourceIdStr]) -> None:
+        """
+        Stop a batch of resource timers.
+        """
+        for resource in resources:
+            self.stop_timer(resource)
+
+    def remove_timers(self, resources: Collection[ResourceIdStr]) -> None:
+        """
+        Cancel and remove timers for resources that have been completely dropped from the model.
+        """
+        self.stop_timers(resources)
+        for resource in resources:
+            del self.resource_timers[resource]

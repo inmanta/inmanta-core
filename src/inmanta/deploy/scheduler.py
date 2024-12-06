@@ -320,7 +320,7 @@ class ResourceScheduler(TaskManager):
         if not self._running:
             return
         async with self._scheduler_lock:
-            self._timer_manager.remove_resources(self._state.dirty)
+            self._timer_manager.stop_timers(self._state.dirty)
             self._work.deploy_with_context(
                 self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
             )
@@ -341,7 +341,7 @@ class ResourceScheduler(TaskManager):
             return
         async with self._scheduler_lock:
             self._state.dirty.update(resource for resource in self._state.resources.keys() if _should_deploy(resource))
-            self._timer_manager.remove_resources(self._state.dirty)
+            self._timer_manager.stop_timers(self._state.dirty)
             self._work.deploy_with_context(
                 self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
             )
@@ -374,7 +374,7 @@ class ResourceScheduler(TaskManager):
             )
         )
 
-    async def trigger_deploy_for_resource(self, resource: ResourceIdStr, reason: str, priority: TaskPriority) -> None:
+    async def deploy_resource(self, resource: ResourceIdStr, reason: str, priority: TaskPriority) -> None:
         """
         Make sure the given resource is marked for deployment with at least the provided priority.
         If the given priority is higher than the previous one (or if it didn't exist before), a new deploy
@@ -388,7 +388,7 @@ class ResourceScheduler(TaskManager):
             if self._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy
                 return
             to_deploy: set[ResourceIdStr] = {resource}
-            self._timer_manager.remove_resource(resource)
+            self._timer_manager.stop_timer(resource)
             self._work.deploy_with_context(
                 to_deploy,
                 reason=reason,
@@ -576,13 +576,14 @@ class ResourceScheduler(TaskManager):
                 #    - blocked: no point in re-trying them, re-deploy will happen when (if) dependants successfully deploy
                 #    - deleted from the model
 
-                self._timer_manager.remove_resources(
-                    self._state.dirty | blocked_resources | transitively_blocked_resources | deleted_resources
+                self._timer_manager.stop_timers(
+                    self._state.dirty | blocked_resources | transitively_blocked_resources
                 )
+                self._timer_manager.remove_timers(deleted_resources)
 
                 # Install timers for initial up-to-date resources. They are up-to-date now,
                 # but we want to make sure we periodically repair them.
-                self._timer_manager.update_resources(up_to_date_resources, is_compliant=True)
+                self._timer_manager.update_timers(up_to_date_resources, is_compliant=True)
 
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
@@ -758,7 +759,7 @@ class ResourceScheduler(TaskManager):
                 self._send_events(details, recovered_from_failure=recovered_from_failure)
 
             # No matter the deployment result, schedule a re-deploy for this resource
-            self._timer_manager.update_resource(resource, is_compliant=(status is ComplianceStatus.COMPLIANT))
+            self._timer_manager.update_timer(resource, is_compliant=(status is ComplianceStatus.COMPLIANT))
 
     def _send_events(
         sending_resource: ResourceDetails,
@@ -815,7 +816,7 @@ class ResourceScheduler(TaskManager):
             task = Deploy(resource=resource_id)
             assert task in self._work.agent_queues.in_progress
             priority = self._work.agent_queues.in_progress[task]
-            self._timer_manager.remove_resources(all_listeners)
+            self._timer_manager.stop_timers(all_listeners)
             self._work.deploy_with_context(
                 all_listeners,
                 reason=(
