@@ -25,7 +25,7 @@ from uuid import UUID
 from asyncpg import UniqueViolationError
 
 from inmanta import const, data
-from inmanta.agent.executor import DeployResult
+from inmanta.agent.executor import DeployResult, DryrunResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.protocol import Client
@@ -52,6 +52,10 @@ class StateUpdateManager(abc.ABC):
 
     @abc.abstractmethod
     async def send_deploy_done(self, result: DeployResult) -> None:
+        pass
+
+    @abc.abstractmethod
+    async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
         pass
 
 
@@ -90,14 +94,48 @@ class ToServerUpdateManager(StateUpdateManager):
         if response.code != 200:
             LOGGER.error("Resource status update failed %s for %s ", response.result, result.rvid)
 
+    async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
+        await self.client.dryrun_update(
+            tid=env,
+            id=dryrun_result.dryrun_id,
+            resource=dryrun_result.rvid,
+            changes=dryrun_result.changes,
+        )
+        await self.client.resource_action_update(
+            tid=env,
+            resource_ids=[dryrun_result.rvid],
+            action_id=dryrun_result.dryrun_id,
+            action=const.ResourceAction.dryrun,
+            started=dryrun_result.started,
+            finished=dryrun_result.finished,
+            messages=dryrun_result.messages,
+            status=const.ResourceState.dry,
+        )
+
 
 class ToDbUpdateManager(StateUpdateManager):
 
-    def __init__(self, environment: UUID) -> None:
+    def __init__(self, client: Client, environment: UUID) -> None:
         self.environment = environment
+        # TODO: The client is only here temporarily while we fix the dryrun_update
+        self.client = client
         # FIXME: We may want to move the writing of the log to the scheduler side as well,
         #  when all uses of this logger are moved
         self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
+
+    def get_resource_action_logger(self, environment: UUID) -> logging.Logger:
+        """Get the resource action logger for the given environment.
+        :param environment: The environment to get a logger for
+        :return: The logger for the given environment.
+        """
+        return self._resource_action_logger.getChild(str(environment))
+
+    def log_resource_action(self, env: UUID, resource_id: str, log_level: int, ts: datetime.datetime, message: str) -> None:
+        """Write the given log to the correct resource action logger"""
+        logger = self.get_resource_action_logger(env)
+        message = resource_id + ": " + message
+        log_record = resourceservice.ResourceActionLogLine(logger.name, log_level, message, ts)
+        logger.handle(log_record)
 
     async def send_in_progress(
         self, action_id: UUID, resource_id: ResourceVersionIdStr
@@ -274,18 +312,22 @@ class ToDbUpdateManager(StateUpdateManager):
                         environment=self.environment, resource_id=resource.resource_id, connection=connection
                     )
 
-    def log_resource_action(
-        self, env: UUID, resource_id: ResourceVersionIdStr, log_level: int, ts: datetime.datetime, message: str
-    ) -> None:
-        """Write the given log to the correct resource action logger"""
-        logger = self.get_resource_action_logger(env)
-        message = resource_id + ": " + message
-        log_record = resourceservice.ResourceActionLogLine(logger.name, log_level, message, ts)
-        logger.handle(log_record)
-
-    def get_resource_action_logger(self, environment: UUID) -> logging.Logger:
-        """Get the resource action logger for the given environment.
-        :param environment: The environment to get a logger for
-        :return: The logger for the given environment.
-        """
-        return self._resource_action_logger.getChild(str(environment))
+    async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
+        # TODO: Inline these methods so that we don't call the server
+        # To be done after we update the dryrun database table
+        await self.client.dryrun_update(
+            tid=env,
+            id=dryrun_result.dryrun_id,
+            resource=dryrun_result.rvid,
+            changes=dryrun_result.changes,
+        )
+        await self.client.resource_action_update(
+            tid=env,
+            resource_ids=[dryrun_result.rvid],
+            action_id=dryrun_result.dryrun_id,
+            action=const.ResourceAction.dryrun,
+            started=dryrun_result.started,
+            finished=dryrun_result.finished,
+            messages=dryrun_result.messages,
+            status=const.ResourceState.dry,
+        )

@@ -19,6 +19,7 @@
 import abc
 import asyncio
 import logging
+import typing
 import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
@@ -31,11 +32,11 @@ from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import DeployResult
-from inmanta.data import ConfigurationModel
+from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
-from inmanta.deploy.state import DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
+from inmanta.deploy.state import AgentStatus, DeploymentResult, ModelState, ResourceDetails, ResourceState, ResourceStatus
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
@@ -100,6 +101,74 @@ class TaskManager(StateUpdateManager, abc.ABC):
         """
 
 
+class TaskRunner:
+    def __init__(self, endpoint: str, scheduler: "ResourceScheduler"):
+        self.endpoint = endpoint
+        self.status = AgentStatus.STOPPED
+        self._scheduler = scheduler
+        self._task: typing.Optional[asyncio.Task[None]] = None
+        self._notify_task: typing.Optional[asyncio.Task[None]] = None
+
+    async def _start(self) -> None:
+        self.status = AgentStatus.STARTED
+        assert (
+            self._task is None or self._task.done()
+        ), f"Task Runner {self.endpoint} is trying to start twice, this should not happen"
+        self._task = asyncio.create_task(self._run())
+
+    async def _stop(self) -> None:
+        self.status = AgentStatus.STOPPING
+
+    async def notify(self) -> None:
+        """
+        Method to notify the runner that something has changed in the DB. This method will fetch the new information
+        regarding the environment and the information related to the runner (agent). Depending on the desired state of the
+        agent, it will either stop / start the agent or do nothing
+        """
+        should_be_running = await self._scheduler.should_be_running() and await self._scheduler.should_runner_be_running(
+            endpoint=self.endpoint
+        )
+
+        match self.status:
+            case AgentStatus.STARTED if not should_be_running:
+                await self._stop()
+            case AgentStatus.STOPPED if should_be_running:
+                await self._start()
+            case AgentStatus.STOPPING if should_be_running:
+                self.status = AgentStatus.STARTED
+
+    def notify_sync(self) -> None:
+        """
+        Method to notify the runner that something has changed in the DB in a synchronous manner.
+        """
+        # We save it to be sure that the task will not be GC
+        self._notify_task = asyncio.create_task(self.notify())
+
+    async def _run(self) -> None:
+        """Main loop for one agent. It will first fetch or create its actual state from the DB to make sure that it's
+        allowed to run."""
+        while self._scheduler._running and self.status == AgentStatus.STARTED:
+            work_item: work.MotivatedTask[Task] = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
+            try:
+                await work_item.task.execute(self._scheduler, self.endpoint, work_item.reason)
+            except Exception:
+                LOGGER.exception(
+                    "Task %s for agent %s has failed and the exception was not properly handled", work_item.task, self.endpoint
+                )
+
+            self._scheduler._work.agent_queues.task_done(self.endpoint, work_item.task)
+
+        self.status = AgentStatus.STOPPED
+
+    def is_running(self) -> bool:
+        return self.status == AgentStatus.STARTED
+
+    async def join(self) -> None:
+        if self._task is None or self._task.done():
+            return
+        await self._task
+
+
 class ResourceScheduler(TaskManager):
     """
     Scheduler for resource actions. Reads resource state from the database and accepts deploy, dry-run, ... requests from the
@@ -120,7 +189,7 @@ class ResourceScheduler(TaskManager):
         self._work: work.ScheduledWork = work.ScheduledWork(
             requires=self._state.requires.requires_view(),
             provides=self._state.requires.provides_view(),
-            new_agent_notify=self._start_for_agent,
+            new_agent_notify=self._create_agent,
         )
 
         # We uphold two locks to prevent concurrency conflicts between external events (e.g. new version or deploy request)
@@ -136,7 +205,7 @@ class ResourceScheduler(TaskManager):
         self._running = False
         # Agent name to worker task
         # here to prevent it from being GC-ed
-        self._workers: dict[str, asyncio.Task[None]] = {}
+        self._workers: dict[str, TaskRunner] = {}
         # Set of resources for which a concrete non-stale deploy is in progress, i.e. we've committed for a given intent and
         # that intent still reflects the latest resource intent
         # Apart from the obvious, this differs from the agent queues' in-progress deploys in the sense that those are simply
@@ -149,7 +218,7 @@ class ResourceScheduler(TaskManager):
         self.client = client
         self.code_manager = CodeManager(client)
         self.executor_manager = executor_manager
-        self._state_update_delegate = ToDbUpdateManager(environment)
+        self._state_update_delegate = ToDbUpdateManager(client, environment)
 
     def reset(self) -> None:
         """
@@ -192,7 +261,12 @@ class ResourceScheduler(TaskManager):
         }
 
         await self._new_version(
-            version, resources=resources_to_deploy, requires=requires, up_to_date_resources=up_to_date_resources
+            version,
+            # TODO: this is not right! Should pass ALL managed resources, not only those in the increment! Then up_to_date_resources should be plain set
+            resources=resources_to_deploy,
+            requires=requires,
+            up_to_date_resources=up_to_date_resources,
+            reason="Deploy was triggered because the scheduler was started",
         )
 
     async def stop(self) -> None:
@@ -200,18 +274,22 @@ class ResourceScheduler(TaskManager):
             return
         self._running = False
         self._work.agent_queues.send_shutdown()
-        await asyncio.gather(*self._workers.values())
 
-    async def deploy(self, priority: TaskPriority = TaskPriority.USER_DEPLOY) -> None:
+    async def join(self) -> None:
+        await asyncio.gather(*[worker.join() for worker in self._workers.values()])
+
+    async def deploy(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_DEPLOY) -> None:
         """
         Trigger a deploy
         """
         if not self._running:
             return
         async with self._scheduler_lock:
-            self._work.deploy_with_context(self._state.dirty, priority=priority, deploying=self._deploying_latest)
+            self._work.deploy_with_context(
+                self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
+            )
 
-    async def repair(self, priority: TaskPriority = TaskPriority.USER_REPAIR) -> None:
+    async def repair(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_REPAIR) -> None:
         """
         Trigger a repair, i.e. mark all resources as dirty, then trigger a deploy.
         """
@@ -219,7 +297,9 @@ class ResourceScheduler(TaskManager):
             return
         async with self._scheduler_lock:
             self._state.dirty.update(self._state.resources.keys())
-            self._work.deploy_with_context(self._state.dirty, priority=priority, deploying=self._deploying_latest)
+            self._work.deploy_with_context(
+                self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
+            )
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         if not self._running:
@@ -314,7 +394,12 @@ class ResourceScheduler(TaskManager):
             # No model version has been released yet.
             return
         else:
-            await self._new_version(version, resources, requires)
+            await self._new_version(
+                version,
+                resources,
+                requires,
+                reason="Deploy was triggered because a new version has been released",
+            )
 
     async def _new_version(
         self,
@@ -322,6 +407,7 @@ class ResourceScheduler(TaskManager):
         resources: Mapping[ResourceIdStr, ResourceDetails],
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
         up_to_date_resources: Optional[Mapping[ResourceIdStr, ResourceDetails]] = None,
+        reason: str = "Deploy was triggered because a new version has been released",
     ) -> None:
         up_to_date_resources = {} if up_to_date_resources is None else up_to_date_resources
         async with self._intent_lock:
@@ -381,14 +467,14 @@ class ResourceScheduler(TaskManager):
             async with self._scheduler_lock:
                 self._state.version = version
                 for resource in blocked_resources:
-                    self._state.block_resource(resource, details, transient=False)
+                    self._state.block_resource(resource, resources[resource], is_transitive=False)
                 for resource in new_desired_state:
                     self._state.update_desired_state(resource, resources[resource])
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
-                transitively_blocked_resources: set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
+                transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
                 for resource in unblocked_resources:
-                    self._state.unblock_resource(resource)
+                    self._state.mark_as_defined(resource, resources[resource])
                 # Update set of in-progress non-stale deploys by trimming resources with new state
                 self._deploying_latest.difference_update(
                     new_desired_state, deleted_resources, blocked_resources, transitively_blocked_resources
@@ -396,6 +482,7 @@ class ResourceScheduler(TaskManager):
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
                     self._state.dirty,
+                    reason=reason,
                     priority=TaskPriority.NEW_VERSION_DEPLOY,
                     deploying=self._deploying_latest,
                     added_requires=added_requires,
@@ -414,20 +501,58 @@ class ResourceScheduler(TaskManager):
                 # time too many, which is not so bad.
                 self._work.delete_resource(resource)
 
-    def _start_for_agent(self, agent: str) -> None:
+    def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
-        self._workers[agent] = asyncio.create_task(self._run_for_agent(agent))
+        self._workers[agent] = TaskRunner(endpoint=agent, scheduler=self)
+        self._workers[agent].notify_sync()
 
-    async def _run_for_agent(self, agent: str) -> None:
-        """Main loop for one agent"""
-        while self._running:
-            task: Task = await self._work.agent_queues.queue_get(agent)
-            try:
-                await task.execute(self, agent)
-            except Exception:
-                LOGGER.exception("Task %s for agent %s has failed and the exception was not properly handled", task, agent)
+    async def should_be_running(self) -> bool:
+        """
+        Check in the DB (authoritative entity) if the Scheduler should be running
+            i.e. if the environment is not halted.
+        """
+        current_environment = await Environment.get_by_id(self.environment)
+        assert current_environment
+        return not current_environment.halted
 
-            self._work.agent_queues.task_done(agent, task)
+    async def should_runner_be_running(self, endpoint: str) -> bool:
+        """
+        Check in the DB (authoritative entity) if the agent (or the Scheduler if endpoint == Scheduler id) should be running
+            i.e. if it is not paused.
+
+        :param endpoint: The name of the agent
+        """
+        await data.Agent.insert_if_not_exist(environment=self.environment, endpoint=endpoint)
+        current_agent = await data.Agent.get(env=self.environment, endpoint=endpoint)
+        return not current_agent.paused
+
+    async def refresh_agent_state_from_db(self, name: str) -> None:
+        """
+        Refresh from the DB (authoritative entity) the actual state of the agent.
+            - If the agent is not paused: It will make sure that the agent is running.
+            - If the agent is paused: Stop a particular agent.
+
+        :param name: The name of the agent
+        """
+        if name in self._workers:
+            await self._workers[name].notify()
+
+    async def refresh_all_agent_states_from_db(self) -> None:
+        """
+        Refresh from the DB (authoritative entity) the actual state of all agents.
+            - If an agent is not paused: It will make sure that the agent is running.
+            - If an agent is paused: Stop a particular agent.
+        """
+        for worker in self._workers.values():
+            await worker.notify()
+
+    async def is_agent_running(self, name: str) -> bool:
+        """
+        Return True if the provided agent is running, at least an agent that the Scheduler is aware of
+
+        :param name: The name of the agent
+        """
+        return name in self._workers and self._workers[name].is_running()
 
     # TaskManager interface
 
@@ -493,7 +618,12 @@ class ResourceScheduler(TaskManager):
                         task = Deploy(resource=resource)
                         assert task in self._work.agent_queues.in_progress
                         priority = self._work.agent_queues.in_progress[task]
-                        self._work.deploy_with_context(event_listeners, priority=priority, deploying=set())
+                        self._work.deploy_with_context(
+                            event_listeners,
+                            reason=f"Deploying because an event was received from {resource}",
+                            priority=priority,
+                            deploying=set(),
+                        )
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
@@ -505,3 +635,6 @@ class ResourceScheduler(TaskManager):
 
     async def send_deploy_done(self, result: DeployResult) -> None:
         return await self._state_update_delegate.send_deploy_done(result)
+
+    async def dryrun_update(self, env: uuid.UUID, dryrun_result: executor.DryrunResult) -> None:
+        await self._state_update_delegate.dryrun_update(env, dryrun_result)

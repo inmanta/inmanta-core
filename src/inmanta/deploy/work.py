@@ -22,7 +22,7 @@ import typing
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Callable, Optional, TypeVar
+from typing import Callable, Optional
 
 from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import tasks
@@ -30,9 +30,6 @@ from inmanta.deploy import tasks
 """
 Type alias for the union of all task types. Allows exhaustive case matches.
 """
-
-
-T = TypeVar("T", bound=tasks.Task, covariant=True)
 
 
 class TaskPriority(IntEnum):
@@ -47,12 +44,39 @@ class TaskPriority(IntEnum):
     INTERVAL_REPAIR = 6
 
 
-Tiebreaker: typing.TypeAlias = int
+# TODO: docstrings and names
+class PrioritizedTask[T: tasks.Task](typing.Protocol):
+    """
+    Resource action task with a priority attached. Lower values represent a higher priority. Negative priorities are reserved
+    for internal use.
+    """
+
+    @property
+    def task(self) -> T: ...
+
+    @property
+    def priority(self) -> TaskPriority: ...
+
+    @property
+    def priority_tiebreaker(self) -> Optional[int]: ...
+
+
+# TODO: does this belong here or in tasks?
+class MotivatedTask[T: tasks.Task](typing.Protocol):
+    @property
+    def task(self) -> T: ...
+
+    @property
+    def reason(self) -> Optional[str]: ...
+
+
+# TODO: should this remain generic?
+class TaskSpec[T: tasks.Task](PrioritizedTask[T], MotivatedTask[T], typing.Protocol): ...
 
 
 @functools.total_ordering
 @dataclass(kw_only=True)
-class TaskQueueItem:
+class TaskQueueItem(TaskSpec[tasks.Task]):
     """
     Task item for the task queue. Tasks are prioritized based on TaskPriority, with insert order as tiebreaker.
 
@@ -65,7 +89,8 @@ class TaskQueueItem:
 
     task: tasks.Task
     priority: TaskPriority
-    insert_order: Tiebreaker
+    priority_tiebreaker: int
+    reason: Optional[str]
 
     # Mutable state
     deleted: bool = False
@@ -73,12 +98,12 @@ class TaskQueueItem:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):
             return NotImplemented
-        return (self.priority, self.insert_order, self.deleted) == (other.priority, other.insert_order, other.deleted)
+        return (self.priority, self.priority_tiebreaker, self.deleted) == (other.priority, other.priority_tiebreaker, other.deleted)
 
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):
             return NotImplemented
-        return (self.priority, self.insert_order, not self.deleted) < (other.priority, other.insert_order, not other.deleted)
+        return (self.priority, self.priority_tiebreaker, not self.deleted) < (other.priority, other.priority_tiebreaker, not other.deleted)
 
 
 class AgentQueues:
@@ -156,7 +181,7 @@ class AgentQueues:
         """
         return set(self._tasks_by_resource.get(resource, {}).keys())
 
-    def remove(self, task: tasks.Task) -> tuple[TaskPriority, Tiebreaker]:
+    def remove(self, task: tasks.Task) -> TaskSpec[tasks.Task]:
         """
         Removes the given task from its associated agent queue. Raises KeyError if it is not in the queue.
         Returns the priority at which the deleted task was queued.
@@ -167,9 +192,9 @@ class AgentQueues:
         del the_tasks[task]
         if not the_tasks:
             del self._tasks_by_resource[task.resource]
-        return queue_item.priority, queue_item.insert_order
+        return queue_item
 
-    def discard(self, task: tasks.Task) -> Optional[tuple[TaskPriority, Tiebreaker]]:
+    def discard(self, task: tasks.Task) -> Optional[TaskSpec[tasks.Task]]:
         """
         Removes the given task from its associated agent queue if it is present.
         Returns the priority at which the deleted task was queued, if it was at all.
@@ -194,7 +219,12 @@ class AgentQueues:
     ########################################
 
     def queue_put_nowait(
-        self, task: tasks.Task, *, priority: TaskPriority, priority_tiebreaker: Optional[Tiebreaker] = None
+        self,
+        task: tasks.Task,
+        *,
+        priority: TaskPriority,
+        priority_tiebreaker: Optional[int] = None,
+        reason: Optional[str] = None,
     ) -> None:
         """
         Add a new task to the associated agent's queue.
@@ -205,15 +235,15 @@ class AgentQueues:
             Should only be set if this task was previously dropped from the agent queues, in order to insert it back
             at its previous position.
         """
-        insert_order: int = priority_tiebreaker if priority_tiebreaker is not None else self._entry_count
+        priority_tiebreaker = priority_tiebreaker if priority_tiebreaker is not None else self._entry_count
         already_queued: Optional[TaskQueueItem] = self._queue_item_for_task(task)
-        if already_queued is not None and (already_queued.priority, already_queued.insert_order) <= (priority, insert_order):
+        if already_queued is not None and (already_queued.priority, already_queued.priority_tiebreaker) <= (priority, priority_tiebreaker):
             # task is already queued with equal or higher priority
             return
         # reschedule with new priority, no need to explicitly remove, this is achieved by setting self._tasks_by_resource
         if already_queued is not None:
             already_queued.deleted = True
-        item: TaskQueueItem = TaskQueueItem(task=task, priority=priority, insert_order=insert_order)
+        item: TaskQueueItem = TaskQueueItem(task=task, priority=priority, priority_tiebreaker=priority_tiebreaker, reason=reason)
         self._entry_count += 1
         if task.resource not in self._tasks_by_resource:
             self._tasks_by_resource[task.resource] = {}
@@ -227,12 +257,13 @@ class AgentQueues:
         poison_pill = TaskQueueItem(
             task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")),
             priority=TaskPriority.TERMINATED,
-            insert_order=0,
+            priority_tiebreaker=0,
+            reason="Scheduler shutdown",
         )
         for queue in self._agent_queues.values():
             queue.put_nowait(poison_pill)
 
-    async def queue_get(self, agent: str) -> tasks.Task:
+    async def queue_get(self, agent: str) -> MotivatedTask[tasks.Task]:
         """
         Consume a task from an agent's queue. If the queue is empty, blocks until a task becomes available.
         """
@@ -247,7 +278,7 @@ class AgentQueues:
             self.discard(item.task)
             # add the item to _in_progress with the correct priority
             self._in_progress[item.task] = item.priority
-            return item.task
+            return item
 
     def task_done(self, agent: str, task: tasks.Task) -> None:
         """
@@ -260,8 +291,8 @@ class AgentQueues:
         self._agent_queues[agent].task_done()
 
 
-@dataclass
-class BlockedDeploy:
+@dataclass(kw_only=True)
+class BlockedDeploy(TaskSpec[tasks.Deploy]):
     """
     Deploy task that is blocked on one or more of its dependencies (subset of its requires relation).
     """
@@ -269,7 +300,8 @@ class BlockedDeploy:
     task: tasks.Deploy
     blocked_on: set[ResourceIdStr]
     priority: TaskPriority
-    priority_tiebreaker: Optional[Tiebreaker] = None
+    priority_tiebreaker: Optional[int] = None
+    reason: Optional[str]
 
 
 class ScheduledWork:
@@ -311,6 +343,7 @@ class ScheduledWork:
     def deploy_with_context(
         self,
         resources: Set[ResourceIdStr],
+        reason: str,
         *,
         priority: TaskPriority,
         deploying: Optional[Set[ResourceIdStr]] = None,
@@ -399,22 +432,25 @@ class ScheduledWork:
                 # discard rather than remove because task may already be running, in which case we leave it run its course
                 # and simply add a new one
                 task: tasks.Deploy = tasks.Deploy(resource=resource)
-                discarded: Optional[tuple[TaskPriority, Tiebreaker]] = self.agent_queues.discard(task)
+                discarded: Optional[TaskSpec[tasks.Task]] = self.agent_queues.discard(task)
                 new_priority: TaskPriority
-                new_tiebreaker: Optional[Tiebreaker]
+                new_tiebreaker: Optional[int]
+                new_reason: Optional[str]
                 # TODO: test cases (base test case may already exist):
                 #   - queued @ lower (more urgent) priority => eventually requeued at old priority and insert order
                 #   - queued @ equal priority => eventually requeued at old priority and insert order
                 #   - queued @ higher (less urgent) priority & early insert order => eventually requeued at new priority and new
                 #       insert order
                 # -> test insert order by initially having one before and one after, then check new position
-                if discarded is not None and discarded[1] <= priority:
+                if discarded is not None and discarded.priority <= priority:
                     # currently scheduled task has same or lower priority (more urgent) than new one
                     # => keep priority and tiebreaker
-                    new_priority, new_tiebreaker = discarded
+                    new_priority, new_tiebreaker, new_reason = (
+                        discarded.priority, discarded.priority_tiebreaker, discarded.reason
+                    )
                 else:
                     # take new priority and reset tiebreaker so queue at the end of the new priority
-                    new_priority, new_tiebreaker = priority, None
+                    new_priority, new_tiebreaker, new_reason = priority, None, reason
                 queued.remove(resource)
                 self._waiting[resource] = BlockedDeploy(
                     task=task,
@@ -422,6 +458,7 @@ class ScheduledWork:
                     blocked_on=new_blockers,
                     priority=new_priority,
                     priority_tiebreaker=new_tiebreaker,
+                    reason=new_reason,
                 )
             else:
                 self._waiting[resource].blocked_on.update(new_blockers)
@@ -436,7 +473,7 @@ class ScheduledWork:
                 # scheduled as well, they will follow the provides relation to ensure this deploy waits its turn.
                 if task in self.agent_queues:
                     # simply add it again, the queue will make sure only the highest priority is kept
-                    self.agent_queues.queue_put_nowait(task, priority=priority)
+                    self.agent_queues.queue_put_nowait(task, priority=priority, reason=reason)
                 if resource in self._waiting and priority < self._waiting[resource].priority:
                     # TODO: test case (may already exist) + test that tiebreaker is reset
                     self._waiting[resource].priority = priority
@@ -450,6 +487,7 @@ class ScheduledWork:
                 task=tasks.Deploy(resource=resource),
                 blocked_on=blocked_on,
                 priority=priority,
+                reason=reason,
             )
             not_scheduled.discard(resource)
             if not blocked_on:
