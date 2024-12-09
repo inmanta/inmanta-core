@@ -64,6 +64,7 @@ class MotivatedTask[T: tasks.Task](typing.Protocol):
     """
     Resource action task with an optional reason field attached.
     """
+
     @property
     def task(self) -> T: ...
 
@@ -71,7 +72,7 @@ class MotivatedTask[T: tasks.Task](typing.Protocol):
     def reason(self) -> Optional[str]: ...
 
 
-class FullTaskSpec[T: tasks.Task](PrioritizedTask[T], MotivatedTask[T], typing.Protocol):
+class TaskSpec[T: tasks.Task](PrioritizedTask[T], MotivatedTask[T], typing.Protocol):
     """
     Full specification of a resource action task request. Includes both priorities and reason.
 
@@ -103,12 +104,20 @@ class TaskQueueItem(TaskSpec[tasks.Task]):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):
             return NotImplemented
-        return (self.priority, self.priority_tiebreaker, self.deleted) == (other.priority, other.priority_tiebreaker, other.deleted)
+        return (self.priority, self.priority_tiebreaker, self.deleted) == (
+            other.priority,
+            other.priority_tiebreaker,
+            other.deleted,
+        )
 
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):
             return NotImplemented
-        return (self.priority, self.priority_tiebreaker, not self.deleted) < (other.priority, other.priority_tiebreaker, not other.deleted)
+        return (self.priority, self.priority_tiebreaker, not self.deleted) < (
+            other.priority,
+            other.priority_tiebreaker,
+            not other.deleted,
+        )
 
 
 class AgentQueues:
@@ -242,13 +251,18 @@ class AgentQueues:
         """
         priority_tiebreaker = priority_tiebreaker if priority_tiebreaker is not None else self._entry_count
         already_queued: Optional[TaskQueueItem] = self._queue_item_for_task(task)
-        if already_queued is not None and (already_queued.priority, already_queued.priority_tiebreaker) <= (priority, priority_tiebreaker):
+        if already_queued is not None and (already_queued.priority, already_queued.priority_tiebreaker) <= (
+            priority,
+            priority_tiebreaker,
+        ):
             # task is already queued with equal or higher priority
             return
         # reschedule with new priority, no need to explicitly remove, this is achieved by setting self._tasks_by_resource
         if already_queued is not None:
             already_queued.deleted = True
-        item: TaskQueueItem = TaskQueueItem(task=task, priority=priority, priority_tiebreaker=priority_tiebreaker, reason=reason)
+        item: TaskQueueItem = TaskQueueItem(
+            task=task, priority=priority, priority_tiebreaker=priority_tiebreaker, reason=reason
+        )
         self._entry_count += 1
         if task.resource not in self._tasks_by_resource:
             self._tasks_by_resource[task.resource] = {}
@@ -268,8 +282,8 @@ class AgentQueues:
         for queue in self._agent_queues.values():
             queue.put_nowait(poison_pill)
 
-    # Make sure to return MotivatedTask rather than FullTaskSpec because priorities might change so we don't want to give caller
-    # the wrong impression.
+    # Make sure to return MotivatedTask rather than full TaskSpec because priorities might change so we don't want to give
+    # caller the wrong impression.
     async def queue_get(self, agent: str) -> MotivatedTask[tasks.Task]:
         """
         Consume a task from an agent's queue. If the queue is empty, blocks until a task becomes available.
@@ -453,7 +467,9 @@ class ScheduledWork:
                     # currently scheduled task has same or lower priority (more urgent) than new one
                     # => keep priority and tiebreaker
                     new_priority, new_tiebreaker, new_reason = (
-                        discarded.priority, discarded.priority_tiebreaker, discarded.reason
+                        discarded.priority,
+                        discarded.priority_tiebreaker,
+                        discarded.reason,
                     )
                 else:
                     # take new priority and reset tiebreaker so queue at the end of the new priority
