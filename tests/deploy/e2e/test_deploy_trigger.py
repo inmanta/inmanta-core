@@ -122,6 +122,7 @@ async def test_spontaneous_deploy(
     Test that a deploy run is executed every 2 seconds in the new agent
      as specified in the agent_repair_interval (using a cron or not)
     """
+
     with caplog.at_level(logging.DEBUG):
         resource_container.Provider.reset()
 
@@ -154,6 +155,11 @@ async def test_spontaneous_deploy(
         # do a deploy
         start = time.time()
 
+        result = await client.get_scheduler_status(env_id)
+        assert result.code == 200
+        expected_data = {"discrepancies": {}, "resource_state": {}}
+        assert result.result["data"] == expected_data
+
         result = await client.release_version(
             tid=env_id,
             id=version,
@@ -165,11 +171,45 @@ async def test_spontaneous_deploy(
         result = await client.get_version(env_id, version)
         assert result.code == 200
 
+        async def picked_up_by_the_scheduler() -> bool:
+            result = await client.get_scheduler_status(env_id)
+            assert result.code == 200
+            new = {
+                "discrepancies": {},
+                "resource_state": {
+                    "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "new", "status": "has_update"}
+                },
+            }
+            deployed = {
+                "discrepancies": {},
+                "resource_state": {
+                    "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "deployed", "status": "compliant"}
+                },
+            }
+            return result.result["data"] in [new, deployed]
+
+        # Flaky part depending on
+        # when we check the inner status vs how fast the scheduler picks up the resources:
+        #     - if the check happens before the resources are picked up: we get discrepancies + empty resource_state
+        #     - if the check happens after the resources are picked up: we get discrepancies because resources
+        #       are already deployed
+
+        await retry_limited(picked_up_by_the_scheduler, 10)
+
         await clienthelper.wait_for_deployed()
 
         await clienthelper.wait_full_success()
 
         duration = time.time() - start
+        result = await client.get_scheduler_status(env_id)
+        assert result.code == 200
+        expected_data = {
+            "discrepancies": {},
+            "resource_state": {
+                "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "deployed", "status": "compliant"}
+            },
+        }
+        assert result.result["data"] == expected_data
 
         assert await clienthelper.done_count() == 1
 
