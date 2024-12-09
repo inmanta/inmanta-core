@@ -44,7 +44,6 @@ class TaskPriority(IntEnum):
     INTERVAL_REPAIR = 6
 
 
-# TODO: docstrings and names
 class PrioritizedTask[T: tasks.Task](typing.Protocol):
     """
     Resource action task with a priority attached. Lower values represent a higher priority. Negative priorities are reserved
@@ -61,8 +60,10 @@ class PrioritizedTask[T: tasks.Task](typing.Protocol):
     def priority_tiebreaker(self) -> Optional[int]: ...
 
 
-# TODO: does this belong here or in tasks?
 class MotivatedTask[T: tasks.Task](typing.Protocol):
+    """
+    Resource action task with an optional reason field attached.
+    """
     @property
     def task(self) -> T: ...
 
@@ -70,8 +71,12 @@ class MotivatedTask[T: tasks.Task](typing.Protocol):
     def reason(self) -> Optional[str]: ...
 
 
-# TODO: should this remain generic?
-class TaskSpec[T: tasks.Task](PrioritizedTask[T], MotivatedTask[T], typing.Protocol): ...
+class FullTaskSpec[T: tasks.Task](PrioritizedTask[T], MotivatedTask[T], typing.Protocol):
+    """
+    Full specification of a resource action task request. Includes both priorities and reason.
+
+    Intended mostly for internal use within this module. External modules typically only care for MotivatedTask.
+    """
 
 
 @functools.total_ordering
@@ -263,6 +268,8 @@ class AgentQueues:
         for queue in self._agent_queues.values():
             queue.put_nowait(poison_pill)
 
+    # Make sure to return MotivatedTask rather than FullTaskSpec because priorities might change so we don't want to give caller
+    # the wrong impression.
     async def queue_get(self, agent: str) -> MotivatedTask[tasks.Task]:
         """
         Consume a task from an agent's queue. If the queue is empty, blocks until a task becomes available.
