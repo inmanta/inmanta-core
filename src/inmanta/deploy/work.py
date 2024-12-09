@@ -162,6 +162,12 @@ class AgentQueues:
         """
         return item in self._tasks_by_resource.get(item.resource, {})
 
+    def queued(self) -> Mapping[tasks.Task, TaskSpec[tasks.Task]]:
+        """
+        Returns all queued tasks and corresponding request details. Mostly intended for testing purposes.
+        """
+        return {t: spec for per_resource in self._tasks_by_resource.values() for t, spec in per_resource.items()}
+
     def reset(self) -> None:
         self._agent_queues.clear()
         self._tasks_by_resource.clear()
@@ -494,6 +500,7 @@ class ScheduledWork:
                     # TODO: test case (may already exist) + test that tiebreaker is reset
                     self._waiting[resource].priority = priority
                     self._waiting[resource].priority_tiebreaker = None
+                    self._waiting[resource].reason = reason
                 continue
             # task is not yet scheduled, schedule it now
             blocked_on: set[ResourceIdStr] = {
