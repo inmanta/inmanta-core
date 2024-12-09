@@ -1,4 +1,4 @@
-inmanta-dev-dependencies[pytest,async,core]==2.141.0
+inmanta-dev-dependencies[pytest,async,core]==2.142.0
 bumpversion==0.6.0
 logfire>=0.46,<3.0
 openapi_spec_validator==0.7.1
