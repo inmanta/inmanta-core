@@ -471,15 +471,11 @@ class ResourceScheduler(TaskManager):
 
     async def reset_resource_state(self) -> None:
         """
-        Update resources on the latest version of the model stuck in "deploying" state. This can occur when the Scheduler is
-        killed in the middle of a deployment.
+        Update resources on the latest released version of the model stuck in "deploying" state.
+        This can occur when the Scheduler is killed in the middle of a deployment.
         """
-        cm_version = await ConfigurationModel.get_latest_version(self.environment)
-        if cm_version is None:
-            return
-        version = cm_version.version
 
-        await data.Resource.reset_resource_state(self.environment, version)
+        await data.Resource.reset_resource_state(self.environment)
 
     async def _new_version(
         self,
