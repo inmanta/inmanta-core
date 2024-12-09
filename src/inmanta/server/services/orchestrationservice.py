@@ -1312,14 +1312,12 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
     ) -> SchedulerStatusReport:
         await self.autostarted_agent_manager._ensure_scheduler(env.id)
-        LOGGER.error("sched started FLAG1")
         client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
-        if client is not None:
-            status = await client.trigger_get_status(env.id)
-            assert status.code == 200
-            resp = SchedulerStatusReport.model_validate(status.result["data"])
-            LOGGER.error(f"{resp=}")
-            return resp
+        assert client is not None
+        status = await client.trigger_get_status(env.id)
+        assert status.code == 200
+        resp = SchedulerStatusReport.model_validate(status.result["data"])
+        return resp
 
     def convert_resources(self, resources: list[data.Resource]) -> dict[ResourceIdStr, diff.Resource]:
         return {res.resource_id: diff.Resource(resource_id=res.resource_id, attributes=res.attributes) for res in resources}

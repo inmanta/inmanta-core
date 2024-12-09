@@ -374,14 +374,12 @@ class ResourceScheduler(TaskManager):
         to the internal state of the scheduler and return the internal
         state
         """
-        LOGGER.error("FLAG1.5")
 
         resources_in_db: Mapping[ResourceIdStr, ResourceDetails]
 
         try:
             latest_version, resources_in_db, _ = await self._get_resources_in_latest_version()
         except KeyError:
-            LOGGER.error("FLAG1.6")
             return SchedulerStatusReport(resource_state={}, discrepancies={})
 
         def _build_discrepancy_map(
@@ -395,7 +393,7 @@ class ResourceScheduler(TaskManager):
             :return: A dict mapping each resource to the discrepancies related to it (if any)
             """
             state_translation_table: dict[
-                const.ResourceState, Tuple[state.DeploymentResult, state.BlockedStatus, state.ComplianceStatus]
+                const.ResourceState, Tuple[state.DeploymentResult | None, state.BlockedStatus | None, state.ComplianceStatus | None]
             ] = {
                 # A table to translate the old states into the new states
                 # None means don't care, mostly used for values we can't derive from the old state
@@ -467,15 +465,7 @@ class ResourceScheduler(TaskManager):
 
             return discrepancy_map
 
-        def _log_discrepancies(discrepancies: Mapping[ResourceIdStr, list[Discrepancy]]) -> None:
-            for rid, discrepancies in discrepancies.items():
-                LOGGER.error(f"discrepancies {discrepancies=}")
-                for discrepancy in discrepancies:
-                    LOGGER.info("Discrepancy for %s. Expected %s, got %s.", rid, discrepancy.expected, discrepancy.actual)
-
         discrepancy_map = _build_discrepancy_map(resources_in_db)
-        _log_discrepancies(discrepancy_map)
-        LOGGER.error("FLAG2")
         return SchedulerStatusReport(resource_state=self._state.resource_state, discrepancies=discrepancy_map)
 
     async def _build_resource_mappings_from_db(
@@ -846,7 +836,7 @@ class ResourceScheduler(TaskManager):
                             deploying=set(),
                         )
 
-    def translate_resource_state(self, resource_state_object: ResourceState) -> const.ResourceState | None:
+    def translate_resource_state(self, resource_state_object: ResourceState) -> const.ResourceState:
         """
         Project a ResourceState (multi-vector object) into a const.ResourceState (single string denoting its status).
         """
@@ -870,7 +860,7 @@ class ResourceScheduler(TaskManager):
 
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr
-    ) -> Mapping[ResourceIdStr, const.ResourceState]:
+    ) -> dict[ResourceIdStr, const.ResourceState]:
         """
         Get resource state for every dependency of a given resource from the scheduler state.
         The state is then converted to const.ResourceState.

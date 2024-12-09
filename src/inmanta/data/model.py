@@ -899,8 +899,8 @@ LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
 
 
 class SchedulerStatusReport(BaseModel):
-    resource_state: dict[ResourceIdStr, object]
-    discrepancies: dict[ResourceIdStr, object]
+    resource_state: dict[ResourceIdStr, typing.Any]
+    discrepancies: dict[ResourceIdStr, typing.Any]
 
 
 class DataBaseReport(BaseModel):
