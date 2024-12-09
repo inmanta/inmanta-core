@@ -428,6 +428,51 @@ async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
     assert agent.executor_manager.executors["agent1"].execute_count == 2
 
 
+async def test_shutdown(agent: TestAgent, make_resource_minimal):
+    """
+    Ensure the simples deploy scenario works: 2 dependant resources
+    """
+
+    # basic tests once more
+
+    rid1 = "test::Resource[agent1,name=1]"
+    rid2 = "test::Resource[agent1,name=2]"
+    resources = {
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, values={"value": "a"}, requires=[rid1]),
+    }
+
+    await agent.scheduler._new_version(1, resources, make_requires(resources))
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    assert agent.executor_manager.executors["agent1"].execute_count == 2
+
+    # Ensure proper shutdown
+
+    # We are running
+    assert len(agent.scheduler._workers) == 1
+    assert agent.scheduler._workers["agent1"].is_running()
+
+    # Make the agent active!
+    await agent.scheduler.repair(reason="Test")
+
+    # Shutdown
+    await agent.scheduler.stop()
+    assert len(agent.scheduler._workers) == 1
+    assert not agent.scheduler._workers["agent1"].is_running()
+    # This one can be used to validate the test case, but it is a race
+    # So it is commented as it will cause flakes
+    # assert not agent.scheduler._workers["agent1"]._task.done()
+
+    # Join
+    await agent.scheduler.join()
+    assert not agent.scheduler._workers["agent1"].is_running()
+    assert agent.scheduler._workers["agent1"]._task.done()
+
+    # Reset
+    await agent.scheduler._reset()
+    assert len(agent.scheduler._workers) == 0
+
+
 async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> None:
     """
     Verify the behavior of various scheduler intricacies relating to which resources are added to the scheduled work,
