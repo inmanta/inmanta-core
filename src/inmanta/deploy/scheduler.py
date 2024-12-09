@@ -243,31 +243,26 @@ class ResourceScheduler(TaskManager):
         """
         Initialize the scheduler state and continue the deployment where we were before the server was shutdown.
         """
-        async with data.ConfigurationModel.get_connection() as con:
-            # Get resources from the database
-            try:
-                version, resources, requires = await self._get_resources_in_latest_version(connection=con)
-            except KeyError:
-                # No model version has been released yet.
-                return
+        async with self._intent_lock:
+            async with data.ConfigurationModel.get_connection() as con:
+                # Get resources from the database
+                try:
+                    version, resources, requires = await self._get_resources_in_latest_version(connection=con)
+                except KeyError:
+                    # No model version has been released yet.
+                    return
 
-            # Rely on the incremental calculation to determine which resources should be deployed and which not.
-            increment: set[ResourceIdStr]
-            increment, _ = await ConfigurationModel.get_increment(self.environment, version, connection=con)
+                # Rely on the incremental calculation to determine which resources should be deployed and which not.
+                increment: set[ResourceIdStr]
+                increment, _ = await ConfigurationModel.get_increment(self.environment, version, connection=con)
 
-        resources_to_deploy: Mapping[ResourceIdStr, ResourceDetails] = {rid: resources[rid] for rid in increment}
-        up_to_date_resources: Mapping[ResourceIdStr, ResourceDetails] = {
-            rid: resources[rid] for rid in resources.keys() if rid not in increment
-        }
-
-        await self._new_version(
-            version,
-            # TODO: this is not right! Should pass ALL managed resources, not only those in the increment! Then up_to_date_resources should be plain set
-            resources=resources_to_deploy,
-            requires=requires,
-            up_to_date_resources=up_to_date_resources,
-            reason="Deploy was triggered because the scheduler was started",
-        )
+            await self._new_version(
+                version,
+                resources=resources,
+                requires=requires,
+                up_to_date_resources=resources.keys() - increment,
+                reason="Deploy was triggered because the scheduler was started",
+            )
 
     async def stop(self) -> None:
         if not self._running:
@@ -388,118 +383,141 @@ class ResourceScheduler(TaskManager):
         """
         if not self._running:
             return
-        try:
-            version, resources, requires = await self._get_resources_in_latest_version()
-        except KeyError:
-            # No model version has been released yet.
-            return
-        else:
-            await self._new_version(
-                version,
-                resources,
-                requires,
-                reason="Deploy was triggered because a new version has been released",
-            )
+        async with self._intent_lock:
+            try:
+                version, resources, requires = await self._get_resources_in_latest_version()
+            except KeyError:
+                # No model version has been released yet.
+                return
+            else:
+                await self._new_version(
+                    version,
+                    resources,
+                    requires,
+                    reason="Deploy was triggered because a new version has been released",
+                )
 
     async def _new_version(
         self,
         version: int,
         resources: Mapping[ResourceIdStr, ResourceDetails],
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
-        up_to_date_resources: Optional[Mapping[ResourceIdStr, ResourceDetails]] = None,
+        up_to_date_resources: Optional[Set[ResourceIdStr]] = None,
         reason: str = "Deploy was triggered because a new version has been released",
     ) -> None:
-        up_to_date_resources = {} if up_to_date_resources is None else up_to_date_resources
-        async with self._intent_lock:
-            # Inspect new state and compare it with the old one before acquiring scheduler the lock.
-            # This is safe because we only read intent-related state here, for which we've already acquired the lock
-            deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
-            for resource in deleted_resources:
-                self._work.delete_resource(resource)
+        """
+        Register a newly released version with the scheduler. Updates scheduled state and scheduled work accordingly.
 
-            new_desired_state: set[ResourceIdStr] = set()
-            # Only contains the direct undeployable resources, not the transitive ones.
-            blocked_resources: set[ResourceIdStr] = set()
-            # Resources that were undeployable in a previous model version, but got unblocked. Not the transitive ones.
-            unblocked_resources: set[ResourceIdStr] = set()
-            added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
-            dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
-            for resource, details in up_to_date_resources.items():
+        Expects to be called under the intent lock, and with monotonically increasing versions.
+
+        :param version: The model version that is being registered.
+        :param resources: All resources in this version.
+        :param requires: The requires set of each resource in this version.
+        :param up_to_date_resources: Set of resources that are to be considered in an assumed good state due to a previously
+            successful deploy for the same intent. Should not include any blocked resources. Mostly intended for the very first
+            version when the scheduler is started with a fresh state.
+        :param reason: The reason to associate with any deploys caused by this newly released version.
+        """
+        up_to_date_resources = set() if up_to_date_resources is None else up_to_date_resources
+
+        if version < self._state.version:
+            raise ValueError(
+                f"Invalid scheduler state: received out-of-order versions. Currently at version {self._state.version} but"
+                " received version {version}"
+            )
+        if version == self._state.version:
+            return
+
+        # Inspect new state and compare it with the old one before acquiring scheduler the lock.
+        # This is safe because we only read intent-related state here, for which we've already acquired the lock
+        deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
+        for resource in deleted_resources:
+            self._work.delete_resource(resource)
+
+        new_desired_state: set[ResourceIdStr] = set()
+        # Only contains the direct undeployable resources, not the transitive ones.
+        blocked_resources: set[ResourceIdStr] = set()
+        # Resources that were undeployable in a previous model version, but got unblocked. Not the transitive ones.
+        unblocked_resources: set[ResourceIdStr] = set()
+        added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
+        dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
+
+        for resource, details in resources.items():
+            if resource in up_to_date_resources:
                 self._state.add_up_to_date_resource(resource, details)
-
-            for resource, details in resources.items():
-                if details.status is const.ResourceState.undefined:
-                    blocked_resources.add(resource)
-                    self._work.delete_resource(resource)
-                elif resource in self._state.resources:
-                    # It's a resource we know.
-                    if self._state.resource_state[resource].status is ResourceStatus.UNDEFINED:
-                        # The resource has been undeployable in previous versions, but not anymore.
-                        unblocked_resources.add(resource)
-                    elif details.attribute_hash != self._state.resources[resource].attribute_hash:
-                        # The desired state has changed.
-                        new_desired_state.add(resource)
-                else:
-                    # It's a resource we don't know yet.
-                    new_desired_state.add(resource)
-                old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
-                new_requires: Set[ResourceIdStr] = requires.get(resource, set())
-                added: Set[ResourceIdStr] = new_requires - old_requires
-                dropped: Set[ResourceIdStr] = old_requires - new_requires
-                if added:
-                    added_requires[resource] = added
-                if dropped:
-                    dropped_requires[resource] = dropped
-                # this loop is race-free, potentially slow, and completely synchronous
-                # => regularly pass control to the event loop to not block scheduler operation during update prep
-                await asyncio.sleep(0)
-
-            # A resource should not be present in more than one of these resource sets
-            assert len(new_desired_state | blocked_resources | unblocked_resources) == len(new_desired_state) + len(
-                blocked_resources
-            ) + len(unblocked_resources)
-
-            # in the current implementation everything below the lock is synchronous, so it's not technically required. It is
-            # however kept for two reasons:
-            # 1. pass context once more to event loop before starting on the sync path
-            #   (could be achieved with a simple sleep(0) if desired)
-            # 2. clarity: it clearly signifies that this is the atomic and performance-sensitive part
-            async with self._scheduler_lock:
-                self._state.version = version
-                for resource in blocked_resources:
-                    self._state.block_resource(resource, resources[resource], is_transitive=False)
-                for resource in new_desired_state:
-                    self._state.update_desired_state(resource, resources[resource])
-                for resource in added_requires.keys() | dropped_requires.keys():
-                    self._state.update_requires(resource, requires[resource])
-                transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
-                for resource in unblocked_resources:
-                    self._state.mark_as_defined(resource, resources[resource])
-                # Update set of in-progress non-stale deploys by trimming resources with new state
-                self._deploying_latest.difference_update(
-                    new_desired_state, deleted_resources, blocked_resources, transitively_blocked_resources
-                )
-                # ensure deploy for ALL dirty resources, not just the new ones
-                self._work.deploy_with_context(
-                    self._state.dirty,
-                    reason=reason,
-                    priority=TaskPriority.NEW_VERSION_DEPLOY,
-                    deploying=self._deploying_latest,
-                    added_requires=added_requires,
-                    dropped_requires=dropped_requires,
-                )
-                for resource in deleted_resources:
-                    self._state.drop(resource)
-                for resource in blocked_resources | transitively_blocked_resources:
-                    self._work.delete_resource(resource)
-
-            # Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added
-            # again by a deploy trigger (because we dropped them outside the lock).
-            for resource in deleted_resources:
-                # Delete the deleted resources outside the _scheduler_lock, because we do not want to keep the _scheduler_lock
-                # acquired longer than required. The worst that can happen here is that we deploy the deleted resources one
-                # time too many, which is not so bad.
+                continue
+            if details.status is const.ResourceState.undefined:
+                blocked_resources.add(resource)
                 self._work.delete_resource(resource)
+            elif resource in self._state.resources:
+                # It's a resource we know.
+                if self._state.resource_state[resource].status is ResourceStatus.UNDEFINED:
+                    # The resource has been undeployable in previous versions, but not anymore.
+                    unblocked_resources.add(resource)
+                elif details.attribute_hash != self._state.resources[resource].attribute_hash:
+                    # The desired state has changed.
+                    new_desired_state.add(resource)
+            else:
+                # It's a resource we don't know yet.
+                new_desired_state.add(resource)
+            old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
+            new_requires: Set[ResourceIdStr] = requires.get(resource, set())
+            added: Set[ResourceIdStr] = new_requires - old_requires
+            dropped: Set[ResourceIdStr] = old_requires - new_requires
+            if added:
+                added_requires[resource] = added
+            if dropped:
+                dropped_requires[resource] = dropped
+            # this loop is race-free, potentially slow, and completely synchronous
+            # => regularly pass control to the event loop to not block scheduler operation during update prep
+            await asyncio.sleep(0)
+
+        # A resource should not be present in more than one of these resource sets
+        assert len(new_desired_state | blocked_resources | unblocked_resources) == len(new_desired_state) + len(
+            blocked_resources
+        ) + len(unblocked_resources)
+
+        # in the current implementation everything below the lock is synchronous, so it's not technically required. It is
+        # however kept for two reasons:
+        # 1. pass context once more to event loop before starting on the sync path
+        #   (could be achieved with a simple sleep(0) if desired)
+        # 2. clarity: it clearly signifies that this is the atomic and performance-sensitive part
+        async with self._scheduler_lock:
+            self._state.version = version
+            for resource in blocked_resources:
+                self._state.block_resource(resource, resources[resource], is_transitive=False)
+            for resource in new_desired_state:
+                self._state.update_desired_state(resource, resources[resource])
+            for resource in added_requires.keys() | dropped_requires.keys():
+                self._state.update_requires(resource, requires[resource])
+            transitively_blocked_resources: Set[ResourceIdStr] = self._state.block_provides(resources=blocked_resources)
+            for resource in unblocked_resources:
+                self._state.mark_as_defined(resource, resources[resource])
+            # Update set of in-progress non-stale deploys by trimming resources with new state
+            self._deploying_latest.difference_update(
+                new_desired_state, deleted_resources, blocked_resources, transitively_blocked_resources
+            )
+            # ensure deploy for ALL dirty resources, not just the new ones
+            self._work.deploy_with_context(
+                self._state.dirty,
+                reason=reason,
+                priority=TaskPriority.NEW_VERSION_DEPLOY,
+                deploying=self._deploying_latest,
+                added_requires=added_requires,
+                dropped_requires=dropped_requires,
+            )
+            for resource in deleted_resources:
+                self._state.drop(resource)
+            for resource in blocked_resources | transitively_blocked_resources:
+                self._work.delete_resource(resource)
+
+        # Once more, drop all resources that do not exist in this version from the scheduled work, in case they got added
+        # again by a deploy trigger (because we dropped them outside the lock).
+        for resource in deleted_resources:
+            # Delete the deleted resources outside the _scheduler_lock, because we do not want to keep the _scheduler_lock
+            # acquired longer than required. The worst that can happen here is that we deploy the deleted resources one
+            # time too many, which is not so bad.
+            self._work.delete_resource(resource)
 
     def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
