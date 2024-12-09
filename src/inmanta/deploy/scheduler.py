@@ -947,31 +947,9 @@ class ResourceScheduler(TaskManager):
                 deploying=set(),
             )
 
-    def translate_resource_state(self, resource_state_object: ResourceState) -> const.ResourceState:
-        """
-        Project a ResourceState (multi-vector object) into a const.ResourceState (single string denoting its status).
-        """
-        match resource_state_object:
-            case ResourceState(status=ComplianceStatus.UNDEFINED):
-                resource_state = const.ResourceState.undefined
-            case ResourceState(blocked=BlockedStatus.YES):
-                resource_state = const.ResourceState.skipped_for_undefined
-            case ResourceState(status=ComplianceStatus.HAS_UPDATE):
-                resource_state = const.ResourceState.available
-            case ResourceState(deployment_result=DeploymentResult.SKIPPED):
-                resource_state = const.ResourceState.skipped
-            case ResourceState(deployment_result=DeploymentResult.DEPLOYED):
-                resource_state = const.ResourceState.deployed
-            case ResourceState(deployment_result=DeploymentResult.FAILED):
-                resource_state = const.ResourceState.failed
-            case _:
-                raise Exception(f"Cannot translate resource state: {resource_state_object}")
-
-        return resource_state
-
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr
-    ) -> dict[ResourceIdStr, const.ResourceState]:
+    ) -> Mapping[ResourceIdStr, const.ResourceState]:
         """
         Get resource state for every dependency of a given resource from the scheduler state.
         The state is then converted to const.ResourceState.
@@ -985,7 +963,21 @@ class ResourceScheduler(TaskManager):
         dependencies_state = {}
         for dep_id in dependencies:
             resource_state_object: ResourceState = self._state.resource_state[dep_id]
-            dependencies_state[dep_id] = self.translate_resource_state(resource_state_object)
+            match resource_state_object:
+                case ResourceState(status=ComplianceStatus.UNDEFINED):
+                    dependencies_state[dep_id] = const.ResourceState.undefined
+                case ResourceState(blocked=BlockedStatus.YES):
+                    dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
+                case ResourceState(status=ComplianceStatus.HAS_UPDATE):
+                    dependencies_state[dep_id] = const.ResourceState.available
+                case ResourceState(deployment_result=DeploymentResult.SKIPPED):
+                    dependencies_state[dep_id] = const.ResourceState.skipped
+                case ResourceState(deployment_result=DeploymentResult.DEPLOYED):
+                    dependencies_state[dep_id] = const.ResourceState.deployed
+                case ResourceState(deployment_result=DeploymentResult.FAILED):
+                    dependencies_state[dep_id] = const.ResourceState.failed
+                case _:
+                    raise Exception(f"Failed to parse the resource state for {dep_id}: {resource_state_object}")
         return dependencies_state
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
