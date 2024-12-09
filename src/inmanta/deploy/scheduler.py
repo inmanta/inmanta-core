@@ -133,15 +133,21 @@ class TaskRunner:
         self._task: typing.Optional[asyncio.Task[None]] = None
         self._notify_task: typing.Optional[asyncio.Task[None]] = None
 
-    async def _start(self) -> None:
+    async def start(self) -> None:
         self.status = AgentStatus.STARTED
         assert (
             self._task is None or self._task.done()
         ), f"Task Runner {self.endpoint} is trying to start twice, this should not happen"
         self._task = asyncio.create_task(self._run())
 
-    async def _stop(self) -> None:
+    async def stop(self) -> None:
         self.status = AgentStatus.STOPPING
+
+    async def join(self) -> None:
+        assert not self.is_running(), "Joining worker that is not stopped"
+        if self._task is None or self._task.done():
+            return
+        await self._task
 
     async def notify(self) -> None:
         """
@@ -155,9 +161,9 @@ class TaskRunner:
 
         match self.status:
             case AgentStatus.STARTED if not should_be_running:
-                await self._stop()
+                await self.stop()
             case AgentStatus.STOPPED if should_be_running:
-                await self._start()
+                await self.start()
             case AgentStatus.STOPPING if should_be_running:
                 self.status = AgentStatus.STARTED
 
@@ -186,11 +192,6 @@ class TaskRunner:
 
     def is_running(self) -> bool:
         return self.status == AgentStatus.STARTED
-
-    async def join(self) -> None:
-        if self._task is None or self._task.done():
-            return
-        await self._task
 
 
 class ResourceScheduler(TaskManager):
@@ -247,7 +248,7 @@ class ResourceScheduler(TaskManager):
 
         self._timer_manager = timers.TimerManager(self)
 
-    async def reset(self) -> None:
+    async def _reset(self) -> None:
         """
         Clear out all state and start empty
 
@@ -256,6 +257,13 @@ class ResourceScheduler(TaskManager):
         assert not self._running
         self._state.reset()
         self._work.reset()
+        # Ensure we are down
+        for worker in self._workers.values():
+            # We have no timeout here
+            # This can potentially hang when an executor hangs
+            # However, the stop should forcefully kill the executor
+            # This will kill the connection and free the worker
+            await worker.join()
         self._workers.clear()
         self._deploying_latest.clear()
         await self._timer_manager.reset()
@@ -263,11 +271,28 @@ class ResourceScheduler(TaskManager):
     async def start(self) -> None:
         if self._running:
             return
-        await self.reset()
+        await self._reset()
         await self.reset_resource_state()
 
         await self._initialize()
         self._running = True
+
+
+    async def stop(self) -> None:
+        if not self._running:
+            return
+        self._running = False
+        await self._timer_manager.stop()
+        # Ensure workers go down
+        # First stop them
+        for worker in self._workers.values():
+            await worker.stop()
+        # Then wake them up to receive the stop
+        self._work.agent_queues.send_shutdown()
+
+    async def join(self) -> None:
+        await asyncio.gather(*[worker.join() for worker in self._workers.values()])
+        await self._timer_manager.join()
 
     async def _initialize(self) -> None:
         """
@@ -299,17 +324,6 @@ class ResourceScheduler(TaskManager):
             up_to_date_resources=up_to_date_resources,
             reason="Deploy was triggered because the scheduler was started",
         )
-
-    async def stop(self) -> None:
-        if not self._running:
-            return
-        self._running = False
-        await self._timer_manager.stop()
-        self._work.agent_queues.send_shutdown()
-
-    async def join(self) -> None:
-        await asyncio.gather(*[worker.join() for worker in self._workers.values()])
-        await self._timer_manager.join()
 
     async def deploy(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_DEPLOY) -> None:
         """
