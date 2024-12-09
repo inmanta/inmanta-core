@@ -25,7 +25,7 @@ import typing
 import uuid
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Mapping, Optional, Sequence, Tuple
+from typing import Any, Coroutine, Mapping, Optional, Sequence, Tuple
 from uuid import UUID
 
 import asyncpg
@@ -44,6 +44,7 @@ from inmanta.deploy import state, tasks
 from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import BlockedStatus
+from inmanta.deploy.timers import TimerManager
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
@@ -236,6 +237,25 @@ state_translation_table: dict[
 }
 
 
+class DummyTimerManager(TimerManager):
+    async def install_timer(
+        self, resource: ResourceIdStr, is_dirty: bool, action: Callable[..., Coroutine[Any, Any, None]]
+    ) -> None:
+        pass
+
+    def update_timer(self, resource: ResourceIdStr, *, is_compliant: bool) -> None:
+        pass
+
+    def stop_timer(self, resource: ResourceIdStr) -> None:
+        pass
+
+    def _trigger_global_deploy(self, cron_expression: str) -> None:
+        pass
+
+    def _trigger_global_repair(self, cron_expression: str) -> None:
+        pass
+
+
 class DummyStateManager(StateUpdateManager):
 
     def __init__(self):
@@ -285,6 +305,7 @@ class TestScheduler(ResourceScheduler):
         self.code_manager = DummyCodeManager(client)
         self.mock_versions = {}
         self._state_update_delegate = DummyStateManager()
+        self._timer_manager = DummyTimerManager(self)
 
     async def read_version(
         self,
@@ -878,7 +899,6 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
 
     def make_resources(
         *,
-        version: int,
         r1_value: Optional[int],
         r2_value: Optional[int],
         r3_value: Optional[int],
@@ -888,10 +908,10 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
         r1_fail: bool = False,
     ) -> dict[ResourceIdStr, state.ResourceDetails]:
         """
-        Returns three resources with a single attribute, whose value is set by the value parameters. The fail parameters
-        control whether the executor should fail or deploy successfully.
-
+        Returns three resources with a single attribute, whose value is set by the value parameters.
         Setting a resource value to None strips it from the model.
+
+        The r1_fail parameter controls whether the r1 resource should fail or deploy successfully.
 
         Unless explicitly overridden, the resources depend on one another like r1 -> r2 -> r3 (r1 provides r2 etc), but only r1
         sends events.
@@ -919,7 +939,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
         }
 
     resources: Mapping[ResourceIdStr, state.ResourceDetails]
-    resources = make_resources(version=5, r1_value=0, r2_value=0, r3_value=0)
+    resources = make_resources(r1_value=0, r2_value=0, r3_value=0)
     await agent.scheduler._new_version(5, resources, make_requires(resources))
 
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
@@ -935,7 +955,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     ##################################
     agent.executor_manager.reset_executor_counters()
     # make a change to r2 only -> verify that only r2 gets redeployed because it has send_event=False
-    resources = make_resources(version=6, r1_value=0, r2_value=1, r3_value=0)
+    resources = make_resources(r1_value=0, r2_value=1, r3_value=0)
     await agent.scheduler._new_version(6, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
@@ -945,12 +965,13 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
 
     # make a change to r1 only -> verify that r2 gets deployed due to event propagation
     agent.executor_manager.reset_executor_counters()
-    resources = make_resources(version=7, r1_value=1, r2_value=1, r3_value=0)
+    resources = make_resources(r1_value=1, r2_value=1, r3_value=0)
     await agent.scheduler._new_version(7, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
     # verify that r3 didn't get an event, i.e. it did not deploy and it is not scheduled or executing
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
@@ -962,7 +983,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     #########################
     agent.executor_manager.reset_executor_counters()
     # release change to r1, and make its deploy fail
-    resources = make_resources(version=8, r1_value=2, r2_value=1, r3_value=0, r1_fail=True)
+    resources = make_resources(r1_value=2, r2_value=1, r3_value=0, r1_fail=True)
     await agent.scheduler._new_version(8, resources, make_requires(resources))
     # assert that r2 got deployed through event propagation
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
@@ -981,7 +1002,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     agent.executor_manager.reset_executor_counters()
 
     # hang r2 in the running state by releasing an update for it
-    resources = make_resources(version=9, r1_value=2, r2_value=2, r3_value=0)
+    resources = make_resources(r1_value=2, r2_value=2, r3_value=0)
     await agent.scheduler._new_version(9, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
 
@@ -992,7 +1013,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
     # trigger an event by releasing a change for r1
-    resources = make_resources(version=10, r1_value=3, r2_value=2, r3_value=0)
+    resources = make_resources(r1_value=3, r2_value=2, r3_value=0)
     await agent.scheduler._new_version(10, resources, make_requires(resources))
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
     # assert that r2 was rescheduled due to the event, even though it is already deploying for its latest intent
@@ -1002,7 +1023,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
 
     # verify that it suffices for r2 to be already scheduled (vs deploying above), i.e. it does not get scheduled twice
     # trigger an event by releasing a change for r1
-    resources = make_resources(version=11, r1_value=4, r2_value=2, r3_value=0)
+    resources = make_resources(r1_value=4, r2_value=2, r3_value=0)
     await agent.scheduler._new_version(11, resources, make_requires(resources))
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 2)
     assert len(agent.scheduler._work._waiting) == 0
@@ -1034,11 +1055,11 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     #   and will be notified by it
     agent.executor_manager.reset_executor_counters()
     # release a new version with an update to r2, where it sends events
-    resources = make_resources(version=12, r1_value=4, r2_value=3, r3_value=0, r2_send_event=True)
+    resources = make_resources(r1_value=4, r2_value=3, r3_value=0, r2_send_event=True)
     await agent.scheduler._new_version(12, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     # release another change to r2, making the currently running deploy stale
-    resources = make_resources(version=13, r1_value=4, r2_value=4, r3_value=0, r2_send_event=True)
+    resources = make_resources(r1_value=4, r2_value=4, r3_value=0, r2_send_event=True)
     await agent.scheduler._new_version(13, resources, make_requires(resources))
 
     # verify expected intermediate state
@@ -1079,11 +1100,11 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     # => should not produce events
     agent.executor_manager.reset_executor_counters()
     # release a new version with an update to r2, where it sends events
-    resources = make_resources(version=13, r1_value=4, r2_value=5, r3_value=0, r2_send_event=True)
+    resources = make_resources(r1_value=4, r2_value=5, r3_value=0, r2_send_event=True)
     await agent.scheduler._new_version(13, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     # drop r2, making the currently running deploy stale
-    resources = make_resources(version=14, r1_value=4, r2_value=None, r3_value=0)
+    resources = make_resources(r1_value=4, r2_value=None, r3_value=0)
     await agent.scheduler._new_version(14, resources, make_requires(resources))
 
     # verify expected intermediate state
@@ -1110,7 +1131,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     agent.executor_manager.reset_executor_counters()
 
     # set up initial state
-    resources = make_resources(version=16, r1_value=4, r2_value=0, r3_value=0)
+    resources = make_resources(r1_value=4, r2_value=0, r3_value=0)
     await agent.scheduler._new_version(16, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
@@ -1128,7 +1149,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert len(agent.scheduler._state.dirty) == 0
 
     # release change for r1, sending event to r2 when it finishes
-    resources = make_resources(version=17, r1_value=5, r2_value=0, r3_value=0)
+    resources = make_resources(r1_value=5, r2_value=0, r3_value=0)
     await agent.scheduler._new_version(17, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
 
@@ -1386,6 +1407,13 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         rid6: make_resource_minimal(rid=rid6, values={"value": "a"}, requires=[rid7]),
         rid7: make_resource_minimal(rid=rid7, values={"value": "a"}, requires=[]),
     }
+
+    #                             +-- rid2  <- rid5
+    #                             |              |
+    #      "Provides"      rid1 <-+-- rid3  <----+
+    #        view                 |              |
+    #                             +-- rid4     rid6 <- rid7
+
     await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 7

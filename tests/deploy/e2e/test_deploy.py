@@ -21,7 +21,7 @@ import logging
 import pathlib
 import uuid
 from collections.abc import Sequence
-from typing import Mapping, NamedTuple, Optional
+from typing import Callable, Mapping, Optional, NamedTuple
 from uuid import UUID
 
 import pytest
@@ -737,7 +737,7 @@ dep_states = [
 ]
 
 
-def make_matrix(matrix, valueparser):
+def make_matrix(matrix: str, valueparser: Callable[[str], bool]) -> list[list[bool]]:
     """
     Expect matrix of the form
 

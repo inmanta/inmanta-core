@@ -282,7 +282,7 @@ class ScheduledWork:
         scheduled work, they will be processed in requires order. Only direct requires are considered. It is the responsibility
         of the scheduler to include in-between resources as scheduled work if/when transitive requires ordering is desired.
 
-    Expects to be informed by the scheduler of deploy requests and/or state changes through add() and
+    Expects to be informed by the scheduler of deploy requests and/or state changes through deploy_with_context() and
     delete_resource().
 
     Expects to be informed by scheduler of finished tasks through finished_deploy().
@@ -474,7 +474,7 @@ class ScheduledWork:
     def delete_resource(self, resource: ResourceIdStr) -> None:
         """
         Drop tasks for a given resource when it was deleted from the model or
-        when we know it can't progress e.g. it is known to be blocked
+        when we know it can't progress e.g. it is undefined and thus known to be blocked
         on another resource.
         Does not affect dry-run tasks because they do not act on the latest desired state.
         """

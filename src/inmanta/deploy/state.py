@@ -143,9 +143,6 @@ class ModelState:
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict[ResourceIdStr, ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
-    # (might be simply a change of its dependencies), which are still being processed by
-    # the resource scheduler. This is a short-lived transient state, used for internal concurrency control. Kept separate from
-    # ResourceStatus so that it lives outside the scheduler lock's scope.
     dirty: set[ResourceIdStr] = dataclasses.field(default_factory=set)
     # types per agent keeps track of which resource types live on which agent by doing a reference count
     # the dict is agent_name -> resource_type -> resource_count
