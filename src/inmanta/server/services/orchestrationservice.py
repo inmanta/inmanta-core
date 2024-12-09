@@ -1316,6 +1316,7 @@ class OrchestrationService(protocol.ServerSlice):
         assert client is not None
         status = await client.trigger_get_status(env.id)
         assert status.code == 200
+        assert status.result is not None
         resp = SchedulerStatusReport.model_validate(status.result["data"])
         return resp
 

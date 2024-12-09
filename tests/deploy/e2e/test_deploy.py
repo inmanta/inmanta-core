@@ -238,7 +238,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     deployed_resource_expected_status = {"blocked": "no", "deployment_result": "deployed", "status": "compliant"}
     failed_resource_expected_status = {"blocked": "no", "deployment_result": "failed", "status": "non_compliant"}
-    skipped_resource_expected_status = {"blocked": "no", "deployment_result": "skipped", "status": "non_compliant"}
+    skipped_resource_expected_status = {"blocked": "transient", "deployment_result": "skipped", "status": "non_compliant"}
 
     class ExpectedResourceStatus(NamedTuple):
         rid: str

@@ -178,7 +178,6 @@ async def test_spontaneous_deploy(
         async def picked_up_by_the_scheduler() -> bool:
             result = await client.get_scheduler_status(env_id)
             assert result.code == 200
-            # Flaky part depending on how fast the scheduler picks this up
             expected_data = {
                 "discrepancies": {},
                 "resource_state": {
@@ -186,6 +185,12 @@ async def test_spontaneous_deploy(
                 },
             }
             return result.result["data"] == expected_data
+
+        # Flaky part depending on
+        # when we check the inner status vs how fast the scheduler picks up the resources:
+        #     - if the check happens before the resources are picked up: we get discrepancies + empty resource_state
+        #     - if the check happens after the resources are picked up: we get discrepancies because resources are already deployed
+
 
         await retry_limited(picked_up_by_the_scheduler, 10)
 
