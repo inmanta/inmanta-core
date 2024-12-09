@@ -158,7 +158,7 @@ async def test_spontaneous_deploy(
 
         result = await client.get_scheduler_status(env_id)
         assert result.code == 200
-        expected_data = {'discrepancies': {}, "resource_state": {}}
+        expected_data = {"discrepancies": {}, "resource_state": {}}
         assert result.result["data"] == expected_data
 
         result = await client.release_version(
@@ -180,13 +180,10 @@ async def test_spontaneous_deploy(
             assert result.code == 200
             # Flaky part depending on how fast the scheduler picks this up
             expected_data = {
-                'discrepancies': {},
+                "discrepancies": {},
                 "resource_state": {
-                    "test::Resource[agent1,key=key1]": {
-                        "blocked": "no",
-                        "deployment_result": "new",
-                        "status": "has_update"}
-                }
+                    "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "new", "status": "has_update"}
+                },
             }
             return result.result["data"] == expected_data
 
@@ -200,10 +197,10 @@ async def test_spontaneous_deploy(
         result = await client.get_scheduler_status(env_id)
         assert result.code == 200
         expected_data = {
-            'discrepancies': {},
+            "discrepancies": {},
             "resource_state": {
                 "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "deployed", "status": "compliant"}
-            }
+            },
         }
         assert result.result["data"] == expected_data
 

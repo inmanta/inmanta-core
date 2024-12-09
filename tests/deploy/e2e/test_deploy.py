@@ -21,7 +21,7 @@ import logging
 import pathlib
 import uuid
 from collections.abc import Sequence
-from typing import Callable, Mapping, Optional, NamedTuple
+from typing import Callable, Mapping, NamedTuple, Optional
 from uuid import UUID
 
 import pytest

@@ -481,6 +481,7 @@ class ResourceScheduler(TaskManager):
 
         discrepancy_map = _build_discrepancy_map(resources_in_db)
         return SchedulerStatusReport(resource_state=self._state.resource_state, discrepancies=discrepancy_map)
+
     async def deploy_resource(self, resource: ResourceIdStr, reason: str, priority: TaskPriority) -> None:
         """
         Make sure the given resource is marked for deployment with at least the provided priority.

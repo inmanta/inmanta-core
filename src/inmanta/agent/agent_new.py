@@ -31,7 +31,7 @@ from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import DataBaseReport, SchedulerStatusReport
 from inmanta.deploy import scheduler
 from inmanta.deploy.work import TaskPriority
-from inmanta.protocol import SessionEndpoint, methods, methods_v2, TypedClient
+from inmanta.protocol import SessionEndpoint, TypedClient, methods, methods_v2
 from inmanta.server.services.databaseservice import DatabaseMonitor
 from inmanta.types import Apireturn
 from inmanta.util import ensure_directory_exist, join_threadpools
