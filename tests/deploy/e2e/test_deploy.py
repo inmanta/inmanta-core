@@ -130,12 +130,6 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     resource_container.Provider.set("agent3", "key", "value")
     resource_container.Provider.set_fail("agent1", "key3", 2)
 
-    # result = await client.get_scheduler_status(env_id)
-    # assert result.code == 200
-    #
-    # expected_state = {"resource_state": {}}
-    # assert result.result["data"] == expected_state
-
     async def make_version(is_different=False):
         """
 
@@ -842,6 +836,7 @@ dep_states_reload = [
 
 @pytest.mark.parametrize("dep_state", dep_states_reload, ids=lambda x: x.name)
 async def test_reload(server, client, clienthelper, environment, resource_container, dep_state, agent):
+
     resource_container.Provider.reset()
 
     version = await clienthelper.get_version()

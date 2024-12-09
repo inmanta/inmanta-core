@@ -45,7 +45,6 @@ async def test_resource_pool():
             await self.set_shutdown()
 
     class SimplePoolManager(SingleIdPoolManager[str, SimplePoolMember]):
-
         async def create_member(self, executor_id: str) -> SimplePoolMember:
             return SimplePoolMember(my_id=executor_id)
 
@@ -75,6 +74,7 @@ async def test_timed_resource_pool():
     counter = itertools.count()
 
     class SimplePoolMember(PoolMember[str]):
+
         def __init__(self, my_id: str) -> None:
             super().__init__(my_id)
             self.count = next(counter)
@@ -168,6 +168,7 @@ async def test_resource_pool_stacking():
                 await self.request_shutdown()
 
     class UpperManager(PoolManager[str, str, DoublePoolManager]):
+
         def _id_to_internal(self, ext_id: str) -> str:
             return ext_id
 
