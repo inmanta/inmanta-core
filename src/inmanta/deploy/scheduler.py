@@ -472,7 +472,7 @@ class ResourceScheduler(TaskManager):
 
         await data.Resource.reset_resource_state(self.environment, version)
 
-    # TODO: create ticket to move intent lock one level up in order to prevent out-of-order versions
+    # FIXME[#8358]: move intent lock one level up in order to prevent out-of-order versions
     async def _new_version(
         self,
         version: int,
