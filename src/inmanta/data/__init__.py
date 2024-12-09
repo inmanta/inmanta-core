@@ -4683,11 +4683,11 @@ class Resource(BaseDocument):
             UPDATE {Resource.table_name()} r
             SET status=ps.last_non_deploying_status::TEXT::resourcestate
             FROM {ResourcePersistentState.table_name()} ps
-            WHERE r.resource_id = ps.resource_id
-                AND r.environment = ps.environment
-                AND r.status = 'deploying'
-                AND r.environment = $1
-                AND r.model = (
+            WHERE r.resource_id=ps.resource_id
+                AND r.environment=ps.environment
+                AND r.status='deploying'
+                AND r.environment=$1
+                AND r.model=(
                     SELECT version
                     FROM {ConfigurationModel.table_name()}
                     WHERE environment=$1
