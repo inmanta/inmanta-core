@@ -304,7 +304,7 @@ class RESTServer(RESTBase):
         else:
             self._http_server = httpserver.HTTPServer(application, decompress_request=True)
 
-        bind_port = server_config.get_bind_port()
+        bind_port = server_config.server_bind_port.get()
         bind_addresses = server_config.server_bind_address.get()
 
         for bind_addr in bind_addresses:

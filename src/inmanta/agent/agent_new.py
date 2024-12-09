@@ -16,34 +16,24 @@
     Contact: code@inmanta.com
 """
 
-import datetime
 import logging
 import os
-import random
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
-from typing import Any, Callable, Coroutine, Optional, Union
+from typing import Any, Optional
 
-from inmanta import config, const, protocol
+import inmanta.server.config as opt
+from inmanta import config, const, data, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
+from inmanta.data.model import DataBaseReport
 from inmanta.deploy import scheduler
-from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
+from inmanta.server.services.databaseservice import DatabaseMonitor
 from inmanta.types import Apireturn
-from inmanta.util import (
-    CronSchedule,
-    IntervalSchedule,
-    ScheduledTask,
-    Scheduler,
-    TaskMethod,
-    TaskSchedule,
-    ensure_directory_exist,
-    join_threadpools,
-)
+from inmanta.util import ensure_directory_exist, join_threadpools
 
 LOGGER = logging.getLogger("inmanta.scheduler")
 
@@ -79,104 +69,17 @@ class Agent(SessionEndpoint):
         self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self._client)
         self.working = False
 
-        self._sched = Scheduler("new agent endpoint")
-        self._time_triggered_actions: set[ScheduledTask] = set()
-
-        self._set_deploy_and_repair_intervals()
-
-    def _set_deploy_and_repair_intervals(self) -> None:
-        """
-        Fetch the settings related to automatic deploys and repairs from the config
-        FIXME: These settings are not currently updated (unlike the old agent)
-            We should fix or remove this timer in the future.
-        """
-        # do regular deploys
-        self._deploy_interval = cfg.agent_deploy_interval.get()
-        deploy_splay_time = cfg.agent_deploy_splay_time.get()
-
-        self._deploy_splay_value = random.randint(0, deploy_splay_time)
-
-        # do regular repair runs
-        self._repair_interval: Union[int, str] = cfg.agent_repair_interval.get()
-        repair_splay_time = cfg.agent_repair_splay_time.get()
-        self._repair_splay_value = random.randint(0, repair_splay_time)
-
-    def _enable_time_triggers(self) -> None:
-
-        def periodic_schedule(
-            kind: str,
-            action: Callable[[], Coroutine[object, None, object]],
-            interval: Union[int, str],
-            splay_value: int,
-        ) -> bool:
-            """
-            Schedule a periodic task
-
-            :param kind: Name of the task (value to display in logs)
-            :param action: The action to schedule periodically
-            :param interval: The interval at which to schedule the task. Can be specified as either a number of
-                seconds, or a cron string.
-            :param splay_value: When specifying the interval as a number of seconds, this parameter specifies
-                the number of seconds by which to delay the initial execution of this action.
-            """
-            now = datetime.datetime.now().astimezone()
-
-            if isinstance(interval, int) and interval > 0:
-                LOGGER.info(
-                    "Scheduling periodic %s with interval %d and splay %d (first run at %s)",
-                    kind,
-                    interval,
-                    splay_value,
-                    (now + datetime.timedelta(seconds=splay_value)).strftime(const.TIME_LOGFMT),
-                )
-                interval_schedule: IntervalSchedule = IntervalSchedule(
-                    interval=float(interval), initial_delay=float(splay_value)
-                )
-                self._enable_time_trigger(action, interval_schedule)
-                return True
-
-            if isinstance(interval, str):
-                LOGGER.info("Scheduling periodic %s with cron expression '%s'", kind, interval)
-                cron_schedule = CronSchedule(cron=interval)
-                self._enable_time_trigger(action, cron_schedule)
-                return True
-            return False
-
-        async def interval_deploy() -> None:
-            now = datetime.datetime.now().astimezone()
-            await self.scheduler.deploy(
-                reason=f"Deploy was triggered at {now} because of deploy timer {self._deploy_interval}",
-                priority=TaskPriority.INTERVAL_DEPLOY,
-            )
-
-        async def interval_repair() -> None:
-            now = datetime.datetime.now().astimezone()
-            await self.scheduler.repair(
-                reason=f"Deploy was triggered at {now} because of repair timer {self._repair_interval}",
-                priority=TaskPriority.INTERVAL_REPAIR,
-            )
-
-        periodic_schedule(
-            "deploy",
-            interval_deploy,
-            self._deploy_interval,
-            self._deploy_splay_value,
+    async def start(self) -> None:
+        # Make mypy happy
+        assert data.Resource._connection_pool is not None
+        self._db_monitor = DatabaseMonitor(
+            data.Resource._connection_pool,
+            opt.db_name.get(),
+            opt.db_host.get(),
         )
-        periodic_schedule(
-            "repair",
-            interval_repair,
-            self._repair_interval,
-            self._repair_splay_value,
-        )
+        self._db_monitor.start()
 
-    def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
-        self._sched.add_action(action, schedule)
-        self._time_triggered_actions.add(ScheduledTask(action=action, schedule=schedule))
-
-    def _disable_time_triggers(self) -> None:
-        for task in self._time_triggered_actions:
-            self._sched.remove(task)
-        self._time_triggered_actions.clear()
+        await super().start()
 
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
         assert self._env_id is not None
@@ -193,10 +96,11 @@ class Agent(SessionEndpoint):
     async def stop(self) -> None:
         if self.working:
             await self.stop_working()
+        if self._db_monitor:
+            await self._db_monitor.stop()
         threadpools_to_join = [self.thread_pool]
         await self.executor_manager.join(threadpools_to_join, const.SHUTDOWN_GRACE_IOLOOP * 0.9)
         self.thread_pool.shutdown(wait=False)
-
         await join_threadpools(threadpools_to_join)
         await super().stop()
 
@@ -213,7 +117,6 @@ class Agent(SessionEndpoint):
         self.working = True
         await self.executor_manager.start()
         await self.scheduler.start()
-        self._enable_time_triggers()
         LOGGER.info("Scheduler started for environment %s", self.environment)
 
     async def stop_working(self, timeout: float = 0.0) -> None:
@@ -221,17 +124,11 @@ class Agent(SessionEndpoint):
         if not self.working:
             return
         self.working = False
-        self._disable_time_triggers()
         await self.scheduler.stop()
         await self.executor_manager.stop()
         await self.executor_manager.join([], timeout=timeout)
         await self.scheduler.join()
         LOGGER.info("Scheduler stopped for environment %s", self.environment)
-
-    @protocol.handle(methods_v2.update_agent_map)
-    async def update_agent_map(self, agent_map: dict[str, str]) -> None:
-        # Not used here
-        pass
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
@@ -302,20 +199,6 @@ class Agent(SessionEndpoint):
         await self.scheduler.read_version()
         return 200
 
-    @protocol.handle(methods.resource_event, env="tid", agent="id")
-    async def resource_event(
-        self,
-        env: uuid.UUID,
-        agent: str,
-        resource: ResourceVersionIdStr,
-        send_events: bool,
-        state: const.ResourceState,
-        change: const.Change,
-        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]],
-    ) -> Apireturn:
-        # Doesn't do anything
-        pass
-
     @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
     async def run_dryrun(self, env: uuid.UUID, dry_run_id: uuid.UUID, agent: str, version: int) -> Apireturn:
         """
@@ -340,6 +223,20 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods.get_status)
     async def get_status(self) -> Apireturn:
         return 200, collect_report(self)
+
+    @protocol.handle(methods_v2.get_db_status)
+    async def get_db_status(self) -> DataBaseReport:
+        if self._db_monitor is None:
+            return DataBaseReport(
+                connected=False,
+                database="",
+                host="",
+                max_pool=0,
+                open_connections=0,
+                free_connections=0,
+                pool_exhaustion_count=0,
+            )
+        return await self._db_monitor.get_status()
 
     def check_storage(self) -> dict[str, str]:
         """

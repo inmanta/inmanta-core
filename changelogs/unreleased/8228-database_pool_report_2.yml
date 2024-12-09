@@ -1,0 +1,3 @@
+description: Fix for 8228 to correctly write out config file
+change-type: patch
+destination-branches: [master]

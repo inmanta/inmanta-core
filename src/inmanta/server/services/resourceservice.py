@@ -19,14 +19,12 @@
 import asyncio
 import datetime
 import logging
-import re
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Sequence
 from typing import Any, Callable, Optional, Union, cast
 
 from asyncpg.connection import Connection
-from asyncpg.exceptions import UniqueViolationError
 from pydantic import ValidationError
 from tornado.httputil import url_concat
 
@@ -41,7 +39,6 @@ from inmanta.data.dataview import (
     ResourceView,
 )
 from inmanta.data.model import (
-    AttributeStateChange,
     DiscoveredResource,
     LatestReleasedResource,
     LinkedDiscoveredResource,
@@ -60,7 +57,7 @@ from inmanta.data.model import (
 from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
-from inmanta.protocol.exceptions import BadRequest, Conflict, Forbidden, NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_RESOURCE, SLICE_TRANSPORT, agentmanager
@@ -209,7 +206,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         env: data.Environment,
         resource_id: ResourceVersionIdStr,
         logs: bool,
-        status: bool,
         log_action: const.ResourceAction,
         log_limit: int,
         connection: Optional[Connection] = None,
@@ -224,9 +220,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             resv = await data.Resource.get(env.id, resource_id, con)
             if resv is None:
                 return 404, {"message": "The resource with the given id does not exist in the given environment"}
-
-            if status is not None and status:
-                return 200, {"status": resv.status}
 
             actions: list[data.ResourceAction] = []
             if bool(logs):
@@ -253,168 +246,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             environment.id, resource_type, attributes, connection=connection
         )
         return [r.to_dto() for r in result]
-
-    @handle(methods.get_resources_for_agent, env="tid")
-    async def get_resources_for_agent(
-        self, env: data.Environment, agent: str, version: Optional[int], sid: uuid.UUID, incremental_deploy: bool
-    ) -> Apireturn:
-        """
-        This method fetches the desired state of resources from the
-        database for a given (environment, agent, model version).
-
-        :param env: Only fetch resources from this environment.
-        :param agent: Only fetch resources this agent is responsible for.
-        :param version: Only fetch resources belonging to this version of
-            the model. Use the latest version by default.
-        :param sid: Session id for the agent.
-        :param incremental_deploy: Only fetch resources for which desired state has
-            changed since the last version.
-
-        :return: A tuple[int, Optional[JsonType]] with the http response code and a dict.
-
-        In case of success, this dict is expected to contain the following keys and associated types:
-        {
-            "environment": uuid.UUID,
-            "agent": str,
-            "version": int,
-            "resources": list[dict[str, object]]  # The requested resources
-            "resource_types": list(ResourceType),  # ALL the types for this model version
-        }
-        """
-        if incremental_deploy:
-            if version is not None:
-                return 500, {"message": "Cannot request increment for a specific version"}
-            result = await self.get_resource_increment_for_agent(env, agent)
-        else:
-            result = await self.get_all_resources_for_agent(env, agent, version)
-        return result
-
-    async def get_all_resources_for_agent(self, env: data.Environment, agent: str, version: Optional[int]) -> Apireturn:
-        started = datetime.datetime.now().astimezone()
-        if version is None:
-            version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
-            if version is None:
-                return 404, {"message": "No version available"}
-
-        else:
-            exists = await data.ConfigurationModel.version_exists(environment=env.id, version=version)
-            if not exists:
-                return 404, {"message": "The given version does not exist"}
-
-        deploy_model = []
-
-        resources = await data.Resource.get_resources_for_version(env.id, version, agent)
-        resource_types: set[ResourceType] = set()
-
-        resource_ids = []
-        for rv in resources:
-            resource_types.add(rv.resource_type)
-
-            deploy_model.append(rv.to_dict())
-            resource_ids.append(rv.resource_version_id)
-
-        # Don't log ResourceActions without resource_version_ids, because
-        # no API call exists to retrieve them.
-        if resource_ids:
-            now = datetime.datetime.now().astimezone()
-            log_line = data.LogLine.log(
-                logging.INFO, "Resource version pulled by client for agent %(agent)s state", agent=agent
-            )
-            self.log_resource_action(env.id, resource_ids, logging.INFO, now, log_line.msg)
-            ra = data.ResourceAction(
-                environment=env.id,
-                version=version,
-                resource_version_ids=resource_ids,
-                action=const.ResourceAction.pull,
-                action_id=uuid.uuid4(),
-                started=started,
-                finished=now,
-                messages=[log_line],
-            )
-            await ra.insert()
-
-        return 200, {
-            "environment": env.id,
-            "agent": agent,
-            "version": version,
-            "resources": deploy_model,
-            "resource_types": list(resource_types),  # cast to list since sets are not json serializable
-        }
-
-    async def get_resource_increment_for_agent(self, env: data.Environment, agent: str) -> Apireturn:
-        started = datetime.datetime.now().astimezone()
-
-        version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
-        if version is None:
-            return 404, {"message": "No version available"}
-
-        version, increment_ids, neg_increment, neg_increment_per_agent = await self.get_increment(env, version)
-
-        now = datetime.datetime.now().astimezone()
-        ON_AGENT_REGEX = re.compile(rf"^[a-zA-Z0-9_:]+\[{re.escape(agent)},")
-
-        # This is a bit subtle.
-        # Any resource we consider deployed has to be marked as such.
-        # Otherwise the agent will fail the deployment.
-        # Stale successful deployments can cause resource that were available to be now considered deployed.
-        # We don't do this back propagation on deploy,
-        #   because it is about a lot of resource that need to grab a lock to check if they are stale
-        # We do it here, as we always have.
-        # This method only updates the state for resources that are currently in the available or deploying state.
-        # As such, it should not race with backpropagation on failure.
-        await self.mark_deployed(
-            env,
-            neg_increment_per_agent[agent],
-            now,
-            version,
-            only_update_from_states=[const.ResourceState.available, const.ResourceState.deploying],
-        )
-
-        resources = await data.Resource.get_resources_for_version(env.id, version, agent)
-
-        deploy_model: list[dict[str, Any]] = []
-        resource_ids: list[str] = []
-
-        resource_types: set[ResourceType] = set()
-
-        for rv in resources:
-            resource_types.add(rv.resource_type)
-            if rv.resource_id not in increment_ids:
-                continue
-
-            def in_requires(req: ResourceIdStr) -> bool:
-                if req in increment_ids:
-                    return True
-                return ON_AGENT_REGEX.match(req) is None
-
-            rv.attributes["requires"] = [r for r in rv.attributes["requires"] if in_requires(r)]
-            deploy_model.append(rv.to_dict())
-            resource_ids.append(rv.resource_version_id)
-
-        # Don't log ResourceActions without resource_version_ids, because
-        # no API call exists to retrieve them.
-        if resource_ids:
-            ra = data.ResourceAction(
-                environment=env.id,
-                version=version,
-                resource_version_ids=resource_ids,
-                action=const.ResourceAction.pull,
-                action_id=uuid.uuid4(),
-                started=started,
-                finished=now,
-                messages=[
-                    data.LogLine.log(logging.INFO, "Resource version pulled by client for agent %(agent)s state", agent=agent)
-                ],
-            )
-            await ra.insert()
-
-        return 200, {
-            "environment": env.id,
-            "agent": agent,
-            "version": version,
-            "resources": deploy_model,
-            "resource_types": list(resource_types),  # cast to list since sets are not json serializable
-        }
 
     async def mark_deployed(
         self,
@@ -496,13 +327,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
 
                 await data.Resource.set_deployed_multi(env.id, resources_id_filtered, version, connection=inner_connection)
                 # Resource persistent state should not be affected
-
-        def post_deploy_update() -> None:
-            # Make sure tasks are scheduled AFTER the tx is done.
-            # This method is only called if the transaction commits successfully.
-            self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, version))
-
-        connection.call_after_tx(post_deploy_update)
 
     async def _update_deploy_state(
         self,
@@ -671,143 +495,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                     self._increment_cache[env.id] = (version, positive, negative, negative_per_agent, run_ahead_lock)
         return increment
 
-    @handle(methods_v2.resource_deploy_done, env="tid", resource_id="rvid")
-    async def resource_deploy_done(
-        self,
-        env: data.Environment,
-        resource_id: Id,
-        action_id: uuid.UUID,
-        status: ResourceState,
-        messages: list[LogLine] = [],
-        changes: dict[str, AttributeStateChange] = {},
-        change: Optional[Change] = None,
-        keep_increment_cache: bool = False,
-    ) -> None:
-        resource_id_str = resource_id.resource_version_str()
-        finished = datetime.datetime.now().astimezone()
-        changes_with_rvid: dict[ResourceVersionIdStr, dict[str, object]] = {
-            resource_id_str: {attr_name: attr_change.model_dump()} for attr_name, attr_change in changes.items()
-        }
-
-        if status not in VALID_STATES_ON_STATE_UPDATE:
-            error_and_log(
-                f"Status {status} is not a valid status at the end of a deployment.",
-                resource_ids=[resource_id_str],
-                action=const.ResourceAction.deploy,
-                action_id=action_id,
-            )
-        if status in TRANSIENT_STATES:
-            error_and_log(
-                "No transient state can be used to mark a deployment as done.",
-                status=status,
-                resource_ids=[resource_id_str],
-                action=const.ResourceAction.deploy,
-                action_id=action_id,
-            )
-
-        async with data.Resource.get_connection() as connection:
-            async with connection.transaction():
-                resource = await data.Resource.get_one(
-                    connection=connection,
-                    environment=env.id,
-                    resource_id=resource_id.resource_str(),
-                    model=resource_id.version,
-                    # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
-                    # cascading deletes
-                    lock=data.RowLockMode.FOR_UPDATE,
-                )
-                if resource is None:
-                    raise NotFound("The resource with the given id does not exist in the given environment.")
-
-                # no escape from terminal
-                if resource.status != status and resource.status in TERMINAL_STATES:
-                    LOGGER.error("Attempting to set undeployable resource to deployable state")
-                    raise AssertionError("Attempting to set undeployable resource to deployable state")
-
-                resource_action = await data.ResourceAction.get(action_id=action_id, connection=connection)
-                if resource_action is None:
-                    raise NotFound(
-                        f"No resource action exists for action_id {action_id}. Ensure "
-                        f"`/resource/<resource_id>/deploy/start` is called first. "
-                    )
-                if resource_action.finished is not None:
-                    raise Conflict(
-                        f"Resource action with id {resource_id_str} was already marked as done at {resource_action.finished}."
-                    )
-
-                for log in messages:
-                    # All other data is stored in the database. The msg was already formatted at the client side.
-                    self.log_resource_action(
-                        env.id,
-                        [resource_id_str],
-                        log.level.to_int,
-                        log.timestamp,
-                        log.msg,
-                    )
-
-                await resource_action.set_and_save(
-                    messages=[
-                        {
-                            **log.model_dump(),
-                            "timestamp": log.timestamp.astimezone().isoformat(timespec="microseconds"),
-                        }
-                        for log in messages
-                    ],
-                    changes=changes_with_rvid,
-                    status=status,
-                    change=change,
-                    finished=finished,
-                    connection=connection,
-                )
-
-                extra_fields = {}
-                if status == ResourceState.deployed:
-                    extra_fields["last_success"] = resource_action.started
-
-                # keep track IF we need to propagate if we are stale
-                # but only do it at the end of the transaction
-                if change != Change.nochange:
-                    # We are producing an event
-                    extra_fields["last_produced_events"] = finished
-
-                await resource.update_fields(
-                    status=status,
-                    connection=connection,
-                )
-                await resource.update_persistent_state(
-                    last_deploy=finished,
-                    last_deployed_version=resource_id.version,
-                    last_deployed_attribute_hash=resource.attribute_hash,
-                    last_non_deploying_status=const.NonDeployingResourceState(status),
-                    **extra_fields,
-                    connection=connection,
-                )
-
-                # final resource update
-                if not keep_increment_cache:
-                    self.clear_env_cache(env)
-
-                if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
-                    await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
-
-        self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
-
-        waiting_agents = {(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides}
-        for agent, aresource_id in waiting_agents:
-            aclient = self.agentmanager_service.get_agent_client(env.id, agent)
-            if aclient is not None:
-                if change is None:
-                    change = const.Change.nochange
-                await aclient.resource_event(
-                    tid=env.id,
-                    id=agent,
-                    resource=aresource_id,
-                    send_events=False,
-                    state=status,
-                    change=change,
-                    changes=changes_with_rvid,
-                )
-
     @handle(methods.resource_action_update, env="tid")
     async def resource_action_update(
         self,
@@ -823,17 +510,10 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         change: const.Change,
         send_events: bool,
         keep_increment_cache: bool = False,
-        is_increment_notification: bool = False,
         only_update_from_states: Optional[set[const.ResourceState]] = None,
         *,
         connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
     ) -> Apireturn:
-        """
-        :param is_increment_notification: is this the increment calucation setting the deployed status,
-            instead of an actual deploy? Used to keep track of the last_success field on the resources,
-            which should not be updated for increments.
-        """
-
         def convert_legacy_state(
             status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]]
         ) -> Optional[const.ResourceState]:
@@ -987,7 +667,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
 
-                        model_version = None
                         for res in resources:
                             await res.update_fields(
                                 status=status,
@@ -999,15 +678,14 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                             if change is not None and change != Change.nochange:
                                 extra_fields["last_produced_events"] = finished
 
-                            if not is_increment_notification:
-                                if status == ResourceState.deployed:
-                                    extra_fields["last_success"] = resource_action.started
-                                if status not in {
-                                    ResourceState.deploying,
-                                    ResourceState.undefined,
-                                    ResourceState.skipped_for_undefined,
-                                }:
-                                    extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
+                            if status == ResourceState.deployed:
+                                extra_fields["last_success"] = resource_action.started
+                            if status not in {
+                                ResourceState.deploying,
+                                ResourceState.undefined,
+                                ResourceState.skipped_for_undefined,
+                            }:
+                                extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
 
                             await res.update_persistent_state(
                                 **extra_fields,
@@ -1015,8 +693,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                                 last_deployed_attribute_hash=res.attribute_hash,
                                 connection=inner_connection,
                             )
-
-                            model_version = res.model
 
                             if (
                                 "purged" in res.attributes
@@ -1030,11 +706,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         if is_resource_state_update and is_resource_action_finished:
 
             def post_deploy_update() -> None:
-                assert model_version is not None  # mypy can't figure this out
-                # Make sure tasks are scheduled AFTER the tx is done.
-                # This method is only called if the transaction commits successfully.
-                self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, model_version))
-
                 waiting_agents = {
                     (Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides
                 }
@@ -1054,54 +725,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             connection.call_after_tx(post_deploy_update)
 
         return 200
-
-    @handle(methods_v2.resource_deploy_start, env="tid", resource_id="rvid")
-    async def resource_deploy_start(
-        self,
-        env: data.Environment,
-        resource_id: Id,
-        action_id: uuid.UUID,
-    ) -> dict[ResourceVersionIdStr, const.ResourceState]:
-        resource_id_str = resource_id.resource_version_str()
-        async with data.Resource.get_connection() as connection:
-            async with connection.transaction():
-                resource = await data.Resource.get_one(
-                    connection=connection,
-                    environment=env.id,
-                    resource_id=resource_id.resource_str(),
-                    model=resource_id.version,
-                )
-                if resource is None:
-                    raise NotFound(message=f"Environment {env.id} doesn't contain a resource with id {resource_id_str}")
-
-                resource_action = data.ResourceAction(
-                    environment=env.id,
-                    version=resource_id.version,
-                    resource_version_ids=[resource_id_str],
-                    action_id=action_id,
-                    action=const.ResourceAction.deploy,
-                    started=datetime.datetime.now().astimezone(),
-                    messages=[
-                        data.LogLine.log(
-                            logging.INFO,
-                            "Resource deploy started on agent %(agent)s, setting status to deploying",
-                            agent=resource_id.agent_name,
-                        )
-                    ],
-                    status=const.ResourceState.deploying,
-                )
-                try:
-                    await resource_action.insert(connection=connection)
-                except UniqueViolationError:
-                    raise Conflict(message=f"A resource action with id {action_id} already exists.")
-
-                await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
-
-            self.clear_env_cache(env)
-
-            return await data.Resource.get_last_non_deploying_state_for_dependencies(
-                environment=env.id, resource_version_id=resource_id, connection=connection
-            )
 
     @handle(methods_v2.get_resource_actions, env="tid")
     async def get_resource_actions(
@@ -1240,19 +863,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             raise BadRequest(e.message) from e
 
         # TODO: optimize for no orphans
-
-    @handle(methods_v2.resources_status, env="tid")
-    async def resources_status(
-        self,
-        env: data.Environment,
-        version: int,
-        rids: list[ResourceIdStr],
-    ) -> dict[str, ResourceState]:
-        try:
-            rids = [Id.parse_id(rid).resource_str() for rid in rids]
-        except ValueError as e:
-            raise BadRequest(str(e))
-        return await data.Resource.get_status_for(env.id, version, rids)
 
     @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ReleasedResourceDetails:

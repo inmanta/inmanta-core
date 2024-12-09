@@ -21,6 +21,7 @@ import json
 import logging
 import time
 import typing
+import urllib.parse
 import uuid
 from datetime import datetime
 from operator import itemgetter
@@ -33,10 +34,12 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 import inmanta.util
 import util.performance
 import utils
-from inmanta import data
+from inmanta import const, data
+from inmanta.agent.executor import DeployResult
 from inmanta.const import ResourceState
-from inmanta.data.model import LatestReleasedResource, ResourceVersionIdStr
-from inmanta.server.config import get_bind_port
+from inmanta.data.model import LatestReleasedResource, ResourceIdStr, ResourceVersionIdStr
+from inmanta.deploy import persistence
+from inmanta.server import config
 
 
 async def test_resource_list_no_released_version(server, client):
@@ -379,7 +382,7 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     assert result.result["links"].get("next") is not None
     assert result.result["links"].get("prev") is None
 
-    port = get_bind_port()
+    port = config.server_bind_port.get()
     base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
@@ -447,6 +450,140 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     assert response["links"].get("prev") is not None
     assert response["links"].get("next") is not None
     assert response["metadata"] == {"total": 5, "before": 2, "after": 1, "page_size": 2}
+
+
+async def test_none_resources_paging(server, client, env_with_resources):
+    """Test the output when listing resources when the pagination criteria does not match any result.
+    We want to assert that metadata and the provided links are still consistent in that particular situation"""
+    env = env_with_resources
+
+    no_result_desc_prev = await client.resource_list(
+        env.id,
+        limit=2,
+        sort="agent.DESC",
+        end="aaaa",
+        last_id="aaa",
+    )
+    assert no_result_desc_prev.code == 200
+    assert len(no_result_desc_prev.result["data"]) == 0
+    assert no_result_desc_prev.result["links"] == {
+        "prev": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&start=aaaa&first_id=aaa",
+        "first": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False",
+        "self": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False",
+    }
+    assert no_result_desc_prev.result["metadata"] == {"after": 0, "before": 6, "page_size": 2, "total": 6}
+
+    # If we try to fetch resources on the linked page, it should return something
+    query_parameters_desc_prev = dict(
+        urllib.parse.parse_qsl(urllib.parse.urlsplit(no_result_desc_prev.result["links"]["prev"]).query)
+    )
+
+    actual_result_desc_prev = await client.resource_list(env.id, **query_parameters_desc_prev)
+    assert actual_result_desc_prev.code == 200
+    expected_result_desc_prev = {
+        "prev": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&start=agent1&"
+        "first_id=test%3A%3AFile%5Bagent1%2Cpath%3D%2Fetc%2Ffile2%5D",
+        "first": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False",
+        "self": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&first_id=aaa&start=aaaa",
+    }
+    assert actual_result_desc_prev.result["links"] == expected_result_desc_prev
+    assert actual_result_desc_prev.result["metadata"] == {"after": 0, "before": 4, "page_size": 2, "total": 6}
+    assert len(actual_result_desc_prev.result["data"]) == 2
+
+    no_result_desc_next = await client.resource_list(
+        env.id,
+        limit=2,
+        sort="agent.DESC",
+        start="zzz",
+        first_id="zzzz",
+    )
+    assert no_result_desc_next.code == 200
+    assert len(no_result_desc_next.result["data"]) == 0
+    assert no_result_desc_next.result["links"] == {
+        "next": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&end=zzz&last_id=zzzz",
+        "self": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&first_id=zzzz&start=zzz",
+    }
+    assert no_result_desc_next.result["metadata"] == {"after": 6, "before": 0, "page_size": 2, "total": 6}
+
+    # If we try to fetch resources on the linked page, it should return something
+    query_parameters_desc_next = dict(
+        urllib.parse.parse_qsl(urllib.parse.urlsplit(no_result_desc_next.result["links"]["next"]).query)
+    )
+
+    actual_result_desc_next = await client.resource_list(env.id, **query_parameters_desc_next)
+    assert actual_result_desc_next.code == 200
+    expected_result_desc_next = {
+        "next": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&end=agent2&last_id=test%3A%3AFile%5Bagent2%2"
+        "Cpath%3D%2Ftmp%2Ffile4%5D",
+        "self": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False",
+    }
+    assert actual_result_desc_next.result["links"] == expected_result_desc_next
+    assert actual_result_desc_next.result["metadata"] == {"after": 4, "before": 0, "page_size": 2, "total": 6}
+    assert len(actual_result_desc_next.result["data"]) == 2
+
+    no_result_asc_prev = await client.resource_list(
+        env.id,
+        limit=2,
+        sort="agent.ASC",
+        start="zzz",
+        first_id="zzzz",
+    )
+    assert no_result_asc_prev.code == 200
+    assert len(no_result_asc_prev.result["data"]) == 0
+    assert no_result_asc_prev.result["links"] == {
+        "prev": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&end=zzz&last_id=zzzz",
+        "first": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False",
+        "self": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&first_id=zzzz&start=zzz",
+    }
+    assert no_result_asc_prev.result["metadata"] == {"after": 0, "before": 6, "page_size": 2, "total": 6}
+
+    # If we try to fetch resources on the linked page, it should return something
+    query_parameters_asc_prev = dict(
+        urllib.parse.parse_qsl(urllib.parse.urlsplit(no_result_asc_prev.result["links"]["prev"]).query)
+    )
+
+    actual_result_asc_prev = await client.resource_list(env.id, **query_parameters_asc_prev)
+    assert actual_result_asc_prev.code == 200
+    expected_result_asc_prev = {
+        "prev": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&end=agent2&"
+        "last_id=test%3A%3AFile%5Bagent2%2Cpath%3D%2Ftmp%2Ffile4%5D",
+        "first": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False",
+        "self": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False",
+    }
+    assert actual_result_asc_prev.result["links"] == expected_result_asc_prev
+    assert actual_result_asc_prev.result["metadata"] == {"after": 0, "before": 4, "page_size": 2, "total": 6}
+    assert len(actual_result_asc_prev.result["data"]) == 2
+
+    no_result_asc_next = await client.resource_list(
+        env.id,
+        limit=2,
+        sort="agent.ASC",
+        end="aaaaa",
+        last_id="aa",
+    )
+    assert no_result_asc_next.code == 200
+    assert len(no_result_asc_next.result["data"]) == 0
+    assert no_result_asc_next.result["links"] == {
+        "next": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&start=aaaaa&first_id=aa",
+        "self": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False",
+    }
+    assert no_result_asc_next.result["metadata"] == {"after": 6, "before": 0, "page_size": 2, "total": 6}
+
+    # If we try to fetch resources on the linked page, it should return something
+    query_parameters_asc_next = dict(
+        urllib.parse.parse_qsl(urllib.parse.urlsplit(no_result_asc_next.result["links"]["next"]).query)
+    )
+
+    actual_result_asc_next = await client.resource_list(env.id, **query_parameters_asc_next)
+    assert actual_result_asc_next.code == 200
+    expected_result_asc_next = {
+        "next": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&start=agent1&"
+        "first_id=test%3A%3AFile%5Bagent1%2Cpath%3D%2Fetc%2Ffile2%5D",
+        "self": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&first_id=aa&start=aaaaa",
+    }
+    assert actual_result_asc_next.result["links"] == expected_result_asc_next
+    assert actual_result_asc_next.result["metadata"] == {"after": 4, "before": 0, "page_size": 2, "total": 6}
+    assert len(actual_result_asc_next.result["data"]) == 2
 
 
 @pytest.mark.parametrize(
@@ -559,7 +696,6 @@ async def test_deploy_summary(server, client, env_with_resources):
 
 @pytest.fixture
 async def very_big_env(server, client, environment, clienthelper, null_agent, instances: int) -> int:
-    agent = null_agent
     env_obj = await data.Environment.get_by_id(environment)
     await env_obj.set(data.AUTO_DEPLOY, True)
 
@@ -623,28 +759,48 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
             version = result.result["data"]
         await utils.wait_until_version_is_released(client, environment, version)
 
-        result = await agent._client.get_resources_for_agent(environment, f"agent{tenant_index}", incremental_deploy=True)
+        # Get all resources
+        result = await client.get_version(tid=environment, id=version)
         assert result.code == 200
-        assert result.result["resources"]
+        all_resources: list[dict[str, object]] = result.result["resources"]
 
-        async def deploy(resource) -> None:
+        # Filter out resources part of the increment
+        increment: set[ResourceIdStr]
+        increment, _ = await data.ConfigurationModel.get_increment(environment, version)
+        resources_in_increment_for_agent: list[dict[str, object]] = [
+            r for r in all_resources if r["resource_id"] in increment and r["agent"] == f"agent{tenant_index}"
+        ]
+
+        to_db_update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
+
+        async def deploy(resource: dict[str, object]) -> None:
             nonlocal deploy_counter
-            rid = resource["id"]
+            rid = ResourceIdStr(resource["resource_id"])
+            rvid = ResourceVersionIdStr(resource["resource_version_id"])
             actionid = uuid.uuid4()
             deploy_counter = deploy_counter + 1
-            await agent._client.resource_deploy_start(environment, rid, actionid)
+            await to_db_update_manager.send_in_progress(actionid, rvid)
             if "sub=4]" in rid:
                 return
             else:
                 if "sub=2]" in rid:
-                    status = ResourceState.failed
+                    status = const.HandlerResourceState.failed
                 elif "sub=3]" in rid:
-                    status = ResourceState.skipped
+                    status = const.HandlerResourceState.skipped
                 else:
-                    status = ResourceState.deployed
-                await agent._client.resource_deploy_done(environment, rid, actionid, status)
+                    status = const.HandlerResourceState.deployed
+                await to_db_update_manager.send_deploy_done(
+                    result=DeployResult(
+                        rvid=rvid,
+                        action_id=actionid,
+                        resource_state=status,
+                        messages=[],
+                        changes={},
+                        change=None,
+                    )
+                )
 
-        await asyncio.gather(*(deploy(resource) for resource in result.result["resources"]))
+        await asyncio.gather(*(deploy(resource) for resource in resources_in_increment_for_agent))
 
     for iteration in [0, 1]:
         for tenant in range(instances):
@@ -677,7 +833,7 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
         "total": very_big_env * 100,
     }
 
-    port = get_bind_port()
+    port = config.server_bind_port.get()
     base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 

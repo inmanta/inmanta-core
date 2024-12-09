@@ -103,7 +103,10 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
 
 @pytest.mark.parametrize(
     "agent_deploy_interval",
-    ["2", "*/2 * * * * * *"],
+    [
+        "2",
+        "*/2 * * * * * *",
+    ],
 )
 async def test_spontaneous_deploy(
     server,
@@ -125,12 +128,11 @@ async def test_spontaneous_deploy(
         env_id = UUID(environment)
 
         Config.set("config", "agent-deploy-interval", agent_deploy_interval)
-        Config.set("config", "agent-deploy-splay-time", "2")
+        # Disable repairs
         Config.set("config", "agent-repair-interval", "0")
 
-        # This is just so we can reuse the agent from the fixtures with the new config options
-        agent._set_deploy_and_repair_intervals()
-        agent._enable_time_triggers()
+        timer_manager = agent.scheduler._timer_manager
+        timer_manager.initialize()
 
         resource_container.Provider.set_fail("agent1", "key1", 1)
 
@@ -152,25 +154,24 @@ async def test_spontaneous_deploy(
         # do a deploy
         start = time.time()
 
-        result = await client.release_version(env_id, version, False)
+        result = await client.release_version(
+            tid=env_id,
+            id=version,
+        )
         assert result.code == 200
 
-        assert not result.result["model"]["deployed"]
         assert result.result["model"]["released"]
-        assert result.result["model"]["total"] == 1
-        assert result.result["model"]["result"] == "deploying"
 
         result = await client.get_version(env_id, version)
         assert result.code == 200
 
         await clienthelper.wait_for_deployed()
 
-        await clienthelper.wait_full_success(env_id)
+        await clienthelper.wait_full_success()
 
         duration = time.time() - start
 
-        result = await client.get_version(env_id, version)
-        assert result.result["model"]["done"] == 1
+        assert await clienthelper.done_count() == 1
 
         assert resource_container.Provider.isset("agent1", "key1")
 
@@ -195,14 +196,13 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     """
     resource_container.Provider.reset()
     env_id = environment
-
     Config.set("config", "agent-repair-interval", agent_repair_interval)
-    Config.set("config", "agent-repair-splay-time", "2")
+    # Disable deploys
     Config.set("config", "agent-deploy-interval", "0")
 
-    # This is just so we can reuse the agent from the fixtures with the new config options
-    agent._set_deploy_and_repair_intervals()
-    agent._enable_time_triggers()
+    timer_manager = agent.scheduler._timer_manager
+    timer_manager.initialize()
+
     version = await clienthelper.get_version()
 
     resources = [
@@ -219,22 +219,20 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     await clienthelper.put_version_simple(resources, version)
 
     # do a deploy
-    result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
+    result = await client.release_version(
+        tid=env_id, id=version, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    )
     assert result.code == 200
-    assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 1
-    assert result.result["model"]["result"] == "deploying"
 
     result = await client.get_version(env_id, version)
     assert result.code == 200
 
-    await clienthelper.wait_full_success(env_id)
+    await clienthelper.wait_full_success()
 
     async def verify_deployment_result():
-        result = await client.get_version(env_id, version)
         # A repair run may put one resource from the deployed state to the deploying state.
-        assert len(resources) - 1 <= result.result["model"]["done"] <= len(resources)
+        assert len(resources) - 1 <= await clienthelper.done_count() <= len(resources)
 
         assert resource_container.Provider.isset("agent1", "key1")
         assert resource_container.Provider.get("agent1", "key1") == "value1"

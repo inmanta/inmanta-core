@@ -1,0 +1,4 @@
+description: Document on-disk layout
+issue-nr: 8272
+change-type: minor
+destination-branches: [master]

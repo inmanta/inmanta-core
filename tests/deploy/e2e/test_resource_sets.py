@@ -23,8 +23,10 @@ from typing import Optional
 
 import utils
 from inmanta import const, data
+from inmanta.agent import executor
+from inmanta.deploy import persistence
 from inmanta.protocol.common import Result
-from inmanta.resources import ResourceIdStr
+from inmanta.resources import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
 
 
@@ -1218,6 +1220,7 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     """
     Test whether the put_partial() endpoint correctly merges the resource states of two resource sets.
     """
+    env_id = uuid.UUID(environment)
     # Compose base version for partial compile
     version = await clienthelper.get_version()
     resources = [
@@ -1255,29 +1258,27 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     )
     assert result.code == 200, result.result
 
+    update_manager = persistence.ToDbUpdateManager(client, env_id)
+
     # set key2 to deploying
-    result = await agent._client.resource_deploy_start(
-        tid=environment, rvid=f"test::Resource[agent1,key=key2],v={version}", action_id=uuid.uuid4()
+    await update_manager.send_in_progress(
+        action_id=uuid.uuid4(), resource_id=ResourceVersionIdStr(f"test::Resource[agent1,key=key2],v={version}")
     )
-    assert result.code == 200, result.result
 
     # Set key 3 to deployed
-
     action_id = uuid.uuid4()
-    result = await agent._client.resource_deploy_start(
-        tid=environment, rvid=f"test::Resource[agent1,key=key3],v={version}", action_id=action_id
+    rvid3 = ResourceVersionIdStr(f"test::Resource[agent1,key=key3],v={version}")
+    await update_manager.send_in_progress(action_id=action_id, resource_id=rvid3)
+    await update_manager.send_deploy_done(
+        result=executor.DeployResult(
+            rvid=rvid3,
+            action_id=action_id,
+            resource_state=const.HandlerResourceState.deployed,
+            messages=[],
+            changes={},
+            change=const.Change.nochange,
+        )
     )
-    assert result.code == 200, result.result
-    result = await agent._client.resource_deploy_done(
-        tid=environment,
-        rvid=f"test::Resource[agent1,key=key3],v={version}",
-        action_id=action_id,
-        status=const.ResourceState.deployed,
-        messages=[],
-        changes={},
-        change=const.Change.nochange,
-    )
-    assert result.code == 200, result.result
 
     # Partial compile
     resources_partial = [

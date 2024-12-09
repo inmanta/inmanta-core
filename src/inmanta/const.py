@@ -37,6 +37,20 @@ class ResourceState(str, Enum):
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
 
 
+class HandlerResourceState(str, Enum):
+    """
+    The resource states that the resource handler may report via the HandlerContext (with the set_resource_state method)
+    when it performs a resource action.
+    """
+
+    skipped = "skipped"
+    deployed = "deployed"
+    failed = "failed"
+    dry = "dry"
+    skipped_for_dependency = "skipped_for_dependency"
+    unavailable = "unavailable"
+
+
 class NonDeployingResourceState(str, Enum):
     unavailable = ResourceState.unavailable.value
     skipped = ResourceState.skipped.value
@@ -358,9 +372,10 @@ INMANTA_REMOVED_SET_ID = "INMANTA_REMOVED_RESOURCE_SET_ID"
 INMANTA_VENV_STATUS_FILENAME = ".inmanta_venv_status"
 
 
-# File present in the root of the state dir to indicate that this orchestrator
-# uses the new disk layout.
-INMANTA_USE_NEW_DISK_LAYOUT_FILENAME = ".inmanta_use_new_disk_layout"
+# File present in the root of the state dir to indicate the version of disk layout that this orchestrator uses.
+INMANTA_DISK_LAYOUT_VERSION = ".inmanta_disk_layout_version"
+# If no file is present, create it with this version
+DEFAULT_INMANTA_DISK_LAYOUT_VERSION = 2
 
 
 # ID to represent the new scheduler as an agent

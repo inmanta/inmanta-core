@@ -28,21 +28,14 @@ from tornado.httpclient import AsyncHTTPClient
 import _pytest.logging
 import toml
 from inmanta import logging as inmanta_logging
-from inmanta.agent.handler import (
-    CRUDHandler,
-    HandlerContext,
-    ResourceHandler,
-    ResourcePurged,
-    SkipResource,
-    TResource,
-    provider,
-)
+from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
 from inmanta.data.model import ResourceIdStr
+from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
-from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
+from inmanta.resources import PurgeableResource, Resource, resource
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
 
@@ -160,12 +153,6 @@ if PYTEST_PLUGIN_MODE:
     from inmanta_tests import utils  # noqa: F401
 else:
     import utils
-
-# These elements were moved to inmanta.db.util to allow them to be used from other extensions.
-# This import statement is present to ensure backwards compatibility.
-from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, PGRestore  # noqa: F401
-from inmanta.db.util import clear_database as do_clean_hard  # noqa: F401
-from inmanta.db.util import postgres_get_custom_types as postgress_get_custom_types  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -705,7 +692,7 @@ async def server_config(
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
         config.Config.set("database", "password", pg_password)
-        config.Config.set("database", "connection_timeout", str(3))
+        config.Config.set("database", "db_connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
         config.Config.set("agent_rest_transport", "port", port)
@@ -782,7 +769,7 @@ async def server_multi(
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
         config.Config.set("database", "password", pg_password)
-        config.Config.set("database", "connection_timeout", str(3))
+        config.Config.set("database", "db_connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
         config.Config.set("agent_rest_transport", "port", port)
@@ -812,7 +799,7 @@ async def server_multi(
 
         yield ibl.restserver
         try:
-            await ibl.stop(timeout=15)
+            await ibl.stop(timeout=20)
         except concurrent.futures.TimeoutError:
             logger.exception("Timeout during stop of the server in teardown")
 
@@ -849,11 +836,11 @@ async def agent(server, environment):
     a = Agent(environment)
     # Restore state-dir
     config.Config.set("config", "state-dir", str(server_state_dir))
-
+    loop = asyncio.get_running_loop()
     executor = InProcessExecutorManager(
         environment,
         a._client,
-        asyncio.get_event_loop(),
+        loop,
         logger,
         a.thread_pool,
         str(pathlib.Path(a._storage["executors"]) / "code"),
@@ -893,6 +880,22 @@ async def null_agent(server, environment):
 
 
 @pytest.fixture(scope="function")
+async def null_agent_multi(server_multi, environment_multi):
+    """Construct an agent that does nothing"""
+    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
+
+    a = utils.NullAgent(environment_multi)
+
+    await a.start()
+
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+    await a.stop()
+
+
+@pytest.fixture(scope="function")
 async def agent_multi(server_multi, environment_multi):
     """Construct an agent that can execute using the resource container"""
     server = server_multi
@@ -911,6 +914,7 @@ async def agent_multi(server_multi, environment_multi):
         str(pathlib.Path(a._storage["executors"]) / "venvs"),
         False,
     )
+    executor = WriteBarierExecutorManager(executor)
     a.executor_manager = executor
     a.scheduler.executor_manager = executor
     a.scheduler.code_manager = utils.DummyCodeManager(a._client)
@@ -995,8 +999,6 @@ async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str,
         if use_custom_env_settings:
             env_obj = await data.Environment.get_by_id(uuid.UUID(env_id))
             await env_obj.set(data.AUTO_DEPLOY, False)
-            await env_obj.set(data.PUSH_ON_AUTO_DEPLOY, False)
-            await env_obj.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
             await env_obj.set(data.RECOMPILE_BACKOFF, 0)
 
         return env_id
@@ -2178,6 +2180,14 @@ def resource_container(clean_reset):
 
         fields = ("key", "value", "set_state_to_deployed", "purged")
 
+    @resource("test::LSMLike", agent="agent", id_attribute="key")
+    class LsmLike(Resource):
+        """
+        Raise a SkipResource exception in the deploy() handler method.
+        """
+
+        fields = ("key", "value", "purged")
+
     @resource("test::EventResource", agent="agent", id_attribute="key")
     class EventResource(PurgeableResource):
         """
@@ -2451,64 +2461,49 @@ def resource_container(clean_reset):
         def do_changes(self, ctx, resource, changes):
             ctx.info("This is not JSON serializable: %(val)s", val=Empty())
 
-    @resource("test::AgentConfig", agent="agent", id_attribute="agentname")
-    class AgentConfig(PurgeableResource):
-        """
-        A resource that can modify the agentmap for autostarted agents
-        """
-
-        fields = ("agentname", "uri", "autostart")
-
-        @staticmethod
-        def get_autostart(exp, obj):
+    @provider("test::LSMLike", name="lsmlike")
+    class LSMLikeHandler(CRUDHandler[LsmLike]):
+        def deploy(
+            self,
+            ctx: handler.HandlerContext,
+            resource: LsmLike,
+            requires: dict[ResourceIdStr, const.ResourceState],
+        ) -> None:
+            self.pre(ctx, resource)
             try:
-                if not obj.autostart:
-                    raise IgnoreResourceException()
-            except Exception as e:
-                # When this attribute is not set, also ignore it
-                raise IgnoreResourceException() from e
-            return obj.autostart
+                all_resources_are_deployed_successfully = self._send_current_state(ctx, resource, requires)
+                if all_resources_are_deployed_successfully:
+                    ctx.set_status(const.ResourceState.deployed)
+                else:
+                    ctx.set_status(const.ResourceState.failed)
+            finally:
+                self.post(ctx, resource)
 
-    @provider("test::AgentConfig", name="agentrest")
-    class AgentConfigHandler(CRUDHandler[AgentConfig]):
-        def _get_map(self) -> dict:
-            def call():
-                return self.get_client().get_setting(tid=self._agent.environment, id=data.AUTOSTART_AGENT_MAP)
+        def _send_current_state(
+            self,
+            ctx: handler.HandlerContext,
+            resource: LsmLike,
+            fine_grained_resource_states: dict[ResourceIdStr, const.ResourceState],
+        ) -> bool:
+            # If a resource is not in events, it means that it was deployed before so we can mark it as success
+            is_failed = False
+            skipped_resources = []
+            # Convert inmanta.const.ResourceState to inmanta_lsm.model.ResourceState
+            for resource_id, state in fine_grained_resource_states.items():
+                if state == const.ResourceState.failed:
+                    is_failed = True
+                elif state == const.ResourceState.deployed:
+                    pass
+                else:
+                    # some transient state that is not failed and not success, so lets skip
+                    skipped_resources.append(f"skipped because the `{resource_id}` is `{state.value}`")
 
-            value = self.run_sync(call)
-            return value.result["value"]
+            # failure takes precedence over transient
+            # transient takes precedence over success
+            if len(skipped_resources) > 0 and not is_failed:
+                raise SkipResource("\n".join(skipped_resources))
 
-        def _set_map(self, agent_config: dict) -> None:
-            def call():
-                return self.get_client().set_setting(
-                    tid=self._agent.environment, id=data.AUTOSTART_AGENT_MAP, value=agent_config
-                )
-
-            return self.run_sync(call)
-
-        def read_resource(self, ctx: HandlerContext, resource: AgentConfig) -> None:
-            agent_config = self._get_map()
-            ctx.set("map", agent_config)
-
-            if resource.agentname not in agent_config:
-                raise ResourcePurged()
-
-            resource.uri = agent_config[resource.agentname]
-
-        def create_resource(self, ctx: HandlerContext, resource: AgentConfig) -> None:
-            agent_config = ctx.get("map")
-            agent_config[resource.agentname] = resource.uri
-            self._set_map(agent_config)
-
-        def delete_resource(self, ctx: HandlerContext, resource: AgentConfig) -> None:
-            agent_config = ctx.get("map")
-            del agent_config[resource.agentname]
-            self._set_map(agent_config)
-
-        def update_resource(self, ctx: HandlerContext, changes: dict, resource: AgentConfig) -> None:
-            agent_config = ctx.get("map")
-            agent_config[resource.agentname] = resource.uri
-            self._set_map(agent_config)
+            return not is_failed
 
     waiter = Condition()
 
@@ -2521,26 +2516,21 @@ def resource_container(clean_reset):
             )
 
         # unhang waiters
-        result = await client.get_version(env_id, version)
-        assert result.code == 200
         now = time.time()
-        log_progress(result.result["model"]["done"], result.result["model"]["total"])
-        while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        done, total = await utils.get_done_and_total(client, env_id)
+
+        log_progress(done, total)
+        while (total - done) > 0:
             if now + timeout < time.time():
                 raise Exception("Timeout")
-            if (
-                wait_for_this_amount_of_resources_in_done
-                and result.result["model"]["done"] - wait_for_this_amount_of_resources_in_done >= 0
-            ):
+            if wait_for_this_amount_of_resources_in_done and done - wait_for_this_amount_of_resources_in_done >= 0:
                 break
-            result = await client.get_version(env_id, version)
-            log_progress(result.result["model"]["done"], result.result["model"]["total"])
+            done, total = await utils.get_done_and_total(client, env_id)
+            log_progress(done, total)
             waiter.acquire()
             waiter.notify_all()
             waiter.release()
             await asyncio.sleep(0.1)
-
-        return result
 
     async def wait_for_condition_with_waiters(wait_condition, timeout=10):
         """

@@ -23,19 +23,21 @@ from datetime import timezone
 import pytest
 
 from inmanta import const, data
+from inmanta.agent import executor
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
+from inmanta.deploy import persistence
 
 
 @pytest.fixture
 async def resource_deployer(client, environment, null_agent):
-    agent = null_agent
+    env_id = uuid.UUID(environment)
+    update_manager = persistence.ToDbUpdateManager(client, env_id)
 
     class ResourceDeploymentHelperFunctions:
         @classmethod
         async def start_deployment(cls, rvid: ResourceVersionIdStr) -> uuid.UUID:
             action_id = uuid.uuid4()
-            result = await agent._client.resource_deploy_start(tid=environment, rvid=rvid, action_id=action_id)
-            assert result.code == 200
+            await update_manager.send_in_progress(action_id, rvid)
             return action_id
 
         @classmethod
@@ -44,23 +46,25 @@ async def resource_deployer(client, environment, null_agent):
             rvid: ResourceVersionIdStr,
             action_id: uuid.UUID,
             change: const.Change = const.Change.created,
-            status: const.ResourceState = const.ResourceState.deployed,
+            status: const.HandlerResourceState = const.HandlerResourceState.deployed,
         ) -> None:
-            result = await agent._client.resource_deploy_done(
-                tid=environment,
-                rvid=rvid,
-                action_id=action_id,
-                status=status,
-                change=change,
+            await update_manager.send_deploy_done(
+                result=executor.DeployResult(
+                    rvid=rvid,
+                    action_id=action_id,
+                    resource_state=status,
+                    messages=[],
+                    changes={},
+                    change=change,
+                )
             )
-            assert result.code == 200
 
         @classmethod
         async def deploy_resource(
             cls,
             rvid: ResourceVersionIdStr,
             change: const.Change = const.Change.created,
-            status: const.ResourceState = const.ResourceState.deployed,
+            status: const.HandlerResourceState = const.HandlerResourceState.deployed,
         ) -> None:
             action_id = await cls.start_deployment(rvid)
             await cls.deployment_finished(rvid, action_id, change, status)
@@ -104,7 +108,7 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
 
     # Perform deployment
     await resource_deployer.deploy_resource(rvid=rvid_r2_v1)
-    await resource_deployer.deploy_resource(rvid=rvid_r3_v1, status=const.ResourceState.failed)
+    await resource_deployer.deploy_resource(rvid=rvid_r3_v1, status=const.HandlerResourceState.failed)
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v1)
 
     # Verify that events exist
@@ -164,29 +168,6 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     # Finish deployment r1
     await resource_deployer.deployment_finished(rvid=rvid_r1_v1, action_id=action_id)
 
-    # request 3
-    # only two exist
-    result = await agent._client.resources_status(
-        tid=environment,
-        version=version,
-        rids=[
-            "std::testing::NullResource[agent1,name=file2]",
-            "std::testing::NullResource[agent1,name=file3]",
-            "std::testing::NullResource[agent1,name=file4]",
-        ],
-    )
-    assert result.code == 200
-    assert result.result["data"] == {
-        "std::testing::NullResource[agent1,name=file2]": "deployed",
-        "std::testing::NullResource[agent1,name=file3]": "deployed",
-    }
-
-    result = await agent._client.resources_status(
-        tid=environment, version=version, rids=["std::testing::NullResource[agent1,name=file2]", "Resource WITH invalid id"]
-    )
-    assert result.code == 400
-    assert result.result["message"] == "Invalid request: Invalid id for resource Resource WITH invalid id"
-
 
 async def test_events_api_endpoints_increment(server, client, environment, clienthelper, null_agent, resource_deployer):
     """
@@ -234,7 +215,7 @@ async def test_events_api_endpoints_increment(server, client, environment, clien
 
     # Perform deployment
     await resource_deployer.deploy_resource(rvid=rvid_r2_v1)
-    await resource_deployer.deploy_resource(rvid=rvid_r3_v1, status=const.ResourceState.failed)
+    await resource_deployer.deploy_resource(rvid=rvid_r3_v1, status=const.HandlerResourceState.failed)
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v1)
 
     # Verify that events exist
@@ -344,7 +325,7 @@ async def test_events_api_endpoints_events_across_versions(server, client, envir
     await clienthelper.put_version_simple(resources, version)
 
     # Deploy
-    await resource_deployer.deploy_resource(rvid=rvid_r3_v3, status=const.ResourceState.failed)
+    await resource_deployer.deploy_resource(rvid=rvid_r3_v3, status=const.HandlerResourceState.failed)
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v3)
 
     # Assert events

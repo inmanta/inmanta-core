@@ -35,14 +35,12 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, cast
 from uuid import UUID
 
-import inmanta.types
-import inmanta.util
 import packaging.requirements
 from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
-from inmanta.const import Change, ResourceState
+from inmanta.const import Change
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.env import PythonEnvironment
@@ -125,7 +123,7 @@ class EnvBlueprint:
         """
         if self._hash_cache is None:
             blueprint_dict: Dict[str, Any] = {
-                "pip_config": self.pip_config.dict(),
+                "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 "python_version": self.python_version,
             }
@@ -209,7 +207,7 @@ class ExecutorBlueprint(EnvBlueprint):
         """
         if self._hash_cache is None:
             blueprint_dict = {
-                "pip_config": self.pip_config.dict(),
+                "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 # Use the hash values and name to create a stable identity
                 "sources": [[source.hash_value, source.name, source.is_byte_code] for source in self.sources],
@@ -472,24 +470,47 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
 
 
 @dataclass
+class FactResult:
+    resource_id: ResourceVersionIdStr
+    # Failed fact checks may have empty action_id
+    action_id: Optional[uuid.UUID]
+    started: datetime.datetime
+    finished: datetime.datetime
+    success: bool
+    parameters: list[dict[str, Any]]
+    messages: list[LogLine]
+    error_msg: Optional[str] = None
+
+
+@dataclass
 class DeployResult:
     rvid: ResourceVersionIdStr
     action_id: uuid.UUID
-    status: ResourceState
+    resource_state: const.HandlerResourceState
     messages: list[LogLine]
     changes: dict[str, AttributeStateChange]
     change: Optional[Change]
+
+    @property
+    def status(self) -> const.ResourceState:
+        """
+        Translates the new HandlerResourceState to the const.ResourceState that some of the code still uses
+        (mainly parts of the code that communicate with the server)
+        """
+        if self.resource_state is const.HandlerResourceState.skipped_for_dependency:
+            return const.ResourceState.skipped
+        return const.ResourceState(self.resource_state)
 
     @classmethod
     def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext) -> "DeployResult":
         if ctx.status is None:
             ctx.warning("Deploy status field is None, failing!")
-            ctx.set_status(ResourceState.failed)
+            ctx.set_resource_state(const.HandlerResourceState.failed)
 
         return DeployResult(
             rvid=rvid,
             action_id=ctx.action_id,
-            status=ctx.status or ResourceState.failed,
+            resource_state=ctx.resource_state or const.HandlerResourceState.failed,
             messages=ctx.logs,
             changes=ctx.changes,
             change=ctx.change,
@@ -500,7 +521,7 @@ class DeployResult:
         return DeployResult(
             rvid=rvid,
             action_id=action_id,
-            status=ResourceState.unavailable,
+            resource_state=const.HandlerResourceState.unavailable,
             messages=[message],
             changes={},
             change=Change.nochange,
@@ -526,7 +547,7 @@ class Executor(abc.ABC):
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-        requires: dict[ResourceIdStr, const.ResourceState],
+        requires: Mapping[ResourceIdStr, const.ResourceState],
     ) -> DeployResult:
         """
         Perform the actual deployment of the resource by calling the loaded handler code
@@ -552,7 +573,7 @@ class Executor(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def get_facts(self, resource: ResourceDetails) -> inmanta.types.Apireturn:
+    async def get_facts(self, resource: ResourceDetails) -> FactResult:
         """
         Get facts for a given resource
         :param resource: The resource for which to get facts.

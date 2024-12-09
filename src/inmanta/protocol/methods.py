@@ -422,7 +422,6 @@ def get_resource(
     tid: uuid.UUID,
     id: str,
     logs: Optional[bool] = None,
-    status: Optional[bool] = None,
     log_action: Optional[const.ResourceAction] = None,
     log_limit: int = 0,
 ):
@@ -439,23 +438,6 @@ def get_resource(
                       To retrieve more entries, use  /api/v2/resource_actions
                       (:func:`~inmanta.protocol.methods_v2.get_resource_actions`)
                       If None, a default limit (set to 1000) is applied.
-    """
-
-
-@method(path="/resource", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
-def get_resources_for_agent(
-    tid: uuid.UUID, agent: str, sid: Optional[uuid.UUID] = None, version: Optional[int] = None, incremental_deploy: bool = False
-):
-    """
-    Return the most recent state for the resources associated with agent, or the version requested
-
-    :param tid: The environment ID this resource belongs to.
-    :param agent: The agent name.
-    :param sid: Optional. Session id of the agent (transparently added by agent client).
-    :param version: Optional. The version to retrieve. If none, the latest available version is returned. With a specific
-                    version that version is returned, even if it has not been released yet.
-    :param incremental_deploy: Optional. Indicates whether the server should only return the resources that changed since the
-                               previous deployment.
     """
 
 
@@ -578,9 +560,8 @@ def release_version(
 
     :param tid: The id of the environment
     :param id: The version of the CM to deploy
-    :param push: Notify all agents to deploy the version
-    :param agent_trigger_method: Optional. Indicates whether the agents should perform a full or an incremental deploy when
-                                push is true.
+    :param push: [DEPRECATED] This argument is ignored.
+    :param agent_trigger_method: [DEPRECATED]: This argument is ignored.
 
     :return: Returns the following status codes:
             200: The version is released
@@ -857,17 +838,6 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
     """
 
 
-@method(path="/code/<id>", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
-def get_code(tid: uuid.UUID, id: int, resource: str):
-    """
-    Retrieve the source code associated with a specific version of a configuration model for a given resource in an environment.
-
-    :param tid: The id of the environment to which the code belongs.
-    :param id: The version number of the configuration model.
-    :param resource: The identifier of the resource. This should be a resource ID, not a resource version ID.
-    """
-
-
 @method(path="/codebatched/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
 def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
     """
@@ -1048,35 +1018,6 @@ def trigger_read_version(tid: uuid.UUID) -> int:
     Notify the scheduler that a new version has been released
 
     :param tid: The environment this agent is defined in
-    """
-
-
-# Methods to send event to the server
-
-
-@method(
-    path="/event/<id>",
-    operation="PUT",
-    server_agent=True,
-    enforce_auth=False,
-    timeout=5,
-    arg_options=AGENT_ENV_OPTS,
-    client_types=[],
-    reply=False,
-)
-def resource_event(
-    tid: uuid.UUID, id: str, resource: str, send_events: bool, state: const.ResourceState, change: const.Change, changes={}
-):
-    """
-    Tell an agent a resource it waits for has been updated
-
-    :param tid: The environment this agent is defined in
-    :param id: The name of the agent
-    :param resource: The resource ID of the resource being updated
-    :param send_events: [DEPRECATED] The value of this field is not used anymore.
-    :param state: State the resource acquired (deployed, skipped, canceled)
-    :param change: The change that was made to the resource
-    :param changes: Optional. The changes made to the resource
     """
 
 

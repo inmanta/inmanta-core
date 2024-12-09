@@ -53,21 +53,21 @@ class ResourceDetails:
         object.__setattr__(self, "id", Id.parse_id(self.resource_id))
 
 
-class ResourceStatus(StrEnum):
+class ComplianceStatus(StrEnum):
     """
     Status of a resource's operational status with respect to its latest desired state, to the best of our knowledge.
-
-    UP_TO_DATE: Resource has had at least one successful deploy for the latest desired state, and no compliance check has
-        reported a diff since. Is not affected by later deploy failures, i.e. the last known operational status is assumed to
-        hold until observed otherwise.
-    HAS_UPDATE: Resource's operational state does not match latest desired state, as far as we know. Either the resource
-        has never been (successfully) deployed, or was deployed for a different desired state or a compliance check revealed a
-        diff.
+    COMPLIANT: The operational state complies to latest resource intent as far as we know.
+    HAS_UPDATE: The resource intent has been updated since latest deploy attempt (if any),
+        meaning we are not yet managing the new intent.
+    NON_COMPLIANT: The resource intent has not been updated since latest deploy attempt (if any)
+        but we have reason to believe operational state might not comply with latest resource intent,
+        based on a deploy attempt / compliance check for that intent.
     UNDEFINED: The resource status is undefined, because it has an unknown attribute.
     """
 
-    UP_TO_DATE = enum.auto()
+    COMPLIANT = enum.auto()
     HAS_UPDATE = enum.auto()
+    NON_COMPLIANT = enum.auto()
     UNDEFINED = enum.auto()
 
 
@@ -79,11 +79,13 @@ class DeploymentResult(StrEnum):
     NEW: Resource has never been deployed before.
     DEPLOYED: Last resource deployment was successful.
     FAILED: Last resource deployment was unsuccessful.
+    SKIPPED: Resource skipped deployment.
     """
 
     NEW = enum.auto()
     DEPLOYED = enum.auto()
     FAILED = enum.auto()
+    SKIPPED = enum.auto()
 
 
 class AgentStatus(StrEnum):
@@ -105,16 +107,13 @@ class BlockedStatus(StrEnum):
     YES: The resource will retain its blocked status within this model version. For example: A resource that has unknowns
          or depends on a resource with unknowns.
     NO: The resource is not blocked
+    TRANSIENT: The resource is blocked but may recover within the same version.
+        Concretely it is waiting for its dependencies to deploy successfully.
     """
 
     YES = enum.auto()
     NO = enum.auto()
-
-    def is_blocked(self) -> bool:
-        """
-        Return True iff the resource is currently blocked.
-        """
-        return self is not BlockedStatus.NO
+    TRANSIENT = enum.auto()
 
 
 @dataclass
@@ -125,7 +124,7 @@ class ResourceState:
 
     # FIXME: review / finalize resource state. Based on draft design in
     #   https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
-    status: ResourceStatus
+    status: ComplianceStatus
     deployment_result: DeploymentResult
     blocked: BlockedStatus
 
@@ -144,9 +143,6 @@ class ModelState:
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict[ResourceIdStr, ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
-    # (might be simply a change of its dependencies), which are still being processed by
-    # the resource scheduler. This is a short-lived transient state, used for internal concurrency control. Kept separate from
-    # ResourceStatus so that it lives outside the scheduler lock's scope.
     dirty: set[ResourceIdStr] = dataclasses.field(default_factory=set)
     # types per agent keeps track of which resource types live on which agent by doing a reference count
     # the dict is agent_name -> resource_type -> resource_count
@@ -168,12 +164,12 @@ class ModelState:
         """
         self.resources[resource] = details
         if resource in self.resource_state:
-            self.resource_state[resource].status = ResourceStatus.UP_TO_DATE
+            self.resource_state[resource].status = ComplianceStatus.COMPLIANT
             self.resource_state[resource].deployment_result = DeploymentResult.DEPLOYED
             self.resource_state[resource].blocked = BlockedStatus.NO
         else:
             self.resource_state[resource] = ResourceState(
-                status=ResourceStatus.UP_TO_DATE, deployment_result=DeploymentResult.DEPLOYED, blocked=BlockedStatus.NO
+                status=ComplianceStatus.COMPLIANT, deployment_result=DeploymentResult.DEPLOYED, blocked=BlockedStatus.NO
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
@@ -191,10 +187,10 @@ class ModelState:
         self.resources[resource] = details
         if resource in self.resource_state:
             if not is_transitive:
-                self.resource_state[resource].status = ResourceStatus.UNDEFINED
+                self.resource_state[resource].status = ComplianceStatus.UNDEFINED
             self.resource_state[resource].blocked = BlockedStatus.YES
         else:
-            resource_status = ResourceStatus.UNDEFINED if not is_transitive else ResourceStatus.HAS_UPDATE
+            resource_status = ComplianceStatus.UNDEFINED if not is_transitive else ComplianceStatus.HAS_UPDATE
             self.resource_state[resource] = ResourceState(
                 status=resource_status,
                 deployment_result=DeploymentResult.NEW,
@@ -202,6 +198,17 @@ class ModelState:
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
+
+    def are_dependencies_compliant(self, resource: ResourceIdStr) -> bool:
+        """
+        Checks if a resource has all of its dependencies in a compliant state.
+
+        :param resource: The id of the resource to find the dependencies for
+        """
+        requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.requires.requires_view()
+        dependencies: Set[ResourceIdStr] = requires_view.get(resource, set())
+
+        return all(self.resource_state[dep_id].status is ComplianceStatus.COMPLIANT for dep_id in dependencies)
 
     def block_provides(self, resources: Set[ResourceIdStr]) -> Set[ResourceIdStr]:
         """
@@ -217,14 +224,14 @@ class ModelState:
         provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.requires.provides_view()
         todo: list[ResourceIdStr] = list(itertools.chain.from_iterable(provides_view.get(r, set()) for r in resources))
         # We rely on the seen set to improve performance. Although the improvement might be rather small,
-        # because we only save one call to `self.resource_state[resource_id].blocked.is_blocked()`.
+        # because we only save one check `self.resource_state[resource_id].blocked == BlockedStatus.YES`.
         seen: set[ResourceIdStr] = set()
         while todo:
             resource_id: ResourceIdStr = todo.pop()
             if resource_id in seen:
                 continue
             seen.add(resource_id)
-            if self.resource_state[resource_id].blocked.is_blocked():
+            if self.resource_state[resource_id].blocked is BlockedStatus.YES:
                 # Resource is already blocked. All provides will be blocked as well.
                 continue
             else:
@@ -257,23 +264,23 @@ class ModelState:
 
             :return: True iff the given resource was unblocked.
             """
-            if self.resource_state[resource].blocked is BlockedStatus.NO:
+            if self.resource_state[resource].blocked is not BlockedStatus.YES:
                 # The resource is already unblocked.
                 return False
-            if self.resource_state[resource].status is ResourceStatus.UNDEFINED:
+            if self.resource_state[resource].status is ComplianceStatus.UNDEFINED:
                 # The resource is undefined.
                 return False
             if resource in known_blockers_cache:
                 # First check the blocked status of the cached known blocker for improved performance.
                 known_blocker: ResourceIdStr = known_blockers_cache[resource]
-                if self.resource_state[known_blocker].blocked.is_blocked():
+                if self.resource_state[known_blocker].blocked is BlockedStatus.YES:
                     return False
                 else:
                     # Cache is out of date. Clear cache item.
                     del known_blockers_cache[resource]
             # Perform more expensive call by traversing all requirements of resource.
             blocked_dependency: ResourceIdStr | None = next(
-                (r for r in self.requires.get(resource, set()) if self.resource_state[r].blocked.is_blocked()), None
+                (r for r in self.requires.get(resource, set()) if self.resource_state[r].blocked is BlockedStatus.YES), None
             )
             if blocked_dependency:
                 # Resource is blocked, because a dependency is blocked.
@@ -281,13 +288,13 @@ class ModelState:
                 return False
             # Unblock resource
             self.resource_state[resource].blocked = BlockedStatus.NO
-            if self.resource_state[resource].status is ResourceStatus.HAS_UPDATE:
+            if self.resource_state[resource].status in [ComplianceStatus.HAS_UPDATE, ComplianceStatus.NON_COMPLIANT]:
                 self.dirty.add(resource)
             return True
 
         provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.requires.provides_view()
         self.resources[resource] = details
-        self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
+        self.resource_state[resource].status = ComplianceStatus.HAS_UPDATE
         todo: list[ResourceIdStr] = [resource]
         while todo:
             resource_id: ResourceIdStr = todo.pop()
@@ -307,26 +314,31 @@ class ModelState:
         """
         self.resources[resource] = details
         if resource in self.resource_state:
-            self.resource_state[resource].status = ResourceStatus.HAS_UPDATE
+            self.resource_state[resource].status = ComplianceStatus.HAS_UPDATE
             self.resource_state[resource].blocked = BlockedStatus.NO
         else:
             self.resource_state[resource] = ResourceState(
-                status=ResourceStatus.HAS_UPDATE,
+                status=ComplianceStatus.HAS_UPDATE,
                 deployment_result=DeploymentResult.NEW,
                 blocked=BlockedStatus.NO,
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.add(resource)
 
-    def update_requires(
-        self,
-        resource: ResourceIdStr,
-        requires: Set[ResourceIdStr],
-    ) -> None:
+    def update_requires(self, resource: ResourceIdStr, requires: Set[ResourceIdStr]) -> None:
         """
         Update the requires relation for a resource. Updates the reverse relation accordingly.
         """
+        check_dependencies: bool = self.resource_state[resource].blocked is BlockedStatus.TRANSIENT and bool(
+            self.requires[resource] - requires
+        )
         self.requires[resource] = requires
+        # If the resource is blocked transiently, and we drop at least one of its requirements
+        # we check to see if the resource can now be unblocked
+        # i.e. all of its dependencies are now compliant with the desired state.
+        if check_dependencies and self.are_dependencies_compliant(resource):
+            self.resource_state[resource].blocked = BlockedStatus.NO
+            self.dirty.add(resource)
 
     def drop(self, resource: ResourceIdStr) -> None:
         """

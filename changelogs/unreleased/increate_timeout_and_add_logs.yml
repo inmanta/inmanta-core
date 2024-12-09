@@ -1,0 +1,4 @@
+description: Effort to stabilize traffic light -> Increased timeout, remove pytest option and add additional logs
+change-type: patch
+destination-branches: [master]
+

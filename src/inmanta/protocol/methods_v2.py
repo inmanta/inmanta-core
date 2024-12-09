@@ -24,7 +24,7 @@ from typing import Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
-from inmanta.data.model import LinkedDiscoveredResource, PipConfig, ResourceIdStr
+from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig, ResourceIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
@@ -486,13 +486,11 @@ def get_agent_process_details(tid: uuid.UUID, id: uuid.UUID, report: bool = Fals
 
 
 @typedmethod(
-    path="/agentmap", api=False, server_agent=True, enforce_auth=False, operation="POST", client_types=[], api_version=2
+    path="/db_status", api=False, server_agent=True, enforce_auth=False, operation="POST", client_types=[], api_version=2
 )
-def update_agent_map(agent_map: dict[str, str]) -> None:
+def get_db_status() -> DataBaseReport:
     """
-    Notify an agent about the fact that the autostart_agent_map has been updated.
-
-    :param agent_map: The content of the new autostart_agent_map
+    Get a report of the DB connection pool status
     """
 
 
@@ -552,62 +550,6 @@ def get_resource_actions(
 
     :raises BadRequest: When the supplied parameters are not valid.
 
-    """
-
-
-@typedmethod(
-    path="/resource/<rvid>/deploy/done",
-    operation="POST",
-    agent_server=True,
-    arg_options={**methods.ENV_OPTS, **methods.RVID_OPTS},
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def resource_deploy_done(
-    tid: uuid.UUID,
-    rvid: model.ResourceVersionIdStr,
-    action_id: uuid.UUID,
-    status: ResourceState,
-    messages: list[model.LogLine] = [],
-    changes: dict[str, model.AttributeStateChange] = {},
-    change: Optional[Change] = None,
-) -> None:
-    """
-    Report to the server that an agent has finished the deployment of a certain resource.
-
-    :param tid: The id of the environment the resource belongs to
-    :param rvid: The resource version id of the resource for which the deployment is finished.
-    :param action_id: A unique ID associated with this resource deployment action. This should be the same ID that was
-                      passed to the `/resource/<resource_id>/deploy/start` API call.
-    :param status: The current status of the resource (if known)
-    :param messages: A list of log entries produced by the deployment action.
-    :param changes: A dict of changes to this resource. The key of this dict indicates the attributes/fields that
-                   have been changed. The value contains the new value and/or the original value.
-    :param change: The type of change that was done the given resource.
-    """
-
-
-@typedmethod(
-    path="/resource/<rvid>/deploy/start",
-    operation="POST",
-    agent_server=True,
-    arg_options={**methods.ENV_OPTS, **methods.RVID_OPTS},
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def resource_deploy_start(
-    tid: uuid.UUID,
-    rvid: model.ResourceVersionIdStr,
-    action_id: uuid.UUID,
-) -> dict[model.ResourceVersionIdStr, ResourceState]:
-    """
-    Report to the server that the agent will start the deployment of the given resource.
-
-    :param tid: The id of the environment the resource belongs to
-    :param rvid: The resource version id of the resource for which the deployment will start
-    :param action_id: A unique id used to track the action of this deployment
-    :return: A dict mapping the resource version id of each dependency of resource_id to
-             the last deployment status of that resource.
     """
 
 
@@ -864,31 +806,6 @@ def get_fact(tid: uuid.UUID, rid: model.ResourceIdStr, id: uuid.UUID) -> model.F
     """
 
 
-# This should be be get operation,
-# but we can overflow the max url length if we don't put the parameters in the body
-# as such, we made this a post
-@typedmethod(
-    path="/resources/status",
-    operation="POST",
-    agent_server=True,
-    arg_options={**methods.ENV_OPTS},
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def resources_status(
-    tid: uuid.UUID,
-    version: int,
-    rids: list[model.ResourceIdStr],
-) -> dict[model.ResourceIdStr, ResourceState]:
-    """
-    Get the deployment status for a batch of resource ids
-
-    :param tid: The id of the environment the resources belong to
-    :param version: Version of the model to get the status for
-    :param rids: List of resource ids to fetch the status for.
-    """
-
-
 @typedmethod(path="/compilereport", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def get_compile_reports(
     tid: uuid.UUID,
@@ -1002,11 +919,7 @@ def promote_desired_state_version(
 
     :param tid: The id of the environment
     :param version: The number of the version to promote
-    :param trigger_method: If set to 'push_incremental_deploy' or 'push_full_deploy',
-        the agents will perform an incremental or full deploy, respectively.
-        If set to 'no_push', the new version is not pushed to the agents.
-        If the parameter is not set (or set to null), the new version is pushed and
-        the environment setting 'environment_agent_trigger_method' decides if the deploy should be full or incremental
+    :param trigger_method: [DEPRECATED] This argument is ignored.
     """
 
 

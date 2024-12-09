@@ -728,35 +728,7 @@ class PythonEnvironment:
 
         # check if the virtual env exists
         if os.path.isdir(self.env_path) and os.listdir(self.env_path):
-            # Make sure the venv hosts the same python version as the running process
-            if sys.platform.startswith("linux"):
-                # Check if the python binary exists in the environment's bin directory
-                if not os.path.exists(self.python_path):
-                    raise VenvActivationFailedError(
-                        msg=f"Unable to use virtualenv at {self.env_path} as no Python installation exists."
-                    )
-                # On linux based systems, the python version is in the path to the site packages dir:
-                if not os.path.exists(self.site_packages_dir):
-                    raise VenvActivationFailedError(
-                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
-                        "is different from the Python version of this process."
-                    )
-            else:
-                # On other distributions a more costly check is required:
-                # Get version as a (major, minor) tuple for the venv and the running process
-                venv_python_version = (
-                    subprocess.check_output([self.python_path, "--version"]).decode("utf-8").strip().split()[1]
-                )
-                venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
-
-                running_process_python_version = sys.version_info[:2]
-
-                if venv_python_version != running_process_python_version:
-                    raise VenvActivationFailedError(
-                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
-                        "is different from the Python version of this process."
-                    )
-
+            self.can_activate()
         else:
             path = os.path.realpath(self.env_path)
             try:
@@ -773,6 +745,39 @@ class PythonEnvironment:
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
             self._write_pip_binary()
             self._write_pth_file()
+
+    def can_activate(self) -> None:
+        """
+        Can this venv be activated with this current python version?
+
+        raises a VenvActivationFailedError exception if this is not the case
+        """
+        # Make sure the venv hosts the same python version as the running process
+        if sys.platform.startswith("linux"):
+            # Check if the python binary exists in the environment's bin directory
+            if not os.path.exists(self.python_path):
+                raise VenvActivationFailedError(
+                    msg=f"Unable to use virtualenv at {self.env_path} as no Python installation exists."
+                )
+            # On linux based systems, the python version is in the path to the site packages dir:
+            if not os.path.exists(self.site_packages_dir):
+                raise VenvActivationFailedError(
+                    msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
+                    "is different from the Python version of this process."
+                )
+        else:
+            # On other distributions a more costly check is required:
+            # Get version as a (major, minor) tuple for the venv and the running process
+            venv_python_version = subprocess.check_output([self.python_path, "--version"]).decode("utf-8").strip().split()[1]
+            venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
+
+            running_process_python_version = sys.version_info[:2]
+
+            if venv_python_version != running_process_python_version:
+                raise VenvActivationFailedError(
+                    msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
+                    "is different from the Python version of this process."
+                )
 
     def _write_pip_binary(self) -> None:
         """
@@ -1164,6 +1169,8 @@ class ActiveEnv(PythonEnvironment):
         """
         Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
         in that order.
+
+        Extra's are ignored entirely
         """
         inmanta_core_canonical = packaging.utils.canonicalize_name("inmanta-core")
 
@@ -1218,9 +1225,10 @@ class ActiveEnv(PythonEnvironment):
         for c in all_constraints:
             requirement = c.requirement
             req_name = NormalizedName(requirement.name)  # requirement is already canonical
+            if requirement.marker and not requirement.marker.evaluate():
+                continue
             if req_name not in installed_versions or (
                 not requirement.specifier.contains(installed_versions[req_name], prereleases=True)
-                and (not requirement.marker or (requirement.marker and requirement.marker.evaluate()))
             ):
                 version_conflict = VersionConflict(
                     requirement=requirement,
@@ -1270,6 +1278,8 @@ class ActiveEnv(PythonEnvironment):
         in the sense that it has been replaced with a more correct check defined in self.check(). This method is invoked
         when the `--no-strict-deps-check` commandline option is provided.
 
+        Extra's are ignored
+
         :param in_scope: A full pattern representing the package names that are considered in scope for the installed packages'
             compatibility check. Only in scope packages' dependencies will be considered for conflicts. The pattern is matched
             against an all-lowercase package name.
@@ -1294,8 +1304,11 @@ class ActiveEnv(PythonEnvironment):
         constraint_violations: set[VersionConflict] = {
             VersionConflict(constraint, installed_versions.get(constraint.name, None))
             for constraint in all_constraints
-            if constraint.name not in installed_versions
-            or not constraint.specifier.contains(installed_versions[constraint.name], prereleases=True)
+            if not constraint.marker or constraint.marker.evaluate()
+            if (
+                constraint.name not in installed_versions
+                or not constraint.specifier.contains(installed_versions[constraint.name], prereleases=True)
+            )
         }
 
         all_violations = constraint_violations_non_strict | constraint_violations_strict | constraint_violations
@@ -1428,7 +1441,7 @@ class VirtualEnv(ActiveEnv):
         """
         Returns True iff the venv exists on disk.
         """
-        return os.path.exists(self.python_path) and os.path.exists(self._path_pth_file)
+        return os.path.exists(self.python_path)
 
     def is_using_virtual_env(self) -> bool:
         return self._using_venv
