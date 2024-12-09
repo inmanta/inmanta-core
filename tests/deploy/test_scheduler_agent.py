@@ -1101,11 +1101,11 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     agent.executor_manager.reset_executor_counters()
     # release a new version with an update to r2, where it sends events
     resources = make_resources(r1_value=4, r2_value=5, r3_value=0, r2_send_event=True)
-    await agent.scheduler._new_version(13, resources, make_requires(resources))
+    await agent.scheduler._new_version(14, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     # drop r2, making the currently running deploy stale
     resources = make_resources(r1_value=4, r2_value=None, r3_value=0)
-    await agent.scheduler._new_version(14, resources, make_requires(resources))
+    await agent.scheduler._new_version(15, resources, make_requires(resources))
 
     # verify expected intermediate state
     assert agent.executor_manager.executors["agent1"].execute_count == 0
