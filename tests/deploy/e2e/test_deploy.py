@@ -239,7 +239,9 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         rid: str
         expected_status: dict[str, str]
 
-    def build_expected_state(all_resources: Sequence[str], specific_resources: Sequence[ExpectedResourceStatus]) -> SchedulerStatusReport:
+    def build_expected_state(
+        all_resources: Sequence[str], specific_resources: Sequence[ExpectedResourceStatus]
+    ) -> SchedulerStatusReport:
         """
         helper method to build a custom SchedulerStatusReport
         """
@@ -253,8 +255,6 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
             expected_state["resource_state"][resource_status.rid] = resource_status.expected_status
 
         return SchedulerStatusReport.model_validate(expected_state)
-
-
 
     v1_expected_result = []
     for i in range(1, 6):
