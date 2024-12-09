@@ -20,8 +20,9 @@ from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from typing import Callable, Optional, Union
 
+from inmanta import references
 from inmanta.ast import NotFoundException, RuntimeException
-from inmanta.execute.util import NoneValue, Unknown
+from inmanta.execute import util
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
 from inmanta.util import JSONSerializable
@@ -34,7 +35,14 @@ except ImportError:
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute
     from inmanta.ast.entity import Entity
-    from inmanta.execute.runtime import Instance
+    from inmanta.execute.runtime import Instance, ResultVariable
+
+
+class MultiUnsetException(RuntimeException):
+
+    def __init__(self, msg: str, result_variables: "list[ResultVariable[object]]") -> None:
+        RuntimeException.__init__(self, None, msg)
+        self.result_variables = result_variables
 
 
 class UnsetException(RuntimeException):
@@ -61,9 +69,13 @@ class UnknownException(Exception):
     depending on this value by return an instance of Unknown as well.
     """
 
-    def __init__(self, unknown: Unknown):
+    def __init__(self, unknown: util.Unknown):
         super().__init__()
         self.unknown = unknown
+
+
+class ValueReferenceException(Exception):
+    pass
 
 
 class AttributeNotFound(NotFoundException, AttributeError):
@@ -93,7 +105,7 @@ class DynamicProxy:
         Converts a value from the plugin domain to the internal domain.
         """
         if item is None:
-            return NoneValue()
+            return util.NoneValue()
 
         if isinstance(item, DynamicProxy):
             return item._get_instance()
@@ -123,10 +135,10 @@ class DynamicProxy:
         if value is None:
             return None
 
-        if isinstance(value, NoneValue):
+        if isinstance(value, util.NoneValue):
             return None
 
-        if isinstance(value, Unknown):
+        if isinstance(value, util.Unknown):
             raise UnknownException(value)
 
         if isinstance(value, (str, tuple, int, float, bool)):
@@ -143,6 +155,9 @@ class DynamicProxy:
 
         if hasattr(value, "__call__"):
             return CallProxy(value)
+
+        if isinstance(value, references.Reference):
+            return value
 
         return DynamicProxy(value)
 
@@ -171,7 +186,7 @@ class DynamicProxy:
         Return true if this value is unknown and cannot be determined
         during this compilation run
         """
-        if isinstance(self._get_instance(), Unknown):
+        if isinstance(self._get_instance(), util.Unknown):
             return True
         return False
 
