@@ -1,4 +1,4 @@
-description: The lowest supported python version was increase to 3.12
+description: The lowest supported python version was increased to 3.12
 issue-nr: 8315
 change-type: major
 destination-branches: [master]
