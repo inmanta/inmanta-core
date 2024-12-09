@@ -228,7 +228,6 @@ class Agent(SessionEndpoint, TypedClient):
     async def get_scheduler_resource_state(self, env: data.Environment) -> SchedulerStatusReport:
         assert env.id == self.environment, f"{env.id=}, {self.environment=}"
         report = await self.scheduler.get_resource_state()
-        LOGGER.debug(f"{report=}")
         return report
 
     @protocol.handle(methods_v2.get_db_status)

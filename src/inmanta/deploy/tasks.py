@@ -274,6 +274,7 @@ class DryRun(Task):
 
 
 class RefreshFact(Task):
+
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str, reason: str | None = None) -> None:
         version: int
         intent = await task_manager.get_resource_intent(self.resource)

@@ -1021,23 +1021,6 @@ def trigger_read_version(tid: uuid.UUID) -> int:
     """
 
 
-# @method(
-#     path="/scheduler/state",
-#     operation="GET",
-#     server_agent=True,
-#     enforce_auth=False,
-#     timeout=5,
-#     arg_options=AGENT_ENV_OPTS,
-#     client_types=[],
-# )
-# def trigger_get_status(tid: uuid.UUID):
-#     """
-#     Get a snapshot of the scheduler state
-#
-#     :param tid: The id of the environment.
-#     """
-
-
 # Methods for the agent to get its initial state from the server
 
 

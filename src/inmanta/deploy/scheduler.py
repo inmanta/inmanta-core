@@ -385,8 +385,9 @@ class ResourceScheduler(TaskManager):
     async def get_resource_state(self) -> SchedulerStatusReport:
         """
         Check that the state of the resources in the DB corresponds
-        to the internal state of the scheduler and return the internal
-        state
+        to the internal state of the scheduler and return a SchedulerStatusReport
+        object containing the internal state and any discrepancies between this
+        state and that of the DB.
         """
 
         resources_in_db: Mapping[ResourceIdStr, ResourceDetails]

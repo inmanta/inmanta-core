@@ -189,8 +189,8 @@ async def test_spontaneous_deploy(
         # Flaky part depending on
         # when we check the inner status vs how fast the scheduler picks up the resources:
         #     - if the check happens before the resources are picked up: we get discrepancies + empty resource_state
-        #     - if the check happens after the resources are picked up: we get discrepancies because resources are already deployed
-
+        #     - if the check happens after the resources are picked up: we get discrepancies because resources
+        #       are already deployed
 
         await retry_limited(picked_up_by_the_scheduler, 10)
 

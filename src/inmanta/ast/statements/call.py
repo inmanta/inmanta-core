@@ -245,6 +245,7 @@ class PluginFunction(Function):
         queue: QueueScheduler,
         result: ResultVariable,
     ) -> None:
+
         no_unknows = self.plugin.check_args(args, kwargs)
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:

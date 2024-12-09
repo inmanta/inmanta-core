@@ -899,6 +899,14 @@ LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
 
 
 class SchedulerStatusReport(BaseModel):
+    """
+    Status report for the scheduler self-check
+
+    :param resource_state: In-memory representation of the resources in the scheduler
+    :param discrepancies: Discrepancies between the in-memory representation of the resources
+        and their state in the database.
+    """
+
     resource_state: dict[ResourceIdStr, typing.Any]
     discrepancies: dict[ResourceIdStr, typing.Any]
 

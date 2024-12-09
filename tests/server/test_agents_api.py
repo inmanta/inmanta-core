@@ -33,6 +33,7 @@ from inmanta.util import parse_timestamp
 @pytest.fixture
 @pytest.mark.parametrize("no_agent", [True])
 async def env_with_agents(client, environment: str) -> None:
+
     env_uuid = uuid.UUID(environment)
 
     async def create_agent(

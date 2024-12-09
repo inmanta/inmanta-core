@@ -59,8 +59,6 @@ def reawaitable(func: Callable[_PWrapped, Awaitable[T]]) -> Callable[_PWrapped, 
 def async_lru_cache(
     maxsize: int | None = 128, typed: bool = False
 ) -> "Callable[[Callable[..., Awaitable[T]]], _lru_cache_wrapper[CachedAwaitable[T]]]": ...
-
-
 @overload
 def async_lru_cache(maxsize: Callable[..., Awaitable[T]], typed: bool = False) -> "_lru_cache_wrapper[CachedAwaitable[T]]": ...
 

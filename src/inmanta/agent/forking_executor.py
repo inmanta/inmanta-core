@@ -298,6 +298,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         while not self.stopping:
             await self.touch_inmanta_venv_status()
             if not self.stopping:
+
                 await asyncio.sleep(self.timer_venv_scheduler_interval)
 
     async def touch_inmanta_venv_status(self) -> None:
@@ -664,6 +665,7 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
             if self.shut_down:
                 return
             try:
+
                 if self.process.exitcode is None:
                     # Running
                     self.process.join(grace_time)
@@ -823,6 +825,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
 
 
 class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.ExecutorBlueprint, MPProcess]):
+
     def __init__(
         self,
         thread_pool: concurrent.futures.thread.ThreadPoolExecutor,
