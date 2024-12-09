@@ -277,7 +277,6 @@ class ResourceScheduler(TaskManager):
         await self._initialize()
         self._running = True
 
-
     async def stop(self) -> None:
         if not self._running:
             return
