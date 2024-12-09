@@ -240,6 +240,8 @@ src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-bo
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
+src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
+src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Cannot determine type of "RVID_OPTS"  [has-type]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Cannot determine type of "RVID_OPTS"  [has-type]
