@@ -174,13 +174,19 @@ async def test_spontaneous_deploy(
         async def picked_up_by_the_scheduler() -> bool:
             result = await client.get_scheduler_status(env_id)
             assert result.code == 200
-            expected_data = {
+            new = {
                 "discrepancies": {},
                 "resource_state": {
                     "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "new", "status": "has_update"}
                 },
             }
-            return result.result["data"] == expected_data
+            deployed = {
+                "discrepancies": {},
+                "resource_state": {
+                    "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "deployed", "status": "compliant"}
+                },
+            }
+            return result.result["data"] in [new, deployed]
 
         # Flaky part depending on
         # when we check the inner status vs how fast the scheduler picks up the resources:
