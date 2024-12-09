@@ -122,7 +122,6 @@ async def test_spontaneous_deploy(
     Test that a deploy run is executed every 2 seconds in the new agent
      as specified in the agent_repair_interval (using a cron or not)
     """
-    # result = await agent.scheduler.get_resource_state()
 
     with caplog.at_level(logging.DEBUG):
         resource_container.Provider.reset()
@@ -166,9 +165,6 @@ async def test_spontaneous_deploy(
             id=version,
         )
         assert result.code == 200
-
-        # result = await client.get_compile_data(uuid.UUID(environment))
-        # assert result.code == 200, result
 
         assert result.result["model"]["released"]
 

@@ -29,6 +29,7 @@ import pytest
 from inmanta import config, const, data, execute
 from inmanta.config import Config
 from inmanta.data import SERVER_COMPILE
+from inmanta.data.model import SchedulerStatusReport
 from inmanta.deploy.state import BlockedStatus, ComplianceStatus, DeploymentResult, ResourceState
 from inmanta.resources import Id
 from inmanta.server import SLICE_PARAM, SLICE_SERVER
@@ -238,7 +239,10 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         rid: str
         expected_status: dict[str, str]
 
-    def build_expected_state(all_resources: Sequence[str], specific_resources: Sequence[ExpectedResourceStatus]):
+    def build_expected_state(all_resources: Sequence[str], specific_resources: Sequence[ExpectedResourceStatus]) -> SchedulerStatusReport:
+        """
+        helper method to build a custom SchedulerStatusReport
+        """
         expected_state = {
             "resource_state": {
                 Id.parse_id(resource["id"]).resource_str(): deployed_resource_expected_status for resource in all_resources
@@ -248,7 +252,9 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         for resource_status in specific_resources:
             expected_state["resource_state"][resource_status.rid] = resource_status.expected_status
 
-        return expected_state
+        return SchedulerStatusReport.model_validate(expected_state)
+
+
 
     v1_expected_result = []
     for i in range(1, 6):
@@ -258,7 +264,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     result = await client.get_scheduler_status(env_id)
     assert result.code == 200
-    assert result.result["data"] == build_expected_state(resources, v1_expected_result)
+    assert result.result["data"] == build_expected_state(resources, v1_expected_result).model_dump()
 
     await check_scheduler_state(resources, scheduler)
     await resource_action_consistency_check()
@@ -300,7 +306,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     result = await client.get_scheduler_status(env_id)
     assert result.code == 200
-    assert result.result["data"] == build_expected_state(resources, [])
+    assert result.result["data"] == build_expected_state(resources, []).model_dump()
 
 
 async def check_server_state_vs_scheduler_state(client, environment, scheduler):
