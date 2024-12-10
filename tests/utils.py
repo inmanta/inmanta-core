@@ -44,7 +44,7 @@ import inmanta.util
 import packaging.requirements
 import packaging.version
 from _pytest.mark import MarkDecorator
-from inmanta import config, const, data, env, module, protocol, util
+from inmanta import config, const, data, env, module, protocol, util, resources
 from inmanta.agent import config as cfg
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
@@ -413,9 +413,16 @@ async def get_done_count(
 async def wait_until_deployment_finishes(
     client: Client, environment: str, version: int = -1, timeout: int = 10, wait_for_n: int | None = None
 ) -> None:
-    async def done():
+    async def done() -> bool:
+
+        if version >= 0:
+            scheduler = await data.Scheduler.get_one(environment=environment)
+            if scheduler.last_processed_model_version < version:
+                return False
+
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
+
         summary = result.result["metadata"]["deploy_summary"]
         # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
         #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
@@ -509,9 +516,7 @@ class ClientHelper:
         return lookup[version]
 
     async def wait_for_deployed(self, version: int = -1, timeout=10) -> None:
-        if version != -1:
-            await self.wait_for_released(version)
-        await wait_until_deployment_finishes(self.client, str(self.environment), timeout)
+        await wait_until_deployment_finishes(self.client, str(self.environment), version, timeout)
 
     async def wait_full_success(self) -> None:
         await wait_full_success(self.client, self.environment)
@@ -907,7 +912,7 @@ def make_random_file(size: int = 0) -> tuple[str, bytes, str]:
     return hash, content, body
 
 
-async def _deploy_resources(client, environment, resources, version, push, agent_trigger_method=None):
+async def _deploy_resources(client, environment, resources, version: int, push, agent_trigger_method=None):
     result = await client.put_version(
         tid=environment,
         version=version,
@@ -922,7 +927,7 @@ async def _deploy_resources(client, environment, resources, version, push, agent
     result = await client.release_version(environment, version, push, agent_trigger_method)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment)
+    await wait_until_deployment_finishes(client, environment, version)
 
     result = await client.get_version(environment, version)
     assert result.code == 200

@@ -23,7 +23,7 @@ import hashlib
 import json
 import typing
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Set
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import Mapping, Optional, Sequence, Tuple
@@ -291,7 +291,9 @@ class DummyStateManager(StateUpdateManager):
     ) -> None:
         pass
 
-    async def update_orphan_state(self, environment: UUID, connection: Optional[Connection] = None) -> None:
+    async def mark_as_orphan(
+        self, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
+    ) -> None:
         pass
 
     async def set_last_processed_model_version(
@@ -343,6 +345,10 @@ class TestScheduler(ResourceScheduler):
         self, version: int, *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> Mapping[ResourceIdStr, ResourceDetails]:
         return self.mock_versions[version]
+
+    async def _get_resource_details(self, env: uuid.UUID, version: int) -> list[ResourceDetails]:
+        assert self.environment == env
+        return list(self.mock_versions[version].values())
 
 
 class TestAgent(Agent):

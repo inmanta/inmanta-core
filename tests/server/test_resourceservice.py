@@ -82,11 +82,12 @@ async def resource_deployer(client, environment, null_agent):
     yield ResourceDeploymentHelperFunctions
 
 
-async def test_events_api_endpoints_basic_case(server, client, environment, clienthelper, agent, resource_deployer):
+async def test_events_api_endpoints_basic_case(server, client, environment, clienthelper, null_agent, resource_deployer):
     """
     Test whether the `get_resource_events` and the `resource_did_dependency_change`
     endpoints behave as expected
     """
+    await clienthelper.set_auto_deploy(auto=True)
     version = await clienthelper.get_version()
 
     # a name that is hard to parse
@@ -106,12 +107,12 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     attribute_has_r2 = util.make_attribute_hash(rid_r2_v1, resources[1])
     attribute_has_r3 = util.make_attribute_hash(rid_r3_v1, resources[2])
 
-    await clienthelper.put_version_simple(resources, version)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
 
-    result = await agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v1)
+    result = await null_agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v1)
     assert result.code == 400, result.result
     assert "Fetching resource events only makes sense when the resource is currently deploying" in result.result["message"]
-    result = await agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v1)
+    result = await null_agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v1)
     assert result.code == 400
     assert "Fetching resource events only makes sense when the resource is currently deploying" in result.result["message"]
 
@@ -121,7 +122,7 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v1)
 
     # Verify that events exist
-    result = await agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v1)
+    result = await null_agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v1)
     assert result.code == 200
     assert len(result.result["data"]) == 2
     assert len(result.result["data"][rid_r2_v1]) == 1
@@ -130,7 +131,7 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     assert len(result.result["data"][rid_r3_v1]) == 1
     assert result.result["data"][rid_r3_v1][0]["action"] == const.ResourceAction.deploy
     assert result.result["data"][rid_r3_v1][0]["status"] == const.ResourceState.failed
-    result = await agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v1)
+    result = await null_agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v1)
     assert result.code == 200
     assert result.result["data"]
 
@@ -141,12 +142,12 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v1)
 
     # Assert no events anymore
-    result = await agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v1)
+    result = await null_agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v1)
     assert result.code == 200
     assert len(result.result["data"]) == 2
     assert len(result.result["data"][rid_r2_v1]) == 0
     assert len(result.result["data"][rid_r3_v1]) == 0
-    result = await agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v1)
+    result = await null_agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v1)
     assert result.code == 200
     assert not result.result["data"]
 
@@ -161,7 +162,7 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v1)
 
     # Ensure events, but no reload deployment required
-    result = await agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v1)
+    result = await null_agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v1)
     assert result.code == 200
     assert len(result.result["data"]) == 2
     assert len(result.result["data"][rid_r2_v1]) == 1
@@ -170,7 +171,7 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     assert len(result.result["data"][rid_r3_v1]) == 1
     assert result.result["data"][rid_r3_v1][0]["action"] == const.ResourceAction.deploy
     assert result.result["data"][rid_r3_v1][0]["status"] == const.ResourceState.deployed
-    result = await agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v1)
+    result = await null_agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v1)
     assert result.code == 200
     assert not result.result["data"]
 
@@ -407,7 +408,9 @@ async def test_events_api_endpoints_events_across_versions(server, client, envir
     assert not result.result["data"]
 
 
-async def test_events_resource_without_dependencies(server, client, environment, clienthelper, agent, resource_deployer):
+async def test_events_resource_without_dependencies(
+    server, client, environment, clienthelper, null_agent, resource_deployer
+) -> None:
     """
     Ensure that events are captured across versions.
     """
@@ -419,20 +422,23 @@ async def test_events_resource_without_dependencies(server, client, environment,
     ]
     await clienthelper.put_version_simple(resources, version)
 
+    result = await client.release_version(tid=environment, id=version)
+    assert result.code == 200
+
     # Start new deployment for r1
     await resource_deployer.start_deployment(rvid=rvid_r1_v1)
 
-    result = await agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v1)
+    result = await null_agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v1)
     assert result.code == 200
     assert len(result.result["data"]) == 0
-    result = await agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v1)
+    result = await null_agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v1)
     assert result.code == 200
     assert not result.result["data"]
 
 
 @pytest.mark.parametrize("endpoint_to_use", ["deployment_endpoint", "resource_action_update"])
 async def test_last_non_deploying_status_field_on_resource(
-    client, environment, clienthelper, resource_deployer, agent, endpoint_to_use: str
+    client, environment, clienthelper, resource_deployer, null_agent, endpoint_to_use: str
 ) -> None:
     """
     Test whether the `last_non_deploying_status` field is updated correctly when a deployment of a resource is done.
@@ -450,6 +456,9 @@ async def test_last_non_deploying_status_field_on_resource(
         {"name": "file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": False},
     ]
     await clienthelper.put_version_simple(resources, version)
+
+    result = await client.release_version(tid=environment, id=version)
+    assert result.code == 200
 
     async def assert_status_fields(
         r1_status: const.ResourceState,
@@ -473,7 +482,7 @@ async def test_last_non_deploying_status_field_on_resource(
             return await resource_deployer.start_deployment(rvid=rvid)
         else:
             action_id = uuid.uuid4()
-            result = await agent._client.resource_action_update(
+            result = await null_agent._client.resource_action_update(
                 tid=environment,
                 resource_ids=[rvid],
                 action_id=action_id,
@@ -501,7 +510,7 @@ async def test_last_non_deploying_status_field_on_resource(
             )
         else:
             now = datetime.datetime.now().astimezone()
-            result = await agent._client.resource_action_update(
+            result = await null_agent._client.resource_action_update(
                 tid=environment,
                 resource_ids=[rvid],
                 action_id=action_id,

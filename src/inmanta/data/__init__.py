@@ -4436,33 +4436,21 @@ class ResourcePersistentState(BaseDocument):
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
 
     @classmethod
-    async def update_orphan_state(cls, environment: uuid.UUID, connection: Optional[Connection] = None) -> None:
+    async def mark_as_orphan(
+        cls,
+        environment: UUID,
+        resource_ids: Set[ResourceIdStr],
+        connection: Optional[Connection] = None,
+    ) -> None:
         """
         Set the is_orphan column to True on all resources in the given environment that became an orphan.
         """
         query = f"""
-            WITH latest_released_version AS (
-                SELECT max(c.version) AS version
-                FROM {ConfigurationModel.table_name()} AS c
-                WHERE c.environment=$1 AND c.released
-            )
-            UPDATE {cls.table_name()} AS rps
-            SET
-                is_orphan=TRUE
-            WHERE
-                rps.environment=$1
-                AND NOT EXISTS(
-                    SELECT *
-                    FROM {Resource.table_name()} AS r
-                    WHERE (
-                        r.environment=$1
-                        AND r.model>=(SELECT version FROM latest_released_version)
-                        AND r.resource_id=rps.resource_id
-                    )
-                )
-                AND NOT rps.is_orphan
+            UPDATE {cls.table_name()}
+            SET is_orphan=TRUE
+            WHERE environment=$1 AND resource_id=ANY($2)
         """
-        await cls._execute_query(query, environment, connection=connection)
+        await cls._execute_query(query, environment, resource_ids, connection=connection)
 
     @classmethod
     async def update_resource_intent(
@@ -4518,6 +4506,57 @@ class ResourcePersistentState(BaseDocument):
             ) and rps.environment=$1
             """,
             environment,
+            connection=connection,
+        )
+
+    @classmethod
+    async def populate_for_version(
+        cls, environment: uuid.UUID, model_version: int, connection: Optional[Connection] = None
+    ) -> None:
+        """
+        Make sure that the resource_persistent_state table has a record for each resource present in the
+        given model version. This method assumes that the given model_version is the latest released version.
+        """
+        await cls._execute_query(
+            f"""
+            INSERT INTO {cls.table_name()} (
+                environment,
+                resource_id,
+                resource_type,
+                agent,
+                resource_id_value,
+                current_intent_attribute_hash,
+                is_undefined,
+                is_orphan,
+                deployment_result,
+                blocked_status
+            )
+            SELECT
+                r.environment,
+                r.resource_id,
+                r.resource_type,
+                r.agent,
+                r.resource_id_value,
+                r.attribute_hash,
+                r.status = 'undefined'::public.resourcestate,
+                FALSE,
+                'NEW',
+                CASE
+                    WHEN
+                        r.status = 'undefined'::public.resourcestate
+                        OR r.status = 'skipped_for_undefined'::public.resourcestate
+                    THEN 'YES'
+                    ELSE 'NO'
+                END
+            FROM {Resource.table_name()} AS r
+            WHERE r.environment=$1 AND r.model=$2 AND NOT EXISTS(
+                SELECT *
+                FROM {cls.table_name()} AS rps
+                WHERE rps.environment=r.environment AND rps.resource_id=r.resource_id
+            )
+            """,
+            environment,
+            model_version,
             connection=connection,
         )
 
@@ -4896,23 +4935,16 @@ class Resource(BaseDocument):
         This method generates a report of all resources in the given environment,
         with their latest version and when they are last deployed.
         """
-        query_resource_ids = f"""
-                SELECT resource_id, last_deployed_version as deployed_version, last_deploy
-                FROM {ResourcePersistentState.table_name()}
-                WHERE environment=$1
-        """
-        query_latest_version = f"""
-                SELECT resource_id, model AS latest_version
-                FROM {Resource.table_name()}
-                WHERE environment=$1 AND
-                      resource_id=r1.resource_id
-                ORDER BY model DESC
-                LIMIT 1
-        """
         query = f"""
-                SELECT r1.resource_id, r2.latest_version, r1.deployed_version, r1.last_deploy
-                FROM ({query_resource_ids}) AS r1 INNER JOIN LATERAL ({query_latest_version}) AS r2
-                      ON (r1.resource_id = r2.resource_id)
+        WITH latest_version_of_each_resource AS (
+            SELECT environment, max(model) AS model, resource_id
+            FROM {Resource.table_name()}
+            WHERE environment=$1
+            GROUP BY (environment, resource_id)
+        )
+        SELECT lver.resource_id, lver.model AS latest_version, rps.last_deployed_version AS deployed_version, rps.last_deploy
+        FROM latest_version_of_each_resource AS lver LEFT JOIN {ResourcePersistentState.table_name()} AS rps
+            ON lver.environment=rps.environment AND lver.resource_id=rps.resource_id
         """
         values = [cls._get_value(environment)]
         result = []
@@ -5096,7 +5128,9 @@ class Resource(BaseDocument):
         )
 
     @classmethod
-    async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ReleasedResourceDetails]:
+    async def get_released_resource_details(
+        cls, env: uuid.UUID, resource_id: m.ResourceIdStr
+    ) -> Optional[m.ReleasedResourceDetails]:
         def status_sub_query(resource_table_name: str) -> str:
             return f"""
             (CASE
@@ -5334,38 +5368,6 @@ class Resource(BaseDocument):
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
         await super().insert(connection=connection)
-        # TODO: On conflict or is not exists or just make every update an upsert?
-        await self._execute_query(
-            """
-            INSERT INTO resource_persistent_state (
-                environment,
-                resource_id,
-                resource_type,
-                agent,
-                resource_id_value,
-                is_undefined,
-                is_orphan,
-                deployment_result,
-                blocked_status
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            ON CONFLICT DO NOTHING
-            """,
-            self.environment,
-            self.resource_id,
-            self.resource_type,
-            self.agent,
-            self.resource_id_value,
-            self.status is const.ResourceState.undefined,
-            False,
-            state.DeploymentResult.NEW.name,
-            (
-                state.BlockedStatus.YES.name
-                if self.status in (const.ResourceState.undefined, const.ResourceState.skipped_for_undefined)
-                else state.BlockedStatus.NO.name
-            ),
-            connection=connection,
-        )
 
     @classmethod
     async def insert_many(
@@ -5374,38 +5376,6 @@ class Resource(BaseDocument):
         for doc in documents:
             doc.make_hash()
         # TODO performance?
-        for doc in documents:
-            await cls._execute_query(
-                """
-                INSERT INTO resource_persistent_state (
-                    environment,
-                    resource_id,
-                    resource_type,
-                    agent,
-                    resource_id_value,
-                    is_undefined,
-                    is_orphan,
-                    deployment_result,
-                    blocked_status
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                ON CONFLICT DO NOTHING
-                """,
-                doc.environment,
-                doc.resource_id,
-                doc.resource_type,
-                doc.agent,
-                doc.resource_id_value,
-                doc.status is const.ResourceState.undefined,
-                False,
-                state.DeploymentResult.NEW.name,
-                (
-                    state.BlockedStatus.YES.name
-                    if doc.status in (const.ResourceState.undefined, const.ResourceState.skipped_for_undefined)
-                    else state.BlockedStatus.NO.name
-                ),
-                connection=connection,
-            )
         await super().insert_many(documents, connection=connection)
 
     async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: object) -> None:

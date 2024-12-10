@@ -97,50 +97,59 @@ async def test_has_only_one_version_from_resource(server, client):
         )
         await cm.insert()
 
+    res1_name = "file" + str(1)
+    res1_key = "std::testing::NullResource[agent1,name=" + res1_name + "]"
+    res2_name = "file" + str(2)
+    res2_key = "std::testing::NullResource[agent1,name=" + res2_name + "]"
+
     version = 1
-    name = "file" + str(1)
-    key = "std::testing::NullResource[agent1,name=" + name + "]"
-    res1_v1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
+    res1_v1 = data.Resource.new(
+        environment=env.id, resource_version_id=res1_key + ",v=%d" % version, attributes={"name": res1_name}
+    )
     await res1_v1.insert()
+    res2_v1 = data.Resource.new(
+        environment=env.id, resource_version_id=res2_key + ",v=%d" % version, attributes={"name": res2_name}
+    )
+    await res2_v1.insert()
+    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
+
     version = 2
     res1_v2 = data.Resource.new(
         environment=env.id,
-        resource_version_id=key + ",v=%d" % version,
-        attributes={"name": name},
+        resource_version_id=res1_key + ",v=%d" % version,
+        attributes={"name": res1_name},
         status=ResourceState.deploying,
     )
     await res1_v2.insert()
-    version = 3
-    res1_v3 = data.Resource.new(
-        environment=env.id,
-        resource_version_id=key + ",v=%d" % version,
-        attributes={"name": name},
-        status=ResourceState.deployed,
-    )
-    await res1_v3.insert()
-    version = 4
-    res1_v4 = data.Resource.new(
-        environment=env.id,
-        resource_version_id=key + ",v=%d" % version,
-        attributes={"name": name, "new_attr": 123, "requires": ["abc"]},
-        status=ResourceState.deployed,
-    )
-    await res1_v4.insert()
-    await res1_v4.update_persistent_state(last_non_deploying_status=ResourceState.deployed)
-
-    version = 1
-    name = "file" + str(2)
-    key = "std::testing::NullResource[agent1,name=" + name + "]"
-    res2_v1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
-    await res2_v1.insert()
-    version = 2
     res2_v2 = data.Resource.new(
         environment=env.id,
-        resource_version_id=key + ",v=%d" % version,
-        attributes={"name": name},
+        resource_version_id=res2_key + ",v=%d" % version,
+        attributes={"name": res2_name},
         status=ResourceState.deploying,
     )
     await res2_v2.insert()
+    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
+
+    version = 3
+    res1_v3 = data.Resource.new(
+        environment=env.id,
+        resource_version_id=res1_key + ",v=%d" % version,
+        attributes={"name": res1_name},
+        status=ResourceState.deployed,
+    )
+    await res1_v3.insert()
+    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
+
+    version = 4
+    res1_v4 = data.Resource.new(
+        environment=env.id,
+        resource_version_id=res1_key + ",v=%d" % version,
+        attributes={"name": res1_name, "new_attr": 123, "requires": ["abc"]},
+        status=ResourceState.deployed,
+    )
+    await res1_v4.insert()
+    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
+    await res1_v4.update_persistent_state(last_non_deploying_status=ResourceState.deployed)
 
     result = await client.resource_list(env.id, sort="status.asc")
     assert result.code == 200

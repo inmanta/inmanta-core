@@ -20,6 +20,7 @@ import abc
 import datetime
 import logging
 import uuid
+from collections.abc import Set
 from typing import Any, Optional
 from uuid import UUID
 
@@ -78,7 +79,9 @@ class StateUpdateManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def update_orphan_state(self, environment: UUID, connection: Optional[Connection] = None) -> None:
+    async def mark_as_orphan(
+        self, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
+    ) -> None:
         pass
 
     @abc.abstractmethod
@@ -324,8 +327,13 @@ class ToDbUpdateManager(StateUpdateManager):
             environment, intent, update_blocked_state, connection=connection
         )
 
-    async def update_orphan_state(self, environment: UUID, connection: Optional[Connection] = None) -> None:
-        await data.ResourcePersistentState.update_orphan_state(environment, connection=connection)
+    async def mark_as_orphan(
+        self,
+        environment: UUID,
+        resource_ids: Set[ResourceIdStr],
+        connection: Optional[Connection] = None,
+    ) -> None:
+        await data.ResourcePersistentState.mark_as_orphan(environment, resource_ids, connection=connection)
 
     async def set_last_processed_model_version(
         self, environment: uuid.UUID, version: int, connection: Optional[Connection] = None

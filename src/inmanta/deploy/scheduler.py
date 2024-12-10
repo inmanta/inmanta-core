@@ -377,17 +377,33 @@ class ResourceScheduler(TaskManager):
                 self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
             )
 
+    async def _get_resource_details(self, env: uuid.UUID, version: int) -> list[ResourceDetails]:
+        resources_in_version = await data.Resource.get_list(environment=env, model=version)
+        result = []
+        for res in resources_in_version:
+            # Make mypy happy
+            assert res.attribute_hash is not None
+            result.append(
+                ResourceDetails(
+                    resource_id=res.resource_id,
+                    attribute_hash=res.attribute_hash,
+                    attributes=res.attributes,
+                    status=ComplianceStatus.UNDEFINED,  # TODO: FIX
+                )
+            )
+        return result
+
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         if not self._running:
             return
-        resources = await self._build_resource_mappings_from_db(version)
-        for rid, resource in resources.items():
+        resource_details = await self._get_resource_details(self.environment, version)
+        for res_details in resource_details:
             self._work.agent_queues.queue_put_nowait(
                 PrioritizedTask(
                     task=DryRun(
-                        resource=rid,
+                        resource=res_details.resource_id,
                         version=version,
-                        resource_details=resource,
+                        resource_details=res_details,
                         dry_run_id=dry_run_id,
                     ),
                     priority=TaskPriority.DRYRUN,
@@ -663,7 +679,7 @@ class ResourceScheduler(TaskManager):
                 connection=con,
             )
             # Mark orphaned resources
-            await self.update_orphan_state(self.environment, connection=con)
+            await self.mark_as_orphan(self.environment, deleted_resources, con)
             await self.set_last_processed_model_version(self.environment, version, connection=con)
 
     def _create_agent(self, agent: str) -> None:
@@ -885,8 +901,13 @@ class ResourceScheduler(TaskManager):
             environment, intent, update_blocked_state, connection=connection
         )
 
-    async def update_orphan_state(self, environment: UUID, connection: Optional[asyncpg.connection.Connection] = None) -> None:
-        await self._state_update_delegate.update_orphan_state(environment, connection=connection)
+    async def mark_as_orphan(
+        self,
+        environment: UUID,
+        resource_ids: Set[ResourceIdStr],
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        await self._state_update_delegate.mark_as_orphan(environment, resource_ids, connection=connection)
 
     async def set_last_processed_model_version(
         self, environment: UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None

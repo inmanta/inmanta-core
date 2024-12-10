@@ -172,7 +172,7 @@ async def test_docs_snippets_unmanaged_resources_basic(
     version, _ = await snippetcompiler.do_export_and_deploy()
 
     await clienthelper.wait_for_released(version)
-    await wait_until_deployment_finishes(client, environment)
+    await wait_until_deployment_finishes(client, environment, version)
 
     result = await client.discovered_resources_get_batch(tid=environment)
     assert result.code == 200
@@ -233,7 +233,7 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
 
     await clienthelper.wait_for_released(version)
 
-    await wait_until_deployment_finishes(client, environment)
+    await wait_until_deployment_finishes(client, environment, version)
 
     result = await client.discovered_resources_get_batch(tid=environment)
     assert result.code == 200

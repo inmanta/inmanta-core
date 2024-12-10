@@ -1558,7 +1558,6 @@ async def test_resources_report(init_dataclasses_and_load_schema):
         attributes={"name": "file1"},
     )
     await res11.insert()
-    await res11.update_persistent_state(last_deployed_version=version, last_deploy=datetime.datetime(2018, 7, 14, 12, 30))
 
     res12 = data.Resource.new(
         environment=env.id,
@@ -1567,6 +1566,8 @@ async def test_resources_report(init_dataclasses_and_load_schema):
         attributes={"name": "file2"},
     )
     await res12.insert()
+    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
+    await res11.update_persistent_state(last_deployed_version=version, last_deploy=datetime.datetime(2018, 7, 14, 12, 30))
     await res12.update_persistent_state(
         last_deployed_version=version,
         last_deploy=datetime.datetime(2018, 7, 14, 12, 30),
@@ -1599,6 +1600,7 @@ async def test_resources_report(init_dataclasses_and_load_schema):
         attributes={"name": "file3"},
     )
     await res22.insert()
+    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
 
     # model 3
     version += 1
@@ -1620,6 +1622,7 @@ async def test_resources_report(init_dataclasses_and_load_schema):
         attributes={"name": "file2"},
     )
     await res31.insert()
+    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
     await res31.update_persistent_state(last_deployed_version=version, last_deploy=datetime.datetime(2018, 7, 14, 14, 30))
 
     report = await data.Resource.get_resources_report(env.id)
@@ -2825,6 +2828,9 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
             attributes=attributes,
         )
         await r1.insert()
+        await data.ResourcePersistentState.populate_for_version(
+            environment=env.id, model_version=Id.parse_id(resource_version_id).version
+        )
         await r1.update_persistent_state(
             last_deploy=datetime.datetime.now(tz=UTC), last_non_deploying_status=last_non_deploying_status
         )

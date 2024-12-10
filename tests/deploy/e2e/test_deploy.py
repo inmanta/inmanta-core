@@ -301,14 +301,8 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                 blocked_status=BlockedStatus.NO,
                 expected_compliance_status=compliance_status,
             )
-    assert_resource_persistent_state(
-        resource_persistent_state=rid_to_rps[ResourceIdStr("test::Resourcex[agentx,key=key]")],
-        is_undefined=False,
-        is_orphan=False,
-        deployment_result=DeploymentResult.NEW,
-        blocked_status=BlockedStatus.NO,
-        expected_compliance_status=ComplianceStatus.HAS_UPDATE,
-    )
+    # Unreleased resources are not present in the resource_persistent_state table.
+    assert ResourceIdStr("test::Resourcex[agentx,key=key]") not in rid_to_rps
 
     # deploy trigger
     await client.deploy(environment, agent_trigger_method=const.AgentTriggerMethod.push_incremental_deploy)
@@ -328,14 +322,8 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                 blocked_status=BlockedStatus.NO,
                 expected_compliance_status=ComplianceStatus.COMPLIANT,
             )
-    assert_resource_persistent_state(
-        resource_persistent_state=rid_to_rps[ResourceIdStr("test::Resourcex[agentx,key=key]")],
-        is_undefined=False,
-        is_orphan=False,
-        deployment_result=DeploymentResult.NEW,
-        blocked_status=BlockedStatus.NO,
-        expected_compliance_status=ComplianceStatus.HAS_UPDATE,
-    )
+    # Unreleased resources are not present in the resource_persistent_state table.
+    assert ResourceIdStr("test::Resourcex[agentx,key=key]") not in rid_to_rps
 
 
 async def check_server_state_vs_scheduler_state(client, environment, scheduler):

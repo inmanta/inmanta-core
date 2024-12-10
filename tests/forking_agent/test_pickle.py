@@ -20,6 +20,7 @@ import datetime
 import pickle
 import uuid
 
+from inmanta.deploy import state
 from inmanta.agent.executor import DeployResult, DryrunResult
 from inmanta.const import Change, ResourceState
 from inmanta.data import LogLine
@@ -57,6 +58,7 @@ def test_risky_objects():
         [LogLine(msg="test", args=[], level="INFO", kwargs={"A": EvilString("X")})],
         {"a": AttributeStateChange(current="a", desired=EvilString("B"))},
         Change.updated,
+        state.DeploymentResult.DEPLOYED,
     )
 
     deploy_out = pickle.loads(pickle.dumps(deploy))

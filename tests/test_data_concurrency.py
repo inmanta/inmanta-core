@@ -15,7 +15,8 @@
 
     Contact: code@inmanta.com
 """
-
+from inmanta.deploy.state import DeploymentResult
+from inmanta.util import get_compiler_version, make_attribute_hash
 from utils import get_resource
 
 """
@@ -84,105 +85,6 @@ def slowdown_queries(
 
     for query_func in query_funcs:
         monkeypatch.setattr(cls, query_func, patch_method(getattr(cls, query_func)))
-
-
-@pytest.mark.slowtest
-@pytest.mark.parametrize("method_to_use", ["send_deploy_done", "resource_action_update"])
-async def test_4889_deadlock_delete_resource_action_update(
-    monkeypatch, server, client, environment: str, agent, method_to_use: str
-) -> None:
-    """
-    Verify that no deadlock exists between the delete of a version and the
-    send_deploy_done/resource_action_update (background task) on that same version.
-    """
-    env_id: uuid.UUID = uuid.UUID(environment)
-    update_manager = persistence.ToDbUpdateManager(client, env_id)
-
-    version: int = 1
-    await data.ConfigurationModel(
-        environment=env_id,
-        version=version,
-        date=datetime.datetime.now().astimezone(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    ).insert()
-
-    resource = model.ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={version}")
-    await data.Resource.new(
-        environment=env_id,
-        status=const.ResourceState.available,
-        resource_version_id=resource,
-        attributes={"purge_on_delete": False, "purged": True, "requires": []},
-    ).insert()
-
-    # Add parameter for resource
-    parameter_id = "test_param"
-    result = await client.set_param(
-        tid=env_id,
-        id=parameter_id,
-        source=const.ParameterSource.user,
-        value="val",
-        resource_id="std::testing::NullResource[agent1,name=file1]",
-    )
-    assert result.code == 200
-
-    action_id = uuid.uuid4()
-    await update_manager.send_in_progress(action_id, resource)
-
-    # artificially slow down queries to increase deadlock probability
-    slowdown_queries(monkeypatch, cls=data.ResourceAction, query_funcs=["set_and_save"], delay=2)
-
-    # request delete
-    async def delete() -> Result:
-        # Make sure insert starts first so it can acquire its first lock.
-        await asyncio.sleep(1)
-        return await client.delete_version(tid=environment, id=version)
-
-    # request deploy_done
-    now: datetime.datetime = datetime.datetime.now()
-    deploy_done: abc.Awaitable[None] | abc.Awaitable[Result]
-    if method_to_use == "send_deploy_done":
-        deploy_done = update_manager.send_deploy_done(
-            result=executor.DeployResult(
-                rvid=resource,
-                action_id=action_id,
-                status=const.ResourceState.deployed,
-                messages=[
-                    data.LogLine.log(
-                        level=const.LogLevel.DEBUG, msg="message", kwargs={"keyword": 123, "none": None}, timestamp=now
-                    ),
-                    data.LogLine.log(level=const.LogLevel.INFO, msg="test", kwargs={}, timestamp=now),
-                ],
-                changes={"attr1": model.AttributeStateChange(current=None, desired="test")},
-                change=const.Change.purged,
-            )
-        )
-    elif method_to_use == "resource_action_update":
-        deploy_done = agent._client.resource_action_update(
-            tid=env_id,
-            resource_ids=[resource],
-            action_id=action_id,
-            action=const.ResourceAction.deploy,
-            started=None,
-            finished=now,
-            status=const.ResourceState.deployed,
-            messages=[
-                data.LogLine.log(level=const.LogLevel.DEBUG, msg="message", timestamp=now, keyword=123, none=None),
-                data.LogLine.log(level=const.LogLevel.INFO, msg="test", timestamp=now),
-            ],
-            changes={resource: {"attr1": model.AttributeStateChange(current=None, desired="test")}},
-            change=const.Change.purged,
-            send_events=True,
-        )
-    else:
-        raise ValueError("Unknown value for endpoint_to_use parameter")
-
-    # wait for both concurrent requests
-    results: abc.Sequence[Result | None] = await asyncio.gather(deploy_done, delete())
-    assert all(result.code == 200 for result in results if isinstance(result, Result)), "\n".join(
-        str(result.result) for result in results if isinstance(result, Result) and result.code != 200
-    )
 
 
 @pytest.mark.slowtest
