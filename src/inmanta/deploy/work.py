@@ -51,6 +51,7 @@ class PrioritizedTask[T: tasks.Task](typing.Protocol):
 
     Intended mostly for internal use within this module. External modules typically only care for MotivatedTask.
     """
+
     task: T
     priority: TaskPriority
     priority_tiebreaker: Optional[int]
@@ -60,6 +61,7 @@ class MotivatedTask[T: tasks.Task](typing.Protocol):
     """
     Resource action task with an optional reason field attached.
     """
+
     task: T
     reason: Optional[str]
 
@@ -70,6 +72,7 @@ class TaskSpec[T: tasks.Task](PrioritizedTask[T], MotivatedTask[T], typing.Proto
 
     Intended mostly for internal use within this module. External modules typically only care for MotivatedTask.
     """
+
     task: T
 
 
