@@ -489,10 +489,6 @@ class ResourceScheduler(TaskManager):
         up_to_date_resources: Optional[Mapping[ResourceIdStr, ResourceDetails]] = None,
         reason: str = "Deploy was triggered because a new version has been released",
     ) -> None:
-        # TODO:
-        #   1. update all immediate state
-        #   2. propagate all transients (first the blocked: yes, then the blocked: No, no node is ever visited twice)
-
         up_to_date_resources = {} if up_to_date_resources is None else up_to_date_resources
         async with self._intent_lock:
             # Inspect new state and compare it with the old one before acquiring the scheduler lock.
