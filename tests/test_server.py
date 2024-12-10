@@ -1148,9 +1148,7 @@ async def test_send_in_progress(server, client, environment, agent, method_to_us
             attributes=attributes,
         )
         await r1.insert()
-        await data.ResourcePersistentState.populate_for_version(
-            environment=uuid.UUID(environment), model_version=version
-        )
+        await data.ResourcePersistentState.populate_for_version(environment=uuid.UUID(environment), model_version=version)
         await r1.update_persistent_state(last_deploy=datetime.now(tz=UTC), last_non_deploying_status=last_non_deploying_status)
 
     await make_resource_with_last_non_deploying_status(

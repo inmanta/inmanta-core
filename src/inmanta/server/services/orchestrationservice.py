@@ -1106,9 +1106,7 @@ class OrchestrationService(protocol.ServerSlice):
                         )
 
                     # Ensure there is a record for every resource in the resource_persistent_state table.
-                    await data.ResourcePersistentState.populate_for_version(
-                        env.id, version_id, connection=connection
-                    )
+                    await data.ResourcePersistentState.populate_for_version(env.id, version_id, connection=connection)
 
                     # Already mark undeployable resources as deployed to create a better UX (change the version counters)
                     undep = model.get_undeployable()

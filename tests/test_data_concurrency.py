@@ -15,8 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from inmanta.deploy.state import DeploymentResult
-from inmanta.util import get_compiler_version, make_attribute_hash
+
 from utils import get_resource
 
 """
@@ -34,10 +33,7 @@ import asyncpg
 import pytest
 
 from inmanta import const, data
-from inmanta.agent import executor
 from inmanta.data import model
-from inmanta.deploy import persistence
-from inmanta.protocol.common import Result
 
 
 def slowdown_queries(

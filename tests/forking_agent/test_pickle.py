@@ -20,11 +20,11 @@ import datetime
 import pickle
 import uuid
 
-from inmanta.deploy import state
 from inmanta.agent.executor import DeployResult, DryrunResult
 from inmanta.const import Change, ResourceState
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange
+from inmanta.deploy import state
 
 
 def test_risky_objects():

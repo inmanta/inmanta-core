@@ -44,7 +44,7 @@ import inmanta.util
 import packaging.requirements
 import packaging.version
 from _pytest.mark import MarkDecorator
-from inmanta import config, const, data, env, module, protocol, util, resources
+from inmanta import config, const, data, env, module, protocol, util
 from inmanta.agent import config as cfg
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
