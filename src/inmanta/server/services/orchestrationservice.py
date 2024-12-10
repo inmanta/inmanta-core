@@ -1311,14 +1311,26 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
     ) -> SchedulerStatusReport:
-        await self.autostarted_agent_manager._ensure_scheduler(env.id)
-        client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
-        assert client is not None
-        status = await client.trigger_get_status(env.id)
-        assert status.code == 200
-        assert status.result is not None
-        resp = SchedulerStatusReport.model_validate(status.result["data"])
-        return resp
+        try:
+            await self.autostarted_agent_manager._ensure_scheduler(env.id)
+        except Exception as e:
+            raise ServerError(f"Scheduler in env {env.id} failed to start.") from e
+        else:
+            client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
+
+            if client is None:
+                raise ServerError(f"Cannot retrieve session for scheduler in env {env.id}.")
+
+            status = await client.trigger_get_status(env.id)
+
+            status_code = status.code
+            result = status.result
+
+            if status_code != 200:
+                raise BaseHttpException(status_code, result["message"] if result else "")
+
+            resp = SchedulerStatusReport.model_validate(result["data"])
+            return resp
 
     def convert_resources(self, resources: list[data.Resource]) -> dict[ResourceIdStr, diff.Resource]:
         return {res.resource_id: diff.Resource(resource_id=res.resource_id, attributes=res.attributes) for res in resources}

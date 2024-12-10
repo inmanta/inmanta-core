@@ -24,7 +24,6 @@ import logging
 import uuid
 from typing import Any
 
-import pytest
 
 from inmanta import const, data, resources
 from inmanta.const import ParameterSource
@@ -270,11 +269,11 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     assert result.code == 200
 
     # THIS IS A BEHAVIOR CHANGE: NO FACTS IF NOT RELEASED
-    # await get_fact("test::Fact[agent1,key=key1]", 503)  # undeployable
+    await get_fact("test::Fact[agent1,key=key1]", 503)  # undeployable
     # await get_fact("test::Fact[agent1,key=key2]")  # normal
-    # await get_fact("test::Fact[agent1,key=key3]", 503)  # not present
-    # await get_fact("test::Fact[agent1,key=key4]", 503)  # unknown
-    # await get_fact("test::Fact[agent1,key=key5]", 503)  # broken
+    await get_fact("test::Fact[agent1,key=key3]", 503)  # not present
+    await get_fact("test::Fact[agent1,key=key4]", 503)  # unknown
+    await get_fact("test::Fact[agent1,key=key5]", 503)  # broken
     # f6 = await get_fact("test::Fact[agent1,key=key6]")  # normal
     # f7 = await get_fact("test::Fact[agent1,key=key7]")  # normal
     #
@@ -289,7 +288,6 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     await get_fact("test::Fact[agent1,key=key1]", 503, lower_limit=0)  # undeployable
     await get_fact("test::Fact[agent1,key=key2]")  # normal
     await get_fact("test::Fact[agent1,key=key3]")  # not present -> present
-    pytest.skip("No unknowns yet!")
     await get_fact("test::Fact[agent1,key=key4]", 503)  # unknown
     await get_fact("test::Fact[agent1,key=key5]", 503)  # broken
 

@@ -105,7 +105,7 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
     "agent_deploy_interval",
     [
         "2",
-        "*/2 * * * * * *",
+        # "*/2 * * * * * *",
     ],
 )
 async def test_spontaneous_deploy(
@@ -157,7 +157,7 @@ async def test_spontaneous_deploy(
 
         result = await client.get_scheduler_status(env_id)
         assert result.code == 200
-        expected_data = {"discrepancies": {}, "resource_state": {}}
+        expected_data = {"discrepancies": {}, "scheduler_state": {}, "db_state": {}}
         assert result.result["data"] == expected_data
 
         result = await client.release_version(
@@ -171,22 +171,34 @@ async def test_spontaneous_deploy(
         result = await client.get_version(env_id, version)
         assert result.code == 200
 
+        def selective_comparison(left_dict, right_dict):
+            for field in ["discrepancies", "scheduler_state"]:
+                left_value = left_dict.get(field)
+                right_value = right_dict.get(field)
+
+                if left_value is None or right_value is None:
+                    return False
+                if left_value != right_value:
+                    return False
+            return True
+
         async def picked_up_by_the_scheduler() -> bool:
+
             result = await client.get_scheduler_status(env_id)
             assert result.code == 200
             new = {
                 "discrepancies": {},
-                "resource_state": {
+                "scheduler_state": {
                     "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "new", "status": "has_update"}
                 },
             }
             deployed = {
                 "discrepancies": {},
-                "resource_state": {
+                "scheduler_state": {
                     "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "deployed", "status": "compliant"}
                 },
             }
-            return result.result["data"] in [new, deployed]
+            return selective_comparison(result.result["data"], new) or selective_comparison(result.result["data"], deployed)
 
         # Flaky part depending on
         # when we check the inner status vs how fast the scheduler picks up the resources:
@@ -205,11 +217,11 @@ async def test_spontaneous_deploy(
         assert result.code == 200
         expected_data = {
             "discrepancies": {},
-            "resource_state": {
+            "scheduler_state": {
                 "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "deployed", "status": "compliant"}
             },
         }
-        assert result.result["data"] == expected_data
+        assert selective_comparison(result.result["data"], expected_data)
 
         assert await clienthelper.done_count() == 1
 

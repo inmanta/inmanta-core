@@ -30,7 +30,7 @@ from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import DataBaseReport, SchedulerStatusReport
 from inmanta.deploy import scheduler
-from inmanta.protocol import SessionEndpoint, TypedClient, methods, methods_v2
+from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.server.services.databaseservice import DatabaseMonitor
 from inmanta.types import Apireturn
 from inmanta.util import ensure_directory_exist, join_threadpools
@@ -38,7 +38,7 @@ from inmanta.util import ensure_directory_exist, join_threadpools
 LOGGER = logging.getLogger("inmanta.scheduler")
 
 
-class Agent(SessionEndpoint, TypedClient):
+class Agent(SessionEndpoint):
     """
     This is the new scheduler, adapted to the agent protocol
 

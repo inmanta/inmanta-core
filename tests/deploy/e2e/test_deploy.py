@@ -218,7 +218,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     result = await client.get_scheduler_status(env_id)
     assert result.code == 200
 
-    expected_state = {"resource_state": {}, "discrepancies": {}}
+    expected_state = {"scheduler_state": {}, "db_state": {}, "discrepancies": {}}
     assert result.result["data"] == expected_state
 
     # deploy and wait until one is ready
@@ -239,6 +239,17 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         rid: str
         expected_status: dict[str, str]
 
+    def selective_comparison(left_dict, right_dict):
+        for field in ["discrepancies", "scheduler_state"]:
+            left_value = left_dict.get(field)
+            right_value = right_dict.get(field)
+
+            if left_value is None or right_value is None:
+                return False
+            if left_value != right_value:
+                return False
+        return True
+
     def build_expected_state(
         all_resources: Sequence[str], specific_resources: Sequence[ExpectedResourceStatus]
     ) -> SchedulerStatusReport:
@@ -246,13 +257,14 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         helper method to build a custom SchedulerStatusReport
         """
         expected_state = {
-            "resource_state": {
+            "scheduler_state": {
                 Id.parse_id(resource["id"]).resource_str(): deployed_resource_expected_status for resource in all_resources
             },
             "discrepancies": {},
+            "db_state": {},
         }
         for resource_status in specific_resources:
-            expected_state["resource_state"][resource_status.rid] = resource_status.expected_status
+            expected_state["scheduler_state"][resource_status.rid] = resource_status.expected_status
 
         return SchedulerStatusReport.model_validate(expected_state)
 
@@ -264,7 +276,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     result = await client.get_scheduler_status(env_id)
     assert result.code == 200
-    assert result.result["data"] == build_expected_state(resources, v1_expected_result).model_dump()
+    assert selective_comparison(result.result["data"], build_expected_state(resources, v1_expected_result).model_dump())
 
     await check_scheduler_state(resources, scheduler)
     await resource_action_consistency_check()
@@ -306,7 +318,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     result = await client.get_scheduler_status(env_id)
     assert result.code == 200
-    assert result.result["data"] == build_expected_state(resources, []).model_dump()
+    assert selective_comparison(result.result["data"], build_expected_state(resources, []).model_dump())
 
 
 async def check_server_state_vs_scheduler_state(client, environment, scheduler):
