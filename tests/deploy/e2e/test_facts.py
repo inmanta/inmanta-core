@@ -24,7 +24,6 @@ import logging
 import uuid
 from typing import Any
 
-
 from inmanta import const, data, resources
 from inmanta.const import ParameterSource
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_PARAM

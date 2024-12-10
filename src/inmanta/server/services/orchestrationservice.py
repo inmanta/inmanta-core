@@ -1329,6 +1329,8 @@ class OrchestrationService(protocol.ServerSlice):
             if status_code != 200:
                 raise BaseHttpException(status_code, result["message"] if result else "")
 
+            assert result is not None
+
             resp = SchedulerStatusReport.model_validate(result["data"])
             return resp
 

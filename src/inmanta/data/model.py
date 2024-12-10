@@ -930,9 +930,9 @@ class SchedulerStatusReport(BaseModel):
         and their state in the database.
     """
 
-    scheduler_state: dict[ResourceIdStr, typing.Any]
-    db_state: dict[ResourceIdStr, typing.Any]
-    discrepancies: dict[ResourceIdStr, list[Discrepancy]]
+    scheduler_state: Mapping[ResourceIdStr, typing.Any]
+    db_state: Mapping[ResourceIdStr, typing.Any]
+    discrepancies: Mapping[ResourceIdStr, list[Discrepancy]]
 
 
 class DataBaseReport(BaseModel):
