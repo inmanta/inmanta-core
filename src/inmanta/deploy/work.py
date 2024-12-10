@@ -223,12 +223,14 @@ class AgentQueues:
     def _queue_item_for_task(self, task: tasks.Task) -> Optional[TaskQueueItem]:
         return self._tasks_by_resource.get(task.resource, {}).get(task, None)
 
-    def sorted(self, agent: str) -> list[tasks.Task]:
-        # FIXME: remove this method: it's only a PoC to hightlight how to achieve a sorted view
+    def sorted(self, agent: str) -> list[MotivatedTask[tasks.Task]]:
+        """
+        Return a sorted view of the queued tasks for a single agent. Solely for testing purposes.
+        """
         queue: asyncio.PriorityQueue[TaskQueueItem] = self._agent_queues[agent]
         backing_heapq: list[TaskQueueItem] = queue._queue  # type: ignore [attr-defined]
         backing_heapq.sort()
-        return [item.task for item in backing_heapq if not item.deleted]
+        return [item for item in backing_heapq if not item.deleted]
 
     ########################################
     # asyncio.PriorityQueue-like interface #
@@ -456,26 +458,25 @@ class ScheduledWork:
                 # and simply add a new one
                 task: tasks.Deploy = tasks.Deploy(resource=resource)
                 discarded: Optional[TaskSpec[tasks.Task]] = self.agent_queues.discard(task)
+
                 new_priority: TaskPriority
                 new_tiebreaker: Optional[int]
                 new_reason: Optional[str]
-                # TODO: test cases (base test case may already exist):
-                #   - queued @ lower (more urgent) priority => eventually requeued at old priority and insert order
-                #   - queued @ equal priority => eventually requeued at old priority and insert order
-                #   - queued @ higher (less urgent) priority & early insert order => eventually requeued at new priority and new
-                #       insert order
-                # -> test insert order by initially having one before and one after, then check new position
-                if discarded is not None and discarded.priority <= priority:
-                    # currently scheduled task has same or lower priority (more urgent) than new one
-                    # => keep priority and tiebreaker
+                # always use the previously scheduled priority, because new priority only applies to anything in 'resources',
+                # which are scheduled seperately.
+                if discarded is not None:
                     new_priority, new_tiebreaker, new_reason = (
                         discarded.priority,
                         discarded.priority_tiebreaker,
                         discarded.reason,
                     )
                 else:
-                    # take new priority and reset tiebreaker so queue at the end of the new priority
-                    new_priority, new_tiebreaker, new_reason = priority, None, reason
+                    # Get priority from running task. This should always return something, but default to this request's
+                    # priority just in case
+                    new_priority = self.agent_queues.in_progress.get(task, priority)
+                    new_tiebreaker = None
+                    new_reason = "rescheduling because a dependency was added to this resource while it was deploying"
+
                 queued.remove(resource)
                 self._waiting[resource] = BlockedDeploy(
                     task=task,
@@ -500,7 +501,6 @@ class ScheduledWork:
                     # simply add it again, the queue will make sure only the highest priority is kept
                     self.agent_queues.queue_put_nowait(task, priority=priority, reason=reason)
                 if resource in self._waiting and priority < self._waiting[resource].priority:
-                    # TODO: test case (may already exist) + test that tiebreaker is reset
                     self._waiting[resource].priority = priority
                     self._waiting[resource].priority_tiebreaker = None
                     self._waiting[resource].reason = reason

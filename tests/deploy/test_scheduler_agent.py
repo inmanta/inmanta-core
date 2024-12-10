@@ -45,7 +45,7 @@ from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import BlockedStatus
 from inmanta.deploy.timers import TimerManager
-from inmanta.deploy.work import TaskPriority
+from inmanta.deploy.work import ScheduledWork, TaskPriority
 from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.resources import Id
@@ -1778,6 +1778,294 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
     # All tasks were consumed
     queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
     assert len(queue) == 0
+
+
+async def test_scheduler_priority_rescheduling(agent: TestAgent, environment, make_resource_minimal):
+    """
+    Verify behavior of task rescheduling (e.g. because of new requires) with respect to priorities, both explicit and relative
+    to other scheduled task (i.e. current queue position).
+    """
+
+    # General flow of the test: all deploy tasks, all on the same agent, different priorities. Tasks are never picked up,
+    # only added or shifted around (due to changing priorities or requires edges).
+    # This test interacts with scheduled work directly rather than to go through the scheduler for verbosity reasons.
+    # For a basic priority test that does go via the scheduler see test_scheduler_priority.
+
+    # define some resources
+    rid1 = ResourceIdStr("test::Resource[agent,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent,name=2]")
+    rid3 = ResourceIdStr("test::Resource[agent,name=3]")
+    rid4 = ResourceIdStr("test::Resource[agent,name=4]")
+    rid5 = ResourceIdStr("test::Resource[agent,name=5]")
+    rid6 = ResourceIdStr("test::Resource[agent,name=6]")
+    task1 = tasks.Deploy(resource=rid1)
+    task2 = tasks.Deploy(resource=rid2)
+    task3 = tasks.Deploy(resource=rid3)
+    task4 = tasks.Deploy(resource=rid4)
+    task5 = tasks.Deploy(resource=rid5)
+    task6 = tasks.Deploy(resource=rid6)
+
+    # set up the scheduled work
+    requires: state.RequiresProvidesMapping = state.RequiresProvidesMapping()
+    work: ScheduledWork = ScheduledWork(
+        requires=requires, provides=requires.provides_view(), new_agent_notify=lambda *args, **kwargs: None
+    )
+
+    # three different deploy requests, each for a different resource. Verify that order ends up as expected
+    work.deploy_with_context(
+        resources={rid1},
+        reason="First deploy",
+        priority=TaskPriority(2),
+    )
+    work.deploy_with_context(
+        resources={rid2},
+        reason="Second deploy",
+        priority=TaskPriority(1),
+    )
+    work.deploy_with_context(
+        resources={rid3},
+        reason="Third deploy",
+        priority=TaskPriority(3),
+    )
+
+    assert [item.task for item in work.agent_queues.sorted("agent")] == [task2, task1, task3]
+
+    # add some more tasks to the middle priority level
+    work.deploy_with_context(
+        resources={rid1, rid2, rid3, rid4, rid5},
+        reason="Bulk deploy",
+        priority=TaskPriority(2),
+    )
+    # add one more task to the more urgent priority level for some relative ordering asserts later on
+    # -> priority 1: rid2, rid6
+    # -> priority 2: rid1, rid3, rid4, rid5 (latter three in any order)
+    # -> rid6 comes last for any priority tiebreakers out of all resources
+    work.deploy_with_context(
+        resources={rid6},
+        reason="deploy rid6",
+        priority=TaskPriority(1),
+    )
+
+    def get_sorted_tasks() -> Sequence[tuple[tasks.Task, str]]:
+        return [(item.task, item.reason) for item in work.agent_queues.sorted("agent")]
+
+    # may be updated after each assertion
+    original_sorted_tasks: Sequence[tuple[tasks.Task, str]] = get_sorted_tasks()
+
+    assert original_sorted_tasks[:3] == [
+        # rid2 already had a more urgent priority, it should remain first
+        (task2, "Second deploy"),
+        # rid6 was added later with a more urgent priority, it should move before the others but after rid2
+        (task6, "deploy rid6"),
+        # rid1 was added first among those with this priority + it keeps its original reason
+        (task1, "First deploy"),
+    ]
+    # other priorities are equal and non-deterministic
+    assert set(original_sorted_tasks[3:]) == {
+        (task3, "Bulk deploy"),
+        (task4, "Bulk deploy"),
+        (task5, "Bulk deploy"),
+    }
+
+    # add a requires edge, lifting a resource out of the agent queues because it becomes blocked
+    rid_first_requires: ResourceIdStr = original_sorted_tasks[3][0].resource
+    requires[rid_first_requires] = {rid1}
+    work.deploy_with_context(
+        {rid_first_requires},
+        reason="add first requires",
+        # less urgent priority
+        priority=TaskPriority(5),
+        added_requires={rid_first_requires: {rid1}},
+    )
+    # expect same order as before, minus the third element
+    assert get_sorted_tasks() == original_sorted_tasks[:3] + original_sorted_tasks[4:]
+    # drop the requires edge, unblocking the task again
+    requires[rid_first_requires] = set()
+    work.deploy_with_context(
+        {rid_first_requires},
+        reason="drop first requires",
+        # less urgent priority
+        priority=TaskPriority(5),
+        dropped_requires={rid_first_requires: {rid1}},
+    )
+    # expect same order as original: because new priority is less urgent, the old priority, relative order and reason are kept
+    assert get_sorted_tasks() == original_sorted_tasks
+
+    # do the same for an equal priority task
+    requires[rid_first_requires] = {rid1}
+    work.deploy_with_context(
+        {rid_first_requires},
+        reason="add second requires",
+        # equal priority
+        priority=TaskPriority(2),
+        added_requires={rid_first_requires: {rid1}},
+    )
+    # expect same order as before, minus the third element
+    assert get_sorted_tasks() == original_sorted_tasks[:3] + original_sorted_tasks[4:]
+    # drop the requires edge, unblocking the task again
+    requires[rid_first_requires] = set()
+    work.deploy_with_context(
+        {rid_first_requires},
+        reason="drop second requires",
+        # equal priority
+        priority=TaskPriority(2),
+        dropped_requires={rid_first_requires: {rid1}},
+    )
+    # expect same order as original: even though new priority is lower, the old priority, relative order and reason are kept
+    assert get_sorted_tasks() == original_sorted_tasks
+
+    # same now for more urgent priority task in request that blocks it
+    requires[rid_first_requires] = {rid1}
+    work.deploy_with_context(
+        {rid_first_requires},
+        reason="add third requires",
+        # more urgent priority
+        priority=TaskPriority(1),
+        added_requires={rid_first_requires: {rid1}},
+    )
+    # expect same order as before, minus the third element
+    assert get_sorted_tasks() == original_sorted_tasks[:3] + original_sorted_tasks[4:]
+    # drop the requires edge, unblocking the task again
+    requires[rid_first_requires] = set()
+    work.deploy_with_context(
+        {rid_first_requires},
+        reason="drop third requires",
+        # equal priority as original
+        priority=TaskPriority(2),
+        dropped_requires={rid_first_requires: {rid1}},
+    )
+    # task is moved to new, more urgent priority, and receives the new message
+    assert get_sorted_tasks() == [
+        *original_sorted_tasks[:2],
+        # message from adding the requires
+        (tasks.Deploy(resource=rid_first_requires), "add third requires"),
+        original_sorted_tasks[2],
+        *original_sorted_tasks[4:],
+    ]
+
+    # update original_sorted_tasks to reflect new order
+    original_sorted_tasks = get_sorted_tasks()
+
+    # same now but request the more urgent priority for the request that unblocks it
+    rid_fourth_requires: ResourceIdStr = original_sorted_tasks[4][0].resource
+    requires[rid_fourth_requires] = {rid1}
+    work.deploy_with_context(
+        {rid_fourth_requires},
+        reason="add fourth requires",
+        # equal priority as original
+        priority=TaskPriority(2),
+        added_requires={rid_fourth_requires: {rid1}},
+    )
+    # expect same order as before, minus the fourth element
+    assert get_sorted_tasks() == original_sorted_tasks[:4] + original_sorted_tasks[5:]
+    # drop the requires edge, unblocking the task again
+    requires[rid_fourth_requires] = set()
+    work.deploy_with_context(
+        {rid_fourth_requires},
+        reason="drop fourth requires",
+        # most urgent priority
+        priority=TaskPriority(0),
+        dropped_requires={rid_fourth_requires: {rid1}},
+    )
+    # task is moved to new, more urgent priority, and receives the new message
+    assert get_sorted_tasks() == [
+        # message from dropping the requires
+        (tasks.Deploy(resource=rid_fourth_requires), "drop fourth requires"),
+        *original_sorted_tasks[:4],
+        *original_sorted_tasks[5:],
+    ]
+
+    # update original_sorted_tasks to reflect new order
+    original_sorted_tasks = get_sorted_tasks()
+
+    # add a requires with an extremely urgent priority, but for a resource that's not in the to-deploy set
+    # => priority should not affect this resource
+    rid_fifth_requires: ResourceIdStr = original_sorted_tasks[2][0].resource
+    requires[rid_fifth_requires] = {rid1}
+    work.deploy_with_context(
+        set(),
+        reason="add fifth requires",
+        # most urgent priority
+        priority=TaskPriority(-1),
+        added_requires={rid_fifth_requires: {rid1}},
+    )
+    # expect same order as before, minus the third element
+    assert get_sorted_tasks() == original_sorted_tasks[:2] + original_sorted_tasks[3:]
+    # drop the requires edge, unblocking the task again
+    requires[rid_fifth_requires] = set()
+    work.deploy_with_context(
+        set(),
+        reason="drop fifth requires",
+        # most urgent priority
+        priority=TaskPriority(-1),
+        dropped_requires={rid_fifth_requires: {rid1}},
+    )
+    # no priority shifting took place: original is restored
+    assert get_sorted_tasks() == original_sorted_tasks
+
+    # get a single item from the queue, and while it's "deploying" add a dependency for it
+    await work.agent_queues.queue_get("agent")
+    assert work.agent_queues._in_progress == {tasks.Deploy(resource=rid_fourth_requires): TaskPriority(0)}
+    # expect same order as before, minus the first element
+    assert get_sorted_tasks() == original_sorted_tasks[1:]
+    requires[rid_fourth_requires] = {rid1}
+    work.deploy_with_context(
+        set(),
+        reason="add dependency while deploying",
+        # most urgent priority
+        priority=TaskPriority(-1),
+        added_requires={rid_fourth_requires: {rid1}},
+        deploying={rid_fourth_requires},
+    )
+    # no difference because new task is blocked
+    assert get_sorted_tasks() == original_sorted_tasks[1:]
+    assert rid_fourth_requires in work._waiting
+    requires[rid_fourth_requires] = set()
+    # unblock the task
+    work.deploy_with_context(
+        set(),
+        reason="drop dependency again",
+        # most urgent priority
+        priority=TaskPriority(-1),
+        dropped_requires={rid_fourth_requires: {rid1}},
+        deploying={rid_fourth_requires},
+    )
+    # task got added again with original priority but a new message
+    task_fourth_requires = tasks.Deploy(resource=rid_fourth_requires)
+    assert get_sorted_tasks() == [
+        (
+            task_fourth_requires,
+            "rescheduling because a dependency was added to this resource while it was deploying",
+        ),
+        *original_sorted_tasks[1:],
+    ]
+    # assert it has the same priority as the in-progress task
+    assert work.agent_queues.queued()[task_fourth_requires].priority == TaskPriority(0)
+
+    # update original_sorted_tasks to reflect new order
+    original_sorted_tasks = get_sorted_tasks()
+
+    # while resource is still deploying, request a deploy for it with a more urgent priority
+    work.deploy_with_context(
+        {rid_fourth_requires},
+        reason="deploy again while deploying",
+        # most urgent priority
+        priority=TaskPriority(-1),
+        deploying={rid_fourth_requires},
+    )
+    # same order but different message
+    assert get_sorted_tasks() == [
+        (
+            task_fourth_requires,
+            "deploy again while deploying",
+        ),
+        *original_sorted_tasks[1:],
+    ]
+    # assert priorities
+    # in-progress priority should have been shifted to increase priority of events that may be sent
+    assert work.agent_queues.in_progress == {task_fourth_requires: TaskPriority(-1)}
+    # queued priority should have been shifted as well
+    assert work.agent_queues.queued()[task_fourth_requires].priority == TaskPriority(-1)
 
 
 async def test_repair_does_not_trigger_for_blocked_resources(agent: TestAgent, make_resource_minimal):
