@@ -107,6 +107,8 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         """
         :param new_agent_notify: method to notify consumer about a new agent, called with agent name as argument.
         """
+        self._new_agent_notify: Callable[[str], None] = new_agent_notify
+
         self._agent_queues: dict[str, asyncio.PriorityQueue[TaskQueueItem]] = {}
         # can not drop tasks from queue without breaking the heap invariant, or potentially breaking asyncio.Queue invariants
         # => take approach suggested in heapq docs: simply mark as deleted.
@@ -116,7 +118,6 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         # monotonically rising value for item insert order
         # use simple counter rather than time.monotonic_ns() for performance reasons
         self._entry_count: int = 0
-        self._new_agent_notify: Callable[[str], None] = new_agent_notify
         self._in_progress: dict[tasks.Task, TaskPriority] = {}
 
     @property
@@ -127,6 +128,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         self._agent_queues.clear()
         self._tasks_by_resource.clear()
         self._entry_count = 0
+        self._in_progress.clear()
 
     def _get_queue(self, agent_name: str) -> asyncio.PriorityQueue[TaskQueueItem]:
         """
