@@ -491,11 +491,14 @@ class ResourceScheduler(TaskManager):
                 return SchedulerStatusReport(scheduler_state={}, db_state={}, discrepancies={})
 
             if latest_version != self._state.version:
-                raise Exception(
-                    f"Cannot compare scheduler status and database status because of "
-                    f"model version mismatch ({self._state.version} and {latest_version} respectively). "
-                    "The scheduler might not have processed this new version yet."
+                LOGGER.info(
+                    "Cannot compare scheduler status and database status because of "
+                    "model version mismatch (%s and %s respectively). "
+                    "The scheduler might not have processed this new version yet.",
+                    self._state.version,
+                    latest_version,
                 )
+                return SchedulerStatusReport(scheduler_state={}, db_state={}, discrepancies={})
 
             discrepancy_map = _build_discrepancy_map(resources_in_db)
             return SchedulerStatusReport(

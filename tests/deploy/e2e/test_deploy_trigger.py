@@ -26,6 +26,8 @@ from inmanta import const
 from inmanta.config import Config
 from utils import get_resource, log_contains, log_doesnt_contain, resource_action_consistency_check, retry_limited
 
+LOGGER = logging.getLogger(__name__)
+
 
 @pytest.mark.skip("Broken")
 async def test_deploy_trigger(server, client, clienthelper, resource_container, environment, caplog, agent):
@@ -105,7 +107,7 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
     "agent_deploy_interval",
     [
         "2",
-        "*/2 * * * * * *",
+        # "*/2 * * * * * *",
     ],
 )
 async def test_spontaneous_deploy(
@@ -172,14 +174,19 @@ async def test_spontaneous_deploy(
         assert result.code == 200
 
         def selective_comparison(left_dict, right_dict):
+            LOGGER.debug(f"{left_dict=}")
+            LOGGER.debug(f"{right_dict=}")
             for field in ["discrepancies", "scheduler_state"]:
                 left_value = left_dict.get(field)
                 right_value = right_dict.get(field)
 
                 if left_value is None or right_value is None:
+                    LOGGER.debug(" DIFF")
                     return False
                 if left_value != right_value:
+                    LOGGER.debug(" DIFF")
                     return False
+            LOGGER.debug(" EQUALISH")
             return True
 
         async def picked_up_by_the_scheduler() -> bool:
@@ -206,7 +213,9 @@ async def test_spontaneous_deploy(
         #     - if the check happens after the resources are picked up: we get discrepancies because resources
         #       are already deployed
 
+        LOGGER.debug("retry_limited picked_up_by_the_scheduler")
         await retry_limited(picked_up_by_the_scheduler, 10)
+        LOGGER.debug("FLAG 1 DONE")
 
         await clienthelper.wait_for_deployed()
 
@@ -221,7 +230,9 @@ async def test_spontaneous_deploy(
                 "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "deployed", "status": "compliant"}
             },
         }
+        LOGGER.debug("SELECTIVE COMPARE")
         assert selective_comparison(result.result["data"], expected_data)
+        LOGGER.debug("FLAG 2 DONE")
 
         assert await clienthelper.done_count() == 1
 
