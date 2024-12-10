@@ -17,6 +17,7 @@
 """
 
 import traceback
+import typing
 from abc import abstractmethod
 from functools import lru_cache
 from typing import Dict, List, Optional, Union
@@ -857,6 +858,38 @@ class DirectExecuteException(TypingException):
 
     def importantance(self) -> int:
         return 11
+
+
+class DataClassException(TypingException):
+    """Exception in relation to dataclasses"""
+
+    def __init__(self, entity: "Entity", msg: str) -> None:
+        super().__init__(entity, msg)
+        self.entity = entity
+
+    def importantance(self) -> int:
+        return 9
+
+
+class DataClassMismatchException(DataClassException):
+    """
+    Exception due to a mismatch between both version of a dataclass
+
+    """
+
+    def __init__(
+        self,
+        entity: "Entity",
+        dataclass: "typing.Type[object] | None",
+        dataclass_python_name: str,
+        msg: str,
+    ) -> None:
+        """
+        :param dataclass python dataclass, None if absent
+        """
+        super().__init__(entity, msg)
+        self.dataclass = dataclass
+        self.dataclass_python_name = dataclass_python_name
 
 
 class KeyException(RuntimeException):

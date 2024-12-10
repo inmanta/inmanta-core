@@ -32,7 +32,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints, reveal_type
 from urllib import parse
 
 import docstring_parser
@@ -533,7 +533,6 @@ class MethodProperties:
         for arg in full_spec.args:
             if arg not in type_hints:
                 raise InvalidMethodDefinition(f"{arg} in function {self.function} has no type annotation.")
-
             self._validate_type_arg(
                 arg, type_hints[arg], strict=self.strict_typing, allow_none_type=True, in_url=self.arguments_in_url()
             )
