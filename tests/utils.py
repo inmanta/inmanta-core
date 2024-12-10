@@ -417,7 +417,7 @@ async def wait_until_deployment_finishes(
 
         if version >= 0:
             scheduler = await data.Scheduler.get_one(environment=environment)
-            if scheduler.last_processed_model_version < version:
+            if scheduler.last_processed_model_version is None or scheduler.last_processed_model_version < version:
                 return False
 
         result = await client.resource_list(environment, deploy_summary=True)

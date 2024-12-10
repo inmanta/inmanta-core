@@ -311,10 +311,13 @@ async def test_events_api_endpoints_increment(server, client, environment, clien
     await resource_deployer.deployment_finished(rvid=rvid_r1_v2, attribute_hash=rvid_r1_v2_attribute_hash, action_id=action_id)
 
 
-async def test_events_api_endpoints_events_across_versions(server, client, environment, clienthelper, agent, resource_deployer):
+async def test_events_api_endpoints_events_across_versions(
+    server, client, environment, clienthelper, null_agent, resource_deployer
+):
     """
     Ensure that events are captured across versions.
     """
+    await clienthelper.set_auto_deploy(auto=True)
     # Version 1
     version = await clienthelper.get_version()
     rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={version}")
@@ -324,7 +327,7 @@ async def test_events_api_endpoints_events_across_versions(server, client, envir
         {"name": "file1", "id": rvid_r1_v1, "requires": [rvid_r2_v1], "purged": False, "send_event": False},
         {"name": "file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": False},
     ]
-    await clienthelper.put_version_simple(resources, version)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
 
     # Deploy
     await resource_deployer.deploy_resource(
@@ -345,7 +348,7 @@ async def test_events_api_endpoints_events_across_versions(server, client, envir
         {"name": "file2", "id": rvid_r2_v2, "requires": [], "purged": False, "send_event": False},
         {"name": "file3", "id": rvid_r3_v2, "requires": [], "purged": False, "send_event": False},
     ]
-    await clienthelper.put_version_simple(resources, version)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
 
     # Deploy
     await resource_deployer.deploy_resource(
@@ -365,7 +368,7 @@ async def test_events_api_endpoints_events_across_versions(server, client, envir
         {"name": "file1", "id": rvid_r1_v3, "requires": [rvid_r3_v3], "purged": False, "send_event": False},
         {"name": "file3", "id": rvid_r3_v3, "requires": [], "purged": False, "send_event": False},
     ]
-    await clienthelper.put_version_simple(resources, version)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
 
     # Deploy
     await resource_deployer.deploy_resource(
@@ -376,7 +379,9 @@ async def test_events_api_endpoints_events_across_versions(server, client, envir
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v3)
 
     # Assert events
-    result = await agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v3)
+    result = await null_agent._client.get_resource_events(
+        tid=environment, rvid=rvid_r1_v3, exclude_change=const.Change.nochange
+    )
     assert result.code == 200
     assert len(result.result["data"]) == 1
     assert len(result.result["data"][rid_v3_v3]) == 2
@@ -384,7 +389,7 @@ async def test_events_api_endpoints_events_across_versions(server, client, envir
     assert result.result["data"][rid_v3_v3][0]["status"] == const.ResourceState.failed
     assert result.result["data"][rid_v3_v3][1]["action"] == const.ResourceAction.deploy
     assert result.result["data"][rid_v3_v3][1]["status"] == const.ResourceState.deployed
-    result = await agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v3)
+    result = await null_agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v3)
     assert result.code == 200
     assert result.result["data"]
 
@@ -399,11 +404,13 @@ async def test_events_api_endpoints_events_across_versions(server, client, envir
     await resource_deployer.start_deployment(rvid=rvid_r1_v3)
 
     # Assert no move events
-    result = await agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v3)
+    result = await null_agent._client.get_resource_events(
+        tid=environment, rvid=rvid_r1_v3, exclude_change=const.Change.nochange
+    )
     assert result.code == 200
     assert len(result.result["data"]) == 1
     assert len(result.result["data"][rid_v3_v3]) == 0
-    result = await agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v3)
+    result = await null_agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v3)
     assert result.code == 200
     assert not result.result["data"]
 

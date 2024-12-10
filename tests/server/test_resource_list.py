@@ -193,6 +193,7 @@ async def env_with_resources(server, client):
                 status=status,
             )
             await res.insert()
+            await data.ResourcePersistentState.populate_for_version(environment=environment, model_version=version)
             await res.update_persistent_state(
                 last_deploy=datetime.now(tz=UTC),
                 last_non_deploying_status=(
