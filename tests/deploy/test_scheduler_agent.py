@@ -20,6 +20,7 @@
 
 import asyncio
 import hashlib
+import itertools
 import json
 import typing
 import uuid
@@ -43,7 +44,7 @@ from inmanta.data.model import ResourceVersionIdStr
 from inmanta.deploy import state, tasks
 from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ResourceScheduler
-from inmanta.deploy.state import BlockedStatus
+from inmanta.deploy.state import BlockedStatus, ComplianceStatus, DeploymentResult
 from inmanta.deploy.timers import TimerManager
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
@@ -57,7 +58,7 @@ FAIL_DEPLOY: str = "fail_deploy"
 
 async def retry_limited_fast(
     fun: Callable[..., bool] | Callable[..., Awaitable[bool]],
-    timeout: float = 0.1,
+    timeout: float = 15,
     interval: float = 0.005,
     *args: object,
     **kwargs: object,
@@ -105,11 +106,14 @@ class DummyExecutor(executor.Executor):
         # The actual reasons are of the form `action because of reason`
         assert ("because" in reason) or ("Test" in reason)
         self.execute_count += 1
-        result = (
-            const.HandlerResourceState.failed
-            if resource_details.attributes.get(FAIL_DEPLOY, False) is True
-            else const.HandlerResourceState.deployed
-        )
+        if any(status != const.HandlerResourceState.deployed for status in requires.values()):
+            result = const.HandlerResourceState.skipped_for_dependency
+        else:
+            result = (
+                const.HandlerResourceState.failed
+                if resource_details.attributes.get(FAIL_DEPLOY, False) is True
+                else const.HandlerResourceState.deployed
+            )
         return DeployResult(
             resource_details.rvid,
             action_id,
@@ -1838,3 +1842,208 @@ async def test_state_of_skipped_resources_for_dependencies(agent: TestAgent, mak
         deployment_result=state.DeploymentResult.SKIPPED,
         blocked=state.BlockedStatus.TRANSIENT,
     )
+
+
+async def test_deploy_blocked_state(agent: TestAgent, make_resource_minimal) -> None:
+    """
+    Verify topology changes that update recursive properties
+    """
+
+    # Shorthand variables for specific resources
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent1,name=2]")
+    rid3 = ResourceIdStr("test::Resource[agent1,name=3]")
+    rid4 = ResourceIdStr("test::Resource[agent1,name=4]")
+    rid5 = ResourceIdStr("test::Resource[agent1,name=5]")
+    rid6 = ResourceIdStr("test::Resource[agent1,name=6]")
+    rid7 = ResourceIdStr("test::Resource[agent1,name=7]")
+    rid8 = ResourceIdStr("test::Resource[agent1,name=8]")
+    rid9 = ResourceIdStr("test::Resource[agent1,name=9]")
+
+    version = 1
+
+    async def make_resources(rx_requires: list[list[ResourceIdStr]], undef: list[ResourceIdStr] = [rid1]) -> None:
+        """
+        Build as many resources as required, with subsequent ids
+
+        :param rx_requires: the requires relation for each resources
+        :param undef: rids of undefined resources
+
+        hashes change every time
+        """
+        nonlocal version
+        rids = (ResourceIdStr(f"test::Resource[agent1,name={i + 1}]") for i in itertools.count())
+        resources = {
+            rid: make_resource_minimal(
+                rid,
+                values={"value": version},
+                requires=requires,
+                status=const.ResourceState.undefined if rid in undef else const.ResourceState.deployed,
+            )
+            for rid, requires in zip(rids, rx_requires)
+        }
+        await agent.scheduler._new_version(version, resources, make_requires(resources))
+        version += 1
+        await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
+
+    def is_deployed(rid: ResourceIdStr):
+        assert agent.scheduler._state.resource_state[rid].deployment_result == DeploymentResult.DEPLOYED
+        assert agent.scheduler._state.resource_state[rid].status == ComplianceStatus.COMPLIANT
+        assert agent.scheduler._state.resource_state[rid].blocked == BlockedStatus.NO
+
+    def is_blocked(rid: ResourceIdStr):
+        assert agent.scheduler._state.resource_state[rid].deployment_result == DeploymentResult.DEPLOYED, rid
+        assert agent.scheduler._state.resource_state[rid].status == ComplianceStatus.HAS_UPDATE, rid
+        assert agent.scheduler._state.resource_state[rid].blocked == BlockedStatus.YES, rid
+
+    def is_undefined(rid: ResourceIdStr):
+        assert agent.scheduler._state.resource_state[rid].deployment_result == DeploymentResult.DEPLOYED
+        assert agent.scheduler._state.resource_state[rid].status == ComplianceStatus.UNDEFINED
+        assert agent.scheduler._state.resource_state[rid].blocked == BlockedStatus.YES
+
+    def is_new_undefined(rid: ResourceIdStr):
+        assert agent.scheduler._state.resource_state[rid].deployment_result == DeploymentResult.NEW
+        assert agent.scheduler._state.resource_state[rid].status == ComplianceStatus.UNDEFINED
+        assert agent.scheduler._state.resource_state[rid].blocked == BlockedStatus.YES
+
+    def is_new_blocked(rid: ResourceIdStr):
+        assert agent.scheduler._state.resource_state[rid].deployment_result == DeploymentResult.NEW
+        assert agent.scheduler._state.resource_state[rid].status == ComplianceStatus.HAS_UPDATE
+        assert agent.scheduler._state.resource_state[rid].blocked == BlockedStatus.YES
+
+    # Chain of 3
+    # 3 -> 1 -> 2
+    # 1 is undefined
+    # 2 is free to deploy
+    # 3 is undefined
+    await make_resources(
+        [
+            [rid2],
+            [],
+            [rid1],
+        ],
+        undef=[rid1],
+    )
+    is_new_undefined(rid1)
+    is_deployed(rid2)
+    is_new_blocked(rid3)
+
+    # reverse order
+    # 3 <- 1 <- 2
+    # 1 is undefined
+    # 3 is free to deploy
+    # 3 is undefined
+    await make_resources(
+        [[rid3], [rid1], []],
+        undef=[rid1],
+    )
+
+    is_new_undefined(rid1)
+    is_blocked(rid2)
+    is_deployed(rid3)
+
+    # diamond 1 < 2,3,4 < 5
+    diamond = [[rid2, rid3, rid4], [rid5], [rid5], [rid5], [], []]
+    # 1 is undefined
+    # rest is free
+    await make_resources(diamond, [rid1])
+    is_deployed(rid2)
+    is_deployed(rid3)
+    is_deployed(rid4)
+    is_deployed(rid5)
+    is_deployed(rid6)
+    is_new_undefined(rid1)
+
+    # 5 is undefined
+    # rest is blocked
+    await make_resources(diamond, [rid5])
+
+    is_blocked(rid2)
+    is_blocked(rid3)
+    is_blocked(rid4)
+    is_undefined(rid5)
+    is_deployed(rid6)
+    is_new_blocked(rid1)
+
+    # Unblock it all
+    await make_resources(diamond, [])
+
+    is_deployed(rid2)
+    is_deployed(rid3)
+    is_deployed(rid4)
+    is_deployed(rid5)
+    is_deployed(rid6)
+    is_deployed(rid1)
+
+    # Mixed graph
+    # graph of 4 levels high, with 2 tops, where every node requires the two nodes below
+    # layer 1: 1 -> 3,4  2->4,5
+    # layer 2: 3 -> 6,7  4->7,8 ....
+    # Layer n has n+1 nodes
+    # Each node i in layer n requires i+n and i+n+1
+
+    def make_node_layer(n):
+        offset_row_below = int((n + 1) * (n + 2) / 2)
+        nr_of_nodes = n + 1
+        return [
+            [
+                ResourceIdStr(f"test::Resource[agent1,name={offset_row_below + i}]"),
+                ResourceIdStr(f"test::Resource[agent1,name={offset_row_below + i + 1}]"),
+            ]
+            for i in range(nr_of_nodes)
+        ]
+
+    graph = [*make_node_layer(1), *make_node_layer(2), *make_node_layer(3), *[[]] * 5]
+
+    # Deploy all
+    await make_resources(graph, [])
+    for rid in range(14):
+        is_deployed(f"test::Resource[agent1,name={rid + 1}]")
+
+    # Block 6,7 and 5, causing 1,2,3,4 to be blocked
+    await make_resources(graph, [rid6, rid7, rid5])
+    for rid in range(4):
+        is_blocked(f"test::Resource[agent1,name={rid + 1}]")
+    for rid in range(4, 7):
+        is_undefined(f"test::Resource[agent1,name={rid + 1}]")
+    for rid in range(7, 14):
+        is_deployed(f"test::Resource[agent1,name={rid + 1}]")
+
+    # Unblock 5 and 7
+    # Block 9
+    # 1,3 blocked due to 6
+    # 2,5 blocked due to nine
+    # 4,7,8 unblocked
+    await make_resources(graph, [rid6, rid9])
+    is_undefined(rid6)
+    is_undefined(rid9)
+    is_blocked(rid1)
+    is_blocked(rid2)
+    is_blocked(rid3)
+    is_blocked(rid5)
+    is_deployed(rid4)
+    is_deployed(rid7)
+    is_deployed(rid8)
+    for rid in range(9, 14):
+        is_deployed(f"test::Resource[agent1,name={rid + 1}]")
+
+    # Also unblock
+    # 1,3 blocked due to 6
+    # 2,4,5,7,8 unblocked
+    await make_resources(graph, [rid6])
+    is_undefined(rid6)
+    is_blocked(rid1)
+    is_blocked(rid3)
+    is_deployed(rid2)
+    is_deployed(rid4)
+    is_deployed(rid5)
+    for rid in range(6, 14):
+        is_deployed(f"test::Resource[agent1,name={rid + 1}]")
+
+    # Drop half of it, deploy all
+    graph = [*make_node_layer(1), *[[]] * 3]
+    await make_resources(graph, [])
+    for rid in range(5):
+        is_deployed(f"test::Resource[agent1,name={rid + 1}]")
+    for rid in range(5, 14):
+        assert f"test::Resource[agent1,name={rid + 1}]" not in agent.scheduler._state.resource_state

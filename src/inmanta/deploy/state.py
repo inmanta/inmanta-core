@@ -24,6 +24,7 @@ from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import AbstractSet, Tuple
 
 from inmanta import const
 from inmanta.data.model import ResourceIdStr, ResourceType
@@ -174,29 +175,33 @@ class ModelState:
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
 
-    def block_resource(self, resource: ResourceIdStr, details: ResourceDetails, is_transitive: bool) -> None:
+    def block_and_update_resource(self, resource: ResourceIdStr, details: ResourceDetails) -> None:
         """
         Mark the given resource as blocked, i.e. it's not deployable. This method updates the resource details
         and the resource_status.
 
         :param resource: The resource that should be blocked.
         :param details: The details of the resource that should be blocked.
-        :param is_transitive: True iff the given resource is blocked transitively. It's blocked because one of its dependencies
-                              is blocked. If False, the resource is blocked because it's undefined.
         """
         self.resources[resource] = details
         if resource in self.resource_state:
-            if not is_transitive:
-                self.resource_state[resource].status = ComplianceStatus.UNDEFINED
+            self.resource_state[resource].status = ComplianceStatus.UNDEFINED
             self.resource_state[resource].blocked = BlockedStatus.YES
         else:
-            resource_status = ComplianceStatus.UNDEFINED if not is_transitive else ComplianceStatus.HAS_UPDATE
             self.resource_state[resource] = ResourceState(
-                status=resource_status,
+                status=ComplianceStatus.UNDEFINED,
                 deployment_result=DeploymentResult.NEW,
                 blocked=BlockedStatus.YES,
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
+        self.dirty.discard(resource)
+
+    def _block_resource_transitive(self, resource: ResourceIdStr) -> None:
+        """
+        Mark the given resource as transitively blocked, i.e. it's not deployable.
+        """
+
+        self.resource_state[resource].blocked = BlockedStatus.YES
         self.dirty.discard(resource)
 
     def are_dependencies_compliant(self, resource: ResourceIdStr) -> bool:
@@ -210,66 +215,193 @@ class ModelState:
 
         return all(self.resource_state[dep_id].status is ComplianceStatus.COMPLIANT for dep_id in dependencies)
 
-    def block_provides(self, resources: Set[ResourceIdStr]) -> Set[ResourceIdStr]:
+    def update_transitive_state(
+        self,
+        now_blocked: AbstractSet[ResourceIdStr],
+        verify_blocked: AbstractSet[ResourceIdStr],
+        verify_unblocked: set[ResourceIdStr],
+    ) -> Tuple[set[ResourceIdStr], set[ResourceIdStr]]:
         """
-        Marks the provides of the given resources as blocked.
 
-        Must be called under the scheduler lock. This method assumes that all the resources of the model version
-        are populated in the resources dictionary.
+        Update transitive states
 
-        :param resources: The set of resources for which the provides have to be blocked.
-        :return: The set of dependent resources that were newly marked as blocked (transitively).
+        :param now_blocked: resources that have become undefined
+        :param verify_blocked: resources that have added requires
+        :param verify_unblocked: resources that have lost requires relations
+
+        returns: <blocked, unlocked> resources
         """
-        result: set[ResourceIdStr] = set()
+        # This algorithm moves the blocked/unblocked forward over the provides relation
+        # 1. We start from the nodes passed in
+        # 2. Resources that have become undefined are first marked over the requires relation.
+        #   - This is easy as blocked state with a known root can safely be propagated froward
+        # 3. Resource that added a requirement may have become blocked
+        #   - We back check one step  (along requires)
+        #   - We mark them as blocked if needed.
+        #       - Nodes marked as blocked this way are not definitely blocked,
+        #         as nodes deeper down the tree may become unblocked later on
+        #       - Except if we find an undefined node on the path, in that case, they are definitely blocked
+        #   - We forward propagate that
+        # 4. Resources that removed a requirements or became defined may have become defined
+        #    are checked one step along the requires relations to see if they are unblocked
+        #    - We check back one step (along requires)
+        #    - We mark them as unblocked if needed
+        #       - Nodes marked as blocked this way are not definitely blocked,
+        #         as nodes deeper down the tree may become unblocked later on
+        #       - Except if we find an undefined node on the path, in that case, they are definitely blocked
+        #    - We forward propagate that
+
+        # To traverse efficiently, we maintain:
+        #  - a worklist of definitely blocked nodes
+        #  - a set of definitely blocked nodes
+        #  - a worklist of potential unblocked nodes
+
+        #  - a cache of blocker nodes. When we find a node B blocking a potentially unblocked node A, we cache this.
+        #    If we hit node A again and we are not coming from B, we know it is still blocked.
+
+        out_blocked: set[ResourceIdStr] = set()
+        out_unblocked: set[ResourceIdStr] = set()
+
+        # a set of definitely blocked nodes
+        is_blocked: set[ResourceIdStr] = set(now_blocked)
+
+        # forward graph
         provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.requires.provides_view()
-        todo: list[ResourceIdStr] = list(itertools.chain.from_iterable(provides_view.get(r, set()) for r in resources))
+
+        # 1. forward propagate blocked, start one provides step forward from the updated nodes
+        propagate_blocked_work: list[ResourceIdStr] = list(
+            itertools.chain.from_iterable(provides_view.get(r, set()) for r in is_blocked)
+        )
         # We rely on the seen set to improve performance. Although the improvement might be rather small,
         # because we only save one check `self.resource_state[resource_id].blocked == BlockedStatus.YES`.
-        seen: set[ResourceIdStr] = set()
-        while todo:
-            resource_id: ResourceIdStr = todo.pop()
-            if resource_id in seen:
+        while propagate_blocked_work:
+            resource_id: ResourceIdStr = propagate_blocked_work.pop()
+            if resource_id in is_blocked:
                 continue
-            seen.add(resource_id)
+            is_blocked.add(resource_id)
             if self.resource_state[resource_id].blocked is BlockedStatus.YES:
                 # Resource is already blocked. All provides will be blocked as well.
                 continue
             else:
                 # Block resource and its provides.
-                self.block_resource(resource_id, self.resources[resource_id], is_transitive=True)
-                result.add(resource_id)
-                todo.extend(provides_view.get(resource_id, set()))
-        return result
+                self._block_resource_transitive(resource_id)
+                out_blocked.add(resource_id)
+                propagate_blocked_work.extend(provides_view.get(resource_id, set()))
 
-    def mark_as_defined(self, resource: ResourceIdStr, details: ResourceDetails) -> None:
-        """
-        Mark the given resource as defined. If the given resource or any of its provides became unblocked, because of this,
-        this method also updates the blocked status.
-
-        Must be called under the scheduler lock. This method assumes that all the resources of the model version
-        are populated in the resources dictionary.
-
-        :param resource: The resource that became defined.
-        :param details: The details of resource.
-        """
-
-        # Cache used by the `update_blocked_status()` method to prevent the expensive check on the blocked
+        # 2. back check propagate potential blockers
+        known_blockers_cache: dict[ResourceIdStr, ResourceIdStr] = {}
+        # Cache used by the `update_blocked_status_*()` method to prevent the expensive check on the blocked
         # status of the requirements of a resource. If the dictionary contains key value pair (X, Y), it
         # indicates that resource Y is a requirement of resource X that was blocked, last we checked
-        known_blockers_cache: dict[ResourceIdStr, ResourceIdStr] = {}
+        # This cache is a bit complicated in that
+        #  - The unblock check on node A takes us up to n traversals (if A has n requires)
+        #  - We may hit A up to n times
+        #  - The chance of a cache miss is 1/n (i.e. we come from that edge) (roughly)
+        #  - So we reduce from n*n to n time complexity
+        # unclear if it is worth it, hard to tell/test
 
+        def update_blocked_status_to_blocked(resource: ResourceIdStr) -> bool:
+            """
+            Check if the deployment of the given resource is still blocked and mark it as unblocked if it is.
+            check one step over the requires relation, assume all states to hold.
+            if they don't we will pass this node again
+
+            :return: True iff the given resource changes state.
+            """
+            if resource in is_blocked:
+                # Is blocked for a know root
+                return False
+
+            my_state = self.resource_state[resource]
+            if my_state.blocked is BlockedStatus.YES:
+                # The resource is already blocked.
+                return False
+
+            if my_state.status is ComplianceStatus.UNDEFINED:
+                assert False  # TODO: remove, should not happen
+
+            blocked_dependency: ResourceIdStr | None = None
+            # one blocked requires, evidence we are blocked
+
+            if resource in known_blockers_cache:
+                # First check the blocked status of the cached known blocker for improved performance.
+                known_blocker: ResourceIdStr = known_blockers_cache[resource]
+                if self.resource_state[known_blocker].blocked is BlockedStatus.YES:
+                    blocked_dependency = known_blocker
+                else:
+                    # Cache is out of date. Clear cache item.
+                    del known_blockers_cache[resource]
+
+            if blocked_dependency is None:
+                # Perform more expensive call by traversing all requirements of resource.
+                blocked_dependency = next(
+                    (r for r in self.requires.get(resource, set()) if self.resource_state[r].blocked is BlockedStatus.YES), None
+                )
+
+            if blocked_dependency is None:
+                return False
+
+            if blocked_dependency:
+                # Resource is blocked, because a dependency is blocked.
+                known_blockers_cache[resource] = blocked_dependency
+
+            if blocked_dependency in is_blocked:
+                # We know the root is undefined, hard block
+                is_blocked.add(resource)
+
+            # Unblock resource
+            self._block_resource_transitive(resource)
+            out_blocked.add(resource)
+            return True
+
+        for resource_id in verify_blocked:
+            # verify all potential blockers
+            blocked = update_blocked_status_to_blocked(resource_id)
+            # Keep track of this that have been blocked
+            if blocked:
+                propagate_blocked_work.append(resource_id)
+
+        # Propagate blockers once more
+        # We iterate differently, because the parents blocked status is relevant
+        propagate_blocked_work = list(verify_blocked)
+        while propagate_blocked_work:
+            already_blocked: ResourceIdStr = propagate_blocked_work.pop()
+            is_hard_block = already_blocked in is_blocked
+            for to_be_blocked in provides_view.get(already_blocked, set()):
+                if is_hard_block:
+                    is_blocked.add(to_be_blocked)
+                my_state = self.resource_state[to_be_blocked]
+                if my_state.blocked is not BlockedStatus.YES:
+                    continue
+                else:
+                    self._block_resource_transitive(to_be_blocked)
+                    out_blocked.add(to_be_blocked)
+                    propagate_blocked_work.append(to_be_blocked)
+
+        # 2. forward propagate the unblocked
         def update_blocked_status(resource: ResourceIdStr) -> bool:
             """
             Check if the deployment of the given resource is still blocked and mark it as unblocked if it is.
+            check one step over the requires relation, assume all states to hold.
+            if they don't we will pass this node again
 
             :return: True iff the given resource was unblocked.
             """
-            if self.resource_state[resource].blocked is not BlockedStatus.YES:
+            if resource in is_blocked:
+                # Is blocked for a know root
+                return False
+
+            my_state = self.resource_state[resource]
+            if my_state.blocked is not BlockedStatus.YES:
                 # The resource is already unblocked.
                 return False
-            if self.resource_state[resource].status is ComplianceStatus.UNDEFINED:
+
+            if my_state.status is ComplianceStatus.UNDEFINED:
                 # The resource is undefined.
+                # Root blocker
+                is_blocked.add(resource)
                 return False
+
             if resource in known_blockers_cache:
                 # First check the blocked status of the cached known blocker for improved performance.
                 known_blocker: ResourceIdStr = known_blockers_cache[resource]
@@ -278,6 +410,7 @@ class ModelState:
                 else:
                     # Cache is out of date. Clear cache item.
                     del known_blockers_cache[resource]
+
             # Perform more expensive call by traversing all requirements of resource.
             blocked_dependency: ResourceIdStr | None = next(
                 (r for r in self.requires.get(resource, set()) if self.resource_state[r].blocked is BlockedStatus.YES), None
@@ -286,21 +419,23 @@ class ModelState:
                 # Resource is blocked, because a dependency is blocked.
                 known_blockers_cache[resource] = blocked_dependency
                 return False
+
             # Unblock resource
-            self.resource_state[resource].blocked = BlockedStatus.NO
-            if self.resource_state[resource].status in [ComplianceStatus.HAS_UPDATE, ComplianceStatus.NON_COMPLIANT]:
+            # TODO: factor out cfr block_resource?
+            my_state.blocked = BlockedStatus.NO
+            if my_state.status in [ComplianceStatus.HAS_UPDATE, ComplianceStatus.NON_COMPLIANT]:
                 self.dirty.add(resource)
+            out_unblocked.add(resource)
             return True
 
-        provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.requires.provides_view()
-        self.resources[resource] = details
-        self.resource_state[resource].status = ComplianceStatus.HAS_UPDATE
-        todo: list[ResourceIdStr] = [resource]
-        while todo:
-            resource_id: ResourceIdStr = todo.pop()
+        to_verify_work: list[ResourceIdStr] = list(verify_unblocked)
+        while to_verify_work:
+            resource_id = to_verify_work.pop()
             resource_was_unblocked: bool = update_blocked_status(resource_id)
             if resource_was_unblocked:
-                todo.extend(provides_view.get(resource_id, set()))
+                to_verify_work.extend(provides_view.get(resource_id, set()))
+
+        return out_unblocked, out_blocked
 
     def update_desired_state(
         self,
@@ -310,17 +445,19 @@ class ModelState:
         """
         Register a new desired state for a resource.
 
+        The resource is not currently blocked
+
         For blocked resources, block_resource() should be called instead.
         """
         self.resources[resource] = details
         if resource in self.resource_state:
             self.resource_state[resource].status = ComplianceStatus.HAS_UPDATE
-            self.resource_state[resource].blocked = BlockedStatus.NO
+            # Blocked status is not affected, otherwise mark_as_defined would have been called
         else:
             self.resource_state[resource] = ResourceState(
                 status=ComplianceStatus.HAS_UPDATE,
                 deployment_result=DeploymentResult.NEW,
-                blocked=BlockedStatus.NO,
+                blocked=BlockedStatus.NO,  # Requires are not set yet
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.add(resource)
@@ -329,6 +466,9 @@ class ModelState:
         """
         Update the requires relation for a resource. Updates the reverse relation accordingly.
         """
+
+        # TODO: verify this is correct and needed
+
         check_dependencies: bool = self.resource_state[resource].blocked is BlockedStatus.TRANSIENT and bool(
             self.requires[resource] - requires
         )
