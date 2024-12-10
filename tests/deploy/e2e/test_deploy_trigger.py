@@ -105,7 +105,7 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
     "agent_deploy_interval",
     [
         "2",
-        # "*/2 * * * * * *",
+        "*/2 * * * * * *",
     ],
 )
 async def test_spontaneous_deploy(
