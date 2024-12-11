@@ -922,3 +922,19 @@ class TornadoDebugLogHandler(logging.Handler):
             and record.msg.startswith("max_clients limit reached")
         ):
             self.logger.warning(record.msg)  # Log Tornado log as inmanta warnings
+
+
+def load_config_file_to_dict(file_name: str, context: dict[str, str] | None) -> dict:
+    # todo: make command to render file to console
+
+    # will raise os error if something is wrong
+    with open(file_name, "r") as fh:
+        content = fh.read()
+
+    if file_name.endswith(".tmpl"):
+        template = content.format(**context)
+
+    dict_config = yaml.safe_load(config)
+
+    return dict_config
+

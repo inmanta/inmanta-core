@@ -27,7 +27,7 @@ import yaml
 
 import inmanta
 from inmanta import config
-from inmanta.logging import InmantaLoggerConfig, MultiLineFormatter, Options
+from inmanta.logging import InmantaLoggerConfig, MultiLineFormatter, Options, load_config_file_to_dict
 
 
 @pytest.fixture(autouse=True)
@@ -332,3 +332,10 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
         )
         logger.info("test")
         assert "HHH test" in stream.getvalue()
+
+
+def test_log_file_or_template(tmp_path):
+
+    with pytest.raises(FileNotFoundError):
+        # TODO: do we
+        load_config_file_to_dict(tmp_path/"test", {})
