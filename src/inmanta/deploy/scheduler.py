@@ -112,13 +112,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         """
 
     @abstractmethod
-    async def deploy_done(
-        self,
-        resource: ResourceIdStr,
-        *,
-        attribute_hash: str,
-        resource_state: const.HandlerResourceState,
-    ) -> None:
+    async def deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
         """
         Register the end of deployment for the given resource: update the resource state based on the deployment result
         and inform its dependencies that deployment is finished.
@@ -127,10 +121,9 @@ class TaskManager(StateUpdateManager, abc.ABC):
 
         Acquires appropriate locks
 
-        :param resource: The resource to report state for.
         :param attribute_hash: The resource's attribute hash for which this state applies. No scheduler state is updated if the
             hash indicates the state information is stale.
-        :param resource_state: The state of the resource as reported by the handler
+        :param result: The DeployResult object describing the result of the deployment.
         """
 
 
@@ -718,7 +711,7 @@ class ResourceScheduler(TaskManager):
                 resources_with_updated_blocked_state: Set[ResourceIdStr] = (
                     undefined
                     | blocked_for_undefined_dep
-                    | defined
+                    | newly_defined
                     | transitively_unblocked
                     | up_to_date_resources.keys()
                 )
@@ -839,13 +832,7 @@ class ResourceScheduler(TaskManager):
             self._deploying_latest.add(resource)
             return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=dependencies)
 
-    async def deploy_done(
-        self,
-        resource: ResourceIdStr,
-        *,
-        attribute_hash: str,
-        resource_state: const.HandlerResourceState,
-    ) -> None:
+    async def deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
         try:
             await self.update_scheduler_state_for_finished_deploy(attribute_hash, result)
         except UnmanagedResource:
@@ -854,40 +841,33 @@ class ResourceScheduler(TaskManager):
         else:
             # Write deployment result to the database.
             await self.send_deploy_done(attribute_hash, result)
-        
+
     async def update_scheduler_state_for_finished_deploy(self, attribute_hash: str, result: DeployResult) -> None:
         """
         Update the state of the scheduler based on the DeploymentResult of the given resource.
 
         :raise UnmanagedResource: This update is about a resource that is no longer managed by the server.
         """
-        # Translate deploy result status to the new deployment result state
-        deployment_result: DeploymentResult
-        match resource_state:
-            case const.HandlerResourceState.deployed:
-                deployment_result = DeploymentResult.DEPLOYED
-            case const.HandlerResourceState.skipped | const.HandlerResourceState.skipped_for_dependency:
-                deployment_result = DeploymentResult.SKIPPED
-            case _:
-                deployment_result = DeploymentResult.FAILED
-
-        status = (
-            ComplianceStatus.COMPLIANT if deployment_result is DeploymentResult.DEPLOYED else ComplianceStatus.NON_COMPLIANT
-        )
+        resource_id: ResourceIdStr = result.resource_id
+        if result.deployment_result is DeploymentResult.NEW:
+           raise ValueError("update_scheduler_state_for_finished_deploy should not be called to register new resources")
 
         async with self._scheduler_lock:
             # refresh resource details for latest model state
-            details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
+            details: Optional[ResourceDetails] = self._state.resources.get(resource_id, None)
 
             if details is None:
                 # we are stale and removed
-                return
+                raise UnmanagedResource()
 
-            state: ResourceState = self._state.resource_state[resource]
+            state: ResourceState = self._state.resource_state[resource_id]
 
-            recovered_from_failure: bool = deployment_result is DeploymentResult.DEPLOYED and state.deployment_result not in (
-                DeploymentResult.DEPLOYED,
-                DeploymentResult.NEW,
+            recovered_from_failure: bool = (
+                result.deployment_result is DeploymentResult.DEPLOYED
+                and state.deployment_result not in (
+                    DeploymentResult.DEPLOYED,
+                    DeploymentResult.NEW,
+                )
             )
 
             if details.attribute_hash != attribute_hash:
@@ -897,19 +877,22 @@ class ResourceScheduler(TaskManager):
                 # None of the event propagation or other update happen either for the same reason
                 # except for the event to notify dependents of failure recovery (to unblock skipped for dependencies)
                 # because we might otherwise miss the recovery.
-                if deployment_result is not None:
-                    state.deployment_result = deployment_result
+                if result.deployment_result is not None:
+                    # TODO: deployment_result cannot be None type wise???
+                    state.deployment_result = result.deployment_result
                     if recovered_from_failure:
                         self._send_events(details, stale_deploy=True, recovered_from_failure=True)
                 return
 
             # We are not stale
-            state.status = status
+            state.status = (
+                ComplianceStatus.COMPLIANT if result.status is const.ResourceState.deployed else ComplianceStatus.NON_COMPLIANT
+            )
 
             # first update state, then send out events
-            self._deploying_latest.remove(resource)
-            state.deployment_result = deployment_result
-            self._work.finished_deploy(resource)
+            self._deploying_latest.remove(resource_id)
+            state.deployment_result = result.deployment_result
+            self._work.finished_deploy(resource_id)
 
             # Check if we need to mark a resource as transiently blocked
             # We only do that if it is not already blocked (BlockedStatus.YES)
@@ -919,93 +902,27 @@ class ResourceScheduler(TaskManager):
             # If all dependencies are compliant we don't want to transiently block this resource.
             if (
                 state.blocked is not BlockedStatus.YES
-                and resource_state is const.HandlerResourceState.skipped_for_dependency
-                and not self._state.are_dependencies_compliant(resource)
+                and result.resource_state is const.HandlerResourceState.skipped_for_dependency
+                and not self._state.are_dependencies_compliant(resource_id)
             ):
                 state.blocked = BlockedStatus.TRANSIENT
                 # Remove this resource from the dirty set when we block it
-                self._state.dirty.discard(resource)
-            elif deployment_result is DeploymentResult.DEPLOYED:
+                self._state.dirty.discard(resource_id)
+            elif result.deployment_result is DeploymentResult.DEPLOYED:
                 # Remove this resource from the dirty set if it is successfully deployed
-                self._state.dirty.discard(resource)
+                self._state.dirty.discard(resource_id)
             else:
                 # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
                 # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
                 # (or skip) causes it to become dirty now.
-                self._state.dirty.add(resource)
+                self._state.dirty.add(resource_id)
 
             # propagate events
             self._send_events(details, recovered_from_failure=recovered_from_failure)
 
             # No matter the deployment result, schedule a re-deploy for this resource unless it's blocked
             if state.blocked is BlockedStatus.NO:
-                self._timer_manager.update_timer(resource, is_compliant=(status is ComplianceStatus.COMPLIANT))
-
-    #async def update_scheduler_state_for_finished_deploy(self, attribute_hash: str, result: DeployResult) -> None:
-    #    """
-    #    Update the state of the scheduler based on the DeploymentResult of the given resource.
-
-    #    :raise UnmanagedResource: This update is about a resource that is no longer managed by the server.
-    #    """
-    #    resource_id = result.resource_id
-    #    if result.deployment_result is DeploymentResult.NEW:
-    #        raise ValueError("report_resource_state should not be called to register new resources")
-
-    #    async with self._scheduler_lock:
-    #        # refresh resource details for latest model state
-    #        details: Optional[ResourceDetails] = self._state.resources.get(resource_id, None)
-
-    #        if details is None:
-    #            # we are stale and removed
-    #            raise UnmanagedResource()
-
-    #        state: ResourceState = self._state.resource_state[resource_id]
-
-    #        if details.attribute_hash != attribute_hash:
-    #            # We are stale but still the last deploy
-    #            # We can update the deployment_result (which is about last deploy)
-    #            # We can't update status (which is about active state only)
-    #            # None of the event propagation or other update happen either for the same reason
-    #            state.deployment_result = result.deployment_result
-    #            return
-
-    #        # We are not stale
-    #        state.status = (
-    #            ComplianceStatus.COMPLIANT if result.status is const.ResourceState.deployed else ComplianceStatus.NON_COMPLIANT
-    #        )
-    #        # first update state, then send out events
-    #        self._deploying_latest.remove(resource_id)
-    #        state.deployment_result = result.deployment_result
-    #        self._work.finished_deploy(resource_id)
-    #        if result.deployment_result is DeploymentResult.DEPLOYED:
-    #            self._state.dirty.discard(resource_id)
-    #        else:
-    #            # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
-    #            # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
-    #            # (or skip) causes it to become dirty now.
-    #            self._state.dirty.add(resource_id)
-    #        # propagate events
-    #        if details.attributes.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False):
-    #            provides: Set[ResourceIdStr] = self._state.requires.provides_view().get(resource_id, set())
-    #            event_listeners: Set[ResourceIdStr] = {
-    #                dependant
-    #                for dependant in provides
-    #                if (dependant_details := self._state.resources.get(dependant, None)) is not None
-    #                # default to True for backward compatibility, i.e. not all resources have the field
-    #                if dependant_details.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
-    #            }
-    #            if event_listeners:
-    #                # do not pass deploying tasks because for event propagation we really want to start a new one,
-    #                # even if the current intent is already being deployed
-    #                task = Deploy(resource=resource_id)
-    #                assert task in self._work.agent_queues.in_progress
-    #                priority = self._work.agent_queues.in_progress[task]
-    #                self._work.deploy_with_context(
-    #                    event_listeners,
-    #                    reason=f"Deploying because an event was received from {resource_id}",
-    #                    priority=priority,
-    #                    deploying=set(),
-    #                )
+                self._timer_manager.update_timer(resource_id, is_compliant=(state.status is ComplianceStatus.COMPLIANT))
 
     def _send_events(
         self,
@@ -1076,7 +993,6 @@ class ResourceScheduler(TaskManager):
                 deploying=set(),
             )
 
-    # TODO: CHECK MERGE CONFLICT
     async def _get_last_non_deploying_state_for_dependencies(
         self, resource: ResourceIdStr
     ) -> Mapping[ResourceIdStr, const.ResourceState]:

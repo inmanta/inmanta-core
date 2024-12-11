@@ -167,6 +167,7 @@ class ToDbUpdateManager(StateUpdateManager):
         """
         Update the db to reflect the result of a deploy for a given resource.
         """
+
         def error_and_log(message: str, **context: Any) -> None:
             """
             :param message: message to return both to logger and to remote caller

@@ -121,7 +121,7 @@ class Deploy(Task):
                 # Stale resource, can simply be dropped.
                 return
 
-            # From this point on, we HAVE to call report_resource_state to make the scheduler propagate state
+            # From this point on, we HAVE to call deploy_done to make the scheduler propagate state
 
             # The main difficulty of this code is exception handling
             # We collect state here to report back in the finally block
@@ -209,14 +209,13 @@ class Deploy(Task):
                 if deploy_result is not None:
                     # We signaled start, so we signal end
                     try:
-                        await task_manager.send_deploy_done(resource_details.attribute_hash, deploy_result)
+                        await task_manager.deploy_done(resource_details.attribute_hash, deploy_result)
                     except Exception:
                         LOGGER.error(
                             "Failed to report the end of the deployment to the server for %s",
                             resource_details.resource_id,
                             exc_info=True,
                         )
-                    # TODO: FIX MERGE CONFLICT
 
 
 @dataclass(frozen=True, kw_only=True)
