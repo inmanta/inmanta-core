@@ -427,7 +427,7 @@ class ResourceScheduler(TaskManager):
                     resource_id=res.resource_id,
                     attribute_hash=res.attribute_hash,
                     attributes=res.attributes,
-                    status=ComplianceStatus.UNDEFINED,  # TODO: FIX
+                    status=ComplianceStatus.UNDEFINED,
                 )
             )
         return result

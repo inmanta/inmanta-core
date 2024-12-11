@@ -1034,6 +1034,9 @@ def assert_resource_persistent_state(
     blocked_status: state.BlockedStatus,
     expected_compliance_status: state.ComplianceStatus,
 ) -> None:
+    """
+    Assert that the given ResourcePersistentState record has the given content.
+    """
     assert (
         resource_persistent_state.is_undefined == is_undefined
     ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.is_undefined} != {is_undefined})"

@@ -304,7 +304,7 @@ class ScheduledWork:
         """
         :param requires: This is a view on the requires of the requires field from the associated ModelState object.
                          It's a view, which means that it's updated whenever the original RequiresProvides mapping is updated.
-        :param provides: This is a view on the  provides of the requires field from the associated ModelState object.
+        :param provides: This is a view on the provides of the requires field from the associated ModelState object.
                          It's a view, which means that it's updated whenever the original RequiresProvides mapping is updated.
         """
         self.requires: Mapping[ResourceIdStr, Set[ResourceIdStr]] = requires
