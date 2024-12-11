@@ -37,9 +37,10 @@ import utils
 from inmanta import const, data
 from inmanta.agent.executor import DeployResult
 from inmanta.const import ResourceState
-from inmanta.data.model import LatestReleasedResource, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import LatestReleasedResource
 from inmanta.deploy import persistence
 from inmanta.server import config
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
 
 async def test_resource_list_no_released_version(server, client):

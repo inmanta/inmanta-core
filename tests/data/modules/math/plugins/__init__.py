@@ -18,7 +18,8 @@
 
 import math
 
-from inmanta.plugins import PluginException, plugin
+from inmanta.plugins import plugin
+from inmanta.ast import PluginException
 
 
 @plugin

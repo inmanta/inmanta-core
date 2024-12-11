@@ -22,10 +22,10 @@ import datetime
 import uuid
 from typing import Any, Literal, Optional, Union
 
+import inmanta.types
 from inmanta import const, data, resources
 from inmanta.const import ResourceState
 from inmanta.data import model
-from inmanta.data.model import PipConfig
 from inmanta.protocol import exceptions
 from inmanta.protocol.common import ArgOption
 from inmanta.protocol.decorators import method, typedmethod
@@ -53,7 +53,7 @@ async def ignore_env(obj: Any, metadata: dict) -> Any:
     return obj
 
 
-async def convert_resource_version_id(rvid: model.ResourceVersionIdStr, metadata: dict) -> "resources.Id":
+async def convert_resource_version_id(rvid: inmanta.types.ResourceVersionIdStr, metadata: dict) -> "resources.Id":
     try:
         return resources.Id.parse_resource_version_id(rvid)
     except Exception:
@@ -524,12 +524,12 @@ def put_version(
     tid: uuid.UUID,
     version: int,
     resources: list,
-    resource_state: dict[model.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
+    resource_state: dict[inmanta.types.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
     unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
     version_info: Optional[dict] = None,
     compiler_version: Optional[str] = None,
-    resource_sets: dict[model.ResourceIdStr, Optional[str]] = {},
-    pip_config: Optional[PipConfig] = None,
+    resource_sets: dict[inmanta.types.ResourceIdStr, Optional[str]] = {},
+    pip_config: Optional[model.PipConfig] = None,
 ):
     """
     Store a new version of the configuration model

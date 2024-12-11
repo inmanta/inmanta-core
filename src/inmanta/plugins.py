@@ -718,16 +718,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
 
 @stable_api
-class PluginException(Exception):
-    """
-    Base class for custom exceptions raised from a plugin.
-    """
-
-    def __init__(self, message: str) -> None:
-        self.message = message
-
-
-@stable_api
 def plugin(
     function: Optional[Callable] = None,
     commands: Optional[list[str]] = None,
@@ -826,3 +816,7 @@ def deprecated(
     if function is not None:
         return inner(function)
     return inner
+
+
+# This is the stable api location of this type for <iso7
+from inmanta.ast import PluginException  # noqa: F401

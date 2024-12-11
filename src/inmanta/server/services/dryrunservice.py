@@ -22,7 +22,7 @@ import uuid
 from typing import Optional, cast
 
 from inmanta import const, data
-from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffStatus, ResourceVersionIdStr
+from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffStatus
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
@@ -36,7 +36,7 @@ from inmanta.server import (
     protocol,
 )
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
-from inmanta.types import Apireturn, JsonType
+from inmanta.types import Apireturn, JsonType, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 

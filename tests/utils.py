@@ -50,15 +50,14 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data import ResourceIdStr
-from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, ResourceType
+from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceDetails
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client, SessionEndpoint, methods
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
-from inmanta.types import Apireturn
+from inmanta.types import Apireturn, ResourceIdStr, ResourceType
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
 

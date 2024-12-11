@@ -5,7 +5,7 @@ from typing import Optional
 import pydantic
 
 from inmanta import resources
-from inmanta.data.model import ResourceIdStr
+from inmanta.types import ResourceIdStr
 from inmanta.agent.handler import provider, DiscoveryHandler, HandlerContext, CRUDHandler
 from inmanta.resources import resource, DiscoveryResource, PurgeableResource
 

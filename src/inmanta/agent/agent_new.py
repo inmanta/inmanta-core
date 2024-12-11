@@ -22,6 +22,7 @@ import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Optional
 
+import inmanta.protocol  # noqa: F401 prevent import loop
 import inmanta.server.config as opt
 from inmanta import config, const, data, protocol
 from inmanta.agent import config as cfg

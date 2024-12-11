@@ -25,9 +25,10 @@ from typing import Collection
 from inmanta import protocol
 from inmanta.agent import executor
 from inmanta.agent.executor import ResourceInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, ResourceType
+from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.loader import ModuleSource
 from inmanta.protocol import Client, SyncClient
+from inmanta.types import ResourceType
 from inmanta.util.async_lru import async_lru_cache
 
 LOGGER = logging.getLogger(__name__)

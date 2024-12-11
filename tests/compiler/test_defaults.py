@@ -19,8 +19,7 @@
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import DuplicateException, TypingException
-from inmanta.execute.proxy import UnsetException
+from inmanta.ast import DuplicateException, TypingException, UnsetException
 
 
 def test_issue_127_default_overrides(snippetcompiler):

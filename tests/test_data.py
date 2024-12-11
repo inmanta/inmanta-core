@@ -35,7 +35,8 @@ import utils
 from inmanta import const, data, util
 from inmanta.const import AgentStatus, LogLevel
 from inmanta.data import ArgumentCollector, QueryType
-from inmanta.resources import Id, ResourceVersionIdStr
+from inmanta.resources import Id
+from inmanta.types import ResourceVersionIdStr
 
 
 async def test_connect_too_small_connection_pool(postgres_db, database_name: str, create_db_schema: bool = False):

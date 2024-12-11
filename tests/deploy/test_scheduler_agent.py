@@ -38,8 +38,6 @@ from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.const import Change
-from inmanta.data import ResourceIdStr
-from inmanta.data.model import ResourceVersionIdStr
 from inmanta.deploy import state, tasks
 from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ResourceScheduler
@@ -49,6 +47,7 @@ from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.resources import Id
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import retry_limited
 from utils import DummyCodeManager, make_requires
 

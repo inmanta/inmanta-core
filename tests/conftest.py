@@ -31,7 +31,6 @@ from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
-from inmanta.data.model import ResourceIdStr
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
@@ -141,7 +140,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
-from inmanta.types import JsonType
+from inmanta.types import JsonType, ResourceIdStr
 from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version

@@ -23,8 +23,8 @@ from urllib import parse
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-from inmanta.data.model import ResourceVersionIdStr
 from inmanta.server import config
+from inmanta.types import ResourceVersionIdStr
 
 
 async def test_discovery_resource_single(server, client, agent, environment):
