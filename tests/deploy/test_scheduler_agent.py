@@ -2027,7 +2027,7 @@ async def test_deploy_blocked_state(agent: TestAgent, make_resource_minimal) -> 
     for rid in range(9, 14):
         is_deployed(f"test::Resource[agent1,name={rid + 1}]")
 
-    # Also unblock
+    # Also unblock 9
     # 1,3 blocked due to 6
     # 2,4,5,7,8 unblocked
     await make_resources(graph, [rid6])

@@ -238,7 +238,7 @@ class ModelState:
         :param verify_blocked: resources that have added requires
         :param verify_unblocked: resources that have lost requires relations
 
-        returns: <blocked, unlocked> resources
+        returns: <unblocked, blocked> resources
         """
         # This algorithm moves the blocked/unblocked forward over the provides relation
         # 1. We start from the nodes passed in
