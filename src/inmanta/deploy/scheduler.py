@@ -875,11 +875,9 @@ class ResourceScheduler(TaskManager):
                 # None of the event propagation or other update happen either for the same reason
                 # except for the event to notify dependents of failure recovery (to unblock skipped for dependencies)
                 # because we might otherwise miss the recovery.
-                if result.deployment_result is not None:
-                    # TODO: deployment_result cannot be None type wise???
-                    state.deployment_result = result.deployment_result
-                    if recovered_from_failure:
-                        self._send_events(details, stale_deploy=True, recovered_from_failure=True)
+                state.deployment_result = result.deployment_result
+                if recovered_from_failure:
+                    self._send_events(details, stale_deploy=True, recovered_from_failure=True)
                 return
 
             # We are not stale
