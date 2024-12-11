@@ -382,7 +382,7 @@ class ResourceScheduler(TaskManager):
 
         resources_in_db: Mapping[ResourceIdStr, ResourceDetails]
 
-        def _build_discrepancy_map(
+        async def _build_discrepancy_map(
             resources_in_db: Mapping[ResourceIdStr, ResourceDetails]
         ) -> dict[ResourceIdStr, list[Discrepancy]]:
             """
@@ -440,6 +440,9 @@ class ResourceScheduler(TaskManager):
                     )
                 ]
 
+            # Keep track of the number of iterations to regularly pass control back to the io loop
+            iteration_counter: int = 0
+
             # For resources in both the DB and the scheduler, check for discrepancies in state
             for rid in resources_in_db.keys() & self._state.resource_state.keys():
                 resource_discrepancies: list[Discrepancy] = []
@@ -482,6 +485,14 @@ class ResourceScheduler(TaskManager):
                 if resource_discrepancies:
                     discrepancy_map[rid] = resource_discrepancies
 
+                iteration_counter += 1
+
+                # Pass back control to the io loop every 1000 iterations to not
+                # block scheduler operations in case we have a lot of resources.
+                if iteration_counter == 1000:
+                    await asyncio.sleep(0)
+                    iteration_counter = 0
+
             return discrepancy_map
 
         async with self._scheduler_lock:
@@ -500,7 +511,7 @@ class ResourceScheduler(TaskManager):
                 )
                 return SchedulerStatusReport(scheduler_state={}, db_state={}, discrepancies={})
 
-            discrepancy_map = _build_discrepancy_map(resources_in_db)
+            discrepancy_map = await _build_discrepancy_map(resources_in_db)
             return SchedulerStatusReport(
                 scheduler_state=self._state.resource_state, db_state=resources_in_db, discrepancies=discrepancy_map
             )

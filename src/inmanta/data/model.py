@@ -930,8 +930,9 @@ class SchedulerStatusReport(BaseModel):
         and their state in the database.
     """
 
-    scheduler_state: Mapping[ResourceIdStr, typing.Any]
-    db_state: Mapping[ResourceIdStr, typing.Any]
+    # Can't type properly because of current module structure
+    scheduler_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceState
+    db_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceDetails
     discrepancies: Mapping[ResourceIdStr, list[Discrepancy]]
 
 

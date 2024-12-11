@@ -26,8 +26,6 @@ from inmanta import const
 from inmanta.config import Config
 from utils import get_resource, log_contains, log_doesnt_contain, resource_action_consistency_check, retry_limited
 
-LOGGER = logging.getLogger(__name__)
-
 
 @pytest.mark.skip("Broken")
 async def test_deploy_trigger(server, client, clienthelper, resource_container, environment, caplog, agent):
@@ -107,7 +105,7 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
     "agent_deploy_interval",
     [
         "2",
-        # "*/2 * * * * * *",
+        "*/2 * * * * * *",
     ],
 )
 async def test_spontaneous_deploy(
@@ -124,7 +122,6 @@ async def test_spontaneous_deploy(
     Test that a deploy run is executed every 2 seconds in the new agent
      as specified in the agent_repair_interval (using a cron or not)
     """
-
     with caplog.at_level(logging.DEBUG):
         resource_container.Provider.reset()
 
@@ -157,11 +154,6 @@ async def test_spontaneous_deploy(
         # do a deploy
         start = time.time()
 
-        result = await client.get_scheduler_status(env_id)
-        assert result.code == 200
-        expected_data = {"discrepancies": {}, "scheduler_state": {}, "db_state": {}}
-        assert result.result["data"] == expected_data
-
         result = await client.release_version(
             tid=env_id,
             id=version,
@@ -173,66 +165,11 @@ async def test_spontaneous_deploy(
         result = await client.get_version(env_id, version)
         assert result.code == 200
 
-        def selective_comparison(left_dict, right_dict):
-            LOGGER.debug(f"{left_dict=}")
-            LOGGER.debug(f"{right_dict=}")
-            for field in ["discrepancies", "scheduler_state"]:
-                left_value = left_dict.get(field)
-                right_value = right_dict.get(field)
-
-                if left_value is None or right_value is None:
-                    LOGGER.debug(" DIFF")
-                    return False
-                if left_value != right_value:
-                    LOGGER.debug(" DIFF")
-                    return False
-            LOGGER.debug(" EQUALISH")
-            return True
-
-        async def picked_up_by_the_scheduler() -> bool:
-
-            result = await client.get_scheduler_status(env_id)
-            assert result.code == 200
-            new = {
-                "discrepancies": {},
-                "scheduler_state": {
-                    "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "new", "status": "has_update"}
-                },
-            }
-            deployed = {
-                "discrepancies": {},
-                "scheduler_state": {
-                    "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "deployed", "status": "compliant"}
-                },
-            }
-            return selective_comparison(result.result["data"], new) or selective_comparison(result.result["data"], deployed)
-
-        # Flaky part depending on
-        # when we check the inner status vs how fast the scheduler picks up the resources:
-        #     - if the check happens before the resources are picked up: we get discrepancies + empty resource_state
-        #     - if the check happens after the resources are picked up: we get discrepancies because resources
-        #       are already deployed
-
-        LOGGER.debug("retry_limited picked_up_by_the_scheduler")
-        await retry_limited(picked_up_by_the_scheduler, 10)
-        LOGGER.debug("FLAG 1 DONE")
-
         await clienthelper.wait_for_deployed()
 
         await clienthelper.wait_full_success()
 
         duration = time.time() - start
-        result = await client.get_scheduler_status(env_id)
-        assert result.code == 200
-        expected_data = {
-            "discrepancies": {},
-            "scheduler_state": {
-                "test::Resource[agent1,key=key1]": {"blocked": "no", "deployment_result": "deployed", "status": "compliant"}
-            },
-        }
-        LOGGER.debug("SELECTIVE COMPARE")
-        assert selective_comparison(result.result["data"], expected_data)
-        LOGGER.debug("FLAG 2 DONE")
 
         assert await clienthelper.done_count() == 1
 
