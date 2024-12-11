@@ -36,6 +36,7 @@ from inmanta.ast import (
     MultiException,
     Namespace,
     Range,
+    UnsetException,
 )
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
@@ -44,7 +45,6 @@ from inmanta.compiler.data import CompileData
 from inmanta.execute import scheduler
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
 from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
-from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ResultVariable
 from inmanta.parser import ParserException
 from inmanta.plugins import Plugin, PluginMeta

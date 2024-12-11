@@ -38,8 +38,7 @@ if TYPE_CHECKING:
     from inmanta.ast.statements.define import DefineEntity, DefineImport  # noqa: F401
     from inmanta.ast.type import NamedType, Type  # noqa: F401
     from inmanta.compiler import Compiler
-    from inmanta.execute.runtime import DelayedResultVariable, ExecutionContext, Instance, ResultVariable  # noqa: F401
-    from inmanta.plugins import PluginException
+    from inmanta.execute.runtime import DelayedResultVariable, ExecutionContext, Instance, ResultVariable, Unknown  # noqa: F401
 
 
 class TypeDeprecationWarning(InmantaWarning):
@@ -996,3 +995,50 @@ class MultiException(CompilerException):
             out += "\n" + part
 
         return out
+
+
+class AttributeNotFound(NotFoundException, AttributeError):
+    """
+    Exception used for backwards compatibility with try-except blocks around some_proxy.some_attr.
+    This previously raised `NotFoundException` which is currently deprecated in this context.
+    Its new behavior is to raise an AttributeError for compatibility with Python's builtin `hasattr`.
+    """
+
+
+class UnsetException(RuntimeException):
+    """
+    This exception is thrown when an attribute is accessed that was not yet
+    available (i.e. it has not been frozen yet).
+    """
+
+    def __init__(self, msg: str, instance: Optional["Instance"] = None, attribute: Optional["Attribute"] = None) -> None:
+        RuntimeException.__init__(self, None, msg)
+        self.instance: Optional["Instance"] = instance
+        self.attribute: Optional["Attribute"] = attribute
+        self.msg = msg
+
+    def get_result_variable(self) -> Optional["Instance"]:
+        return self.instance
+
+
+class UnknownException(Exception):
+    """
+    This exception is thrown when code tries to access a value that is
+    unknown and cannot be determined during this evaluation. The code
+    receiving this exception is responsible for invalidating any results
+    depending on this value by return an instance of Unknown as well.
+    """
+
+    def __init__(self, unknown: "Unknown"):
+        super().__init__()
+        self.unknown = unknown
+
+
+@stable_api
+class PluginException(Exception):
+    """
+    Base class for custom exceptions raised from a plugin.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.message = message

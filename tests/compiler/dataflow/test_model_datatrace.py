@@ -21,10 +21,9 @@ from typing import Optional
 import pytest
 
 from compiler.dataflow.conftest import DataflowTestHelper
-from inmanta.ast import AttributeException, CompilerException, DoubleSetException, NotFoundException
+from inmanta.ast import AttributeException, CompilerException, DoubleSetException, NotFoundException, UnsetException
 from inmanta.execute.dataflow import VariableNodeReference
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
-from inmanta.execute.proxy import UnsetException
 
 
 @pytest.mark.parametrize(

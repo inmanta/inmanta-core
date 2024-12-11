@@ -1,8 +1,8 @@
 from _collections import defaultdict
 from inmanta import resources
-from inmanta.execute.proxy import UnknownException
+from inmanta.ast import UnknownException, PluginException
 from inmanta.execute.util import Unknown
-from inmanta.plugins import PluginException, plugin, Context
+from inmanta.plugins import plugin, Context
 
 
 @plugin

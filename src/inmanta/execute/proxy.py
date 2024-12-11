@@ -18,9 +18,9 @@
 
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
-from typing import Callable, Optional, Union
+from typing import Callable, Union
 
-from inmanta.ast import NotFoundException, RuntimeException
+from inmanta.ast import AttributeNotFound, NotFoundException, RuntimeException, UnknownException
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
@@ -32,46 +32,8 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from inmanta.ast.attribute import Attribute
     from inmanta.ast.entity import Entity
     from inmanta.execute.runtime import Instance
-
-
-class UnsetException(RuntimeException):
-    """
-    This exception is thrown when an attribute is accessed that was not yet
-    available (i.e. it has not been frozen yet).
-    """
-
-    def __init__(self, msg: str, instance: Optional["Instance"] = None, attribute: Optional["Attribute"] = None) -> None:
-        RuntimeException.__init__(self, None, msg)
-        self.instance: Optional["Instance"] = instance
-        self.attribute: Optional["Attribute"] = attribute
-        self.msg = msg
-
-    def get_result_variable(self) -> Optional["Instance"]:
-        return self.instance
-
-
-class UnknownException(Exception):
-    """
-    This exception is thrown when code tries to access a value that is
-    unknown and cannot be determined during this evaluation. The code
-    receiving this exception is responsible for invalidating any results
-    depending on this value by return an instance of Unknown as well.
-    """
-
-    def __init__(self, unknown: Unknown):
-        super().__init__()
-        self.unknown = unknown
-
-
-class AttributeNotFound(NotFoundException, AttributeError):
-    """
-    Exception used for backwards compatibility with try-except blocks around some_proxy.some_attr.
-    This previously raised `NotFoundException` which is currently deprecated in this context.
-    Its new behavior is to raise an AttributeError for compatibility with Python's builtin `hasattr`.
-    """
 
 
 @stable_api
@@ -270,3 +232,6 @@ class IteratorProxy(DynamicProxy):
     def __next__(self):
         i = self._get_instance()
         return DynamicProxy.return_value(next(i))
+
+
+from inmanta.ast import AttributeNotFound, UnknownException, UnsetException
