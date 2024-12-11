@@ -554,7 +554,7 @@ class ResourceScheduler(TaskManager):
             async with self._scheduler_lock:
                 self._state.version = version
                 for resource in undefined:
-                    self._state.block_and_update_resource(resource, resources[resource])  # Removes from the dirty set
+                    self._state.update_resource_to_undefined(resource, resources[resource])  # Removes from the dirty set
                 for resource in now_defined:
                     # the resources moving out of undefined, normal update
                     self._state.update_desired_state(resource, resources[resource])  # Updates the dirty set
@@ -566,8 +566,6 @@ class ResourceScheduler(TaskManager):
                 t_unblocked, t_blocked = self._state.update_transitive_state(
                     undefined, added_requires.keys(), now_defined | dropped_requires.keys()
                 )
-
-                # blocked_for_undefined_dep: Set[ResourceIdStr] = self._state.block_provides(resources=undefined)
 
                 # Update set of in-progress non-stale deploys by trimming resources with new state
                 self._deploying_latest.difference_update(new_desired_state, deleted_resources, undefined, t_blocked)

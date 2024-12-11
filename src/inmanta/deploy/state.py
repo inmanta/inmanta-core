@@ -175,7 +175,7 @@ class ModelState:
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
 
-    def block_and_update_resource(self, resource: ResourceIdStr, details: ResourceDetails) -> None:
+    def update_resource_to_undefined(self, resource: ResourceIdStr, details: ResourceDetails) -> None:
         """
         Mark the given resource as blocked, i.e. it's not deployable. This method updates the resource details
         and the resource_status.
@@ -204,6 +204,15 @@ class ModelState:
         self.resource_state[resource].blocked = BlockedStatus.YES
         self.dirty.discard(resource)
 
+    def _unblock_resource(self, resource: ResourceIdStr) -> None:
+        """
+        Mark the given resource as transitively blocked, i.e. it's not deployable.
+        """
+        my_state = self.resource_state[resource]
+        my_state.blocked = BlockedStatus.NO
+        if my_state.status in [ComplianceStatus.HAS_UPDATE, ComplianceStatus.NON_COMPLIANT]:
+            self.dirty.add(resource)
+
     def are_dependencies_compliant(self, resource: ResourceIdStr) -> bool:
         """
         Checks if a resource has all of its dependencies in a compliant state.
@@ -217,7 +226,7 @@ class ModelState:
 
     def update_transitive_state(
         self,
-        now_blocked: AbstractSet[ResourceIdStr],
+        new_undefined: AbstractSet[ResourceIdStr],
         verify_blocked: AbstractSet[ResourceIdStr],
         verify_unblocked: set[ResourceIdStr],
     ) -> Tuple[set[ResourceIdStr], set[ResourceIdStr]]:
@@ -225,7 +234,7 @@ class ModelState:
 
         Update transitive states
 
-        :param now_blocked: resources that have become undefined
+        :param new_undefined: resources that have become undefined
         :param verify_blocked: resources that have added requires
         :param verify_unblocked: resources that have lost requires relations
 
@@ -263,7 +272,7 @@ class ModelState:
         out_unblocked: set[ResourceIdStr] = set()
 
         # a set of definitely blocked nodes
-        is_blocked: set[ResourceIdStr] = set(now_blocked)
+        is_blocked: set[ResourceIdStr] = set(new_undefined)
 
         # forward graph
         provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.requires.provides_view()
@@ -349,7 +358,7 @@ class ModelState:
                 # We know the root is undefined, hard block
                 is_blocked.add(resource)
 
-            # Unblock resource
+            # Block resource
             self._block_resource_transitive(resource)
             out_blocked.add(resource)
             return True
@@ -357,7 +366,7 @@ class ModelState:
         for resource_id in verify_blocked:
             # verify all potential blockers
             blocked = update_blocked_status_to_blocked(resource_id)
-            # Keep track of this that have been blocked
+            # if we did block it, add it to the work
             if blocked:
                 propagate_blocked_work.append(resource_id)
 
@@ -421,10 +430,7 @@ class ModelState:
                 return False
 
             # Unblock resource
-            # TODO: factor out cfr block_resource?
-            my_state.blocked = BlockedStatus.NO
-            if my_state.status in [ComplianceStatus.HAS_UPDATE, ComplianceStatus.NON_COMPLIANT]:
-                self.dirty.add(resource)
+            self._unblock_resource(resource)
             out_unblocked.add(resource)
             return True
 
@@ -452,12 +458,12 @@ class ModelState:
         self.resources[resource] = details
         if resource in self.resource_state:
             self.resource_state[resource].status = ComplianceStatus.HAS_UPDATE
-            # Blocked status is not affected, otherwise mark_as_defined would have been called
+            # Blocked status is handled in update_transitive_state
         else:
             self.resource_state[resource] = ResourceState(
                 status=ComplianceStatus.HAS_UPDATE,
                 deployment_result=DeploymentResult.NEW,
-                blocked=BlockedStatus.NO,  # Requires are not set yet
+                blocked=BlockedStatus.NO,  # Requires are not set yet, handled in update_transitive_state
             )
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.add(resource)

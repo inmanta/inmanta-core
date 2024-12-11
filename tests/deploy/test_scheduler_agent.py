@@ -1915,7 +1915,7 @@ async def test_deploy_blocked_state(agent: TestAgent, make_resource_minimal) -> 
     # 3 -> 1 -> 2
     # 1 is undefined
     # 2 is free to deploy
-    # 3 is undefined
+    # 3 is blocked
     await make_resources(
         [
             [rid2],
@@ -1932,7 +1932,7 @@ async def test_deploy_blocked_state(agent: TestAgent, make_resource_minimal) -> 
     # 3 <- 1 <- 2
     # 1 is undefined
     # 3 is free to deploy
-    # 3 is undefined
+    # 2 is blocked
     await make_resources(
         [[rid3], [rid1], []],
         undef=[rid1],
