@@ -59,6 +59,7 @@ class UnmanagedResource(Exception):
     """
     An exception that indicates that a resource is not managed by the orchestrator.
     """
+
     pass
 
 
