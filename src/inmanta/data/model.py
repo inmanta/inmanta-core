@@ -901,9 +901,12 @@ LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
 class Discrepancy(BaseModel):
     """
     Records a discrepancy between the state as persisted in the database and
-    the in-memory state in the scheduler.
+    the in-memory state in the scheduler. Either model-wide when no
+    resource id is specified (e.g. when model versions are mismatched)
+    or for a specific resource.
 
     :param rid: If set, this discrepancy is specific to this resource.
+        If left unset, this discrepancy is not specific to any particular resource.
     :param field: If set, specifies on which field this discrepancy was detected.
         If left unset, and a rid is specified, the discrepancy was detected on the
         resource level i.e. it is missing from either the db or the scheduler.
