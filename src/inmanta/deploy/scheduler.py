@@ -59,7 +59,6 @@ class UnmanagedResource(Exception):
     """
     An exception that indicates that a resource is not managed by the orchestrator.
     """
-
     pass
 
 
@@ -500,13 +499,12 @@ class ResourceScheduler(TaskManager):
         for resource in resources_from_db:
             if const.ResourceState[resource["status"]] is const.ResourceState.undefined:
                 status = ComplianceStatus.UNDEFINED
-            elif (
-                resource["attribute_hash"] == resource["last_deployed_attribute_hash"]
-                and DeploymentResult[resource["deployment_result"]] is DeploymentResult.DEPLOYED
-            ):
+            elif resource["attribute_hash"] != resource["last_deployed_attribute_hash"]:
+                status = ComplianceStatus.HAS_UPDATE
+            elif DeploymentResult[resource["deployment_result"]] is DeploymentResult.DEPLOYED:
                 status = ComplianceStatus.COMPLIANT
             else:
-                status = ComplianceStatus.HAS_UPDATE
+                status = ComplianceStatus.NON_COMPLIANT
             result[resource["resource_id"]] = ResourceDetails(
                 resource_id=resource["resource_id"],
                 attribute_hash=resource["attribute_hash"],

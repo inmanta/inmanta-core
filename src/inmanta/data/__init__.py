@@ -4427,12 +4427,17 @@ class ResourcePersistentState(BaseDocument):
     # Last produced an event. i.e. the end time of the last deploy where we had an effective change
     # (change is not None and change != Change.nochange)
 
+    # Written at version release time
     is_undefined: bool
+    # Written when a new version is processed by the scheduler
     is_orphan: bool
+    # Written at deploy time (except for NEW -> no race condition possible with deploy path)
     deployment_result: state.DeploymentResult
+    # Written both when processing a new version and at deploy time. As such, this should be updated
+    # under the scheduler lock to prevent race conditions with the deploy time updates.
     blocked_status: state.BlockedStatus
 
-    # status
+    # Written at deploy time (Exception for initial record creation  -> no race condition possible with deploy path)
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
 
     @classmethod
@@ -4443,7 +4448,7 @@ class ResourcePersistentState(BaseDocument):
         connection: Optional[Connection] = None,
     ) -> None:
         """
-        Set the is_orphan column to True on all resources in the given environment that became an orphan.
+        Set the is_orphan column to True on all given resources.
         """
         query = f"""
             UPDATE {cls.table_name()}
