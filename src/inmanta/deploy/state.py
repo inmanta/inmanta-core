@@ -372,7 +372,6 @@ class ModelState:
 
         # Propagate blockers once more
         # We iterate differently, because the parents blocked status is relevant
-        propagate_blocked_work = list(verify_blocked)
         while propagate_blocked_work:
             already_blocked: ResourceIdStr = propagate_blocked_work.pop()
             is_hard_block = already_blocked in is_blocked
