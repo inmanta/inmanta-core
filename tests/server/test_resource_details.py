@@ -128,6 +128,7 @@ async def env_with_resources(server, client):
             status=status,
         )
         await res.insert()
+        await data.ResourcePersistentState.populate_for_version(environment=environment, model_version=version)
 
         last_deploy = resource_deploy_times[next(counter)]
         deploy_times[environment][key].append(last_deploy)

@@ -827,7 +827,7 @@ async def agent_factory(server) -> AsyncIterator[Callable[[uuid.UUID], Awaitable
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agents: list[Agent] = []
 
-    async def create() -> Agent:
+    async def create(environment: uuid.UUID) -> Agent:
         # Mock scheduler state-dir: outside of tests this happens
         # when the scheduler config is loaded, before starting the scheduler
         server_state_dir = config.Config.get("config", "state-dir")

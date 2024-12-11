@@ -189,6 +189,7 @@ class ManagedExecutor(DummyExecutor):
             messages=[],
             changes={},
             change=Change.nochange,
+            deployment_result=DeploymentResult.DEPLOYED,
         )
 
 
