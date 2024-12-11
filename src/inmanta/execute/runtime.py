@@ -37,7 +37,7 @@ from inmanta.ast import (
     RuntimeException,
 )
 from inmanta.ast.type import Type
-from inmanta.execute import dataflow, proxy
+from inmanta.execute import dataflow
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.tracking import Tracker
 from inmanta.execute.util import NoneValue, Unknown

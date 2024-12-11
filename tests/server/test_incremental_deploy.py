@@ -31,7 +31,6 @@ import inmanta.types
 from inmanta import const, data
 from inmanta.agent.executor import DeployResult
 from inmanta.const import Change, ResourceAction, ResourceState
-from inmanta.data import model
 from inmanta.deploy import persistence
 from inmanta.resources import Id
 from inmanta.server import SLICE_ORCHESTRATION, SLICE_RESOURCE

@@ -20,7 +20,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from typing import Callable, Union
 
-from inmanta.ast import AttributeNotFound, NotFoundException, RuntimeException, UnknownException
+# UnsetException, UnknownException and AttributeNotFound have their stable api location here
+from inmanta.ast import AttributeNotFound, NotFoundException, RuntimeException, UnknownException, UnsetException  # noqa: F401
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
@@ -232,6 +233,3 @@ class IteratorProxy(DynamicProxy):
     def __next__(self):
         i = self._get_instance()
         return DynamicProxy.return_value(next(i))
-
-
-from inmanta.ast import AttributeNotFound, UnknownException, UnsetException

@@ -818,4 +818,5 @@ def deprecated(
     return inner
 
 
-from inmanta.ast import PluginException
+# This is the stable api location of this type for <iso7
+from inmanta.ast import PluginException  # noqa: F401

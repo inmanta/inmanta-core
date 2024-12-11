@@ -26,7 +26,6 @@ import inmanta.types
 from inmanta import const, data, resources
 from inmanta.const import ResourceState
 from inmanta.data import model
-from inmanta.data.model import PipConfig
 from inmanta.protocol import exceptions
 from inmanta.protocol.common import ArgOption
 from inmanta.protocol.decorators import method, typedmethod
@@ -530,7 +529,7 @@ def put_version(
     version_info: Optional[dict] = None,
     compiler_version: Optional[str] = None,
     resource_sets: dict[inmanta.types.ResourceIdStr, Optional[str]] = {},
-    pip_config: Optional[PipConfig] = None,
+    pip_config: Optional[model.PipConfig] = None,
 ):
     """
     Store a new version of the configuration model
