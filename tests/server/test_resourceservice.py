@@ -118,7 +118,9 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
 
     # Perform deployment
     await resource_deployer.deploy_resource(rvid=rvid_r2_v1, attribute_hash=attribute_has_r2)
-    await resource_deployer.deploy_resource(rvid=rvid_r3_v1, attribute_hash=attribute_has_r3, status=const.HandlerResourceState.failed)
+    await resource_deployer.deploy_resource(
+        rvid=rvid_r3_v1, attribute_hash=attribute_has_r3, status=const.HandlerResourceState.failed
+    )
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v1)
 
     # Verify that events exist

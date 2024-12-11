@@ -25,9 +25,8 @@ import typing
 import uuid
 from collections.abc import Awaitable, Callable, Set
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Coroutine, Mapping, Optional, Sequence, Tuple
 from contextlib import asynccontextmanager
-from typing import Mapping, Optional, Sequence, Tuple
+from typing import Any, Coroutine, Mapping, Optional, Sequence, Tuple
 from uuid import UUID
 
 import asyncpg
@@ -46,8 +45,8 @@ from inmanta.data.model import ResourceVersionIdStr
 from inmanta.deploy import state, tasks
 from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ResourceScheduler
-from inmanta.deploy.timers import TimerManager
 from inmanta.deploy.state import BlockedStatus, ComplianceStatus, DeploymentResult
+from inmanta.deploy.timers import TimerManager
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder

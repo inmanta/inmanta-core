@@ -675,7 +675,9 @@ class ResourceScheduler(TaskManager):
                 blocked_for_undefined_dep: Set[ResourceIdStr] = self._state.block_provides(resources=undefined)
                 transitively_unblocked: set[ResourceIdStr] = set()
                 for resource in newly_defined:
-                    transitively_unblocked.update(self._state.mark_as_defined(resource, resources[resource]))  # Updates the dirty set
+                    transitively_unblocked.update(
+                        self._state.mark_as_defined(resource, resources[resource])
+                    )  # Updates the dirty set
                 # Update set of in-progress non-stale deploys by trimming resources with new state
                 self._deploying_latest.difference_update(
                     new_desired_state, deleted_resources, undefined, blocked_for_undefined_dep
@@ -709,11 +711,7 @@ class ResourceScheduler(TaskManager):
                 # Updating the blocked state should be done under the scheduler lock, because this state is written
                 # by both the deploy and the new version code path.
                 resources_with_updated_blocked_state: Set[ResourceIdStr] = (
-                    undefined
-                    | blocked_for_undefined_dep
-                    | newly_defined
-                    | transitively_unblocked
-                    | up_to_date_resources.keys()
+                    undefined | blocked_for_undefined_dep | newly_defined | transitively_unblocked | up_to_date_resources.keys()
                 )
 
                 await self.update_resource_intent(
@@ -850,7 +848,7 @@ class ResourceScheduler(TaskManager):
         """
         resource_id: ResourceIdStr = result.resource_id
         if result.deployment_result is DeploymentResult.NEW:
-           raise ValueError("update_scheduler_state_for_finished_deploy should not be called to register new resources")
+            raise ValueError("update_scheduler_state_for_finished_deploy should not be called to register new resources")
 
         async with self._scheduler_lock:
             # refresh resource details for latest model state
@@ -864,7 +862,8 @@ class ResourceScheduler(TaskManager):
 
             recovered_from_failure: bool = (
                 result.deployment_result is DeploymentResult.DEPLOYED
-                and state.deployment_result not in (
+                and state.deployment_result
+                not in (
                     DeploymentResult.DEPLOYED,
                     DeploymentResult.NEW,
                 )
