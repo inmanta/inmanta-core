@@ -898,6 +898,47 @@ class PipConfig(BaseModel):
 LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
 
 
+class Discrepancy(BaseModel):
+    """
+    Records a discrepancy between the state as persisted in the database and
+    the in-memory state in the scheduler. Either model-wide when no
+    resource id is specified (e.g. when model versions are mismatched)
+    or for a specific resource.
+
+    :param rid: If set, this discrepancy is specific to this resource.
+        If left unset, this discrepancy is not specific to any particular resource.
+    :param field: If set, specifies on which field this discrepancy was detected.
+        If left unset, and a rid is specified, the discrepancy was detected on the
+        resource level i.e. it is missing from either the db or the scheduler.
+    :param expected: User-facing message denoting the expected state (i.e. as persisted
+        in the DB).
+    :param actual: User-facing message denoting the actual state (i.e. in-memory state
+        in the scheduler).
+
+    """
+
+    rid: ResourceIdStr | None
+    field: str | None
+    expected: str
+    actual: str
+
+
+class SchedulerStatusReport(BaseModel):
+    """
+    Status report for the scheduler self-check
+
+    :param scheduler_state: In-memory representation of the resources in the scheduler
+    :param db_state: Desired state of the resources as persisted in the database
+    :param discrepancies: Discrepancies between the in-memory representation of the resources
+        and their state in the database.
+    """
+
+    # Can't type properly because of current module structure
+    scheduler_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceState
+    db_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceDetails
+    discrepancies: list[Discrepancy] | dict[ResourceIdStr, list[Discrepancy]]
+
+
 class DataBaseReport(BaseModel):
     """
     :param max_pool: maximal pool size
