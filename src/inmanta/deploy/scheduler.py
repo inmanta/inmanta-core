@@ -308,14 +308,14 @@ class ResourceScheduler(TaskManager):
                 return
 
             # Rely on the incremental calculation to determine which resources should be deployed and which not.
-            increment: set[ResourceIdStr]
-            increment, _ = await ConfigurationModel.get_increment(self.environment, version, connection=con)
+            up_to_date_resources: Set[ResourceIdStr]
+            _, up_to_date_resources = await ConfigurationModel.get_increment(self.environment, version, connection=con)
 
         await self._new_version(
             version,
             resources=resources,
             requires=requires,
-            up_to_date_resources=resources.keys() - increment,
+            up_to_date_resources=up_to_date_resources,
             reason="Deploy was triggered because the scheduler was started",
         )
 
