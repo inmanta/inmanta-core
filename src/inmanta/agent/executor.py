@@ -44,6 +44,7 @@ from inmanta.const import Change
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import state
+from inmanta.deploy.state import DeploymentResult
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
@@ -514,13 +515,8 @@ class DeployResult:
         if ctx.status is None:
             ctx.warning("Deploy status field is None, failing!")
             ctx.set_resource_state(const.HandlerResourceState.failed)
-        match ctx.status:
-            case const.ResourceState.deployed:
-                deployment_result = state.DeploymentResult.DEPLOYED
-            case const.ResourceState.skipped:
-                deployment_result = state.DeploymentResult.SKIPPED
-            case _:
-                deployment_result = state.DeploymentResult.FAILED
+        # Make mypy happy
+        assert ctx.resource_state is not None
         return DeployResult(
             rvid=rvid,
             action_id=ctx.action_id,
@@ -528,7 +524,7 @@ class DeployResult:
             messages=ctx.logs,
             changes=ctx.changes,
             change=ctx.change,
-            deployment_result=deployment_result,
+            deployment_result=DeploymentResult.from_handler_resource_state(ctx.resource_state),
         )
 
     @classmethod
