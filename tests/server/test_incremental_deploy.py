@@ -27,11 +27,12 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.agent.executor import DeployResult
 from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.data import ResourceVersionIdStr, model
-from inmanta.deploy import persistence
+from inmanta.data.model import ResourceId
+from inmanta.deploy import persistence, state
 from inmanta.resources import Id
 from inmanta.server import SLICE_ORCHESTRATION, SLICE_RESOURCE
 from inmanta.server.services.orchestrationservice import OrchestrationService
@@ -162,14 +163,14 @@ class MultiVersionSetup:
                 assert result == 200
                 latest_released_version = version
 
-            for rid, state in self.states_per_version[version].items():
+            for rid, resource_state in self.states_per_version[version].items():
                 # Start the deploy
                 action_id = uuid.uuid4()
                 now = datetime.now()
-                if state == const.ResourceState.available:
+                if resource_state == const.ResourceState.available:
                     # initial state can not be set
                     continue
-                if state not in const.TRANSIENT_STATES:
+                if resource_state not in const.TRANSIENT_STATES:
                     finished = now
                 else:
                     finished = None
@@ -180,7 +181,7 @@ class MultiVersionSetup:
                     ResourceAction.deploy,
                     now,
                     finished,
-                    status=state,
+                    status=resource_state,
                     messages=[],
                     changes={},
                     change=None,
@@ -394,6 +395,7 @@ async def test_deploy_scenarios_added_by_send_event_cad(server, null_agent, envi
 
 async def test_deploy_cad_double(server, null_agent, environment, caplog, client, clienthelper):
     version = await clienthelper.get_version()
+    rid = ResourceId("test::Resource[agent1,key=key1]")
     rvid = ResourceVersionIdStr(f"test::Resource[agent1,key=key1],v={version}")
     rvid2 = ResourceVersionIdStr(f"test::Resource[agent2,key=key2],v={version}")
 
@@ -424,6 +426,7 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
         action_id = uuid.uuid4()
         await update_manager.send_in_progress(action_id, rvid)
         await update_manager.send_deploy_done(
+            attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resources[0]),
             result=DeployResult(
                 rvid=rvid,
                 action_id=action_id,
@@ -431,7 +434,8 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
                 messages=[],
                 changes={},
                 change=change,
-            )
+                deployment_result=state.DeploymentResult.DEPLOYED,
+            ),
         )
 
     async def assert_resources_to_deploy(

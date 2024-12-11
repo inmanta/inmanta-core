@@ -416,7 +416,8 @@ def test_warning_min_c_option_file_doesnt_exist(snippetcompiler, tmpdir):
 entity Test:
     int attr
 end
-"""
+""",
+        autostd=True,
     )
     config_options = ["-c", non_existing_config_file, "-vvv"]
     args = [sys.executable, "-m", "inmanta.app"] + config_options + ["compile"]

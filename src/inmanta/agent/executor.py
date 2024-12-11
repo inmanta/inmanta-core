@@ -43,6 +43,8 @@ from inmanta.agent.handler import HandlerContext
 from inmanta.const import Change
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.deploy import state
+from inmanta.deploy.state import DeploymentResult
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
@@ -485,11 +487,18 @@ class FactResult:
 @dataclass
 class DeployResult:
     rvid: ResourceVersionIdStr
+    resource_id: ResourceIdStr = dataclasses.field(init=False)
     action_id: uuid.UUID
     resource_state: const.HandlerResourceState
     messages: list[LogLine]
     changes: dict[str, AttributeStateChange]
     change: Optional[Change]
+    deployment_result: state.DeploymentResult
+
+    def __post_init__(self) -> None:
+        if self.status in {*const.TRANSIENT_STATES, *const.UNDEPLOYABLE_STATES, const.ResourceState.dry}:
+            raise ValueError(f"Resource state {self.status} is not a valid state for a deployment result.")
+        self.resource_id = Id.parse_id(self.rvid).resource_str()
 
     @property
     def status(self) -> const.ResourceState:
@@ -506,7 +515,8 @@ class DeployResult:
         if ctx.status is None:
             ctx.warning("Deploy status field is None, failing!")
             ctx.set_resource_state(const.HandlerResourceState.failed)
-
+        # Make mypy happy
+        assert ctx.resource_state is not None
         return DeployResult(
             rvid=rvid,
             action_id=ctx.action_id,
@@ -514,10 +524,11 @@ class DeployResult:
             messages=ctx.logs,
             changes=ctx.changes,
             change=ctx.change,
+            deployment_result=DeploymentResult.from_handler_resource_state(ctx.resource_state),
         )
 
     @classmethod
-    def undeployable(self, rvid: ResourceVersionIdStr, action_id: UUID, message: LogLine) -> "DeployResult":
+    def undeployable(cls, rvid: ResourceVersionIdStr, action_id: UUID, message: LogLine) -> "DeployResult":
         return DeployResult(
             rvid=rvid,
             action_id=action_id,
@@ -525,6 +536,7 @@ class DeployResult:
             messages=[message],
             changes={},
             change=Change.nochange,
+            deployment_result=state.DeploymentResult.FAILED,
         )
 
 

@@ -2275,7 +2275,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         # get imports: don't use a set because this collection is used to drive control flow and we want to keep control flow as
         # deterministic as possible
         imports: list[DefineImport] = [x for x in self.get_imports()]
-
         # All imports of the entire project
         all_imports: set[DefineImport] = set(imports)
 

@@ -19,15 +19,18 @@
 import abc
 import datetime
 import logging
-from typing import Any
+import uuid
+from collections.abc import Set
+from typing import Any, Optional
 from uuid import UUID
 
-from asyncpg import UniqueViolationError
+from asyncpg import Connection, UniqueViolationError
 
 from inmanta import const, data
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data.model import ResourceVersionIdStr
+from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
+from inmanta.deploy import state
 from inmanta.protocol import Client
 from inmanta.resources import Id
 from inmanta.server.services import resourceservice
@@ -54,7 +57,7 @@ class StateUpdateManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def send_deploy_done(self, result: DeployResult) -> None:
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
         pass
 
     @abc.abstractmethod
@@ -64,6 +67,31 @@ class StateUpdateManager(abc.ABC):
     @abc.abstractmethod
     async def set_parameters(self, fact_result: FactResult) -> None:
         pass
+
+    @abc.abstractmethod
+    async def update_resource_intent(
+        self,
+        environment: UUID,
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        update_blocked_state: bool,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        pass
+
+    @abc.abstractmethod
+    async def mark_as_orphan(
+        self, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
+    ) -> None:
+        pass
+
+    @abc.abstractmethod
+    async def set_last_processed_model_version(
+        self, environment: uuid.UUID, version: int, connection: Optional[Connection] = None
+    ) -> None:
+        """
+        Set the last model version that was processed by the scheduler.
+        """
+        await data.Scheduler.set_last_processed_model_version(environment, version, connection=connection)
 
 
 class ToDbUpdateManager(StateUpdateManager):
@@ -135,7 +163,7 @@ class ToDbUpdateManager(StateUpdateManager):
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
-    async def send_deploy_done(self, result: DeployResult) -> None:
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
         """
         Update the db to reflect the result of a deploy for a given resource.
         """
@@ -234,15 +262,15 @@ class ToDbUpdateManager(StateUpdateManager):
                     connection=connection,
                 )
 
-                extra_fields = {}
+                extra_datetime_fields: dict[str, datetime.datetime] = {}
                 if status == ResourceState.deployed:
-                    extra_fields["last_success"] = resource_action.started
+                    extra_datetime_fields["last_success"] = resource_action.started
 
                 # keep track IF we need to propagate if we are stale
                 # but only do it at the end of the transaction
                 if change != Change.nochange:
                     # We are producing an event
-                    extra_fields["last_produced_events"] = finished
+                    extra_datetime_fields["last_produced_events"] = finished
 
                 await resource.update_fields(
                     status=status,
@@ -253,7 +281,8 @@ class ToDbUpdateManager(StateUpdateManager):
                     last_deployed_version=resource_id_parsed.version,
                     last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
-                    **extra_fields,
+                    deployment_result=result.deployment_result,
+                    **extra_datetime_fields,
                     connection=connection,
                 )
 
@@ -293,3 +322,27 @@ class ToDbUpdateManager(StateUpdateManager):
             finished=fact_result.finished,
             messages=fact_result.messages,
         )
+
+    async def update_resource_intent(
+        self,
+        environment: UUID,
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        update_blocked_state: bool,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        await data.ResourcePersistentState.update_resource_intent(
+            environment, intent, update_blocked_state, connection=connection
+        )
+
+    async def mark_as_orphan(
+        self,
+        environment: UUID,
+        resource_ids: Set[ResourceIdStr],
+        connection: Optional[Connection] = None,
+    ) -> None:
+        await data.ResourcePersistentState.mark_as_orphan(environment, resource_ids, connection=connection)
+
+    async def set_last_processed_model_version(
+        self, environment: uuid.UUID, version: int, connection: Optional[Connection] = None
+    ) -> None:
+        await data.Scheduler.set_last_processed_model_version(environment, version, connection=connection)
