@@ -146,6 +146,9 @@ class BlockedStatus(StrEnum):
     NO = enum.auto()
     TRANSIENT = enum.auto()
 
+    def is_blocked(self) -> bool:
+        return self != BlockedStatus.NO
+
 
 @dataclass
 class ResourceState:
