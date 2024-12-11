@@ -189,7 +189,7 @@ class ManagedExecutor(DummyExecutor):
             messages=[],
             changes={},
             change=Change.nochange,
-            deployment_result=DeploymentResult.DEPLOYED,
+            deployment_result=state.DeploymentResult.from_handler_resource_state(result),
         )
 
 

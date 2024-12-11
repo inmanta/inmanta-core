@@ -118,6 +118,18 @@ class DeploymentResult(StrEnum):
     FAILED = enum.auto()
     SKIPPED = enum.auto()
 
+    @classmethod
+    def from_handler_resource_state(cls, handler_resource_state: const.HandlerResourceState) -> "DeploymentResult":
+        match handler_resource_state:
+            case const.HandlerResourceState.deployed:
+                return DeploymentResult.DEPLOYED
+            case const.HandlerResourceState.skipped | const.HandlerResourceState.skipped_for_dependency:
+                return DeploymentResult.SKIPPED
+            case const.HandlerResourceState.dry:
+                raise Exception(f"Unexpected handler_resource_state {const.HandlerResourceState.dry.value}")
+            case _:
+                return DeploymentResult.FAILED
+
 
 class AgentStatus(StrEnum):
     """
