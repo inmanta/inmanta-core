@@ -226,7 +226,7 @@ class Agent(SessionEndpoint):
 
     @protocol.handle(methods_v2.trigger_get_status, env="tid")
     async def get_scheduler_resource_state(self, env: data.Environment) -> SchedulerStatusReport:
-        assert env.id == self.environment, f"{env.id=}, {self.environment=}"
+        assert env.id == self.environment
         report = await self.scheduler.get_resource_state()
         return report
 
