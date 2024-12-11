@@ -47,7 +47,7 @@ async def resource_deployer(client, environment, null_agent):
             action_id: uuid.UUID,
             attribute_hash: str,
             change: const.Change = const.Change.created,
-            status: const.ResourceState = const.ResourceState.deployed,
+            status: const.HandlerResourceState = const.HandlerResourceState.deployed,
             deployment_result: state.DeploymentResult = state.DeploymentResult.DEPLOYED,
         ) -> None:
             await update_manager.send_deploy_done(
@@ -55,7 +55,7 @@ async def resource_deployer(client, environment, null_agent):
                 result=executor.DeployResult(
                     rvid=rvid,
                     action_id=action_id,
-                    status=status,
+                    resource_state=status,
                     messages=[],
                     changes={},
                     change=change,
@@ -69,7 +69,7 @@ async def resource_deployer(client, environment, null_agent):
             rvid: ResourceVersionIdStr,
             attribute_hash: str,
             change: const.Change = const.Change.created,
-            status: const.ResourceState = const.ResourceState.deployed,
+            status: const.HandlerResourceState = const.HandlerResourceState.deployed,
             deployment_result: state.DeploymentResult = state.DeploymentResult.DEPLOYED,
         ) -> None:
             action_id = await cls.start_deployment(rvid)
@@ -118,7 +118,7 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
 
     # Perform deployment
     await resource_deployer.deploy_resource(rvid=rvid_r2_v1, attribute_hash=attribute_has_r2)
-    await resource_deployer.deploy_resource(rvid=rvid_r3_v1, attribute_hash=attribute_has_r3, status=const.ResourceState.failed)
+    await resource_deployer.deploy_resource(rvid=rvid_r3_v1, attribute_hash=attribute_has_r3, status=const.HandlerResourceState.failed)
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v1)
 
     # Verify that events exist
@@ -237,7 +237,7 @@ async def test_events_api_endpoints_increment(server, client, environment, clien
     # Perform deployment
     await resource_deployer.deploy_resource(rvid=rvid_r2_v1, attribute_hash=rvid_r2_v1_attribute_hash)
     await resource_deployer.deploy_resource(
-        rvid=rvid_r3_v1, attribute_hash=rvid_r3_v1_attribute_hash, status=const.ResourceState.failed
+        rvid=rvid_r3_v1, attribute_hash=rvid_r3_v1_attribute_hash, status=const.HandlerResourceState.failed
     )
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v1)
 
@@ -374,7 +374,7 @@ async def test_events_api_endpoints_events_across_versions(
     await resource_deployer.deploy_resource(
         rvid=rvid_r3_v3,
         attribute_hash=util.make_attribute_hash(resource_id=rid_v3_v3, attributes=resources[1]),
-        status=const.ResourceState.failed,
+        status=const.HandlerResourceState.failed,
     )
     action_id = await resource_deployer.start_deployment(rvid=rvid_r1_v3)
 

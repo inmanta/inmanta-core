@@ -21,7 +21,7 @@ import pickle
 import uuid
 
 from inmanta.agent.executor import DeployResult, DryrunResult
-from inmanta.const import Change, ResourceState
+from inmanta.const import Change, HandlerResourceState
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import state
@@ -54,7 +54,7 @@ def test_risky_objects():
     deploy = DeployResult(
         "std::Test[a1,k=v],v=3",
         uuid.uuid4(),
-        ResourceState.deployed,
+        HandlerResourceState.deployed,
         [LogLine(msg="test", args=[], level="INFO", kwargs={"A": EvilString("X")})],
         {"a": AttributeStateChange(current="a", desired=EvilString("B"))},
         Change.updated,

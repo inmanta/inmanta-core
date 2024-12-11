@@ -34,7 +34,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 import inmanta.util
 import util.performance
 import utils
-from inmanta import data, util
+from inmanta import const, data, util
 from inmanta.agent.executor import DeployResult
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource, ResourceIdStr, ResourceVersionIdStr
@@ -794,17 +794,17 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 return
             else:
                 if "sub=2]" in rid:
-                    status = ResourceState.failed
+                    status = const.HandlerResourceState.failed
                 elif "sub=3]" in rid:
-                    status = ResourceState.skipped
+                    status = const.HandlerResourceState.skipped
                 else:
-                    status = ResourceState.deployed
+                    status = const.HandlerResourceState.deployed
                 await to_db_update_manager.send_deploy_done(
                     attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resource),
                     result=DeployResult(
                         rvid=rvid,
                         action_id=actionid,
-                        status=status,
+                        resource_state=status,
                         messages=[],
                         changes={},
                         change=None,

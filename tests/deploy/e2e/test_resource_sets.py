@@ -1280,7 +1280,7 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
         result=executor.DeployResult(
             rvid=rvid3,
             action_id=action_id,
-            status=const.ResourceState.deployed,
+            resource_state=const.HandlerResourceState.deployed,
             messages=[],
             changes={},
             change=const.Change.nochange,

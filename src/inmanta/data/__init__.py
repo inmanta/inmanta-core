@@ -4800,31 +4800,35 @@ class Resource(BaseDocument):
     async def reset_resource_state(
         cls,
         environment: uuid.UUID,
-        version: int,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
-        Update resources on the latest version of the model stuck in "deploying" state. The status will be reset to the latest
-        non deploying status.
+        Update resources on the latest released version of the model stuck in "deploying" state.
+        The status will be reset to the latest non deploying status.
 
         :param environment: The environment impacted by this
-        :param version: The version of the model impacted by this
         :param connection: The connection to use
         """
+
         query = f"""
-            UPDATE resource AS updated_r
-            SET status=inconsistent_r.last_non_deploying_status::TEXT::resourcestate
-            FROM (
-                SELECT r.resource_id, r.status, r.model, ps.last_non_deploying_status
-                FROM {Resource.table_name()} r
-                INNER JOIN {ResourcePersistentState.table_name()} ps ON r.resource_id = ps.resource_id
-                AND r.environment = ps.environment
-                WHERE r.environment=$1 AND r.model = $2 AND r.status = 'deploying'
-            ) AS inconsistent_r
-            WHERE inconsistent_r.resource_id = updated_r.resource_id AND inconsistent_r.model = updated_r.model
+            UPDATE {Resource.table_name()} r
+            SET status=ps.last_non_deploying_status::TEXT::resourcestate
+            FROM {ResourcePersistentState.table_name()} ps
+            WHERE r.resource_id=ps.resource_id
+                AND r.environment=ps.environment
+                AND r.status='deploying'
+                AND r.environment=$1
+                AND r.model=(
+                    SELECT version
+                    FROM {ConfigurationModel.table_name()}
+                    WHERE environment=$1
+                        AND released=true
+                    ORDER BY version DESC
+                    LIMIT 1
+                )
         """
-        values = [cls._get_value(environment), cls._get_value(version)]
+        values = [cls._get_value(environment)]
         async with cls.get_connection(connection) as connection:
             await connection.execute(query, *values)
 
@@ -6013,14 +6017,14 @@ class ConfigurationModel(BaseDocument):
 
         outset: set[ResourceIdStr] = {res["resource_id"] for res in increment}
         original_provides: dict[str, list[ResourceIdStr]] = defaultdict(list)
-        send_events: list[ResourceIdStr] = []
+        send_events: set[ResourceIdStr] = set()
 
         # build lookup tables
         for res in resources:
             for req in res["requires"]:
                 original_provides[req].append(res["resource_id"])
             if res[const.RESOURCE_ATTRIBUTE_SEND_EVENTS]:
-                send_events.append(res["resource_id"])
+                send_events.add(res["resource_id"])
 
         # recursively include stuff potentially receiving events from nodes in the increment
         increment_work: list[ResourceIdStr] = list(outset)

@@ -597,7 +597,7 @@ async def test_move_to_available_state(server, environment, client, clienthelper
             result=executor.DeployResult(
                 rvid=rvid,
                 action_id=action_id,
-                status=const.ResourceState.deployed,
+                resource_state=const.HandlerResourceState.deployed,
                 messages=[],
                 changes={},
                 change=None,

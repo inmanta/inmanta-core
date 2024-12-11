@@ -116,13 +116,14 @@ class Deploy(Task):
             # First do scheduler book keeping to establish what to do
             version: int
             resource_details: "state.ResourceDetails"
-            intent = await task_manager.get_resource_intent_for_deploy(self.resource)
+            intent = await task_manager.deploy_start(self.resource)
             if intent is None:
                 # Stale resource, can simply be dropped.
                 return
+
             # From this point on, we HAVE to call report_resource_state to make the scheduler propagate state
 
-            # The main difficulty off this code is exception handling
+            # The main difficulty of this code is exception handling
             # We collect state here to report back in the finally block
 
             # Full status of the deploy,
@@ -188,6 +189,7 @@ class Deploy(Task):
                     deploy_result = await my_executor.execute(
                         action_id, gid, executor_resource_details, reason, intent.dependencies
                     )
+
                 except Exception as e:
                     # This should not happen
 
@@ -214,6 +216,7 @@ class Deploy(Task):
                             resource_details.resource_id,
                             exc_info=True,
                         )
+                    # TODO: FIX MERGE CONFLICT
 
 
 @dataclass(frozen=True, kw_only=True)

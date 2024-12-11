@@ -620,7 +620,7 @@ src/inmanta/data/__init__.py:0: error: Set comprehension has incompatible type S
 src/inmanta/data/__init__.py:0: error: Set comprehension has incompatible type Set[object]; expected Set[ResourceIdStr]  [misc]
 src/inmanta/data/__init__.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "append" of "list" has incompatible type "object"; expected "ResourceIdStr"  [arg-type]
-src/inmanta/data/__init__.py:0: error: Argument 1 to "append" of "list" has incompatible type "object"; expected "ResourceIdStr"  [arg-type]
+src/inmanta/data/__init__.py:0: error: Argument 1 to "add" of "set" has incompatible type "object"; expected "ResourceIdStr"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "int")  [assignment]
 src/inmanta/data/__init__.py:0: error: "DocumentMeta" has no attribute "set_connection_pool"  [attr-defined]
 src/inmanta/data/__init__.py:0: error: "DocumentMeta" has no attribute "close_connection_pool"  [attr-defined]

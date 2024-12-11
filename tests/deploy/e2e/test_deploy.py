@@ -20,7 +20,7 @@ import asyncio
 import logging
 import pathlib
 import uuid
-from typing import Mapping, Optional
+from typing import Callable, Mapping, Optional
 from uuid import UUID
 
 import pytest
@@ -28,7 +28,7 @@ import pytest
 from inmanta import config, const, data, execute
 from inmanta.config import Config
 from inmanta.data import SERVER_COMPILE, ResourceIdStr
-from inmanta.deploy.state import BlockedStatus, ComplianceStatus, DeploymentResult
+from inmanta.deploy.state import BlockedStatus, ComplianceStatus, DeploymentResult, ResourceState
 from inmanta.server import SLICE_PARAM, SLICE_SERVER
 from inmanta.util import get_compiler_version
 from utils import (
@@ -777,7 +777,7 @@ dep_states = [
 ]
 
 
-def make_matrix(matrix, valueparser):
+def make_matrix(matrix: str, valueparser: Callable[[str], bool]) -> list[list[bool]]:
     """
     Expect matrix of the form
 
@@ -1242,3 +1242,87 @@ async def test_lsm_states(resource_container, server, client, clienthelper, envi
     # One failure, one skip, in the depdencies
     # response is failure
     assert state_map == {rid1: "failed", rid2: "skipped", lsmrid: "failed"}
+
+
+async def test_skipped_for_dependency(resource_container, server, client, clienthelper, environment, agent):
+    """
+    Asserts the state of a resource, on the scheduler, whose dependency has been skipped
+    """
+    version = await clienthelper.get_version()
+
+    resource_container.Provider.set_skip("agent1", "key", 2)
+
+    rid1 = "test::Resource[agent1,key=key]"
+    rid2 = "test::Resource[agent1,key=key2]"
+
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+        },
+        {
+            "key": "key2",
+            "value": "value",
+            "id": f"{rid2},v={version}",
+            "requires": [rid1],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+        },
+    ]
+    await clienthelper.set_auto_deploy(True)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed()
+    scheduler = agent.scheduler
+    assert scheduler._state.resource_state[rid2] == ResourceState(
+        status=ComplianceStatus.NON_COMPLIANT,
+        deployment_result=DeploymentResult.SKIPPED,
+        blocked=BlockedStatus.TRANSIENT,
+    )
+    assert scheduler._state.resource_state[rid1] == ResourceState(
+        status=ComplianceStatus.NON_COMPLIANT,
+        deployment_result=DeploymentResult.SKIPPED,
+        blocked=BlockedStatus.NO,
+    )
+
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+        },
+        {
+            "key": "key2",
+            "value": "value",
+            "id": f"{rid2},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": True,
+            "receive_events": False,
+        },
+    ]
+    await clienthelper.set_auto_deploy(True)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+    await clienthelper.wait_for_deployed()
+
+    assert scheduler._state.resource_state[rid1] == ResourceState(
+        status=ComplianceStatus.NON_COMPLIANT,
+        deployment_result=DeploymentResult.SKIPPED,
+        blocked=BlockedStatus.NO,
+    )
+
+    assert scheduler._state.resource_state[rid2] == ResourceState(
+        status=ComplianceStatus.COMPLIANT,
+        deployment_result=DeploymentResult.DEPLOYED,
+        blocked=BlockedStatus.NO,
+    )

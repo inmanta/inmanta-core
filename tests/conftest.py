@@ -827,28 +827,27 @@ async def agent_factory(server) -> AsyncIterator[Callable[[uuid.UUID], Awaitable
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agents: list[Agent] = []
 
-    async def create(environment: uuid.UUID) -> Agent:
-        # Mock scheduler state-dir: outside of tests this happens
-        # when the scheduler config is loaded, before starting the scheduler
-        server_state_dir = config.Config.get("config", "state-dir")
-        scheduler_state_dir = pathlib.Path(server_state_dir) / "server" / str(environment)
-        scheduler_state_dir.mkdir(exist_ok=True)
-        config.Config.set("config", "state-dir", str(scheduler_state_dir))
-        a = Agent(environment)
-        agents.append(a)
-        # Restore state-dir
-        config.Config.set("config", "state-dir", str(server_state_dir))
+    # Mock scheduler state-dir: outside of tests this happens
+    # when the scheduler config is loaded, before starting the scheduler
+    server_state_dir = config.Config.get("config", "state-dir")
+    scheduler_state_dir = pathlib.Path(server_state_dir) / "server" / str(environment)
+    scheduler_state_dir.mkdir(exist_ok=True)
+    config.Config.set("config", "state-dir", str(scheduler_state_dir))
+    a = Agent(environment)
+    agents.append(a)
+    # Restore state-dir
+    config.Config.set("config", "state-dir", str(server_state_dir))
 
-        executor = InProcessExecutorManager(
-            environment,
-            a._client,
-            asyncio.get_event_loop(),
-            logger,
-            a.thread_pool,
-            str(pathlib.Path(a._storage["executors"]) / "code"),
-            str(pathlib.Path(a._storage["executors"]) / "venvs"),
-            False,
-        )
+    executor = InProcessExecutorManager(
+        environment,
+        a._client,
+        asyncio.get_running_loop(),
+        logger,
+        a.thread_pool,
+        str(pathlib.Path(a._storage["executors"]) / "code"),
+        str(pathlib.Path(a._storage["executors"]) / "venvs"),
+        False,
+    )
 
         executor = WriteBarierExecutorManager(executor)
 

@@ -103,7 +103,10 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
 
 @pytest.mark.parametrize(
     "agent_deploy_interval",
-    ["2", "*/2 * * * * * *"],
+    [
+        "2",
+        "*/2 * * * * * *",
+    ],
 )
 async def test_spontaneous_deploy(
     server,
@@ -125,12 +128,11 @@ async def test_spontaneous_deploy(
         env_id = UUID(environment)
 
         Config.set("config", "agent-deploy-interval", agent_deploy_interval)
-        Config.set("config", "agent-deploy-splay-time", "2")
+        # Disable repairs
         Config.set("config", "agent-repair-interval", "0")
 
-        # This is just so we can reuse the agent from the fixtures with the new config options
-        agent._set_deploy_and_repair_intervals()
-        agent._enable_time_triggers()
+        timer_manager = agent.scheduler._timer_manager
+        timer_manager.initialize()
 
         resource_container.Provider.set_fail("agent1", "key1", 1)
 
@@ -152,7 +154,10 @@ async def test_spontaneous_deploy(
         # do a deploy
         start = time.time()
 
-        result = await client.release_version(env_id, version, False)
+        result = await client.release_version(
+            tid=env_id,
+            id=version,
+        )
         assert result.code == 200
 
         assert result.result["model"]["released"]
@@ -191,14 +196,13 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     """
     resource_container.Provider.reset()
     env_id = environment
-
     Config.set("config", "agent-repair-interval", agent_repair_interval)
-    Config.set("config", "agent-repair-splay-time", "2")
+    # Disable deploys
     Config.set("config", "agent-deploy-interval", "0")
 
-    # This is just so we can reuse the agent from the fixtures with the new config options
-    agent._set_deploy_and_repair_intervals()
-    agent._enable_time_triggers()
+    timer_manager = agent.scheduler._timer_manager
+    timer_manager.initialize()
+
     version = await clienthelper.get_version()
 
     resources = [
@@ -215,7 +219,9 @@ async def test_spontaneous_repair(server, client, agent, resource_container, env
     await clienthelper.put_version_simple(resources, version)
 
     # do a deploy
-    result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
+    result = await client.release_version(
+        tid=env_id, id=version, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+    )
     assert result.code == 200
     assert result.result["model"]["released"]
 

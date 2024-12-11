@@ -40,7 +40,7 @@ from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
-from inmanta.const import Change, ResourceState
+from inmanta.const import Change
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.deploy import state
@@ -488,7 +488,7 @@ class DeployResult:
     rvid: ResourceVersionIdStr
     resource_id: ResourceIdStr = dataclasses.field(init=False)
     action_id: uuid.UUID
-    status: ResourceState
+    resource_state: const.HandlerResourceState
     messages: list[LogLine]
     changes: dict[str, AttributeStateChange]
     change: Optional[Change]
@@ -499,11 +499,21 @@ class DeployResult:
             raise ValueError(f"Resource state {self.status} is not a valid state for a deployment result.")
         self.resource_id = Id.parse_id(self.rvid).resource_str()
 
+    @property
+    def status(self) -> const.ResourceState:
+        """
+        Translates the new HandlerResourceState to the const.ResourceState that some of the code still uses
+        (mainly parts of the code that communicate with the server)
+        """
+        if self.resource_state is const.HandlerResourceState.skipped_for_dependency:
+            return const.ResourceState.skipped
+        return const.ResourceState(self.resource_state)
+
     @classmethod
     def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext) -> "DeployResult":
         if ctx.status is None:
             ctx.warning("Deploy status field is None, failing!")
-            ctx.set_status(ResourceState.failed)
+            ctx.set_resource_state(const.HandlerResourceState.failed)
         match ctx.status:
             case const.ResourceState.deployed:
                 deployment_result = state.DeploymentResult.DEPLOYED
@@ -514,7 +524,7 @@ class DeployResult:
         return DeployResult(
             rvid=rvid,
             action_id=ctx.action_id,
-            status=ctx.status or ResourceState.failed,
+            resource_state=ctx.resource_state or const.HandlerResourceState.failed,
             messages=ctx.logs,
             changes=ctx.changes,
             change=ctx.change,
@@ -526,7 +536,7 @@ class DeployResult:
         return DeployResult(
             rvid=rvid,
             action_id=action_id,
-            status=ResourceState.unavailable,
+            resource_state=const.HandlerResourceState.unavailable,
             messages=[message],
             changes={},
             change=Change.nochange,

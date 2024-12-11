@@ -107,6 +107,8 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         """
         :param new_agent_notify: method to notify consumer about a new agent, called with agent name as argument.
         """
+        self._new_agent_notify: Callable[[str], None] = new_agent_notify
+
         self._agent_queues: dict[str, asyncio.PriorityQueue[TaskQueueItem]] = {}
         # can not drop tasks from queue without breaking the heap invariant, or potentially breaking asyncio.Queue invariants
         # => take approach suggested in heapq docs: simply mark as deleted.
@@ -116,7 +118,6 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         # monotonically rising value for item insert order
         # use simple counter rather than time.monotonic_ns() for performance reasons
         self._entry_count: int = 0
-        self._new_agent_notify: Callable[[str], None] = new_agent_notify
         self._in_progress: dict[tasks.Task, TaskPriority] = {}
 
     @property
@@ -127,6 +128,7 @@ class AgentQueues(Mapping[tasks.Task, PrioritizedTask[tasks.Task]]):
         self._agent_queues.clear()
         self._tasks_by_resource.clear()
         self._entry_count = 0
+        self._in_progress.clear()
 
     def _get_queue(self, agent_name: str) -> asyncio.PriorityQueue[TaskQueueItem]:
         """
@@ -282,7 +284,7 @@ class ScheduledWork:
         scheduled work, they will be processed in requires order. Only direct requires are considered. It is the responsibility
         of the scheduler to include in-between resources as scheduled work if/when transitive requires ordering is desired.
 
-    Expects to be informed by the scheduler of deploy requests and/or state changes through add() and
+    Expects to be informed by the scheduler of deploy requests and/or state changes through deploy_with_context() and
     delete_resource().
 
     Expects to be informed by scheduler of finished tasks through finished_deploy().
@@ -493,7 +495,7 @@ class ScheduledWork:
     def delete_resource(self, resource: ResourceIdStr) -> None:
         """
         Drop tasks for a given resource when it was deleted from the model or
-        when we know it can't progress e.g. it is known to be blocked
+        when we know it can't progress e.g. it is undefined and thus known to be blocked
         on another resource.
         Does not affect dry-run tasks because they do not act on the latest desired state.
         """
