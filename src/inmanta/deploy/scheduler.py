@@ -101,6 +101,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
     @abstractmethod
     async def deploy_start(
         self,
+        action_id: uuid.UUID,
         resource: ResourceIdStr,
     ) -> Optional[ResourceIntent]:
         """
@@ -819,15 +820,21 @@ class ResourceScheduler(TaskManager):
                 return None
             return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=None)
 
-    async def deploy_start(self, resource: ResourceIdStr) -> Optional[ResourceIntent]:
+    async def deploy_start(self, action_id: uuid.UUID, resource: ResourceIdStr) -> Optional[ResourceIntent]:
         async with self._scheduler_lock:
             # fetch resource details under lock
             resource_details = self._get_resource_intent(resource)
             if resource_details is None or self._state.resource_state[resource].blocked is BlockedStatus.YES:
+                # We are trying to deploy a stale resource.
                 return None
             dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
             self._deploying_latest.add(resource)
-            return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=dependencies)
+            resource_intent = ResourceIntent(
+                model_version=self._state.version, details=resource_details, dependencies=dependencies
+            )
+            # Update the state in the database.
+            await self.send_in_progress(action_id, resource_details.id.resource_version_str())
+            return resource_intent
 
     async def deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
         try:
