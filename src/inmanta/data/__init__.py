@@ -47,6 +47,7 @@ from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
+import inmanta.protocol  # prevent import loop
 import inmanta.types
 from crontab import CronTab
 from inmanta import const, resources, util

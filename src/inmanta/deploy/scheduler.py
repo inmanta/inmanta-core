@@ -29,6 +29,7 @@ from uuid import UUID
 
 import asyncpg
 
+import inmanta.protocol  # noqa: F401 prevent import loop
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager

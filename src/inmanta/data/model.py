@@ -31,6 +31,7 @@ from pydantic import ConfigDict, Field, computed_field, field_validator, model_v
 
 import inmanta
 import inmanta.ast.export as ast_export
+import inmanta.protocol
 import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
