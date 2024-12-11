@@ -900,13 +900,13 @@ LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
 
 class Discrepancy(BaseModel):
     """
-    Records a discrepancy for a resource between its status in the database
-    and its status in the scheduler state.
+    Records a discrepancy between the state as persisted in the database and
+    the in-memory state in the scheduler.
 
-    :param rid: Resource Id for this resource.
+    :param rid: If set, this discrepancy is specific to this resource.
     :param field: If set, specifies on which field this discrepancy was detected.
-        If left unset, the discrepancy was detected on the resource level i.e. it
-        is missing from either the db or the scheduler.
+        If left unset, and a rid is specified, the discrepancy was detected on the
+        resource level i.e. it is missing from either the db or the scheduler.
     :param expected: User-facing message denoting the expected state (i.e. as persisted
         in the DB) for this resource as a whole (or for the given field, if specified).
     :param actual: User-facing message denoting the actual state (i.e. in-memory state
@@ -914,7 +914,7 @@ class Discrepancy(BaseModel):
 
     """
 
-    rid: ResourceIdStr
+    rid: ResourceIdStr | None
     field: str | None
     expected: str
     actual: str
@@ -933,7 +933,7 @@ class SchedulerStatusReport(BaseModel):
     # Can't type properly because of current module structure
     scheduler_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceState
     db_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceDetails
-    discrepancies: Mapping[ResourceIdStr, list[Discrepancy]]
+    discrepancies: Mapping[ResourceIdStr | None, list[Discrepancy]]
 
 
 class DataBaseReport(BaseModel):
