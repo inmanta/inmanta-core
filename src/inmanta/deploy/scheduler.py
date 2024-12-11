@@ -512,16 +512,14 @@ class ResourceScheduler(TaskManager):
                 return SchedulerStatusReport(
                     scheduler_state={},
                     db_state={},
-                    discrepancies={
-                        None: [
-                            Discrepancy(
-                                rid=None,
-                                field="model_version",
-                                expected=latest_version,
-                                actual=self._state.version,
-                            )
-                        ]
-                    },
+                    discrepancies=[
+                        Discrepancy(
+                            rid=None,
+                            field="model_version",
+                            expected=str(latest_version),
+                            actual=str(self._state.version),
+                        )
+                    ],
                 )
 
             discrepancy_map = await _build_discrepancy_map(resources_in_db)
