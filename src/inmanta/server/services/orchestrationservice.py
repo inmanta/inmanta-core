@@ -33,15 +33,7 @@ from inmanta import const, data, tracing
 from inmanta.const import ResourceState
 from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode
 from inmanta.data.dataview import DesiredStateVersionView
-from inmanta.data.model import (
-    DesiredStateVersion,
-    PipConfig,
-    PromoteTriggerMethod,
-    ResourceDiff,
-    ResourceIdStr,
-    ResourceMinimal,
-    ResourceVersionIdStr,
-)
+from inmanta.data.model import DesiredStateVersion, PipConfig, PromoteTriggerMethod, ResourceDiff, ResourceMinimal
 from inmanta.db.util import ConnectionInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
@@ -60,7 +52,7 @@ from inmanta.server import config as opt
 from inmanta.server import diff, protocol
 from inmanta.server.services import resourceservice
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ReturnTupple
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
 
 LOGGER = logging.getLogger(__name__)
 PLOGGER = logging.getLogger("performance")

@@ -47,10 +47,7 @@ from inmanta.data.model import (
     Resource,
     ResourceAction,
     ResourceHistory,
-    ResourceIdStr,
     ResourceLog,
-    ResourceType,
-    ResourceVersionIdStr,
     VersionedResource,
     VersionedResourceDetails,
 )
@@ -65,7 +62,7 @@ from inmanta.server import config as opt
 from inmanta.server import extensions, protocol
 from inmanta.server.services.environmentlistener import EnvironmentAction, EnvironmentListener
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, JsonType, PrimitiveTypes
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
 
 resource_discovery = extensions.BoolFeature(

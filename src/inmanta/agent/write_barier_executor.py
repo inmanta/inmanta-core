@@ -25,7 +25,7 @@ from copy import deepcopy
 from inmanta import const
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, FailedResources, ResourceDetails, ResourceInstallSpec
-from inmanta.data.model import ResourceIdStr
+from inmanta.types import ResourceIdStr
 
 
 class WriteBarierExecutor(executor.Executor):

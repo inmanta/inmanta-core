@@ -24,8 +24,8 @@ from typing import TYPE_CHECKING
 
 from inmanta import util
 from inmanta.agent import config as agent_config
-from inmanta.data.model import ResourceIdStr
 from inmanta.deploy.work import TaskPriority
+from inmanta.types import ResourceIdStr
 
 if TYPE_CHECKING:
     from inmanta.deploy.scheduler import ResourceScheduler

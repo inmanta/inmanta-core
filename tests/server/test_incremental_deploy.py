@@ -27,15 +27,17 @@ from uuid import UUID, uuid4
 
 import pytest
 
+import inmanta.types
 from inmanta import const, data
 from inmanta.agent.executor import DeployResult
 from inmanta.const import Change, ResourceAction, ResourceState
-from inmanta.data import ResourceVersionIdStr, model
+from inmanta.data import model
 from inmanta.deploy import persistence
 from inmanta.resources import Id
 from inmanta.server import SLICE_ORCHESTRATION, SLICE_RESOURCE
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
+from inmanta.types import ResourceVersionIdStr
 from inmanta.util import get_compiler_version
 from utils import assert_no_warning
 
@@ -419,7 +421,7 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
     result = await client.release_version(environment, version, False)
     assert result.code == 200
 
-    async def deploy(rvid: model.ResourceVersionIdStr, change: Change = Change.nochange):
+    async def deploy(rvid: inmanta.types.ResourceVersionIdStr, change: Change = Change.nochange):
         update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
         action_id = uuid.uuid4()
         await update_manager.send_in_progress(action_id, rvid)

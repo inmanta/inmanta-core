@@ -41,7 +41,7 @@ from inmanta.agent import config as agent_cfg
 from inmanta.config import Config, config_map_to_str
 from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
 from inmanta.data import APILIMIT, Environment, InvalidSort, model
-from inmanta.data.model import DataBaseReport, ResourceIdStr
+from inmanta.data.model import DataBaseReport
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
@@ -59,7 +59,7 @@ from inmanta.server import protocol
 from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, SessionManager
 from inmanta.server.server import Server
 from inmanta.server.services import environmentservice
-from inmanta.types import Apireturn, ArgumentTypes, ReturnTupple
+from inmanta.types import Apireturn, ArgumentTypes, ResourceIdStr, ReturnTupple
 
 from ..data.dataview import AgentView
 from . import config as server_config

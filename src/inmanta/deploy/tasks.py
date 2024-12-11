@@ -29,8 +29,9 @@ import pyformance
 from inmanta import const, data, resources
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployResult
-from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType
+from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
+from inmanta.types import ResourceIdStr, ResourceType
 
 LOGGER = logging.getLogger(__name__)
 

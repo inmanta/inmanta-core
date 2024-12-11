@@ -24,7 +24,7 @@ import pytest
 
 from inmanta import data
 from inmanta.const import ResourceState
-from inmanta.data.model import ResourceVersionIdStr
+from inmanta.types import ResourceVersionIdStr
 
 
 @pytest.fixture

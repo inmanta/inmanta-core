@@ -27,8 +27,9 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
 from inmanta.const import ResourceState
-from inmanta.data.model import ResourceVersionIdStr, VersionedResource
+from inmanta.data.model import VersionedResource
 from inmanta.server import config
+from inmanta.types import ResourceVersionIdStr
 
 
 @pytest.fixture

@@ -24,8 +24,8 @@ import pytest
 
 from inmanta import const, data
 from inmanta.agent import executor
-from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.deploy import persistence
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
 
 @pytest.fixture

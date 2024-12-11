@@ -68,9 +68,7 @@ from inmanta.data.model import (
     LatestReleasedResource,
     PagingBoundaries,
     ResourceHistory,
-    ResourceIdStr,
     ResourceLog,
-    ResourceVersionIdStr,
 )
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
@@ -90,7 +88,7 @@ from inmanta.server.validate_filter import (
     InvalidFilter,
     LogLevelFilter,
 )
-from inmanta.types import JsonType, SimpleTypes
+from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr, SimpleTypes
 from inmanta.util import datetime_iso_format
 
 T_ORDER = TypeVar("T_ORDER", bound=DatabaseOrderV2)

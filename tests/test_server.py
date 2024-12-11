@@ -34,13 +34,14 @@ from inmanta import config, const, data, loader, resources, util
 from inmanta.agent import executor, handler
 from inmanta.const import ParameterSource
 from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
-from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
+from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import persistence
 from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.types import ResourceVersionIdStr
 from inmanta.util import get_compiler_version
 from utils import log_contains, log_doesnt_contain, retry_limited
 

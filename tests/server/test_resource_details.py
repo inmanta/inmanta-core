@@ -29,8 +29,8 @@ from dateutil.tz import UTC
 from inmanta import const, data, util
 from inmanta.agent import executor
 from inmanta.const import ResourceState
-from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.deploy import persistence
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
 
 

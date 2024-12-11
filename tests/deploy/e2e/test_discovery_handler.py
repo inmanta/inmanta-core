@@ -24,10 +24,10 @@ import pytest
 
 from inmanta import const, data, util
 from inmanta.agent.handler import DiscoveryHandler, HandlerContext, provider
-from inmanta.data import ResourceIdStr
 from inmanta.data.model import BaseModel
 from inmanta.resources import DiscoveryResource, Id, resource
 from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.types import ResourceIdStr
 from inmanta.util import retry_limited
 from utils import wait_for_n_deployed_resources, wait_until_deployment_finishes
 

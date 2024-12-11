@@ -26,7 +26,7 @@ from inmanta import data
 from inmanta.const import ParameterSource
 from inmanta.data import InvalidSort
 from inmanta.data.dataview import FactsView, ParameterView
-from inmanta.data.model import Fact, Parameter, ResourceIdStr
+from inmanta.data.model import Fact, Parameter
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -36,7 +36,7 @@ from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.server import Server
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, JsonType
+from inmanta.types import Apireturn, JsonType, ResourceIdStr
 
 LOGGER = logging.getLogger(__name__)
 

@@ -32,13 +32,14 @@ from inmanta.ast import CompilerException, Namespace
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.const import ResourceState
-from inmanta.data.model import PipConfig, ResourceVersionIdStr
+from inmanta.data.model import PipConfig
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance
 from inmanta.module import Project
 from inmanta.protocol import Result
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
+from inmanta.types import ResourceVersionIdStr
 from inmanta.util import get_compiler_version, hash_file
 
 LOGGER = logging.getLogger(__name__)

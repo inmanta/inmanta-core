@@ -42,11 +42,11 @@ from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
 from inmanta.const import Change
 from inmanta.data import LogLine
-from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.data.model import AttributeStateChange, PipConfig
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
-from inmanta.types import JsonType
+from inmanta.types import JsonType, ResourceIdStr, ResourceType, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
