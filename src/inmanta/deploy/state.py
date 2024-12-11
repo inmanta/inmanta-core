@@ -206,7 +206,7 @@ class ModelState:
 
     def _unblock_resource(self, resource: ResourceIdStr) -> None:
         """
-        Mark the given resource as transitively blocked, i.e. it's not deployable.
+        Mark the given resource as unblocked
         """
         my_state = self.resource_state[resource]
         my_state.blocked = BlockedStatus.NO
