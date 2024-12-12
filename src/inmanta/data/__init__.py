@@ -5384,7 +5384,6 @@ class Resource(BaseDocument):
     ) -> None:
         for doc in documents:
             doc.make_hash()
-        # TODO performance?
         await super().insert_many(documents, connection=connection)
 
     async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: object) -> None:
