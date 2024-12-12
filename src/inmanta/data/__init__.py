@@ -33,7 +33,7 @@ from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
 from itertools import chain
 from re import Pattern
-from typing import Generic, NewType, Optional, TypeVar, Union, cast, overload
+from typing import Tuple, Generic, NewType, Optional, TypeVar, Union, cast, overload
 from uuid import UUID
 
 import asyncpg
@@ -4747,6 +4747,45 @@ class Resource(BaseDocument):
             """
         out = await cls.select_query(query, [env, model_version, rids], no_obj=True)
         return {ResourceIdStr(r["resource_id"]): ResourceState[r["status"]] for r in out}
+
+    @classmethod
+    async def get_resource_states_latest_version(
+        cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Tuple[Optional[int], abc.Mapping[ResourceIdStr, ResourceState]]:
+        query = """
+            WITH latest_released_version AS (
+                SELECT max(version) AS version
+                FROM configurationmodel
+                WHERE environment=$1 AND released
+            )
+            SELECT (
+                r.model,
+                r.resource_id,
+                CASE
+                    -- The resource_persistent_state.last_non_deploying_status column is only populated for
+                    -- actual deployment operations to prevent locking issues. This case-statement calculates
+                    -- the correct state from the combination of the resource table and the
+                    -- resource_persistent_state table.
+                    WHEN r.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
+                        -- The deploying, undefined and skipped_for_undefined states are not tracked in the
+                        -- resource_persistent_state table.
+                        THEN r.status::text
+                    WHEN rps.last_deployed_attribute_hash != r.attribute_hash
+                        -- The hash changed since the last deploy -> new desired state
+                        THEN r.status::text
+                        -- No override required, use last known state from actual deployment
+                        ELSE rps.last_non_deploying_status::text
+                END
+            ) AS status
+            FROM resource AS r
+                 INNER JOIN resource_persistent_state AS rps ON r.environment=rps.environment AND r.resource_id=rps.resource_id
+                 INNER JOIN configurationmodel AS c ON c.environment=r.environment AND c.version=r.model
+            WHERE r.environment=$1 AND r.model = (SELECT version FROM latest_released_version)
+        """
+        results = await cls.select_query(query, [env], no_obj=True, connection=connection)
+        if not results:
+            return None, {}
+        return (int(results[0]["model"]), {r["resource_id"]: const.ResourceState[r["status"]] for r in results})
 
     @stable_api
     @classmethod
