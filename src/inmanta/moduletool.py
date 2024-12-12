@@ -157,6 +157,59 @@ class ModuleLikeTool:
             project.load()
         return project
 
+    def determine_new_version(
+         self, old_version: Version, version: Optional[Version], major: bool, minor: bool, patch: bool, dev: bool
+    ) -> Optional[Version]:
+        """
+        Only used by the `inmanta module commit` command.
+        """
+        was_dev = old_version.is_prerelease
+        outversion: Version
+
+        if was_dev:
+            if major or minor or patch:
+                LOGGER.warning("when releasing a dev version, options --major, --minor and --patch are ignored")
+
+            # determine new version
+            if version is not None:
+                baseversion = version
+            else:
+                baseversion = Version(old_version.base_version)
+
+            if not dev:
+                outversion = baseversion
+            else:
+                outversion = Version("%s.dev%d" % (baseversion, time.time()))
+        else:
+            opts = [x for x in [major, minor, patch] if x]
+            if version is not None:
+                if len(opts) > 0:
+                    LOGGER.warning("when using the --version option, --major, --minor and --patch are ignored")
+                outversion = version
+            else:
+                if len(opts) == 0:
+                    LOGGER.error("One of the following options is required: --major, --minor or --patch")
+                    return None
+                elif len(opts) > 1:
+                    LOGGER.error("You can use only one of the following options: --major, --minor or --patch")
+                    return None
+
+                # We do not support revision for deprecated methods
+                revision = False
+                change_type: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
+                if change_type:
+                    outversion = Version(str(VersionOperation.bump_version(change_type, old_version, version_tag="")))
+                else:
+                    outversion = Version(str(VersionOperation.set_version_tag(old_version, version_tag="")))
+
+            if dev:
+                outversion = Version("%s.dev%d" % (outversion, time.time()))
+
+        if outversion <= old_version:
+            LOGGER.error(f"new versions ({outversion}) is not larger then old version ({old_version}), aborting")
+            return None
+
+        return outversion
 
 @total_ordering
 @enum.unique
@@ -963,6 +1016,45 @@ version: 0.0.1dev0"""
         Verify dependencies and frozen module versions
         """
         self.get_project(load=True)
+
+    def commit(
+        self,
+        message: str,
+        module: Optional[str] = None,
+        version: Optional[str] = None,
+        dev: bool = False,
+        major: bool = False,
+        minor: bool = False,
+        patch: bool = False,
+        commit_all: bool = False,
+        tag: bool = False,
+    ) -> None:
+        """
+        Commit all current changes.
+        """
+        inmanta.warnings.warn(
+            CommandDeprecationWarning(
+                "The `inmanta module commit` command has been deprecated in favor of `inmanta module release`."
+            )
+        )
+        # find module
+        mod = self.get_module(module)
+        if not isinstance(mod, ModuleV1):
+            raise CLIException(f"{mod.name} is a v2 module and does not support this operation.", exitcode=1)
+        # get version
+        old_version = Version(str(mod.version))
+
+        outversion = self.determine_new_version(old_version, Version(version) if version else None, major, minor, patch, dev)
+
+        if outversion is None:
+            return
+
+        mod.rewrite_version(str(outversion))
+        # commit
+        gitprovider.commit(mod._path, message, commit_all, [mod.get_metadata_file_path()])
+        # tag
+        if not dev or tag:
+            gitprovider.tag(mod._path, str(outversion))
 
     def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: str, module: Optional[str] = None) -> None:
         """
