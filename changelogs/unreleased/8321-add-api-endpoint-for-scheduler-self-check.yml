@@ -1,0 +1,6 @@
+description: Add API endpoint for scheduler self-check
+issue-nr: 8321
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"
