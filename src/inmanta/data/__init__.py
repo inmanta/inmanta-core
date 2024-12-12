@@ -4573,8 +4573,6 @@ class ResourcePersistentState(BaseDocument):
             return state.ComplianceStatus.ORPHAN
         elif self.is_undefined:
             return state.ComplianceStatus.UNDEFINED
-        elif self.blocked_status is state.BlockedStatus.YES:
-            return state.ComplianceStatus.NON_COMPLIANT
         elif (
             self.last_deployed_attribute_hash is None or self.current_intent_attribute_hash != self.last_deployed_attribute_hash
         ):
