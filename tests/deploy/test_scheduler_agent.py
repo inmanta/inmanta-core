@@ -1843,12 +1843,14 @@ async def test_scheduler_priority_rescheduling(agent: TestAgent, environment, ma
     rid4 = ResourceIdStr("test::Resource[agent,name=4]")
     rid5 = ResourceIdStr("test::Resource[agent,name=5]")
     rid6 = ResourceIdStr("test::Resource[agent,name=6]")
+    rid7 = ResourceIdStr("test::Resource[agent,name=7]")
     task1 = tasks.Deploy(resource=rid1)
     task2 = tasks.Deploy(resource=rid2)
     task3 = tasks.Deploy(resource=rid3)
     task4 = tasks.Deploy(resource=rid4)
     task5 = tasks.Deploy(resource=rid5)
     task6 = tasks.Deploy(resource=rid6)
+    task7 = tasks.Deploy(resource=rid7)
 
     # set up the scheduled work
     requires: state.RequiresProvidesMapping = state.RequiresProvidesMapping()
@@ -1860,7 +1862,7 @@ async def test_scheduler_priority_rescheduling(agent: TestAgent, environment, ma
     work.deploy_with_context(
         resources={rid1},
         reason="First deploy",
-        priority=TaskPriority(2),
+        priority=TaskPriority(3),
     )
     work.deploy_with_context(
         resources={rid2},
@@ -1870,7 +1872,7 @@ async def test_scheduler_priority_rescheduling(agent: TestAgent, environment, ma
     work.deploy_with_context(
         resources={rid3},
         reason="Third deploy",
-        priority=TaskPriority(3),
+        priority=TaskPriority(4),
     )
 
     assert [item.task for item in work.agent_queues.sorted("agent")] == [task2, task1, task3]
@@ -1879,16 +1881,18 @@ async def test_scheduler_priority_rescheduling(agent: TestAgent, environment, ma
     work.deploy_with_context(
         resources={rid1, rid2, rid3, rid4, rid5},
         reason="Bulk deploy",
-        priority=TaskPriority(2),
+        priority=TaskPriority(3),
     )
-    # add one more task to the more urgent priority level for some relative ordering asserts later on
-    # -> priority 1: rid2, rid6
-    # -> priority 2: rid1, rid3, rid4, rid5 (latter three in any order)
-    # -> rid6 comes last for any priority tiebreakers out of all resources
+    # add two more tasks to more urgent priority level for some relative ordering asserts later on
     work.deploy_with_context(
         resources={rid6},
         reason="deploy rid6",
         priority=TaskPriority(1),
+    )
+    work.deploy_with_context(
+        resources={rid7},
+        reason="deploy rid7",
+        priority=TaskPriority(2),
     )
 
     def get_sorted_tasks() -> Sequence[tuple[tasks.Task, str]]:
@@ -1897,23 +1901,28 @@ async def test_scheduler_priority_rescheduling(agent: TestAgent, environment, ma
     # may be updated after each assertion
     original_sorted_tasks: Sequence[tuple[tasks.Task, str]] = get_sorted_tasks()
 
-    assert original_sorted_tasks[:3] == [
+    # -> priority 1: rid2, rid6
+    # -> priority 2: rid7
+    # -> priority 3: rid1, rid3, rid4, rid5 (latter three in any order)
+    assert original_sorted_tasks[:4] == [
         # rid2 already had a more urgent priority, it should remain first
         (task2, "Second deploy"),
         # rid6 was added later with a more urgent priority, it should move before the others but after rid2
         (task6, "deploy rid6"),
+        # rid6 was added later with a more urgent priority, it should move before the others but after rid6
+        (task7, "deploy rid7"),
         # rid1 was added first among those with this priority + it keeps its original reason
         (task1, "First deploy"),
     ]
     # other priorities are equal and non-deterministic
-    assert set(original_sorted_tasks[3:]) == {
+    assert set(original_sorted_tasks[4:]) == {
         (task3, "Bulk deploy"),
         (task4, "Bulk deploy"),
         (task5, "Bulk deploy"),
     }
 
     # add a requires edge, lifting a resource out of the agent queues because it becomes blocked
-    rid_first_requires: ResourceIdStr = original_sorted_tasks[3][0].resource
+    rid_first_requires: ResourceIdStr = original_sorted_tasks[4][0].resource
     requires[rid_first_requires] = {rid1}
     work.deploy_with_context(
         {rid_first_requires},
@@ -1922,8 +1931,8 @@ async def test_scheduler_priority_rescheduling(agent: TestAgent, environment, ma
         priority=TaskPriority(5),
         added_requires={rid_first_requires: {rid1}},
     )
-    # expect same order as before, minus the third element
-    assert get_sorted_tasks() == original_sorted_tasks[:3] + original_sorted_tasks[4:]
+    # expect same order as before, minus the fourth element
+    assert get_sorted_tasks() == original_sorted_tasks[:4] + original_sorted_tasks[5:]
     # drop the requires edge, unblocking the task again
     requires[rid_first_requires] = set()
     work.deploy_with_context(
@@ -1942,18 +1951,18 @@ async def test_scheduler_priority_rescheduling(agent: TestAgent, environment, ma
         {rid_first_requires},
         reason="add second requires",
         # equal priority
-        priority=TaskPriority(2),
+        priority=TaskPriority(3),
         added_requires={rid_first_requires: {rid1}},
     )
     # expect same order as before, minus the third element
-    assert get_sorted_tasks() == original_sorted_tasks[:3] + original_sorted_tasks[4:]
+    assert get_sorted_tasks() == original_sorted_tasks[:4] + original_sorted_tasks[5:]
     # drop the requires edge, unblocking the task again
     requires[rid_first_requires] = set()
     work.deploy_with_context(
         {rid_first_requires},
         reason="drop second requires",
         # equal priority
-        priority=TaskPriority(2),
+        priority=TaskPriority(3),
         dropped_requires={rid_first_requires: {rid1}},
     )
     # expect same order as original: even though new priority is lower, the old priority, relative order and reason are kept
@@ -1969,40 +1978,41 @@ async def test_scheduler_priority_rescheduling(agent: TestAgent, environment, ma
         added_requires={rid_first_requires: {rid1}},
     )
     # expect same order as before, minus the third element
-    assert get_sorted_tasks() == original_sorted_tasks[:3] + original_sorted_tasks[4:]
+    assert get_sorted_tasks() == original_sorted_tasks[:4] + original_sorted_tasks[5:]
     # drop the requires edge, unblocking the task again
     requires[rid_first_requires] = set()
     work.deploy_with_context(
         {rid_first_requires},
         reason="drop third requires",
         # equal priority as original
-        priority=TaskPriority(2),
+        priority=TaskPriority(3),
         dropped_requires={rid_first_requires: {rid1}},
     )
     # task is moved to new, more urgent priority, and receives the new message
     assert get_sorted_tasks() == [
-        *original_sorted_tasks[:2],
+        *original_sorted_tasks[:2],  # rid2, rid6
         # message from adding the requires
         (tasks.Deploy(resource=rid_first_requires), "add third requires"),
-        original_sorted_tasks[2],
-        *original_sorted_tasks[4:],
+        original_sorted_tasks[2],  # rid7
+        original_sorted_tasks[3],  # rid1
+        *original_sorted_tasks[5:],
     ]
 
     # update original_sorted_tasks to reflect new order
     original_sorted_tasks = get_sorted_tasks()
 
     # same now but request the more urgent priority for the request that unblocks it
-    rid_fourth_requires: ResourceIdStr = original_sorted_tasks[4][0].resource
+    rid_fourth_requires: ResourceIdStr = original_sorted_tasks[5][0].resource
     requires[rid_fourth_requires] = {rid1}
     work.deploy_with_context(
         {rid_fourth_requires},
         reason="add fourth requires",
         # equal priority as original
-        priority=TaskPriority(2),
+        priority=TaskPriority(3),
         added_requires={rid_fourth_requires: {rid1}},
     )
     # expect same order as before, minus the fourth element
-    assert get_sorted_tasks() == original_sorted_tasks[:4] + original_sorted_tasks[5:]
+    assert get_sorted_tasks() == original_sorted_tasks[:5] + original_sorted_tasks[6:]
     # drop the requires edge, unblocking the task again
     requires[rid_fourth_requires] = set()
     work.deploy_with_context(
@@ -2016,8 +2026,8 @@ async def test_scheduler_priority_rescheduling(agent: TestAgent, environment, ma
     assert get_sorted_tasks() == [
         # message from dropping the requires
         (tasks.Deploy(resource=rid_fourth_requires), "drop fourth requires"),
-        *original_sorted_tasks[:4],
-        *original_sorted_tasks[5:],
+        *original_sorted_tasks[:5],
+        *original_sorted_tasks[6:],
     ]
 
     # update original_sorted_tasks to reflect new order
@@ -2111,6 +2121,8 @@ async def test_scheduler_priority_rescheduling(agent: TestAgent, environment, ma
     assert work.agent_queues.in_progress == {task_fourth_requires: TaskPriority(-1)}
     # queued priority should have been shifted as well
     assert work.agent_queues.queued()[task_fourth_requires].priority == TaskPriority(-1)
+
+    # TODO: bump priority on queued task without adding requires
 
 
 async def test_repair_does_not_trigger_for_blocked_resources(agent: TestAgent, make_resource_minimal):

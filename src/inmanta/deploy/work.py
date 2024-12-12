@@ -50,11 +50,19 @@ class PrioritizedTask[T: tasks.Task](typing.Protocol):
     for internal use.
 
     Intended mostly for internal use within this module. External modules typically only care for MotivatedTask.
+
+    :param task: The task
+    :param priority: The priority assigned to the task
+    :param requested_at: Integer representing when this task was requested with this priority. Serves as priority tiebreaker.
+        Index is preserved for the lifetime of the task at the given priority, even if it is rescheduled due to changing
+        dependencies. When the priority changes (is bumped), it is considered a "new request" (only from then on we desire to
+        execute the task at that priority, it should not jump ahead of equal-priority tasks). This integer should be a unique,
+        strictly monotonically rising (with time) value among all scheduled tasks.
     """
 
     task: T
     priority: TaskPriority
-    priority_tiebreaker: Optional[int]
+    requested_at: int
 
 
 class MotivatedTask[T: tasks.Task](typing.Protocol):
@@ -91,7 +99,7 @@ class TaskQueueItem(TaskSpec[tasks.Task]):
 
     task: tasks.Task
     priority: TaskPriority
-    priority_tiebreaker: int
+    requested_at: int
     reason: Optional[str]
 
     # Mutable state
@@ -100,18 +108,18 @@ class TaskQueueItem(TaskSpec[tasks.Task]):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):
             return NotImplemented
-        return (self.priority, self.priority_tiebreaker, self.deleted) == (
+        return (self.priority, self.requested_at, self.deleted) == (
             other.priority,
-            other.priority_tiebreaker,
+            other.requested_at,
             other.deleted,
         )
 
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, TaskQueueItem):
             return NotImplemented
-        return (self.priority, self.priority_tiebreaker, not self.deleted) < (
+        return (self.priority, self.requested_at, not self.deleted) < (
             other.priority,
-            other.priority_tiebreaker,
+            other.requested_at,
             not other.deleted,
         )
 
@@ -222,6 +230,14 @@ class AgentQueues:
         except KeyError:
             return None
 
+    def reserve_requested_at(self) -> int:
+        """
+        Reserve a unique, strictly monotonically rising value for a new task's requested_at value.
+        """
+        result: int = self._entry_count
+        self._entry_count += 1
+        return result
+
     def _queue_item_for_task(self, task: tasks.Task) -> Optional[TaskQueueItem]:
         return self._tasks_by_resource.get(task.resource, {}).get(task, None)
 
@@ -243,7 +259,7 @@ class AgentQueues:
         task: tasks.Task,
         *,
         priority: TaskPriority,
-        priority_tiebreaker: Optional[int] = None,
+        requested_at: Optional[int] = None,
         reason: Optional[str] = None,
     ) -> None:
         """
@@ -251,23 +267,33 @@ class AgentQueues:
 
         :param task: The task to queue.
         :param priority: The priority to queue the task at.
-        :param priority_tiebreaker: The tiebreaker value for comparing this task's priority equal-priority tasks.
-            Should only be set if this task was previously dropped from the agent queues, in order to insert it back
-            at its previous position.
+        :param requested_at: Integer value representing when this task was initially requested for the given priority (e.g. if
+            it was deferred for some time. Serves as tiebreaker for comparing this task with equal-priority tasks. If none, the
+            next value in line is used, resulting in the task being added at the end of its priority queue. A value can be
+            reserved (for adding to the queue in the future) through the reserve_requested_at() method.
         """
-        priority_tiebreaker = priority_tiebreaker if priority_tiebreaker is not None else self._entry_count
+        requested_at = requested_at if requested_at is not None else self._entry_count
         already_queued: Optional[TaskQueueItem] = self._queue_item_for_task(task)
-        if already_queued is not None and (already_queued.priority, already_queued.priority_tiebreaker) <= (
-            priority,
-            priority_tiebreaker,
-        ):
+        if already_queued is not None and already_queued.priority <= priority:
             # task is already queued with equal or higher priority
             return
         # reschedule with new priority, no need to explicitly remove, this is achieved by setting self._tasks_by_resource
         if already_queued is not None:
             already_queued.deleted = True
         item: TaskQueueItem = TaskQueueItem(
-            task=task, priority=priority, priority_tiebreaker=priority_tiebreaker, reason=reason
+            task=task,
+            priority=priority,
+            requested_at=(
+                self.reserve_requested_at()
+                if (
+                    # no requested_at given => use default
+                    requested_at is None
+                    # rescheduling at higher priority => assign fresh requested_at
+                    or already_queued is not None
+                )
+                else requested_at
+            ),
+            reason=reason,
         )
         self._entry_count += 1
         if task.resource not in self._tasks_by_resource:
@@ -282,7 +308,7 @@ class AgentQueues:
         poison_pill = TaskQueueItem(
             task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")),
             priority=TaskPriority.TERMINATED,
-            priority_tiebreaker=0,
+            requested_at=-1,
             reason="Scheduler shutdown",
         )
         for queue in self._agent_queues.values():
@@ -327,7 +353,7 @@ class BlockedDeploy(TaskSpec[tasks.Deploy]):
     task: tasks.Deploy
     blocked_on: set[ResourceIdStr]
     priority: TaskPriority
-    priority_tiebreaker: Optional[int] = None
+    requested_at: int
     reason: Optional[str]
 
 
@@ -462,21 +488,22 @@ class ScheduledWork:
                 discarded: Optional[TaskSpec[tasks.Task]] = self.agent_queues.discard(task)
 
                 new_priority: TaskPriority
-                new_tiebreaker: Optional[int]
+                new_requested_at: int
                 new_reason: Optional[str]
                 # always use the previously scheduled priority, because new priority only applies to anything in 'resources',
                 # which are scheduled seperately.
                 if discarded is not None:
-                    new_priority, new_tiebreaker, new_reason = (
+                    new_priority, new_requested_at, new_reason = (
                         discarded.priority,
-                        discarded.priority_tiebreaker,
+                        discarded.requested_at,
                         discarded.reason,
                     )
                 else:
                     # Get priority from running task. This should always return something, but default to this request's
                     # priority just in case
                     new_priority = self.agent_queues.in_progress.get(task, priority)
-                    new_tiebreaker = None
+                    # old task is already running, consider this a new request
+                    new_requested_at = self.agent_queues.reserve_requested_at()
                     new_reason = "rescheduling because a dependency was added to this resource while it was deploying"
 
                 queued.remove(resource)
@@ -485,7 +512,7 @@ class ScheduledWork:
                     # task was previously ready to execute => assume no other blockers than this one
                     blocked_on=new_blockers,
                     priority=new_priority,
-                    priority_tiebreaker=new_tiebreaker,
+                    requested_at=new_requested_at,
                     reason=new_reason,
                 )
             else:
@@ -502,9 +529,11 @@ class ScheduledWork:
                 if task in self.agent_queues:
                     # simply add it again, the queue will make sure only the highest priority is kept
                     self.agent_queues.queue_put_nowait(task, priority=priority, reason=reason)
-                if resource in self._waiting and priority < self._waiting[resource].priority:
+                elif resource in self._waiting and priority < self._waiting[resource].priority:
                     self._waiting[resource].priority = priority
-                    self._waiting[resource].priority_tiebreaker = None
+                    # bumping priority => consider this a new request, resetting the requested_at field
+                    # (see TaskPriority.requested_at docstring)
+                    self._waiting[resource].requested_at = self.agent_queues.reserve_requested_at()
                     self._waiting[resource].reason = reason
                 continue
             # task is not yet scheduled, schedule it now
@@ -515,6 +544,7 @@ class ScheduledWork:
                 task=tasks.Deploy(resource=resource),
                 blocked_on=blocked_on,
                 priority=priority,
+                requested_at=self.agent_queues.reserve_requested_at(),
                 reason=reason,
             )
             not_scheduled.discard(resource)
@@ -547,7 +577,7 @@ class ScheduledWork:
         self.agent_queues.queue_put_nowait(
             blocked_deploy.task,
             priority=blocked_deploy.priority,
-            priority_tiebreaker=blocked_deploy.priority_tiebreaker,
+            requested_at=blocked_deploy.requested_at,
             reason=blocked_deploy.reason,
         )
         del self._waiting[blocked_deploy.task.resource]
