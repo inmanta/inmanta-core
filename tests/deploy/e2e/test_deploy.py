@@ -20,7 +20,8 @@ import asyncio
 import logging
 import pathlib
 import uuid
-from typing import Callable, Mapping, Optional
+from collections.abc import Sequence
+from typing import Callable, Mapping, NamedTuple, Optional
 from uuid import UUID
 
 import pytest
@@ -28,7 +29,9 @@ import pytest
 from inmanta import config, const, data, execute
 from inmanta.config import Config
 from inmanta.data import SERVER_COMPILE, ResourceIdStr
+from inmanta.data.model import SchedulerStatusReport
 from inmanta.deploy.state import BlockedStatus, ComplianceStatus, DeploymentResult, ResourceState
+from inmanta.resources import Id
 from inmanta.server import SLICE_PARAM, SLICE_SERVER
 from inmanta.util import get_compiler_version
 from utils import (
@@ -116,6 +119,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         - Construction of initial model state
         - Retrieval of data when a new version is released
         - Use test::Resourcex to ensure the executor doesn't mutate the input
+        - Test the endpoint to check scheduler internal state against the DB.
     """
 
     env_id = environment
@@ -140,9 +144,9 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
             resources.extend(
                 [
                     {
-                        "key": "key",
+                        "key": "key1",
                         "value": "value",
-                        "id": "test::Resourcex[%s,key=key],v=%d" % (agent, version),
+                        "id": "test::Resourcex[%s,key=key1],v=%d" % (agent, version),
                         "requires": ["test::Resourcex[%s,key=key3],v=%d" % (agent, version)],
                         "purged": False,
                         "send_event": False,
@@ -152,7 +156,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                         "key": "key2",
                         "value": "value",
                         "id": "test::Resourcex[%s,key=key2],v=%d" % (agent, version),
-                        "requires": ["test::Resourcex[%s,key=key],v=%d" % (agent, version)],
+                        "requires": ["test::Resourcex[%s,key=key1],v=%d" % (agent, version)],
                         "purged": not is_different,
                         "send_event": False,
                         "attributes": {"A": "B"},
@@ -181,7 +185,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                         "id": "test::Resourcex[%s,key=key5],v=%d" % (agent, version),
                         "requires": [
                             "test::Resourcex[%s,key=key4],v=%d" % (agent, version),
-                            "test::Resourcex[%s,key=key],v=%d" % (agent, version),
+                            "test::Resourcex[%s,key=key1],v=%d" % (agent, version),
                         ],
                         "purged": False,
                         "send_event": False,
@@ -207,11 +211,16 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         return version
 
     logger.info("setup done")
-
     version1, resources = await make_version()
     await clienthelper.put_version_simple(version=version1, resources=resources)
 
     logger.info("first version pushed")
+
+    result = await client.get_scheduler_status(env_id)
+    assert result.code == 200
+
+    expected_state = {"scheduler_state": {}, "db_state": {}, "discrepancies": {}}
+    assert result.result["data"] == expected_state
 
     # deploy and wait until one is ready
     result = await client.release_version(env_id, version1)
@@ -222,6 +231,53 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     logger.info("first version released")
 
     await clienthelper.wait_for_deployed(version=1)
+
+    deployed_resource_expected_status = {"blocked": "no", "deployment_result": "deployed", "status": "compliant"}
+    failed_resource_expected_status = {"blocked": "no", "deployment_result": "failed", "status": "non_compliant"}
+    skipped_resource_expected_status = {"blocked": "transient", "deployment_result": "skipped", "status": "non_compliant"}
+
+    class ExpectedResourceStatus(NamedTuple):
+        rid: str
+        expected_status: dict[str, str]
+
+    def selective_comparison(left_dict, right_dict):
+        for field in ["discrepancies", "scheduler_state"]:
+            left_value = left_dict.get(field)
+            right_value = right_dict.get(field)
+
+            if left_value is None or right_value is None:
+                return False
+            if left_value != right_value:
+                return False
+        return True
+
+    def build_expected_state(
+        all_resources: Sequence[str], specific_resources: Sequence[ExpectedResourceStatus]
+    ) -> SchedulerStatusReport:
+        """
+        helper method to build a custom SchedulerStatusReport
+        """
+        expected_state = {
+            "scheduler_state": {
+                Id.parse_id(resource["id"]).resource_str(): deployed_resource_expected_status for resource in all_resources
+            },
+            "discrepancies": {},
+            "db_state": {},
+        }
+        for resource_status in specific_resources:
+            expected_state["scheduler_state"][resource_status.rid] = resource_status.expected_status
+
+        return SchedulerStatusReport.model_validate(expected_state)
+
+    v1_expected_result = []
+    for i in range(1, 6):
+        rid = f"test::Resourcex[agent1,key=key{i}]"
+        result = failed_resource_expected_status if i == 3 else skipped_resource_expected_status
+        v1_expected_result.append(ExpectedResourceStatus(rid=rid, expected_status=result))
+
+    result = await client.get_scheduler_status(env_id)
+    assert result.code == 200
+    assert selective_comparison(result.result["data"], build_expected_state(resources, v1_expected_result).model_dump())
 
     await check_scheduler_state(resources, scheduler)
     await resource_action_consistency_check()
@@ -265,7 +321,8 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     version1, resources = await make_version(True)
     await clienthelper.put_version_simple(version=version1, resources=resources)
     await make_marker_version()
-
+    introspect_state = await client.get_scheduler_status(env_id)
+    assert introspect_state.code == 200, introspect_state
     # deploy and wait until one is ready
     result = await client.release_version(env_id, version1, push=False)
     assert result.code == 200
@@ -277,6 +334,8 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     await resource_action_consistency_check()
     assert resource_container.Provider.readcount("agentx", "key") == 0
+    introspect_state = await client.get_scheduler_status(env_id)
+    assert introspect_state.code == 200, introspect_state
 
     # Assert that the resource_persistent_state table is consistent.
     result = await data.ResourcePersistentState.get_list(environment=environment)
@@ -324,6 +383,10 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
             )
     # Unreleased resources are not present in the resource_persistent_state table.
     assert ResourceIdStr("test::Resourcex[agentx,key=key]") not in rid_to_rps
+
+    result = await client.get_scheduler_status(env_id)
+    assert result.code == 200
+    assert selective_comparison(result.result["data"], build_expected_state(resources, []).model_dump())
 
 
 async def check_server_state_vs_scheduler_state(client, environment, scheduler):
