@@ -20,7 +20,6 @@ import argparse
 import asyncio
 import logging
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -55,44 +54,6 @@ def tmp_working_dir(tmpdir: py.path.local) -> Iterator[py.path.local]:
     os.chdir(str(tmpdir))
     yield tmpdir
     os.chdir(cwd)
-
-
-def test_versioning():
-    mt = ModuleTool()
-
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, False, False, True, False)
-    assert str(newversion) == "1.2.4"
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, False, True, False, False)
-    assert str(newversion) == "1.3.0"
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, False, False, False)
-    assert str(newversion) == "2.0.0"
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, True, False, False)
-    assert newversion is None
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, False, True, False)
-    assert newversion is None
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, True, True, False)
-    assert newversion is None
-    newversion = mt.determine_new_version(version.Version("1.2.3.dev025"), None, False, False, True, False)
-    assert str(newversion) == "1.2.3"
-    newversion = mt.determine_new_version(version.Version("1.2.3.dev025"), None, False, False, False, False)
-    assert str(newversion) == "1.2.3"
-
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, False, False, True, True)
-    assert re.search("1.2.4.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, False, True, False, True)
-    assert re.search("1.3.0.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, False, False, True)
-    assert re.search("2.0.0.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, True, False, True)
-    assert newversion is None
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, False, True, True)
-    assert newversion is None
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, True, True, True)
-    assert newversion is None
-    newversion = mt.determine_new_version(version.Version("1.2.3.dev025"), None, False, False, True, True)
-    assert re.search("1.2.3.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(version.Version("1.2.3.dev025"), None, False, False, False, True)
-    assert re.search("1.2.3.dev[0-9]+", str(newversion))
 
 
 def test_get_module_v1(tmp_working_dir: py.path.local):

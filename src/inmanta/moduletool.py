@@ -30,7 +30,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 import zipfile
 from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import abc
@@ -157,60 +156,6 @@ class ModuleLikeTool:
         if load:
             project.load()
         return project
-
-    def determine_new_version(
-        self, old_version: Version, version: Optional[Version], major: bool, minor: bool, patch: bool, dev: bool
-    ) -> Optional[Version]:
-        """
-        Only used by the `inmanta module commit` command.
-        """
-        was_dev = old_version.is_prerelease
-        outversion: Version
-
-        if was_dev:
-            if major or minor or patch:
-                LOGGER.warning("when releasing a dev version, options --major, --minor and --patch are ignored")
-
-            # determine new version
-            if version is not None:
-                baseversion = version
-            else:
-                baseversion = Version(old_version.base_version)
-
-            if not dev:
-                outversion = baseversion
-            else:
-                outversion = Version("%s.dev%d" % (baseversion, time.time()))
-        else:
-            opts = [x for x in [major, minor, patch] if x]
-            if version is not None:
-                if len(opts) > 0:
-                    LOGGER.warning("when using the --version option, --major, --minor and --patch are ignored")
-                outversion = version
-            else:
-                if len(opts) == 0:
-                    LOGGER.error("One of the following options is required: --major, --minor or --patch")
-                    return None
-                elif len(opts) > 1:
-                    LOGGER.error("You can use only one of the following options: --major, --minor or --patch")
-                    return None
-
-                # We do not support revision for deprecated methods
-                revision = False
-                change_type: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
-                if change_type:
-                    outversion = Version(str(VersionOperation.bump_version(change_type, old_version, version_tag="")))
-                else:
-                    outversion = Version(str(VersionOperation.set_version_tag(old_version, version_tag="")))
-
-            if dev:
-                outversion = Version("%s.dev%d" % (outversion, time.time()))
-
-        if outversion <= old_version:
-            LOGGER.error(f"new versions ({outversion}) is not larger then old version ({old_version}), aborting")
-            return None
-
-        return outversion
 
 
 @total_ordering
@@ -620,25 +565,6 @@ class ModuleTool(ModuleLikeTool):
             parents=parent_parsers,
         )
 
-        commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
-        commit.add_argument("-m", "--message", help="Commit message", required=True)
-        commit.add_argument("-r", "--release", dest="dev", help="make a release", action="store_false")
-        commit.add_argument("--major", dest="major", help="make a major release", action="store_true")
-        commit.add_argument("--minor", dest="minor", help="make a major release", action="store_true")
-        commit.add_argument("--patch", dest="patch", help="make a major release", action="store_true")
-        commit.add_argument("-v", "--version", help="Version to use on tag")
-        commit.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
-        commit.add_argument(
-            "-t",
-            "--tag",
-            dest="tag",
-            help="Create a tag for the commit."
-            "Tags are not created for dev releases by default, if you want to tag it, specify this flag explicitly",
-            action="store_true",
-        )
-        commit.add_argument("-n", "--no-tag", dest="tag", help="Don't create a tag for the commit", action="store_false")
-        commit.set_defaults(tag=False)
-
         create = subparser.add_parser(
             "create",
             help="Create a new module",
@@ -1037,45 +963,6 @@ version: 0.0.1dev0"""
         Verify dependencies and frozen module versions
         """
         self.get_project(load=True)
-
-    def commit(
-        self,
-        message: str,
-        module: Optional[str] = None,
-        version: Optional[str] = None,
-        dev: bool = False,
-        major: bool = False,
-        minor: bool = False,
-        patch: bool = False,
-        commit_all: bool = False,
-        tag: bool = False,
-    ) -> None:
-        """
-        Commit all current changes.
-        """
-        inmanta.warnings.warn(
-            CommandDeprecationWarning(
-                "The `inmanta module commit` command has been deprecated in favor of `inmanta module release`."
-            )
-        )
-        # find module
-        mod = self.get_module(module)
-        if not isinstance(mod, ModuleV1):
-            raise CLIException(f"{mod.name} is a v2 module and does not support this operation.", exitcode=1)
-        # get version
-        old_version = Version(str(mod.version))
-
-        outversion = self.determine_new_version(old_version, Version(version) if version else None, major, minor, patch, dev)
-
-        if outversion is None:
-            return
-
-        mod.rewrite_version(str(outversion))
-        # commit
-        gitprovider.commit(mod._path, message, commit_all, [mod.get_metadata_file_path()])
-        # tag
-        if not dev or tag:
-            gitprovider.tag(mod._path, str(outversion))
 
     def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: str, module: Optional[str] = None) -> None:
         """
