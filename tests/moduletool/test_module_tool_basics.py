@@ -244,8 +244,8 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     # syntax error
     add_file(mod10, "model/_init.cf", "SomeInvalidThings", "a commit", minor=True)
     # fix it
-    add_file(mod10, "model/_init.cf", "", "a commit",  minor=True)
-    add_file(mod10, "secondsignal", "import mod9", "b commit",major=True)
+    add_file(mod10, "model/_init.cf", "", "a commit", minor=True)
+    add_file(mod10, "secondsignal", "import mod9", "b commit", major=True)
     add_file(mod10, "badsignal", "import mod9", "c commit", major=True)
 
     p9 = makeproject(modules_repo, "proj9", [("mod9", "==3.2.1"), ("mod10", "==3.2.1")], ["mod9"])
@@ -316,10 +316,7 @@ def module_without_tags(modules_repo):
 
 @pytest.mark.parametrize(
     "dev",
-    [
-        False,
-        True
-    ],
+    [False, True],
 )
 def test_commit_no_tags(git_modules_dir, module_without_tags, dev):
     version_tag_in_output = not dev

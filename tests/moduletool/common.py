@@ -33,7 +33,15 @@ def makeproject(reporoot, name, deps=[], imports=None, install_mode: Optional[In
     return makemodule(reporoot, name, deps, project=True, imports=imports, install_mode=install_mode)
 
 
-def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode: Optional[InstallMode] = None, version: str | None = '0.0.1'):
+def makemodule(
+    reporoot,
+    name,
+    deps=[],
+    project=False,
+    imports=None,
+    install_mode: Optional[InstallMode] = None,
+    version: str | None = "0.0.1",
+):
     path = os.path.join(reporoot, name)
     os.makedirs(path)
     mainfile = "module.yml"
@@ -179,10 +187,17 @@ def add_requires(
     os.chdir(old_cwd)
 
 
-def add_file_and_compiler_constraint(modpath, file, content, msg,compiler_version,revision: bool = False,
+def add_file_and_compiler_constraint(
+    modpath,
+    file,
+    content,
+    msg,
+    compiler_version,
+    revision: bool = False,
     patch: bool = False,
     minor: bool = False,
-    major: bool = False):
+    major: bool = False,
+):
     cfgfile = os.path.join(modpath, "module.yml")
     with open(cfgfile, encoding="utf-8") as fd:
         cfg = yaml.safe_load(fd)
@@ -191,11 +206,7 @@ def add_file_and_compiler_constraint(modpath, file, content, msg,compiler_versio
 
     with open(cfgfile, "w", encoding="utf-8") as fd:
         yaml.dump(cfg, fd)
-    add_file(modpath, file, content, msg,
-        revision= revision,
-        patch= patch,
-        minor= minor,
-        major= major)
+    add_file(modpath, file, content, msg, revision=revision, patch=patch, minor=minor, major=major)
 
 
 def commitmodule(modpath, mesg):
