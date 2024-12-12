@@ -322,7 +322,7 @@ class LoggingConfigBuilder:
 
             # use setting as formerly passed by the autostarted agent manager if not set via CLI
             if not log_file_cli_option:
-                log_file_cli_option = os.path.join(config.log_dir.get(), f"agent{env}-log")
+                log_file_cli_option = os.path.join(config.log_dir.get(), f"agent-{env}.log")
 
             # We don't override log-file-level as we can't detect if it is set
 
@@ -332,7 +332,7 @@ class LoggingConfigBuilder:
             handler_root_logger = "core_server_log"
             handlers[handler_root_logger] = {
                 "class": "logging.handlers.WatchedFileHandler",
-                "level": log_level,
+                "level": python_log_level_to_name(log_level),
                 "formatter": "core_log_formatter",
                 "filename": log_file_cli_option,
                 "mode": "a+",
@@ -343,7 +343,7 @@ class LoggingConfigBuilder:
             handlers[handler_root_logger] = {
                 "class": "logging.StreamHandler",
                 "formatter": "core_console_formatter",
-                "level": log_level,
+                "level": python_log_level_to_name(log_level),
                 "stream": stream,
             }
 

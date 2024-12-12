@@ -655,7 +655,8 @@ async def test_batched_code_upload(
             assert info.content == source_code
 
 
-async def test_resource_action_log(server, client, environment):
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_resource_action_log(server, client, environment, clienthelper):
     version = (await client.reserve_version(environment)).result["data"]
     resources = [
         {
@@ -671,6 +672,7 @@ async def test_resource_action_log(server, client, environment):
             "version": version,
         }
     ]
+    await clienthelper.set_auto_deploy()
     res = await client.put_version(
         tid=environment,
         version=version,
@@ -680,6 +682,8 @@ async def test_resource_action_log(server, client, environment):
         compiler_version=get_compiler_version(),
     )
     assert res.code == 200
+    await clienthelper.wait_for_released()
+    await clienthelper.wait_for_deployed()
 
     resource_action_log = os.path.join(config.log_dir.get(), f"{opt.server_resource_action_log_prefix.get()}{environment}.log")
     assert os.path.isfile(resource_action_log)

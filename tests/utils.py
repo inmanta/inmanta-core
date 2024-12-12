@@ -492,13 +492,13 @@ class ClientHelper:
         if wait_for_released:
             await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
 
-    async def wait_for_released(self, version: int | None):
+    async def wait_for_released(self, version: int | None = None):
         """
         Version None means latest
         """
         await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
 
-    async def is_released(self, version: int | None) -> bool:
+    async def is_released(self, version: int | None = None) -> bool:
         """Version None means latest"""
         versions = await self.client.list_versions(tid=self.environment)
         assert versions.code == 200
