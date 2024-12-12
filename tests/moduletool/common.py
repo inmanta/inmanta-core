@@ -33,7 +33,7 @@ def makeproject(reporoot, name, deps=[], imports=None, install_mode: Optional[In
     return makemodule(reporoot, name, deps, project=True, imports=imports, install_mode=install_mode)
 
 
-def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode: Optional[InstallMode] = None):
+def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode: Optional[InstallMode] = None, version: str | None = '0.0.1'):
     path = os.path.join(reporoot, name)
     os.makedirs(path)
     mainfile = "module.yml"
@@ -47,7 +47,7 @@ def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mod
     with open(os.path.join(path, mainfile), "w", encoding="utf-8") as projectfile:
         projectfile.write("name: " + name)
         projectfile.write("\nlicense: Apache 2.0")
-        projectfile.write("\nversion: '0.0.1'")
+        projectfile.write(f"\nversion: '{version}'")
 
         if project:
             projectfile.write(
@@ -88,22 +88,39 @@ repo: %s
     return path
 
 
-def add_file(modpath, file, content, msg, version=None, dev=False, tag=True):
+def add_file(
+    modpath,
+    file,
+    content,
+    msg,
+    revision: bool = False,
+    patch: bool = False,
+    minor: bool = False,
+    major: bool = False,
+    dev=False,
+):
     with open(os.path.join(modpath, file), "w", encoding="utf-8") as projectfile:
         projectfile.write(content)
 
-    if version is None:
+    if not any([revision, patch, minor, major]):
         return commitmodule(modpath, msg)
     else:
         old_cwd = os.getcwd()
         os.chdir(modpath)
         subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
-        ModuleTool().commit(msg, version=version, dev=dev, commit_all=True, tag=tag)
+        ModuleTool().release(dev=dev, message=msg, revision=revision, patch=patch, minor=minor, major=major, commit_all=True)
         os.chdir(old_cwd)
 
 
 def add_requires(
-    modpath: str, deps: list[tuple[str, str]], commit_msg: str, version: str, dev: bool = False, tag: bool = True
+    modpath: str,
+    deps: list[tuple[str, str]],
+    commit_msg: str,
+    revision: bool = False,
+    patch: bool = False,
+    minor: bool = False,
+    major: bool = False,
+    dev: bool = False,
 ) -> None:
     """
     Add the version requirements of dependencies in a module's YAML file and adds the import to the .cf file.
@@ -112,9 +129,11 @@ def add_requires(
     :param modpath: The path to the module.
     :param deps: A list of tuples, each containing a dependency name and its corresponding version specification.
     :param commit_msg: The commit message to use
-    :param version: The version to tag the commit with
+    :param revision: Set this flag to perform a bump on the revision semver number
+    :param patch: Set this flag to perform a bump on the patch semver number
+    :param minor: Set this flag to perform a bump on the minor semver number
+    :param major: Set this flag to perform a bump on the major semver number
     :param dev: A flag indicating whether this is a development version. Default is False.
-    :param tag: A flag indicating whether to tag the commit. Default is True.
     """
     mainfile = "module.yml"
     file_path = os.path.join(modpath, mainfile)
@@ -156,11 +175,14 @@ def add_requires(
     old_cwd = os.getcwd()
     os.chdir(modpath)
     subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
-    ModuleTool().commit(commit_msg, version=version, dev=dev, commit_all=True, tag=tag)
+    ModuleTool().release(message=commit_msg, revision=revision, patch=patch, minor=minor, major=major, dev=dev, commit_all=True)
     os.chdir(old_cwd)
 
 
-def add_file_and_compiler_constraint(modpath, file, content, msg, version, compiler_version):
+def add_file_and_compiler_constraint(modpath, file, content, msg,compiler_version,revision: bool = False,
+    patch: bool = False,
+    minor: bool = False,
+    major: bool = False):
     cfgfile = os.path.join(modpath, "module.yml")
     with open(cfgfile, encoding="utf-8") as fd:
         cfg = yaml.safe_load(fd)
@@ -169,7 +191,11 @@ def add_file_and_compiler_constraint(modpath, file, content, msg, version, compi
 
     with open(cfgfile, "w", encoding="utf-8") as fd:
         yaml.dump(cfg, fd)
-    add_file(modpath, file, content, msg, version)
+    add_file(modpath, file, content, msg,
+        revision= revision,
+        patch= patch,
+        minor= minor,
+        major= major)
 
 
 def commitmodule(modpath, mesg):
@@ -188,10 +214,10 @@ def add_tag(modpath, tag):
 
 
 def make_module_simple(reporoot, name, depends=[], version="3.2", project=False):
-    mod = makemodule(reporoot, name, depends, project=project)
+    mod = makemodule(reporoot, name, depends, project=project, version=version)
     commitmodule(mod, "first commit")
     if not project:
-        add_file(mod, "signal", "present", "second commit", version=version)
+        add_file(mod, "signal", "present", "second commit")
     return mod
 
 

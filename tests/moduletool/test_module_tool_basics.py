@@ -20,7 +20,6 @@ import argparse
 import asyncio
 import logging
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -55,44 +54,6 @@ def tmp_working_dir(tmpdir: py.path.local) -> Iterator[py.path.local]:
     os.chdir(str(tmpdir))
     yield tmpdir
     os.chdir(cwd)
-
-
-def test_versioning():
-    mt = ModuleTool()
-
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, False, False, True, False)
-    assert str(newversion) == "1.2.4"
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, False, True, False, False)
-    assert str(newversion) == "1.3.0"
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, False, False, False)
-    assert str(newversion) == "2.0.0"
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, True, False, False)
-    assert newversion is None
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, False, True, False)
-    assert newversion is None
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, True, True, False)
-    assert newversion is None
-    newversion = mt.determine_new_version(version.Version("1.2.3.dev025"), None, False, False, True, False)
-    assert str(newversion) == "1.2.3"
-    newversion = mt.determine_new_version(version.Version("1.2.3.dev025"), None, False, False, False, False)
-    assert str(newversion) == "1.2.3"
-
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, False, False, True, True)
-    assert re.search("1.2.4.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, False, True, False, True)
-    assert re.search("1.3.0.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, False, False, True)
-    assert re.search("2.0.0.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, True, False, True)
-    assert newversion is None
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, False, True, True)
-    assert newversion is None
-    newversion = mt.determine_new_version(version.Version("1.2.3"), None, True, True, True, True)
-    assert newversion is None
-    newversion = mt.determine_new_version(version.Version("1.2.3.dev025"), None, False, False, True, True)
-    assert re.search("1.2.3.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(version.Version("1.2.3.dev025"), None, False, False, False, True)
-    assert re.search("1.2.3.dev[0-9]+", str(newversion))
 
 
 def test_get_module_v1(tmp_working_dir: py.path.local):
@@ -275,19 +236,19 @@ ignore = H405,H404,H302,H306,H301,H101,H801,E402,W503,E252,E203
 
 def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     mod9 = make_module_simple(modules_repo, "mod9", [("mod10", None)])
-    add_file(mod9, "signal", "present", "third commit", version="3.3")
-    add_file(mod9, "model/b.cf", "import mod9", "fourth commit", version="4.0")
+    add_file(mod9, "signal", "present", "third commit", minor=True)
+    add_file(mod9, "model/b.cf", "import mod9", "fourth commit", major=True)
 
     mod10 = make_module_simple(modules_repo, "mod10", [])
-    add_file(mod10, "signal", "present", "a commit", version="3.3")
+    add_file(mod10, "signal", "present", "a commit", minor=True)
     # syntax error
-    add_file(mod10, "model/_init.cf", "SomeInvalidThings", "a commit", version="3.5")
+    add_file(mod10, "model/_init.cf", "SomeInvalidThings", "a commit", minor=True)
     # fix it
-    add_file(mod10, "model/_init.cf", "", "a commit", version="3.6")
-    add_file(mod10, "secondsignal", "import mod9", "b commit", version="4.0")
-    add_file(mod10, "badsignal", "import mod9", "c commit", version="5.0")
+    add_file(mod10, "model/_init.cf", "", "a commit",  minor=True)
+    add_file(mod10, "secondsignal", "import mod9", "b commit",major=True)
+    add_file(mod10, "badsignal", "import mod9", "c commit", major=True)
 
-    p9 = makeproject(modules_repo, "proj9", [("mod9", "==3.3"), ("mod10", "==3.3")], ["mod9"])
+    p9 = makeproject(modules_repo, "proj9", [("mod9", "==3.2.1"), ("mod10", "==3.2.1")], ["mod9"])
     commitmodule(p9, "first commit")
 
     # setup project
@@ -354,13 +315,17 @@ def module_without_tags(modules_repo):
 
 
 @pytest.mark.parametrize(
-    "dev, tag, version_tag_in_output",
-    [(True, True, True), (True, False, False), (False, True, True), (False, False, True)],
+    "dev",
+    [
+        False,
+        True
+    ],
 )
-def test_commit_no_tags(git_modules_dir, module_without_tags, dev, tag, version_tag_in_output):
-    add_file(module_without_tags, "dummyfile", "Content", "Commit without tags", version="5.0", dev=dev, tag=tag)
+def test_commit_no_tags(git_modules_dir, module_without_tags, dev):
+    version_tag_in_output = not dev
+    add_file(module_without_tags, "dummyfile", "Content", "Commit without tags", major=True, dev=dev)
     output = subprocess.check_output(["git", "tag", "-l"], cwd=module_without_tags, stderr=subprocess.STDOUT)
-    assert ("5.0" in str(output)) is version_tag_in_output
+    assert ("3.2.1" in str(output)) is version_tag_in_output
 
 
 async def test_version_argument(modules_repo):
