@@ -51,6 +51,17 @@ def test_options(monkeypatch):
 
 
 def test_configfile_hierarchy(monkeypatch, tmpdir):
+    """
+    Test the hierarchy when a config option is set in multiple places:
+
+        - via .cfg file in /etc/inmanta
+        - via .cfg file in /etc/inmanta/inmanta.d
+        - via file without extension in /etc/inmanta/inmanta.d
+        - via .inmanta file at the root
+        - via .inmanta.cfg file at the root
+        - via custom.cfg file at the root
+        - via environment variable
+    """
     etc_inmanta_dir = os.path.join(tmpdir, "etc", "inmanta")
     os.makedirs(etc_inmanta_dir, exist_ok=False)
 
