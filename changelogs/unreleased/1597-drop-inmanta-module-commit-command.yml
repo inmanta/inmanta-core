@@ -1,0 +1,10 @@
+description: >
+  Remove deprecated 'inmanta module commit' command.
+  Please use the 'inmanta module release' command instead to perform
+  a release for a module.
+issue-nr: 1597
+change-type: minor
+destination-branches: [master]
+sections:
+  deprecation-note: "{{description}}"
+
