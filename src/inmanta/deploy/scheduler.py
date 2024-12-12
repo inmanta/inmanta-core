@@ -46,8 +46,8 @@ from inmanta.deploy.state import (
     ResourceDetails,
     ResourceState,
 )
-from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact
-from inmanta.deploy.work import PrioritizedTask, TaskPriority
+from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
+from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
 
@@ -178,15 +178,15 @@ class TaskRunner:
         """Main loop for one agent. It will first fetch or create its actual state from the DB to make sure that it's
         allowed to run."""
         while self._scheduler._running and self.status == AgentStatus.STARTED:
-            task, reason = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
+            work_item: work.MotivatedTask[Task] = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
             try:
-                await task.execute(self._scheduler, self.endpoint, reason)
+                await work_item.task.execute(self._scheduler, self.endpoint, work_item.reason)
             except Exception:
                 LOGGER.exception(
-                    "Task %s for agent %s has failed and the exception was not properly handled", task, self.endpoint
+                    "Task %s for agent %s has failed and the exception was not properly handled", work_item.task, self.endpoint
                 )
 
-            self._scheduler._work.agent_queues.task_done(self.endpoint, task)
+            self._scheduler._work.agent_queues.task_done(self.endpoint, work_item.task)
 
         self.status = AgentStatus.STOPPED
 
@@ -308,17 +308,12 @@ class ResourceScheduler(TaskManager):
                 return
 
             # Rely on the incremental calculation to determine which resources should be deployed and which not.
-            increment: set[ResourceIdStr]
-            increment, _ = await ConfigurationModel.get_increment(self.environment, version, connection=con)
-
-        resources_to_deploy: Mapping[ResourceIdStr, ResourceDetails] = {rid: resources[rid] for rid in increment}
-        up_to_date_resources: Mapping[ResourceIdStr, ResourceDetails] = {
-            rid: resources[rid] for rid in resources.keys() if rid not in increment
-        }
+            up_to_date_resources: Set[ResourceIdStr]
+            _, up_to_date_resources = await ConfigurationModel.get_increment(self.environment, version, connection=con)
 
         await self._new_version(
             version,
-            resources=resources_to_deploy,
+            resources=resources,
             requires=requires,
             up_to_date_resources=up_to_date_resources,
             reason="Deploy was triggered because the scheduler was started",
@@ -363,15 +358,13 @@ class ResourceScheduler(TaskManager):
         resources = await self._build_resource_mappings_from_db(version)
         for rid, resource in resources.items():
             self._work.agent_queues.queue_put_nowait(
-                PrioritizedTask(
-                    task=DryRun(
-                        resource=rid,
-                        version=version,
-                        resource_details=resource,
-                        dry_run_id=dry_run_id,
-                    ),
-                    priority=TaskPriority.DRYRUN,
-                )
+                DryRun(
+                    resource=rid,
+                    version=version,
+                    resource_details=resource,
+                    dry_run_id=dry_run_id,
+                ),
+                priority=TaskPriority.DRYRUN,
             )
 
     async def get_facts(self, resource: dict[str, object]) -> None:
@@ -379,10 +372,8 @@ class ResourceScheduler(TaskManager):
             return
         rid = Id.parse_id(resource["id"]).resource_str()
         self._work.agent_queues.queue_put_nowait(
-            PrioritizedTask(
-                task=RefreshFact(resource=rid),
-                priority=TaskPriority.FACT_REFRESH,
-            )
+            RefreshFact(resource=rid),
+            priority=TaskPriority.FACT_REFRESH,
         )
 
     async def get_resource_state(self) -> SchedulerStatusReport:
@@ -645,16 +636,39 @@ class ResourceScheduler(TaskManager):
 
         await data.Resource.reset_resource_state(self.environment)
 
+    # FIXME[#8358]: move intent lock one level up in order to prevent out-of-order versions
     async def _new_version(
         self,
         version: int,
         resources: Mapping[ResourceIdStr, ResourceDetails],
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
-        up_to_date_resources: Optional[Mapping[ResourceIdStr, ResourceDetails]] = None,
+        up_to_date_resources: Optional[Set[ResourceIdStr]] = None,
         reason: str = "Deploy was triggered because a new version has been released",
     ) -> None:
-        up_to_date_resources = {} if up_to_date_resources is None else up_to_date_resources
+        """
+        Register a newly released version with the scheduler. Updates scheduled state and scheduled work accordingly.
+
+        Expects to be called under the intent lock, and with monotonically increasing versions.
+
+        :param version: The model version that is being registered.
+        :param resources: All resources in this version.
+        :param requires: The requires set of each resource in this version.
+        :param up_to_date_resources: Set of resources that are to be considered in an assumed good state due to a previously
+            successful deploy for the same intent. Should not include any blocked resources. Mostly intended for the very first
+            version when the scheduler is started with a fresh state.
+        :param reason: The reason to associate with any deploys caused by this newly released version.
+        """
+        up_to_date_resources = set() if up_to_date_resources is None else up_to_date_resources
+
         async with self._intent_lock:
+            if version < self._state.version:
+                raise ValueError(
+                    f"Invalid scheduler state: received out-of-order versions. Currently at version {self._state.version} but"
+                    " received version {version}"
+                )
+            if version == self._state.version:
+                return
+
             # Inspect new state and compare it with the old one before acquiring the scheduler lock.
             # This is safe because we only read intent-related state here, for which we've already acquired the lock
             deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
@@ -672,10 +686,10 @@ class ResourceScheduler(TaskManager):
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
 
-            for resource, details in up_to_date_resources.items():
-                self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
-
             for resource, details in resources.items():
+                if resource in up_to_date_resources:
+                    self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
+                    continue
                 if details.status is const.ResourceState.undefined:
                     undefined.add(resource)
                     self._work.delete_resource(resource)
