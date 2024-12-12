@@ -4,7 +4,7 @@ description: >
   a release for a module.
 issue-nr: 1597
 issue-repo: irt
-change-type: minor
+change-type: major
 destination-branches: [master]
 sections:
   deprecation-note: "{{description}}"

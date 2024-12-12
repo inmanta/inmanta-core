@@ -30,6 +30,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import abc
@@ -158,7 +159,7 @@ class ModuleLikeTool:
         return project
 
     def determine_new_version(
-         self, old_version: Version, version: Optional[Version], major: bool, minor: bool, patch: bool, dev: bool
+        self, old_version: Version, version: Optional[Version], major: bool, minor: bool, patch: bool, dev: bool
     ) -> Optional[Version]:
         """
         Only used by the `inmanta module commit` command.
@@ -210,6 +211,7 @@ class ModuleLikeTool:
             return None
 
         return outversion
+
 
 @total_ordering
 @enum.unique
