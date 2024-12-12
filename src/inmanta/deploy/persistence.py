@@ -91,7 +91,7 @@ class StateUpdateManager(abc.ABC):
         """
         Set the last model version that was processed by the scheduler.
         """
-        await data.Scheduler.set_last_processed_model_version(environment, version, connection=connection)
+        pass
 
 
 class ToDbUpdateManager(StateUpdateManager):
