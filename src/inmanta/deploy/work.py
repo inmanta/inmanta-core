@@ -272,7 +272,6 @@ class AgentQueues:
             next value in line is used, resulting in the task being added at the end of its priority queue. A value can be
             reserved (for adding to the queue in the future) through the reserve_requested_at() method.
         """
-        requested_at = requested_at if requested_at is not None else self.reserve_requested_at()
         already_queued: Optional[TaskQueueItem] = self._queue_item_for_task(task)
         if already_queued is not None and already_queued.priority <= priority:
             # task is already queued with equal or higher priority
@@ -295,7 +294,6 @@ class AgentQueues:
             ),
             reason=reason,
         )
-        self._entry_count += 1
         if task.resource not in self._tasks_by_resource:
             self._tasks_by_resource[task.resource] = {}
         self._tasks_by_resource[task.resource][task] = item

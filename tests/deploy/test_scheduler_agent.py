@@ -2119,10 +2119,40 @@ async def test_scheduler_priority_rescheduling(agent: TestAgent, environment, ma
     # assert priorities
     # in-progress priority should have been shifted to increase priority of events that may be sent
     assert work.agent_queues.in_progress == {task_fourth_requires: TaskPriority(-1)}
-    # queued priority should have been shifted as well
+    # queued priority should have been shifted as well, and requested_at refreshed
     assert work.agent_queues.queued()[task_fourth_requires].priority == TaskPriority(-1)
+    assert work.agent_queues.queued()[task_fourth_requires].requested_at == work.agent_queues._entry_count - 1
 
-    # TODO: bump priority on queued task without adding requires
+    # update original_sorted_tasks to reflect new order
+    original_sorted_tasks = get_sorted_tasks()
+
+    # verify priority bumping on waiting task (not yet in queue)
+    # add dependency to move task to waiting
+    requires[rid2] = {rid1}
+    work.deploy_with_context(
+        {rid2},
+        reason="add sixth requires",
+        # low urgency priority
+        priority=TaskPriority(5),
+        added_requires={rid2: {rid1}},
+    )
+    assert get_sorted_tasks() == [original_sorted_tasks[0], *original_sorted_tasks[2:]]
+    work.deploy_with_context(
+        {rid2},
+        reason="bump priority for rid2",
+        # higher urgency priority
+        priority=TaskPriority(0),
+        # still waiting for rid1 => not queued
+        added_requires={},
+        dropped_requires={},
+    )
+    # unchanged versus previous check
+    assert get_sorted_tasks() == [original_sorted_tasks[0], *original_sorted_tasks[2:]]
+    assert rid2 in work._waiting
+    # assert that waiting task's priority was bumped and its requested_at refreshed
+    assert work._waiting[rid2].priority == TaskPriority(0)
+    assert work._waiting[rid2].requested_at == work.agent_queues._entry_count - 1
+    assert work._waiting[rid2].reason == "bump priority for rid2"
 
 
 async def test_repair_does_not_trigger_for_blocked_resources(agent: TestAgent, make_resource_minimal):
