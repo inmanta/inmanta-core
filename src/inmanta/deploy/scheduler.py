@@ -321,7 +321,7 @@ class ResourceScheduler(TaskManager):
                 return
 
             # Check at which model version the scheduler was before it went down
-            scheduler: Optional[data.Scheduler] = await Scheduler.get_one(environment=self.environment, connection=con)
+            scheduler: Optional[data.Scheduler] = await data.Scheduler.get_one(environment=self.environment, connection=con)
             assert scheduler is not None
             last_processed_model_version = scheduler.last_processed_model_version
             if last_processed_model_version is not None:
