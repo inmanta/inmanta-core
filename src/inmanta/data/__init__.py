@@ -33,7 +33,7 @@ from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
 from itertools import chain
 from re import Pattern
-from typing import Tuple, Generic, NewType, Optional, TypeVar, Union, cast, overload
+from typing import Generic, NewType, Optional, Tuple, TypeVar, Union, cast, overload
 from uuid import UUID
 
 import asyncpg
@@ -4756,25 +4756,26 @@ class Resource(BaseDocument):
                 FROM configurationmodel
                 WHERE environment=$1 AND released
             )
-            SELECT (
+            SELECT
                 r.model,
                 r.resource_id,
-                CASE
-                    -- The resource_persistent_state.last_non_deploying_status column is only populated for
-                    -- actual deployment operations to prevent locking issues. This case-statement calculates
-                    -- the correct state from the combination of the resource table and the
-                    -- resource_persistent_state table.
-                    WHEN r.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
-                        -- The deploying, undefined and skipped_for_undefined states are not tracked in the
+                (
+                    CASE
+                        -- The resource_persistent_state.last_non_deploying_status column is only populated for
+                        -- actual deployment operations to prevent locking issues. This case-statement calculates
+                        -- the correct state from the combination of the resource table and the
                         -- resource_persistent_state table.
-                        THEN r.status::text
-                    WHEN rps.last_deployed_attribute_hash != r.attribute_hash
-                        -- The hash changed since the last deploy -> new desired state
-                        THEN r.status::text
-                        -- No override required, use last known state from actual deployment
-                        ELSE rps.last_non_deploying_status::text
-                END
-            ) AS status
+                        WHEN r.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
+                            -- The deploying, undefined and skipped_for_undefined states are not tracked in the
+                            -- resource_persistent_state table.
+                            THEN r.status::text
+                        WHEN rps.last_deployed_attribute_hash != r.attribute_hash
+                            -- The hash changed since the last deploy -> new desired state
+                            THEN r.status::text
+                            -- No override required, use last known state from actual deployment
+                            ELSE rps.last_non_deploying_status::text
+                    END
+                ) AS status
             FROM resource AS r
                  INNER JOIN resource_persistent_state AS rps ON r.environment=rps.environment AND r.resource_id=rps.resource_id
                  INNER JOIN configurationmodel AS c ON c.environment=r.environment AND c.version=r.model
@@ -5834,6 +5835,30 @@ class ConfigurationModel(BaseDocument):
         if not result:
             return None
         return int(result["version"])
+
+    @classmethod
+    async def get_released_versions_in_interval(
+        cls,
+        environment: uuid.UUID,
+        lower_bound: int,
+        upper_bound: int,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> Sequence[int]:
+        """
+        Return all the released model version between model version lower_bound and upper_bound (bounds included).
+        The version numbers are returned in descending order.
+        """
+        if lower_bound > upper_bound:
+            raise Exception("lower_bound cannot be larger than upper_bound.")
+        query = f"""
+            SELECT version
+            FROM {ConfigurationModel.table_name()}
+            WHERE environment=$1 AND released AND version BETWEEN $2 AND $3
+            ORDER BY version DESC
+        """
+        result = await cls._fetch_query(query, cls._get_value(environment), lower_bound, upper_bound, connection=connection)
+        return [int(r["version"]) for r in result]
 
     @classmethod
     async def get_agents(

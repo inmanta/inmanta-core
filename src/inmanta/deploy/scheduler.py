@@ -303,13 +303,14 @@ class ResourceScheduler(TaskManager):
         self._timer_manager.initialize()
         async with self._intent_lock, self._scheduler_lock, data.Scheduler.get_connection() as con, con.transaction():
             # Make sure there is an entry for this scheduler in the scheduler database table
-            await con.execute(
+            await data.Scheduler._execute_query(
                 f"""
                     INSERT INTO {data.Scheduler.table_name()}
                     VALUES($1, NULL)
                     ON CONFLICT DO NOTHING
                 """,
                 self.environment,
+                connection=con,
             )
 
             # Retrieve latest released model version
@@ -343,15 +344,28 @@ class ResourceScheduler(TaskManager):
 
             if last_processed_model_version is not None and last_processed_model_version < latest_release_model.version:
                 # We restored the scheduler state from the database, but a newer, released version is available.
-                # Load the new desired state into the scheduler and start the deployment.
-                await self._read_version(intent_lock_acquired=True, scheduler_lock_acquired=True, connection=con)
-            else:
-                # No newer model version exists. Start deploying everything in dirty set.
-                self._work.deploy_with_context(
-                    self._state.dirty,
-                    reason="Deploy was triggered because the scheduler was started",
-                    priority=TaskPriority.NEW_VERSION_DEPLOY,
+                # Apply the changes from each subsequent model version to the scheduler.
+                versions = await data.ConfigurationModel.get_released_versions_in_interval(
+                    environment=self.environment,
+                    lower_bound=last_processed_model_version + 1,
+                    upper_bound=latest_release_model.version,
+                    connection=con,
                 )
+                for version in reversed(versions):
+                    # Apply version from old to new
+                    await self._read_version(
+                        version=version,
+                        start_deployment=False,
+                        intent_lock_acquired=True,
+                        scheduler_lock_acquired=True,
+                        connection=con,
+                    )
+            # Start deploying everything in dirty set.
+            self._work.deploy_with_context(
+                self._state.dirty,
+                reason="Deploy was triggered because the scheduler was started",
+                priority=TaskPriority.NEW_VERSION_DEPLOY,
+            )
 
     async def _recover_scheduler_state_using_increments_calculation(self, *, connection: asyncpg.connection.Connection) -> None:
         """
@@ -359,7 +373,7 @@ class ResourceScheduler(TaskManager):
         by relying on the increments calculation logic. This method starts the deployment process.
         """
         try:
-            version, resources, requires = await self._get_resources_in_latest_version(connection=connection)
+            version, resources, requires = await self._get_resources_in_version(connection=connection)
         except KeyError:
             # No model version has been released yet.
             return
@@ -610,7 +624,7 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             async with data.Scheduler.get_connection() as connection:
                 try:
-                    latest_version, resources_in_db, _ = await self._get_resources_in_latest_version(connection=connection)
+                    latest_version, resources_in_db, _ = await self._get_resources_in_version(connection=connection)
                 except KeyError:
                     return SchedulerStatusReport(scheduler_state={}, db_state={}, resource_states={}, discrepancies={})
                 if latest_version != self._state.version:
@@ -663,8 +677,13 @@ class ResourceScheduler(TaskManager):
         resources_from_db = await data.Resource.get_resources_for_version_raw_with_persistent_state(
             environment=self.environment,
             version=version,
-            projection=None,
-            projection_persistent=None,
+            projection=[
+                "resource_id",
+                "status",
+                "attributes",
+                "attribute_hash",
+            ],
+            projection_persistent=["deployment_result", "last_deployed_attribute_hash"],
             connection=connection,
         )
         result = {}
@@ -694,25 +713,28 @@ class ResourceScheduler(TaskManager):
         }
         return require_mapping
 
-    async def _get_resources_in_latest_version(
+    async def _get_resources_in_version(
         self,
         *,
+        version: int | None = None,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> tuple[int, Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]]]:
         """
         Returns a tuple containing:
-            1. The version number of the latest released model.
+            1. The version number of the configuration model.
             2. A dict mapping every resource_id in the latest released version to its ResourceDetails.
             3. A dict mapping every resource_id in the latest released version to the set of resources it requires.
         """
         async with ConfigurationModel.get_connection(connection) as con:
-            cm_version = await ConfigurationModel.get_latest_version(self.environment, connection=con)
-            if cm_version is None:
-                raise KeyError()
-            model_version = cm_version.version
-            resources_from_db = await self._build_resource_mappings_from_db(version=model_version, connection=con)
+            if version is None:
+                # Fetch the latest released model version
+                cm_version = await ConfigurationModel.get_latest_version(self.environment, connection=con)
+                if cm_version is None:
+                    raise KeyError()
+                version = cm_version.version
+            resources_from_db = await self._build_resource_mappings_from_db(version=version, connection=con)
             requires_from_db = self._construct_requires_mapping(resources_from_db)
-            return model_version, resources_from_db, requires_from_db
+            return version, resources_from_db, requires_from_db
 
     async def read_version(
         self,
@@ -731,12 +753,14 @@ class ResourceScheduler(TaskManager):
     async def _read_version(
         self,
         *,
+        version: int | None = None,
+        start_deployment: bool = True,
         intent_lock_acquired: bool = False,
         scheduler_lock_acquired: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         try:
-            version, resources, requires = await self._get_resources_in_latest_version(connection=connection)
+            version, resources, requires = await self._get_resources_in_version(version=version, connection=connection)
         except KeyError:
             # No model version has been released yet.
             return
@@ -748,6 +772,7 @@ class ResourceScheduler(TaskManager):
                 reason="Deploy was triggered because a new version has been released",
                 intent_lock_acquired=intent_lock_acquired,
                 scheduler_lock_acquired=scheduler_lock_acquired,
+                start_deployment=start_deployment,
                 connection=connection,
             )
 

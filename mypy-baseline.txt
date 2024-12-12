@@ -620,6 +620,10 @@ src/inmanta/data/__init__.py:0: error: No overload variant of "int" matches argu
 src/inmanta/data/__init__.py:0: note: Possible overload variants:
 src/inmanta/data/__init__.py:0: note: def __new__(cls, str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
 src/inmanta/data/__init__.py:0: note: def __new__(cls, str | bytes | bytearray, /, base: SupportsIndex) -> int
+src/inmanta/data/__init__.py:0: error: No overload variant of "int" matches argument type "object"  [call-overload]
+src/inmanta/data/__init__.py:0: note: Possible overload variants:
+src/inmanta/data/__init__.py:0: note: def __new__(cls, str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/inmanta/data/__init__.py:0: note: def __new__(cls, str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/data/__init__.py:0: error: Incompatible return value type (got "list[object]", expected "list[str]")  [return-value]
 src/inmanta/data/__init__.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/data/__init__.py:0: error: Unsupported left operand type for > ("object")  [operator]

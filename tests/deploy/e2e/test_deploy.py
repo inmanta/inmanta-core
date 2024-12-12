@@ -219,7 +219,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     result = await client.get_scheduler_status(env_id)
     assert result.code == 200
 
-    expected_state = {"scheduler_state": {}, "db_state": {}, "discrepancies": {}}
+    expected_state = {"scheduler_state": {}, "db_state": {}, "discrepancies": {}, "resource_states": {}}
     assert result.result["data"] == expected_state
 
     # deploy and wait until one is ready
@@ -263,6 +263,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
             },
             "discrepancies": {},
             "db_state": {},
+            "resource_states": {},
         }
         for resource_status in specific_resources:
             expected_state["scheduler_state"][resource_status.rid] = resource_status.expected_status
@@ -298,7 +299,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     result = await data.ResourcePersistentState.get_list(environment=environment)
     rid_to_rps = {r.resource_id: r for r in result}
     for agent in ["agent1", "agent2", "agent3"]:
-        for key in ["key", "key2", "key3", "key4", "key5"]:
+        for key in ["key1", "key2", "key3", "key4", "key5"]:
             match (agent, key):
                 case ("agent1", "key3"):
                     deployment_result = DeploymentResult.FAILED
@@ -341,7 +342,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     result = await data.ResourcePersistentState.get_list(environment=environment)
     rid_to_rps = {r.resource_id: r for r in result}
     for agent in ["agent1", "agent2", "agent3"]:
-        for key in ["key", "key2", "key3", "key4", "key5"]:
+        for key in ["key1", "key2", "key3", "key4", "key5"]:
             match (agent, key):
                 case ("agent1", "key3"):
                     deployment_result = DeploymentResult.FAILED
@@ -372,7 +373,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     result = await data.ResourcePersistentState.get_list(environment=environment)
     rid_to_rps = {r.resource_id: r for r in result}
     for agent in ["agent1", "agent2", "agent3"]:
-        for key in ["key", "key2", "key3", "key4", "key5"]:
+        for key in ["key1", "key2", "key3", "key4", "key5"]:
             assert_resource_persistent_state(
                 resource_persistent_state=rid_to_rps[ResourceIdStr(f"test::Resourcex[{agent},key={key}]")],
                 is_undefined=False,
