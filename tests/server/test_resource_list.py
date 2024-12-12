@@ -34,7 +34,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 import inmanta.util
 import util.performance
 import utils
-from inmanta import const, data, util
+from inmanta import const, data, resources, util
 from inmanta.agent.executor import DeployResult
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource, ResourceIdStr, ResourceVersionIdStr
@@ -732,7 +732,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 ri += 10
             return f"test::XResource{int(ri / 20)}[agent{tenant_index},sub={ri}]"
 
-        resources = [
+        attributes = [
             {
                 "id": f"{resource_id(ri)},v={version}",
                 "send_event": False,
@@ -748,7 +748,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
             result = await client.put_version(
                 environment,
                 version,
-                resources,
+                attributes,
                 resource_state,
                 [],
                 {},
@@ -762,7 +762,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 resource_state=resource_state,
                 unknowns=[],
                 version_info={},
-                resources=resources,
+                resources=attributes,
                 resource_sets=resource_sets,
             )
             assert result.code == 200
@@ -789,7 +789,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
             rvid = ResourceVersionIdStr(resource["resource_version_id"])
             actionid = uuid.uuid4()
             deploy_counter = deploy_counter + 1
-            await to_db_update_manager.send_in_progress(actionid, rvid)
+            await to_db_update_manager.send_in_progress(actionid, resources.Id.parse_id(rvid))
             if "sub=4]" in rid:
                 return
             else:

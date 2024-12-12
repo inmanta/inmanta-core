@@ -46,7 +46,7 @@ class StateUpdateManager(abc.ABC):
     """
 
     @abc.abstractmethod
-    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
+    async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         """
         This method sets the state to in_progress.
 
@@ -118,12 +118,10 @@ class ToDbUpdateManager(StateUpdateManager):
         log_record = resourceservice.ResourceActionLogLine(logger.name, log_level, message, ts)
         logger.handle(log_record)
 
-    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
+    async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         """
         Update the db to reflect that deployment has started for a given resource.
         """
-        resource_id_str = resource_id
-        resource_id_parsed = Id.parse_id(resource_id_str)
 
         async with data.Resource.get_connection() as connection:
             async with connection.transaction():
@@ -131,18 +129,16 @@ class ToDbUpdateManager(StateUpdateManager):
                 resource = await data.Resource.get_one(
                     connection=connection,
                     environment=self.environment,
-                    resource_id=resource_id_parsed.resource_str(),
-                    model=resource_id_parsed.version,
+                    resource_id=resource_id.resource_str(),
+                    model=resource_id.version,
                     lock=data.RowLockMode.FOR_UPDATE,
                 )
-                assert (
-                    resource is not None
-                ), f"Resource {resource_id_parsed} does not exists in the database, this should not happen"
+                assert resource is not None, f"Resource {resource_id} does not exists in the database, this should not happen"
 
                 resource_action = data.ResourceAction(
                     environment=self.environment,
-                    version=resource_id_parsed.version,
-                    resource_version_ids=[resource_id_str],
+                    version=resource_id.version,
+                    resource_version_ids=[resource_id.resource_version_str()],
                     action_id=action_id,
                     action=const.ResourceAction.deploy,
                     started=datetime.datetime.now().astimezone(),
@@ -150,7 +146,7 @@ class ToDbUpdateManager(StateUpdateManager):
                         data.LogLine.log(
                             logging.INFO,
                             "Resource deploy started on agent %(agent)s, setting status to deploying",
-                            agent=resource_id_parsed.agent_name,
+                            agent=resource_id.agent_name,
                         )
                     ],
                     status=const.ResourceState.deploying,

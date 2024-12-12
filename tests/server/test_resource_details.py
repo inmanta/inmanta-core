@@ -26,7 +26,7 @@ from uuid import UUID
 import pytest
 from dateutil.tz import UTC
 
-from inmanta import const, data, util
+from inmanta import const, data, resources, util
 from inmanta.agent import executor
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
@@ -590,7 +590,7 @@ async def test_move_to_available_state(server, environment, client, clienthelper
     for i in range(1, 3):
         action_id = uuid.uuid4()
         rvid = ResourceVersionIdStr(f"test::Resource[agent1,key=test{i}],v={version1}")
-        await update_manager.send_in_progress(action_id, rvid)
+        await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid))
         await update_manager.send_deploy_done(
             attribute_hash=util.make_attribute_hash(
                 resource_id=ResourceIdStr(f"test::Resource[agent1,key=test{i}]"), attributes=resources_v1[0]

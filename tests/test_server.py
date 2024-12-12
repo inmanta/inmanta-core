@@ -1177,7 +1177,7 @@ async def test_send_in_progress(server, client, environment, agent, method_to_us
 
     if method_to_use == "send_in_progress":
         update_manager = persistence.ToDbUpdateManager(client, env_id)
-        await update_manager.send_in_progress(action_id, ResourceVersionIdStr(rvid_r1_v1))
+        await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid_r1_v1))
     else:
         await agent._client.resource_action_update(
             tid=env_id,
@@ -1237,7 +1237,7 @@ async def test_send_in_progress_action_id_conflict(server, client, environment, 
 
     async def execute_send_in_progress(expect_exception: bool, resulting_nr_resource_actions: int) -> None:
         try:
-            await update_manager.send_in_progress(action_id, rvid_r1_v1)
+            await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid_r1_v1))
         except ValueError:
             assert expect_exception
         else:
@@ -1290,7 +1290,7 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
 
     update_manager = persistence.ToDbUpdateManager(client, env_id)
     action_id = uuid.uuid4()
-    await update_manager.send_in_progress(action_id, rvid_r1_v1)
+    await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid_r1_v1))
 
     # Assert initial state
     result = await client.get_resource_actions(tid=env_id)

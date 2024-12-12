@@ -22,7 +22,7 @@ from datetime import timezone
 
 import pytest
 
-from inmanta import const, data, util
+from inmanta import const, data, resources, util
 from inmanta.agent import executor
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.deploy import persistence, state
@@ -37,7 +37,7 @@ async def resource_deployer(client, environment, null_agent):
         @classmethod
         async def start_deployment(cls, rvid: ResourceVersionIdStr) -> uuid.UUID:
             action_id = uuid.uuid4()
-            await update_manager.send_in_progress(action_id, rvid)
+            await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid))
             return action_id
 
         @classmethod

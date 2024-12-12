@@ -41,7 +41,6 @@ from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, Resou
 from inmanta.config import Config
 from inmanta.const import Change
 from inmanta.data import ResourceIdStr
-from inmanta.data.model import ResourceVersionIdStr
 from inmanta.deploy import state, tasks
 from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ResourceScheduler
@@ -270,8 +269,8 @@ class DummyStateManager(StateUpdateManager):
     def __init__(self):
         self.state: dict[ResourceIdStr, const.ResourceState] = {}
 
-    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
-        self.state[Id.parse_id(resource_id).resource_str()] = const.ResourceState.deploying
+    async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
+        self.state[resource_id.resource_str()] = const.ResourceState.deploying
 
     async def send_deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
         self.state[result.resource_id] = result.status

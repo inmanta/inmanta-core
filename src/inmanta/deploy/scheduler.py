@@ -55,7 +55,7 @@ from inmanta.resources import Id
 LOGGER = logging.getLogger(__name__)
 
 
-class UnmanagedResource(Exception):
+class StaleResource(Exception):
     """
     An exception that indicates that a resource is not managed by the orchestrator.
     """
@@ -833,13 +833,13 @@ class ResourceScheduler(TaskManager):
                 model_version=self._state.version, details=resource_details, dependencies=dependencies
             )
             # Update the state in the database.
-            await self.send_in_progress(action_id, resource_details.id.resource_version_str())
+            await self.send_in_progress(action_id, Id.parse_id(ResourceVersionIdStr(f"{resource},v={self._state.version}")))
             return resource_intent
 
     async def deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
         try:
             await self.update_scheduler_state_for_finished_deploy(attribute_hash, result)
-        except UnmanagedResource:
+        except StaleResource:
             # The resource is no longer managed, no need to update the database state.
             pass
         else:
@@ -850,7 +850,7 @@ class ResourceScheduler(TaskManager):
         """
         Update the state of the scheduler based on the DeploymentResult of the given resource.
 
-        :raise UnmanagedResource: This update is about a resource that is no longer managed by the server.
+        :raise StaleResource: This update is about a resource that is no longer managed by the server.
         """
         resource_id: ResourceIdStr = result.resource_id
         if result.deployment_result is DeploymentResult.NEW:
@@ -862,7 +862,7 @@ class ResourceScheduler(TaskManager):
 
             if details is None:
                 # we are stale and removed
-                raise UnmanagedResource()
+                raise StaleResource()
 
             state: ResourceState = self._state.resource_state[resource_id]
 
@@ -1032,7 +1032,7 @@ class ResourceScheduler(TaskManager):
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
 
-    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
+    async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         await self._state_update_delegate.send_in_progress(action_id, resource_id)
 
     async def send_deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
