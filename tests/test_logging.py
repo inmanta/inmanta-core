@@ -337,5 +337,44 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
 def test_log_file_or_template(tmp_path):
 
     with pytest.raises(FileNotFoundError):
-        # TODO: do we
-        load_config_file_to_dict(tmp_path/"test", {})
+        # TODO: do we want more specific exceptions?
+        load_config_file_to_dict(str(tmp_path / "test"), {})
+
+    content_1 = {"test": "x"}
+    content_2 = {"test": "{xvar}", "flah": "\n\n\n{yvar}\n", "{test}": "value"}
+
+    f1 = tmp_path / "test.yaml"
+    f2 = tmp_path / "test.yaml.tmpl"
+
+    with open(f1, "w") as fh:
+        yaml.dump(content_1, fh)
+
+    with open(f2, "w") as fh:
+        yaml.dump(content_2, fh)
+
+    assert load_config_file_to_dict(str(f1), {}) == content_1
+
+    with pytest.raises(
+        Exception,
+        match="The configuration template at .* refers to context variable 'test',"
+        " but this variable is not available. The context is limited to xvar, yvar",
+    ):
+        load_config_file_to_dict(
+            str(f2),
+            {
+                "xvar": "A",
+                "yvar": "B",
+            },
+        )
+
+    config = load_config_file_to_dict(str(f2), {"xvar": "A", "yvar": "B", "test": "key"})
+    assert config == {"test": "A", "flah": "\n\n\nB\n", "key": "value"}
+
+    # we control the values, so not very relevant from security perspective
+    # overwrite type of injection
+    config = load_config_file_to_dict(str(f2), {"xvar": "A", "yvar": "B", "test": "flah"})
+    assert config == {"test": "A", "flah": "value"}
+
+    # Full on injection
+    config = load_config_file_to_dict(str(f2), {"xvar": "A", "yvar": "B", "test": "flah': 'zxxx'\ntest: zzz\nflah: zzz\n#"})
+    assert config == {"test": "zzz", "flah": "zzz"}

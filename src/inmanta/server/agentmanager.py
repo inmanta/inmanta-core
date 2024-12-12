@@ -1232,19 +1232,14 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         out: str = os.path.join(self._server_storage["logs"], "agent-%s.out" % env.id)
         err: str = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
 
-        agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
-
         proc: subprocess.Process = await self._fork_inmanta(
             [
                 "--log-file-level",
                 "DEBUG",
-                "--timed-logs",
                 "--config",
                 config_path,
                 "--config-dir",
                 Config._config_dir if Config._config_dir is not None else "",
-                "--log-file",
-                agent_log,
                 "scheduler",
             ],
             out,

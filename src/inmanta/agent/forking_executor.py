@@ -534,6 +534,7 @@ def mp_worker_entrypoint(
 ) -> None:
     """Entry point for child processes"""
     set_executor_status(name, "connecting")
+
     # Set up logging stage 1
     # Basic config, starts on std.out
     config_builder = inmanta.logging.LoggingConfigBuilder()

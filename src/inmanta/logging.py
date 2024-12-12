@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import enum
 import logging
 import logging.config
 import os
@@ -24,16 +23,19 @@ import re
 import sys
 from argparse import Namespace
 from collections import abc
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import Mapping
+from io import TextIOWrapper
 from logging import handlers
 from typing import Optional, TextIO
 
 import colorlog
 import yaml
 from colorlog.formatter import LogColors
+from yaml import Dumper, Node
 
 from inmanta import config, const
+from inmanta.config import component_log_configs
+from inmanta.const import LOG_CONTEXT_VAR_ENVIRONMENT
 from inmanta.server import config as server_config
 from inmanta.stable_api import stable_api
 
@@ -84,6 +86,20 @@ log_levels = {
 logging.addLevelName(3, "TRACE")
 
 
+class LogConfigDumper(Dumper):
+    """Ensure class variables are not shared, as representer config lives on the class"""
+
+    def encode_streams(self, data: object) -> Node:
+        if data == sys.stdout:
+            return self.represent_data("ext://sys.stdout")
+        if data == sys.stderr:
+            return self.represent_data("ext://sys.stderr")
+        raise Exception(f"Can not encode stream {data}")
+
+
+LogConfigDumper.add_representer(TextIOWrapper, LogConfigDumper.encode_streams)
+
+
 @stable_api
 class LoggingConfigExtension:
     """
@@ -99,7 +115,7 @@ class LoggingConfigExtension:
         formatters: Optional[abc.Mapping[str, object]] = None,
         handlers: Optional[abc.Mapping[str, object]] = None,
         loggers: Optional[abc.Mapping[str, object]] = None,
-        root_handlers: Optional[abc.Set[str]] = None,
+        root_handlers: Optional[list[str]] = None,
         log_dirs_to_create: Optional[abc.Set[str]] = None,
     ) -> None:
         """
@@ -108,7 +124,7 @@ class LoggingConfigExtension:
         self.formatters = formatters if formatters else {}
         self.handlers = handlers if handlers else {}
         self.loggers = loggers if loggers else {}
-        self.root_handlers = root_handlers if root_handlers else set()
+        self.root_handlers = root_handlers if root_handlers else []
         self.log_dirs_to_create = log_dirs_to_create if log_dirs_to_create else set()
 
     def ensure_log_dirs(self) -> None:
@@ -147,7 +163,7 @@ class FullLoggingConfig(LoggingConfigExtension):
         formatters: Optional[abc.Mapping[str, object]] = None,
         handlers: Optional[abc.Mapping[str, object]] = None,
         loggers: Optional[abc.Mapping[str, object]] = None,
-        root_handlers: Optional[abc.Set[str]] = None,
+        root_handlers: Optional[list[str]] = None,
         log_dirs_to_create: Optional[abc.Set[str]] = None,
         root_log_level: Optional[int | str] = None,
     ):
@@ -178,7 +194,7 @@ class FullLoggingConfig(LoggingConfigExtension):
             formatters=dict(**self.formatters, **logging_config_extension.formatters),
             handlers=dict(**self.handlers, **logging_config_extension.handlers),
             loggers=dict(**self.loggers, **logging_config_extension.loggers),
-            root_handlers=set(*self.root_handlers, *logging_config_extension.root_handlers),
+            root_handlers=sorted(list(set(*self.root_handlers, *logging_config_extension.root_handlers))),
             log_dirs_to_create=set(*self.log_dirs_to_create, *logging_config_extension.log_dirs_to_create),
             root_log_level=self.root_log_level,
         )
@@ -208,6 +224,9 @@ class FullLoggingConfig(LoggingConfigExtension):
             "disable_existing_loggers": False,
         }
 
+    def to_string(self) -> str:
+        return yaml.dump(self._to_dict_config(), Dumper=LogConfigDumper)
+
 
 class Options(Namespace):
     """
@@ -233,25 +252,10 @@ class Options(Namespace):
     logging_config: Optional[str] = None
 
 
-class LoggerMode(enum.Enum):
-    """
-    A different log format is used when the compiler/exporter is executed. This enum
-    indicates which mode we are currently executing in.
-        * COMPILER: the compiler is running.
-        * EXPORT: The exporter is running.
-        * OTHER: We are executing neither the compiler nor the exporter (e.g. running the server).
-    """
-
-    COMPILER = "compiler"
-    EXPORTER = "exporter"
-    OTHER = "other"
-
-
 class LoggingConfigBuilder:
     def get_bootstrap_logging_config(
         self,
         stream: TextIO = sys.stdout,
-        logging_config_extensions: Optional[abc.Sequence[LoggingConfigExtension]] = None,
         python_log_level: int = logging.INFO,
     ) -> FullLoggingConfig:
         """
@@ -259,14 +263,13 @@ class LoggingConfigBuilder:
         and the moment that the logging-related config options are parsed and applied.
 
         :param stream: The TextIO stream where the logs will be sent to.
-        :param logging_config_extensions: The logging config required by the extensions.
         :param python_log_level: python log level to configure for the bootstrap logger
         """
         name_root_handler = "core_console_handler"
         log_level_name = python_log_level_to_name(python_log_level)
         logging_config_core = FullLoggingConfig(
             formatters={
-                "core_console_formatter": self._get_multiline_formatter_config(),
+                "core_console_formatter": self._get_multiline_formatter_config(True),
             },
             handlers={
                 name_root_handler: {
@@ -277,17 +280,17 @@ class LoggingConfigBuilder:
                 },
             },
             loggers={},
-            root_handlers={name_root_handler},
+            root_handlers=[name_root_handler],
             root_log_level=log_level_name,
         )
-        logging_config_core.validate_for_extension(extension_name="core")
-        return self._join_logging_configs(logging_config_core, logging_config_extensions)
+        return logging_config_core
 
     def get_logging_config_from_options(
         self,
         stream: TextIO,
         options: Options,
-        logging_config_extensions: Optional[abc.Sequence[LoggingConfigExtension]] = None,
+        component: str | None,
+        context: Mapping[str, str],
     ) -> FullLoggingConfig:
         """
         Return the logging config based on the given configuration options, passed on the CLI,
@@ -296,18 +299,42 @@ class LoggingConfigBuilder:
         :param stream: The TextIO stream where the logs will be sent to.
         :param options: The config options passed on the CLI.
         :param logging_config_extensions: The logging config required by the extensions.
+        :param component: component we are starting
+        :param context: the component context we are starting with
         """
         handlers: dict[str, object] = {}
+        loggers: dict[str, object] = {}
         handler_root_logger: str
         log_level: int
-        if options.log_file:
+
+        log_file_cli_option = options.log_file
+
+        short_names = False
+        if component == "compiler":
+            short_names = not options.keep_logger_names
+
+        if component == "scheduler":
+            # Override defaults
+            if LOG_CONTEXT_VAR_ENVIRONMENT not in context:
+                raise Exception("The scheduler expect an environment as context")
+
+            env = context.get(LOG_CONTEXT_VAR_ENVIRONMENT)
+
+            # use setting as formerly passed by the autostarted agent manager if not set via CLI
+            if not log_file_cli_option:
+                log_file_cli_option = os.path.join(config.log_dir.get(), f"agent{env}-log")
+
+            # We don't override log-file-level as we can't detect if it is set
+
+        # Shared config
+        if log_file_cli_option:
             log_level = convert_inmanta_log_level(options.log_file_level)
             handler_root_logger = "core_server_log"
             handlers[handler_root_logger] = {
                 "class": "logging.handlers.WatchedFileHandler",
                 "level": log_level,
-                "formatter": "core_server_log_formatter",
-                "filename": options.log_file,
+                "formatter": "core_log_formatter",
+                "filename": log_file_cli_option,
                 "mode": "a+",
             }
         else:
@@ -320,98 +347,77 @@ class LoggingConfigBuilder:
                 "stream": stream,
             }
 
-        full_logging_config = FullLoggingConfig(
-            formatters={
-                # Always add all the formatters, even if they are not used by configuration. This way
-                # the formatters can be used if the user dumps the default logging config to file.
-                "core_resource_action_log_formatter": {
-                    "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
-                },
-                "core_server_log_formatter": {
-                    "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
-                },
-                "core_console_formatter": self._get_multiline_formatter_config(options),
+        formatters = {
+            # Always add all the formatters, even if they are not used by configuration. This way
+            # the formatters can be used if the user dumps the default logging config to file.
+            "core_console_formatter": self._get_multiline_formatter_config(not short_names, options),
+            "core_log_formatter": {
+                "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
             },
-            handlers={
-                **handlers,
-                "core_resource_action_handler": {
-                    "class": "inmanta.logging.ParametrizedFileHandler",
-                    "level": "DEBUG",
-                    "formatter": "core_resource_action_log_formatter",
-                    "name_parent_logger": const.NAME_RESOURCE_ACTION_LOGGER,
-                    "log_file_template": os.path.join(
-                        config.log_dir.get(), server_config.server_resource_action_log_prefix.get() + "{child_logger_name}.log"
-                    ),
-                },
+        }
+
+        handlers.update(
+            {
                 "core_tornado_debug_log_handler": {
                     "class": "inmanta.logging.TornadoDebugLogHandler",
                     "level": "DEBUG",
                 },
-            },
-            loggers={
-                const.NAME_RESOURCE_ACTION_LOGGER: {
-                    "level": "DEBUG",
-                    "propagate": True,
-                    "handlers": ["core_resource_action_handler"],
-                },
+            }
+        )
+
+        loggers.update(
+            {
                 "tornado.general": {
                     "level": "DEBUG",
                     "propagate": True,
                     "handlers": ["core_tornado_debug_log_handler"],
-                },
-            },
-            root_handlers={handler_root_logger},
+                }
+            }
+        )
+
+        if component == "server":
+            # Fully generic
+            pass
+        elif component == "scheduler":
+            # Resource action log
+            formatters.update(
+                {
+                    "resource_action_log_formatter": {
+                        "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
+                    }
+                }
+            )
+            handlers.update(
+                {
+                    "scheduler_resource_action_handler": {
+                        "class": "logging.handlers.WatchedFileHandler",
+                        "level": "DEBUG",
+                        "formatter": "resource_action_log_formatter",
+                        "filename": os.path.join(
+                            config.log_dir.get(),
+                            server_config.server_resource_action_log_prefix.get()
+                            + f"{context.get(LOG_CONTEXT_VAR_ENVIRONMENT)}.log",
+                        ),
+                    },
+                }
+            )
+            loggers.update(
+                {
+                    const.NAME_RESOURCE_ACTION_LOGGER: {
+                        "level": "DEBUG",
+                        "propagate": True,
+                        "handlers": ["scheduler_resource_action_handler"],
+                    },
+                }
+            )
+
+        full_logging_config = FullLoggingConfig(
+            formatters=formatters,
+            handlers=handlers,
+            loggers=loggers,
+            root_handlers=[handler_root_logger],
             root_log_level=log_level,
         )
-        full_logging_config.validate_for_extension(extension_name="core")
-        return self._join_logging_configs(full_logging_config, logging_config_extensions)
-
-    def get_logging_config_for_agent(self, log_file: str, inmanta_log_level: str, cli_log: bool) -> FullLoggingConfig:
-        """
-        Returns the logging config for an agent.
-
-        :param log_file: The log file were the logs should be sent to.
-        :param inmanta_log_level: The Inmanta log level threshold, that indicates which log records should be ignored
-                                  and which should be logged. This log level is taking into account for log records sent
-                                  to file and to stderr.
-        :param cli_log: A boolean indicating whether logs should also be sent to stderr or not.
-        """
-        python_log_level: int = convert_inmanta_log_level(inmanta_log_level)
-        cli_handlers = {}
-        name_root_handler = "core_agent_log_handler"
-        root_loggers = {name_root_handler}
-        if cli_log:
-            cli_handlers["core_console_handler"] = {
-                "class": "logging.StreamHandler",
-                "formatter": "core_console_formatter",
-                "level": python_log_level,
-                "stream": "ext://sys.stderr",
-            }
-            root_loggers.add("core_console_handler")
-        full_logging_config = FullLoggingConfig(
-            formatters={
-                # Always add all the formatters, even if they are not used by configuration. This way
-                # the formatters can be used if the user dumps the default logging config to file.
-                "core_agent_log_formatter": {
-                    "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
-                },
-                "core_console_formatter": self._get_multiline_formatter_config(),
-            },
-            handlers={
-                name_root_handler: {
-                    "class": "logging.handlers.WatchedFileHandler",
-                    "level": python_log_level,
-                    "formatter": "core_agent_log_formatter",
-                    "filename": log_file,
-                    "mode": "a+",
-                },
-                **cli_handlers,
-            },
-            loggers={},
-            root_handlers=root_loggers,
-            root_log_level=python_log_level,
-        )
-        full_logging_config.validate_for_extension(extension_name="core")
         return full_logging_config
 
     def _join_logging_configs(
@@ -429,25 +435,17 @@ class LoggingConfigBuilder:
             result = result.join(logging_config_ext)
         return result
 
-    def _get_multiline_formatter_config(self, options: Optional[Options] = None) -> dict[str, object]:
+    def _get_multiline_formatter_config(self, keep_logger_names: bool, options: Optional[Options] = None) -> dict[str, object]:
         """
         Returns the dict-based formatter config for logs that will be sent to the console.
 
         :param options: The config options requested by the user or None if the config options are not parsed yet and
                         the bootstrap_logger_config should be used.
         """
+
         # Use a shorter space padding if we know that we will use short names as the logger name.
         # Otherwise the log records contains too much white spaces.
-        space_padding_after_logger_name = (
-            15
-            if (
-                options
-                and not options.keep_logger_names
-                and hasattr(options, "func")
-                and options.func.__name__ in ["compile_project", "export"]
-            )
-            else 25
-        )
+        space_padding_after_logger_name = 25 if (keep_logger_names) else 15
         log_format = "%(asctime)s " if options and options.timed else ""
         if _is_on_tty():
             log_format += f"%(log_color)s%(name)-{space_padding_after_logger_name}s%(levelname)-8s%(reset)s%(blue)s%(message)s"
@@ -462,7 +460,7 @@ class LoggingConfigBuilder:
             "log_colors": log_colors,
             "reset": _is_on_tty(),
             "no_color": not _is_on_tty(),
-            "keep_logger_names": options.keep_logger_names if options else False,
+            "keep_logger_names": keep_logger_names,
         }
 
 
@@ -483,42 +481,6 @@ def convert_inmanta_log_level(inmanta_log_level: str, cli: bool = False) -> int:
     # Converts the Inmanta log level to the Python log level
     python_log_level = log_levels[inmanta_log_level]
     return python_log_level
-
-
-class LoggerModeManager:
-    """
-    A singleton that keeps track of the current LoggerMode.
-    """
-
-    _instance: Optional["LoggerModeManager"] = None
-
-    def __init__(self) -> None:
-        self._logger_mode = LoggerMode.OTHER
-
-    def get_logger_mode(self) -> LoggerMode:
-        """
-        Returns the current logger mode.
-        """
-        return self._logger_mode
-
-    @contextmanager
-    def run_in_logger_mode(self, logger_mode: LoggerMode) -> Iterator[None]:
-        """
-        A contextmanager that can be used to temporarily change the LoggerMode within a code block.
-        This ContextManager updates the LoggerModeManager singleton and is therefore not async- or threadsafe.
-        """
-        prev_logger_mode = self._logger_mode
-        self._logger_mode = logger_mode
-        try:
-            yield
-        finally:
-            self._logger_mode = prev_logger_mode
-
-    @classmethod
-    def get_instance(cls) -> "LoggerModeManager":
-        if cls._instance is None:
-            cls._instance = LoggerModeManager()
-        return cls._instance
 
 
 @stable_api
@@ -550,6 +512,7 @@ class InmantaLoggerConfig:
         self._handlers: abc.Sequence[logging.Handler] = self._apply_logging_config(log_config)
         self._options_applied: bool = False
         self._logging_configs_extensions: list[LoggingConfigExtension] = []
+        self._loaded_config: FullLoggingConfig | None = None
         if logfire_enabled:
             logging.root.addHandler(LogfireLoggingHandler())
 
@@ -594,7 +557,7 @@ class InmantaLoggerConfig:
         logging.shutdown()
         cls._instance = None
 
-    def _get_path_to_logging_config_file(self, options: Options) -> Optional[str]:
+    def _get_path_to_logging_config_file(self, options: Options, component: str | None = None) -> Optional[str]:
         """
         Returns the path to the logging config file that was configured by the user
         or None if no logging config file was set.
@@ -602,16 +565,19 @@ class InmantaLoggerConfig:
         The configuration options are considered in the following order:
            1. The --logging-config CLI option.
            2. The INMANTA_CONFIG_LOGGING_CONFIG environment variable.
+           3. The component specific log config option
            3. The logging_config option in the config files.
 
         :param options: The configuration options passed on the CLI.
         """
         if options.logging_config:
             return options.logging_config
+        if component is not None:
+            return component_log_configs[component].get()
         return config.logging_config.get()
 
     @stable_api
-    def apply_options(self, options: Options) -> None:
+    def apply_options(self, options: Options, component: str | None = None, context: Mapping[str, str] = {}) -> None:
         """
         Apply the logging options to the current handler. A handler should have been created before
 
@@ -621,38 +587,34 @@ class InmantaLoggerConfig:
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
 
-        logging_config_file: Optional[str] = self._get_path_to_logging_config_file(options)
+        logging_config_file: Optional[str] = self._get_path_to_logging_config_file(options, component)
         if logging_config_file:
-            self._apply_logging_config_from_file(logging_config_file)
+            self._apply_logging_config_from_file(logging_config_file, context)
         else:
-            self._apply_logging_config_from_options(options)
+            self._apply_logging_config_from_options(options, component, context)
         self._options_applied = True
 
-    def _apply_logging_config_from_file(self, config_file: str) -> None:
+    def _apply_logging_config_from_file(self, config_file: str, context: Mapping[str, str] = {}) -> None:
         """
         Apply the given logging config file.
         """
         handlers_before = list(logging.root.handlers)
-        if not os.path.isfile(config_file):
-            raise Exception(f"No logging config file exists at {config_file}.")
-        with open(config_file, "r") as fh:
-            try:
-                dict_config = yaml.safe_load(fh)
-            except yaml.YAMLError:
-                raise Exception(f"Failed to parse the logging config file at {config_file} as YAML.")
+        dict_config = load_config_file_to_dict(config_file, context)
         try:
             logging.config.dictConfig(dict_config)
         except Exception:
             raise Exception(f"Failed to apply the logging config defined in {dict_config}.")
         self._handlers = [handler for handler in logging.root.handlers if handler not in handlers_before]
 
-    def _apply_logging_config_from_options(self, options: Options) -> None:
+    def _apply_logging_config_from_options(
+        self, options: Options, component: str | None = None, context: Mapping[str, str] = {}
+    ) -> None:
         """
         Apply the logging configuration as defined by the CLI options when the --logging-config option is not set.
         """
         config_builder = LoggingConfigBuilder()
         logging_config: FullLoggingConfig = config_builder.get_logging_config_from_options(
-            self._stream, options, self._logging_configs_extensions
+            self._stream, options, component, context
         )
         self._handlers = self._apply_logging_config(logging_config)
 
@@ -664,6 +626,7 @@ class InmantaLoggerConfig:
         """
         handlers_before = list(logging.root.handlers)
         logging_config.apply_config()
+        self._loaded_config = logging_config
         return [handler for handler in logging.root.handlers if handler not in handlers_before]
 
     @stable_api
@@ -676,6 +639,7 @@ class InmantaLoggerConfig:
         :param inmanta_log_level: The inmanta logging level
         :param cli: True if the logs will be outputted to the CLI.
         """
+        # ToDO: remove?
         python_log_level = convert_inmanta_log_level(inmanta_log_level, cli)
         for handler in self._handlers:
             handler.setLevel(python_log_level)
@@ -688,6 +652,7 @@ class InmantaLoggerConfig:
 
         :param formatter: The log formatter.
         """
+        # ToDO: remove?
         for handler in self._handlers:
             handler.setFormatter(formatter)
 
@@ -699,6 +664,7 @@ class InmantaLoggerConfig:
 
         :param location: The location of the log file.
         """
+        # ToDO: remove?
         file_handler = logging.handlers.WatchedFileHandler(filename=location, mode="a+")
         for handler in self._handlers:
             handler.close()
@@ -713,6 +679,7 @@ class InmantaLoggerConfig:
 
         :return: The logging handler
         """
+        # ToDO: remove?
         if not self._handlers:
             raise Exception("No handlers found.")
         return self._handlers[0]
@@ -722,6 +689,7 @@ class InmantaLoggerConfig:
         """
         Register the default logging config for a certain extension.
         """
+        # ToDO: remove?
         self._logging_configs_extensions.append(logging_config)
 
 
@@ -745,7 +713,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         log_colors: Optional[LogColors] = None,
         reset: bool = True,
         no_color: bool = False,
-        keep_logger_names: bool,
+        keep_logger_names: bool = True,
     ):
         """
         Initialize a new `MultiLineFormatter` instance.
@@ -761,7 +729,6 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         super().__init__(fmt, log_colors=log_colors, reset=reset, no_color=no_color)
         self.fmt = fmt
         self._keep_logger_names = keep_logger_names
-        self._logger_mode_manager = LoggerModeManager.get_instance()
 
     def get_header_length(self, record: logging.LogRecord) -> int:
         """
@@ -822,8 +789,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
 
         :attr logger_name: The name of the logger that was used to create the log record.
         """
-        logger_mode = self._logger_mode_manager.get_logger_mode()
-        if not self._keep_logger_names and logger_mode in [LoggerMode.COMPILER, LoggerMode.EXPORTER]:
+        if not self._keep_logger_names:
             if not logger_name.startswith("inmanta"):
                 # This is a log record from a third-party library. Don't adjust the logger name.
                 return logger_name
@@ -834,9 +800,13 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
             if match:
                 # Log record created by an Inmanta module.
                 return match.groupdict()["module_name"]
+            elif "export" in logger_name:
+                return "exporter"
+            elif "protocol" in logger_name:
+                return "exporter"
             else:
                 # Log record created by Inmanta code.
-                return logger_mode.value
+                return "compiler"
         else:
             # Don't modify the logger name
             return logger_name
@@ -924,17 +894,22 @@ class TornadoDebugLogHandler(logging.Handler):
             self.logger.warning(record.msg)  # Log Tornado log as inmanta warnings
 
 
-def load_config_file_to_dict(file_name: str, context: dict[str, str] | None) -> dict:
-    # todo: make command to render file to console
-
+def load_config_file_to_dict(file_name: str, context: Mapping[str, str]) -> dict[str, object]:
     # will raise os error if something is wrong
     with open(file_name, "r") as fh:
         content = fh.read()
 
     if file_name.endswith(".tmpl"):
-        template = content.format(**context)
+        try:
+            content = content.format(**context)
+        except KeyError as e:
+            all_keys = ", ".join(context.keys())
+            # Not very good exception
+            raise Exception(
+                f"The configuration template at {file_name} refers to context variable {str(e)}, "
+                f"but this variable is not available. The context is limited to {all_keys}"
+            )
 
-    dict_config = yaml.safe_load(config)
+    dict_config = yaml.safe_load(content)
 
     return dict_config
-
