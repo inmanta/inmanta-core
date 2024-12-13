@@ -58,7 +58,7 @@ FAIL_DEPLOY: str = "fail_deploy"
 
 async def retry_limited_fast(
     fun: Callable[..., bool] | Callable[..., Awaitable[bool]],
-    timeout: float = 15,
+    timeout: float = 0.1,
     interval: float = 0.005,
     *args: object,
     **kwargs: object,
