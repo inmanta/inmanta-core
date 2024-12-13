@@ -210,7 +210,7 @@ class ReferenceCollector:
             case _:
                 pass
 
-    def add_reference(self, path: str, reference: references.Reference) -> None:
+    def add_reference(self, path: str, reference: references.Reference[references.PrimitiveTypes]) -> None:
         """Add a new attribute map to a value reference that we found at the given path.
 
         :param path: The path where the value needs to be inserted
@@ -241,7 +241,8 @@ def collect_references(value_reference_collector: ReferenceCollector, value: obj
     match value:
         case list() | proxy.SequenceProxy():
             return [
-                collect_references(value_reference_collector, value, f"{path}[{index}]") for index, value in enumerate(value)
+                collect_references(value_reference_collector, value, f"{path}[{index}]")
+                for index, value in enumerate(cast(typing.Iterable[object], value))
             ]
 
         case dict() | proxy.DictProxy():
@@ -545,11 +546,11 @@ class Resource(metaclass=ResourceMeta):
 
     def resolve_all_references(self) -> None:
         """Resolve all value references"""
-        for ref in self.references:
+        for ref in self.references:  # type: ignore
             model = references.ReferenceModel(**ref)
             self._references_model[model.id] = model
 
-        for mutator in self.mutators:
+        for mutator in self.mutators:  # type: ignore
             mutator = references.mutator.get_class(mutator["type"]).deserialize(references.MutatorModel(**mutator), self)
             mutator.run()
 
@@ -559,9 +560,10 @@ class Resource(metaclass=ResourceMeta):
                 setattr(self, field, fields[field])
             else:
                 raise Exception("Resource with id {} does not have field {}".format(fields["id"], field))
+
         if "requires" in fields:
             # parse requires into ID's
-            for require in fields["requires"]:
+            for require in fields["requires"]:  # type: ignore
                 self.requires.add(Id.parse_id(require))
 
     def set_version(self, version: int) -> None:

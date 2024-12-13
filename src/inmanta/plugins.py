@@ -449,7 +449,6 @@ class PluginReturn(PluginValue):
         if is_datclass_based:
 
             def make_dc(value: object) -> object:
-                # TODO: add correct type check
                 if isinstance(value, base_type._paired_dataclass) or references.is_reference_of(
                     value, base_type._paired_dataclass
                 ):

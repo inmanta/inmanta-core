@@ -134,7 +134,9 @@ class DynamicProxy:
         return item
 
     @classmethod
-    def return_value(cls, value: object) -> Union[None, str, tuple[object, ...], int, float, bool, "DynamicProxy"]:
+    def return_value(
+        cls, value: object
+    ) -> Union[None, str, tuple[object, ...], int, float, bool, "DynamicProxy", references.Reference[references.RefValue]]:
         """
         Converts a value from the internal domain to the plugin domain.
         """

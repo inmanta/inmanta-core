@@ -243,7 +243,7 @@ class DataclassRefeferenMeta(type):
             dct = cls.get_dataclass_type()
             return getattr(dct, DATACLASS_FIELDS)
 
-        return type.__getattr__(cls)
+        return type.__getattr__(cls)  # type: ignore
 
 
 class Reference[T: RefValue](Base):
@@ -304,7 +304,7 @@ class DataclassReference[T: DataclassProtocol](Reference[T], metaclass=Dataclass
             return AttributeReference(
                 reference=self,
                 attribute_name=name,
-                attribute_type=fields[name].type,
+                attribute_type=typing.cast(PrimitiveTypes, fields[name].type),
             )
 
         raise AttributeError(name=name, obj=self)
@@ -317,6 +317,7 @@ class DataclassReference[T: DataclassProtocol](Reference[T], metaclass=Dataclass
 class reference[T: Reference[RefValue]]:
     """This decorator register a reference under a specific name"""
 
+    # It is not allowed to use T in a class var so we cannot use T here
     _reference_classes: typing.ClassVar[dict[str, type[Reference[RefValue]]]] = {}
 
     def __init__(self, name: str) -> None:
@@ -335,7 +336,7 @@ class reference[T: Reference[RefValue]]:
         return cls
 
     @classmethod
-    def get_class(cls, name: str) -> type[T]:
+    def get_class(cls, name: str) -> type[Reference[RefValue]]:
         """Get the class of registered with the given name"""
         if name not in cls._reference_classes:
             raise TypeError(f"There is no reference class registered with name {name}")
@@ -360,7 +361,7 @@ class mutator[T: Mutator]:
         self.name = name
 
     def __call__(self, cls: type[T]) -> type[T]:
-        """Register a new mutator. If we already have it explictly delete it (reload)"""
+        """Register a new mutator. If we already have it explicitly delete it (reload)"""
         if self.name in mutator._mutator_classes:
             del mutator._mutator_classes[self.name]
 
@@ -388,7 +389,7 @@ class AttributeReference[T: PrimitiveTypes](Reference[T]):
 
     def __init__(
         self,
-        reference: DataclassProtocol,
+        reference: DataclassProtocol | DataclassReference[DataclassProtocol],
         attribute_name: str,
         attribute_type: typing.Type[T],
     ) -> None:
@@ -423,7 +424,7 @@ class ReplaceValue(Mutator):
         dict_path_expr.set_element(self.resource, value)
 
 
-def is_reference_of(instance: typing.Optional[object], type_class: type[PrimitiveTypes]) -> bool:
+def is_reference_of(instance: typing.Optional[object], type_class: type[object]) -> bool:
     """Is the given instance a reference to the given type."""
     if instance is None or not isinstance(instance, Reference):
         return False
@@ -431,8 +432,9 @@ def is_reference_of(instance: typing.Optional[object], type_class: type[Primitiv
     if isinstance(instance, AttributeReference):
         return instance.attribute_type is type_class
 
-    generic_args = [typing.get_args(base)[0] for base in instance.__orig_bases__]
-    if len(generic_args) == 1:
-        return generic_args[0] is type_class
+    if hasattr(instance, "__orig_bases__"):
+        generic_args = [typing.get_args(base)[0] for base in instance.__orig_bases__]
+        if len(generic_args) == 1:
+            return generic_args[0] is type_class
 
     return False
