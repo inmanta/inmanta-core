@@ -1254,7 +1254,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         is_orphan=False,
         deployment_result=DeploymentResult.DEPLOYED,
         blocked_status=BlockedStatus.YES,
-        expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
+        expected_compliance_status=ComplianceStatus.COMPLIANT,
     )
 
 
