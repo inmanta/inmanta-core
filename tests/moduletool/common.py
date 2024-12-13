@@ -247,7 +247,6 @@ def make_module_simple(reporoot, name, depends=[], version="3.2", project=False)
     commitmodule(mod, "first commit")
     if not project:
         add_file(mod, "signal", "present", "second commit")
-    # add_tag(mod, version)
     return mod
 
 

@@ -137,8 +137,7 @@ def modules_repo(git_modules_dir) -> str:
     mod5 = make_module_simple(reporoot, "mod5", version="0.1")
     add_file(mod5, "badsignal", "present", "third commit", dev=True)
 
-    mod6 = make_module_simple(reporoot, "mod6", version="3.1")
-    add_file(mod6, "signal", "present", "third commit", minor=True)
+    mod6 = make_module_simple(reporoot, "mod6", version="3.2")
     add_file(mod6, "badsignal", "present", "fourth commit", dev=True)
 
     mod7 = make_module_simple(reporoot, "mod7")
