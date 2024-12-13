@@ -22,6 +22,7 @@ import inspect
 import typing
 from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
+from inmanta import references
 from inmanta.ast import (
     CompilerException,
     DataClassException,
@@ -702,13 +703,16 @@ class Entity(NamedType, WithComment):
          i.e. for which 'corresponds_to' returns True
          i.e. instances of the associated dataclass
         """
-        assert isinstance(value, self._paired_dataclass)
+        # TODO: improve type check
+        assert isinstance(value, self._paired_dataclass) or isinstance(value, references.DataclassReference)
 
         def convert_none(x: object | None) -> object:
             return x if x is not None else NoneValue()
 
+        attributes = {k.name: convert_none(getattr(value, k.name)) for k in dataclasses.fields(value)}
+
         instance = self.get_instance(
-            {k.name: convert_none(getattr(value, k.name)) for k in dataclasses.fields(value)},
+            attributes,
             resolver,
             queue,
             location,

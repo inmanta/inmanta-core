@@ -19,11 +19,10 @@
 import json
 import os
 import typing
-import uuid
 
 import pytest
 
-from inmanta import env, resources, util
+from inmanta import env, references, resources, util
 
 if typing.TYPE_CHECKING:
     from conftest import SnippetCompilationTest
@@ -36,11 +35,19 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
     """Test the use of references in the model and if they produce the correct serialized form."""
     refs_module = os.path.join(modules_v2_dir, "refs")
 
+    def assert_id(ref_list: list[references.ReferenceModel], ref_type: str, ref_id: str) -> references.ReferenceModel:
+        """Assert that the reference of type `ref_type` has id `ref_id`"""
+        refs = {str(ref.id): ref for ref in ref_list}
+        assert ref_id in refs
+        assert refs[ref_id].type == ref_type
+
+        return refs[ref_id]
+
     snippetcompiler.setup_for_snippet(
         snippet="""
         import refs
         import std::testing
-        
+
         test_ref = refs::create_test(value=refs::create_string_reference(name="CWD"))
 
         std::testing::NullResource(
@@ -56,8 +63,10 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
     serialized = res_dict.popitem()[1].serialize()
 
     # validate that our UUID is stable
-    assert serialized["references"][0].id == uuid.UUID("541c1529-a48e-347f-b3bc-992e03ac54ef")
-    assert serialized["references"][1].id == uuid.UUID("154575d1-df13-3dec-afd2-ca8c86b55f18")
+    assert_id(serialized["references"], "refs::Bool", "207f236b-43ea-36e3-b5a2-998117929c04")
+    assert_id(serialized["references"], "refs::TestReference", "78d7ff5f-6309-3011-bfff-8068471d5761")
+    assert_id(serialized["references"], "core::AttributeReference", "a2a6c977-699f-3294-8e53-9d4d101b6b72")
+    assert_id(serialized["references"], "refs::String", "a8ed8c4f-204a-3f7e-a630-e21cb20e9209")
 
     data = json.dumps(serialized, default=util.api_boundary_json_encoder)
 

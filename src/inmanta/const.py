@@ -378,3 +378,4 @@ RESOURCE_ATTRIBUTE_MUTATORS: typing.Final[str] = "mutators"
 
 # Field in an instance to link it to the associated dataclass
 # Because it starts with a space, it can never collide with a valid attribute defined in the model
+DATACLASS_SELF_FIELD = " dataclass"

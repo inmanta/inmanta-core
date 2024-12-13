@@ -1,7 +1,7 @@
 import os
 import dataclasses
 
-from inmanta.references import reference, Reference
+from inmanta.references import reference, Reference, DataclassReference
 from inmanta.plugins import plugin
 
 
@@ -62,7 +62,7 @@ class Test:
 
 
 @reference("refs::TestReference")
-class TestReference(Reference[Test]):
+class TestReference(DataclassReference[Test]):
     """A reference that returns a dataclass"""
 
     def __init__(self, value: str) -> None:
@@ -70,11 +70,11 @@ class TestReference(Reference[Test]):
         :param value: The value
         """
         super().__init__(value=value)
-        self.value = value
+        self._value = value
 
     def resolve(self) -> Test:
         """Resolve test references"""
-        return Test(value=self.value)
+        return Test(value=self._value)
 
 
 @plugin

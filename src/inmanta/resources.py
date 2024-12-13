@@ -287,12 +287,12 @@ class Resource(metaclass=ResourceMeta):
             return False
 
     @staticmethod
-    def get_references(_, instance) -> typing.Sequence[references.ReferenceModel]:
+    def get_references(_, instance: "Resource") -> typing.Sequence[references.ReferenceModel]:
         """This method is present so the serialization works correctly. This field is set by the serializer"""
         return []
 
     @staticmethod
-    def get_mutators(_, instance) -> typing.Sequence[references.MutatorModel]:
+    def get_mutators(_, instance: "Resource") -> typing.Sequence[references.MutatorModel]:
         """This method is present so the serialization works correctly. This field is set by the serializer"""
         return []
 
@@ -472,7 +472,7 @@ class Resource(metaclass=ResourceMeta):
         # - receive_events
         # - references
         # - mutators
-        extra = {}
+        extra: dict[str, object] = {}
         if const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS not in obj_map:
             extra[const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS] = True
 

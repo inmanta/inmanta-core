@@ -17,6 +17,7 @@
 """
 
 import abc
+import builtins
 import collections
 import dataclasses
 import hashlib
@@ -27,6 +28,7 @@ import uuid
 from typing import Tuple
 
 import pydantic
+import typing_inspect
 
 import inmanta
 from inmanta import util
@@ -41,7 +43,7 @@ class DataclassProtocol(typing.Protocol):
     """Protocol use to only allow classes that have been annotated as dataclass"""
 
     @property
-    def __dataclass_fields__(self) -> collections.abc.Mapping[str, dataclasses.Field]:
+    def __dataclass_fields__(self) -> collections.abc.Mapping[str, dataclasses.Field[object]]:
         r"""Return the fields of the dataclass."""
 
 
@@ -108,7 +110,7 @@ class PythonTypeArgument(Argument):
     value: str
 
     def get_arg_value(self, resource: "inmanta.resources.Resource") -> object:
-        return None
+        return getattr(builtins, self.value)
 
 
 class ResourceArgument(Argument):
@@ -155,7 +157,7 @@ class Base:
 
     def __init__(self, **kwargs: object) -> None:
         self._arguments: typing.Mapping[str, object] = kwargs
-        self._model: typing.Optional[ReferenceModel] = None
+        self._model: typing.Optional[BaseModel] = None
         # TODO: do we want to enforce type correctness when creating a reference? This also has impact on how arguments are
         #       are serialized: based on instance types or on static types
 
@@ -178,8 +180,7 @@ class Base:
 
     def serialize_arguments(self) -> Tuple[uuid.UUID, list[ArgumentTypes]]:
         """Serialize the arguments to this class"""
-        parameters = inspect.get_annotations(self.__init__, eval_str=True)
-
+        parameters = inspect.get_annotations(type(self).__init__, eval_str=True)
         arguments: list[ArgumentTypes] = []
         for name, value in self._arguments.items():
             param_type = parameters.get(name)
@@ -194,10 +195,13 @@ class Base:
                 case "resource", _, inmanta.resources.Resource:
                     arguments.append(ResourceArgument(name=name))
 
-                case _:
-                    raise TypeError(f"Unable to serialize argument {name} of {self}")
+                case _, type(), _ if value in [str, float, int, bool]:
+                    arguments.append(PythonTypeArgument(name=name, value=value.__name__))
 
-        data = json.dumps(arguments, default=util.api_boundary_json_encoder, sort_keys=True)
+                case _:
+                    raise TypeError(f"Unable to serialize argument `{name}` of `{self}`")
+
+        data = json.dumps({"type": self.type, "args": arguments}, default=util.api_boundary_json_encoder, sort_keys=True)
         hasher = hashlib.md5()
         hasher.update(data.encode())
         return uuid.uuid3(uuid.NAMESPACE_OID, hasher.digest()), arguments
@@ -224,19 +228,19 @@ class Mutator(Base):
         return self._model
 
 
-class RefMeta(type):
-    """ A metaclass to make Reference work with dataclasses"""
+class DataclassRefeferenMeta(type):
+    """A metaclass to make Reference work with dataclasses"""
 
     def __getattr__(cls, name: str) -> object:
-        """ Act as a dataclass if required """
+        """Act as a dataclass if required"""
         if name == dataclasses._FIELDS:
-            print(name)
+            dct = cls.get_dataclass_type()
+            return getattr(dct, dataclasses._FIELDS)
 
-        return type.__getstate__(cls)
+        return type.__getattr__(cls)
 
 
-
-class Reference[T: RefValue](Base, metaclass=RefMeta):
+class Reference[T: RefValue](Base):
     """Instances of this class can create references to a value and resolve them."""
 
     def __init__(self, **kwargs: object) -> None:
@@ -264,6 +268,19 @@ class Reference[T: RefValue](Base, metaclass=RefMeta):
 
         return self._model
 
+
+class DataclassReference[T: DataclassProtocol](Reference, metaclass=DataclassRefeferenMeta):
+    @classmethod
+    def get_dataclass_type(cls) -> DataclassProtocol:
+        """Get the dataclass type that the reference points to"""
+        for g in cls.__orig_bases__:
+            if typing_inspect.is_generic_type(g):
+                for arg in typing.get_args(g):
+                    if dataclasses.is_dataclass(arg):
+                        return arg
+
+        raise TypeError("A dataclass reference requires a typevar that is bound to the dataclass it references.")
+
     def _get_T(self) -> type[T]:
         """Get the type of reference that we are"""
         generic_args = [typing.get_args(base)[0] for base in self.__orig_bases__]
@@ -275,18 +292,21 @@ class Reference[T: RefValue](Base, metaclass=RefMeta):
         """If our reference is a subclass of Value (dataclass), we return a reference to the
         attribute instead of the attribute itself.
 
-        Note: something similar can be implemented for dict access using __getitem__
-
         :param name: The name of the attribute to fetch
         :return: A reference to the attribute
         """
-        value_type = self._get_T()
-        if dataclasses.is_dataclass(value_type) and name in dataclasses.fields(value_type):
-                return AttributeReference(
-                    resolver=self,
-                    attribute_name=name,
-                    attribute_type=value_type.__annotations__[name],
-                )
+        dc_type = self.get_dataclass_type()
+        if name == dataclasses._FIELDS:
+            return getattr(dc_type, dataclasses._FIELDS)
+
+        fields = {f.name: f for f in dataclasses.fields(dc_type)}
+        if name in fields:
+            return AttributeReference(
+                reference=self,
+                attribute_name=name,
+                attribute_type=fields[name].type,
+            )
+
         raise AttributeError(name=name, obj=self)
 
 
@@ -297,7 +317,7 @@ class Reference[T: RefValue](Base, metaclass=RefMeta):
 class reference[T: Reference[RefValue]]:
     """This decorator register a reference under a specific name"""
 
-    _reference_classes: typing.ClassVar[dict[str, Reference]] = {}
+    _reference_classes: typing.ClassVar[dict[str, type[Reference[T]]]] = {}
 
     def __init__(self, name: str) -> None:
         """
@@ -363,21 +383,22 @@ class mutator[T: Reference[RefValue]]:
 
 
 @reference(name="core::AttributeReference")
-class AttributeReference(Reference[T]):
-    """A reference that points to a value in an attribute"""
+class AttributeReference[T: PrimitiveTypes](Reference[T]):
+    """A reference that points to a value in an attribute of a dataclass"""
 
     def __init__(
         self,
-        resolver: Reference[DataclassProtocol],
+        reference: DataclassProtocol,
         attribute_name: str,
-        attribute_type: typing.Type[
-            T
-        ],  # This allows to have "relations" so we might need to constraint this to primitive types only
+        attribute_type: typing.Type[T],
     ) -> None:
-        super().__init__(resolver=resolver, attribute_name=attribute_name)
+        super().__init__(reference=reference, attribute_name=attribute_name, attribute_type=attribute_type)
+        self.attribute_name = attribute_name
+        self.attribute_type = attribute_type
+        self.reference = reference
 
     def resolve(self) -> T:
-        return getattr(self._resolver.resolve(), self._attribute_name)
+        return getattr(self.reference, self.attribute_name)
 
 
 @mutator(name="core::Replace")
@@ -407,7 +428,11 @@ def is_reference_of(instance: typing.Optional[object], type_class: type[Primitiv
     if instance is None or not isinstance(instance, Reference):
         return False
 
+    if isinstance(instance, AttributeReference):
+        return instance.attribute_type is type_class
+
     generic_args = [typing.get_args(base)[0] for base in instance.__orig_bases__]
     if len(generic_args) == 1:
-        return generic_args[0]
+        return generic_args[0] is type_class
+
     return False
