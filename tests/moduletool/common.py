@@ -107,17 +107,36 @@ def add_file(
     major: bool = False,
     dev=False,
 ):
+    """
+    Add a file for a given module.
+    If no semver flag is set (revision, patch, minor or major) the newly added file will be commited
+    but the module will not be released.
+
+    If one of the semver flags is set to True, this module will be released with the appropriate increment.
+    When 'dev' is True, no
+
+    :param modpath: The path to the module
+    :param file: The file's name
+    :param content: The content to write to file
+    :param msg: Commit message
+    :param revision: Set this flag to perform a bump on the revision semver number
+    :param patch: Set this flag to perform a bump on the patch semver number
+    :param minor: Set this flag to perform a bump on the minor semver number
+    :param major: Set this flag to perform a bump on the major semver number
+    :param dev: When set along with one of the semver flags, only perform a dev release after creating
+        this file (i.e. don't tag this version). If set to False, perform a stable release (i.e. tag
+        this version) followed by a dev release with the minimal required increment.
+    :return:
+    """
     with open(os.path.join(modpath, file), "w", encoding="utf-8") as projectfile:
         projectfile.write(content)
 
-    if not any([revision, patch, minor, major]):
-        return commitmodule(modpath, msg)
-    else:
-        old_cwd = os.getcwd()
-        os.chdir(modpath)
-        subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
-        ModuleTool().release(dev=dev, message=msg, revision=revision, patch=patch, minor=minor, major=major, commit_all=True)
-        os.chdir(old_cwd)
+
+    old_cwd = os.getcwd()
+    os.chdir(modpath)
+    subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
+    ModuleTool().release(dev=dev, message=msg, revision=revision, patch=patch, minor=minor, major=major, commit_all=True)
+    os.chdir(old_cwd)
 
 
 def add_requires(
@@ -229,7 +248,7 @@ def make_module_simple(reporoot, name, depends=[], version="3.2", project=False)
     commitmodule(mod, "first commit")
     if not project:
         add_file(mod, "signal", "present", "second commit")
-    add_tag(mod, version)
+    # add_tag(mod, version)
     return mod
 
 

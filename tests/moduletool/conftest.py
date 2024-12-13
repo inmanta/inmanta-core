@@ -129,17 +129,17 @@ def modules_repo(git_modules_dir) -> str:
     make_module_simple(reporoot, "mod2", version="2016.1")
 
     mod3 = make_module_simple(reporoot, "mod3", version="0.1")
-    add_file(mod3, "badsignal", "present", "third commit")
+    add_file(mod3, "badsignal", "present", "third commit", dev=True)
 
     mod4 = make_module_simple(reporoot, "badmod", [("mod2", "<2016")])
-    add_file(mod4, "badsignal", "present", "third commit")
+    add_file(mod4, "badsignal", "present", "third commit", dev=True)
 
     mod5 = make_module_simple(reporoot, "mod5", version="0.1")
-    add_file(mod5, "badsignal", "present", "third commit")
+    add_file(mod5, "badsignal", "present", "third commit", dev=True)
 
     mod6 = make_module_simple(reporoot, "mod6", version="3.1")
     add_file(mod6, "signal", "present", "third commit", minor=True)
-    add_file(mod6, "badsignal", "present", "fourth commit")
+    add_file(mod6, "badsignal", "present", "fourth commit", dev=True)
 
     mod7 = make_module_simple(reporoot, "mod7")
     add_file(mod7, "nsignal", "present", "third commit", patch=True)
@@ -151,7 +151,7 @@ def modules_repo(git_modules_dir) -> str:
 
     mod8 = make_module_simple(reporoot, "mod8", [], version="0.0.1")
     add_file(mod8, "devsignal", "present", "third commit", minor=True)
-    add_file(mod8, "mastersignal", "present", "last commit")
+    add_file(mod8, "mastersignal", "present", "last commit", dev=True)
 
     mod11 = make_module_simple(reporoot, "mod11", version="3.2.0")
     add_file(mod11, "file", "test", "release version 3.2.1", patch=True)
@@ -193,7 +193,7 @@ def modules_repo(git_modules_dir) -> str:
 
     nover = makemodule(reporoot, "nover", [])
     commitmodule(nover, "first commit")
-    add_file(nover, "signal", "present", "second commit")
+    add_file(nover, "signal", "present", "second commit", dev=True)
 
     noverproject = makeproject(reporoot, "noverproject", imports=["nover"])
     commitmodule(noverproject, "first commit")

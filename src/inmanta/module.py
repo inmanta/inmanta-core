@@ -476,6 +476,7 @@ class CLIGitProvider(GitProvider):
                 ["git", "commit", "-a", "-m", message], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
 
+
     def tag(self, repo: str, tag: str) -> None:
         subprocess.check_call(
             ["git", "tag", "-a", "-m", "auto tag by module tool", tag],
