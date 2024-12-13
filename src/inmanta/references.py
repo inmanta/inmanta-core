@@ -38,13 +38,19 @@ ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z
 PrimitiveTypes = str | float | int | bool
 
 
-@typing.runtime_checkable
-class DataclassProtocol(typing.Protocol):
-    """Protocol use to only allow classes that have been annotated as dataclass"""
+# The name of an attribute on the class where dataclasses store field information. This is an integral part of the
+# dataclasses protocol. All the helpers in dataclasses rely on this field, however `dataclasses._FIELDS` that has
+# the same value is not exported.
+DATACLASS_FIELDS = "__dataclass_fields__"
 
-    @property
-    def __dataclass_fields__(self) -> collections.abc.Mapping[str, dataclasses.Field[object]]:
-        r"""Return the fields of the dataclass."""
+# Typing of dataclass.* methods relies entirely on the definition in typeshed that only exists during typechecking.
+# This ensures that our code works during typechecking and at runtime.
+if not typing.TYPE_CHECKING:
+    DataclassProtocol = object
+else:
+    import _typeshed
+
+    DataclassProtocol = _typeshed.DataclassInstance
 
 
 type RefValue = PrimitiveTypes | DataclassProtocol
@@ -220,11 +226,11 @@ class Mutator(Base):
 
     def serialize(self) -> MutatorModel:
         """Emit the correct pydantic objects to serialize the reference in the exporter."""
-        if self._model:
-            return self._model
+        if not self._model:
+            arg_id, arguments = self.serialize_arguments()
+            self._model = MutatorModel(type=self.type, args=arguments)
 
-        arg_id, arguments = self.serialize_arguments()
-        self._model = MutatorModel(type=self.type, args=arguments)
+        assert isinstance(self._model, MutatorModel)
         return self._model
 
 
@@ -232,10 +238,10 @@ class DataclassRefeferenMeta(type):
     """A metaclass to make Reference work with dataclasses"""
 
     def __getattr__(cls, name: str) -> object:
-        """Act as a dataclass if required"""
-        if name == dataclasses._FIELDS:
+        """Act as a dataclass if required and this metaclass is used on a DataclassReference"""
+        if name == DATACLASS_FIELDS and isinstance(cls, DataclassReference):
             dct = cls.get_dataclass_type()
-            return getattr(dct, dataclasses._FIELDS)
+            return getattr(dct, DATACLASS_FIELDS)
 
         return type.__getattr__(cls)
 
@@ -266,27 +272,21 @@ class Reference[T: RefValue](Base):
             argument_id, arguments = self.serialize_arguments()
             self._model = ReferenceModel(id=argument_id, type=self.type, args=arguments)
 
+        assert isinstance(self._model, ReferenceModel)
         return self._model
 
 
-class DataclassReference[T: DataclassProtocol](Reference, metaclass=DataclassRefeferenMeta):
+class DataclassReference[T: DataclassProtocol](Reference[T], metaclass=DataclassRefeferenMeta):
     @classmethod
-    def get_dataclass_type(cls) -> DataclassProtocol:
+    def get_dataclass_type(cls) -> type[DataclassProtocol]:
         """Get the dataclass type that the reference points to"""
         for g in cls.__orig_bases__:
             if typing_inspect.is_generic_type(g):
                 for arg in typing.get_args(g):
-                    if dataclasses.is_dataclass(arg):
+                    if dataclasses.is_dataclass(arg) and isinstance(arg, type):
                         return arg
 
         raise TypeError("A dataclass reference requires a typevar that is bound to the dataclass it references.")
-
-    def _get_T(self) -> type[T]:
-        """Get the type of reference that we are"""
-        generic_args = [typing.get_args(base)[0] for base in self.__orig_bases__]
-        if len(generic_args) == 1:
-            return generic_args[0]
-        raise AttributeError(f"Unable to determine type of T for {type(self)}")
 
     def __getattr__(self, name: str) -> object:
         """If our reference is a subclass of Value (dataclass), we return a reference to the
@@ -296,8 +296,8 @@ class DataclassReference[T: DataclassProtocol](Reference, metaclass=DataclassRef
         :return: A reference to the attribute
         """
         dc_type = self.get_dataclass_type()
-        if name == dataclasses._FIELDS:
-            return getattr(dc_type, dataclasses._FIELDS)
+        if name == DATACLASS_FIELDS:
+            return getattr(dc_type, DATACLASS_FIELDS)
 
         fields = {f.name: f for f in dataclasses.fields(dc_type)}
         if name in fields:
@@ -317,7 +317,7 @@ class DataclassReference[T: DataclassProtocol](Reference, metaclass=DataclassRef
 class reference[T: Reference[RefValue]]:
     """This decorator register a reference under a specific name"""
 
-    _reference_classes: typing.ClassVar[dict[str, type[Reference[T]]]] = {}
+    _reference_classes: typing.ClassVar[dict[str, type[Reference[RefValue]]]] = {}
 
     def __init__(self, name: str) -> None:
         """
@@ -326,16 +326,16 @@ class reference[T: Reference[RefValue]]:
         self.name = name
 
     def __call__(self, cls: type[T]) -> type[T]:
-        """Register a new reference. If we already have it explictly delete it (reload)"""
-        if self.name in reference._reference_classes:
-            del reference._reference_classes[self.name]
+        """Register a new reference. If we already have it explicitly delete it (reload)"""
+        if self.name in type(self)._reference_classes:
+            del type(self)._reference_classes[self.name]
 
-        reference._reference_classes[self.name] = cls
+        type(self)._reference_classes[self.name] = cls
         cls.type = self.name
         return cls
 
     @classmethod
-    def get_class(cls, name: str) -> type[Reference]:
+    def get_class(cls, name: str) -> type[T]:
         """Get the class of registered with the given name"""
         if name not in cls._reference_classes:
             raise TypeError(f"There is no reference class registered with name {name}")
@@ -348,10 +348,10 @@ class reference[T: Reference[RefValue]]:
         cls._reference_classes = {}
 
 
-class mutator[T: Reference[RefValue]]:
+class mutator[T: Mutator]:
     """This decorator register a mutator under a specific name"""
 
-    _mutator_classes: typing.ClassVar[dict[str, Mutator]] = {}
+    _mutator_classes: typing.ClassVar[dict[str, type[Mutator]]] = {}
 
     def __init__(self, name: str) -> None:
         """
@@ -398,7 +398,7 @@ class AttributeReference[T: PrimitiveTypes](Reference[T]):
         self.reference = reference
 
     def resolve(self) -> T:
-        return getattr(self.reference, self.attribute_name)
+        return typing.cast(T, getattr(self.reference, self.attribute_name))
 
 
 @mutator(name="core::Replace")

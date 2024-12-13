@@ -287,12 +287,12 @@ class Resource(metaclass=ResourceMeta):
             return False
 
     @staticmethod
-    def get_references(_, instance: "Resource") -> typing.Sequence[references.ReferenceModel]:
+    def get_references(_exporter: "export.Exporter", instance: "Resource") -> typing.Sequence[references.ReferenceModel]:
         """This method is present so the serialization works correctly. This field is set by the serializer"""
         return []
 
     @staticmethod
-    def get_mutators(_, instance: "Resource") -> typing.Sequence[references.MutatorModel]:
+    def get_mutators(_exporter: "export.Exporter", instance: "Resource") -> typing.Sequence[references.MutatorModel]:
         """This method is present so the serialization works correctly. This field is set by the serializer"""
         return []
 
