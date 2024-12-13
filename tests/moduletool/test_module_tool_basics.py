@@ -232,18 +232,18 @@ ignore = H405,H404,H302,H306,H301,H101,H801,E402,W503,E252,E203
 
 
 def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
-    mod9 = make_module_simple(modules_repo, "mod9", [("mod10", None)])
+    mod9 = make_module_simple(modules_repo, "mod9", [("mod10", None)], version="3.2.0")
     add_file(mod9, "signal", "present", "third commit", minor=True)
     add_file(mod9, "model/b.cf", "import mod9", "fourth commit", major=True)
 
     mod10 = make_module_simple(modules_repo, "mod10", [], version="3.2.0")
-    add_file(mod10, "signal", "present", "a commit", minor=True)
+    add_file(mod10, "signal", "present", "a commit", minor=True)  # 3.3.0 (Good version)
     # syntax error
-    add_file(mod10, "model/_init.cf", "SomeInvalidThings", "a commit", minor=True)
+    add_file(mod10, "model/_init.cf", "SomeInvalidThings", "a commit", minor=True)  # 3.4.0 (Bad version)
     # fix it
-    add_file(mod10, "model/_init.cf", "", "a commit", minor=True)
-    add_file(mod10, "secondsignal", "import mod9", "b commit", major=True)
-    add_file(mod10, "badsignal", "import mod9", "c commit", major=True)
+    add_file(mod10, "model/_init.cf", "", "a commit", minor=True)  # 3.5.0 (Good version)
+    add_file(mod10, "secondsignal", "import mod9", "b commit", major=True)  # 4.0.0
+    add_file(mod10, "badsignal", "import mod9", "c commit", major=True)  # 5.0.0
 
     p9 = makeproject(modules_repo, "proj9", [("mod9", "==3.3.0"), ("mod10", "==3.3.0")], ["mod9"])
     commitmodule(p9, "first commit")
@@ -269,7 +269,7 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     Project._project = None
 
     with pytest.raises(ParserException):
-        # mod 10 is updated to a version that contains a syntax error
+        # mod 10 is updated to version 3.4.0 that contains a syntax error
         app(["project", "update"])
 
     # unfreeze deps to allow update
@@ -300,13 +300,13 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     assert os.path.exists(os.path.join(m9dir, "model", "b.cf"))
     m10dir = os.path.join(proj, "libs", "mod10")
     assert os.path.exists(os.path.join(m10dir, "secondsignal"))
-    # should not be latest version
+    # should not be latest version (i.e. doesn't contain changes added in 5.0.0)
     assert not os.path.exists(os.path.join(m10dir, "badsignal"))
 
 
 @pytest.fixture(scope="function")
 def module_without_tags(modules_repo):
-    mod_no_tag = make_module_simple(modules_repo, "mod-no-tag")
+    mod_no_tag = make_module_simple(modules_repo, "mod-no-tag", version="4.0.0")
     yield mod_no_tag
     shutil.rmtree(mod_no_tag)
 
@@ -319,7 +319,10 @@ def test_commit_no_tags(git_modules_dir, module_without_tags, dev):
     version_tag_in_output = not dev
     add_file(module_without_tags, "dummyfile", "Content", "Commit without tags", major=True, dev=dev)
     output = subprocess.check_output(["git", "tag", "-l"], cwd=module_without_tags, stderr=subprocess.STDOUT)
-    assert ("4.0.0" in str(output)) is version_tag_in_output
+    # Base version:
+    assert "4.0.0" in str(output)
+    # Check we only tag v5 when performing stable release
+    assert ("5.0.0" in str(output)) is version_tag_in_output
 
 
 class InmantaModule:

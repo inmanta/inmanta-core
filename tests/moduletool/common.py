@@ -40,7 +40,7 @@ def makemodule(
     project=False,
     imports=None,
     install_mode: Optional[InstallMode] = None,
-    version: str | None = "0.0.1",
+    version: str = "0.0.1",
 ) -> str:
     path = os.path.join(reporoot, name)
     os.makedirs(path)
@@ -242,7 +242,7 @@ def add_tag(modpath, tag):
     subprocess.check_output(["git", "tag", tag], cwd=modpath, stderr=subprocess.STDOUT)
 
 
-def make_module_simple(reporoot, name, depends=[], version="3.2", project=False):
+def make_module_simple(reporoot, name, depends=[], version="3.2.0", project=False):
     mod = makemodule(reporoot, name, depends, project=project, version=version)
     commitmodule(mod, "first commit")
     if not project:
@@ -250,7 +250,7 @@ def make_module_simple(reporoot, name, depends=[], version="3.2", project=False)
     return mod
 
 
-def make_module_simple_deps(reporoot, name, depends=[], project=False, version="3.2"):
+def make_module_simple_deps(reporoot, name, depends=[], project=False, version="3.2.0"):
     prefix = "project" if project else "mod"
     return make_module_simple(reporoot, prefix + name, [("mod" + x, None) for x in depends], project=project, version=version)
 

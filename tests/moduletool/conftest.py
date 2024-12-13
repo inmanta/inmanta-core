@@ -206,12 +206,12 @@ def modules_repo(git_modules_dir) -> str:
     E-> H
     D-> F,G
     """
-    make_module_simple_deps(reporoot, "a", ["b", "c", "d"], project=True)
+    make_module_simple_deps(reporoot, "a", ["b", "c", "d"], project=True, version="0.0.1")
     make_module_simple_deps(reporoot, "b")
-    c = make_module_simple_deps(reporoot, "c", ["e", "f", "e::a"], version="3.0")
+    c = make_module_simple_deps(reporoot, "c", ["e", "f", "e::a"], version="3.1.0")
     add_file(c, "model/a.cf", "import modi", "add mod c::a", minor=True)
     make_module_simple_deps(reporoot, "d", ["f", "g"])
-    e = make_module_simple_deps(reporoot, "e", ["h"], version="3.0")
+    e = make_module_simple_deps(reporoot, "e", ["h"], version="3.1.0")
     add_file(e, "model/a.cf", "import modj", "add mod e::a", minor=True)
     make_module_simple_deps(reporoot, "f")
     make_module_simple_deps(reporoot, "g")
