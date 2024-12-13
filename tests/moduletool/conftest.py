@@ -27,6 +27,7 @@ from moduletool.common import (
     add_file,
     add_file_and_compiler_constraint,
     add_requires,
+    add_tag,
     commitmodule,
     make_module_simple,
     make_module_simple_deps,
@@ -136,8 +137,9 @@ def modules_repo(git_modules_dir) -> str:
     mod5 = make_module_simple(reporoot, "mod5", version="0.1")
     add_file(mod5, "badsignal", "present", "third commit")
 
-    mod6 = make_module_simple(reporoot, "mod6")
+    mod6 = make_module_simple(reporoot, "mod6", version="3.1")
     add_file(mod6, "badsignal", "present", "third commit")
+    add_file(mod6, "signal", "present", "fourth commit", minor=True)
 
     mod7 = make_module_simple(reporoot, "mod7")
     add_file(mod7, "nsignal", "present", "third commit", patch=True)
@@ -147,11 +149,11 @@ def modules_repo(git_modules_dir) -> str:
     add_file_and_compiler_constraint(mod7, "badsignal", "present", "fifth commit", minor=True, compiler_version="1000000.5")
     add_file(mod7, "badsignal", "present", "sixth commit", minor=True)
 
-    mod8 = make_module_simple(reporoot, "mod8", [])
-    add_file(mod8, "devsignal", "present", "third commit", minor=True, dev=True)
+    mod8 = make_module_simple(reporoot, "mod8", [], version="0.0.1")
+    add_file(mod8, "devsignal", "present", "third commit", minor=True)
     add_file(mod8, "mastersignal", "present", "last commit")
 
-    mod11 = make_module_simple(reporoot, "mod11")
+    mod11 = make_module_simple(reporoot, "mod11", version="3.2.0")
     add_file(mod11, "file", "test", "release version 3.2.1", patch=True)
     add_file(mod11, "file", "test", "release version 4.0.0", major=True)
     add_file(mod11, "file", "test", "release version 4.1.0", minor=True)
@@ -160,6 +162,7 @@ def modules_repo(git_modules_dir) -> str:
 
     mod12 = make_module_simple(reporoot, "mod12", version="3.2.1")
     add_file(mod12, "file", "test", "release version 4.0.0.dev0", major=True, dev=True)
+    add_tag(mod12, "4.0.0.dev0")
     add_file(mod12, "file", "test", "release version 4.0.0", major=True)
 
     mod13 = make_module_simple(reporoot, "mod13", version="1.2.3")

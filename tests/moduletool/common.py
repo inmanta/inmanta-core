@@ -41,7 +41,7 @@ def makemodule(
     imports=None,
     install_mode: Optional[InstallMode] = None,
     version: str | None = "0.0.1",
-):
+) -> str:
     path = os.path.join(reporoot, name)
     os.makedirs(path)
     mainfile = "module.yml"
@@ -229,6 +229,7 @@ def make_module_simple(reporoot, name, depends=[], version="3.2", project=False)
     commitmodule(mod, "first commit")
     if not project:
         add_file(mod, "signal", "present", "second commit")
+    add_tag(mod, version)
     return mod
 
 

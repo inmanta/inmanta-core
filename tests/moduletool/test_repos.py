@@ -27,9 +27,9 @@ from inmanta.module import CompositeModuleRepo, InvalidMetadata, LocalFileRepo, 
 def test_file_co(git_modules_dir, modules_repo):
     result = """name: mod6
 license: Apache 2.0
-version: '3.2'
+version: '3.2.0'
 """
-    module_yaml = gitprovider.get_file_for_version(os.path.join(modules_repo, "mod6"), "3.2", "module.yml")
+    module_yaml = gitprovider.get_file_for_version(os.path.join(modules_repo, "mod6"), "3.2.0", "module.yml")
     assert result == module_yaml
 
 

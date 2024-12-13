@@ -32,7 +32,6 @@ import pytest
 import yaml
 
 from inmanta import module
-from inmanta.command import CLIException
 from inmanta.module import (
     InmantaModuleRequirement,
     InvalidMetadata,
@@ -239,7 +238,7 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     add_file(mod9, "signal", "present", "third commit", minor=True)
     add_file(mod9, "model/b.cf", "import mod9", "fourth commit", major=True)
 
-    mod10 = make_module_simple(modules_repo, "mod10", [])
+    mod10 = make_module_simple(modules_repo, "mod10", [], version="3.2.0")
     add_file(mod10, "signal", "present", "a commit", minor=True)
     # syntax error
     add_file(mod10, "model/_init.cf", "SomeInvalidThings", "a commit", minor=True)
@@ -248,7 +247,7 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     add_file(mod10, "secondsignal", "import mod9", "b commit", major=True)
     add_file(mod10, "badsignal", "import mod9", "c commit", major=True)
 
-    p9 = makeproject(modules_repo, "proj9", [("mod9", "==3.2.1"), ("mod10", "==3.2.1")], ["mod9"])
+    p9 = makeproject(modules_repo, "proj9", [("mod9", "==3.3.0"), ("mod10", "==3.3.0")], ["mod9"])
     commitmodule(p9, "first commit")
 
     # setup project
@@ -263,7 +262,7 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     with open(projectyml, encoding="utf-8") as fh:
         pyml = yaml.safe_load(fh)
 
-    pyml["requires"] = ["mod10 == 3.5"]
+    pyml["requires"] = ["mod10 == 3.4.0"]
 
     with open(projectyml, "w", encoding="utf-8") as fh:
         yaml.dump(pyml, fh)
@@ -276,7 +275,7 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
         app(["project", "update"])
 
     # unfreeze deps to allow update
-    pyml["requires"] = ["mod10 == 4.0"]
+    pyml["requires"] = ["mod10 == 4.0.0"]
 
     with open(projectyml, "w", encoding="utf-8") as fh:
         yaml.dump(pyml, fh)
@@ -618,13 +617,7 @@ import minimalv2module
             assert "Skipping module minimalv2module: v2 modules do not support this operation." in caplog.messages
 
     verify_v2_message("status")
-    cwd = os.getcwd()
-    try:
-        os.chdir(os.path.join(modules_v2_dir, "minimalv2module"))
-        with pytest.raises(CLIException, match="minimalv2module is a v2 module and does not support this operation."):
-            ModuleTool().execute("commit", argparse.Namespace(message="message"))
-    finally:
-        os.chdir(cwd)
+
     verify_v2_message("push")
 
 

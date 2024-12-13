@@ -505,7 +505,7 @@ class CLIGitProvider(GitProvider):
         ).decode("utf-8")
 
     def get_file_for_version(self, repo: str, tag: str, file: str) -> str:
-        data = subprocess.check_output(["git", "archive", "--format=tar", tag, file], cwd=repo, stderr=subprocess.DEVNULL)
+        data = subprocess.check_output(["git", "archive", "--format=tar", tag, file], cwd=repo, stderr=sys.stdout)
         tf = TarFile(fileobj=BytesIO(data))
         tfile = tf.next()
         assert tfile is not None
