@@ -378,14 +378,8 @@ class ResourceScheduler(TaskManager):
             # No model version has been released yet.
             return
         # Rely on the incremental calculation to determine which resources should be deployed and which not.
-        increment: set[ResourceIdStr]
-        increment, _ = await ConfigurationModel.get_increment(self.environment, version, connection=connection)
-
-        resources_to_deploy: Mapping[ResourceIdStr, ResourceDetails] = {rid: resources[rid] for rid in increment}
-        up_to_date_resources: Mapping[ResourceIdStr, ResourceDetails] = {
-            rid: resources[rid] for rid in resources.keys() if rid not in increment
-        }
-
+        up_to_date_resources: set[ResourceIdStr]
+        _, up_to_date_resources = await ConfigurationModel.get_increment(self.environment, version, connection=connection)
         await self._new_version(
             version,
             resources=resources,
