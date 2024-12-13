@@ -131,7 +131,6 @@ def add_file(
     with open(os.path.join(modpath, file), "w", encoding="utf-8") as projectfile:
         projectfile.write(content)
 
-
     old_cwd = os.getcwd()
     os.chdir(modpath)
     subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
