@@ -397,7 +397,7 @@ class Option(Generic[T]):
         """
         Return the environment variable associated with this config option.
         """
-        return f"INMANTA_{self.section}_{self.name.replace('-', '_')}"
+        return f"INMANTA_{self.section}_{self.name.replace('-', '_')}".upper()
 
     def get_default_desc(self) -> str:
         defa = self.default
