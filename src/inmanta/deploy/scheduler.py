@@ -836,7 +836,7 @@ class ResourceScheduler(TaskManager):
                 if resource in up_to_date_resources:
                     self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
                     continue
-                if details.status is const.ResourceState.undefined:
+                if details.status is ComplianceStatus.UNDEFINED:
                     undefined.add(resource)
                     self._work.delete_resource(resource)
                 elif resource in self._state.resources:
@@ -916,7 +916,7 @@ class ResourceScheduler(TaskManager):
                 # Updating the blocked state should be done under the scheduler lock, because this state is written
                 # by both the deploy and the new version code path.
                 resources_with_updated_blocked_state: Set[ResourceIdStr] = (
-                    undefined | blocked_for_undefined_dep | newly_defined | transitively_unblocked | up_to_date_resources.keys()
+                    undefined | blocked_for_undefined_dep | newly_defined | transitively_unblocked | up_to_date_resources
                 )
 
                 await self.update_resource_intent(
