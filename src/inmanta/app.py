@@ -789,7 +789,8 @@ def cmd_parser() -> argparse.ArgumentParser:
         "--verbose",
         action="count",
         default=0,
-        help="Log level for messages going to the console. Default is warnings,"
+        help="Log level for messages going to the console. Default is warnings only. "
+             "When used in combination with a logging config file, it will force a cli logger to be added to the config."
         "-v warning, -vv info, -vvv debug and -vvvv trace",
     )
     parser.add_argument(

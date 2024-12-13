@@ -21,6 +21,7 @@ import logging.config
 import os
 import re
 import sys
+import warnings
 from argparse import Namespace
 from collections import abc
 from collections.abc import Mapping
@@ -135,20 +136,6 @@ class LoggingConfigExtension:
         for directory in self.log_dirs_to_create:
             os.makedirs(directory, exist_ok=True)
 
-    def validate_for_extension(self, extension_name: str) -> None:
-        """
-        Verify that the names of the formatters and handlers are prefixed with `<name-extension>_` and
-        raise an Exception in case this constraint is violated.
-        """
-        for logging_config_element in ["formatters", "handlers"]:
-            for name in getattr(self, logging_config_element):
-                if not name.startswith(f"{extension_name}_"):
-                    raise Exception(
-                        f"{logging_config_element.capitalize()} defined in the default logging config of an extension must be"
-                        f" prefixed with `{extension_name}_`. Extension {extension_name} defines a"
-                        f" {logging_config_element[0:-1]} with the invalid name {name}."
-                    )
-
 
 class FullLoggingConfig(LoggingConfigExtension):
     """
@@ -176,27 +163,45 @@ class FullLoggingConfig(LoggingConfigExtension):
         )
         self.root_log_level = root_log_level
 
-    def join(self, logging_config_extension: LoggingConfigExtension) -> "FullLoggingConfig":
+    def join(self, logging_config_extension: LoggingConfigExtension, allow_overwrite:bool = False) -> "FullLoggingConfig":
         """
         Join this FullLoggingConfig and the given LoggingConfigExtension together into a single
         FullLoggingConfig object that contains all the logging config of both objects.
         """
+        def warn_or_raise(component: str, names:set[str]) -> None:
+            if not allow_overwrite:
+                raise Exception(f"The following {component} names appear in multiple logging configs: {names}")
+            else:
+                logging.warning(f"The following %s names appear in multiple logging configs: %s", component, common_formatter_names)
+
+
         common_formatter_names = set(self.formatters.keys()) & set(logging_config_extension.formatters.keys())
         if common_formatter_names:
-            raise Exception(f"The following formatter names appear in multiple logging configs: {common_formatter_names}")
+            warn_or_raise("formatter", common_formatter_names)
         common_handler_names = set(self.handlers.keys()) & set(logging_config_extension.handlers.keys())
         if common_handler_names:
-            raise Exception(f"The following handler names appear in multiple logging configs: {common_handler_names}")
+            warn_or_raise("handler", common_handler_names)
         common_logger_names = set(self.loggers.keys()) & set(logging_config_extension.loggers.keys())
         if common_logger_names:
-            raise Exception(f"The following logger names appear in multiple logging configs: {common_logger_names}")
+            warn_or_raise("logger", common_logger_names)
+
+        def update_join(one_dict, two_dict):
+            out = dict(**one_dict)
+            out.update(two_dict)
+            return out
+
+        root_level = self.root_log_level
+        if isinstance(logging_config_extension, FullLoggingConfig):
+            if logging_config_extension.root_log_level is not None:
+                root_level = logging_config_extension.root_log_level
+
         return FullLoggingConfig(
-            formatters=dict(**self.formatters, **logging_config_extension.formatters),
-            handlers=dict(**self.handlers, **logging_config_extension.handlers),
-            loggers=dict(**self.loggers, **logging_config_extension.loggers),
-            root_handlers=sorted(list(set(*self.root_handlers, *logging_config_extension.root_handlers))),
-            log_dirs_to_create=set(*self.log_dirs_to_create, *logging_config_extension.log_dirs_to_create),
-            root_log_level=self.root_log_level,
+            formatters=update_join(self.formatters, logging_config_extension.formatters),
+            handlers=update_join(self.handlers, logging_config_extension.handlers),
+            loggers=update_join(self.loggers, logging_config_extension.loggers),
+            root_handlers=sorted(self.root_handlers + logging_config_extension.root_handlers),
+            log_dirs_to_create=self.log_dirs_to_create | logging_config_extension.log_dirs_to_create,
+            root_log_level= root_level,
         )
 
     def apply_config(self) -> None:
@@ -339,7 +344,7 @@ class LoggingConfigBuilder:
             }
         else:
             log_level = convert_inmanta_log_level(inmanta_log_level=str(options.verbose), cli=True)
-            handler_root_logger = "core_console"
+            handler_root_logger = "core_console_handler"
             handlers[handler_root_logger] = {
                 "class": "logging.StreamHandler",
                 "formatter": "core_console_formatter",
@@ -416,24 +421,9 @@ class LoggingConfigBuilder:
             handlers=handlers,
             loggers=loggers,
             root_handlers=[handler_root_logger],
-            root_log_level=log_level,
+            root_log_level=python_log_level_to_name(log_level),
         )
         return full_logging_config
-
-    def _join_logging_configs(
-        self,
-        full_logger_config: FullLoggingConfig,
-        logging_config_extensions: Optional[abc.Sequence[LoggingConfigExtension]] = None,
-    ) -> FullLoggingConfig:
-        """
-        Join the given LoggingConfigCore and the LoggingConfigExtensions together into a single LoggingConfigCore
-        object that contains all the loging config.
-        """
-        logging_config_extensions = logging_config_extensions if logging_config_extensions else []
-        result = full_logger_config
-        for logging_config_ext in logging_config_extensions:
-            result = result.join(logging_config_ext)
-        return result
 
     def _get_multiline_formatter_config(self, keep_logger_names: bool, options: Optional[Options] = None) -> dict[str, object]:
         """
@@ -590,9 +580,18 @@ class InmantaLoggerConfig:
         logging_config_file: Optional[str] = self._get_path_to_logging_config_file(options, component)
         if logging_config_file:
             self._apply_logging_config_from_file(logging_config_file, context)
+            if options.verbose != 0:
+                # Force cli as well
+                self.force_cli(convert_inmanta_log_level(str(options.verbose), True))
         else:
             self._apply_logging_config_from_options(options, component, context)
         self._options_applied = True
+
+    def force_cli(self, python_log_level: int) -> None:
+        """ Ensure a cli logger is attached at the given level """
+        config_builder = LoggingConfigBuilder()
+        logger_config = config_builder.get_bootstrap_logging_config(python_log_level=python_log_level)
+        self.add_extension_config(logger_config)
 
     def _apply_logging_config_from_file(self, config_file: str, context: Mapping[str, str] = {}) -> None:
         """
@@ -605,6 +604,15 @@ class InmantaLoggerConfig:
         except Exception:
             raise Exception(f"Failed to apply the logging config defined in {dict_config}.")
         self._handlers = [handler for handler in logging.root.handlers if handler not in handlers_before]
+        root = dict_config.get("root",{})
+        # Build config for later merges
+        self._loaded_config = FullLoggingConfig(
+            formatters=dict_config.get("formatters", {}),
+            handlers=dict_config.get("handlers", {}),
+            loggers=dict_config.get("loggers", {}),
+            root_handlers=root.get("handlers", []),
+            root_log_level=root.get("level", None),
+        )
 
     def _apply_logging_config_from_options(
         self, options: Options, component: str | None = None, context: Mapping[str, str] = {}
@@ -685,12 +693,13 @@ class InmantaLoggerConfig:
         return self._handlers[0]
 
     @stable_api
-    def register_default_logging_config(self, logging_config: LoggingConfigExtension) -> None:
+    def add_extension_config(self, logging_config: LoggingConfigExtension) -> None:
         """
         Register the default logging config for a certain extension.
         """
-        # ToDO: remove?
-        self._logging_configs_extensions.append(logging_config)
+        assert self._loaded_config is not None
+        complete_config = self._loaded_config.join(logging_config, allow_overwrite=True)
+        self._apply_logging_config(complete_config)
 
 
 class MultiLineFormatter(colorlog.ColoredFormatter):
