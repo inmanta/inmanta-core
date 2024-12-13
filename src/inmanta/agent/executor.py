@@ -43,8 +43,6 @@ from inmanta.agent.handler import HandlerContext
 from inmanta.const import Change
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
-from inmanta.deploy import state
-from inmanta.deploy.state import DeploymentResult
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
@@ -493,7 +491,6 @@ class DeployResult:
     messages: list[LogLine]
     changes: dict[str, AttributeStateChange]
     change: Optional[Change]
-    deployment_result: state.DeploymentResult
 
     def __post_init__(self) -> None:
         if self.status in {*const.TRANSIENT_STATES, *const.UNDEPLOYABLE_STATES, const.ResourceState.dry}:
@@ -524,7 +521,6 @@ class DeployResult:
             messages=ctx.logs,
             changes=ctx.changes,
             change=ctx.change,
-            deployment_result=DeploymentResult.from_handler_resource_state(ctx.resource_state),
         )
 
     @classmethod
@@ -536,7 +532,6 @@ class DeployResult:
             messages=[message],
             changes={},
             change=Change.nochange,
-            deployment_result=state.DeploymentResult.FAILED,
         )
 
 

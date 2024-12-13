@@ -57,7 +57,9 @@ class StateUpdateManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def send_deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
+    async def send_deploy_done(
+        self, attribute_hash: str, result: DeployResult, deployment_result: state.DeploymentResult
+    ) -> None:
         pass
 
     @abc.abstractmethod
@@ -159,7 +161,9 @@ class ToDbUpdateManager(StateUpdateManager):
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
-    async def send_deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
+    async def send_deploy_done(
+        self, attribute_hash: str, result: DeployResult, deployment_result: state.DeploymentResult
+    ) -> None:
         """
         Update the db to reflect the result of a deploy for a given resource.
         """
@@ -277,7 +281,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     last_deployed_version=resource_id_parsed.version,
                     last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
-                    deployment_result=result.deployment_result,
+                    deployment_result=deployment_result,
                     **extra_datetime_fields,
                     connection=connection,
                 )

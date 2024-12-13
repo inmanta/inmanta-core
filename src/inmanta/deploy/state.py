@@ -125,10 +125,10 @@ class DeploymentResult(StrEnum):
                 return DeploymentResult.DEPLOYED
             case const.HandlerResourceState.skipped | const.HandlerResourceState.skipped_for_dependency:
                 return DeploymentResult.SKIPPED
-            case const.HandlerResourceState.dry:
-                raise Exception(f"Unexpected handler_resource_state {const.HandlerResourceState.dry.value}")
-            case _:
+            case const.HandlerResourceState.failed | const.HandlerResourceState.unavailable:
                 return DeploymentResult.FAILED
+            case _ as resource_state:
+                raise Exception(f"Unexpected handler_resource_state {resource_state.name}")
 
 
 class AgentStatus(StrEnum):

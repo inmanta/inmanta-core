@@ -602,8 +602,8 @@ async def test_move_to_available_state(server, environment, client, clienthelper
                 messages=[],
                 changes={},
                 change=None,
-                deployment_result=state.DeploymentResult.DEPLOYED,
             ),
+            deployment_result=state.DeploymentResult.DEPLOYED,
         )
 
     # Create a new version containing:

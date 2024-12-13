@@ -808,8 +808,8 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                         messages=[],
                         changes={},
                         change=None,
-                        deployment_result=state.DeploymentResult.DEPLOYED,
                     ),
+                    deployment_result=state.DeploymentResult.DEPLOYED,
                 )
 
         await asyncio.gather(*(deploy(resource) for resource in resources_in_increment_for_agent))

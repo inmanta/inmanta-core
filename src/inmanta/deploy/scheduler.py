@@ -1032,23 +1032,26 @@ class ResourceScheduler(TaskManager):
             return resource_intent
 
     async def deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
+        deployment_result: DeploymentResult = DeploymentResult.from_handler_resource_state(result.resource_state)
         try:
-            await self.update_scheduler_state_for_finished_deploy(attribute_hash, result)
+            await self.update_scheduler_state_for_finished_deploy(attribute_hash, result, deployment_result)
         except StaleResource:
             # The resource is no longer managed, no need to update the database state.
             pass
         else:
             # Write deployment result to the database.
-            await self.send_deploy_done(attribute_hash, result)
+            await self.send_deploy_done(attribute_hash, result, deployment_result)
 
-    async def update_scheduler_state_for_finished_deploy(self, attribute_hash: str, result: DeployResult) -> None:
+    async def update_scheduler_state_for_finished_deploy(
+        self, attribute_hash: str, result: DeployResult, deployment_result: DeploymentResult
+    ) -> None:
         """
         Update the state of the scheduler based on the DeploymentResult of the given resource.
 
         :raise StaleResource: This update is about a resource that is no longer managed by the server.
         """
         resource_id: ResourceIdStr = result.resource_id
-        if result.deployment_result is DeploymentResult.NEW:
+        if deployment_result is DeploymentResult.NEW:
             raise ValueError("update_scheduler_state_for_finished_deploy should not be called to register new resources")
 
         async with self._scheduler_lock:
@@ -1061,13 +1064,9 @@ class ResourceScheduler(TaskManager):
 
             state: ResourceState = self._state.resource_state[resource_id]
 
-            recovered_from_failure: bool = (
-                result.deployment_result is DeploymentResult.DEPLOYED
-                and state.deployment_result
-                not in (
-                    DeploymentResult.DEPLOYED,
-                    DeploymentResult.NEW,
-                )
+            recovered_from_failure: bool = deployment_result is DeploymentResult.DEPLOYED and state.deployment_result not in (
+                DeploymentResult.DEPLOYED,
+                DeploymentResult.NEW,
             )
 
             if details.attribute_hash != attribute_hash:
@@ -1077,7 +1076,7 @@ class ResourceScheduler(TaskManager):
                 # None of the event propagation or other update happen either for the same reason
                 # except for the event to notify dependents of failure recovery (to unblock skipped for dependencies)
                 # because we might otherwise miss the recovery.
-                state.deployment_result = result.deployment_result
+                state.deployment_result = deployment_result
                 if recovered_from_failure:
                     self._send_events(details, stale_deploy=True, recovered_from_failure=True)
                 return
@@ -1089,7 +1088,7 @@ class ResourceScheduler(TaskManager):
 
             # first update state, then send out events
             self._deploying_latest.remove(resource_id)
-            state.deployment_result = result.deployment_result
+            state.deployment_result = deployment_result
             self._work.finished_deploy(resource_id)
 
             # Check if we need to mark a resource as transiently blocked
@@ -1106,7 +1105,7 @@ class ResourceScheduler(TaskManager):
                 state.blocked = BlockedStatus.TRANSIENT
                 # Remove this resource from the dirty set when we block it
                 self._state.dirty.discard(resource_id)
-            elif result.deployment_result is DeploymentResult.DEPLOYED:
+            elif deployment_result is DeploymentResult.DEPLOYED:
                 # Remove this resource from the dirty set if it is successfully deployed
                 self._state.dirty.discard(resource_id)
             else:
@@ -1230,8 +1229,8 @@ class ResourceScheduler(TaskManager):
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         await self._state_update_delegate.send_in_progress(action_id, resource_id)
 
-    async def send_deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
-        await self._state_update_delegate.send_deploy_done(attribute_hash, result)
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, deployment_result: DeploymentResult) -> None:
+        await self._state_update_delegate.send_deploy_done(attribute_hash, result, deployment_result)
 
     async def dryrun_update(self, env: uuid.UUID, dryrun_result: executor.DryrunResult) -> None:
         await self._state_update_delegate.dryrun_update(env, dryrun_result)

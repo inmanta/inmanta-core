@@ -1330,8 +1330,8 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
                     messages=messages,
                     changes={"attr1": AttributeStateChange(current=None, desired="test")},
                     change=const.Change.purged,
-                    deployment_result=state.DeploymentResult.DEPLOYED,
                 ),
+                deployment_result=state.DeploymentResult.DEPLOYED,
             )
         else:
             result = await null_agent._client.resource_action_update(
@@ -1416,8 +1416,8 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
                 messages=[],
                 changes={"attr1": AttributeStateChange(current="test", desired="test2")},
                 change=const.Change.created,
-                deployment_result=state.DeploymentResult.DEPLOYED,
             ),
+            deployment_result=state.DeploymentResult.DEPLOYED,
         )
 
 
@@ -1449,8 +1449,8 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
                 messages=[],
                 changes={},
                 change=const.Change.nochange,
-                deployment_result=state.DeploymentResult.DEPLOYED,
             ),
+            deployment_result=state.DeploymentResult.DEPLOYED,
         )
     assert "The resource with the given id does not exist in the given environment" in str(exec_info.value)
 
@@ -1473,8 +1473,8 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
                 messages=[],
                 changes={},
                 change=const.Change.nochange,
-                deployment_result=state.DeploymentResult.DEPLOYED,
             ),
+            deployment_result=state.DeploymentResult.DEPLOYED,
         )
     assert "No resource action exists for action_id" in str(exec_info.value)
 

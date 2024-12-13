@@ -59,8 +59,8 @@ async def resource_deployer(client, environment, null_agent):
                     messages=[],
                     changes={},
                     change=change,
-                    deployment_result=deployment_result,
                 ),
+                deployment_result=deployment_result,
             )
 
         @classmethod
