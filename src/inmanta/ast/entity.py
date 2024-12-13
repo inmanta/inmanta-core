@@ -703,16 +703,13 @@ class Entity(NamedType, WithComment):
          i.e. for which 'corresponds_to' returns True
          i.e. instances of the associated dataclass
         """
-        # TODO: improve type check
-        assert isinstance(value, self._paired_dataclass) or isinstance(value, references.DataclassReference)
+        assert isinstance(value, self._paired_dataclass) or references.is_reference_of(value, self._paired_dataclass)
 
         def convert_none(x: object | None) -> object:
             return x if x is not None else NoneValue()
 
-        attributes = {k.name: convert_none(getattr(value, k.name)) for k in dataclasses.fields(value)}
-
         instance = self.get_instance(
-            attributes,
+            {k.name: convert_none(getattr(value, k.name)) for k in dataclasses.fields(value)},
             resolver,
             queue,
             location,

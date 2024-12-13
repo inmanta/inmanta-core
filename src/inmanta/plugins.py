@@ -450,7 +450,9 @@ class PluginReturn(PluginValue):
 
             def make_dc(value: object) -> object:
                 # TODO: add correct type check
-                if isinstance(value, base_type._paired_dataclass) or isinstance(value, references.DataclassReference):
+                if isinstance(value, base_type._paired_dataclass) or references.is_reference_of(
+                    value, base_type._paired_dataclass
+                ):
                     return base_type.from_python(value, resolver, queue, location)
                 else:
                     raise RuntimeException(None, f"Invalid value '{value}', expected {base_type.type_string()}")
