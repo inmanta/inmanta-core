@@ -161,6 +161,7 @@ def modules_repo(git_modules_dir) -> str:
 
     mod12 = make_module_simple(reporoot, "mod12", version="3.2.1")
     add_file(mod12, "file", "test", "release version 4.0.0.dev0", major=True, dev=True)
+    # Add a dev tag used in test_gitprovider_get_version_tags
     add_tag(mod12, "4.0.0.dev0")
     add_file(mod12, "file", "test", "release version 4.0.0", major=True)
 

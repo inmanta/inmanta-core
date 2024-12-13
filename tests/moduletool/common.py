@@ -113,7 +113,6 @@ def add_file(
     but the module will not be released.
 
     If one of the semver flags is set to True, this module will be released with the appropriate increment.
-    When 'dev' is True, no
 
     :param modpath: The path to the module
     :param file: The file's name
@@ -126,7 +125,6 @@ def add_file(
     :param dev: When set along with one of the semver flags, only perform a dev release after creating
         this file (i.e. don't tag this version). If set to False, perform a stable release (i.e. tag
         this version) followed by a dev release with the minimal required increment.
-    :return:
     """
     with open(os.path.join(modpath, file), "w", encoding="utf-8") as projectfile:
         projectfile.write(content)
