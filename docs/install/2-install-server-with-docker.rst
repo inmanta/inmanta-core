@@ -182,7 +182,8 @@ Overwrite default server configuration
 
 By default the server will use the file located in the image at ``/etc/inmanta/inmanta.cfg``.
 If you want to change it, you can copy this file, edit it, then mount it in the container,
-where the original file was located.
+where the original file was located. It is also possible to provide server config options
+via environment variables (see :ref:`config_reference` for more information).
 
 If you use docker-compose, you can simply update this section of the example above:
 
