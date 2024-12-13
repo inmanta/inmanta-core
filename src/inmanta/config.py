@@ -468,6 +468,7 @@ def make_option_for_log_file(componentname: str) -> Option[str | None]:
 
 
 component_log_configs = {k: make_option_for_log_file(k) for k in ["server", "scheduler", "compiler"]}
+scheduler_log_config = component_log_configs["scheduler"]
 
 
 def get_executable() -> Optional[str]:

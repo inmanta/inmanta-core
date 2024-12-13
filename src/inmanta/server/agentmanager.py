@@ -38,7 +38,7 @@ import inmanta.server.services.environmentlistener
 from inmanta import config as global_config
 from inmanta import const, data, tracing
 from inmanta.agent import config as agent_cfg
-from inmanta.config import Config, config_map_to_str
+from inmanta.config import Config, config_map_to_str, scheduler_log_config
 from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
 from inmanta.data import APILIMIT, Environment, InvalidSort, model
 from inmanta.data.model import DataBaseReport, ResourceIdStr
@@ -1349,6 +1349,14 @@ password = {opt.influxdb_password.get()}
 interval = {opt.influxdb_interval.get()}
 tags = {config_map_to_str(opt.influxdb_tags.get())}
 """
+
+        if scheduler_log_config.get():
+            config += f"""
+
+[logging]
+scheduler = {scheduler_log_config.get()}
+"""
+
         return config
 
     async def _fork_inmanta(
