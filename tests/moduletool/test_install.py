@@ -1218,7 +1218,7 @@ def test_install_project_with_install_mode_master(tmpdir: py.path.local, snippet
 
     assert """
 The following requirements were not satisfied:
-\t* requirement mod11==3.2.1 on module mod11 not fulfilled, now at version 4.2.0.
+\t* requirement mod11==3.2.1 on module mod11 not fulfilled, now at version 4.2.1.dev0.
 The release type of the project is set to 'master'. Set it to a value that is appropriate for the version constraint
     """.strip() in str(
         excinfo.value
