@@ -349,6 +349,12 @@ class Option(Generic[T]):
             return self.validator.__doc__
         return None
 
+    def get_environment_variable(self) -> str:
+        """
+        Return the environment variable associated with this config option.
+        """
+        return f"INMANTA_{self.section}_{self.name.replace('-', '_')}".upper()
+
     def get_default_desc(self) -> str:
         defa = self.default
         if callable(defa):
