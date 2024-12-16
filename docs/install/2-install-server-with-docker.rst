@@ -85,6 +85,13 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
                 image: ghcr.io/inmanta/orchestrator:latest
                 ports:
                     - 8888:8888
+                environment:
+                    INMANTA_DATABASE_HOST: inmanta_db
+                    INMANTA_DATABASE_USERNAME: inmanta
+                    INMANTA_DATABASE_PASSWORD: inmanta
+                    INMANTA_CONFIG_AGENT_DEPLOY_INTERVAL: 800
+                    INMANTA_CONFIG_AGENT_REPAIR_INTERVAL: 86400
+                    INMANTA_SERVER_BIND_PORT: 8888
                 networks:
                     inm_net:
                         ipv4_address: 172.30.0.3
@@ -131,6 +138,13 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
                 volumes:
                     - ./resources/com.inmanta.license:/etc/inmanta/license/com.inmanta.license
                     - ./resources/com.inmanta.jwe:/etc/inmanta/license/com.inmanta.jwe
+                environment:
+                    INMANTA_DATABASE_HOST: inmanta_db
+                    INMANTA_DATABASE_USERNAME: inmanta
+                    INMANTA_DATABASE_PASSWORD: inmanta
+                    INMANTA_CONFIG_AGENT_DEPLOY_INTERVAL: 800
+                    INMANTA_CONFIG_AGENT_REPAIR_INTERVAL: 86400
+                    INMANTA_SERVER_BIND_PORT: 8888
                 networks:
                     inm_net:
                         ipv4_address: 172.30.0.3
@@ -181,39 +195,10 @@ Overwrite default server configuration
 ######################################
 
 By default the server will use the file located in the image at ``/etc/inmanta/inmanta.cfg``.
-If you want to change it, you can copy this file, edit it, then mount it in the container,
-where the original file was located. It is also possible to provide server config options
-via environment variables (see :ref:`config_reference` for more information).
-
-If you use docker-compose, you can simply update this section of the example above:
-
-
-.. only:: iso
-
-    .. code-block:: yaml
-        :substitutions:
-
-        inmanta-server:
-            container_name: inmanta_orchestrator
-            image: containers.inmanta.com/containers/service-orchestrator:|version_major|
-            ports:
-                - 8888:8888
-            volumes:
-                - ./resources/com.inmanta.license:/etc/inmanta/license/com.inmanta.license
-                - ./resources/com.inmanta.jwe:/etc/inmanta/license/com.inmanta.jwe
-                - ./resources/my-server-conf.cfg:/etc/inmanta/inmanta.cfg
-
-.. only:: oss
-
-    .. code-block:: yaml
-
-        inmanta-server:
-            container_name: inmanta_orchestrator
-            image: ghcr.io/inmanta/orchestrator:latest
-            ports:
-                - 8888:8888
-            volumes:
-                - ./resources/my-server-conf.cfg:/etc/inmanta/inmanta.cfg
+If you want to change it, the recommended way is to provide the server config options via environment variables as done in the above example.
+All the different options and associated env variables are described :ref:`here<config_reference>`.
+It is also possible to provide the entire file. You can copy and edit it, then mount it in the container,
+where the original file was located.
 
 
 Starting the ssh server
