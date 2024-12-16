@@ -32,6 +32,12 @@ from inmanta.server.protocol import Server, ServerSlice
 
 
 def test_options(monkeypatch):
+    """
+    Test basic functionalities of the configuration framework:
+        - setting/getting option values
+        - overriding using an environment variable
+        - using the get_environment_variable method to return associated env variable
+    """
     configa = Option("test", "a", "markerA", "test a docs")
     configb = Option("test", "B", option_as_default(configa), "test b docs")
     configc = Option("test", "c", "defaultc", "docstringc")
@@ -48,6 +54,9 @@ def test_options(monkeypatch):
     configb.set("MB2")
     assert configb.get() == "MB2"
     assert configc.get() == "environ_c"
+
+    for option, expected_sub_part in zip([configa, configb, configc], ["TEST_A", "TEST_B", "TEST_C"]):
+        assert option.get_environment_variable() == f"INMANTA_{expected_sub_part}"
 
 
 def test_configfile_hierarchy(monkeypatch, tmpdir):
