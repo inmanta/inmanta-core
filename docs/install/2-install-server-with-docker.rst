@@ -264,9 +264,7 @@ There are two ways you can achieve this:
         agent it starts, but not to any other process running in the container (if you for example
         login via ssh to the container and try to install a project again).
 
-    2.  (Recommended) Set the environment variables in a file and mount it to the following path in the
-        container: ``/etc/inmanta/env``.  This file will be loaded when starting the server and for
-        every session that the inmanta user starts in the container.
+    2.  Set the environment variables in a file and use the `env_file` section of docker compose to specify the path of your env file.
 
 .. only:: oss
 
@@ -277,9 +275,16 @@ There are two ways you can achieve this:
             image: ghcr.io/inmanta/orchestrator:latest
             ports:
                 - 8888:8888
+            env_file: ./resources/my-env-file
+            environment:
+                INMANTA_DATABASE_HOST: inmanta_db
+                INMANTA_DATABASE_USERNAME: inmanta
+                INMANTA_DATABASE_PASSWORD: inmanta
+                INMANTA_CONFIG_AGENT_DEPLOY_INTERVAL: 800
+                INMANTA_CONFIG_AGENT_REPAIR_INTERVAL: 86400
+                INMANTA_SERVER_BIND_PORT: 8888
             volumes:
                 - ./resources/my-server-conf.cfg:/etc/inmanta/inmanta.cfg
-                - ./resources/my-env-file:/etc/inmanta/env
 
 .. only:: iso
 
@@ -291,11 +296,18 @@ There are two ways you can achieve this:
             image: containers.inmanta.com/containers/service-orchestrator:|version_major|
             ports:
                 - 8888:8888
+            env_file: ./resources/my-env-file
+            environment:
+                INMANTA_DATABASE_HOST: inmanta_db
+                INMANTA_DATABASE_USERNAME: inmanta
+                INMANTA_DATABASE_PASSWORD: inmanta
+                INMANTA_CONFIG_AGENT_DEPLOY_INTERVAL: 800
+                INMANTA_CONFIG_AGENT_REPAIR_INTERVAL: 86400
+                INMANTA_SERVER_BIND_PORT: 8888
             volumes:
                 - ./resources/com.inmanta.license:/etc/inmanta/license/com.inmanta.license
                 - ./resources/com.inmanta.jwe:/etc/inmanta/license/com.inmanta.jwe
                 - ./resources/my-server-conf.cfg:/etc/inmanta/inmanta.cfg
-                - ./resources/my-env-file:/etc/inmanta/env
 
 
 Changing inmanta user/group id
