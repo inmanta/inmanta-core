@@ -56,6 +56,7 @@ def test_configfile_hierarchy(monkeypatch, tmpdir):
 
         - in the default main config file /etc/inmanta/inmanta.cfg
         - in a config directory --config-dir cli option
+        - in dot files (.inmanta or .inmanta.cfg)
         - in a config file passed via --config cli option
         - via environment variable
 
