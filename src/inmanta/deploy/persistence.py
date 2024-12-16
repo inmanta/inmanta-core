@@ -44,6 +44,12 @@ class StateUpdateManager(abc.ABC):
 
     @abc.abstractmethod
     async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
+        """
+        This method sets the state to in_progress.
+
+        It is important that this method is atomic: if it fails, we assume the state to be not set and will not re-set it
+
+        """
         # FIXME: get rid of version in the id
         pass
 
@@ -85,6 +91,9 @@ class ToDbUpdateManager(StateUpdateManager):
         logger.handle(log_record)
 
     async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
+        """
+        Update the db to reflect that deployment has started for a given resource.
+        """
         resource_id_str = resource_id
         resource_id_parsed = Id.parse_id(resource_id_str)
 
@@ -127,6 +136,10 @@ class ToDbUpdateManager(StateUpdateManager):
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
     async def send_deploy_done(self, result: DeployResult) -> None:
+        """
+        Update the db to reflect the result of a deploy for a given resource.
+        """
+
         def error_and_log(message: str, **context: Any) -> None:
             """
             :param message: message to return both to logger and to remote caller

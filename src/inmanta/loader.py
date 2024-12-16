@@ -286,22 +286,24 @@ class CodeLoader:
         if not os.path.exists(os.path.join(self.__code_dir, MODULE_DIR)):
             os.makedirs(os.path.join(self.__code_dir, MODULE_DIR), exist_ok=True)
 
-    def _load_module(self, mod_name: str, hv: str, require_reload: bool = True) -> None:
+    def load_module(self, mod_name: str, hv: str) -> None:
         """
-        Load or reload a module
+        Ensure the given module is loaded.
 
-        :arg require_reload: if set to true, we will explcitly reload modules, otherwise we keep them as is
+        :param mod_name: Name of the module to load
+        :param hv: hash value of the content of the module
+
+        :raises Exception: When the provided hash value is different from the one in the cache for this module.
         """
 
         # Importing a module -> only the first import loads the code
         # cache of loaded modules mechanism -> starts afresh when agent is restarted
         try:
             if mod_name in self.__modules:
-                if require_reload:
-                    mod = importlib.reload(self.__modules[mod_name][1])
-                else:
-                    LOGGER.debug("Not reloading module %s", mod_name)
-                    return
+                if hv != self.__modules[mod_name][0]:
+                    raise Exception(f"The content of module {mod_name} changed since it was last imported.")
+                LOGGER.debug("Module %s is already loaded", mod_name)
+                return
             else:
                 mod = importlib.import_module(mod_name)
             self.__modules[mod_name] = (hv, mod)
@@ -309,9 +311,9 @@ class CodeLoader:
         except ImportError:
             LOGGER.exception("Unable to load module %s", mod_name)
 
-    def install_source(self, module_source: ModuleSource) -> bool:
+    def install_source(self, module_source: ModuleSource) -> None:
         """
-        :return: True if this module install requires a reload
+        Ensure the given module source is available on disk.
         """
         # if the module is new, or update
         if module_source.name not in self.__modules or module_source.hash_value != self.__modules[module_source.name][0]:
@@ -365,35 +367,24 @@ class CodeLoader:
                         module_source.hash_value,
                         module_source.name,
                     )
-                    # Force (re)load, because we have it on disk, but not on the in-memory cache
-                    # We may have not loaded it
-                    return True
+                    return
 
             # write the new source
             source_code = module_source.get_source_code()
             with open(source_file, "wb+") as fd:
                 fd.write(source_code)
-            return True
         else:
             LOGGER.debug(
                 "Not deploying code (hv=%s, module=%s) because of cache hit", module_source.hash_value, module_source.name
             )
-            return False
 
     def deploy_version(self, module_sources: Iterable[ModuleSource]) -> None:
-        to_reload: list[ModuleSource] = []
-
+        """
+        Ensure the given module sources are available on disk.
+        """
         sources = set(module_sources)
         for module_source in sources:
-            is_changed = self.install_source(module_source)
-            if is_changed:
-                to_reload.append(module_source)
-        # This whole mechanism can go if we spawn a new venv with the new code when required
-        if len(to_reload) > 0:
-            importlib.invalidate_caches()
-            for module_source in to_reload:
-                # (re)load the new source
-                self._load_module(module_source.name, module_source.hash_value)
+            self.install_source(module_source)
 
 
 class PluginModuleLoader(FileLoader):

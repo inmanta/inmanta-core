@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump logfire from 2.6.1 to 2.6.2
+destination-branches:
+- master
+sections: {}

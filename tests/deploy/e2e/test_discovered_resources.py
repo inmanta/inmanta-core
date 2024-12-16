@@ -17,7 +17,7 @@
 """
 
 import json
-from typing import Sequence
+from collections.abc import Sequence
 from urllib import parse
 
 import pytest

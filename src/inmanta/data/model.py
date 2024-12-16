@@ -471,10 +471,36 @@ class PagingBoundaries:
     Represents the lower and upper bounds that should be used for the next and previous pages
     when listing domain entities.
 
-    :param start: largest value of the page for the primary sort column.
-    :param end: smallest value of the page for the primary sort column.
-    :param first_id: largest value of the page for the secondary sort column, if there is one.
-    :param last_id: smallest value of the page for the secondary sort column, if there is one.
+    The largest / smallest value of the current page represents respectively the min / max boundary value (exclusive) for the
+    neighbouring pages. Which represents next and which prev depends on sorting order (ASC or DESC).
+    So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "highest"
+    and "lowest".
+
+    Let's show this in an example: a user requests the following:
+     - all Resources with name > foo
+     - ASCENDING order
+     - Page size = 10
+
+    The equivalent RequestPagingBoundary will be as follows:
+        ```
+        RequestPagingBoundary:
+            start = foo
+            end = None
+        ```
+
+    The fetched data will be: [foo1 ... foo10]
+
+    But the Pagingboundary will be constructed this way:
+        ```
+        Pagingboundary:
+            end = foo1
+            start = foo10 # Reversed because these are meant to map to like-named fields on neighbouring RequestedPagingBoundary
+        ```
+
+    :param start: largest value of current page for the primary sort column.
+    :param end: smallest value of current page for the primary sort column.
+    :param first_id: largest value of current page for the secondary sort column, if there is one.
+    :param last_id: smallest value of current page for the secondary sort column, if there is one.
     """
 
     def __init__(
@@ -870,6 +896,47 @@ class PipConfig(BaseModel):
 
 
 LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
+
+
+class Discrepancy(BaseModel):
+    """
+    Records a discrepancy between the state as persisted in the database and
+    the in-memory state in the scheduler. Either model-wide when no
+    resource id is specified (e.g. when model versions are mismatched)
+    or for a specific resource.
+
+    :param rid: If set, this discrepancy is specific to this resource.
+        If left unset, this discrepancy is not specific to any particular resource.
+    :param field: If set, specifies on which field this discrepancy was detected.
+        If left unset, and a rid is specified, the discrepancy was detected on the
+        resource level i.e. it is missing from either the db or the scheduler.
+    :param expected: User-facing message denoting the expected state (i.e. as persisted
+        in the DB).
+    :param actual: User-facing message denoting the actual state (i.e. in-memory state
+        in the scheduler).
+
+    """
+
+    rid: ResourceIdStr | None
+    field: str | None
+    expected: str
+    actual: str
+
+
+class SchedulerStatusReport(BaseModel):
+    """
+    Status report for the scheduler self-check
+
+    :param scheduler_state: In-memory representation of the resources in the scheduler
+    :param db_state: Desired state of the resources as persisted in the database
+    :param discrepancies: Discrepancies between the in-memory representation of the resources
+        and their state in the database.
+    """
+
+    # Can't type properly because of current module structure
+    scheduler_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceState
+    db_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceDetails
+    discrepancies: list[Discrepancy] | dict[ResourceIdStr, list[Discrepancy]]
 
 
 class DataBaseReport(BaseModel):

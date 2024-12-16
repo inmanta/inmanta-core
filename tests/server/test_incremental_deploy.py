@@ -427,7 +427,7 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
             result=DeployResult(
                 rvid=rvid,
                 action_id=action_id,
-                status=const.ResourceState.deployed,
+                resource_state=const.HandlerResourceState.deployed,
                 messages=[],
                 changes={},
                 change=change,

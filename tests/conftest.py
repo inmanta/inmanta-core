@@ -836,11 +836,11 @@ async def agent(server, environment):
     a = Agent(environment)
     # Restore state-dir
     config.Config.set("config", "state-dir", str(server_state_dir))
-
+    loop = asyncio.get_running_loop()
     executor = InProcessExecutorManager(
         environment,
         a._client,
-        asyncio.get_event_loop(),
+        loop,
         logger,
         a.thread_pool,
         str(pathlib.Path(a._storage["executors"]) / "code"),

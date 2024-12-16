@@ -24,7 +24,7 @@ import inspect
 import os
 import shutil
 import sys
-from logging import INFO
+from logging import DEBUG
 from types import ModuleType
 from typing import Optional
 
@@ -116,53 +116,74 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv):
 
 
 def test_code_loader(tmp_path, caplog):
-    """Test loading a new module"""
-    caplog.set_level(INFO)
+    """
+    Test code loader capabilities:
+        - test code loader cache
+        - test that an exception is raised when re-loading a module with different content
+    """
+    caplog.set_level(DEBUG)
 
     cl = loader.CodeLoader(tmp_path)
-
-    def deploy(code: str) -> None:
-        cl.deploy_version([get_module_source("inmanta_plugins.inmanta_unit_test", code)])
 
     with pytest.raises(ImportError):
         import inmanta_plugins.inmanta_unit_test  # NOQA
 
-    deploy(
-        """
+    code = """
 def test():
     return 10
-        """
-    )
+    """
+    source_1 = get_module_source("inmanta_plugins.inmanta_unit_test", code)
+
+    # Ensure source is present on disk
+    cl.deploy_version([source_1])
+
     assert any("Deploying code " in message for message in caplog.messages)
     caplog.clear()
 
+    # First manual load to be able to check the content remains untouched
     import inmanta_plugins.inmanta_unit_test  # NOQA
 
     assert inmanta_plugins.inmanta_unit_test.test() == 10
 
-    # deploy new version
-    deploy(
-        """
-def test():
-    return 20
-        """
-    )
+    # deploy same version
+    cl.deploy_version([source_1])
 
-    assert inmanta_plugins.inmanta_unit_test.test() == 20
-
+    assert inmanta_plugins.inmanta_unit_test.test() == 10
     assert any("Deploying code " in message for message in caplog.messages)
+    assert any(
+        f"Not deploying code (hv={source_1.hash_value}, module={source_1.name}) because it is already on disk" in message
+        for message in caplog.messages
+    )
     caplog.clear()
 
-    # deploy same version
-    deploy(
-        """
+    # Load the module to register it in the loader cache
+    cl.load_module(source_1.name, source_1.hash_value)
+    # Subsequent deploys of the same module will result in a cache hit
+    cl.deploy_version([source_1])
+    assert any(
+        f"Not deploying code (hv={source_1.hash_value}, module={source_1.name}) because of cache hit" in message
+        for message in caplog.messages
+    )
+    caplog.clear()
+
+    # deploy new version
+    code = """
 def test():
     return 20
         """
-    )
+    source_2 = get_module_source("inmanta_plugins.inmanta_unit_test", code)
+    cl.deploy_version([source_2])
 
-    assert inmanta_plugins.inmanta_unit_test.test() == 20
-    assert not any("Deploying code " in message for message in caplog.messages)
+    assert any("Deploying code " in message for message in caplog.messages)
+
+    with pytest.raises(Exception):
+        cl.load_module(source_2.name, source_2.hash_value)
+        assert any(
+            f"The content of module {source_2.name} changed since it was last imported." in message
+            for message in caplog.messages
+        )
+
+    assert inmanta_plugins.inmanta_unit_test.test() == 10
 
 
 def test_code_loader_dependency(tmp_path, caplog, deactive_venv):
@@ -225,11 +246,15 @@ def test():
     """
 
     with pytest.raises(ImportError):
-        import inmanta_bad_unit_test  # NOQA
+        import inmanta_plugins.inmanta_bad_unit_test  # NOQA
 
+    caplog.clear()
     cl.deploy_version([get_module_source("inmanta_plugins.inmanta_bad_unit_test", code)])
 
-    assert "ModuleNotFoundError: No module named 'badimmport'" in caplog.text
+    with pytest.raises(ModuleNotFoundError):
+        import inmanta_plugins.inmanta_bad_unit_test  # NOQA
+
+        assert "ModuleNotFoundError: No module named 'badimmport'" in caplog.text
 
 
 @fixture(scope="function")

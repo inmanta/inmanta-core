@@ -1,0 +1,9 @@
+description: Added SkipResourceForDependencies exception.
+issue-nr: 8340
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: >
+    Added SkipResourceForDependencies exception.
+    This exception can be raised by the handler when it wants to skip a resource
+    and retry only when all of its dependencies succeed. See the docs for more details.

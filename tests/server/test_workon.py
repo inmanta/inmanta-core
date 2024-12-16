@@ -22,6 +22,7 @@ import copy
 import getpass
 import logging
 import os
+import platform
 import pprint
 import shutil
 import subprocess
@@ -574,7 +575,7 @@ async def assert_workon_state(
     assert len(lines) == 4  # trailing newline
     working_dir, python, ps1_prefix, empty = lines
     assert (working_dir == str(expected_dir)) != invert_working_dir_assert
-    assert (python == str(expected_dir.join(".env", "bin", "python"))) != invert_python_assert
+    assert (python == str(os.path.realpath(expected_dir.join(".env", "bin", "python")))) != invert_python_assert
     assert ps1_prefix == ("" if invert_ps1_assert else f"({arg}) ")
     assert empty == ""
     assert result.stderr.strip() == expect_stderr.strip()
@@ -612,7 +613,9 @@ async def test_workon(
     )
     # .env dir missing
     env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[2].id), "compiler")
-    shutil.rmtree(str(env_dir.join(".env")))
+    python_version = ".".join(platform.python_version_tuple()[0:2])
+    versioned_venv_dir = ".env-py" + python_version
+    shutil.rmtree(str(env_dir.join(versioned_venv_dir)))
     await assert_workon_state(
         workon_bash,
         compiled_environments[2].name,

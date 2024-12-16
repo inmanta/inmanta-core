@@ -39,6 +39,7 @@ def logger_for_agent(agent: str) -> logging.Logger:
     return logging.getLogger("agent").getChild(agent)
 
 
+# must remain frozen because it's used as key/identity for deploy intent
 @dataclass(frozen=True, kw_only=True)
 class Task(abc.ABC):
     """
@@ -116,45 +117,49 @@ class Deploy(Task):
             # First do scheduler book keeping to establish what to do
             version: int
             resource_details: "state.ResourceDetails"
-            intent = await task_manager.get_resource_intent_for_deploy(self.resource)
+            intent = await task_manager.deploy_start(self.resource)
             if intent is None:
                 # Stale resource, can simply be dropped.
                 return
 
-            # Dependencies are always set when calling get_resource_intent_for_deploy
-            assert intent.dependencies is not None
-            # Resolve to exector form
-            version = intent.model_version
-            resource_details = intent.details
-            executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
+            # From this point on, we HAVE to call report_resource_state to make the scheduler propagate state
 
-            # Make id's
-            gid = uuid.uuid4()
-            action_id = uuid.uuid4()  # can this be gid ?
-
-            # The main difficulty off this code is exception handling
+            # The main difficulty of this code is exception handling
             # We collect state here to report back in the finally block
 
             # Full status of the deploy,
             # may be unset if we fail before signaling start to the server, will be set if we signaled start
             deploy_result: DeployResult | None = None
-            scheduler_deployment_result: state.DeploymentResult
-
             try:
                 # This try catch block ensures we report at the end of the task
 
-                # Signal start to server
+                # Dependencies are always set when calling get_resource_intent_for_deploy
+                assert intent.dependencies is not None
+                # Resolve to exector form
+                version = intent.model_version
+                resource_details = intent.details
+                executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(
+                    version, resource_details
+                )
+
+                # Make id's
+                gid = uuid.uuid4()
+                action_id = uuid.uuid4()  # can this be gid ?
+
+                # Signal start to DB
                 try:
                     await task_manager.send_in_progress(action_id, executor_resource_details.rvid)
                 except Exception:
-                    # Unrecoverable, can't reach server
-                    scheduler_deployment_result = state.DeploymentResult.FAILED
+                    # Unrecoverable, can't reach DB
                     LOGGER.error(
                         "Failed to report the start of the deployment to the server for %s",
                         resource_details.resource_id,
                         exc_info=True,
                     )
                     return
+                # From this point on, we HAVE to call send_deploy_done to make sure we are not stuck in deploying
+                # This is done by setting deploy_result
+                # The surrounding try_catch will call report_resource_state
 
                 # Get executor
                 try:
@@ -176,7 +181,6 @@ class Deploy(Task):
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
-                    scheduler_deployment_result = state.DeploymentResult.FAILED
                     return
 
                 assert reason is not None  # Should always be set for deploy
@@ -185,14 +189,7 @@ class Deploy(Task):
                     deploy_result = await my_executor.execute(
                         action_id, gid, executor_resource_details, reason, intent.dependencies
                     )
-                    # Translate deploy result status to the new deployment result state
-                    match deploy_result.status:
-                        case const.ResourceState.deployed:
-                            scheduler_deployment_result = state.DeploymentResult.DEPLOYED
-                        case const.ResourceState.skipped:
-                            scheduler_deployment_result = state.DeploymentResult.SKIPPED
-                        case _:
-                            scheduler_deployment_result = state.DeploymentResult.FAILED
+
                 except Exception as e:
                     # This should not happen
 
@@ -208,29 +205,28 @@ class Deploy(Task):
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
-                    scheduler_deployment_result = state.DeploymentResult.FAILED
             finally:
                 if deploy_result is not None:
                     # We signaled start, so we signal end
                     try:
                         await task_manager.send_deploy_done(deploy_result)
+                        failed_to_send_deploy_done = False
                     except Exception:
-                        scheduler_deployment_result = state.DeploymentResult.FAILED
+                        failed_to_send_deploy_done = True
                         LOGGER.error(
                             "Failed to report the end of the deployment to the server for %s",
                             resource_details.resource_id,
                             exc_info=True,
                         )
                 # Always notify scheduler
-                await task_manager.report_resource_state(
+                await task_manager.deploy_done(
                     resource=self.resource,
                     attribute_hash=resource_details.attribute_hash,
-                    status=(
-                        state.ComplianceStatus.COMPLIANT
-                        if scheduler_deployment_result == state.DeploymentResult.DEPLOYED
-                        else state.ComplianceStatus.NON_COMPLIANT
+                    resource_state=(
+                        const.HandlerResourceState.failed
+                        if deploy_result is None or failed_to_send_deploy_done
+                        else deploy_result.resource_state
                     ),
-                    deployment_result=scheduler_deployment_result,
                 )
 
 
