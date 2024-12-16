@@ -3,3 +3,6 @@ repo_name: inmanta-core
 postgresql_versions:
     - 13
     - 14
+    - 15
+    - 16
+    - 17
