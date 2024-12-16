@@ -5480,7 +5480,7 @@ class Resource(BaseDocument):
         last_produced_events: Optional[datetime.datetime] = None,
         last_deployed_attribute_hash: Optional[str] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
-        deployment_result: Optional[state.DeploymentResult] = None,
+        state: Optional[state.ResourceState] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)
@@ -5494,8 +5494,10 @@ class Resource(BaseDocument):
             "last_deployed_version": last_deployed_version,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
-        if deployment_result:
-            query_parts.append(f"deployment_result={args(deployment_result.name)}")
+        if state:
+            query_parts.append(f"deployment_result={args(state.deployment_result.name)}")
+            # TODO: split blocked status field to make raceless
+            query_parts.append(f"blocked_status={args(state.blocked.name)}")
         if not query_parts:
             return
         query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"

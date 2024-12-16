@@ -123,7 +123,6 @@ class DummyExecutor(executor.Executor):
             messages=[],
             changes={},
             change=Change.nochange,
-            deployment_result=deployment_result,
         )
 
     async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
@@ -188,7 +187,6 @@ class ManagedExecutor(DummyExecutor):
             messages=[],
             changes={},
             change=Change.nochange,
-            deployment_result=state.DeploymentResult.from_handler_resource_state(result),
         )
 
 

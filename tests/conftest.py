@@ -865,6 +865,17 @@ async def agent_factory(server) -> AsyncIterator[Callable[[uuid.UUID], Awaitable
 
     yield create
 
+    for agent in agents:
+        the_state = dict(agent.scheduler._state.resource_state)
+        for r,state in the_state.items():
+            print(r, state)
+        await agent.stop_working()
+        agent.scheduler._work.agent_queues._new_agent_notify = lambda x: x
+        await agent.start_working()
+
+        new_state = dict(agent.scheduler._state.resource_state)
+        assert the_state == new_state
+
     await asyncio.gather(*[agent.stop() for agent in agents])
 
 
