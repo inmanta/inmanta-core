@@ -61,7 +61,7 @@ from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
 from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
-from inmanta.const import EXIT_START_FAILED, LOG_CONTEXT_VAR_ENVIRONMENT
+from inmanta.const import ALL_LOG_CONTEXT_VARS, EXIT_START_FAILED, LOG_CONTEXT_VAR_ENVIRONMENT
 from inmanta.export import cfg_env
 from inmanta.logging import FullLoggingConfig, InmantaLoggerConfig, LoggingConfigBuilder, _is_on_tty
 from inmanta.server import config as opt
@@ -790,7 +790,7 @@ def cmd_parser() -> argparse.ArgumentParser:
         action="count",
         default=0,
         help="Log level for messages going to the console. Default is warnings only. "
-             "When used in combination with a logging config file, it will force a cli logger to be added to the config."
+        "When used in combination with a logging config file, it will force a cli logger to be added to the config."
         "-v warning, -vv info, -vvv debug and -vvvv trace",
     )
     parser.add_argument(
@@ -856,7 +856,8 @@ def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequen
     )
     subparser.add_parser(
         "scheduler",
-        help="Output default log file template for the scheduler, given the current configuration file and options",
+        help="Output default log file template for the scheduler, "
+        "given the current configuration file and options. Store in a file ending with `.tmpl`",
         parents=parent_parsers,
     )
     subparser.add_parser(
@@ -866,32 +867,48 @@ def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequen
     )
 
 
-@command("default_logging_config", help_msg="Print the default log config", parser_config=default_log_config_parser)
+@command(
+    "print_default_logging_config",
+    help_msg="Print the default log config for the provided component",
+    parser_config=default_log_config_parser,
+)
 def default_logging_config(options: argparse.Namespace) -> None:
     config_builder = LoggingConfigBuilder()
 
-    # Al possible context vars:
-    # TODO move to const
-    context_vars = [LOG_CONTEXT_VAR_ENVIRONMENT]
+    # Because we want to have contex vars in the files,
+    #   but the file can also contain other f-string formatters, this is a bit tricky.
+    # We want to be able to
+    #   1. replace all env_vars with a template `{env_var}`
+    #   2. if we form a template, escape all existing '{' into '{{' and `}` into `}}`
+    # What we do is:
+    #   1. set all env vars to {placeholder}{var}{placeholder}
+    #   2. if we detect the placeholder
+    #   3. do escaping
+    #   4. replace placeholder with {placeholder}{var}{placeholder} with {{{var}}}
 
-    # Replace variables by placeholder
+    # Al possible context vars:
+    context_vars = ALL_LOG_CONTEXT_VARS
+
+    # 1. Replace variables by placeholder
     # Should be safe as we only expect default configs
+    # That don't contain this placeholder
     place_holder = "__PLACE_HOLDER__"
 
     context = {var: f"{place_holder}{var}{place_holder}" for var in context_vars}
 
-    # TODO: LSM!!
     logging_config: FullLoggingConfig = config_builder.get_logging_config_from_options(
         sys.stdout, options, options.cmd, context
     )
 
     raw_dump = logging_config.to_string()
 
+    # 2. if we detect the placeholder
     if place_holder in raw_dump:
-        # escape all '{' and '}'
+        # 3. escape all '{' and '}'
         # i.e. we could be a template of a template
         raw_dump = raw_dump.replace("{", "{{")
         raw_dump = raw_dump.replace("}", "}}")
+        # 4. replace placeholder with `{`
         for context_var in context_vars:
             raw_dump = raw_dump.replace(f"{place_holder}{context_var}{place_holder}", "{" + context_var + "}")
 
@@ -955,7 +972,8 @@ def app() -> None:
         log_context[LOG_CONTEXT_VAR_ENVIRONMENT] = env
 
     # Log config
-    log_config.apply_options(options, options.component, log_context)
+    component = options.component if hasattr(options, "component") else None
+    log_config.apply_options(options, component, log_context)
     logging.captureWarnings(True)
 
     if options.inmanta_version:

@@ -1070,7 +1070,7 @@ async def test_auto_started_agent_log_in_debug_mode(server, environment):
             with open(log_file_path) as f:
                 log_content = f.read()
                 return "DEBUG    inmanta.protocol.endpoints Start transport for client agent" in log_content
-        except:
+        except Exception:
             return False
 
     await retry_limited(log_contains_debug_line, 10)

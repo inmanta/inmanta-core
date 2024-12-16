@@ -259,7 +259,7 @@ ENVIRON_FORCE_TTY = "FORCE_TTY"
 
 LOG_LEVEL_TRACE = 3
 
-NAME_RESOURCE_ACTION_LOGGER = "resource_action_logger"
+NAME_RESOURCE_ACTION_LOGGER = "inmanta.resourceaction"
 
 # Time we give the server/agent to shutdown gracefully, before we force stop the ioloop
 SHUTDOWN_GRACE_IOLOOP = 10
@@ -389,3 +389,5 @@ RESOURCE_ATTRIBUTE_RECEIVE_EVENTS = "receive_events"
 
 # Per component log variables
 LOG_CONTEXT_VAR_ENVIRONMENT = "environment"
+
+ALL_LOG_CONTEXT_VARS = [LOG_CONTEXT_VAR_ENVIRONMENT]

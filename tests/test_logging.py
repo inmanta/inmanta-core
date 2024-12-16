@@ -19,6 +19,7 @@
 import logging
 import os.path
 import sys
+import uuid
 from io import StringIO
 from typing import Optional
 
@@ -27,7 +28,8 @@ import yaml
 
 import inmanta
 from inmanta import config
-from inmanta.logging import InmantaLoggerConfig, MultiLineFormatter, Options, load_config_file_to_dict
+from inmanta.const import ENVIRON_FORCE_TTY
+from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, MultiLineFormatter, Options, load_config_file_to_dict
 
 
 @pytest.fixture(autouse=True)
@@ -378,3 +380,29 @@ def test_log_file_or_template(tmp_path):
     # Full on injection
     config = load_config_file_to_dict(str(f2), {"xvar": "A", "yvar": "B", "test": "flah': 'zxxx'\ntest: zzz\nflah: zzz\n#"})
     assert config == {"test": "zzz", "flah": "zzz"}
+
+
+def test_scheduler_documentation_conformance(inmanta_config, monkeypatch):
+    monkeypatch.setenv(ENVIRON_FORCE_TTY, "yes")
+    env = uuid.uuid4()
+    from_file_dict = load_config_file_to_dict(
+        os.path.join(os.path.dirname(__file__), "..", "misc/scheduler_log.yml.tmpl"), context={"environment": env}
+    )
+    default = LoggingConfigBuilder()
+    from_config = default.get_logging_config_from_options(
+        sys.stdout, Options(log_file_level="DEBUG"), component="scheduler", context={"environment": env}
+    )
+
+    assert from_config._to_dict_config() == from_file_dict
+
+
+def test_server_documentation_conformance(inmanta_config, monkeypatch):
+    monkeypatch.setenv(ENVIRON_FORCE_TTY, "yes")
+    from_file_dict = load_config_file_to_dict(os.path.join(os.path.dirname(__file__), "..", "misc/server_log.yml"), context={})
+
+    default = LoggingConfigBuilder()
+    from_config = default.get_logging_config_from_options(
+        sys.stdout, Options(log_file_level="INFO", log_file="/var/log/inmanta/server.log"), component="server", context={}
+    )
+
+    assert from_config._to_dict_config() == from_file_dict

@@ -109,7 +109,7 @@ from inmanta.protocol.ipc_light import (
 )
 from setproctitle import setproctitle
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("inmanta.executor")
 
 
 class ExecutorContext:
@@ -135,10 +135,10 @@ class ExecutorContext:
     # We have no join here yet, don't know if we need it
     async def init_for(self, name: str, uri: str) -> None:
         """Initialize a new executor in this process"""
-        LOGGER.info("Starting for %s", name)
+        self.server.logger.info("Starting for %s", name)
         if name in self.executors:
             # We existed before
-            LOGGER.info("Waiting for old executor %s to shutdown", name)
+            self.server.logger.info("Waiting for old executor %s to shutdown", name)
             old_one = self.executors[name]
             # But were stopped
             assert old_one.is_stopped()
@@ -146,7 +146,7 @@ class ExecutorContext:
             await old_one.join()
 
         loop = asyncio.get_running_loop()
-        parent_logger = logging.getLogger("agent.executor")
+        parent_logger = logging.getLogger("inmanta.executor")
         assert self.client  # mypy
         # Setup agent instance
         executor = inmanta.agent.in_process_executor.InProcessExecutor(
@@ -543,7 +543,7 @@ def mp_worker_entrypoint(
     logging.captureWarnings(True)
 
     # Set up our own logger
-    logger = logging.getLogger(f"agent.executor.{name}")
+    logger = logging.getLogger(f"inmanta.executor.{name}")
 
     # Load config
     inmanta.config.Config.load_config_from_dict(config)

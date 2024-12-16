@@ -30,7 +30,6 @@ from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STA
 from inmanta.data.model import ResourceVersionIdStr
 from inmanta.protocol import Client
 from inmanta.resources import Id
-from inmanta.server.services import resourceservice
 
 LOGGER = logging.getLogger(__name__)
 
@@ -72,23 +71,6 @@ class ToDbUpdateManager(StateUpdateManager):
         self.environment = environment
         # TODO: The client is only here temporarily while we fix the dryrun_update
         self.client = client
-        # FIXME: We may want to move the writing of the log to the scheduler side as well,
-        #  when all uses of this logger are moved
-        self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
-
-    def get_resource_action_logger(self, environment: UUID) -> logging.Logger:
-        """Get the resource action logger for the given environment.
-        :param environment: The environment to get a logger for
-        :return: The logger for the given environment.
-        """
-        return self._resource_action_logger.getChild(str(environment))
-
-    def log_resource_action(self, env: UUID, resource_id: str, log_level: int, ts: datetime.datetime, message: str) -> None:
-        """Write the given log to the correct resource action logger"""
-        logger = self.get_resource_action_logger(env)
-        message = resource_id + ": " + message
-        log_record = resourceservice.ResourceActionLogLine(logger.name, log_level, message, ts)
-        logger.handle(log_record)
 
     async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
         """
@@ -207,16 +189,6 @@ class ToDbUpdateManager(StateUpdateManager):
                 if resource_action.finished is not None:
                     raise ValueError(
                         f"Resource action with id {resource_id_str} was already marked as done at {resource_action.finished}."
-                    )
-
-                for log in messages:
-                    # All other data is stored in the database. The msg was already formatted at the client side.
-                    self.log_resource_action(
-                        self.environment,
-                        resource_id_str,
-                        log.log_level.to_int,
-                        log.timestamp,
-                        log.msg,
                     )
 
                 await resource_action.set_and_save(

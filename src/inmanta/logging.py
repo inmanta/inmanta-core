@@ -21,7 +21,6 @@ import logging.config
 import os
 import re
 import sys
-import warnings
 from argparse import Namespace
 from collections import abc
 from collections.abc import Mapping
@@ -36,7 +35,7 @@ from yaml import Dumper, Node
 
 from inmanta import config, const
 from inmanta.config import component_log_configs
-from inmanta.const import LOG_CONTEXT_VAR_ENVIRONMENT
+from inmanta.const import LOG_CONTEXT_VAR_ENVIRONMENT, NAME_RESOURCE_ACTION_LOGGER
 from inmanta.server import config as server_config
 from inmanta.stable_api import stable_api
 
@@ -88,7 +87,12 @@ logging.addLevelName(3, "TRACE")
 
 
 class LogConfigDumper(Dumper):
-    """Ensure class variables are not shared, as representer config lives on the class"""
+    """
+    The representer config is class level
+
+    If we don't subclass, we re-configure the every yaml serializer for the entire process
+
+    To prevent this, we subclass"""
 
     def encode_streams(self, data: object) -> Node:
         if data == sys.stdout:
@@ -163,17 +167,19 @@ class FullLoggingConfig(LoggingConfigExtension):
         )
         self.root_log_level = root_log_level
 
-    def join(self, logging_config_extension: LoggingConfigExtension, allow_overwrite:bool = False) -> "FullLoggingConfig":
+    def join(self, logging_config_extension: LoggingConfigExtension, allow_overwrite: bool = False) -> "FullLoggingConfig":
         """
         Join this FullLoggingConfig and the given LoggingConfigExtension together into a single
         FullLoggingConfig object that contains all the logging config of both objects.
         """
-        def warn_or_raise(component: str, names:set[str]) -> None:
+
+        def warn_or_raise(component: str, names: set[str]) -> None:
             if not allow_overwrite:
                 raise Exception(f"The following {component} names appear in multiple logging configs: {names}")
             else:
-                logging.warning(f"The following %s names appear in multiple logging configs: %s", component, common_formatter_names)
-
+                logging.warning(
+                    "The following %s names appear in multiple logging configs: %s", component, common_formatter_names
+                )
 
         common_formatter_names = set(self.formatters.keys()) & set(logging_config_extension.formatters.keys())
         if common_formatter_names:
@@ -185,7 +191,7 @@ class FullLoggingConfig(LoggingConfigExtension):
         if common_logger_names:
             warn_or_raise("logger", common_logger_names)
 
-        def update_join(one_dict, two_dict):
+        def update_join(one_dict: Mapping[str, object], two_dict: Mapping[str, object]) -> dict[str, object]:
             out = dict(**one_dict)
             out.update(two_dict)
             return out
@@ -201,7 +207,7 @@ class FullLoggingConfig(LoggingConfigExtension):
             loggers=update_join(self.loggers, logging_config_extension.loggers),
             root_handlers=sorted(self.root_handlers + logging_config_extension.root_handlers),
             log_dirs_to_create=self.log_dirs_to_create | logging_config_extension.log_dirs_to_create,
-            root_log_level= root_level,
+            root_log_level=root_level,
         )
 
     def apply_config(self) -> None:
@@ -321,7 +327,7 @@ class LoggingConfigBuilder:
         if component == "scheduler":
             # Override defaults
             if LOG_CONTEXT_VAR_ENVIRONMENT not in context:
-                raise Exception("The scheduler expect an environment as context")
+                raise Exception("The scheduler expects an environment as context")
 
             env = context.get(LOG_CONTEXT_VAR_ENVIRONMENT)
 
@@ -334,7 +340,7 @@ class LoggingConfigBuilder:
         # Shared config
         if log_file_cli_option:
             log_level = convert_inmanta_log_level(options.log_file_level)
-            handler_root_logger = "core_server_log"
+            handler_root_logger = f"{component}_handler" if component is not None else "root_handler"
             handlers[handler_root_logger] = {
                 "class": "logging.handlers.WatchedFileHandler",
                 "level": python_log_level_to_name(log_level),
@@ -385,19 +391,12 @@ class LoggingConfigBuilder:
             pass
         elif component == "scheduler":
             # Resource action log
-            formatters.update(
-                {
-                    "resource_action_log_formatter": {
-                        "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
-                    }
-                }
-            )
             handlers.update(
                 {
                     "scheduler_resource_action_handler": {
                         "class": "logging.handlers.WatchedFileHandler",
                         "level": "DEBUG",
-                        "formatter": "resource_action_log_formatter",
+                        "formatter": "core_log_formatter",
                         "filename": os.path.join(
                             config.log_dir.get(),
                             server_config.server_resource_action_log_prefix.get()
@@ -408,7 +407,7 @@ class LoggingConfigBuilder:
             )
             loggers.update(
                 {
-                    const.NAME_RESOURCE_ACTION_LOGGER: {
+                    NAME_RESOURCE_ACTION_LOGGER: {
                         "level": "DEBUG",
                         "propagate": True,
                         "handlers": ["scheduler_resource_action_handler"],
@@ -588,7 +587,7 @@ class InmantaLoggerConfig:
         self._options_applied = True
 
     def force_cli(self, python_log_level: int) -> None:
-        """ Ensure a cli logger is attached at the given level """
+        """Ensure a cli logger is attached at the given level"""
         config_builder = LoggingConfigBuilder()
         logger_config = config_builder.get_bootstrap_logging_config(python_log_level=python_log_level)
         self.add_extension_config(logger_config)
@@ -604,12 +603,19 @@ class InmantaLoggerConfig:
         except Exception:
             raise Exception(f"Failed to apply the logging config defined in {dict_config}.")
         self._handlers = [handler for handler in logging.root.handlers if handler not in handlers_before]
-        root = dict_config.get("root",{})
+
+        def as_dict(inp: dict[str, object], key:str) -> dict[str, object]:
+            root = inp.get(key, {})
+            if not isinstance(root, dict):
+                raise Exception(f"{key} entry should be a dict, got {root}")
+            return root
+
+        root = as_dict(dict_config, "root")
         # Build config for later merges
         self._loaded_config = FullLoggingConfig(
-            formatters=dict_config.get("formatters", {}),
-            handlers=dict_config.get("handlers", {}),
-            loggers=dict_config.get("loggers", {}),
+            formatters=as_dict(dict_config,"formatters"),
+            handlers=as_dict(dict_config,"handlers"),
+            loggers=as_dict(dict_config,"loggers"),
             root_handlers=root.get("handlers", []),
             root_log_level=root.get("level", None),
         )

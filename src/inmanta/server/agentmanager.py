@@ -1354,7 +1354,7 @@ tags = {config_map_to_str(opt.influxdb_tags.get())}
             config += f"""
 
 [logging]
-scheduler = {scheduler_log_config.get()}
+scheduler = {os.path.abspath(scheduler_log_config.get())}
 """
 
         return config
