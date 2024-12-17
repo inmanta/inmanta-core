@@ -824,7 +824,7 @@ async def clienthelper(client, environment):
 
 
 @pytest.fixture(scope="function")
-async def agent_factory(server) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
+async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agents: list[Agent] = []
 
@@ -871,7 +871,7 @@ async def agent_factory(server) -> AsyncIterator[Callable[[uuid.UUID], Awaitable
         for r, state in the_state.items():
             print(r, state)
         await agent.stop_working()
-        agent.scheduler._work.agent_queues._new_agent_notify = lambda x: x
+        monkeypatch.setattr(agent.scheduler._work.agent_queues, "_new_agent_notify", lambda x: x)
         await agent.start_working()
 
         new_state = dict(agent.scheduler._state.resource_state)

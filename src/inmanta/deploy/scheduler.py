@@ -300,6 +300,7 @@ class ResourceScheduler(TaskManager):
         Initialize the scheduler state and continue the deployment where we were before the server was shutdown.
         Marks scheduler as running and triggers first deploys.
         """
+        breakpoint()
         self._timer_manager.initialize()
         async with self._intent_lock, self._scheduler_lock, data.Scheduler.get_connection() as con, con.transaction():
             # Make sure there is an entry for this scheduler in the scheduler database table
@@ -319,6 +320,7 @@ class ResourceScheduler(TaskManager):
             )
             if latest_release_model is None:
                 # No model version has been released yet. No scheduler state to restore from db.
+                self._running = True
                 return
 
             # Check at which model version the scheduler was before it went down
