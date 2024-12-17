@@ -1360,7 +1360,7 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     assert rid_to_res["test::Resource[agent1,key=key7]"]["status"] == const.ResourceState.available.value
 
 
-async def test_put_partial_with_undeployable_resources(server, client, environment, clienthelper, agent) -> None:
+async def test_put_partial_with_undeployable_resources(server, client, environment, clienthelper, agent_no_state_check) -> None:
     """
     Test whether the put_partial() endpoint correctly merges the undeployable and skipped_for_undeployable list
     of a configurationmodel.
