@@ -264,7 +264,7 @@ There are two ways you can achieve this:
         agent it starts, but not to any other process running in the container (if you for example
         login via ssh to the container and try to install a project again).
 
-    2.  Set the environment variables in a file and use the `env_file` section of docker compose to specify the path of your env file.
+    2.  Set the environment variables in a file and use the ``env_file`` section of docker compose to specify the path of your env file.
 
 .. only:: oss
 
