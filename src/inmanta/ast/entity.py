@@ -22,6 +22,7 @@ import inspect
 import typing
 from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
+from inmanta import references
 from inmanta.ast import (
     CompilerException,
     DataClassException,
@@ -702,7 +703,9 @@ class Entity(NamedType, WithComment):
          i.e. for which 'corresponds_to' returns True
          i.e. instances of the associated dataclass
         """
-        assert isinstance(value, self._paired_dataclass)
+        assert self._paired_dataclass and (
+            isinstance(value, self._paired_dataclass) or references.is_reference_of(value, self._paired_dataclass)
+        )
 
         def convert_none(x: object | None) -> object:
             return x if x is not None else NoneValue()

@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Seq
 import typing_inspect
 
 import inmanta.ast.type as inmanta_type
-from inmanta import const, protocol, util
+from inmanta import const, protocol, references, util
 from inmanta.ast import (
     LocatableString,
     Location,
@@ -253,6 +253,8 @@ def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, valu
 
     base_type = expected_type.get_base_type()
     if base_type.has_custom_to_python():
+        if isinstance(value, references.Reference):
+            return value
         return expected_type.to_python(value)
     return DynamicProxy.return_value(value)
 
@@ -445,7 +447,9 @@ class PluginReturn(PluginValue):
         if is_datclass_based:
 
             def make_dc(value: object) -> object:
-                if isinstance(value, base_type._paired_dataclass):
+                if isinstance(value, base_type._paired_dataclass) or references.is_reference_of(
+                    value, base_type._paired_dataclass
+                ):
                     return base_type.from_python(value, resolver, queue, location)
                 else:
                     raise RuntimeException(None, f"Invalid value '{value}', expected {base_type.type_string()}")

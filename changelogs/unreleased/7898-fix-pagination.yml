@@ -1,0 +1,6 @@
+description: "Fixed pagination metadata when on a page behind the last result, or before the first result (due to filtering)"
+issue-nr: 7898
+change-type: patch
+sections:
+  bugfix: "{{description}}"
+destination-branches: [master, iso7]
