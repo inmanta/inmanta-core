@@ -245,6 +245,8 @@ class ModelState:
         for res in resource_records:
             resource_id = res["resource_id"]
 
+            print(f"{resource_id} -- {dict(res)}")
+
             # Populate resource_state
             compliance_status: ComplianceStatus
             if res["is_orphan"]:
