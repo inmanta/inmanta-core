@@ -110,19 +110,26 @@ import dataclasses::bad_sub_fields
 """,
         ministd=True,
     )
-    error_first_line_regex = "The dataclass dataclasses::bad_sub_fields::Virtualmachine defined at .*/bad_sub_fields.* does not match the corresponding python dataclass at .*/bad_sub_fields.*. 7 errors:"
+    error_first_line_regex = "The dataclass dataclasses::bad_sub_fields::Virtualmachine defined at .*/bad_sub_fields.* does "
+    "not match the corresponding python dataclass at .*/bad_sub_fields.*. 7 errors:"
 
     with pytest.raises(DataClassMismatchException, match=error_first_line_regex) as e:
         compiler.do_compile()
 
     message = str(e.value)
     field_lines = [
-        "-The attribute os does not have the same type as the associated field in the python domain. All attributes of a dataclasses must be identical in both the python and inmanta domain.",
-        "-The attribute it does not have the same type as the associated field in the python domain. All attributes of a dataclasses must be identical in both the python and inmanta domain.",
-        "-The attribute ot does not have the same type as the associated field in the python domain. All attributes of a dataclasses must be identical in both the python and inmanta domain.",
-        "-The attribute ram has no counterpart in the python domain. All attributes of a dataclasses must be identical in both the python and inmanta domain.",
-        "-The attribute disk does not have the same type as the associated field in the python domain. All attributes of a dataclasses must be identical in both the python and inmanta domain.",
-        "-The field cpus doesn't exist in the inmanta domain. All attributes of a dataclasses must be identical in both the python and inmanta domain",
+        "-The attribute os does not have the same type as the associated field in the python domain. "
+        "All attributes of a dataclasses must be identical in both the python and inmanta domain.",
+        "-The attribute it does not have the same type as the associated field in the python domain. "
+        "All attributes of a dataclasses must be identical in both the python and inmanta domain.",
+        "-The attribute ot does not have the same type as the associated field in the python domain. "
+        "All attributes of a dataclasses must be identical in both the python and inmanta domain.",
+        "-The attribute ram has no counterpart in the python domain. All attributes of a dataclasses "
+        "must be identical in both the python and inmanta domain.",
+        "-The attribute disk does not have the same type as the associated field in the python domain. "
+        "All attributes of a dataclasses must be identical in both the python and inmanta domain.",
+        "-The field cpus doesn't exist in the inmanta domain. All attributes of a dataclasses must be "
+        "identical in both the python and inmanta domain",
     ]
     for line in field_lines:
         assert line in message

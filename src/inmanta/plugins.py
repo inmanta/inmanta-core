@@ -244,8 +244,6 @@ def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, valu
 
     Unknowns are not handled by this method!
     """
-    import inmanta.ast.entity
-
     expected_type.validate(value)
 
     if isinstance(value, NoneValue):
