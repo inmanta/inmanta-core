@@ -49,7 +49,7 @@ async def test_agent_disconnect(
     await asyncio.wait_for(server.stop(), timeout=15)
 
     def disconnected():
-        return not agent.scheduler._running
+        return not agent_no_state_check.scheduler._running
 
     await utils.retry_limited(disconnected, 1)
 
