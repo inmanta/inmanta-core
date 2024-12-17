@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import copy
 import logging.config
 import pathlib

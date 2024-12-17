@@ -60,7 +60,9 @@ async def resource_deployer(client, environment, null_agent):
                     changes={},
                     change=change,
                 ),
-                deployment_result=deployment_result,
+                state=state.ResourceState(
+                    status=state.ComplianceStatus.COMPLIANT, deployment_result=deployment_result, blocked=state.BlockedStatus.NO
+                ),
             )
 
         @classmethod

@@ -603,7 +603,11 @@ async def test_move_to_available_state(server, environment, client, clienthelper
                 changes={},
                 change=None,
             ),
-            deployment_result=state.DeploymentResult.DEPLOYED,
+            state=state.ResourceState(
+                status=state.ComplianceStatus.COMPLIANT,
+                deployment_result=state.DeploymentResult.DEPLOYED,
+                blocked=state.BlockedStatus.NO,
+            ),
         )
 
     # Create a new version containing:
