@@ -486,6 +486,7 @@ class ModelState:
             # Unblock resource
             self._unblock_resource(resource)
             out_unblocked.add(resource)
+            out_blocked.discard(resource)
             return True
 
         to_verify_work: list[ResourceIdStr] = list(verify_unblocked)
