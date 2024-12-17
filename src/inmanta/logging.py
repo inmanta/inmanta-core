@@ -35,7 +35,7 @@ from yaml import Dumper, Node
 
 from inmanta import config, const
 from inmanta.config import component_log_configs
-from inmanta.const import LOG_CONTEXT_VAR_ENVIRONMENT, NAME_RESOURCE_ACTION_LOGGER
+from inmanta.const import LOG_CONTEXT_VAR_ENVIRONMENT, NAME_RESOURCE_ACTION_LOGGER, LogLevel
 from inmanta.server import config as server_config
 from inmanta.stable_api import stable_api
 
@@ -65,6 +65,20 @@ def python_log_level_to_name(python_log_level: int) -> str:
     if result is not None:
         return result
     return str(python_log_level)
+
+
+def _checkLevel(level: int | str) -> int:
+    # From python logging framework, copied to not use their private methods
+    name_to_level = logging.getLevelNamesMapping()
+    if isinstance(level, int):
+        rv = level
+    elif str(level) == level:
+        if level not in name_to_level:
+            raise ValueError("Unknown level: %r" % level)
+        rv = name_to_level[level]
+    else:
+        raise TypeError("Level not an integer or a valid string: %r" % (level,))
+    return rv
 
 
 """
@@ -199,7 +213,9 @@ class FullLoggingConfig(LoggingConfigExtension):
         root_level = self.root_log_level
         if isinstance(logging_config_extension, FullLoggingConfig):
             if logging_config_extension.root_log_level is not None:
-                root_level = logging_config_extension.root_log_level
+                root_level_int_one = _checkLevel(root_level)
+                root_level_int_other = _checkLevel(logging_config_extension.root_log_level)
+                root_level = python_log_level_to_name(min(root_level_int_one, root_level_int_other))
 
         return FullLoggingConfig(
             formatters=update_join(self.formatters, logging_config_extension.formatters),
