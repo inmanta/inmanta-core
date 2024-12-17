@@ -57,13 +57,7 @@ class StateUpdateManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def send_deploy_done(
-        self,
-        attribute_hash: str,
-        result: DeployResult,
-        deployment_result: state.DeploymentResult,
-        blocked_status: state.BlockedStatus | None,
-    ) -> None:
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: state.ResourceState) -> None:
         pass
 
     @abc.abstractmethod
@@ -165,13 +159,7 @@ class ToDbUpdateManager(StateUpdateManager):
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
-    async def send_deploy_done(
-        self,
-        attribute_hash: str,
-        result: DeployResult,
-        deployment_result: state.DeploymentResult,
-        blocked_status: state.BlockedStatus | None,
-    ) -> None:
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: state.ResourceState) -> None:
         """
         Update the db to reflect the result of a deploy for a given resource.
         """
@@ -196,6 +184,7 @@ class ToDbUpdateManager(StateUpdateManager):
 
         finished = datetime.datetime.now().astimezone()
 
+        # TODO: clean up this particular dict
         changes_with_rvid: dict[ResourceVersionIdStr, dict[str, object]] = {
             resource_id_str: {attr_name: attr_change.model_dump()} for attr_name, attr_change in result.changes.items()
         }
@@ -218,6 +207,7 @@ class ToDbUpdateManager(StateUpdateManager):
 
         async with data.Resource.get_connection() as connection:
             async with connection.transaction():
+                # TODO: do we need the resource at all?
                 resource = await data.Resource.get_one(
                     connection=connection,
                     environment=self.environment,
@@ -289,8 +279,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     last_deployed_version=resource_id_parsed.version,
                     last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
-                    deployment_result=deployment_result,
-                    blocked_status=blocked_status,
+                    state=state,
                     **extra_datetime_fields,
                     connection=connection,
                 )

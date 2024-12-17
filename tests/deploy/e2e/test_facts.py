@@ -289,7 +289,6 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     await get_fact("test::Fact[agent1,key=key1]", 503, lower_limit=0)  # undeployable
     await get_fact("test::Fact[agent1,key=key2]")  # normal
     await get_fact("test::Fact[agent1,key=key3]")  # not present -> present
-    pytest.skip("No unknowns yet!")
     await get_fact("test::Fact[agent1,key=key4]", 503)  # unknown
     await get_fact("test::Fact[agent1,key=key5]", 503)  # broken
 
@@ -388,9 +387,14 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     await clienthelper.put_version_simple([], version)
 
     result = await client.release_version(
-        environment, version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+        environment,
+        version,
+        push=False,
+        agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
     )
     assert result.code == 200
+
+    await clienthelper.wait_for_released(version)
 
     # Remove version 2
     result = await client.delete_version(tid=environment, id=2)
