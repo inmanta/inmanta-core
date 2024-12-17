@@ -922,9 +922,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
     async def create_member(self, blueprint: executor.ExecutorBlueprint) -> MPProcess:
 
         venv = await self.environment_manager.get_environment(blueprint.to_env_blueprint())
-        LOGGER.warning(
-            "PROT"
-        )
         executor = await self.make_child_and_connect(blueprint, venv)
         LOGGER.debug(
             "Child forked (pid: %s) for %s",
@@ -956,18 +953,14 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         """Async code to make a child process and share a socket with it"""
         loop = asyncio.get_running_loop()
         name = executor_id.blueprint_hash()  # FIXME: improve naming https://github.com/inmanta/inmanta-core/issues/7999
-
-        LOGGER.debug("Starting process")
         # Start child
         process, parent_conn = await loop.run_in_executor(
             self.thread_pool, functools.partial(self._make_child, name, self.environment, self.log_level, self.cli_log)
         )
-        LOGGER.debug("Hooking pipe")
         # Hook up the connection
         transport, protocol = await loop.connect_accepted_socket(
             functools.partial(ExecutorClient, f"executor.{name}"), parent_conn
         )
-        LOGGER.debug("UP")
         child_handle = MPProcess(name, process, protocol, executor_id, venv, self.thread_pool)
         return child_handle
 

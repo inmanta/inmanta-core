@@ -220,8 +220,6 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         pass
 
 
-
-
 state_translation_table: dict[
     const.ResourceState, Tuple[state.DeploymentResult, state.BlockedStatus, state.ComplianceStatus]
 ] = {
@@ -1933,7 +1931,6 @@ class BadTestAgent(Agent):
         self.scheduler = TestScheduler(self.scheduler.environment, self.executor_manager, self.scheduler.client)
 
 
-
 @pytest.fixture
 async def bad_agent(environment, config):
     """
@@ -1961,5 +1958,3 @@ async def test_broken_executor_deploy(bad_agent: TestAgent, make_resource_minima
 
     await bad_agent.scheduler._new_version(1, resources, make_requires(resources))
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=bad_agent.scheduler, agent_name="agent1")
-
-

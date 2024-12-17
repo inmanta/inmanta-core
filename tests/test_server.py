@@ -665,7 +665,8 @@ async def test_resource_action_log(server, client, environment, clienthelper, sn
 
         std::testing::NullResource(name="network", agentname="internal")
         """,
-        autostd=True,    )
+        autostd=True,
+    )
 
     version, _ = await snippetcompiler.do_export_and_deploy()
 

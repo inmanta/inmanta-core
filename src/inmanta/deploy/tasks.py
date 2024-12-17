@@ -180,7 +180,8 @@ class Deploy(Task):
                         error=str(e),
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
-                    log_line.write_to_logger(logging.getLogger(NAME_RESOURCE_ACTION_LOGGER).getChild(agent))
+                    # Not attached to ctx, needs to be flushed to logger explicitly
+                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, True)
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
                     return
 
@@ -205,6 +206,8 @@ class Deploy(Task):
                         error=str(e),
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
+                    # Not attached to ctx, needs to be flushed to logger explicitly
+                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, True)
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
 
             finally:

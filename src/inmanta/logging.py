@@ -604,7 +604,7 @@ class InmantaLoggerConfig:
             raise Exception(f"Failed to apply the logging config defined in {dict_config}.")
         self._handlers = [handler for handler in logging.root.handlers if handler not in handlers_before]
 
-        def as_dict(inp: dict[str, object], key:str) -> dict[str, object]:
+        def as_dict(inp: dict[str, object], key: str) -> dict[str, object]:
             root = inp.get(key, {})
             if not isinstance(root, dict):
                 raise Exception(f"{key} entry should be a dict, got {root}")
@@ -613,9 +613,9 @@ class InmantaLoggerConfig:
         root = as_dict(dict_config, "root")
         # Build config for later merges
         self._loaded_config = FullLoggingConfig(
-            formatters=as_dict(dict_config,"formatters"),
-            handlers=as_dict(dict_config,"handlers"),
-            loggers=as_dict(dict_config,"loggers"),
+            formatters=as_dict(dict_config, "formatters"),
+            handlers=as_dict(dict_config, "handlers"),
+            loggers=as_dict(dict_config, "loggers"),
             root_handlers=root.get("handlers", []),
             root_log_level=root.get("level", None),
         )

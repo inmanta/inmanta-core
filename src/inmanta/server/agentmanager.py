@@ -1238,7 +1238,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 "DEBUG",
                 "--config",
                 config_path,
-                *( ["--config-dir" , Config._config_dir] if Config._config_dir is not None else []),
+                *(["--config-dir", Config._config_dir] if Config._config_dir is not None else []),
                 "scheduler",
             ],
             out,
