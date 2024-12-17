@@ -35,16 +35,16 @@ def test_freeze_basic(git_modules_dir: str, modules_repo: str, tmpdir):
     install_project(git_modules_dir, "projecta", tmpdir)
     modtool = ModuleTool()
     cmod = modtool.get_module("modc")
-    assert cmod.get_freeze("modc", recursive=False, mode="==") == {"std": "== 3.2", "mode": "== 3.2", "modf": "== 3.2"}
+    assert cmod.get_freeze("modc", recursive=False, mode="==") == {"std": "== 3.2.0", "mode": "== 3.2.0", "modf": "== 3.2.0"}
     assert cmod.get_freeze("modc", recursive=True, mode="==") == {
-        "std": "== 3.2",
-        "mode": "== 3.2",
-        "modf": "== 3.2",
-        "modh": "== 3.2",
-        "modj": "== 3.2",
+        "std": "== 3.2.0",
+        "mode": "== 3.2.0",
+        "modf": "== 3.2.0",
+        "modh": "== 3.2.0",
+        "modj": "== 3.2.0",
     }
 
-    assert cmod.get_freeze("modc::a", recursive=False, mode="==") == {"std": "== 3.2", "modi": "== 3.2"}
+    assert cmod.get_freeze("modc::a", recursive=False, mode="==") == {"std": "== 3.2.0", "modi": "== 3.2.0"}
 
 
 @pytest.mark.slowtest
@@ -53,21 +53,21 @@ def test_project_freeze_basic(git_modules_dir: str, modules_repo: str, tmpdir):
     modtool = ModuleTool()
     proj = modtool.get_project()
     assert proj.get_freeze(recursive=False, mode="==") == {
-        "std": "== 3.2",
-        "modb": "== 3.2",
-        "modc": "== 3.2",
-        "modd": "== 3.2",
+        "std": "== 3.2.0",
+        "modb": "== 3.2.0",
+        "modc": "== 3.2.0",
+        "modd": "== 3.2.0",
     }
     assert proj.get_freeze(recursive=True, mode="==") == {
-        "std": "== 3.2",
-        "modb": "== 3.2",
-        "modc": "== 3.2",
-        "modd": "== 3.2",
-        "mode": "== 3.2",
-        "modf": "== 3.2",
-        "modg": "== 3.2",
-        "modh": "== 3.2",
-        "modj": "== 3.2",
+        "std": "== 3.2.0",
+        "modb": "== 3.2.0",
+        "modc": "== 3.2.0",
+        "modd": "== 3.2.0",
+        "mode": "== 3.2.0",
+        "modf": "== 3.2.0",
+        "modg": "== 3.2.0",
+        "modh": "== 3.2.0",
+        "modj": "== 3.2.0",
     }
 
 
@@ -102,10 +102,10 @@ modulepath: libs
 downloadpath: libs
 repo: %s
 requires:
-- modb ~= 3.2
-- modc ~= 3.2
-- modd ~= 3.2
-- std ~= 3.2
+- modb ~= 3.2.0
+- modc ~= 3.2.0
+- modd ~= 3.2.0
+- std ~= 3.2.0
 """
         % modules_repo
     )
@@ -132,10 +132,10 @@ modulepath: libs
 downloadpath: libs
 repo: %s
 requires:
-- modb ~= 3.2
-- modc ~= 3.2
-- modd ~= 3.2
-- std ~= 3.2
+- modb ~= 3.2.0
+- modc ~= 3.2.0
+- modd ~= 3.2.0
+- std ~= 3.2.0
 """
             % modules_repo
         )
@@ -197,15 +197,15 @@ repo: %s
 freeze_recursive: true
 freeze_operator: ==
 requires:
-- modb == 3.2
-- modc == 3.2
-- modd == 3.2
-- mode == 3.2
-- modf == 3.2
-- modg == 3.2
-- modh == 3.2
-- modj == 3.2
-- std == 3.2
+- modb == 3.2.0
+- modc == 3.2.0
+- modd == 3.2.0
+- mode == 3.2.0
+- modf == 3.2.0
+- modg == 3.2.0
+- modh == 3.2.0
+- modj == 3.2.0
+- std == 3.2.0
 """
                 % modules_repo
             )
@@ -228,12 +228,12 @@ def test_module_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
         assert out == (
             """name: modc
 license: Apache 2.0
-version: '3.2'
+version: 3.2.0
 requires:
-- mode ~= 3.2
-- modf ~= 3.2
-- modi ~= 3.2
-- std ~= 3.2
+- mode ~= 3.2.0
+- modf ~= 3.2.0
+- modi ~= 3.2.0
+- std ~= 3.2.0
 """
         )
 
@@ -260,12 +260,12 @@ def test_module_freeze_self_disk(git_modules_dir: str, modules_repo: str, capsys
             assert outf == (
                 """name: modc
 license: Apache 2.0
-version: '3.2'
+version: 3.2.0
 requires:
-- mode ~= 3.2
-- modf ~= 3.2
-- modi ~= 3.2
-- std ~= 3.2
+- mode ~= 3.2.0
+- modf ~= 3.2.0
+- modi ~= 3.2.0
+- std ~= 3.2.0
 """
             )
 

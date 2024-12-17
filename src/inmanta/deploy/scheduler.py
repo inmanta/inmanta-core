@@ -24,7 +24,7 @@ import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 from uuid import UUID
 
 import asyncpg
@@ -34,7 +34,7 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.data import ConfigurationModel, Environment
-from inmanta.data.model import ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.data.model import Discrepancy, ResourceIdStr, ResourceType, ResourceVersionIdStr, SchedulerStatusReport
 from inmanta.deploy import timers, work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
 from inmanta.deploy.state import (
@@ -46,8 +46,8 @@ from inmanta.deploy.state import (
     ResourceDetails,
     ResourceState,
 )
-from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact
-from inmanta.deploy.work import PrioritizedTask, TaskPriority
+from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
+from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
 
@@ -133,15 +133,21 @@ class TaskRunner:
         self._task: typing.Optional[asyncio.Task[None]] = None
         self._notify_task: typing.Optional[asyncio.Task[None]] = None
 
-    async def _start(self) -> None:
+    async def start(self) -> None:
         self.status = AgentStatus.STARTED
         assert (
             self._task is None or self._task.done()
         ), f"Task Runner {self.endpoint} is trying to start twice, this should not happen"
         self._task = asyncio.create_task(self._run())
 
-    async def _stop(self) -> None:
+    async def stop(self) -> None:
         self.status = AgentStatus.STOPPING
+
+    async def join(self) -> None:
+        assert not self.is_running(), "Joining worker that is not stopped"
+        if self._task is None or self._task.done():
+            return
+        await self._task
 
     async def notify(self) -> None:
         """
@@ -155,9 +161,9 @@ class TaskRunner:
 
         match self.status:
             case AgentStatus.STARTED if not should_be_running:
-                await self._stop()
+                await self.stop()
             case AgentStatus.STOPPED if should_be_running:
-                await self._start()
+                await self.start()
             case AgentStatus.STOPPING if should_be_running:
                 self.status = AgentStatus.STARTED
 
@@ -172,25 +178,20 @@ class TaskRunner:
         """Main loop for one agent. It will first fetch or create its actual state from the DB to make sure that it's
         allowed to run."""
         while self._scheduler._running and self.status == AgentStatus.STARTED:
-            task, reason = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
+            work_item: work.MotivatedTask[Task] = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
             try:
-                await task.execute(self._scheduler, self.endpoint, reason)
+                await work_item.task.execute(self._scheduler, self.endpoint, work_item.reason)
             except Exception:
                 LOGGER.exception(
-                    "Task %s for agent %s has failed and the exception was not properly handled", task, self.endpoint
+                    "Task %s for agent %s has failed and the exception was not properly handled", work_item.task, self.endpoint
                 )
 
-            self._scheduler._work.agent_queues.task_done(self.endpoint, task)
+            self._scheduler._work.agent_queues.task_done(self.endpoint, work_item.task)
 
         self.status = AgentStatus.STOPPED
 
     def is_running(self) -> bool:
         return self.status == AgentStatus.STARTED
-
-    async def join(self) -> None:
-        if self._task is None or self._task.done():
-            return
-        await self._task
 
 
 class ResourceScheduler(TaskManager):
@@ -247,7 +248,7 @@ class ResourceScheduler(TaskManager):
 
         self._timer_manager = timers.TimerManager(self)
 
-    async def reset(self) -> None:
+    async def _reset(self) -> None:
         """
         Clear out all state and start empty
 
@@ -256,6 +257,13 @@ class ResourceScheduler(TaskManager):
         assert not self._running
         self._state.reset()
         self._work.reset()
+        # Ensure we are down
+        for worker in self._workers.values():
+            # We have no timeout here
+            # This can potentially hang when an executor hangs
+            # However, the stop should forcefully kill the executor
+            # This will kill the connection and free the worker
+            await worker.join()
         self._workers.clear()
         self._deploying_latest.clear()
         await self._timer_manager.reset()
@@ -263,11 +271,27 @@ class ResourceScheduler(TaskManager):
     async def start(self) -> None:
         if self._running:
             return
-        await self.reset()
+        await self._reset()
         await self.reset_resource_state()
 
         await self._initialize()
         self._running = True
+
+    async def stop(self) -> None:
+        if not self._running:
+            return
+        self._running = False
+        await self._timer_manager.stop()
+        # Ensure workers go down
+        # First stop them
+        for worker in self._workers.values():
+            await worker.stop()
+        # Then wake them up to receive the stop
+        self._work.agent_queues.send_shutdown()
+
+    async def join(self) -> None:
+        await asyncio.gather(*[worker.join() for worker in self._workers.values()])
+        await self._timer_manager.join()
 
     async def _initialize(self) -> None:
         """
@@ -284,32 +308,16 @@ class ResourceScheduler(TaskManager):
                 return
 
             # Rely on the incremental calculation to determine which resources should be deployed and which not.
-            increment: set[ResourceIdStr]
-            increment, _ = await ConfigurationModel.get_increment(self.environment, version, connection=con)
-
-        resources_to_deploy: Mapping[ResourceIdStr, ResourceDetails] = {rid: resources[rid] for rid in increment}
-        up_to_date_resources: Mapping[ResourceIdStr, ResourceDetails] = {
-            rid: resources[rid] for rid in resources.keys() if rid not in increment
-        }
+            up_to_date_resources: Set[ResourceIdStr]
+            _, up_to_date_resources = await ConfigurationModel.get_increment(self.environment, version, connection=con)
 
         await self._new_version(
             version,
-            resources=resources_to_deploy,
+            resources=resources,
             requires=requires,
             up_to_date_resources=up_to_date_resources,
             reason="Deploy was triggered because the scheduler was started",
         )
-
-    async def stop(self) -> None:
-        if not self._running:
-            return
-        self._running = False
-        await self._timer_manager.stop()
-        self._work.agent_queues.send_shutdown()
-
-    async def join(self) -> None:
-        await asyncio.gather(*[worker.join() for worker in self._workers.values()])
-        await self._timer_manager.join()
 
     async def deploy(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_DEPLOY) -> None:
         """
@@ -350,15 +358,13 @@ class ResourceScheduler(TaskManager):
         resources = await self._build_resource_mappings_from_db(version)
         for rid, resource in resources.items():
             self._work.agent_queues.queue_put_nowait(
-                PrioritizedTask(
-                    task=DryRun(
-                        resource=rid,
-                        version=version,
-                        resource_details=resource,
-                        dry_run_id=dry_run_id,
-                    ),
-                    priority=TaskPriority.DRYRUN,
-                )
+                DryRun(
+                    resource=rid,
+                    version=version,
+                    resource_details=resource,
+                    dry_run_id=dry_run_id,
+                ),
+                priority=TaskPriority.DRYRUN,
             )
 
     async def get_facts(self, resource: dict[str, object]) -> None:
@@ -366,11 +372,164 @@ class ResourceScheduler(TaskManager):
             return
         rid = Id.parse_id(resource["id"]).resource_str()
         self._work.agent_queues.queue_put_nowait(
-            PrioritizedTask(
-                task=RefreshFact(resource=rid),
-                priority=TaskPriority.FACT_REFRESH,
-            )
+            RefreshFact(resource=rid),
+            priority=TaskPriority.FACT_REFRESH,
         )
+
+    async def get_resource_state(self) -> SchedulerStatusReport:
+        """
+        Check that the state of the resources in the DB corresponds
+        to the internal state of the scheduler and return a SchedulerStatusReport
+        object containing the internal state and any discrepancies between this
+        state and that of the DB.
+        """
+
+        resources_in_db: Mapping[ResourceIdStr, ResourceDetails]
+
+        async def _build_discrepancy_map(
+            resources_in_db: Mapping[ResourceIdStr, ResourceDetails]
+        ) -> dict[ResourceIdStr, list[Discrepancy]]:
+            """
+            For each resource in the given map, compare its persisted state in the database to its
+            state as it is assumed by the scheduler. Build and return a map of all detected discrepancies.
+
+            :param resources_in_db: Map of the state of resources in the database
+            :return: A dict mapping each resource to the discrepancies related to it (if any)
+            """
+            state_translation_table: dict[
+                const.ResourceState, Tuple[DeploymentResult | None, BlockedStatus | None, ComplianceStatus | None]
+            ] = {
+                # A table to translate the old states into the new states
+                # None means don't care, mostly used for values we can't derive from the old state
+                const.ResourceState.unavailable: (None, BlockedStatus.NO, ComplianceStatus.NON_COMPLIANT),
+                const.ResourceState.skipped: (DeploymentResult.SKIPPED, None, None),
+                const.ResourceState.dry: (None, None, None),  # don't care
+                const.ResourceState.deployed: (DeploymentResult.DEPLOYED, BlockedStatus.NO, None),
+                const.ResourceState.failed: (DeploymentResult.FAILED, BlockedStatus.NO, None),
+                const.ResourceState.deploying: (None, BlockedStatus.NO, None),
+                const.ResourceState.available: (None, BlockedStatus.NO, ComplianceStatus.HAS_UPDATE),
+                const.ResourceState.undefined: (None, BlockedStatus.YES, ComplianceStatus.UNDEFINED),
+                const.ResourceState.skipped_for_undefined: (None, BlockedStatus.YES, None),
+            }
+
+            discrepancy_map: dict[ResourceIdStr, list[Discrepancy]] = {}
+
+            # Resources only present in the DB but missing from the scheduler
+            only_in_db = resources_in_db.keys() - self._state.resource_state.keys()
+            for rid in only_in_db:
+                discrepancy_map[rid] = [
+                    Discrepancy(
+                        rid=rid,
+                        field=None,
+                        expected=(
+                            f"Resource is present in the DB (model version {latest_version}). "
+                            "It is expected in the scheduler's resource_state map."
+                        ),
+                        actual="Resource is missing from the scheduler's resource_state map.",
+                    )
+                ]
+
+            # Resources only present in the scheduler but missing from the DB
+            only_in_scheduler = self._state.resource_state.keys() - resources_in_db.keys()
+            for rid in only_in_scheduler:
+                discrepancy_map[rid] = [
+                    Discrepancy(
+                        rid=rid,
+                        field=None,
+                        expected=(
+                            f"Resource is not present in the DB (model version {latest_version}). "
+                            "It shouldn't be in the scheduler's resource_state map."
+                        ),
+                        actual="Resource is present in the scheduler's resource_state map.",
+                    )
+                ]
+
+            # Keep track of the number of iterations to regularly pass control back to the io loop
+            iteration_counter: int = 0
+
+            # For resources in both the DB and the scheduler, check for discrepancies in state
+            for rid in resources_in_db.keys() & self._state.resource_state.keys():
+                resource_discrepancies: list[Discrepancy] = []
+
+                db_resource_details = resources_in_db[rid]
+                db_deploy_result, db_blocked_status, db_compliance_status = state_translation_table[db_resource_details.status]
+
+                scheduler_resource_state: ResourceState = self._state.resource_state[rid]
+                if db_deploy_result:
+                    if scheduler_resource_state.deployment_result != db_deploy_result:
+                        resource_discrepancies.append(
+                            Discrepancy(
+                                rid=rid,
+                                field="deployment_result",
+                                expected=db_deploy_result,
+                                actual=scheduler_resource_state.deployment_result,
+                            )
+                        )
+                if db_blocked_status:
+                    if scheduler_resource_state.blocked != db_blocked_status:
+                        resource_discrepancies.append(
+                            Discrepancy(
+                                rid=rid,
+                                field="blocked_status",
+                                expected=db_blocked_status,
+                                actual=scheduler_resource_state.blocked,
+                            )
+                        )
+                if db_compliance_status:
+                    if scheduler_resource_state.status != db_compliance_status:
+                        resource_discrepancies.append(
+                            Discrepancy(
+                                rid=rid,
+                                field="compliance_status",
+                                expected=db_compliance_status,
+                                actual=scheduler_resource_state.status,
+                            )
+                        )
+
+                if resource_discrepancies:
+                    discrepancy_map[rid] = resource_discrepancies
+
+                iteration_counter += 1
+
+                # Pass back control to the io loop every 1000 iterations to not
+                # block scheduler operations in case we have a lot of resources.
+                if iteration_counter == 1000:
+                    await asyncio.sleep(0)
+                    iteration_counter = 0
+
+            return discrepancy_map
+
+        async with self._scheduler_lock:
+            try:
+                latest_version, resources_in_db, _ = await self._get_resources_in_latest_version()
+            except KeyError:
+                return SchedulerStatusReport(scheduler_state={}, db_state={}, discrepancies={})
+
+            if latest_version != self._state.version:
+                LOGGER.info(
+                    "Cannot compare scheduler status and database status because of "
+                    "model version mismatch (%s and %s respectively). "
+                    "The scheduler might not have processed this new version yet.",
+                    self._state.version,
+                    latest_version,
+                )
+                return SchedulerStatusReport(
+                    scheduler_state={},
+                    db_state={},
+                    discrepancies=[
+                        Discrepancy(
+                            rid=None,
+                            field="model_version",
+                            expected=str(latest_version),
+                            actual=str(self._state.version),
+                        )
+                    ],
+                )
+
+            discrepancy_map = await _build_discrepancy_map(resources_in_db)
+            return SchedulerStatusReport(
+                scheduler_state=self._state.resource_state, db_state=resources_in_db, discrepancies=discrepancy_map
+            )
 
     async def deploy_resource(self, resource: ResourceIdStr, reason: str, priority: TaskPriority) -> None:
         """
@@ -471,26 +630,45 @@ class ResourceScheduler(TaskManager):
 
     async def reset_resource_state(self) -> None:
         """
-        Update resources on the latest version of the model stuck in "deploying" state. This can occur when the Scheduler is
-        killed in the middle of a deployment.
+        Update resources on the latest released version of the model stuck in "deploying" state.
+        This can occur when the Scheduler is killed in the middle of a deployment.
         """
-        cm_version = await ConfigurationModel.get_latest_version(self.environment)
-        if cm_version is None:
-            return
-        version = cm_version.version
 
-        await data.Resource.reset_resource_state(self.environment, version)
+        await data.Resource.reset_resource_state(self.environment)
 
+    # FIXME[#8358]: move intent lock one level up in order to prevent out-of-order versions
     async def _new_version(
         self,
         version: int,
         resources: Mapping[ResourceIdStr, ResourceDetails],
         requires: Mapping[ResourceIdStr, Set[ResourceIdStr]],
-        up_to_date_resources: Optional[Mapping[ResourceIdStr, ResourceDetails]] = None,
+        up_to_date_resources: Optional[Set[ResourceIdStr]] = None,
         reason: str = "Deploy was triggered because a new version has been released",
     ) -> None:
-        up_to_date_resources = {} if up_to_date_resources is None else up_to_date_resources
+        """
+        Register a newly released version with the scheduler. Updates scheduled state and scheduled work accordingly.
+
+        Expects to be called under the intent lock, and with monotonically increasing versions.
+
+        :param version: The model version that is being registered.
+        :param resources: All resources in this version.
+        :param requires: The requires set of each resource in this version.
+        :param up_to_date_resources: Set of resources that are to be considered in an assumed good state due to a previously
+            successful deploy for the same intent. Should not include any blocked resources. Mostly intended for the very first
+            version when the scheduler is started with a fresh state.
+        :param reason: The reason to associate with any deploys caused by this newly released version.
+        """
+        up_to_date_resources = set() if up_to_date_resources is None else up_to_date_resources
+
         async with self._intent_lock:
+            if version < self._state.version:
+                raise ValueError(
+                    f"Invalid scheduler state: received out-of-order versions. Currently at version {self._state.version} but"
+                    " received version {version}"
+                )
+            if version == self._state.version:
+                return
+
             # Inspect new state and compare it with the old one before acquiring the scheduler lock.
             # This is safe because we only read intent-related state here, for which we've already acquired the lock
             deleted_resources: Set[ResourceIdStr] = self._state.resources.keys() - resources.keys()
@@ -508,10 +686,10 @@ class ResourceScheduler(TaskManager):
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
             dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
 
-            for resource, details in up_to_date_resources.items():
-                self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
-
             for resource, details in resources.items():
+                if resource in up_to_date_resources:
+                    self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
+                    continue
                 if details.status is const.ResourceState.undefined:
                     undefined.add(resource)
                     self._work.delete_resource(resource)
