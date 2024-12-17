@@ -249,21 +249,13 @@ class DryRun(Task):
             my_executor: executor.Executor = await self.get_executor(
                 task_manager, agent, executor_resource_details.id.entity_type, self.version
             )
-
-            dryrun_result: executor.DryrunResult = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
-            await task_manager.dryrun_update(
-                env=task_manager.environment,
-                dryrun_result=dryrun_result,
-            )
-
         except Exception:
-            # FIXME: seems weird to conclude undeployable state from generic Exception on either of two method calls
             logger_for_agent(agent).error(
                 "Skipping dryrun for resource %s because it is in undeployable state",
                 executor_resource_details.rvid,
                 exc_info=True,
             )
-            result = executor.DryrunResult(
+            dryrun_result = executor.DryrunResult(
                 rvid=executor_resource_details.rvid,
                 dryrun_id=self.dry_run_id,
                 changes={"handler": AttributeStateChange(current="FAILED", desired="Resource is in an undeployable state")},
@@ -271,7 +263,10 @@ class DryRun(Task):
                 finished=datetime.datetime.now().astimezone(),
                 messages=[],
             )
-            await task_manager.dryrun_update(env=task_manager.environment, dryrun_result=result)
+        else:
+            dryrun_result: executor.DryrunResult = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
+
+        await task_manager.dryrun_update(env=task_manager.environment, dryrun_result=dryrun_result)
 
 
 class RefreshFact(Task):
