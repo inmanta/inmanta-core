@@ -26,11 +26,11 @@ import click
 import pytest
 
 from inmanta import const
-from inmanta.module import InvalidModuleException, Module, UntrackedFilesMode
+from inmanta.module import Module, UntrackedFilesMode
 from inmanta.moduletool import ModuleTool, gitprovider
 from packaging.version import Version
 from test_app_cli import app
-from utils import log_contains, module_from_template, v1_module_from_template
+from utils import module_from_template, v1_module_from_template
 
 
 def get_commit_message_x_commits_ago(path: str, nb_previous_commit: int = 0) -> str:
@@ -576,19 +576,6 @@ def test_not_a_git_repository(tmpdir, modules_dir: str, monkeypatch) -> None:
     with pytest.raises(click.ClickException) as exc_info:
         module_tool.release(dev=False, message="Commit changes")
     assert f"Directory {path_module} is not a git repository" in exc_info.value.message
-
-
-def test_module_commit_deprecation(caplog, tmpdir, monkeypatch) -> None:
-    monkeypatch.chdir(str(tmpdir))
-    with pytest.raises(InvalidModuleException):
-        ModuleTool().commit("message")
-    log_contains(
-        caplog,
-        "inmanta.warnings",
-        logging.WARNING,
-        "The `inmanta module commit` command has been deprecated in favor of `inmanta module release`.",
-        test_phase="call",
-    )
 
 
 def test_failed_to_set_release_date(tmpdir, modules_dir: str, monkeypatch, caplog) -> None:

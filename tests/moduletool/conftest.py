@@ -27,6 +27,7 @@ from moduletool.common import (
     add_file,
     add_file_and_compiler_constraint,
     add_requires,
+    add_tag,
     commitmodule,
     make_module_simple,
     make_module_simple_deps,
@@ -128,42 +129,44 @@ def modules_repo(git_modules_dir) -> str:
     make_module_simple(reporoot, "mod2", version="2016.1")
 
     mod3 = make_module_simple(reporoot, "mod3", version="0.1")
-    add_file(mod3, "badsignal", "present", "third commit")
+    add_file(mod3, "badsignal", "present", "third commit", dev=True)
 
     mod4 = make_module_simple(reporoot, "badmod", [("mod2", "<2016")])
-    add_file(mod4, "badsignal", "present", "third commit")
+    add_file(mod4, "badsignal", "present", "third commit", dev=True)
 
     mod5 = make_module_simple(reporoot, "mod5", version="0.1")
-    add_file(mod5, "badsignal", "present", "third commit")
+    add_file(mod5, "badsignal", "present", "third commit", dev=True)
 
-    mod6 = make_module_simple(reporoot, "mod6")
-    add_file(mod6, "badsignal", "present", "third commit")
+    mod6 = make_module_simple(reporoot, "mod6", version="3.2")
+    add_file(mod6, "badsignal", "present", "fourth commit", dev=True)
 
     mod7 = make_module_simple(reporoot, "mod7")
-    add_file(mod7, "nsignal", "present", "third commit", version="3.2.1")
-    add_file(mod7, "signal", "present", "fourth commit", version="3.2.2")
-    add_file_and_compiler_constraint(mod7, "badsignal", "present", "fifth commit", version="4.0", compiler_version="1000000.4")
-    add_file(mod7, "badsignal", "present", "sixth commit", version="4.1")
-    add_file_and_compiler_constraint(mod7, "badsignal", "present", "fifth commit", version="4.2", compiler_version="1000000.5")
-    add_file(mod7, "badsignal", "present", "sixth commit", version="4.3")
+    add_file(mod7, "nsignal", "present", "third commit", patch=True)
+    add_file(mod7, "signal", "present", "fourth commit", patch=True)
+    add_file_and_compiler_constraint(mod7, "badsignal", "present", "fifth commit", major=True, compiler_version="1000000.4")
+    add_file(mod7, "badsignal", "present", "sixth commit", minor=True)
+    add_file_and_compiler_constraint(mod7, "badsignal", "present", "fifth commit", minor=True, compiler_version="1000000.5")
+    add_file(mod7, "badsignal", "present", "sixth commit", minor=True)
 
-    mod8 = make_module_simple(reporoot, "mod8", [])
-    add_file(mod8, "devsignal", "present", "third commit", version="3.3.dev2")
-    add_file(mod8, "mastersignal", "present", "last commit")
+    mod8 = make_module_simple(reporoot, "mod8", [], version="0.0.1")
+    add_file(mod8, "devsignal", "present", "third commit", minor=True)
+    add_file(mod8, "mastersignal", "present", "last commit", dev=True)
 
-    mod11 = make_module_simple(reporoot, "mod11")
-    add_file(mod11, "file", "test", "release version 3.2.1", version="3.2.1")
-    add_file(mod11, "file", "test", "release version 4.0.0", version="4.0.0")
-    add_file(mod11, "file", "test", "release version 4.1.0", version="4.1.0")
-    add_file(mod11, "file", "test", "release version 4.1.2", version="4.1.2")
-    add_file(mod11, "file", "test", "release version 4.2.0", version="4.2.0")
+    mod11 = make_module_simple(reporoot, "mod11", version="3.2.0")
+    add_file(mod11, "file", "test", "release version 3.2.1", patch=True)
+    add_file(mod11, "file", "test", "release version 4.0.0", major=True)
+    add_file(mod11, "file", "test", "release version 4.1.0", minor=True)
+    add_file(mod11, "file", "test", "release version 4.1.1", patch=True)
+    add_file(mod11, "file", "test", "release version 4.2.0", minor=True)
 
     mod12 = make_module_simple(reporoot, "mod12", version="3.2.1")
-    add_file(mod12, "file", "test", "release version 4.0.0.dev0", version="4.0.0.dev0")
-    add_file(mod12, "file", "test", "release version 4.0.0", version="4.0.0")
+    add_file(mod12, "file", "test", "release version 4.0.0.dev0", major=True, dev=True)
+    # Add a dev tag used in test_gitprovider_get_version_tags
+    add_tag(mod12, "4.0.0.dev0")
+    add_file(mod12, "file", "test", "release version 4.0.0", major=True)
 
     mod13 = make_module_simple(reporoot, "mod13", version="1.2.3")
-    add_requires(mod13, deps=[("mod11", "<4.1.2")], commit_msg="add dependency", version="1.2.4")
+    add_requires(mod13, deps=[("mod11", "<4.1.2")], commit_msg="add dependency", patch=True)
 
     proj = makemodule(
         reporoot, "testproject", [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6", "mod7"]
@@ -190,7 +193,7 @@ def modules_repo(git_modules_dir) -> str:
 
     nover = makemodule(reporoot, "nover", [])
     commitmodule(nover, "first commit")
-    add_file(nover, "signal", "present", "second commit")
+    add_file(nover, "signal", "present", "second commit", dev=True)
 
     noverproject = makeproject(reporoot, "noverproject", imports=["nover"])
     commitmodule(noverproject, "first commit")
@@ -204,13 +207,13 @@ def modules_repo(git_modules_dir) -> str:
     E-> H
     D-> F,G
     """
-    make_module_simple_deps(reporoot, "a", ["b", "c", "d"], project=True)
+    make_module_simple_deps(reporoot, "a", ["b", "c", "d"], project=True, version="0.0.1")
     make_module_simple_deps(reporoot, "b")
-    c = make_module_simple_deps(reporoot, "c", ["e", "f", "e::a"], version="3.0")
-    add_file(c, "model/a.cf", "import modi", "add mod c::a", "3.2")
+    c = make_module_simple_deps(reporoot, "c", ["e", "f", "e::a"], version="3.1.0")
+    add_file(c, "model/a.cf", "import modi", "add mod c::a", minor=True)
     make_module_simple_deps(reporoot, "d", ["f", "g"])
-    e = make_module_simple_deps(reporoot, "e", ["h"], version="3.0")
-    add_file(e, "model/a.cf", "import modj", "add mod e::a", "3.2")
+    e = make_module_simple_deps(reporoot, "e", ["h"], version="3.1.0")
+    add_file(e, "model/a.cf", "import modj", "add mod e::a", minor=True)
     make_module_simple_deps(reporoot, "f")
     make_module_simple_deps(reporoot, "g")
     make_module_simple_deps(reporoot, "h")

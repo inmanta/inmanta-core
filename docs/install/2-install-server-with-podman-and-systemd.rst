@@ -627,7 +627,7 @@ Deploy postgresql with podman and systemd
 
             .. code-block:: console
 
-                $ podman pull docker.io/library/postgres:13
+                $ podman pull docker.io/library/postgres:16
 
         2.  Create a podman network for your database and the orchestrator.
 
@@ -667,7 +667,7 @@ Deploy postgresql with podman and systemd
                         --volume=%h/.local/share/inmanta-orchestrator-db/data:/var/lib/postgresql/data:z \
                         --env=POSTGRES_USER=inmanta \
                         --env=POSTGRES_PASSWORD=inmanta \
-                        docker.io/library/postgres:13 
+                        docker.io/library/postgres:16
                 ExecStop=/usr/bin/podman stop \
                         --ignore -t 10 \
                         --cidfile=%t/%n.ctr-id
