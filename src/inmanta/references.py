@@ -280,7 +280,7 @@ class DataclassReference[T: DataclassProtocol](Reference[T], metaclass=Dataclass
     @classmethod
     def get_dataclass_type(cls) -> type[DataclassProtocol]:
         """Get the dataclass type that the reference points to"""
-        for g in cls.__orig_bases__:
+        for g in cls.__orig_bases__:  # type: ignore
             if typing_inspect.is_generic_type(g):
                 for arg in typing.get_args(g):
                     if dataclasses.is_dataclass(arg) and isinstance(arg, type):
@@ -349,7 +349,7 @@ class reference[T: Reference[RefValue]]:
         cls._reference_classes = {}
 
 
-class mutator[T: Mutator]:
+class mutator[T: type[Mutator]]:
     """This decorator register a mutator under a specific name"""
 
     _mutator_classes: typing.ClassVar[dict[str, type[Mutator]]] = {}
@@ -360,7 +360,7 @@ class mutator[T: Mutator]:
         """
         self.name = name
 
-    def __call__(self, cls: type[T]) -> type[T]:
+    def __call__(self, cls: T) -> T:
         """Register a new mutator. If we already have it explicitly delete it (reload)"""
         if self.name in mutator._mutator_classes:
             del mutator._mutator_classes[self.name]
