@@ -82,7 +82,7 @@ class DummyExecutor(executor.Executor):
           Otherwise, the deploy is reported as successful.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.execute_count = 0
         self.dry_run_count = 0
         self.facts_count = 0
@@ -100,7 +100,7 @@ class DummyExecutor(executor.Executor):
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-        requires: dict[ResourceIdStr, const.HandlerResourceState],
+        requires: Mapping[ResourceIdStr, const.HandlerResourceState],
     ) -> DeployResult:
         assert reason
         # Actual reason or test reason
@@ -347,6 +347,7 @@ class TestScheduler(ResourceScheduler):
     async def _initialize(
         self,
     ) -> None:
+        self._running = True
         pass
 
     async def should_be_running(self) -> bool:
