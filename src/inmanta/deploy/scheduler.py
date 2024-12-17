@@ -278,7 +278,6 @@ class ResourceScheduler(TaskManager):
         await self.reset_resource_state()
 
         await self._initialize()
-        self._running = True
 
     async def stop(self) -> None:
         if not self._running:
@@ -299,6 +298,7 @@ class ResourceScheduler(TaskManager):
     async def _initialize(self) -> None:
         """
         Initialize the scheduler state and continue the deployment where we were before the server was shutdown.
+        Marks scheduler as running and triggers first deploys.
         """
         self._timer_manager.initialize()
         async with self._intent_lock, self._scheduler_lock, data.Scheduler.get_connection() as con, con.transaction():
@@ -360,6 +360,21 @@ class ResourceScheduler(TaskManager):
                         scheduler_lock_acquired=True,
                         connection=con,
                     )
+
+            # Set running flag because we're ready to start accepting tasks.
+            # Set before scheduling first tasks (even if in practice it shouldn't matter because we retain control of the IO
+            # loop until we return.
+            self._running = True
+            self._timer_manager.update_timers(
+                {
+                    resource
+                    for resource, state in self._state.resource_state.items()
+                    if state.blocked is not BlockedStatus.YES
+                    if resource not in self._state.dirty
+                },
+                # non-compliant resources are in the dirty set at this point
+                are_compliant=True,
+            )
             # Start deploying everything in dirty set.
             self._work.deploy_with_context(
                 self._state.dirty,
@@ -905,14 +920,14 @@ class ResourceScheduler(TaskManager):
                 #    - deleted from the model
                 self._timer_manager.stop_timers(self._state.dirty | undefined | transitive_blocked)
                 self._timer_manager.remove_timers(deleted_resources)
-                # Install timers for initial up-to-date resources. They are up-to-date now,
-                # but we want to make sure we periodically repair them.
-                self._timer_manager.update_timers(
-                    up_to_date_resources | (transitive_unblocked - self._state.dirty), are_compliant=True
-                )
-
-                # ensure deploy for ALL dirty resources, not just the new ones
                 if start_deployment:
+                    # Install timers for initial up-to-date resources. They are up-to-date now,
+                    # but we want to make sure we periodically repair them.
+                    self._timer_manager.update_timers(
+                        up_to_date_resources | (transitive_unblocked - self._state.dirty), are_compliant=True
+                    )
+
+                    # ensure deploy for ALL dirty resources, not just the new ones
                     self._work.deploy_with_context(
                         self._state.dirty,
                         reason=reason,
