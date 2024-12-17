@@ -632,7 +632,9 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
 
 
 @pytest.mark.parametrize("halted", [True, False])
-async def test_unknown_parameters(resource_container, environment, client, server, clienthelper, agent, halted, caplog):
+async def test_unknown_parameters(
+    resource_container, environment, client, server, clienthelper, agent_no_state_check, halted, caplog
+):
     """
     Test retrieving facts from the agent
     """
