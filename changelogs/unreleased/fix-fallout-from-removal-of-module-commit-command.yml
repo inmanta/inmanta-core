@@ -1,0 +1,3 @@
+description: Fix failing tests after removal of ``inmanta module commit`` command.
+change-type: patch
+destination-branches: [master]

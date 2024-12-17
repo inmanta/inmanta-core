@@ -835,7 +835,7 @@ class ResourceScheduler(TaskManager):
             # Only contains the direct undeployable resources, not the transitive ones.
             undefined: set[ResourceIdStr] = set()
             # Resources that were undeployable in a previous model version, but got unblocked. Not the transitive ones.
-            newly_defined: set[ResourceIdStr] = set()  # resources that were previously undefined but not anymore
+            now_defined: set[ResourceIdStr] = set()  # resources that were previously undefined but not anymore
 
             # Track potential changes in requires per resource
             added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
@@ -852,8 +852,10 @@ class ResourceScheduler(TaskManager):
                     # It's a resource we know.
                     if self._state.resource_state[resource].status is ComplianceStatus.UNDEFINED:
                         # The resource has been undeployable in previous versions, but not anymore.
-                        newly_defined.add(resource)
-                    elif details.attribute_hash != self._state.resources[resource].attribute_hash:
+                        now_defined.add(resource)
+                        if details.attribute_hash == self._state.resources[resource].attribute_hash:
+                            LOGGER.warning("The resource with id %s has become defined, but the hash has not changed", resource)
+                    if details.attribute_hash != self._state.resources[resource].attribute_hash:
                         # The desired state has changed.
                         new_desired_state.add(resource)
                 else:
@@ -861,17 +863,19 @@ class ResourceScheduler(TaskManager):
 
                 old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
                 new_requires: Set[ResourceIdStr] = requires.get(resource, set())
-                added_requires[resource] = new_requires - old_requires
-                dropped_requires[resource] = old_requires - new_requires
+                added = new_requires - old_requires
+                if added:
+                    added_requires[resource] = added
+                removed = old_requires - new_requires
+                if removed:
+                    dropped_requires[resource] = removed
 
                 # this loop is race-free, potentially slow, and completely synchronous
                 # => regularly pass control to the event loop to not block scheduler operation during update prep
                 await asyncio.sleep(0)
 
             # A resource should not be present in more than one of these resource sets
-            assert len(new_desired_state | undefined | newly_defined) == (
-                len(new_desired_state) + len(undefined) + len(newly_defined)
-            )
+            assert len(new_desired_state | undefined) == (len(new_desired_state) + len(undefined))
 
             # in the current implementation everything below the lock is synchronous, so it's not technically required.
             # It is however kept for two reasons:
@@ -881,31 +885,32 @@ class ResourceScheduler(TaskManager):
             async with scheduler_lock:
                 self._state.version = version
                 for resource in undefined:
-                    self._state.block_resource(resource, resources[resource], is_transitive=False)  # Removes from the dirty set
+                    self._state.update_resource_to_undefined(resource, resources[resource])  # Removes from the dirty set
                 for resource in new_desired_state:
                     self._state.update_desired_state(resource, resources[resource])  # Updates the dirty set
                 for resource in added_requires.keys() | dropped_requires.keys():
                     self._state.update_requires(resource, requires[resource])
-                blocked_for_undefined_dep: Set[ResourceIdStr] = self._state.block_provides(resources=undefined)
-                transitively_unblocked: set[ResourceIdStr] = set()
-                for resource in newly_defined:
-                    transitively_unblocked.update(
-                        self._state.mark_as_defined(resource, resources[resource])
-                    )  # Updates the dirty set
-                # Update set of in-progress non-stale deploys by trimming resources with new state
-                self._deploying_latest.difference_update(
-                    new_desired_state, deleted_resources, undefined, blocked_for_undefined_dep
+
+                transitive_unblocked, transitive_blocked = self._state.update_transitive_state(
+                    new_undefined=undefined,
+                    verify_blocked=added_requires.keys(),
+                    verify_unblocked=now_defined | dropped_requires.keys(),
                 )
+
+                # Update set of in-progress non-stale deploys by trimming resources with new state
+                self._deploying_latest.difference_update(new_desired_state, deleted_resources, undefined, transitive_blocked)
 
                 # Remove timers for resources that are:
                 #    - in the dirty set (because they will be picked up by the scheduler eventually)
                 #    - blocked: must not be deployed
                 #    - deleted from the model
-                self._timer_manager.stop_timers(self._state.dirty | undefined | blocked_for_undefined_dep)
+                self._timer_manager.stop_timers(self._state.dirty | undefined | transitive_blocked)
                 self._timer_manager.remove_timers(deleted_resources)
                 # Install timers for initial up-to-date resources. They are up-to-date now,
                 # but we want to make sure we periodically repair them.
-                self._timer_manager.update_timers(up_to_date_resources, are_compliant=True)
+                self._timer_manager.update_timers(
+                    up_to_date_resources.keys() | (transitive_unblocked - self._state.dirty), are_compliant=True
+                )
 
                 # ensure deploy for ALL dirty resources, not just the new ones
                 if start_deployment:
@@ -919,13 +924,14 @@ class ResourceScheduler(TaskManager):
                     )
                 for resource in deleted_resources:
                     self._state.drop(resource)  # Removes from the dirty set
-                for resource in undefined | blocked_for_undefined_dep:
+                for resource in undefined | transitive_blocked:
                     self._work.delete_resource(resource)
 
                 # Updating the blocked state should be done under the scheduler lock, because this state is written
                 # by both the deploy and the new version code path.
+                # TODO: newly_defined and up_to_date_resources
                 resources_with_updated_blocked_state: Set[ResourceIdStr] = (
-                    undefined | blocked_for_undefined_dep | newly_defined | transitively_unblocked | up_to_date_resources
+                    undefined | transitive_blocked | transitive_unblocked
                 )
 
                 await self.update_resource_intent(
