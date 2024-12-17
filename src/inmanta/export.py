@@ -508,16 +508,23 @@ class Exporter:
         code_manager = loader.CodeManager()
         LOGGER.info("Sending resources and handler source to server")
 
+        types = set()
+
         # Load both resource definition and handlers
         for type_name, resource_definition in resource.get_resources():
             code_manager.register_code(type_name, resource_definition)
+            types.add(type_name)
 
         for type_name, handler_definition in Commander.get_providers():
             code_manager.register_code(type_name, handler_definition)
+            types.add(type_name)
 
-        # Register reference and mutator code
-        for type_name, obj in itertools.chain(references.reference.get_references(), references.mutator.get_mutators()):
-            code_manager.register_code(type_name, obj)
+        # Register all reference and mutator code to all resources. This is very coarse grained and can be optimized once
+        # usage patterns have been established.
+        for resource_type in types:
+            for type_name, obj in itertools.chain(references.reference.get_references(), references.mutator.get_mutators()):
+                if not type_name.startswith("core::"):
+                    code_manager.register_code(resource_type, obj)
 
         LOGGER.info("Uploading source files")
 
