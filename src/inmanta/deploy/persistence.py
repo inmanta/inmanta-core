@@ -306,12 +306,7 @@ class ToDbUpdateManager(StateUpdateManager):
             started=started,
             finished=finished,
             status=status,
-            messages=[
-                {
-                    **msg._data,
-                }
-                for msg in messages
-            ],
+            messages=[msg.to_dict() for msg in messages],
         )
         await resource_action.insert()
 
