@@ -579,8 +579,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                                 extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
                                 extra_fields["last_deployed_attribute_hash"] = res.attribute_hash
 
-
-
                             await res.update_persistent_state(
                                 **extra_fields,
                                 last_deploy=finished,

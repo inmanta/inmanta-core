@@ -821,7 +821,9 @@ async def no_agent() -> bool:
 async def clienthelper(client, environment):
     return utils.ClientHelper(client, environment)
 
+
 DISABLE_STATE_CHECK = False
+
 
 @pytest.fixture(scope="function")
 async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
@@ -883,6 +885,7 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
     finally:
         DISABLE_STATE_CHECK = False
 
+
 @pytest.fixture(scope="function")
 async def agent(
     server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch
@@ -894,6 +897,7 @@ async def agent(
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     yield a
+
 
 @pytest.fixture(scope="function")
 async def agent_no_state_check(server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch):
