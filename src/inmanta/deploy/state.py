@@ -232,7 +232,6 @@ class ModelState:
 
         When updating requires, also call update_transitive_state to ensure transient state is also updated
         """
-        # TODO: verify this is correct and needed
         check_dependencies: bool = self.resource_state[resource].blocked is BlockedStatus.TRANSIENT and bool(
             self.requires[resource] - requires
         )
