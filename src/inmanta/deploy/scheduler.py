@@ -769,6 +769,7 @@ class ResourceScheduler(TaskManager):
                 scheduler_lock_acquired=scheduler_lock_acquired,
                 start_deployment=start_deployment,
                 connection=connection,
+                undefined_resources=undefined_resources,
             )
 
     async def reset_resource_state(self) -> None:

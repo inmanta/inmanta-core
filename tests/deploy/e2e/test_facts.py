@@ -387,7 +387,10 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     await clienthelper.put_version_simple([], version)
 
     result = await client.release_version(
-        environment, version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
+        environment,
+        version,
+        push=False,
+        agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
     )
     assert result.code == 200
 

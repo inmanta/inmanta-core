@@ -1288,8 +1288,8 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
         state=state.ResourceState(
             status=state.ComplianceStatus.COMPLIANT,
             deployment_result=state.DeploymentResult.DEPLOYED,
-            blocked=state.BlockedStatus.NO
-        )
+            blocked=state.BlockedStatus.NO,
+        ),
     )
 
     # Partial compile

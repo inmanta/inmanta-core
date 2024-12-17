@@ -1003,7 +1003,7 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
         is_undefined=False,
         is_orphan=False,
         deployment_result=DeploymentResult.SKIPPED if dep_state.name in {"skip", "fail"} else DeploymentResult.DEPLOYED,
-        blocked_status=BlockedStatus.TRANSIENT if dep_state.name in {"skip", "fail"}  else BlockedStatus.NO,
+        blocked_status=BlockedStatus.TRANSIENT if dep_state.name in {"skip", "fail"} else BlockedStatus.NO,
         expected_compliance_status=(
             ComplianceStatus.NON_COMPLIANT if dep_state.name in {"skip", "fail"} else ComplianceStatus.COMPLIANT
         ),
@@ -1138,7 +1138,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         result = await client.get_version(env_id, version)
         assert result.code == 200
 
-        await wait_until_deployment_finishes(client, env_id)
+        await wait_until_deployment_finishes(client, env_id, version)
 
     resource_container.Provider.set_fail("agent1", "key2", 1)
     version = await clienthelper.get_version()

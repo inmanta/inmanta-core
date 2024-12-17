@@ -867,7 +867,7 @@ async def agent_factory(server) -> AsyncIterator[Callable[[uuid.UUID], Awaitable
 
     for agent in agents:
         the_state = dict(agent.scheduler._state.resource_state)
-        for r,state in the_state.items():
+        for r, state in the_state.items():
             print(r, state)
         await agent.stop_working()
         agent.scheduler._work.agent_queues._new_agent_notify = lambda x: x
@@ -921,7 +921,9 @@ async def agent(
         assert model_state_before.resources[resource_id] == model_state_after.resources[resource_id]
     print()
     # Compare requires
-    assert model_state_before.requires == model_state_after.requires
+    assert {k: v for k, v in model_state_before.requires.items() if v} == {
+        k: v for k, v in model_state_after.requires.items() if v
+    }
 
     # Compare resource_state
     res_before = set(model_state_before.resource_state.keys())
