@@ -273,8 +273,7 @@ class DummyStateManager(StateUpdateManager):
         self,
         attribute_hash: str,
         result: DeployResult,
-        deployment_result: DeploymentResult,
-        blocked_status: BlockedStatus | None,
+        state: state.ResourceState,
     ) -> None:
         self.state[result.resource_id] = result.status
 
@@ -2309,7 +2308,7 @@ async def test_deploy_blocked_state(agent: TestAgent, make_resource_minimal) -> 
             )
             for rid, requires in zip(rids, rx_requires)
         }
-        await agent.scheduler._new_version(version, resources, make_requires(resources))
+        await agent.scheduler._new_version(version, resources, make_requires(resources), undefined_resources=undef)
         version += 1
         await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
 
