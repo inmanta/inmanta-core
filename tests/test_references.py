@@ -72,7 +72,6 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
 
     resource = resources.Resource.deserialize(json.loads(data))
 
-    resource.resolve_all_references()
     assert not resource.fail
 
 

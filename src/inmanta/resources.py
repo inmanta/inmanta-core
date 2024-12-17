@@ -486,7 +486,7 @@ class Resource(metaclass=ResourceMeta):
 
         obj = cls_resource(obj_id)
         obj.populate(obj_map, force_fields)
-
+        obj.resolve_all_references()
         return obj
 
     @classmethod

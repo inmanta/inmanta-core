@@ -304,7 +304,7 @@ class DataclassReference[T: DataclassProtocol](Reference[T], metaclass=Dataclass
             return AttributeReference(
                 reference=self,
                 attribute_name=name,
-                attribute_type=typing.cast(PrimitiveTypes, fields[name].type),
+                attribute_type=typing.cast(type[PrimitiveTypes], fields[name].type),
             )
 
         raise AttributeError(name=name, obj=self)
@@ -314,7 +314,7 @@ class DataclassReference[T: DataclassProtocol](Reference[T], metaclass=Dataclass
 #       of a resource that uses references.
 
 
-class reference[T: Reference[RefValue]]:
+class reference:
     """This decorator register a reference under a specific name"""
 
     # It is not allowed to use T in a class var so we cannot use T here
@@ -326,7 +326,7 @@ class reference[T: Reference[RefValue]]:
         """
         self.name = name
 
-    def __call__(self, cls: type[T]) -> type[T]:
+    def __call__[T: Reference[RefValue]](self, cls: type[T]) -> type[T]:
         """Register a new reference. If we already have it explicitly delete it (reload)"""
         if self.name in type(self)._reference_classes:
             del type(self)._reference_classes[self.name]
@@ -349,7 +349,7 @@ class reference[T: Reference[RefValue]]:
         cls._reference_classes = {}
 
 
-class mutator[T: type[Mutator]]:
+class mutator:
     """This decorator register a mutator under a specific name"""
 
     _mutator_classes: typing.ClassVar[dict[str, type[Mutator]]] = {}
@@ -360,7 +360,7 @@ class mutator[T: type[Mutator]]:
         """
         self.name = name
 
-    def __call__(self, cls: T) -> T:
+    def __call__[T: Mutator](self, cls: type[T]) -> type[T]:
         """Register a new mutator. If we already have it explicitly delete it (reload)"""
         if self.name in mutator._mutator_classes:
             del mutator._mutator_classes[self.name]
