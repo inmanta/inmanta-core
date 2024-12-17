@@ -1003,7 +1003,7 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
         is_undefined=False,
         is_orphan=False,
         deployment_result=DeploymentResult.SKIPPED if dep_state.name in {"skip", "fail"} else DeploymentResult.DEPLOYED,
-        blocked_status=BlockedStatus.TRANSIENT if dep_state.name in {"skip", "fail"} else BlockedStatus.NO,
+        blocked_status=BlockedStatus.TRANSIENT if dep_state.name in {"skip", "fail"}  else BlockedStatus.NO,
         expected_compliance_status=(
             ComplianceStatus.NON_COMPLIANT if dep_state.name in {"skip", "fail"} else ComplianceStatus.COMPLIANT
         ),

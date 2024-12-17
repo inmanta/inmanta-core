@@ -768,7 +768,6 @@ class ResourceScheduler(TaskManager):
                 intent_lock_acquired=intent_lock_acquired,
                 scheduler_lock_acquired=scheduler_lock_acquired,
                 start_deployment=start_deployment,
-                undefined_resources=undefined_resources,
                 connection=connection,
             )
 
@@ -1055,19 +1054,17 @@ class ResourceScheduler(TaskManager):
     async def deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
         deployment_result: DeploymentResult = DeploymentResult.from_handler_resource_state(result.resource_state)
         try:
-            new_blocked_status: BlockedStatus = await self.update_scheduler_state_for_finished_deploy(
-                attribute_hash, result, deployment_result
-            )
+            state = await self.update_scheduler_state_for_finished_deploy(attribute_hash, result, deployment_result)
         except StaleResource:
             # The resource is no longer managed, no need to update the database state.
             pass
         else:
             # Write deployment result to the database.
-            await self.send_deploy_done(attribute_hash, result, deployment_result, new_blocked_status)
+            await self.send_deploy_done(attribute_hash, result, state)
 
     async def update_scheduler_state_for_finished_deploy(
         self, attribute_hash: str, result: DeployResult, deployment_result: DeploymentResult
-    ) -> BlockedStatus | None:
+    ) -> ResourceState | None:
         """
         Update the state of the scheduler based on the DeploymentResult of the given resource.
 
@@ -1145,7 +1142,7 @@ class ResourceScheduler(TaskManager):
             if state.blocked is BlockedStatus.NO:
                 self._timer_manager.update_timer(resource_id, is_compliant=(state.status is ComplianceStatus.COMPLIANT))
 
-            return state.blocked
+            return state
 
     def _send_events(
         self,
@@ -1255,14 +1252,8 @@ class ResourceScheduler(TaskManager):
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         await self._state_update_delegate.send_in_progress(action_id, resource_id)
 
-    async def send_deploy_done(
-        self,
-        attribute_hash: str,
-        result: DeployResult,
-        deployment_result: DeploymentResult,
-        blocked_status: BlockedStatus | None,
-    ) -> None:
-        await self._state_update_delegate.send_deploy_done(attribute_hash, result, deployment_result, blocked_status)
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: ResourceState) -> None:
+        await self._state_update_delegate.send_deploy_done(attribute_hash, result, state)
 
     async def dryrun_update(self, env: uuid.UUID, dryrun_result: executor.DryrunResult) -> None:
         await self._state_update_delegate.dryrun_update(env, dryrun_result)
