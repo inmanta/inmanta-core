@@ -477,7 +477,12 @@ class Resource(metaclass=ResourceMeta):
         if const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS not in obj_map:
             extra[const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS] = True
 
-        if const.RESOURCE_ATTRIBUTE_MUTATORS not in obj_map or const.RESOURCE_ATTRIBUTE_REFERENCES not in obj_map:
+        if (
+            const.RESOURCE_ATTRIBUTE_MUTATORS not in obj_map
+            or obj_map[const.RESOURCE_ATTRIBUTE_MUTATORS] is None
+            or const.RESOURCE_ATTRIBUTE_REFERENCES not in obj_map
+            or obj_map[const.RESOURCE_ATTRIBUTE_REFERENCES] is None
+        ):
             extra[const.RESOURCE_ATTRIBUTE_MUTATORS] = []
             extra[const.RESOURCE_ATTRIBUTE_REFERENCES] = []
 
