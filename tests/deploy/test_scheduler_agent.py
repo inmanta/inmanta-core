@@ -220,6 +220,8 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         pass
 
 
+
+
 state_translation_table: dict[
     const.ResourceState, Tuple[state.DeploymentResult, state.BlockedStatus, state.ComplianceStatus]
 ] = {
@@ -1883,3 +1885,81 @@ async def test_state_of_skipped_resources_for_dependencies(agent: TestAgent, mak
         deployment_result=state.DeploymentResult.SKIPPED,
         blocked=state.BlockedStatus.TRANSIENT,
     )
+
+
+class BrokenDummyManager(executor.ExecutorManager[executor.Executor]):
+    """
+    An ExecutorManager that allows you to set a custom (mocked) executor for a certain agent.
+    """
+
+    async def get_executor(
+        self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
+    ) -> DummyExecutor:
+        raise Exception()
+
+    async def stop_for_agent(self, agent_name: str) -> list[DummyExecutor]:
+        pass
+
+    async def start(self) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
+
+    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
+        pass
+
+
+class BadTestAgent(Agent):
+    """
+    An agent (scheduler) that mock everything:
+
+    * It uses a mocked ExecutorManager.
+    * A dummy code CodeManager.
+    * It mock the methods that interact with the database.
+
+    This allows you to:
+       * Test the interactions between the scheduler and the executor, without the overhead of any other components,
+         like the Inmanta server.
+       * The mocked components allow inspection of the deploy actions done by the executor.
+    """
+
+    def __init__(
+        self,
+        environment: Optional[uuid.UUID] = None,
+    ):
+        super().__init__(environment)
+        self.executor_manager = BrokenDummyManager()
+        self.scheduler = TestScheduler(self.scheduler.environment, self.executor_manager, self.scheduler.client)
+
+
+
+@pytest.fixture
+async def bad_agent(environment, config):
+    """
+    Provide a new agent, with a scheduler that uses the dummy executor
+
+    Allows testing without server, or executor
+    """
+    out = BadTestAgent(environment)
+    await out.start_working()
+    yield out
+    await out.stop_working()
+
+
+async def test_broken_executor_deploy(bad_agent: TestAgent, make_resource_minimal):
+    """
+    Ensure the simples deploy scenario works: 2 dependant resources
+    """
+
+    rid1 = "test::Resource[agent1,name=1]"
+    rid2 = "test::Resource[agent1,name=2]"
+    resources = {
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, values={"value": "a"}, requires=[rid1]),
+    }
+
+    await bad_agent.scheduler._new_version(1, resources, make_requires(resources))
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=bad_agent.scheduler, agent_name="agent1")
+
+

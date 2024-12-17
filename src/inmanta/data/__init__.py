@@ -3928,6 +3928,9 @@ class LogLine(DataDocument):
     def write_to_logger(self, logger: logging.Logger) -> None:
         logger.log(self.log_level.to_int, self.msg, *self.args)
 
+    def write_to_logger_for_resource(self, agent: str, resource_version_string:ResourceVersionIdStr) -> None:
+        logging.getLogger(NAME_RESOURCE_ACTION_LOGGER).getChild(agent).log(log_level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
+
     @classmethod
     def log(
         cls,

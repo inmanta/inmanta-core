@@ -29,6 +29,7 @@ import pyformance
 from inmanta import const, data, resources
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployResult
+from inmanta.const import NAME_RESOURCE_ACTION_LOGGER
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType
 from inmanta.deploy import scheduler, state
 
@@ -179,6 +180,7 @@ class Deploy(Task):
                         error=str(e),
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
+                    log_line.write_to_logger(logging.getLogger(NAME_RESOURCE_ACTION_LOGGER).getChild(agent))
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
                     return
 
@@ -204,6 +206,7 @@ class Deploy(Task):
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
+
             finally:
                 if deploy_result is not None:
                     # We signaled start, so we signal end

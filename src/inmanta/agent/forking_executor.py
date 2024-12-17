@@ -775,6 +775,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
             self.in_flight -= 1
 
     async def start(self) -> None:
+
         await self.call(InitCommandFor(self.name, self.id.agent_uri))
 
     async def request_shutdown(self) -> None:
@@ -919,7 +920,11 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         return ext_id
 
     async def create_member(self, blueprint: executor.ExecutorBlueprint) -> MPProcess:
+
         venv = await self.environment_manager.get_environment(blueprint.to_env_blueprint())
+        LOGGER.warning(
+            "PROT"
+        )
         executor = await self.make_child_and_connect(blueprint, venv)
         LOGGER.debug(
             "Child forked (pid: %s) for %s",
@@ -952,15 +957,17 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         loop = asyncio.get_running_loop()
         name = executor_id.blueprint_hash()  # FIXME: improve naming https://github.com/inmanta/inmanta-core/issues/7999
 
+        LOGGER.debug("Starting process")
         # Start child
         process, parent_conn = await loop.run_in_executor(
             self.thread_pool, functools.partial(self._make_child, name, self.environment, self.log_level, self.cli_log)
         )
+        LOGGER.debug("Hooking pipe")
         # Hook up the connection
         transport, protocol = await loop.connect_accepted_socket(
             functools.partial(ExecutorClient, f"executor.{name}"), parent_conn
         )
-
+        LOGGER.debug("UP")
         child_handle = MPProcess(name, process, protocol, executor_id, venv, self.thread_pool)
         return child_handle
 
@@ -1077,15 +1084,19 @@ class MPManager(
         return my_executor
 
     async def create_member(self, executor_id: executor.ExecutorId) -> MPExecutor:
-        process = await self.process_pool.get(executor_id.blueprint)
-        # FIXME: we have a race here: the process can become empty between these two calls
-        # Current thinking is that this race is unlikely
-        result = await process.get(executor_id)
+        try:
+            process = await self.process_pool.get(executor_id.blueprint)
+            # FIXME: we have a race here: the process can become empty between these two calls
+            # Current thinking is that this race is unlikely
+            result = await process.get(executor_id)
 
-        executors = self.agent_map.get(executor_id.agent_name)
-        assert executors is not None  # make mypy happy
-        executors.add(result)
-        return result
+            executors = self.agent_map.get(executor_id.agent_name)
+            assert executors is not None  # make mypy happy
+            executors.add(result)
+            return result
+        except Exception:
+            LOGGER.info("Could not create executor.", exc_info=True)
+            raise
 
     async def notify_member_shutdown(self, pool_member: MPExecutor) -> bool:
         executors = self.agent_map.get(pool_member.get_id().agent_name)
