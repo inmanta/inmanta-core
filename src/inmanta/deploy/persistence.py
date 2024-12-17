@@ -33,7 +33,6 @@ from inmanta.data.model import ResourceVersionIdStr
 from inmanta.protocol import Client
 from inmanta.resources import Id
 from inmanta.server.services import resourceservice
-from inmanta.util import parse_timestamp
 
 LOGGER = logging.getLogger(__name__)
 
