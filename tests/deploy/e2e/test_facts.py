@@ -291,7 +291,7 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     await get_fact("test::Fact[agent1,key=key5]", 503)  # broken
 
 
-async def test_purged_resources(resource_container, client, clienthelper, server, environment, agent):
+async def test_purged_resources(resource_container, client, clienthelper, server, environment, agent_no_state_check):
     """
     Test if:
         * Facts are purged when the resource is no longer available in any version.
