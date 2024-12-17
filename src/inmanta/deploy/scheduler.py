@@ -692,7 +692,8 @@ class ResourceScheduler(TaskManager):
                 resource_id=resource["resource_id"],
                 attribute_hash=resource["attribute_hash"],
                 attributes=json.loads(resource["attributes"]),
-            ) for resource in resources_from_db
+            )
+            for resource in resources_from_db
         }
         return resource_details, undefined_resources
 
@@ -724,9 +725,7 @@ class ResourceScheduler(TaskManager):
                 if cm_version is None:
                     raise KeyError()
                 version = cm_version.version
-            resource_details, undefined_resources  = await self._build_resource_mappings_from_db(
-                version=version, connection=con
-            )
+            resource_details, undefined_resources = await self._build_resource_mappings_from_db(version=version, connection=con)
             requires = self._construct_requires_mapping(resource_details)
             return version, resource_details, requires, undefined_resources
 
@@ -909,7 +908,7 @@ class ResourceScheduler(TaskManager):
                 # Install timers for initial up-to-date resources. They are up-to-date now,
                 # but we want to make sure we periodically repair them.
                 self._timer_manager.update_timers(
-                    up_to_date_resources.keys() | (transitive_unblocked - self._state.dirty), are_compliant=True
+                    up_to_date_resources | (transitive_unblocked - self._state.dirty), are_compliant=True
                 )
 
                 # ensure deploy for ALL dirty resources, not just the new ones
@@ -929,10 +928,7 @@ class ResourceScheduler(TaskManager):
 
                 # Updating the blocked state should be done under the scheduler lock, because this state is written
                 # by both the deploy and the new version code path.
-                # TODO: newly_defined and up_to_date_resources
-                resources_with_updated_blocked_state: Set[ResourceIdStr] = (
-                    undefined | transitive_blocked | transitive_unblocked
-                )
+                resources_with_updated_blocked_state: Set[ResourceIdStr] = undefined | transitive_blocked | transitive_unblocked
 
                 await self.update_resource_intent(
                     self.environment,

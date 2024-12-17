@@ -1584,7 +1584,10 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     resources[rid2] = make_resource_minimal(rid=rid2, values={"value": "b"}, requires=[rid5])
     resources[rid3] = make_resource_minimal(rid=rid3, values={"value": "a"}, requires=[rid5, rid6])
     await agent.scheduler._new_version(
-        version=2, resources=resources, requires=make_requires(resources), undefined_resources={rid5, rid6},
+        version=2,
+        resources=resources,
+        requires=make_requires(resources),
+        undefined_resources={rid5, rid6},
     )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 7
@@ -1745,7 +1748,10 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     resources[rid8] = make_resource_minimal(rid=rid8, values={"value": "a"}, requires=[])
 
     await agent.scheduler._new_version(
-        version=5, resources=resources, requires=make_requires(resources), undefined_resources={rid9},
+        version=5,
+        resources=resources,
+        requires=make_requires(resources),
+        undefined_resources={rid9},
     )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 2

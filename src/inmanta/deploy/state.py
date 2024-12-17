@@ -334,7 +334,7 @@ class ModelState:
 
     def update_desired_state(
         self,
-        resource: ResourceIdStr,
+        resource: "ResourceIdStr",
         details: ResourceDetails,
     ) -> None:
         """
@@ -358,7 +358,7 @@ class ModelState:
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.add(resource)
 
-    def update_resource_to_undefined(self, resource: ResourceIdStr, details: ResourceDetails) -> None:
+    def update_resource_to_undefined(self, resource: "ResourceIdStr", details: ResourceDetails) -> None:
         """
         Mark the given resource as blocked, i.e. it's not deployable. This method updates the resource details
         and the resource_status.
@@ -381,7 +381,7 @@ class ModelState:
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
 
-    def update_requires(self, resource: ResourceIdStr, requires: Set[ResourceIdStr]) -> None:
+    def update_requires(self, resource: "ResourceIdStr", requires: Set["ResourceIdStr"]) -> None:
         """
         Update the requires relation for a resource. Updates the reverse relation accordingly.
 
@@ -399,7 +399,7 @@ class ModelState:
             self.resource_state[resource].blocked = BlockedStatus.NO
             self.dirty.add(resource)
 
-    def drop(self, resource: ResourceIdStr) -> None:
+    def drop(self, resource: "ResourceIdStr") -> None:
         """
         Completely remove a resource from the resource state.
         """
@@ -431,10 +431,10 @@ class ModelState:
     def update_transitive_state(
         self,
         *,
-        new_undefined: Set[ResourceIdStr],
-        verify_blocked: Set[ResourceIdStr],
-        verify_unblocked: Set[ResourceIdStr],
-    ) -> tuple[Set[ResourceIdStr], Set[ResourceIdStr]]:
+        new_undefined: "Set[ResourceIdStr]",
+        verify_blocked: "Set[ResourceIdStr]",
+        verify_unblocked: "Set[ResourceIdStr]",
+    ) -> "tuple[Set[ResourceIdStr], Set[ResourceIdStr]]":
         """
 
         Update transitive states.
@@ -523,7 +523,7 @@ class ModelState:
         #  - So we reduce from n*n to n time complexity
         # unclear if it is worth it, hard to tell/test
 
-        def update_blocked_status_to_blocked(resource: ResourceIdStr) -> bool:
+        def update_blocked_status_to_blocked(resource: "ResourceIdStr") -> bool:
             """
             Check if the deployment of the given resource is still blocked and mark it as unblocked if it is.
             check one step over the requires relation, assume all states to hold.
@@ -597,7 +597,7 @@ class ModelState:
                     propagate_blocked_work.append(to_be_blocked)
 
         # 4. forward propagate the unblocked
-        def update_blocked_status(resource: ResourceIdStr) -> bool:
+        def update_blocked_status(resource: "ResourceIdStr") -> bool:
             """
             Check if the deployment of the given resource is still blocked and mark it as unblocked if it is.
             check one step over the requires relation, assume all states to hold.
@@ -622,7 +622,7 @@ class ModelState:
 
             if resource in known_blockers_cache:
                 # First check the blocked status of the cached known blocker for improved performance.
-                known_blocker: ResourceIdStr = known_blockers_cache[resource]
+                known_blocker: "ResourceIdStr" = known_blockers_cache[resource]
                 if self.resource_state[known_blocker].blocked is BlockedStatus.YES:
                     return False
                 else:
@@ -630,7 +630,7 @@ class ModelState:
                     del known_blockers_cache[resource]
 
             # Perform more expensive call by traversing all requirements of resource.
-            blocked_dependency: ResourceIdStr | None = next(
+            blocked_dependency: "ResourceIdStr" | None = next(
                 (r for r in self.requires.get(resource, set()) if self.resource_state[r].blocked is BlockedStatus.YES), None
             )
             if blocked_dependency:
@@ -643,7 +643,7 @@ class ModelState:
             out_unblocked.add(resource)
             return True
 
-        to_verify_work: list[ResourceIdStr] = list(verify_unblocked)
+        to_verify_work: "list[ResourceIdStr]" = list(verify_unblocked)
         while to_verify_work:
             resource_id = to_verify_work.pop()
             resource_was_unblocked: bool = update_blocked_status(resource_id)
@@ -652,7 +652,7 @@ class ModelState:
 
         return out_unblocked, out_blocked
 
-    def _block_resource_transitive(self, resource: ResourceIdStr) -> None:
+    def _block_resource_transitive(self, resource: "ResourceIdStr") -> None:
         """
         Mark the given resource as blocked, it's not deployable.
 
@@ -662,7 +662,7 @@ class ModelState:
         self.resource_state[resource].blocked = BlockedStatus.YES
         self.dirty.discard(resource)
 
-    def _unblock_resource(self, resource: ResourceIdStr) -> None:
+    def _unblock_resource(self, resource: "ResourceIdStr") -> None:
         """
         Mark the given resource as unblocked
 

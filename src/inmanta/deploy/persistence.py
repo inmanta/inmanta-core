@@ -312,7 +312,7 @@ class ToDbUpdateManager(StateUpdateManager):
         await self.client.resource_action_update(
             tid=env,
             resource_ids=[dryrun_result.rvid],
-            action_id=dryrun_result.dryrun_id,
+            action_id=uuid.uuid4(),
             action=const.ResourceAction.dryrun,
             started=dryrun_result.started,
             finished=dryrun_result.finished,

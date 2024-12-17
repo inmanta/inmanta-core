@@ -423,11 +423,10 @@ async def wait_until_deployment_finishes(
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
 
-
         summary = result.result["metadata"]["deploy_summary"]
 
-
         import pprint
+
         pprint.pprint(result.result["data"])
 
         # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,

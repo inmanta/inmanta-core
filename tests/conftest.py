@@ -869,7 +869,9 @@ async def agent_factory(server) -> AsyncIterator[Callable[[uuid.UUID], Awaitable
 
 
 @pytest.fixture(scope="function")
-async def agent(server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch) -> AsyncIterator[Agent]:
+async def agent(
+    server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch
+) -> AsyncIterator[Agent]:
     """Construct an agent that can execute using the resource container"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
@@ -881,6 +883,7 @@ async def agent(server, environment, agent_factory: Callable[[uuid.UUID], Awaita
     # Stop and dump scheduler state
     await a.stop()
     import copy
+
     model_state_before = copy.deepcopy(a.scheduler._state)
 
     def deploy_with_context_mock(
