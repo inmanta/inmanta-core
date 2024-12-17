@@ -18,6 +18,7 @@
 
 import argparse
 import base64
+import itertools
 import logging
 import time
 import uuid
@@ -26,7 +27,7 @@ from typing import Any, Callable, Optional, Union
 
 import pydantic
 
-from inmanta import const, loader, protocol
+from inmanta import const, loader, protocol, references
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast.entity import Entity
@@ -36,7 +37,6 @@ from inmanta.data.model import PipConfig, ResourceVersionIdStr
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance
 from inmanta.module import Project
-from inmanta.protocol import Result
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
 from inmanta.util import get_compiler_version, hash_file
@@ -515,6 +515,10 @@ class Exporter:
         for type_name, handler_definition in Commander.get_providers():
             code_manager.register_code(type_name, handler_definition)
 
+        # Register reference and mutator code
+        for type_name, obj in itertools.chain(references.reference.get_references(), references.mutator.get_mutators()):
+            code_manager.register_code(type_name, obj)
+
         LOGGER.info("Uploading source files")
 
         upload_code(conn, tid, version, code_manager)
@@ -584,7 +588,7 @@ class Exporter:
                 else:
                     LOGGER.debug("  %s not in any resource set", rid)
 
-        def do_put(**kwargs: object) -> Result:
+        def do_put(**kwargs: object) -> protocol.Result:
             if partial_compile:
                 result = conn.put_partial(
                     tid=tid,

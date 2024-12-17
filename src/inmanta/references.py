@@ -348,6 +348,11 @@ class reference:
         """Reset the registered reference classes"""
         cls._reference_classes = {}
 
+    @classmethod
+    def get_references(cls) -> typing.Iterator[tuple[str, type[Reference[RefValue]]]]:
+        """Return an iterator with all items registered."""
+        return (item for item in cls._reference_classes.items())
+
 
 class mutator:
     """This decorator register a mutator under a specific name"""
@@ -381,6 +386,11 @@ class mutator:
     def reset(cls) -> None:
         """Reset the registered mutator classes"""
         cls._mutator_classes = {}
+
+    @classmethod
+    def get_mutators(cls) -> typing.Iterator[tuple[str, type[Mutator]]]:
+        """Return an iterator with all items registered."""
+        return (item for item in cls._mutator_classes.items())
 
 
 @reference(name="core::AttributeReference")
