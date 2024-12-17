@@ -85,6 +85,18 @@ def test_options(monkeypatch):
 
 
 def test_configfile_hierarchy(monkeypatch, tmpdir):
+    """
+    Test the hierarchy when a config option is set in multiple places:
+
+        - in the default main config file /etc/inmanta/inmanta.cfg
+        - in a config directory --config-dir cli option
+        - in dot files (.inmanta or .inmanta.cfg)
+        - in a config file passed via --config cli option
+        - via environment variable
+
+        Lower in the list means higher precedence and ties are broken
+        by alphabetical ordering of file names.
+    """
     etc_inmanta_dir = os.path.join(tmpdir, "etc", "inmanta")
     os.makedirs(etc_inmanta_dir, exist_ok=False)
 
