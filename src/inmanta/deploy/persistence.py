@@ -19,6 +19,7 @@
 import abc
 import datetime
 import logging
+import uuid
 from typing import Any
 from uuid import UUID
 
@@ -27,10 +28,12 @@ from asyncpg import UniqueViolationError
 from inmanta import const, data
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
+from inmanta.data import LogLine
 from inmanta.data.model import ResourceVersionIdStr
 from inmanta.protocol import Client
 from inmanta.resources import Id
 from inmanta.server.services import resourceservice
+from inmanta.util import parse_timestamp
 
 LOGGER = logging.getLogger(__name__)
 
@@ -263,33 +266,64 @@ class ToDbUpdateManager(StateUpdateManager):
                     )
 
     async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
-        # TODO: Inline these methods so that we don't call the server
-        # To be done after we update the dryrun database table
         await self.client.dryrun_update(
             tid=env,
             id=dryrun_result.dryrun_id,
             resource=dryrun_result.rvid,
             changes=dryrun_result.changes,
         )
-        await self.client.resource_action_update(
-            tid=env,
-            resource_ids=[dryrun_result.rvid],
-            action_id=dryrun_result.dryrun_id,
-            action=const.ResourceAction.dryrun,
-            started=dryrun_result.started,
-            finished=dryrun_result.finished,
-            messages=dryrun_result.messages,
-            status=const.ResourceState.dry,
+
+        await self._write_resource_action(
+            env,
+            dryrun_result.rvid,
+            const.ResourceAction.dryrun,
+            uuid.uuid4(),
+            const.ResourceState.dry,
+            dryrun_result.started,
+            dryrun_result.finished,
+            dryrun_result.messages,
         )
+
+    async def _write_resource_action(
+        self,
+        env: UUID,
+        resource: ResourceVersionIdStr,
+        action: const.ResourceAction,
+        action_id: UUID,
+        status: const.ResourceState | None,
+        started: datetime.datetime,
+        finished: datetime.datetime,
+        messages: list[LogLine],
+    ) -> None:
+        id = Id.parse_id(resource)
+
+        resource_action = data.ResourceAction(
+            environment=env,
+            version=id.version,
+            resource_version_ids=[resource],
+            action_id=action_id,
+            action=action,
+            started=started,
+            finished=finished,
+            status=status,
+            messages=[
+                {
+                    **msg._data,
+                }
+                for msg in messages
+            ],
+        )
+        await resource_action.insert()
 
     async def set_parameters(self, fact_result: FactResult) -> None:
         await self.client.set_parameters(tid=self.environment, parameters=fact_result.parameters)
-        await self.client.resource_action_update(
-            tid=self.environment,
-            resource_ids=[fact_result.resource_id],
-            action_id=fact_result.action_id,
+        await self._write_resource_action(
+            env=self.environment,
+            resource=fact_result.resource_id,
             action=const.ResourceAction.getfact,
+            action_id=fact_result.action_id or uuid.uuid4(),
             started=fact_result.started,
             finished=fact_result.finished,
             messages=fact_result.messages,
+            status=None,
         )
