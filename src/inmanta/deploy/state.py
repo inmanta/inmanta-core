@@ -91,7 +91,6 @@ class ResourceDetails:
     resource_id: "ResourceIdStr"
     attribute_hash: str
     attributes: Mapping[str, object] = dataclasses.field(hash=False)
-    status: ComplianceStatus
 
     id: "resources.Id" = dataclasses.field(init=False, compare=False, hash=False)
 
@@ -246,13 +245,18 @@ class ModelState:
         for res in resource_records:
             resource_id = res["resource_id"]
 
+            print(f"{resource_id} -- {dict(res)}")
+
             # Populate resource_state
             compliance_status: ComplianceStatus
             if res["is_orphan"]:
                 compliance_status = ComplianceStatus.ORPHAN
             elif res["is_undefined"]:
                 compliance_status = ComplianceStatus.UNDEFINED
-            elif res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]:
+            elif (
+                res["last_deployed_attribute_hash"] is None
+                or res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]
+            ):
                 compliance_status = ComplianceStatus.HAS_UPDATE
             elif DeploymentResult[res["deployment_result"]] is DeploymentResult.DEPLOYED:
                 compliance_status = ComplianceStatus.COMPLIANT
@@ -270,7 +274,6 @@ class ModelState:
                 resource_id=resource_id,
                 attribute_hash=res["attribute_hash"],
                 attributes=json.loads(res["attributes"]),
-                status=compliance_status,
             )
             result.resources[resource_id] = details
 

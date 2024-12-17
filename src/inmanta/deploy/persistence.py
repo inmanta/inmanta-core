@@ -58,7 +58,11 @@ class StateUpdateManager(abc.ABC):
 
     @abc.abstractmethod
     async def send_deploy_done(
-        self, attribute_hash: str, result: DeployResult, deployment_result: state.DeploymentResult
+        self,
+        attribute_hash: str,
+        result: DeployResult,
+        deployment_result: state.DeploymentResult,
+        blocked_status: state.BlockedStatus | None,
     ) -> None:
         pass
 
@@ -162,7 +166,11 @@ class ToDbUpdateManager(StateUpdateManager):
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
     async def send_deploy_done(
-        self, attribute_hash: str, result: DeployResult, deployment_result: state.DeploymentResult
+        self,
+        attribute_hash: str,
+        result: DeployResult,
+        deployment_result: state.DeploymentResult,
+        blocked_status: state.BlockedStatus | None,
     ) -> None:
         """
         Update the db to reflect the result of a deploy for a given resource.
@@ -282,6 +290,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
                     deployment_result=deployment_result,
+                    blocked_status=blocked_status,
                     **extra_datetime_fields,
                     connection=connection,
                 )

@@ -1109,46 +1109,46 @@ class OrchestrationService(protocol.ServerSlice):
                     # Ensure there is a record for every resource in the resource_persistent_state table.
                     await data.ResourcePersistentState.populate_for_version(env.id, version_id, connection=connection)
 
-                    # Already mark undeployable resources as deployed to create a better UX (change the version counters)
-                    undep = model.get_undeployable()
+                    # # Already mark undeployable resources as deployed to create a better UX (change the version counters)
+                    # undep = model.get_undeployable()
                     now = datetime.datetime.now().astimezone()
-
-                    if undep:
-                        undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
-                        # not checking error conditions
-                        await self.resource_service.resource_action_update(
-                            env,
-                            undep_ids,
-                            action_id=uuid.uuid4(),
-                            started=now,
-                            finished=now,
-                            status=const.ResourceState.undefined,
-                            action=const.ResourceAction.deploy,
-                            changes={},
-                            messages=[],
-                            change=const.Change.nochange,
-                            send_events=False,
-                            connection=connection_holder,
-                        )
-
-                        skippable = model.get_skipped_for_undeployable()
-                        if skippable:
-                            skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
-                            # not checking error conditions
-                            await self.resource_service.resource_action_update(
-                                env,
-                                skippable_ids,
-                                action_id=uuid.uuid4(),
-                                started=now,
-                                finished=now,
-                                status=const.ResourceState.skipped_for_undefined,
-                                action=const.ResourceAction.deploy,
-                                changes={},
-                                messages=[],
-                                change=const.Change.nochange,
-                                send_events=False,
-                                connection=connection_holder,
-                            )
+                    #
+                    # if undep:
+                    #     undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
+                    #     # not checking error conditions
+                    #     await self.resource_service.resource_action_update(
+                    #         env,
+                    #         undep_ids,
+                    #         action_id=uuid.uuid4(),
+                    #         started=now,
+                    #         finished=now,
+                    #         status=const.ResourceState.undefined,
+                    #         action=const.ResourceAction.deploy,
+                    #         changes={},
+                    #         messages=[],
+                    #         change=const.Change.nochange,
+                    #         send_events=False,
+                    #         connection=connection_holder,
+                    #     )
+                    #
+                    #     skippable = model.get_skipped_for_undeployable()
+                    #     if skippable:
+                    #         skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
+                    #         # not checking error conditions
+                    #         await self.resource_service.resource_action_update(
+                    #             env,
+                    #             skippable_ids,
+                    #             action_id=uuid.uuid4(),
+                    #             started=now,
+                    #             finished=now,
+                    #             status=const.ResourceState.skipped_for_undefined,
+                    #             action=const.ResourceAction.deploy,
+                    #             changes={},
+                    #             messages=[],
+                    #             change=const.Change.nochange,
+                    #             send_events=False,
+                    #             connection=connection_holder,
+                    #         )
 
                     if latest_version:
                         (

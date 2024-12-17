@@ -869,7 +869,7 @@ async def agent_factory(server) -> AsyncIterator[Callable[[uuid.UUID], Awaitable
 
 
 @pytest.fixture(scope="function")
-async def agent(server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]]) -> AsyncIterator[Agent]:
+async def agent(server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch) -> AsyncIterator[Agent]:
     """Construct an agent that can execute using the resource container"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
@@ -878,7 +878,51 @@ async def agent(server, environment, agent_factory: Callable[[uuid.UUID], Awaita
 
     yield a
 
+    # Stop and dump scheduler state
     await a.stop()
+    import copy
+    model_state_before = copy.deepcopy(a.scheduler._state)
+
+    def deploy_with_context_mock(
+        *args,
+        **kwargs,
+    ):
+        pass
+
+    monkeypatch.setattr(a.scheduler._work, "deploy_with_context", deploy_with_context_mock)
+    # Start again and dump scheduler state
+    await a.scheduler._initialize()
+    model_state_after = copy.deepcopy(a.scheduler._state)
+    await a.stop()
+
+    # Compare scheduler states
+    assert model_state_after.version == model_state_before.version
+
+    # Compare resources
+    res_before = set(model_state_before.resources.keys())
+    res_after = set(model_state_after.resources.keys())
+    assert res_before == res_after
+    for resource_id in res_before:
+        print(f"Handling {resource_id}")
+        assert model_state_before.resources[resource_id] == model_state_after.resources[resource_id]
+    print()
+    # Compare requires
+    assert model_state_before.requires == model_state_after.requires
+
+    # Compare resource_state
+    res_before = set(model_state_before.resource_state.keys())
+    res_after = set(model_state_after.resource_state.keys())
+    assert res_before == res_after
+    for resource_id in res_before:
+        print(f"Handling {resource_id}")
+        assert model_state_before.resource_state[resource_id] == model_state_after.resource_state[resource_id]
+    print()
+
+    # Compare dirty set
+    assert model_state_before.dirty == model_state_after.dirty
+
+    # Compare types_per_agent
+    assert model_state_before.types_per_agent == model_state_after.types_per_agent
 
 
 @pytest.fixture(scope="function")

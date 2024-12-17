@@ -111,11 +111,6 @@ class DummyExecutor(executor.Executor):
             if resource_details.attributes.get(FAIL_DEPLOY, False) is True
             else const.HandlerResourceState.deployed
         )
-        deployment_result = (
-            DeploymentResult.FAILED
-            if resource_details.attributes.get(FAIL_DEPLOY, False) is True
-            else DeploymentResult.DEPLOYED
-        )
         return DeployResult(
             resource_details.rvid,
             action_id,
@@ -123,7 +118,6 @@ class DummyExecutor(executor.Executor):
             messages=[],
             changes={},
             change=Change.nochange,
-            deployment_result=deployment_result,
         )
 
     async def dry_run(self, resources: Sequence[ResourceDetails], dry_run_id: uuid.UUID) -> None:
@@ -188,7 +182,6 @@ class ManagedExecutor(DummyExecutor):
             messages=[],
             changes={},
             change=Change.nochange,
-            deployment_result=state.DeploymentResult.from_handler_resource_state(result),
         )
 
 
@@ -272,7 +265,13 @@ class DummyStateManager(StateUpdateManager):
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         self.state[resource_id.resource_str()] = const.ResourceState.deploying
 
-    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, deployment_result: DeploymentResult) -> None:
+    async def send_deploy_done(
+        self,
+        attribute_hash: str,
+        result: DeployResult,
+        deployment_result: DeploymentResult,
+        blocked_status: BlockedStatus | None,
+    ) -> None:
         self.state[result.resource_id] = result.status
 
     def check_with_scheduler(self, scheduler: ResourceScheduler) -> None:
@@ -358,7 +357,7 @@ class TestScheduler(ResourceScheduler):
     ) -> Mapping[ResourceIdStr, ResourceDetails]:
         return self.mock_versions[version]
 
-    async def _get_resource_details(self, env: uuid.UUID, version: int) -> list[ResourceDetails]:
+    async def _get_resource_details_of_defined_resources(self, env: uuid.UUID, version: int) -> list[ResourceDetails]:
         assert self.environment == env
         return list(self.mock_versions[version].values())
 
@@ -455,7 +454,7 @@ def make_resource_minimal(environment):
         m.update(character.encode("utf-8"))
         attribute_hash = m.hexdigest()
 
-        return state.ResourceDetails(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash, status=status)
+        return state.ResourceDetails(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash)
 
     return make_resource_minimal
 
@@ -1496,7 +1495,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         ),
         rid2: make_resource_minimal(rid=rid2, values={"value": "a"}, requires=[rid5]),
         rid3: make_resource_minimal(rid=rid3, values={"value": "a"}, requires=[rid5, rid6]),
-        rid4: make_resource_minimal(rid=rid4, values={"value": "unknown"}, requires=[], status=ComplianceStatus.UNDEFINED),
+        rid4: make_resource_minimal(rid=rid4, values={"value": "unknown"}, requires=[]),
         rid5: make_resource_minimal(rid=rid5, values={"value": "a"}, requires=[]),
         rid6: make_resource_minimal(rid=rid6, values={"value": "a"}, requires=[rid7]),
         rid7: make_resource_minimal(rid=rid7, values={"value": "a"}, requires=[]),
@@ -1508,7 +1507,9 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     #        view                 |              |
     #                             +-- rid4     rid6 <- rid7
 
-    await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
+    await agent.scheduler._new_version(
+        version=1, resources=resources, requires=make_requires(resources), undefined_resources={rid4}
+    )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 7
     assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
@@ -1574,15 +1575,13 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid5 and rid6 are undefined
     # Change the desired state of rid2
     resources[rid4] = make_resource_minimal(rid=rid4, values={"value": "a"}, requires=[])
-    resources[rid5] = make_resource_minimal(
-        rid=rid5, values={"value": "unknown"}, requires=[], status=ComplianceStatus.UNDEFINED
-    )
-    resources[rid6] = make_resource_minimal(
-        rid=rid6, values={"value": "unknown"}, requires=[rid7], status=ComplianceStatus.UNDEFINED
-    )
+    resources[rid5] = make_resource_minimal(rid=rid5, values={"value": "unknown"}, requires=[])
+    resources[rid6] = make_resource_minimal(rid=rid6, values={"value": "unknown"}, requires=[rid7])
     resources[rid2] = make_resource_minimal(rid=rid2, values={"value": "b"}, requires=[rid5])
     resources[rid3] = make_resource_minimal(rid=rid3, values={"value": "a"}, requires=[rid5, rid6])
-    await agent.scheduler._new_version(version=2, resources=resources, requires=make_requires(resources))
+    await agent.scheduler._new_version(
+        version=2, resources=resources, requires=make_requires(resources), undefined_resources={rid5, rid6},
+    )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 7
 
@@ -1646,7 +1645,9 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid5 no longer has an unknown attribute
     resources[rid5] = make_resource_minimal(rid=rid5, values={"value": "a"}, requires=[])
     resources[rid2] = make_resource_minimal(rid=rid2, values={"value": "b"}, requires=[rid5])
-    await agent.scheduler._new_version(version=3, resources=resources, requires=make_requires(resources))
+    await agent.scheduler._new_version(
+        version=3, resources=resources, requires=make_requires(resources), undefined_resources={rid6}
+    )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 7
 
@@ -1711,10 +1712,12 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     rid8 = ResourceIdStr("test::Resource[agent1,name=8]")
     rid9 = ResourceIdStr("test::Resource[agent1,name=9]")
     resources = {
-        rid8: make_resource_minimal(rid=rid8, values={"value": "unknown"}, requires=[], status=ComplianceStatus.UNDEFINED),
-        rid9: make_resource_minimal(rid=rid9, values={"value": "unknown"}, requires=[rid8], status=ComplianceStatus.UNDEFINED),
+        rid8: make_resource_minimal(rid=rid8, values={"value": "unknown"}, requires=[]),
+        rid9: make_resource_minimal(rid=rid9, values={"value": "unknown"}, requires=[rid8]),
     }
-    await agent.scheduler._new_version(version=4, resources=resources, requires=make_requires(resources))
+    await agent.scheduler._new_version(
+        version=4, resources=resources, requires=make_requires(resources), undefined_resources={rid8, rid9}
+    )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 2
     assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
@@ -1737,7 +1740,9 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid8 is no longer undefined
     resources[rid8] = make_resource_minimal(rid=rid8, values={"value": "a"}, requires=[])
 
-    await agent.scheduler._new_version(version=5, resources=resources, requires=make_requires(resources))
+    await agent.scheduler._new_version(
+        version=5, resources=resources, requires=make_requires(resources), undefined_resources={rid9},
+    )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 2
     assert len(agent.scheduler.get_types_for_agent("agent1")) == 1

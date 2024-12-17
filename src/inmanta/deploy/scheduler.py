@@ -373,7 +373,7 @@ class ResourceScheduler(TaskManager):
         by relying on the increments calculation logic. This method starts the deployment process.
         """
         try:
-            version, resources, requires = await self._get_resources_in_version(connection=connection)
+            version, resources, requires, undefined_resources = await self._get_resources_in_version(connection=connection)
         except KeyError:
             # No model version has been released yet.
             return
@@ -389,6 +389,7 @@ class ResourceScheduler(TaskManager):
             start_deployment=False,
             intent_lock_acquired=True,
             scheduler_lock_acquired=True,
+            undefined_resources=undefined_resources,
             connection=connection,
         )
 
@@ -425,32 +426,39 @@ class ResourceScheduler(TaskManager):
                 self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
             )
 
-    async def _get_resource_details(self, env: uuid.UUID, version: int) -> list[ResourceDetails]:
+    async def _get_resource_details_of_defined_resources(self, env: uuid.UUID, version: int) -> list[ResourceDetails]:
+        """
+        This method is only used by the dryrun() method. It exists so that it can be mocked by the test suite.
+        """
         resources_in_version = await data.Resource.get_list(environment=env, model=version)
         result = []
         for res in resources_in_version:
-            # Make mypy happy
-            assert res.attribute_hash is not None
-            result.append(
-                ResourceDetails(
-                    resource_id=res.resource_id,
-                    attribute_hash=res.attribute_hash,
-                    attributes=res.attributes,
-                    status=ComplianceStatus.UNDEFINED,
+            if res.status is not const.ResourceState.undefined:
+                # Make mypy happy
+                assert res.attribute_hash is not None
+                result.append(
+                    ResourceDetails(
+                        resource_id=res.resource_id,
+                        attribute_hash=res.attribute_hash,
+                        attributes=res.attributes,
+                    )
                 )
-            )
         return result
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         if not self._running:
             return
-        resource_details = await self._get_resource_details(self.environment, version)
-        for res_details in resource_details:
+        resource_details = await self._get_resource_details_of_defined_resources(env=self.environment, version=version)
+        for details in resource_details:
             self._work.agent_queues.queue_put_nowait(
                 DryRun(
-                    resource=res_details.resource_id,
+                    resource=details.resource_id,
                     version=version,
-                    resource_details=res_details,
+                    resource_details=ResourceDetails(
+                        resource_id=details.resource_id,
+                        attribute_hash=details.attribute_hash,
+                        attributes=details.attributes,
+                    ),
                     dry_run_id=dry_run_id,
                 ),
                 priority=TaskPriority.DRYRUN,
@@ -614,7 +622,7 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             async with data.Scheduler.get_connection() as connection:
                 try:
-                    latest_version, resources_in_db, _ = await self._get_resources_in_version(connection=connection)
+                    latest_version, resources_in_db, _, _ = await self._get_resources_in_version(connection=connection)
                 except KeyError:
                     return SchedulerStatusReport(scheduler_state={}, db_state={}, resource_states={}, discrepancies={})
                 if latest_version != self._state.version:
@@ -658,7 +666,7 @@ class ResourceScheduler(TaskManager):
 
     async def _build_resource_mappings_from_db(
         self, version: int, *, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Mapping[ResourceIdStr, ResourceDetails]:
+    ) -> Tuple[Mapping[ResourceIdStr, ResourceDetails], Set[ResourceIdStr]]:
         """
         Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
 
@@ -676,23 +684,17 @@ class ResourceScheduler(TaskManager):
             projection_persistent=["deployment_result", "last_deployed_attribute_hash"],
             connection=connection,
         )
-        result = {}
-        for resource in resources_from_db:
-            if const.ResourceState[resource["status"]] is const.ResourceState.undefined:
-                status = ComplianceStatus.UNDEFINED
-            elif resource["attribute_hash"] != resource["last_deployed_attribute_hash"]:
-                status = ComplianceStatus.HAS_UPDATE
-            elif DeploymentResult[resource["deployment_result"]] is DeploymentResult.DEPLOYED:
-                status = ComplianceStatus.COMPLIANT
-            else:
-                status = ComplianceStatus.NON_COMPLIANT
-            result[resource["resource_id"]] = ResourceDetails(
+        undefined_resources: Set[ResourceIdStr] = {
+            r["resource_id"] for r in resources_from_db if const.ResourceState[r["status"]] is const.ResourceState.undefined
+        }
+        resource_details = {
+            resource["resource_id"]: ResourceDetails(
                 resource_id=resource["resource_id"],
                 attribute_hash=resource["attribute_hash"],
                 attributes=json.loads(resource["attributes"]),
-                status=status,
-            )
-        return result
+            ) for resource in resources_from_db
+        }
+        return resource_details, undefined_resources
 
     def _construct_requires_mapping(
         self, resources: Mapping[ResourceIdStr, ResourceDetails]
@@ -708,7 +710,7 @@ class ResourceScheduler(TaskManager):
         *,
         version: int | None = None,
         connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> tuple[int, Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]]]:
+    ) -> tuple[int, Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]], Set[ResourceIdStr]]:
         """
         Returns a tuple containing:
             1. The version number of the configuration model.
@@ -722,9 +724,11 @@ class ResourceScheduler(TaskManager):
                 if cm_version is None:
                     raise KeyError()
                 version = cm_version.version
-            resources_from_db = await self._build_resource_mappings_from_db(version=version, connection=con)
-            requires_from_db = self._construct_requires_mapping(resources_from_db)
-            return version, resources_from_db, requires_from_db
+            resource_details, undefined_resources  = await self._build_resource_mappings_from_db(
+                version=version, connection=con
+            )
+            requires = self._construct_requires_mapping(resource_details)
+            return version, resource_details, requires, undefined_resources
 
     async def read_version(
         self,
@@ -750,7 +754,9 @@ class ResourceScheduler(TaskManager):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         try:
-            version, resources, requires = await self._get_resources_in_version(version=version, connection=connection)
+            version, resources, requires, undefined_resources = await self._get_resources_in_version(
+                version=version, connection=connection
+            )
         except KeyError:
             # No model version has been released yet.
             return
@@ -763,6 +769,7 @@ class ResourceScheduler(TaskManager):
                 intent_lock_acquired=intent_lock_acquired,
                 scheduler_lock_acquired=scheduler_lock_acquired,
                 start_deployment=start_deployment,
+                undefined_resources=undefined_resources,
                 connection=connection,
             )
 
@@ -785,6 +792,7 @@ class ResourceScheduler(TaskManager):
         start_deployment: bool = True,
         intent_lock_acquired: bool = False,
         scheduler_lock_acquired: bool = False,
+        undefined_resources: Optional[Set[ResourceIdStr]] = None,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
@@ -806,6 +814,7 @@ class ResourceScheduler(TaskManager):
         intent_lock = self._intent_lock if not intent_lock_acquired else asyncio.Lock()
         scheduler_lock = self._scheduler_lock if not scheduler_lock_acquired else asyncio.Lock()
         up_to_date_resources = set() if up_to_date_resources is None else up_to_date_resources
+        undefined_resources = set() if undefined_resources is None else undefined_resources
         async with data.Scheduler.get_connection(connection=connection) as con, con.transaction(), intent_lock:
             if version < self._state.version:
                 raise ValueError(
@@ -836,7 +845,7 @@ class ResourceScheduler(TaskManager):
                 if resource in up_to_date_resources:
                     self._state.add_up_to_date_resource(resource, details)  # Removes from the dirty set
                     continue
-                if details.status is ComplianceStatus.UNDEFINED:
+                if resource in undefined_resources:
                     undefined.add(resource)
                     self._work.delete_resource(resource)
                 elif resource in self._state.resources:
@@ -1044,21 +1053,24 @@ class ResourceScheduler(TaskManager):
     async def deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
         deployment_result: DeploymentResult = DeploymentResult.from_handler_resource_state(result.resource_state)
         try:
-            await self.update_scheduler_state_for_finished_deploy(attribute_hash, result, deployment_result)
+            new_blocked_status: BlockedStatus = await self.update_scheduler_state_for_finished_deploy(
+                attribute_hash, result, deployment_result
+            )
         except StaleResource:
             # The resource is no longer managed, no need to update the database state.
             pass
         else:
             # Write deployment result to the database.
-            await self.send_deploy_done(attribute_hash, result, deployment_result)
+            await self.send_deploy_done(attribute_hash, result, deployment_result, new_blocked_status)
 
     async def update_scheduler_state_for_finished_deploy(
         self, attribute_hash: str, result: DeployResult, deployment_result: DeploymentResult
-    ) -> None:
+    ) -> BlockedStatus | None:
         """
         Update the state of the scheduler based on the DeploymentResult of the given resource.
 
         :raise StaleResource: This update is about a resource that is no longer managed by the server.
+        :return: The new blocked status of the resource. Or None if the blocked status shouldn't be updated.
         """
         resource_id: ResourceIdStr = result.resource_id
         if deployment_result is DeploymentResult.NEW:
@@ -1089,7 +1101,7 @@ class ResourceScheduler(TaskManager):
                 state.deployment_result = deployment_result
                 if recovered_from_failure:
                     self._send_events(details, stale_deploy=True, recovered_from_failure=True)
-                return
+                return None
 
             # We are not stale
             state.status = (
@@ -1130,6 +1142,8 @@ class ResourceScheduler(TaskManager):
             # No matter the deployment result, schedule a re-deploy for this resource unless it's blocked
             if state.blocked is BlockedStatus.NO:
                 self._timer_manager.update_timer(resource_id, is_compliant=(state.status is ComplianceStatus.COMPLIANT))
+
+            return state.blocked
 
     def _send_events(
         self,
@@ -1239,8 +1253,14 @@ class ResourceScheduler(TaskManager):
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         await self._state_update_delegate.send_in_progress(action_id, resource_id)
 
-    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, deployment_result: DeploymentResult) -> None:
-        await self._state_update_delegate.send_deploy_done(attribute_hash, result, deployment_result)
+    async def send_deploy_done(
+        self,
+        attribute_hash: str,
+        result: DeployResult,
+        deployment_result: DeploymentResult,
+        blocked_status: BlockedStatus | None,
+    ) -> None:
+        await self._state_update_delegate.send_deploy_done(attribute_hash, result, deployment_result, blocked_status)
 
     async def dryrun_update(self, env: uuid.UUID, dryrun_result: executor.DryrunResult) -> None:
         await self._state_update_delegate.dryrun_update(env, dryrun_result)
