@@ -264,7 +264,7 @@ class DryRun(Task):
                 messages=[],
             )
         else:
-            dryrun_result: executor.DryrunResult = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
+            dryrun_result = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
 
         await task_manager.dryrun_update(env=task_manager.environment, dryrun_result=dryrun_result)
 
