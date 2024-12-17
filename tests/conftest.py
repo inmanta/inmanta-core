@@ -821,6 +821,7 @@ async def no_agent() -> bool:
 async def clienthelper(client, environment):
     return utils.ClientHelper(client, environment)
 
+DISABLE_STATE_CHECK = False
 
 @pytest.fixture(scope="function")
 async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
@@ -865,8 +866,22 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
 
     yield create
 
-    await asyncio.gather(*[agent.stop() for agent in agents])
+    global DISABLE_STATE_CHECK
+    try:
+        if not DISABLE_STATE_CHECK:
+            for agent in agents:
+                the_state = dict(agent.scheduler._state.resource_state)
+                for r, state in the_state.items():
+                    print(r, state)
+                await agent.stop_working()
+                monkeypatch.setattr(agent.scheduler._work.agent_queues, "_new_agent_notify", lambda x: x)
+                await agent.start_working()
+                new_state = dict(agent.scheduler._state.resource_state)
+                assert the_state == new_state
 
+        await asyncio.gather(*[agent.stop() for agent in agents])
+    finally:
+        DISABLE_STATE_CHECK = False
 
 @pytest.fixture(scope="function")
 async def agent(
@@ -880,54 +895,17 @@ async def agent(
 
     yield a
 
-    # Stop and dump scheduler state
-    await a.stop()
-    import copy
+@pytest.fixture(scope="function")
+async def agent_no_state_check(server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch):
+    """Construct an agent that can execute using the resource container"""
+    global DISABLE_STATE_CHECK
+    DISABLE_STATE_CHECK = True
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
-    model_state_before = copy.deepcopy(a.scheduler._state)
+    a: Agent = await agent_factory(uuid.UUID(environment))
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
-    def deploy_with_context_mock(
-        *args,
-        **kwargs,
-    ):
-        pass
-
-    monkeypatch.setattr(a.scheduler._work, "deploy_with_context", deploy_with_context_mock)
-    # Start again and dump scheduler state
-    await a.scheduler._initialize()
-    model_state_after = copy.deepcopy(a.scheduler._state)
-    await a.stop()
-
-    # Compare scheduler states
-    assert model_state_after.version == model_state_before.version
-
-    # Compare resources
-    res_before = set(model_state_before.resources.keys())
-    res_after = set(model_state_after.resources.keys())
-    assert res_before == res_after
-    for resource_id in res_before:
-        print(f"Handling {resource_id}")
-        assert model_state_before.resources[resource_id] == model_state_after.resources[resource_id]
-    print()
-    # Compare requires
-    assert {k: v for k, v in model_state_before.requires.items() if v} == {
-        k: v for k, v in model_state_after.requires.items() if v
-    }
-
-    # Compare resource_state
-    res_before = set(model_state_before.resource_state.keys())
-    res_after = set(model_state_after.resource_state.keys())
-    assert res_before == res_after
-    for resource_id in res_before:
-        print(f"Handling {resource_id}")
-        assert model_state_before.resource_state[resource_id] == model_state_after.resource_state[resource_id]
-    print()
-
-    # Compare dirty set
-    assert model_state_before.dirty == model_state_after.dirty
-
-    # Compare types_per_agent
-    assert model_state_before.types_per_agent == model_state_after.types_per_agent
+    yield a
 
 
 @pytest.fixture(scope="function")
