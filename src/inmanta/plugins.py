@@ -44,9 +44,8 @@ from inmanta.ast import (
 )
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
-from inmanta.const import DATACLASS_SELF_FIELD
 from inmanta.execute.proxy import DynamicProxy
-from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, WrappedValueVariable
+from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
@@ -245,8 +244,6 @@ def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, valu
 
     Unknowns are not handled by this method!
     """
-    import inmanta.ast.entity
-
     expected_type.validate(value)
 
     if isinstance(value, NoneValue):
