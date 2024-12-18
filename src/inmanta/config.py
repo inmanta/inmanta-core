@@ -454,13 +454,13 @@ logging_config = Option(
 )
 
 
-def make_option_for_log_file(componentname: str) -> Option[str | None]:
+def make_option_for_log_file(component_name: str) -> Option[str | None]:
     # TODO: document expected variables
     return Option(
         section="logging",
-        name=componentname,
+        name=component_name,
         default=option_as_default(logging_config),
-        documentation=f"The path to the configuration file for the logging of the {componentname}. This is a YAML file that follows "
+        documentation=f"The path to the configuration file for the logging of the {component_name}. This is a YAML file that follows "
         "the dictionary-schema accepted by logging.config.dictConfig(). All other log-related configuration "
         "options will be ignored when this option is set.",
         validator=is_str_opt,
