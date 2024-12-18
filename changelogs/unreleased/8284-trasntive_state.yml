@@ -1,5 +1,0 @@
-description: Fix transitive state updates
-issue-nr: 8284
-change-type: minor
-destination-branches: [master]
-
