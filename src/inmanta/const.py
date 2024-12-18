@@ -259,7 +259,7 @@ ENVIRON_FORCE_TTY = "FORCE_TTY"
 
 LOG_LEVEL_TRACE = 3
 
-NAME_RESOURCE_ACTION_LOGGER = "inmanta.resourceaction"
+NAME_RESOURCE_ACTION_LOGGER = "inmanta.resource_action"
 
 # Time we give the server/agent to shutdown gracefully, before we force stop the ioloop
 SHUTDOWN_GRACE_IOLOOP = 10
