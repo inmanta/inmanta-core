@@ -1,5 +1,5 @@
 change-type: patch
 description: Add testing of pg17
 destination-branches:
-- iso7
+- master
 sections: {}
