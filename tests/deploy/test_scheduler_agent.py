@@ -1887,7 +1887,7 @@ async def test_state_of_skipped_resources_for_dependencies(agent: TestAgent, mak
 
 class BrokenDummyManager(executor.ExecutorManager[executor.Executor]):
     """
-    An ExecutorManager that allows you to set a custom (mocked) executor for a certain agent.
+    A broken dummy ExecutorManager that fails on get_executor to test failure paths
     """
 
     async def get_executor(
