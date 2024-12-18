@@ -550,7 +550,7 @@ def mp_worker_entrypoint(
     inmanta.config.Config.load_config_from_dict(config)
 
     # Make sure logfire is configured correctly
-    tracing.configure_logfire("inmanta.executor")
+    tracing.configure_logfire("executor")
 
     async def serve() -> None:
         loop = asyncio.get_running_loop()

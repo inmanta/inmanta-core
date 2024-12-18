@@ -140,7 +140,7 @@ def start_scheduler(options: argparse.Namespace) -> None:
     if max_clients:
         AsyncHTTPClient.configure(None, max_clients=max_clients)
 
-    tracing.configure_logfire("agent_rs")
+    tracing.configure_logfire("scheduler")
 
     util.ensure_event_loop()
     a = agent_new.Agent()
