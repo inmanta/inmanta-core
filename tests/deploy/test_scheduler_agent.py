@@ -1253,9 +1253,11 @@ async def test_skipped_for_dependencies_with_event_propagation(agent: TestAgent,
     }
     await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
 
+    # We set rid1 to fail so that rid2 has a failing dependency
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
     executor1.deploys[rid1].set_result(const.HandlerResourceState.failed)
 
+    # We set rid2 to skip for its dependencies to assert that it gets scheduled when rid1 succeeds
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     executor2.deploys[rid2].set_result(const.HandlerResourceState.skipped_for_dependency)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
