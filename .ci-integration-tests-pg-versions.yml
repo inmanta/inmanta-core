@@ -2,4 +2,4 @@ pipeline_template: ci/inmanta-extensions/Jenkinsfile-integration-tests-all-postg
 repo_name: inmanta-core
 postgresql_versions:
     - 13
-    - 14
+    - 16
