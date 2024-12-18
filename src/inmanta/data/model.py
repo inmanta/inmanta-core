@@ -936,6 +936,7 @@ class SchedulerStatusReport(BaseModel):
     # Can't type properly because of current module structure
     scheduler_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceState
     db_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceDetails
+    resource_states: Mapping[ResourceIdStr, const.ResourceState]
     discrepancies: list[Discrepancy] | dict[ResourceIdStr, list[Discrepancy]]
 
 

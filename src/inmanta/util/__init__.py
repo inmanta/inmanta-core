@@ -26,6 +26,7 @@ import hashlib
 import importlib.metadata
 import inspect
 import itertools
+import json
 import logging
 import os
 import pathlib
@@ -43,7 +44,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import BinaryIO, Callable, Generic, Optional, Sequence, TypeVar, Union
+from typing import TYPE_CHECKING, BinaryIO, Callable, Generic, Mapping, Optional, Sequence, TypeVar, Union
 
 import asyncpg
 import click
@@ -59,6 +60,9 @@ from inmanta import COMPILER_VERSION, const
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 from packaging.utils import NormalizedName
+
+if TYPE_CHECKING:
+    from inmanta.data.model import ResourceId
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -313,6 +317,12 @@ class Scheduler:
         """
         Add task that is currently executing to `self._executing_tasks`.
         """
+        # requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
+        # # types per agent keeps track of which resource types live on which agent by doing a reference count
+        # # the dict is agent_name -> resource_type -> resource_count
+        # types_per_agent: dict[str, dict["ResourceType", int]] = dataclasses.field(
+        #     default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
+        # )
         if action in self._executing_tasks and self._executing_tasks[action]:
             LOGGER.warning("Multiple instances of background task %s are executing simultaneously", action.__name__)
         self._executing_tasks[action].append(task)
@@ -985,3 +995,20 @@ def click_group_with_plugins(plugins: Iterable[importlib.metadata.EntryPoint]) -
         return group
 
     return decorator
+
+
+def make_attribute_hash(resource_id: "ResourceId", attributes: Mapping[str, object]) -> str:
+    """
+    This method returns the attribute hash for the attributes of the given resource.
+    """
+    from inmanta.protocol.common import custom_json_encoder
+
+    character = json.dumps(
+        {k: v for k, v in attributes.items() if k not in ["requires", "provides", "version"]},
+        default=custom_json_encoder,
+        sort_keys=True,  # sort the keys for stable hashes when using dicts, see #5306
+    )
+    m = hashlib.md5()
+    m.update(resource_id.encode("utf-8"))
+    m.update(character.encode("utf-8"))
+    return m.hexdigest()

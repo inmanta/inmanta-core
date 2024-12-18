@@ -34,7 +34,7 @@ async def server_pre_start(server_config):
 
 
 async def test_agent_disconnect(
-    resource_container, environment, server, client, clienthelper, async_finalizer, caplog, agent: Agent
+    resource_container, environment, server, client, clienthelper, async_finalizer, caplog, agent_no_state_check: Agent
 ):
     caplog.set_level(logging.INFO)
     config.Config.set("config", "server-timeout", "1")
@@ -49,7 +49,7 @@ async def test_agent_disconnect(
     await asyncio.wait_for(server.stop(), timeout=15)
 
     def disconnected():
-        return not agent.scheduler._running
+        return not agent_no_state_check.scheduler._running
 
     await utils.retry_limited(disconnected, 1)
 
