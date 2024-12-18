@@ -271,20 +271,27 @@ Mounting files/directories
 ########################
 
 The recommended way to mount files and directories is to use docker volumes:
-```
-docker volume create mydockervolume
-```
-You can then use it in docker-compose file:
-```
-volumes:
-    - mydockervolume:/etc/inmanta/myfolder
-```
+
+.. code-block:: sh
+
+    docker volume create mydockervolume
+
+And then you can use it in docker-compose file:
+
+.. code-block:: yaml
+
+    volumes:
+        - mydockervolume:/etc/inmanta/myfolder
+
+
 However if you really need to mount from the host, you can use bind mounts. You just need to make sure to change the ownership of
-the file/directory you want to mount to make sure it has same uid/gid as the inmanta user. To find them, in the container, you can use `id` command.
-By default, currently, inmanta user `uid` is 997 and `gid` is 995. On your host you can easily change ownership of your file/directory with these values:
-```
-sudo chown -R 997:995 myfolder/
-```
+the file/directory you want to mount to make sure it has same uid/gid as the inmanta user. To find them, in the container, you can use ``id`` command.
+By default, currently, inmanta user ``uid`` is 997 and ``gid`` is 995. On your host you can easily change ownership of your file/directory with these values:
+
+.. code-block:: sh
+
+    sudo chown -R 997:995 myfolder/
+
 
 Log rotation
 ############
