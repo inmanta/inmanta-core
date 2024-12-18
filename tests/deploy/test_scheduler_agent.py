@@ -2340,6 +2340,28 @@ async def test_state_of_skipped_resources_for_dependencies(agent: TestAgent, mak
         deployment_result=state.DeploymentResult.SKIPPED,
         blocked=state.BlockedStatus.TRANSIENT,
     )
+    # Release a new version where r1 succeeds and assert that r2 also gets deployed
+    resources = {
+        rid1: make_resource_minimal(rid=rid1, values={"value": "r1_value"}, requires=[]),
+        rid2: make_resource_minimal(rid=rid2, values={"value": "r2_value"}, requires=[rid1]),
+    }
+    await agent.scheduler._new_version(version=2, resources=resources, requires=make_requires(resources))
+    await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
+
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
+    await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent2")
+
+    assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
+        status=state.ComplianceStatus.COMPLIANT,
+        deployment_result=state.DeploymentResult.DEPLOYED,
+        blocked=state.BlockedStatus.NO,
+    )
+
+    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
+        status=state.ComplianceStatus.COMPLIANT,
+        deployment_result=state.DeploymentResult.DEPLOYED,
+        blocked=state.BlockedStatus.NO,
+    )
 
 
 async def test_deploy_blocked_state(agent: TestAgent, make_resource_minimal) -> None:
@@ -2545,26 +2567,3 @@ async def test_deploy_blocked_state(agent: TestAgent, make_resource_minimal) -> 
         is_deployed(f"test::Resource[agent1,name={rid + 1}]")
     for rid in range(5, 14):
         assert f"test::Resource[agent1,name={rid + 1}]" not in agent.scheduler._state.resource_state
-
-    # Release a new version where r1 succeeds and assert that r2 also gets deployed
-    resources = {
-        rid1: make_resource_minimal(rid=rid1, values={"value": "r1_value"}, requires=[]),
-        rid2: make_resource_minimal(rid=rid2, values={"value": "r2_value"}, requires=[rid1]),
-    }
-    await agent.scheduler._new_version(version=2, resources=resources, requires=make_requires(resources))
-    await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
-
-    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
-    await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent2")
-
-    assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
-        status=state.ComplianceStatus.COMPLIANT,
-        deployment_result=state.DeploymentResult.DEPLOYED,
-        blocked=state.BlockedStatus.NO,
-    )
-
-    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
-        status=state.ComplianceStatus.COMPLIANT,
-        deployment_result=state.DeploymentResult.DEPLOYED,
-        blocked=state.BlockedStatus.NO,
-    )
