@@ -1081,7 +1081,7 @@ class ResourceScheduler(TaskManager):
 
     async def update_scheduler_state_for_finished_deploy(
         self, attribute_hash: str, result: DeployResult, deployment_result: DeploymentResult
-    ) -> ResourceState | None:
+    ) -> ResourceState:
         """
         Update the state of the scheduler based on the DeploymentResult of the given resource.
 
@@ -1117,7 +1117,7 @@ class ResourceScheduler(TaskManager):
                 state.deployment_result = deployment_result
                 if recovered_from_failure:
                     self._send_events(details, stale_deploy=True, recovered_from_failure=True)
-                return None
+                return state
 
             # We are not stale
             state.status = (

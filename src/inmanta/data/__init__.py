@@ -61,7 +61,6 @@ from inmanta.data.model import (
     api_boundary_datetime_normalizer,
 )
 from inmanta.deploy import state
-from inmanta.deploy.state import BlockedStatus
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -5480,7 +5479,6 @@ class Resource(BaseDocument):
         last_success: Optional[datetime.datetime] = None,
         last_produced_events: Optional[datetime.datetime] = None,
         last_deployed_attribute_hash: Optional[str] = None,
-        blocked_status: BlockedStatus | None = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         state: Optional[state.ResourceState] = None,
     ) -> None:
@@ -5494,7 +5492,6 @@ class Resource(BaseDocument):
             "last_produced_events": last_produced_events,
             "last_deployed_attribute_hash": last_deployed_attribute_hash,
             "last_deployed_version": last_deployed_version,
-            "blocked_status": blocked_status.name if blocked_status is not None else blocked_status,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
         if state:
