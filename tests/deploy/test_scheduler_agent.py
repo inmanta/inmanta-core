@@ -1227,7 +1227,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     await agent.scheduler._new_version(18, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
     executor1.deploys[rid1].set_result(const.HandlerResourceState.failed)
-    # assert that r2 got skipped for its dependencies through event propagation
+    # assert that r2 got scheduled for deploy through event propagation
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     executor2.deploys[rid2].set_result(const.HandlerResourceState.skipped_for_dependency)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)

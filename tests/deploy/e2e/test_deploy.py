@@ -1092,7 +1092,7 @@ async def test_redeploy_after_dependency_recovered(resource_container, server, c
             "id": f"{rid1},v={version}",
             "requires": [],
             "purged": False,
-            "send_event": True,
+            "send_event": False,
             "receive_events": False,
         },
         {
@@ -1101,8 +1101,8 @@ async def test_redeploy_after_dependency_recovered(resource_container, server, c
             "id": f"{rid2},v={version}",
             "requires": [rid1],
             "purged": False,
-            "send_event": True,
-            "receive_events": True,
+            "send_event": False,
+            "receive_events": False,
         },
     ]
     await clienthelper.set_auto_deploy(True)
