@@ -97,6 +97,7 @@ from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
 from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.agent.resourcepool import PoolManager, PoolMember
+from inmanta.const import LOGGER_NAME_EXECUTOR
 from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.protocol.ipc_light import (
     FinalizingIPCClient,
@@ -109,7 +110,7 @@ from inmanta.protocol.ipc_light import (
 )
 from setproctitle import setproctitle
 
-LOGGER = logging.getLogger("inmanta.executor")
+LOGGER = logging.getLogger(LOGGER_NAME_EXECUTOR)
 
 
 class ExecutorContext:
@@ -146,7 +147,7 @@ class ExecutorContext:
             await old_one.join()
 
         loop = asyncio.get_running_loop()
-        parent_logger = logging.getLogger("inmanta.executor")
+        parent_logger = LOGGER
         assert self.client  # mypy
         # Setup agent instance
         executor = inmanta.agent.in_process_executor.InProcessExecutor(
@@ -401,7 +402,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         assert context.server.timer_venv_scheduler_interval is None, "InitCommand should be only called once!"
 
         loop = asyncio.get_running_loop()
-        parent_logger = logging.getLogger("inmanta.executor")
+        parent_logger = LOGGER
         logger = parent_logger.getChild(context.name)
 
         context.server.post_init(self._venv_touch_interval)
@@ -543,7 +544,7 @@ def mp_worker_entrypoint(
     logging.captureWarnings(True)
 
     # Set up our own logger
-    logger = logging.getLogger(f"inmanta.executor.{name}")
+    logger = logging.getLogger(f"{LOGGER_NAME_EXECUTOR}.{name}")
 
     # Load config
     inmanta.config.Config.load_config_from_dict(config)

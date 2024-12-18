@@ -113,7 +113,7 @@ async def test_logging_error(resource_container, environment, client, agent, cli
     assert result.code == 200
     assert result.result["data"]["status"] == "failed"
 
-    log_contains(caplog, "inmanta.resourceaction.agent1", logging.ERROR, "Failed to serialize argument for log message")
+    log_contains(caplog, "inmanta.resource_action.agent1", logging.ERROR, "Failed to serialize argument for log message")
 
 
 @pytest.mark.parametrize(

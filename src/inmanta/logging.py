@@ -594,6 +594,9 @@ class InmantaLoggerConfig:
 
         :param options: The Option object coming from the command line. This function uses the following
             attributes: log_file, log_file_level, verbose, timed
+        :param component: The component to configure (e.g. server, scheduler, compiler).
+        Used to select which config file option to use (logging.component)
+        :param context: context variables to use of the config file is a template
         """
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
@@ -809,8 +812,6 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
     def _wrap_record(self, record: logging.LogRecord) -> logging.LogRecord:
         """
         Wrap a log record to perform renaming for specific formatter as determined by the _logger_mode
-
-        This is derived from the way the colorlog.ColoredFormatter works
         """
         old_name = record.name
         new_name = self._get_logger_name_for(old_name)
