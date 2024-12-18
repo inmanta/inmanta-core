@@ -1934,7 +1934,7 @@ class BadTestAgent(Agent):
 @pytest.fixture
 async def bad_agent(environment, config):
     """
-    Provide a new agent, with a scheduler that uses the dummy executor
+    Provide a new agent, with a scheduler that uses the broken dummy executor
 
     Allows testing without server, or executor
     """
