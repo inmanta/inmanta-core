@@ -331,7 +331,6 @@ class LoggingConfigBuilder:
 
         :param stream: The TextIO stream where the logs will be sent to.
         :param options: The config options passed on the CLI.
-        :param logging_config_extensions: The logging config required by the extensions.
         :param component: component we are starting
         :param context: the component context we are starting with
         """
