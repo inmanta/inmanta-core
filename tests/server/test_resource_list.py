@@ -39,6 +39,7 @@ from inmanta.agent.executor import DeployResult
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource, ResourceIdStr, ResourceVersionIdStr
 from inmanta.deploy import persistence, state
+from inmanta.deploy.state import DeploymentResult
 from inmanta.server import config
 
 
@@ -795,10 +796,16 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
             else:
                 if "sub=2]" in rid:
                     status = const.HandlerResourceState.failed
+                    compliance_status = state.ComplianceStatus.NON_COMPLIANT
+                    deployment_result = DeploymentResult.FAILED
                 elif "sub=3]" in rid:
                     status = const.HandlerResourceState.skipped
+                    compliance_status = state.ComplianceStatus.NON_COMPLIANT
+                    deployment_result = DeploymentResult.SKIPPED
                 else:
                     status = const.HandlerResourceState.deployed
+                    compliance_status = state.ComplianceStatus.COMPLIANT
+                    deployment_result = DeploymentResult.DEPLOYED
                 await to_db_update_manager.send_deploy_done(
                     attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resource),
                     result=DeployResult(
@@ -809,7 +816,11 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                         changes={},
                         change=None,
                     ),
-                    deployment_result=state.DeploymentResult.DEPLOYED,
+                    state=state.ResourceState(
+                        status=compliance_status,
+                        deployment_result=deployment_result,
+                        blocked=state.BlockedStatus.NO,
+                    ),
                 )
 
         await asyncio.gather(*(deploy(resource) for resource in resources_in_increment_for_agent))
