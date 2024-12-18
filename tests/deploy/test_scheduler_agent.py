@@ -1910,16 +1910,7 @@ class BrokenDummyManager(executor.ExecutorManager[executor.Executor]):
 
 class BadTestAgent(Agent):
     """
-    An agent (scheduler) that mock everything:
-
-    * It uses a mocked ExecutorManager.
-    * A dummy code CodeManager.
-    * It mock the methods that interact with the database.
-
-    This allows you to:
-       * Test the interactions between the scheduler and the executor, without the overhead of any other components,
-         like the Inmanta server.
-       * The mocked components allow inspection of the deploy actions done by the executor.
+    An agent (scheduler) that uses the broken dummy manager:
     """
 
     def __init__(
