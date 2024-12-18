@@ -233,10 +233,7 @@ class DryRun(Task):
             )
 
             dryrun_result: executor.DryrunResult = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
-            await task_manager.dryrun_update(
-                env=task_manager.environment,
-                dryrun_result=dryrun_result,
-            )
+            await task_manager.dryrun_done(dryrun_result)
 
         except Exception:
             # FIXME: seems weird to conclude undeployable state from generic Exception on either of two method calls
@@ -253,7 +250,7 @@ class DryRun(Task):
                 finished=datetime.datetime.now().astimezone(),
                 messages=[],
             )
-            await task_manager.dryrun_update(env=task_manager.environment, dryrun_result=result)
+            await task_manager.dryrun_done(result)
 
 
 class RefreshFact(Task):
@@ -280,8 +277,6 @@ class RefreshFact(Task):
 
         fact_result = await my_executor.get_facts(executor_resource_details)
         if fact_result.success:
-            await task_manager.set_parameters(
-                fact_result=fact_result,
-            )
+            await task_manager.fact_refresh_done(fact_result)
         else:
             raise Exception(f"Error encountered while executing RefreshTask: {fact_result.error_msg}")

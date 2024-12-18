@@ -33,11 +33,10 @@ import asyncpg
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import Discrepancy, ResourceIdStr, ResourceType, ResourceVersionIdStr, SchedulerStatusReport
 from inmanta.deploy import timers, work
-from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
+from inmanta.deploy.persistence import ToDbUpdateManager
 from inmanta.deploy.state import (
     AgentStatus,
     BlockedStatus,
@@ -70,7 +69,7 @@ class ResourceIntent:
     dependencies: Optional[Mapping[ResourceIdStr, const.ResourceState]]
 
 
-class TaskManager(StateUpdateManager, abc.ABC):
+class TaskManager(abc.ABC):
     """
     Interface for communication with tasks (deploy.task.Task). Offers methods to inspect intent and to report task results.
     """
@@ -113,7 +112,7 @@ class TaskManager(StateUpdateManager, abc.ABC):
         """
 
     @abstractmethod
-    async def deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
+    async def deploy_done(self, attribute_hash: str, result: executor.DeployResult) -> None:
         """
         Register the end of deployment for the given resource: update the resource state based on the deployment result
         and inform its dependencies that deployment is finished.
@@ -125,6 +124,18 @@ class TaskManager(StateUpdateManager, abc.ABC):
         :param attribute_hash: The resource's attribute hash for which this state applies. No scheduler state is updated if the
             hash indicates the state information is stale.
         :param result: The DeployResult object describing the result of the deployment.
+        """
+
+    @abstractmethod
+    async def dryrun_done(self, result: executor.DryrunResult) -> None:
+        """
+        Report the result of a dry-run.
+        """
+
+    @abstractmethod
+    async def fact_refresh_done(self, result: executor.FactResult) -> None:
+        """
+        Report the result of a fact refresh.
         """
 
 
@@ -247,7 +258,7 @@ class ResourceScheduler(TaskManager):
         self.client = client
         self.code_manager = CodeManager(client)
         self.executor_manager = executor_manager
-        self._state_update_delegate = ToDbUpdateManager(client, environment)
+        self.state_update_manager = ToDbUpdateManager(client, environment)
 
         self._timer_manager = timers.TimerManager(self)
 
@@ -946,7 +957,7 @@ class ResourceScheduler(TaskManager):
                 # by both the deploy and the new version code path.
                 resources_with_updated_blocked_state: Set[ResourceIdStr] = undefined | transitive_blocked | transitive_unblocked
 
-                await self.update_resource_intent(
+                await self.state_update_manager.update_resource_intent(
                     self.environment,
                     intent={
                         rid: (self._state.resource_state[rid], self._state.resources[rid])
@@ -965,15 +976,15 @@ class ResourceScheduler(TaskManager):
                 self._work.delete_resource(resource)
 
             # Update intent for resources with new desired state
-            await self.update_resource_intent(
+            await self.state_update_manager.update_resource_intent(
                 self.environment,
                 intent={rid: (self._state.resource_state[rid], self._state.resources[rid]) for rid in new_desired_state},
                 update_blocked_state=False,
                 connection=con,
             )
             # Mark orphaned resources
-            await self.mark_as_orphan(self.environment, deleted_resources, con)
-            await self.set_last_processed_model_version(self.environment, version, connection=con)
+            await self.state_update_manager.mark_as_orphan(self.environment, deleted_resources, con)
+            await self.state_update_manager.set_last_processed_model_version(self.environment, version, connection=con)
 
     def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""
@@ -1065,10 +1076,12 @@ class ResourceScheduler(TaskManager):
                 model_version=self._state.version, details=resource_details, dependencies=dependencies
             )
             # Update the state in the database.
-            await self.send_in_progress(action_id, Id.parse_id(ResourceVersionIdStr(f"{resource},v={self._state.version}")))
+            await self.state_update_manager.send_in_progress(
+                action_id, Id.parse_id(ResourceVersionIdStr(f"{resource},v={self._state.version}"))
+            )
             return resource_intent
 
-    async def deploy_done(self, attribute_hash: str, result: DeployResult) -> None:
+    async def deploy_done(self, attribute_hash: str, result: executor.DeployResult) -> None:
         deployment_result: DeploymentResult = DeploymentResult.from_handler_resource_state(result.resource_state)
         try:
             state = await self.update_scheduler_state_for_finished_deploy(attribute_hash, result, deployment_result)
@@ -1077,10 +1090,16 @@ class ResourceScheduler(TaskManager):
             pass
         else:
             # Write deployment result to the database.
-            await self.send_deploy_done(attribute_hash, result, state)
+            await self.state_update_manager.send_deploy_done(attribute_hash, result, state)
+
+    async def dryrun_done(self, result: executor.DryrunResult) -> None:
+        await self.state_update_manager.dryrun_update(env=self.environment, dryrun_result=result)
+
+    async def fact_refresh_done(self, result: executor.FactResult) -> None:
+        await self.state_update_manager.set_parameters(fact_result=result)
 
     async def update_scheduler_state_for_finished_deploy(
-        self, attribute_hash: str, result: DeployResult, deployment_result: DeploymentResult
+        self, attribute_hash: str, result: executor.DeployResult, deployment_result: DeploymentResult
     ) -> ResourceState:
         """
         Update the state of the scheduler based on the DeploymentResult of the given resource.
@@ -1265,39 +1284,3 @@ class ResourceScheduler(TaskManager):
 
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
-
-    async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
-        await self._state_update_delegate.send_in_progress(action_id, resource_id)
-
-    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: ResourceState) -> None:
-        await self._state_update_delegate.send_deploy_done(attribute_hash, result, state)
-
-    async def dryrun_update(self, env: uuid.UUID, dryrun_result: executor.DryrunResult) -> None:
-        await self._state_update_delegate.dryrun_update(env, dryrun_result)
-
-    async def set_parameters(self, fact_result: FactResult) -> None:
-        await self._state_update_delegate.set_parameters(fact_result)
-
-    async def update_resource_intent(
-        self,
-        environment: UUID,
-        intent: dict[ResourceIdStr, tuple[ResourceState, ResourceDetails]],
-        update_blocked_state: bool,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        await self._state_update_delegate.update_resource_intent(
-            environment, intent, update_blocked_state, connection=connection
-        )
-
-    async def mark_as_orphan(
-        self,
-        environment: UUID,
-        resource_ids: Set[ResourceIdStr],
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        await self._state_update_delegate.mark_as_orphan(environment, resource_ids, connection=connection)
-
-    async def set_last_processed_model_version(
-        self, environment: UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
-        await self._state_update_delegate.set_last_processed_model_version(environment, version, connection=connection)
