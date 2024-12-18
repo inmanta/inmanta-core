@@ -77,7 +77,6 @@ class DummyExecutor(executor.Executor):
         * It doesn't actually do any deploys, but instead keeps track of the actions
           (execute, dryrun, get_facts, etc.) that were requested on it.
         * It reports a deploy as failed if the resource has an attribute with the value of the `FAIL_DEPLOY` variable.
-
     """
 
     def __init__(self):
