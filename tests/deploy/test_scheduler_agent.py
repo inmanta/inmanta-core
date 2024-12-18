@@ -976,8 +976,8 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
             )
             for rid, value, send_event, fail in [
                 (rid1, r1_value, r1_send_event, r1_fail),
-                (rid2, r2_value, r2_send_event, 0),
-                (rid3, r3_value, False, 0),
+                (rid2, r2_value, r2_send_event, False),
+                (rid3, r3_value, False, False),
             ]
             if value is not None
         }
@@ -1017,6 +1017,23 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 1
     # verify that r3 didn't get an event, i.e. it did not deploy and it is not scheduled or executing
+    assert agent.executor_manager.executors["agent3"].execute_count == 0
+    assert len(agent.scheduler._work._waiting) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
+    assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+
+    #########################
+    # Verify failure events #
+    #########################
+    agent.executor_manager.reset_executor_counters()
+    # release change to r1, and make its deploy fail
+    resources = make_resources(r1_value=2, r2_value=1, r3_value=0, r1_fail=True)
+    await agent.scheduler._new_version(8, resources, make_requires(resources))
+    # assert that r2 got deployed through event propagation
+    await retry_limited_fast(lambda: rid2 in executor2.deploys)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
+    await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
     assert len(agent.scheduler._work.agent_queues.queued()) == 0
@@ -1214,28 +1231,34 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert agent.executor_manager.executors["agent2"].execute_count == 3
     assert agent.executor_manager.executors["agent3"].execute_count == 0
 
-    #########################
-    # Verify failure events #
-    #########################
-    agent.executor_manager.reset_executor_counters()
-    # make agent1's executor also managed to make r1 fail and succeed as we please
+
+async def test_skipped_for_dependencies_with_event_propagation(agent: TestAgent, make_resource_minimal):
+    """
+    Ensure that a resource that was skipped for its dependencies gets scheduled when they succeed
+    """
+
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent2,name=2]")
+
+    # make both agent's executors managed
     executor1: ManagedExecutor = ManagedExecutor()
     agent.executor_manager.register_managed_executor("agent1", executor1)
 
-    # release change to r1, and make its deploy fail
-    resources = make_resources(r1_value=2, r2_value=1, r3_value=0)
-    await agent.scheduler._new_version(18, resources, make_requires(resources))
+    executor2: ManagedExecutor = ManagedExecutor()
+    agent.executor_manager.register_managed_executor("agent2", executor2)
+
+    resources = {
+        rid1: make_resource_minimal(rid=rid1, values={"value": "r1_value"}, requires=[]),
+        rid2: make_resource_minimal(rid=rid2, values={"value": "r2_value"}, requires=[rid1]),
+    }
+    await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
+
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
     executor1.deploys[rid1].set_result(const.HandlerResourceState.failed)
-    # assert that r2 got scheduled for deploy through event propagation
+
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     executor2.deploys[rid2].set_result(const.HandlerResourceState.skipped_for_dependency)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
-    assert agent.executor_manager.executors["agent1"].execute_count == 1
-    assert agent.executor_manager.executors["agent3"].execute_count == 0
-    assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues.queued()) == 0
-    assert len(agent.scheduler._work.agent_queues._in_progress) == 0
 
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         status=state.ComplianceStatus.NON_COMPLIANT,
@@ -1244,24 +1267,21 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     )
 
     assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
+        # We are skipped, so not compliant
         status=state.ComplianceStatus.NON_COMPLIANT,
         deployment_result=state.DeploymentResult.SKIPPED,
         blocked=state.BlockedStatus.TRANSIENT,
     )
 
-    # trigger a deploy where r1 succeeds
-    # verify that r2 gets scheduled because its dependencies now succeed
-    await agent.scheduler.deploy(reason="Test")
+    agent.executor_manager.reset_executor_counters()
+    await agent.scheduler.deploy_resource(rid1, reason="Deploy rid1", priority=TaskPriority.USER_DEPLOY)
+
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
     executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
+
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
-    await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 2)
-    assert agent.executor_manager.executors["agent1"].execute_count == 2
-    assert agent.executor_manager.executors["agent3"].execute_count == 0
-    assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues.queued()) == 0
-    assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+    await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
 
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         status=state.ComplianceStatus.COMPLIANT,

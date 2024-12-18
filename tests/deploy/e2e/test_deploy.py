@@ -31,6 +31,7 @@ from inmanta.config import Config
 from inmanta.data import SERVER_COMPILE
 from inmanta.data.model import SchedulerStatusReport
 from inmanta.deploy.state import BlockedStatus, ComplianceStatus, DeploymentResult, ResourceState
+from inmanta.deploy.work import TaskPriority
 from inmanta.resources import Id
 from inmanta.server import SLICE_PARAM, SLICE_SERVER
 from inmanta.util import get_compiler_version
@@ -1122,8 +1123,7 @@ async def test_redeploy_after_dependency_recovered(resource_container, server, c
     )
 
     # Trigger deploy without incrementing version
-    result = await client.deploy(environment)
-    assert result.code == 200
+    await scheduler.deploy_resource(rid1, reason="Deploy rid1", priority=TaskPriority.USER_DEPLOY)
 
     await clienthelper.wait_for_deployed()
     assert scheduler._state.resource_state[rid1] == ResourceState(
