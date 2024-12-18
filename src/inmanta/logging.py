@@ -346,7 +346,7 @@ class LoggingConfigBuilder:
         if component == "compiler":
             short_names = not options.keep_logger_names
 
-        if component == "scheduler":
+        elif component == "scheduler":
             # Override defaults
             if LOG_CONTEXT_VAR_ENVIRONMENT not in context:
                 raise Exception("The scheduler expects an environment as context")
@@ -577,7 +577,7 @@ class InmantaLoggerConfig:
            1. The --logging-config CLI option.
            2. The INMANTA_CONFIG_LOGGING_CONFIG environment variable.
            3. The component specific log config option
-           3. The logging_config option in the config files.
+           4. The logging_config option in the config files.
 
         :param options: The configuration options passed on the CLI.
         """
@@ -603,7 +603,7 @@ class InmantaLoggerConfig:
             self._apply_logging_config_from_file(logging_config_file, context)
             if options.verbose != 0:
                 # Force cli as well
-                self.force_cli(convert_inmanta_log_level(str(options.verbose), True))
+                self.force_cli(convert_inmanta_log_level(str(options.verbose), cli=True))
         else:
             self._apply_logging_config_from_options(options, component, context)
         self._options_applied = True
