@@ -15,15 +15,14 @@
 
     Contact: code@inmanta.com
 """
-
+import abc
 import logging
 import logging.config
 import os
 import re
 import sys
 from argparse import Namespace
-from collections import abc
-from collections.abc import Mapping
+from collections.abc import Mapping, Set, Sequence
 from io import TextIOWrapper
 from logging import handlers
 from typing import Optional, TextIO
@@ -100,7 +99,6 @@ log_levels = {
 
 logging.addLevelName(3, "TRACE")
 
-
 class LogConfigDumper(Dumper):
     """
     The representer config is class level
@@ -132,11 +130,11 @@ class LoggingConfigExtension:
     def __init__(
         self,
         *,
-        formatters: Optional[abc.Mapping[str, object]] = None,
-        handlers: Optional[abc.Mapping[str, object]] = None,
-        loggers: Optional[abc.Mapping[str, object]] = None,
+        formatters: Optional[Mapping[str, object]] = None,
+        handlers: Optional[Mapping[str, object]] = None,
+        loggers: Optional[Mapping[str, object]] = None,
         root_handlers: Optional[list[str]] = None,
-        log_dirs_to_create: Optional[abc.Set[str]] = None,
+        log_dirs_to_create: Optional[Set[str]] = None,
     ) -> None:
         """
         :param log_dirs_to_create: The log directories that should be created before the logging config can be used.
@@ -166,11 +164,11 @@ class FullLoggingConfig(LoggingConfigExtension):
     def __init__(
         self,
         *,
-        formatters: Optional[abc.Mapping[str, object]] = None,
-        handlers: Optional[abc.Mapping[str, object]] = None,
-        loggers: Optional[abc.Mapping[str, object]] = None,
+        formatters: Optional[Mapping[str, object]] = None,
+        handlers: Optional[Mapping[str, object]] = None,
+        loggers: Optional[Mapping[str, object]] = None,
         root_handlers: Optional[list[str]] = None,
-        log_dirs_to_create: Optional[abc.Set[str]] = None,
+        log_dirs_to_create: Optional[Set[str]] = None,
         root_log_level: Optional[int | str] = None,
     ):
         super().__init__(
@@ -284,8 +282,28 @@ class Options(Namespace):
     keep_logger_names: bool = False
     logging_config: Optional[str] = None
 
+class LoggingConfigBuilderExtension(abc.ABC):
+
+    @abc.abstractmethod
+    def get_logging_config_from_options(
+        self,
+        stream: TextIO,
+        options: Options,
+        component: str | None,
+        context: Mapping[str, str],
+        master_config: FullLoggingConfig
+    ) -> FullLoggingConfig:
+        """
+            Update the existing config with additional configuration for this extension
+        """
+        pass
+
 
 class LoggingConfigBuilder:
+
+    def __init__(self, extensions: Sequence[LoggingConfigBuilderExtension] | None = None) -> None:
+        self.extensions = extensions or []
+
     def get_bootstrap_logging_config(
         self,
         stream: TextIO = sys.stdout,
@@ -444,6 +462,10 @@ class LoggingConfigBuilder:
             root_handlers=[handler_root_logger],
             root_log_level=python_log_level_to_name(log_level),
         )
+
+        for extension in self.extensions:
+            full_logging_config = extension.get_logging_config_from_options(stream, options, component, context, full_logging_config)
+
         return full_logging_config
 
     def _get_multiline_formatter_config(self, keep_logger_names: bool, options: Optional[Options] = None) -> dict[str, object]:
@@ -522,7 +544,6 @@ class InmantaLoggerConfig:
         self._stream = stream
         self._handlers: abc.Sequence[logging.Handler] = self._apply_logging_config(log_config)
         self._options_applied: bool = False
-        self._logging_configs_extensions: list[LoggingConfigExtension] = []
         self._loaded_config: FullLoggingConfig | None = None
         if logfire_enabled:
             logging.root.addHandler(LogfireLoggingHandler())
@@ -558,7 +579,7 @@ class InmantaLoggerConfig:
 
     @classmethod
     @stable_api
-    def clean_instance(cls, root_handlers_to_remove: Optional[abc.Sequence[logging.Handler]] = None) -> None:
+    def clean_instance(cls, root_handlers_to_remove: Optional[Sequence[logging.Handler]] = None) -> None:
         """
         This method should be used to clean up an instance of this class.
 
@@ -608,6 +629,26 @@ class InmantaLoggerConfig:
             self._apply_logging_config_from_options(options, component, context)
         self._options_applied = True
 
+    def extend_config(self, options: Options, component: str | None = None, context: Mapping[str, str] = {}, extenders: "list[LoggingConfigBuilderExtension]" = []) -> None:
+        """
+        Second stage loading: add config extensions
+        """
+        if self._options_applied:
+            raise Exception("Extenders can only be added after loading the initial config")
+
+        if not extenders:
+            # No extensions, easy
+            return
+        logging_config_file: Optional[str] = self._get_path_to_logging_config_file(options, component)
+        if logging_config_file:
+            # Config file, no extenders needed
+            return
+
+        config = self._loaded_config
+        for extender in extenders:
+            config = extender.get_logging_config_from_options(self._stream, options, component, context, config)
+        self._handlers = self._apply_logging_config(config)
+
     def force_cli(self, python_log_level: int) -> None:
         """Ensure a cli logger is attached at the given level"""
         config_builder = LoggingConfigBuilder()
@@ -654,7 +695,7 @@ class InmantaLoggerConfig:
         )
         self._handlers = self._apply_logging_config(logging_config)
 
-    def _apply_logging_config(self, logging_config: FullLoggingConfig) -> abc.Sequence[logging.Handler]:
+    def _apply_logging_config(self, logging_config: FullLoggingConfig) -> Sequence[logging.Handler]:
         """
         Apply the given logging_config as the current configuration of the logging system.
 

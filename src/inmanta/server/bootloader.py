@@ -86,6 +86,8 @@ class InmantaBootloader:
         self.restserver = Server()
         self.started = False
         self.feature_manager: Optional[FeatureManager] = None
+        # cache for ctx
+        self.ctx: ApplicationContext | None = None
 
         if configure_logging:
             inmanta_logger_config = inmanta_logging.InmantaLoggerConfig.get_instance()
@@ -248,9 +250,13 @@ class InmantaBootloader:
         """
         Load all slices in the server
         """
+        if self.ctx is not None and not load_all_extensions:
+            return self.ctx
         exts: dict[str, ModuleType] = self._load_extensions(load_all_extensions)
         ctx: ApplicationContext = self._collect_slices(exts, only_register_environment_settings)
         self.feature_manager = ctx.get_feature_manager()
+        if not only_register_environment_settings and not load_all_extensions:
+            self.ctx = ctx
         return ctx
 
     async def wait_for_db(self, db_wait_time: int) -> None:

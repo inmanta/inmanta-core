@@ -100,6 +100,12 @@ def start_server(options: argparse.Namespace) -> None:
     util.ensure_event_loop()
 
     ibl = InmantaBootloader()
+
+    # load slices for log config
+    ctx = ibl.load_slices()
+    log_config_extenders = ctx.get_default_log_config_extenders()
+    InmantaLoggerConfig.get_instance().extend_config(options, "server", {}, log_config_extenders)
+
     setup_signal_handlers(ibl.stop)
 
     ioloop = IOLoop.current()
@@ -849,11 +855,12 @@ def cmd_parser() -> argparse.ArgumentParser:
 def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
-    subparser.add_parser(
+    server = subparser.add_parser(
         "server",
         help="Output default log file for the server, given the current configuration file and options",
         parents=parent_parsers,
     )
+    server.set_defaults(component="server")
     subparser.add_parser(
         "scheduler",
         help="Output default log file template for the scheduler, "
@@ -899,6 +906,17 @@ def default_logging_config(options: argparse.Namespace) -> None:
     logging_config: FullLoggingConfig = config_builder.get_logging_config_from_options(
         sys.stdout, options, options.cmd, context
     )
+
+    if options.cmd == "server":
+        # Upgrade with extensions
+        ibl = InmantaBootloader()
+        # load slices for log config
+        ctx = ibl.load_slices()
+        log_config_extenders = ctx.get_default_log_config_extenders()
+        for extender in log_config_extenders:
+            logging_config = extender.get_logging_config_from_options(sys.stdout, options, component, context, logging_config)
+
+    print(options.component)
 
     raw_dump = logging_config.to_string()
 
