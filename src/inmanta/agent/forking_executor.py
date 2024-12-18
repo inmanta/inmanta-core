@@ -401,7 +401,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         assert context.server.timer_venv_scheduler_interval is None, "InitCommand should be only called once!"
 
         loop = asyncio.get_running_loop()
-        parent_logger = logging.getLogger("agent.executor")
+        parent_logger = logging.getLogger("inmanta.executor")
         logger = parent_logger.getChild(context.name)
 
         context.server.post_init(self._venv_touch_interval)
@@ -549,7 +549,7 @@ def mp_worker_entrypoint(
     inmanta.config.Config.load_config_from_dict(config)
 
     # Make sure logfire is configured correctly
-    tracing.configure_logfire("agent.executor")
+    tracing.configure_logfire("inmanta.executor")
 
     async def serve() -> None:
         loop = asyncio.get_running_loop()
