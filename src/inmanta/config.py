@@ -455,7 +455,6 @@ logging_config = Option(
 
 
 def make_option_for_log_file(component_name: str) -> Option[str | None]:
-    # TODO: document expected variables
     return Option(
         section="logging",
         name=component_name,

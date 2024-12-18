@@ -820,7 +820,6 @@ class OrchestrationService(protocol.ServerSlice):
             if all_rvids:
                 now = datetime.datetime.now().astimezone()
                 log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
-                # TODO: what do we do about this? The server no longer has the resource_action_log...
                 self.resource_service.log_resource_action(env.id, list(all_rvids), logging.INFO, now, log_line.msg)
                 ra = data.ResourceAction(
                     environment=env.id,
