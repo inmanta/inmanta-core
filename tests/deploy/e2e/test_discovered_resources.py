@@ -154,6 +154,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     #     R5                                 |                x              x
     #     R6                                 |                x              x
 
+    await clienthelper.set_auto_deploy(auto=True)
     discovered_resources = []
     discovery_resource_id = "test::DiscoveryResource[agent1,key=key]"
 
@@ -193,7 +194,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
             "send_event": False,
         }
     ]
-    await clienthelper.put_version_simple(resources=resources, version=version1)
+    await clienthelper.put_version_simple(resources=resources, version=version1, wait_for_released=True)
 
     # Create some Resources that are already managed:
     version2 = await clienthelper.get_version()
@@ -207,7 +208,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
         }
         for res in discovered_resources[:2]
     ]
-    await clienthelper.put_version_simple(resources=managed_resources, version=version2)
+    await clienthelper.put_version_simple(resources=managed_resources, version=version2, wait_for_released=True)
 
     filter_values = [None, {"managed": True}, {"managed": False}]
     expected_results = [discovered_resources, discovered_resources[:-2], discovered_resources[-2:]]

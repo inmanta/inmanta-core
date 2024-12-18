@@ -26,7 +26,7 @@ from dataclasses import dataclass
 
 import pyformance
 
-from inmanta import const, data, resources
+from inmanta import data, resources
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployResult
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType
@@ -114,52 +114,46 @@ class PoisonPill(Task):
 class Deploy(Task):
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str, reason: str | None = None) -> None:
         with pyformance.timer("internal.deploy").time():
-            # First do scheduler book keeping to establish what to do
-            version: int
-            resource_details: "state.ResourceDetails"
-            intent = await task_manager.deploy_start(self.resource)
-            if intent is None:
-                # Stale resource, can simply be dropped.
-                return
-
-            # From this point on, we HAVE to call report_resource_state to make the scheduler propagate state
-
-            # The main difficulty of this code is exception handling
-            # We collect state here to report back in the finally block
-
-            # Full status of the deploy,
-            # may be unset if we fail before signaling start to the server, will be set if we signaled start
-            deploy_result: DeployResult | None = None
+            # The main difficulty of this code is exception handling.
+            # We collect state here to report back in the finally block.
+            # This try catch block ensures we report at the end of the task.
             try:
-                # This try catch block ensures we report at the end of the task
-
-                # Dependencies are always set when calling get_resource_intent_for_deploy
-                assert intent.dependencies is not None
-                # Resolve to exector form
-                version = intent.model_version
-                resource_details = intent.details
-                executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(
-                    version, resource_details
-                )
+                # Full status of the deploy,
+                # may be unset if we fail before signaling start to the server, will be set if we signaled start
+                deploy_result: DeployResult | None = None
 
                 # Make id's
                 gid = uuid.uuid4()
                 action_id = uuid.uuid4()  # can this be gid ?
 
-                # Signal start to DB
+                # First do scheduler book keeping to establish what to do
                 try:
-                    await task_manager.send_in_progress(action_id, executor_resource_details.rvid)
+                    intent = await task_manager.deploy_start(action_id, self.resource)
                 except Exception:
                     # Unrecoverable, can't reach DB
                     LOGGER.error(
                         "Failed to report the start of the deployment to the server for %s",
-                        resource_details.resource_id,
+                        self.resource,
                         exc_info=True,
                     )
                     return
+
+                if intent is None:
+                    # Stale resource, can simply be dropped.
+                    return
+
                 # From this point on, we HAVE to call send_deploy_done to make sure we are not stuck in deploying
                 # This is done by setting deploy_result
                 # The surrounding try_catch will call report_resource_state
+
+                # Dependencies are always set when calling get_resource_intent_for_deploy
+                assert intent.dependencies is not None
+                # Resolve to executor form
+                version: int = intent.model_version
+                resource_details: "state.ResourceDetails" = intent.details
+                executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(
+                    version, resource_details
+                )
 
                 # Get executor
                 try:
@@ -209,25 +203,13 @@ class Deploy(Task):
                 if deploy_result is not None:
                     # We signaled start, so we signal end
                     try:
-                        await task_manager.send_deploy_done(deploy_result)
-                        failed_to_send_deploy_done = False
+                        await task_manager.deploy_done(resource_details.attribute_hash, deploy_result)
                     except Exception:
-                        failed_to_send_deploy_done = True
                         LOGGER.error(
                             "Failed to report the end of the deployment to the server for %s",
                             resource_details.resource_id,
                             exc_info=True,
                         )
-                # Always notify scheduler
-                await task_manager.deploy_done(
-                    resource=self.resource,
-                    attribute_hash=resource_details.attribute_hash,
-                    resource_state=(
-                        const.HandlerResourceState.failed
-                        if deploy_result is None or failed_to_send_deploy_done
-                        else deploy_result.resource_state
-                    ),
-                )
 
 
 @dataclass(frozen=True, kw_only=True)
