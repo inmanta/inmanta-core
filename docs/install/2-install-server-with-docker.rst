@@ -152,7 +152,7 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
         volumes:
             pgdata:
 
-    You can paste this yaml snippet in a file named `docker-compose.yml` and ensure you have you license files available.
+    You can paste this yaml snippet in a file named `docker-compose.yml` and ensure you have your license files available.
     With the proposed config, they should be located in a ``resources/`` folder on the side of the docker-compose file you create,
     and the license files should be named ``com.inmanta.license`` and ``com.inmanta.jwe``. You can of course update the content
     of the docker-compose file to match your current configuration.
@@ -168,8 +168,8 @@ The PostgreSQL server started by the above-mentioned docker-compose file has a n
 means that no data will be lost when the PostgreSQL container restarts. Pass the ``-v`` option to the
 ``docker-compose down`` to remove the volume.
 
-The default server config included in the container images assumes by default that the orchestrator can reach a database server on localhost.
-To change this behavior you can use the env variables as shown in the snippet above.
+The default server config assumes that the orchestrator can reach the database server on localhost.
+To change this behavior you can use the environment variables as shown in the snippet above.
 When using a different setup than the one mentioned above, you should overwrite the server config with one
 matching your needs.  You can find more instructions for overwriting the config in a following section,
 :ref:`here<docker_overwrite_server_conf>`.
@@ -185,10 +185,10 @@ matching your needs.  You can find more instructions for overwriting the config 
 Overwrite default server configuration
 ######################################
 
-If you want to change default server configuration, the recommended way is to provide the server
+If you want to change the default server configuration, the recommended way is to provide the server
 config options via environment variables as done in the above example.
-All the different options and associated env variables are described :ref:`here<config_reference>`.
-It is also possible to provide the configuration file, make sure to mount it in ``/etc/inmanta/inmanta.cfg``.
+All the different options and associated environment variables are described :ref:`here<config_reference>`.
+It is also possible to provide a configuration file. Make sure to mount it in ``/etc/inmanta/inmanta.cfg``.
 
 Starting the ssh server
 #######################
@@ -284,8 +284,8 @@ And then you can use it in docker-compose file:
         - mydockervolume:/etc/inmanta/myfolder
 
 
-However if you really need to mount from the host, you can use bind mounts. You just need to make sure to change the ownership of
-the file/directory you want to mount to make sure it has same uid/gid as the inmanta user. To find them, in the container, you can use ``id`` command.
+However if you really need to mount a file or directory from the host, you can use bind mounts. You just need to make sure to change the ownership of
+the file/directory you want to mount to make sure it has same uid/gid as the inmanta user inside the container. To find them, in the container, you can use ``id`` command.
 By default, currently, inmanta user ``uid`` is 997 and ``gid`` is 995. On your host you can easily change ownership of your file/directory with these values:
 
 .. code-block:: sh
