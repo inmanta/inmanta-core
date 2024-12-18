@@ -1,0 +1,4 @@
+---
+description: Move the new resource states into the database.
+change-type: minor
+destination-branches: [master]
