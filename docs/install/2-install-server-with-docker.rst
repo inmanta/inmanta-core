@@ -77,20 +77,24 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
                     inm_net:
                         ipv4_address: 172.30.0.2
                 volumes:
-                    - type: volume
-                      source: pgdata
-                      target: /var/lib/postgresql/data
+                    - pgdata:/var/lib/postgresql/data
             inmanta-server:
                 container_name: inmanta_orchestrator
                 image: ghcr.io/inmanta/orchestrator:latest
+                environment:
+                    INMANTA_DATABASE_HOST: 172.30.0.2
+                    INMANTA_DATABASE_USERNAME: inmanta
+                    INMANTA_DATABASE_PASSWORD: inmanta
                 ports:
                     - 8888:8888
                 networks:
                     inm_net:
                         ipv4_address: 172.30.0.3
+                volumes:
+                    - server-data:/var/lib/inmanta
+                    - server-logs:/var/logs/inmanta
                 depends_on:
                     - "postgres"
-                command: "server --wait-for-host inmanta_db --wait-for-port 5432"
 
         networks:
             inm_net:
@@ -98,8 +102,11 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
                     driver: default
                     config:
                         - subnet: 172.30.0.0/16
+
         volumes:
-            pgdata:
+            pgdata: {}
+            server-data: {}
+            server-logs: {}
 
 
 .. only:: iso
@@ -126,9 +133,17 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
             inmanta-server:
                 container_name: inmanta_orchestrator
                 image: containers.inmanta.com/containers/service-orchestrator:|version_major|
+                environment:
+                    INMANTA_DATABASE_HOST: 172.30.0.2
+                    INMANTA_DATABASE_USERNAME: inmanta
+                    INMANTA_DATABASE_PASSWORD: inmanta
+                    INMANTA_LICENSE_ENTITLEMENT_FILE: /etc/inmanta/license/com.inmanta.jwe
+                    INMANTA_LICENSE_LICENSE_KEY: /etc/inmanta/license/com.inmanta.license
                 ports:
                     - 8888:8888
                 volumes:
+                    - server-data:/var/lib/inmanta
+                    - server-logs:/var/logs/inmanta
                     - ./resources/com.inmanta.license:/etc/inmanta/license/com.inmanta.license
                     - ./resources/com.inmanta.jwe:/etc/inmanta/license/com.inmanta.jwe
                 networks:
@@ -136,15 +151,18 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
                         ipv4_address: 172.30.0.3
                 depends_on:
                     - "postgres"
-                command: "server --wait-for-host inmanta_db --wait-for-port 5432"
+
         networks:
             inm_net:
                 ipam:
                     driver: default
                     config:
                         - subnet: 172.30.0.0/16
+
         volumes:
-            pgdata:
+            pgdata: {}
+            server-data: {}
+            server-logs: {}
 
     You can paste this script in a file named `docker-compose.yml` and ensure you have you license files available.
     With the proposed config, they should be located in a ``resources/`` folder on the side of the docker-compose file you create,
@@ -160,11 +178,8 @@ You should be able to reach the orchestrator to this address: `http://172.30.0.3
 
 The PostgreSQL server started by the above-mentioned docker-compose file has a named volume ``pgdata`` attached. This
 means that no data will be lost when the PostgreSQL container restarts. Pass the ``-v`` option to the
-``docker-compose down`` to remove the volume.
+``docker-compose down`` to remove the volume.  The same applies to the data and logs folders of the orchestrator container.
 
-The default server config included in the container images assumes that the orchestrator can reach a database server
-with hostname ``inmanta_db`` and that it can authenticate to it using the username ``inmanta``
-and password ``inmanta``.
 When using a different setup than the one mentioned above, you should overwrite the server config with one
 matching your needs.  You can find more instructions for overwriting the config in a following section,
 :ref:`here<docker_overwrite_server_conf>`.
@@ -181,67 +196,118 @@ Overwrite default server configuration
 ######################################
 
 By default the server will use the file located in the image at ``/etc/inmanta/inmanta.cfg``.
-If you want to change it, you can copy this file, edit it, then mount it in the container,
-where the original file was located.
+If you want to overwrite any configuration value provided in there, the recommended way is to simply
+set the environment variable corresponding to the configuration option on the container itself, as it
+is done for the database host in the example above.
 
-If you use docker-compose, you can simply update this section of the example above:
+Access the orchestrator file system
+###################################
 
+The orchestrator container is only meant to run the inmanta server and its own components (compiler, scheduler, agents, ...).  
+For previous versions of the container image, it was possible to also run an ssh server in the image, this is not supported anymore.
+To access the file system of the orchestrator, you can either use `docker exec` or ssh in another container which shares the relevant
+volumes with the orchestrator.
 
-.. only:: iso
+1. Using `docker exec`.
 
-    .. code-block:: yaml
-        :substitutions:
+This is the simple solution, if the process that needs access to the orchestrator file system has enough permissions to interact with the docker daemon.
+In this scenario, simply use `docker exec` to open a shell inside the container.
 
-        inmanta-server:
-            container_name: inmanta_orchestrator
-            image: containers.inmanta.com/containers/service-orchestrator:|version_major|
-            ports:
-                - 8888:8888
-            volumes:
-                - ./resources/com.inmanta.license:/etc/inmanta/license/com.inmanta.license
-                - ./resources/com.inmanta.jwe:/etc/inmanta/license/com.inmanta.jwe
-                - ./resources/my-server-conf.cfg:/etc/inmanta/inmanta.cfg
+.. code-block:: sh
+
+    # This command should be executed on the host where the orchestrator container is running
+    docker exec -ti inmanta_orchestrator bash
+
+If you didn't use the same docker compose file as shown above, you might have to adapt the name of the container from `inmanta_orchestrator` to the one that matches the orchestrator.
+
+2. Using an ssh sidecar.
+
+This solution is more advanced and only makes sense when the process that needs access to the orchestrator file system should not have any elevated privileges on the host where the orchestrator container is running.  
+You can deploy a second container which shares the volumes of the orchestrator so that you can read and modify the files located in them.  To do this, we recommend to simply run another container which uses as base
+image the orchestrator image, installs sshd in there, and replaces the entrypoint by the ssh daemon.  If you are using the docker-compose setup shown above, you can simply extend it like this:
 
 .. only:: oss
 
     .. code-block:: yaml
 
-        inmanta-server:
-            container_name: inmanta_orchestrator
-            image: ghcr.io/inmanta/orchestrator:latest
-            ports:
-                - 8888:8888
-            volumes:
-                - ./resources/my-server-conf.cfg:/etc/inmanta/inmanta.cfg
+        version: '3'
+        services:
+            postgres:
+                container_name: inmanta_db
+                image: postgres:13
+                environment:
+                    POSTGRES_USER: inmanta
+                    POSTGRES_PASSWORD: inmanta
+                    PGDATA: /var/lib/postgresql/data/pgdata
+                networks:
+                    inm_net:
+                        ipv4_address: 172.30.0.2
+                volumes:
+                    - pgdata:/var/lib/postgresql/data
+            inmanta-server:
+                container_name: inmanta_orchestrator
+                image: ghcr.io/inmanta/orchestrator:latest
+                environment:
+                    INMANTA_DATABASE_HOST: 172.30.0.2
+                    INMANTA_DATABASE_USERNAME: inmanta
+                    INMANTA_DATABASE_PASSWORD: inmanta
+                ports:
+                    - 8888:8888
+                networks:
+                    inm_net:
+                        ipv4_address: 172.30.0.3
+                volumes:
+                    - server-data:/var/lib/inmanta
+                    - server-logs:/var/logs/inmanta
+                depends_on:
+                    - "postgres"
+            ssh-sidecar:
+                container_name: inmanta_orchestrator
+                image: orchestrator-ssh-sidecar:|version_major|
+                build:
+                    context: .
+                    dockerfile_inline: |
+                        FROM ghcr.io/inmanta/orchestrator:latest
+                        USER root:root
+                        RUN apt-get install -y openssh-server && ssh-keygen -A
+                        EXPOSE 22
+                        ENTRYPOINT ["/usr/sbin/sshd"]
+                        CMD ["-D"]
+                ports:
+                    - 2222:22
+                networks:
+                    inm_net:
+                        ipv4_address: 172.30.0.4
+                volumes:
+                    - server-data:/var/lib/inmanta
+                    - server-logs:/var/logs/inmanta
+                    - ./resources/id_rsa.pub:/var/lib/inmanta/.ssh/authorized_keys
+
+        networks:
+            inm_net:
+                ipam:
+                    driver: default
+                    config:
+                        - subnet: 172.30.0.0/16
+
+        volumes:
+            pgdata: {}
+            server-data: {}
+            server-logs: {}
 
 
-Starting the ssh server
-#######################
+.. only:: iso
 
-By default, no ssh server is running in the container.  You don't need it to have a functional
-orchestrator.
-If you want to enable ssh anyway, for easy access to the orchestrator,
-you can overwrite the startup command of the container with the following:
+    .. code-block:: yaml
+       :substitutions:
 
-.. code-block:: sh
-
-    server-with-ssh
-
-
-If you use docker-compose, it should look like:
-
-.. code-block:: yaml
-
-    inmanta-server:
-        container_name: inmanta_orchestrator
-        ...
-        command: "server-with-ssh"
 
 .. warning::
-    By default, the inmanta user doesn't have any password, if you want to ssh into the container,
-    you also need to set the authorized_keys file for the inmanta user.  You can do so by mounting
-    your public key to the following path in the container: ``/var/lib/inmanta/.ssh/authorized_keys``.
-    When starting, the container will make sure that the file has the correct ownership and permissions.
+    This solution also has some limitations.  As the ssh daemon runs in another container, it doesn't share the same file system and namespaces.  Which means that the following actions will not be possible:
+    - Check the processes running in the orchestrator container.
+    - Modify the filesystem of the orchestrator outside of the shared volumes (`/var/logs/inmanta` and `/var/lib/inmanta`)
+    - Reach the orchestrator api on localhost.
+    - Check the environment variables that the orchestrator container has access to.
 
 
 Waiting for the database
