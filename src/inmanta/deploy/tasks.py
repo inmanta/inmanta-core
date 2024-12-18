@@ -201,7 +201,7 @@ class Deploy(Task):
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
                     # Not attached to ctx, needs to be flushed to logger explicitly
-                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, True)
+                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
 
             finally:
