@@ -1,0 +1,8 @@
+description: Add support for per-component log file
+issue-nr: 8306
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"
+
+
