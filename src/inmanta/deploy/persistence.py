@@ -22,7 +22,6 @@ import logging
 import uuid
 from collections.abc import Set
 from typing import Any, Optional
-from typing import Any
 from uuid import UUID
 
 from asyncpg import Connection, UniqueViolationError
@@ -30,9 +29,9 @@ from asyncpg import Connection, UniqueViolationError
 from inmanta import const, data
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
+from inmanta.data import LogLine
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.deploy import state
-from inmanta.data import LogLine
 from inmanta.protocol import Client
 from inmanta.resources import Id
 from inmanta.server.services import resourceservice
