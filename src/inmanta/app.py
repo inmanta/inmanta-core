@@ -851,12 +851,11 @@ def cmd_parser() -> argparse.ArgumentParser:
 def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
-    server = subparser.add_parser(
+    subparser.add_parser(
         "server",
         help="Output default log file for the server, given the current configuration file and options",
         parents=parent_parsers,
     )
-    server.set_defaults(component="server")
     subparser.add_parser(
         "scheduler",
         help="Output default log file template for the scheduler, "

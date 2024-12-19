@@ -24,9 +24,8 @@ import uuid
 from collections import abc
 from collections.abc import Sequence
 from enum import Enum, StrEnum
-from typing import ClassVar, Mapping, NewType, Optional, Self, Union
+from typing import ClassVar, Mapping, Optional, Self, Union
 
-import pydantic
 import pydantic.schema
 from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
 
@@ -35,7 +34,9 @@ import inmanta.ast.export as ast_export
 import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
-from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
+from inmanta.types import ArgumentTypes, JsonType, ResourceIdStr, ResourceType, ResourceVersionIdStr, SimpleTypes
+
+# Keep ResourceIdStr, ResourceType, ResourceVersionIdStr in place for backwards compat with <=ISO8
 
 
 def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
@@ -200,22 +201,6 @@ class CompileRunReport(BaseModel):
 class CompileDetails(CompileReport):
     compile_data: Optional[CompileData] = None
     reports: Optional[list[CompileRunReport]] = None
-
-
-ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API
-"""
-    The resource id with the version included.
-"""
-
-ResourceIdStr = NewType("ResourceIdStr", str)  # Part of the stable API
-"""
-    The resource id without the version
-"""
-
-ResourceType = NewType("ResourceType", str)
-"""
-    The type of the resource
-"""
 
 
 class AttributeStateChange(BaseModel):

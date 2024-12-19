@@ -98,7 +98,6 @@ from inmanta.agent import executor, resourcepool
 from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
-from inmanta.data.model import ResourceIdStr, ResourceType
 from inmanta.protocol.ipc_light import (
     FinalizingIPCClient,
     IPCMethod,
@@ -108,6 +107,7 @@ from inmanta.protocol.ipc_light import (
     LogShipper,
     ReturnType,
 )
+from inmanta.types import ResourceIdStr, ResourceType
 from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(LOGGER_NAME_EXECUTOR)

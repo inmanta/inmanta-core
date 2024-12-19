@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import inmanta.types
 from utils import get_resource
 
 """
@@ -33,7 +34,6 @@ import asyncpg
 import pytest
 
 from inmanta import const, data
-from inmanta.data import model
 
 
 def slowdown_queries(
@@ -101,7 +101,7 @@ async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environm
     )
     await confmodel.insert()
 
-    resource = model.ResourceVersionIdStr(f"mymod::myresource[myagent,id=1],v={version}")
+    resource = inmanta.types.ResourceVersionIdStr(f"mymod::myresource[myagent,id=1],v={version}")
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.available,
