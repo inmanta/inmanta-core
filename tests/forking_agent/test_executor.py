@@ -209,7 +209,7 @@ def test():
         await retry_limited(oldest_gone, 1)
         log_contains(
             caplog,
-            "inmanta.agent.forking_executor",
+            "inmanta.executor",
             logging.DEBUG,
             ("Reached executor cap for agent agent2. Stopping oldest executor "),
         )

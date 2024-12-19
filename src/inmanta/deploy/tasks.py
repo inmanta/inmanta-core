@@ -174,6 +174,8 @@ class Deploy(Task):
                         error=str(e),
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
+                    # Not attached to ctx, needs to be flushed to logger explicitly
+                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
                     return
 
@@ -198,7 +200,10 @@ class Deploy(Task):
                         error=str(e),
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
+                    # Not attached to ctx, needs to be flushed to logger explicitly
+                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
+
             finally:
                 if deploy_result is not None:
                     # We signaled start, so we signal end

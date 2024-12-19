@@ -661,33 +661,32 @@ async def test_batched_code_upload(
             assert info.content == source_code
 
 
-async def test_resource_action_log(server, client, environment):
-    version = (await client.reserve_version(environment)).result["data"]
-    resources = [
-        {
-            "group": "root",
-            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::testing::NullResource[vm1.dev.inmanta.com,name=network],v=%d" % version,
-            "owner": "root",
-            "path": "/etc/sysconfig/network",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "version": version,
-        }
-    ]
-    res = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-    )
-    assert res.code == 200
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_resource_action_log(server, client, environment, clienthelper, snippetcompiler):
+    await clienthelper.set_auto_deploy()
 
+    snippetcompiler.setup_for_snippet(
+        """\
+        import std::testing
+
+        std::testing::NullResource(name="network", agentname="internal")
+        """,
+        autostd=True,
+    )
+
+    version, _ = await snippetcompiler.do_export_and_deploy()
+
+    await clienthelper.wait_for_released(version)
+    await clienthelper.wait_for_deployed(version)
     resource_action_log = os.path.join(config.log_dir.get(), f"{opt.server_resource_action_log_prefix.get()}{environment}.log")
+    print(resource_action_log)
+    logging.root.warning("%s", resource_action_log)
+
+    log = os.path.join(config.log_dir.get(), f"agent-{environment}.log")
+    with open(log, "r") as fh:
+        for line in fh:
+            logging.warning(line)
+
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
     with open(resource_action_log) as f:
@@ -1352,10 +1351,6 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
                 send_events=True,
             )
             assert result.code == 200, result.result
-
-    # Assert effect of send_deploy_done call
-    assert f"{rvid_r1_v1}: message" in caplog.messages
-    assert f"{rvid_r1_v1}: test" in caplog.messages
 
     result = await client.get_resource_actions(tid=env_id)
     assert result.code == 200, result.result

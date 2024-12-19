@@ -26,7 +26,7 @@ import typing
 import uuid
 from collections.abc import Awaitable, Callable, Set
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Any, Coroutine, Mapping, Optional, Sequence, Tuple
 from uuid import UUID
 
@@ -35,7 +35,7 @@ import pytest
 from asyncpg import Connection
 
 import utils
-from inmanta import const, data, util
+from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
@@ -314,6 +314,10 @@ class DummyStateManager(StateUpdateManager):
     ) -> None:
         pass
 
+    @asynccontextmanager
+    async def get_connection(self, connection: Optional[Connection] = None) -> AbstractAsyncContextManager[Connection]:
+        yield DummyDatabaseConnection()
+
 
 def state_manager_check(agent: "TestAgent"):
     agent.scheduler._state_update_delegate.check_with_scheduler(agent.scheduler)
@@ -421,18 +425,6 @@ async def agent(environment, config, monkeypatch):
     """
     out = TestAgent(environment)
     await out.start_working()
-
-    def _initialize_mock() -> None:
-        pass
-
-    monkeypatch.setattr(ResourceScheduler, "_initialize", _initialize_mock)
-
-    @asynccontextmanager
-    async def get_connection_mock(connection: Optional[asyncpg.connection.Connection] = None):
-        yield DummyDatabaseConnection()
-
-    monkeypatch.setattr(data.BaseDocument, "get_connection", get_connection_mock)
-
     yield out
     await out.stop_working()
 
@@ -2269,6 +2261,72 @@ async def test_state_of_skipped_resources_for_dependencies(agent: TestAgent, mak
         deployment_result=state.DeploymentResult.SKIPPED,
         blocked=state.BlockedStatus.TRANSIENT,
     )
+
+
+class BrokenDummyManager(executor.ExecutorManager[executor.Executor]):
+    """
+    A broken dummy ExecutorManager that fails on get_executor to test failure paths
+    """
+
+    async def get_executor(
+        self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
+    ) -> DummyExecutor:
+        raise Exception()
+
+    async def stop_for_agent(self, agent_name: str) -> list[DummyExecutor]:
+        pass
+
+    async def start(self) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
+
+    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
+        pass
+
+
+class BadTestAgent(Agent):
+    """
+    An agent (scheduler) that uses the broken dummy manager:
+    """
+
+    def __init__(
+        self,
+        environment: Optional[uuid.UUID] = None,
+    ):
+        super().__init__(environment)
+        self.executor_manager = BrokenDummyManager()
+        self.scheduler = TestScheduler(self.scheduler.environment, self.executor_manager, self.scheduler.client)
+
+
+@pytest.fixture
+async def bad_agent(environment, config):
+    """
+    Provide a new agent, with a scheduler that uses the broken dummy executor
+
+    Allows testing without server, or executor
+    """
+    out = BadTestAgent(environment)
+    await out.start_working()
+    yield out
+    await out.stop_working()
+
+
+async def test_broken_executor_deploy(bad_agent: TestAgent, make_resource_minimal):
+    """
+    Ensure the simple deploy scenario works: 2 dependant resources
+    """
+
+    rid1 = "test::Resource[agent1,name=1]"
+    rid2 = "test::Resource[agent1,name=2]"
+    resources = {
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, values={"value": "a"}, requires=[rid1]),
+    }
+
+    await bad_agent.scheduler._new_version(1, resources, make_requires(resources))
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=bad_agent.scheduler, agent_name="agent1")
 
 
 async def test_deploy_blocked_state(agent: TestAgent, make_resource_minimal) -> None:
