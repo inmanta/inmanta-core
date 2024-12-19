@@ -27,7 +27,6 @@ from uuid import UUID, uuid4
 
 import pytest
 
-import inmanta.types
 from inmanta import const, data, util
 from inmanta.agent.executor import DeployResult
 from inmanta.const import Change, ResourceAction, ResourceState
@@ -422,7 +421,7 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
     result = await client.release_version(environment, version, False)
     assert result.code == 200
 
-    async def deploy(rvid: inmanta.types.ResourceVersionIdStr, change: Change = Change.nochange):
+    async def deploy(rvid: ResourceVersionIdStr, change: Change = Change.nochange):
         update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
         action_id = uuid.uuid4()
         await update_manager.send_in_progress(action_id, Id.parse_id(rvid))
