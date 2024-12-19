@@ -124,9 +124,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     agent=resource_id.agent_name,
                 )
                 # Not in Handler context, need to flush explicitly
-                log_line.write_to_logger_for_resource(
-                    resource_id.agent_name, resource_id.resource_version_str(), False
-                )
+                log_line.write_to_logger_for_resource(resource_id.agent_name, resource_id.resource_version_str(), False)
 
                 resource_action = data.ResourceAction(
                     environment=self.environment,
