@@ -21,6 +21,7 @@ import datetime
 import logging
 import uuid
 from collections.abc import Set
+from contextlib import AbstractAsyncContextManager
 from typing import Any, Optional
 from uuid import UUID
 
@@ -44,6 +45,10 @@ class StateUpdateManager(abc.ABC):
 
     This interface is split off from the taskmanager, to make mocking it easier
     """
+
+    @abc.abstractmethod
+    def get_connection(self, connection: Optional[Connection] = None) -> AbstractAsyncContextManager[Connection]:
+        pass
 
     @abc.abstractmethod
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
@@ -100,6 +105,9 @@ class ToDbUpdateManager(StateUpdateManager):
         self.environment = environment
         # TODO: The client is only here temporarily while we fix the dryrun_update
         self.client = client
+
+    def get_connection(self, connection: Optional[Connection] = None) -> AbstractAsyncContextManager[Connection]:
+        return data.Scheduler.get_connection()
 
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         """

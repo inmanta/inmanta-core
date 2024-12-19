@@ -26,7 +26,7 @@ import typing
 import uuid
 from collections.abc import Awaitable, Callable, Set
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Any, Coroutine, Mapping, Optional, Sequence, Tuple
 from uuid import UUID
 
@@ -35,7 +35,7 @@ import pytest
 from asyncpg import Connection
 
 import utils
-from inmanta import const, data, util
+from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
@@ -314,6 +314,10 @@ class DummyStateManager(StateUpdateManager):
     ) -> None:
         pass
 
+    @asynccontextmanager
+    async def get_connection(self, connection: Optional[Connection] = None) -> AbstractAsyncContextManager[Connection]:
+        yield DummyDatabaseConnection()
+
 
 def state_manager_check(agent: "TestAgent"):
     agent.scheduler._state_update_delegate.check_with_scheduler(agent.scheduler)
@@ -421,18 +425,6 @@ async def agent(environment, config, monkeypatch):
     """
     out = TestAgent(environment)
     await out.start_working()
-
-    def _initialize_mock() -> None:
-        pass
-
-    monkeypatch.setattr(ResourceScheduler, "_initialize", _initialize_mock)
-
-    @asynccontextmanager
-    async def get_connection_mock(connection: Optional[asyncpg.connection.Connection] = None):
-        yield DummyDatabaseConnection()
-
-    monkeypatch.setattr(data.BaseDocument, "get_connection", get_connection_mock)
-
     yield out
     await out.stop_working()
 
