@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from typing import TextIO, Mapping
 
 from inmanta.logging import LoggingConfigBuilderExtension, Options, FullLoggingConfig
@@ -31,10 +32,10 @@ class Extender(LoggingConfigBuilderExtension):
         options: Options,
         component: str | None,
         context: Mapping[str, str],
-        master_config: FullLoggingConfig
+        master_config: FullLoggingConfig,
     ) -> FullLoggingConfig:
         master_config.formatters["test_formatter"] = {
-            "format": 'TEST TEST TEST %(asctime)s %(levelname)-8s %(name)-10s %(message)s'
+            "format": "TEST TEST TEST %(asctime)s %(levelname)-8s %(name)-10s %(message)s"
         }
         master_config.handlers["test_handler"] = {
             "class": "logging.StreamHandler",
@@ -45,8 +46,6 @@ class Extender(LoggingConfigBuilderExtension):
         master_config.root_handlers.append("test_handler")
 
         return master_config
-
-
 
 
 def setup(application: ApplicationContext) -> None:

@@ -100,11 +100,7 @@ def start_server(options: argparse.Namespace) -> None:
     util.ensure_event_loop()
 
     ibl = InmantaBootloader()
-
-    # load slices for log config
-    ctx = ibl.load_slices()
-    log_config_extenders = ctx.get_default_log_config_extenders()
-    InmantaLoggerConfig.get_instance().extend_config(options, "server", {}, log_config_extenders)
+    ibl.start_loggers_for_extensions()
 
     setup_signal_handlers(ibl.stop)
 
@@ -911,10 +907,7 @@ def default_logging_config(options: argparse.Namespace) -> None:
         # Upgrade with extensions
         ibl = InmantaBootloader()
         # load slices for log config
-        ctx = ibl.load_slices()
-        log_config_extenders = ctx.get_default_log_config_extenders()
-        for extender in log_config_extenders:
-            logging_config = extender.get_logging_config_from_options(sys.stdout, options, component, context, logging_config)
+        ibl.start_loggers_for_extensions()
 
     print(options.component)
 

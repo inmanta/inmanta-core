@@ -29,6 +29,7 @@ import asyncpg
 
 from inmanta import logging as inmanta_logging
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
+from inmanta.logging import InmantaLoggerConfig
 from inmanta.server import config
 from inmanta.server.extensions import ApplicationContext, FeatureManager, InvalidSliceNameException
 from inmanta.server.protocol import Server, ServerSlice
@@ -110,6 +111,11 @@ class InmantaBootloader:
             ctx.get_feature_manager().add_slice(mypart)
         await self.restserver.start()
         self.started = True
+
+    def start_loggers_for_extensions(self) -> None:
+        ctx = self.load_slices()
+        log_config_extenders = ctx.get_default_log_config_extenders()
+        InmantaLoggerConfig.get_current_instance().extend_config(log_config_extenders)
 
     async def stop(self, timeout: Optional[int] = None) -> None:
         """

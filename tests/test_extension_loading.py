@@ -29,8 +29,8 @@ from typing import Any
 import pytest
 import yaml
 
-import inmanta.server
 import inmanta.logging
+import inmanta.server
 import inmanta_ext
 from inmanta.config import feature_file_config
 from inmanta.logging import Options
@@ -282,15 +282,11 @@ async def test_register_setting() -> None:
     io = StringIO()
     log_instance = inmanta.logging.InmantaLoggerConfig.get_instance(stream=io)
     options = Options(verbose=3)
-    log_instance._apply_logging_config_from_options(options, "server", {})
+    log_instance.apply_options(options, "server", {})
 
     config.server_enabled_extensions.set("testlogextender")
     with splice_extension_in("test_module_path"):
         ibl = InmantaBootloader()
-        ctx = ibl.load_slices()
-        log_config_extenders = ctx.get_default_log_config_extenders()
-        assert log_config_extenders
-        log_instance.extend_config(options, "server", {}, log_config_extenders)
+        ibl.start_loggers_for_extensions()
         logging.info("This is a log line")
     assert "TEST TEST TEST" in io.getvalue()
-    assert False
