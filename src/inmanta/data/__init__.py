@@ -50,7 +50,14 @@ import inmanta.protocol
 import inmanta.types
 from crontab import CronTab
 from inmanta import const, resources, util
-from inmanta.const import DATETIME_MIN_UTC, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
+from inmanta.const import (
+    DATETIME_MIN_UTC,
+    NAME_RESOURCE_ACTION_LOGGER,
+    UNDEPLOYABLE_NAMES,
+    AgentStatus,
+    LogLevel,
+    ResourceState,
+)
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import (
@@ -3927,6 +3934,13 @@ class LogLine(DataDocument):
 
     def write_to_logger(self, logger: logging.Logger) -> None:
         logger.log(self.log_level.to_int, self.msg, *self.args)
+
+    def write_to_logger_for_resource(
+        self, agent: str, resource_version_string: ResourceVersionIdStr, exc_info: bool = False
+    ) -> None:
+        logging.getLogger(NAME_RESOURCE_ACTION_LOGGER).getChild(agent).log(
+            self.log_level.to_int, "resource %s: %s", resource_version_string, self._data["msg"], exc_info=exc_info
+        )
 
     @classmethod
     def log(
