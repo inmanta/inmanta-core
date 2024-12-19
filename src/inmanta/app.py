@@ -100,7 +100,6 @@ def start_server(options: argparse.Namespace) -> None:
     util.ensure_event_loop()
 
     ibl = InmantaBootloader()
-    ibl.start_loggers_for_extensions()
 
     setup_signal_handlers(ibl.stop)
 

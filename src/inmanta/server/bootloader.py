@@ -98,6 +98,7 @@ class InmantaBootloader:
             inmanta_logger_config.apply_options(inmanta_logging.Options())
 
     async def start(self) -> None:
+        self.start_loggers_for_extensions()
         db_wait_time: int = config.db_wait_time.get()
         if db_wait_time != 0:
             # Wait for the database to be up before starting the server
