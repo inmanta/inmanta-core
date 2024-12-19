@@ -251,21 +251,39 @@ class DryRun(Task):
             )
         except Exception:
             logger_for_agent(agent).error(
-                "Skipping dryrun for resource %s because it is in undeployable state",
+                "Skipping dryrun for resource %s because due to an error in generating the appropriate executor",
                 executor_resource_details.rvid,
                 exc_info=True,
             )
             dryrun_result = executor.DryrunResult(
                 rvid=executor_resource_details.rvid,
                 dryrun_id=self.dry_run_id,
-                changes={"handler": AttributeStateChange(current="FAILED", desired="Resource is in an undeployable state")},
+                changes={
+                    "handler": AttributeStateChange(
+                        current="FAILED", desired="Unable to generate an appropriate executor for this resource"
+                    )
+                },
                 started=started,
                 finished=datetime.datetime.now().astimezone(),
                 messages=[],
             )
         else:
-            dryrun_result = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
-
+            try:
+                dryrun_result = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
+            except Exception:
+                logger_for_agent(agent).error(
+                    "Skipping dryrun for resource %s because it is in undeployable state",
+                    executor_resource_details.rvid,
+                    exc_info=True,
+                )
+                dryrun_result = executor.DryrunResult(
+                    rvid=executor_resource_details.rvid,
+                    dryrun_id=self.dry_run_id,
+                    changes={"handler": AttributeStateChange(current="FAILED", desired="Resource is in an undeployable state")},
+                    started=started,
+                    finished=datetime.datetime.now().astimezone(),
+                    messages=[],
+                )
         await task_manager.dryrun_update(env=task_manager.environment, dryrun_result=dryrun_result)
 
 
