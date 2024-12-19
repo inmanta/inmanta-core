@@ -1,0 +1,4 @@
+description: Add the ability for extensions to add log config.
+issue-nr: 8492
+change-type: minor
+destination-branches: [master]

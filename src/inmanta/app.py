@@ -100,6 +100,8 @@ def start_server(options: argparse.Namespace) -> None:
     util.ensure_event_loop()
 
     ibl = InmantaBootloader()
+    ibl.start_loggers_for_extensions()
+
     setup_signal_handlers(ibl.stop)
 
     ioloop = IOLoop.current()
@@ -899,6 +901,11 @@ def default_logging_config(options: argparse.Namespace) -> None:
     logging_config: FullLoggingConfig = config_builder.get_logging_config_from_options(
         sys.stdout, options, options.cmd, context
     )
+
+    if options.cmd == "server":
+        # Upgrade with extensions
+        ibl = InmantaBootloader()
+        logging_config = ibl.start_loggers_for_extensions()
 
     raw_dump = logging_config.to_string()
 
