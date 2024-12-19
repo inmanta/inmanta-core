@@ -24,6 +24,7 @@ from typing import Any, Generic, Optional, TypeVar
 
 import yaml
 
+import inmanta.logging
 from inmanta import data
 from inmanta.config import feature_file_config
 from inmanta.data.model import ExtensionStatus
@@ -192,6 +193,7 @@ class ApplicationContext:
     def __init__(self) -> None:
         self._slices: list[ServerSlice] = []
         self._feature_manager: Optional[FeatureManager] = None
+        self._log_config_extenders: list[inmanta.logging.LoggingConfigBuilderExtension] = []
 
     def register_slice(self, slice: ServerSlice) -> None:
         assert slice is not None
@@ -226,3 +228,9 @@ class ApplicationContext:
         Returns the list of all available environment settings
         """
         return sorted(data.Environment._settings.values(), key=lambda x: x.name)
+
+    def get_default_log_config_extenders(self) -> list[inmanta.logging.LoggingConfigBuilderExtension]:
+        return self._log_config_extenders
+
+    def register_default_logging_config(self, log_config_extender: inmanta.logging.LoggingConfigBuilderExtension) -> None:
+        self._log_config_extenders.append(log_config_extender)
