@@ -251,7 +251,7 @@ class DryRun(Task):
             )
         except Exception:
             logger_for_agent(agent).error(
-                "Skipping dryrun for resource %s because due to an error in generating the appropriate executor",
+                "Skipping dryrun for resource %s because due to an error in constructing the executor",
                 executor_resource_details.rvid,
                 exc_info=True,
             )
@@ -260,7 +260,7 @@ class DryRun(Task):
                 dryrun_id=self.dry_run_id,
                 changes={
                     "handler": AttributeStateChange(
-                        current="FAILED", desired="Unable to generate an appropriate executor for this resource"
+                        current="FAILED", desired="Unable to construct an executor for this resource"
                     )
                 },
                 started=started,
