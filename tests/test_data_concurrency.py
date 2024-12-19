@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import inmanta.types
 from utils import get_resource
 
 """
@@ -101,7 +102,7 @@ async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environm
     )
     await confmodel.insert()
 
-    resource = model.ResourceVersionIdStr(f"mymod::myresource[myagent,id=1],v={version}")
+    resource = inmanta.types.ResourceVersionIdStr(f"mymod::myresource[myagent,id=1],v={version}")
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.available,

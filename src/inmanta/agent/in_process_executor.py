@@ -31,9 +31,10 @@ from inmanta.agent import executor, handler
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import ParameterSource
-from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import AttributeStateChange
 from inmanta.loader import CodeLoader
 from inmanta.resources import Resource
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import NamedLock, join_threadpools
 
 

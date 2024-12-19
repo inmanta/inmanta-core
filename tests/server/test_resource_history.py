@@ -29,8 +29,8 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
 from inmanta.const import ResourceState
-from inmanta.data.model import ResourceVersionIdStr
 from inmanta.server import config
+from inmanta.types import ResourceVersionIdStr
 from inmanta.util import parse_timestamp
 
 

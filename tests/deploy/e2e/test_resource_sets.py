@@ -26,7 +26,8 @@ from inmanta import const, data, util
 from inmanta.agent import executor
 from inmanta.deploy import persistence, state
 from inmanta.protocol.common import Result
-from inmanta.resources import Id, ResourceIdStr, ResourceVersionIdStr
+from inmanta.resources import Id
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
 
 

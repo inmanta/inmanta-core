@@ -23,6 +23,7 @@ from collections import abc
 import asyncpg
 import pytest
 
+import inmanta.types
 from inmanta import resources
 from inmanta.data import Environment, ResourcePersistentState, Scheduler
 from inmanta.deploy import state
@@ -51,7 +52,7 @@ async def test_add_new_resource_status_column(
     resource_persistent_state = await ResourcePersistentState.get_list(environment=env.id)
     resource_state_by_resource_id = {record.resource_id: record for record in resource_persistent_state}
     assert_resource_persistent_state(
-        resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key1]")],
+        resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key1]")],
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeploymentResult.DEPLOYED,
@@ -59,7 +60,7 @@ async def test_add_new_resource_status_column(
         expected_compliance_status=ComplianceStatus.COMPLIANT,
     )
     assert_resource_persistent_state(
-        resource_state_by_resource_id[resources.ResourceIdStr("test::Fail[agent1,key=key2]")],
+        resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Fail[agent1,key=key2]")],
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeploymentResult.FAILED,
@@ -67,7 +68,7 @@ async def test_add_new_resource_status_column(
         expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
     )
     assert_resource_persistent_state(
-        resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key3]")],
+        resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key3]")],
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeploymentResult.SKIPPED,
@@ -75,7 +76,7 @@ async def test_add_new_resource_status_column(
         expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
     )
     assert_resource_persistent_state(
-        resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key4]")],
+        resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key4]")],
         is_undefined=True,
         is_orphan=False,
         deployment_result=state.DeploymentResult.NEW,
@@ -83,7 +84,7 @@ async def test_add_new_resource_status_column(
         expected_compliance_status=ComplianceStatus.UNDEFINED,
     )
     assert_resource_persistent_state(
-        resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key5]")],
+        resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key5]")],
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeploymentResult.NEW,
@@ -91,7 +92,7 @@ async def test_add_new_resource_status_column(
         expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
     )
     assert_resource_persistent_state(
-        resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key6]")],
+        resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key6]")],
         is_undefined=False,
         is_orphan=True,
         # The deployment_result field is not accurate, because it's an orphan. Tracking this accurately
@@ -101,7 +102,7 @@ async def test_add_new_resource_status_column(
         expected_compliance_status=ComplianceStatus.ORPHAN,
     )
     assert_resource_persistent_state(
-        resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key7]")],
+        resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key7]")],
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeploymentResult.DEPLOYED,
@@ -109,7 +110,7 @@ async def test_add_new_resource_status_column(
         expected_compliance_status=ComplianceStatus.COMPLIANT,
     )
     assert_resource_persistent_state(
-        resource_state_by_resource_id[resources.ResourceIdStr("test::Resource[agent1,key=key8]")],
+        resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key8]")],
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeploymentResult.NEW,
