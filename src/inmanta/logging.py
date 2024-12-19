@@ -643,7 +643,7 @@ class InmantaLoggerConfig:
         if not self._options_applied:
             raise Exception("Extenders can only be added after loading the initial config")
         assert self._context is not None  # make mypy happy
-        assert self._loaded_config is not None # make mypy happy
+        assert self._loaded_config is not None  # make mypy happy
 
         if not extenders:
             # No extensions, easy
