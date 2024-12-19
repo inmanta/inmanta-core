@@ -38,7 +38,7 @@ class Extender(LoggingConfigBuilderExtension):
         }
         master_config.handlers["test_handler"] = {
             "class": "logging.StreamHandler",
-            "formatter": "core_console_formatter",
+            "formatter": "test_formatter",
             "level": "DEBUG",
             "stream": stream,
         }
@@ -50,4 +50,4 @@ class Extender(LoggingConfigBuilderExtension):
 
 
 def setup(application: ApplicationContext) -> None:
-    application.register_default_logging_config()
+    application.register_default_logging_config(Extender())

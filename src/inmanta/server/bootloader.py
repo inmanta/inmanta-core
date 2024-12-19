@@ -65,6 +65,9 @@ class ConstrainedApplicationContext(ApplicationContext):
     def set_feature_manager(self, feature_manager: FeatureManager) -> None:
         self.parent.set_feature_manager(feature_manager)
 
+    def register_default_logging_config(self, log_config_extender: inmanta_logging.LoggingConfigBuilderExtension) -> None:
+        self.parent.register_default_logging_config(log_config_extender)
+
 
 @stable_api
 class InmantaBootloader:
