@@ -21,7 +21,10 @@ from copy import copy
 from typing import Callable, Union
 
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
-from inmanta.ast import AttributeNotFound, NotFoundException, RuntimeException, UnknownException, UnsetException  # noqa F401
+from inmanta.ast import AttributeNotFound as AttributeNotFound
+from inmanta.ast import NotFoundException, RuntimeException
+from inmanta.ast import UnknownException as UnknownException
+from inmanta.ast import UnsetException as UnsetException  # noqa F401
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
