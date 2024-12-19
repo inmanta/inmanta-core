@@ -277,7 +277,7 @@ async def test_custom_feature_manager(
 
 async def test_register_setting() -> None:
     """
-    Test registering a new setting.
+    Test extending log config
     """
     io = StringIO()
     log_instance = inmanta.logging.InmantaLoggerConfig.get_instance(stream=io)

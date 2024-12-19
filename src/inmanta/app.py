@@ -905,8 +905,8 @@ def default_logging_config(options: argparse.Namespace) -> None:
     if options.cmd == "server":
         # Upgrade with extensions
         ibl = InmantaBootloader()
-        # load slices for log config
-        ibl.start_loggers_for_extensions()
+        logging_config = ibl.start_loggers_for_extensions()
+
 
     print(options.component)
 

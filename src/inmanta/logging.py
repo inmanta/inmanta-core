@@ -304,8 +304,6 @@ class LoggingConfigBuilderExtension(abc.ABC):
 
 class LoggingConfigBuilder:
 
-    def __init__(self, extensions: Sequence[LoggingConfigBuilderExtension] | None = None) -> None:
-        self.extensions = extensions or []
 
     def get_bootstrap_logging_config(
         self,
@@ -464,11 +462,6 @@ class LoggingConfigBuilder:
             root_handlers=[handler_root_logger],
             root_log_level=python_log_level_to_name(log_level),
         )
-
-        for extension in self.extensions:
-            full_logging_config = extension.get_logging_config_from_options(
-                stream, options, component, context, full_logging_config
-            )
 
         return full_logging_config
 
@@ -644,7 +637,7 @@ class InmantaLoggerConfig:
         self._component = component
         self._context = context
 
-    def extend_config(self, extenders: "list[LoggingConfigBuilderExtension]" = []) -> None:
+    def extend_config(self, extenders: "list[LoggingConfigBuilderExtension]" = []) -> FullLoggingConfig:
         """
         Second stage loading: add config extensions
         """
@@ -667,6 +660,7 @@ class InmantaLoggerConfig:
                 self._stream, self._options_applied, self._component, self._context, config
             )
         self._handlers = self._apply_logging_config(config)
+        return config
 
     def force_cli(self, python_log_level: int) -> None:
         """Ensure a cli logger is attached at the given level"""
