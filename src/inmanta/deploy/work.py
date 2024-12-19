@@ -24,8 +24,8 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Callable, Optional
 
-from inmanta.data.model import ResourceIdStr
 from inmanta.deploy import tasks
+from inmanta.types import ResourceIdStr
 
 """
 Type alias for the union of all task types. Allows exhaustive case matches.

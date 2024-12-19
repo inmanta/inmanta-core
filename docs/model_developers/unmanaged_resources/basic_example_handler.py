@@ -4,7 +4,7 @@ from collections import abc
 import pydantic
 
 from inmanta import resources
-from inmanta.data.model import ResourceIdStr
+from inmanta.types import ResourceIdStr
 from inmanta.agent.handler import provider, DiscoveryHandler, HandlerContext
 from inmanta.resources import resource, DiscoveryResource
 
