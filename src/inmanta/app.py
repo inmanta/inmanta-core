@@ -907,9 +907,6 @@ def default_logging_config(options: argparse.Namespace) -> None:
         ibl = InmantaBootloader()
         logging_config = ibl.start_loggers_for_extensions()
 
-
-    print(options.component)
-
     raw_dump = logging_config.to_string()
 
     # 2. if we detect the placeholder

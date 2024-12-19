@@ -29,7 +29,7 @@ import asyncpg
 
 from inmanta import logging as inmanta_logging
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
-from inmanta.logging import InmantaLoggerConfig, FullLoggingConfig
+from inmanta.logging import FullLoggingConfig, InmantaLoggerConfig
 from inmanta.server import config
 from inmanta.server.extensions import ApplicationContext, FeatureManager, InvalidSliceNameException
 from inmanta.server.protocol import Server, ServerSlice

@@ -304,7 +304,6 @@ class LoggingConfigBuilderExtension(abc.ABC):
 
 class LoggingConfigBuilder:
 
-
     def get_bootstrap_logging_config(
         self,
         stream: TextIO = sys.stdout,
@@ -644,14 +643,15 @@ class InmantaLoggerConfig:
         if not self._options_applied:
             raise Exception("Extenders can only be added after loading the initial config")
         assert self._context is not None  # make mypy happy
+        assert self._loaded_config is not None # make mypy happy
 
         if not extenders:
             # No extensions, easy
-            return
+            return self._loaded_config
         logging_config_file: Optional[str] = self._get_path_to_logging_config_file(self._options_applied, self._component)
         if logging_config_file:
             # Config file, no extenders needed
-            return
+            return self._loaded_config
 
         config = self._loaded_config
         assert config is not None  # make mypy happy
