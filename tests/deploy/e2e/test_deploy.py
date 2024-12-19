@@ -31,6 +31,7 @@ from inmanta.config import Config
 from inmanta.data import SERVER_COMPILE
 from inmanta.data.model import SchedulerStatusReport
 from inmanta.deploy.state import BlockedStatus, ComplianceStatus, DeploymentResult, ResourceState
+from inmanta.deploy.work import TaskPriority
 from inmanta.resources import Id
 from inmanta.server import SLICE_PARAM, SLICE_SERVER
 from inmanta.types import ResourceIdStr
@@ -1399,3 +1400,77 @@ async def test_skipped_for_dependency(resource_container, server, client, client
         deployment_result=DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
     )
+
+
+async def test_redeploy_after_dependency_recovered(resource_container, server, client, clienthelper, environment, agent):
+    """
+    Asserts that a transiently skipped resource recovers when its dependencies succeed
+    """
+    version = await clienthelper.get_version()
+
+    # Disable auto deploys and repairs
+    Config.set("config", "agent-repair-interval", "0")
+    Config.set("config", "agent-deploy-interval", "0")
+
+    resource_container.Provider.set_fail("agent1", "key", 1)
+
+    rid1 = "test::Resource[agent1,key=key]"
+    rid2 = "test::Resource[agent1,key=key2]"
+
+    resources = [
+        {
+            "key": "key",
+            "value": "value",
+            "id": f"{rid1},v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        },
+        {
+            "key": "key2",
+            "value": "value",
+            "id": f"{rid2},v={version}",
+            "requires": [rid1],
+            "purged": False,
+            "send_event": False,
+            "receive_events": False,
+        },
+    ]
+    await clienthelper.set_auto_deploy(True)
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+
+    await clienthelper.wait_for_deployed()
+    scheduler = agent.scheduler
+    assert scheduler._state.resource_state[rid2] == ResourceState(
+        status=ComplianceStatus.NON_COMPLIANT,
+        deployment_result=DeploymentResult.SKIPPED,
+        blocked=BlockedStatus.TRANSIENT,
+    )
+    assert scheduler._state.resource_state[rid1] == ResourceState(
+        status=ComplianceStatus.NON_COMPLIANT,
+        deployment_result=DeploymentResult.FAILED,
+        blocked=BlockedStatus.NO,
+    )
+
+    # Trigger deploy without incrementing version
+    await scheduler.deploy_resource(rid1, reason="Deploy rid1", priority=TaskPriority.USER_DEPLOY)
+
+    await clienthelper.wait_for_deployed()
+    assert scheduler._state.resource_state[rid1] == ResourceState(
+        status=ComplianceStatus.COMPLIANT,
+        deployment_result=DeploymentResult.DEPLOYED,
+        blocked=BlockedStatus.NO,
+    )
+    assert scheduler._state.resource_state[rid2] == ResourceState(
+        status=ComplianceStatus.COMPLIANT,
+        deployment_result=DeploymentResult.DEPLOYED,
+        blocked=BlockedStatus.NO,
+    )
+
+    # Assert that no new version was created
+    result = await client.list_versions(tid=environment)
+    assert result.code == 200
+    versions = result.result["versions"]
+    assert len(versions) == 1
+    assert versions[0]["version"] == version
