@@ -595,7 +595,7 @@ class InmantaLoggerConfig:
             attributes: log_file, log_file_level, verbose, timed
         :param component: The component to configure (e.g. server, scheduler, compiler).
         Used to select which config file option to use (logging.component)
-        :param context: context variables to use of the config file is a template
+        :param context: context variables to use if the config file is a template
         """
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")

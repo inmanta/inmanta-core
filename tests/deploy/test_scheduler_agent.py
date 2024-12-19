@@ -2323,7 +2323,7 @@ async def bad_agent(environment, config):
 
 async def test_broken_executor_deploy(bad_agent: TestAgent, make_resource_minimal):
     """
-    Ensure the simples deploy scenario works: 2 dependant resources
+    Ensure the simple deploy scenario works: 2 dependant resources
     """
 
     rid1 = "test::Resource[agent1,name=1]"
