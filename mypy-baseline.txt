@@ -957,8 +957,6 @@ src/inmanta/compiler/help/explainer.py:0: error: Item "None" of "RelationAttribu
 src/inmanta/agent/resourcepool.py:0: error: Missing type parameters for generic type "PoolMember"  [type-arg]
 src/inmanta/agent/resourcepool.py:0: error: Argument 1 to "append" of "list" has incompatible type "Callable[[TPoolMember], Coroutine[Any, Any, bool]]"; expected "Callable[[PoolMember[TPoolID]], Coroutine[Any, Any, Any]]"  [arg-type]
 src/inmanta/agent/resourcepool.py:0: error: Missing type parameters for generic type "PoolMember"  [type-arg]
-src/inmanta/deploy/persistence.py:0: error: Name "resource_id_parsed" is not defined  [name-defined]
-src/inmanta/deploy/persistence.py:0: error: Name "resource_id_parsed" is not defined  [name-defined]
 src/inmanta/deploy/scheduler.py:0: error: Argument 1 to "parse_id" of "Id" has incompatible type "object"; expected "ResourceVersionIdStr | ResourceIdStr"  [arg-type]
 src/inmanta/deploy/scheduler.py:0: error: Set comprehension has incompatible type Set[object]; expected Set[ResourceIdStr]  [misc]
 src/inmanta/deploy/scheduler.py:0: error: Enum index should be a string (actual index type "object")  [misc]

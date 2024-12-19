@@ -121,11 +121,11 @@ class ToDbUpdateManager(StateUpdateManager):
                 log_line = data.LogLine.log(
                     logging.INFO,
                     "Resource deploy started on agent %(agent)s, setting status to deploying",
-                    agent=resource_id_parsed.agent_name,
+                    agent=resource_id.agent_name,
                 )
                 # Not in Handler context, need to flush explicitly
                 log_line.write_to_logger_for_resource(
-                    resource_id_parsed.agent_name, resource_id_parsed.resource_version_str(), False
+                    resource_id.agent_name, resource_id.resource_version_str(), False
                 )
 
                 resource_action = data.ResourceAction(
