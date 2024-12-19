@@ -636,7 +636,7 @@ class InmantaLoggerConfig:
         self._component = component
         self._context = context
 
-    def extend_config(self, extenders: "list[LoggingConfigBuilderExtension]" = []) -> FullLoggingConfig:
+    def extend_config(self, extenders: "list[LoggingConfigBuilderExtension]") -> FullLoggingConfig:
         """
         Second stage loading: add config extensions
         """
