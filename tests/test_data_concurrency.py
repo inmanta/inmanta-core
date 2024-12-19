@@ -34,7 +34,6 @@ import asyncpg
 import pytest
 
 from inmanta import const, data
-from inmanta.data import model
 
 
 def slowdown_queries(

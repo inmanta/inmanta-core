@@ -34,8 +34,9 @@ import inmanta.ast.export as ast_export
 import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
-# Keep ResourceIdStr, ResourceType, ResourceVersionIdStr in place for backwards compat with <=ISO8
 from inmanta.types import ArgumentTypes, JsonType, ResourceIdStr, ResourceType, ResourceVersionIdStr, SimpleTypes
+
+# Keep ResourceIdStr, ResourceType, ResourceVersionIdStr in place for backwards compat with <=ISO8
 
 
 def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:

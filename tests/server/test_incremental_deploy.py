@@ -31,7 +31,6 @@ import inmanta.types
 from inmanta import const, data, util
 from inmanta.agent.executor import DeployResult
 from inmanta.const import Change, ResourceAction, ResourceState
-from inmanta.data import model
 from inmanta.data.model import ResourceId
 from inmanta.deploy import persistence, state
 from inmanta.resources import Id

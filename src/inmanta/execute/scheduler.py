@@ -25,14 +25,22 @@ from collections.abc import Iterable, Iterator, Sequence
 from typing import TYPE_CHECKING, Any, Deque, Optional
 
 from inmanta import plugins
-from inmanta.ast import Anchor, AnchorTarget, CompilerException, CycleException, Location, MultiException, RuntimeException
+from inmanta.ast import (
+    Anchor,
+    AnchorTarget,
+    CompilerException,
+    CycleException,
+    Location,
+    MultiException,
+    RuntimeException,
+    UnsetException,
+)
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity, Implementation
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineRelation, DefineTypeConstraint
 from inmanta.ast.type import TYPES, Type
 from inmanta.const import LOG_LEVEL_TRACE
-from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import (
     DelayedResultVariable,
     ExecutionContext,

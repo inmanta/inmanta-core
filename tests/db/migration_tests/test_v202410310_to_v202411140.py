@@ -24,7 +24,6 @@ import asyncpg
 import pytest
 
 import inmanta.types
-from inmanta import resources
 from inmanta.data import Environment, ResourcePersistentState, Scheduler
 from inmanta.deploy import state
 from inmanta.deploy.state import ComplianceStatus
