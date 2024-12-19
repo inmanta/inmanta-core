@@ -11,7 +11,7 @@ time-machine==2.16.0
 
 # documentation
 furo==2024.8.6
-inmanta-sphinx==2.2.0
+inmanta-sphinx==2.3.0
 myst-parser==4.0.0
 sphinx==8.1.3
 sphinxcontrib-contentui==0.2.5
