@@ -1618,7 +1618,7 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
         assert sorted(agents_after_purge) == sorted(expected_agents_after_purge)
 
 
-async def test_serialization_attributes_of_resource_to_api(client, server, environment, clienthelper, agent) -> None:
+async def test_serialization_attributes_of_resource_to_api(client, server, environment, clienthelper, null_agent) -> None:
     """
     Due to a bug, the version of a resource was always included in the attribute dictionary.
     This issue has been patched in the database, but at the API boundary we still serve the version
