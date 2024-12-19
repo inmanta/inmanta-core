@@ -22,11 +22,11 @@ from collections import abc
 from typing import Optional
 
 import utils
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.agent import executor
-from inmanta.deploy import persistence
+from inmanta.deploy import persistence, state
 from inmanta.protocol.common import Result
-from inmanta.resources import ResourceIdStr, ResourceVersionIdStr
+from inmanta.resources import Id, ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
 
 
@@ -1216,10 +1216,13 @@ async def test_put_partial_removed_rs_in_rs(server, client, environment, clienth
     }
 
 
-async def test_put_partial_with_resource_state_set(server, client, environment, clienthelper, agent) -> None:
+async def test_put_partial_with_resource_state_set(server, client, environment, clienthelper) -> None:
     """
     Test whether the put_partial() endpoint correctly merges the resource states of two resource sets.
     """
+    result = await client.halt_environment(environment)
+    assert result.code == 200
+
     env_id = uuid.UUID(environment)
     # Compose base version for partial compile
     version = await clienthelper.get_version()
@@ -1258,18 +1261,22 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     )
     assert result.code == 200, result.result
 
+    result = await client.release_version(tid=environment, id=version)
+    assert result.code == 200
+
     update_manager = persistence.ToDbUpdateManager(client, env_id)
 
     # set key2 to deploying
     await update_manager.send_in_progress(
-        action_id=uuid.uuid4(), resource_id=ResourceVersionIdStr(f"test::Resource[agent1,key=key2],v={version}")
+        action_id=uuid.uuid4(), resource_id=Id.parse_id(f"test::Resource[agent1,key=key2],v={version}")
     )
 
     # Set key 3 to deployed
     action_id = uuid.uuid4()
     rvid3 = ResourceVersionIdStr(f"test::Resource[agent1,key=key3],v={version}")
-    await update_manager.send_in_progress(action_id=action_id, resource_id=rvid3)
+    await update_manager.send_in_progress(action_id=action_id, resource_id=Id.parse_id(rvid3))
     await update_manager.send_deploy_done(
+        attribute_hash=util.make_attribute_hash(ResourceIdStr("test::Resource[agent1,key=key3]"), attributes=resources[2]),
         result=executor.DeployResult(
             rvid=rvid3,
             action_id=action_id,
@@ -1277,7 +1284,12 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
             messages=[],
             changes={},
             change=const.Change.nochange,
-        )
+        ),
+        state=state.ResourceState(
+            status=state.ComplianceStatus.COMPLIANT,
+            deployment_result=state.DeploymentResult.DEPLOYED,
+            blocked=state.BlockedStatus.NO,
+        ),
     )
 
     # Partial compile
@@ -1330,20 +1342,25 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     )
     assert result.code == 200
 
-    resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
-    assert len(resource_list) == 7
-    assert all(r.model == 2 for r in resource_list)
-    rid_to_res = {r.resource_id: r for r in resource_list}
-    assert rid_to_res["test::Resource[agent1,key=key1]"].status is const.ResourceState.undefined
-    assert rid_to_res["test::Resource[agent1,key=key2]"].status is const.ResourceState.available
-    assert rid_to_res["test::Resource[agent1,key=key3]"].status is const.ResourceState.available
-    assert rid_to_res["test::Resource[agent1,key=key4]"].status is const.ResourceState.available
-    assert rid_to_res["test::Resource[agent1,key=key5]"].status is const.ResourceState.available
-    assert rid_to_res["test::Resource[agent1,key=key6]"].status is const.ResourceState.undefined
-    assert rid_to_res["test::Resource[agent1,key=key7]"].status is const.ResourceState.available
+    result = await client.release_version(tid=environment, id=result.result["data"])
+    assert result.code == 200
+
+    result = await client.resource_list(tid=environment)
+    assert result.code == 200
+    assert len(result.result["data"]) == 7
+    assert all(Id.parse_id(r["resource_version_id"]).version == 2 for r in result.result["data"])
+    rid_to_res = {r["resource_id"]: r for r in result.result["data"]}
+
+    assert rid_to_res["test::Resource[agent1,key=key1]"]["status"] == const.ResourceState.undefined.value
+    assert rid_to_res["test::Resource[agent1,key=key2]"]["status"] == const.ResourceState.available.value
+    assert rid_to_res["test::Resource[agent1,key=key3]"]["status"] == const.ResourceState.deployed.value
+    assert rid_to_res["test::Resource[agent1,key=key4]"]["status"] == const.ResourceState.available.value
+    assert rid_to_res["test::Resource[agent1,key=key5]"]["status"] == const.ResourceState.available.value
+    assert rid_to_res["test::Resource[agent1,key=key6]"]["status"] == const.ResourceState.undefined.value
+    assert rid_to_res["test::Resource[agent1,key=key7]"]["status"] == const.ResourceState.available.value
 
 
-async def test_put_partial_with_undeployable_resources(server, client, environment, clienthelper, agent) -> None:
+async def test_put_partial_with_undeployable_resources(server, client, environment, clienthelper, agent_no_state_check) -> None:
     """
     Test whether the put_partial() endpoint correctly merges the undeployable and skipped_for_undeployable list
     of a configurationmodel.

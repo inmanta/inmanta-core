@@ -26,7 +26,7 @@ from inmanta.stable_api import stable_api
 
 class ResourceState(str, Enum):
     unavailable = "unavailable"  # This state is set by the agent when no handler is available for the resource
-    skipped = "skipped"  #
+    skipped = "skipped"
     dry = "dry"
     deployed = "deployed"
     failed = "failed"
@@ -43,10 +43,14 @@ class HandlerResourceState(str, Enum):
     when it performs a resource action.
     """
 
+    # A resource indicates it wants to skip its deployment.
     skipped = "skipped"
     deployed = "deployed"
     failed = "failed"
     dry = "dry"
+    # A resource indicates it wants to skip its deployment, because one of its dependencies wasn't deployed
+    # and that it should only be redeployed once its dependencies are deployed successfully. Resources with this
+    # HandlerResourceState will get the TRANSIENT blocked status.
     skipped_for_dependency = "skipped_for_dependency"
     unavailable = "unavailable"
 
@@ -259,7 +263,7 @@ ENVIRON_FORCE_TTY = "FORCE_TTY"
 
 LOG_LEVEL_TRACE = 3
 
-NAME_RESOURCE_ACTION_LOGGER = "inmanta.resourceaction"
+NAME_RESOURCE_ACTION_LOGGER = "inmanta.resource_action"
 
 # Time we give the server/agent to shutdown gracefully, before we force stop the ioloop
 SHUTDOWN_GRACE_IOLOOP = 10
@@ -391,3 +395,7 @@ RESOURCE_ATTRIBUTE_RECEIVE_EVENTS = "receive_events"
 LOG_CONTEXT_VAR_ENVIRONMENT = "environment"
 
 ALL_LOG_CONTEXT_VARS = [LOG_CONTEXT_VAR_ENVIRONMENT]
+
+
+# Logger namespace
+LOGGER_NAME_EXECUTOR = "inmanta.executor"
