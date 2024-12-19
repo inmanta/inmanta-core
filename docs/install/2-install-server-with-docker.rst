@@ -268,7 +268,7 @@ There are two ways you can achieve this:
                 - ./resources/my-server-conf.cfg:/etc/inmanta/inmanta.cfg
 
 Mounting files/directories
-########################
+##########################
 
 The recommended way to mount files and directories is to use docker volumes:
 
