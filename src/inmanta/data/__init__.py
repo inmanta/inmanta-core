@@ -60,19 +60,12 @@ from inmanta.const import (
 )
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import (
-    AuthMethod,
-    BaseModel,
-    PagingBoundaries,
-    PipConfig,
-    ResourceType,
-    api_boundary_datetime_normalizer,
-)
+from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
-from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr
+from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
 
 LOGGER = logging.getLogger(__name__)
