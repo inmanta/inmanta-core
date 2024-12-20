@@ -64,7 +64,7 @@ from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import ALL_LOG_CONTEXT_VARS, EXIT_START_FAILED, LOG_CONTEXT_VAR_ENVIRONMENT
 from inmanta.export import cfg_env
-from inmanta.logging import FullLoggingConfig, InmantaLoggerConfig, LoggingConfigBuilder, _is_on_tty, Options
+from inmanta.logging import FullLoggingConfig, InmantaLoggerConfig, LoggingConfigBuilder, Options, _is_on_tty
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.databaseservice import initialize_database_connection_pool
@@ -619,6 +619,7 @@ def export(options: argparse.Namespace) -> None:
     LOGGER.debug("The entire export command took %0.03f seconds", time.time() - t1)
     summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
 
+
 def validate_logging_config_parser_config(
     parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]
 ) -> None:
@@ -635,10 +636,11 @@ def validate_logging_config_parser_config(
         help="The environment id to be used as context variable in logging config templates.",
     )
 
+
 @command(
     "validate-logging-config",
     help_msg="This command loads the logging config and produces log lines. It provides a tool to verify that the"
-             " logging config doesn't contain any syntax errors and that it behaves as expected.",
+    " logging config doesn't contain any syntax errors and that it behaves as expected.",
     parser_config=validate_logging_config_parser_config,
 )
 def validate_logging_config(options: argparse.Namespace) -> None:
@@ -650,7 +652,7 @@ def validate_logging_config(options: argparse.Namespace) -> None:
                 verbose=0,
                 logging_config=options.filename,
             ),
-            context=_get_log_context_variables(options)
+            context=_get_log_context_variables(options),
         )
     except Exception as e:
         print(str(e), file=sys.stderr)
@@ -659,7 +661,7 @@ def validate_logging_config(options: argparse.Namespace) -> None:
     logger_and_message = [
         (logging.getLogger("inmanta.protocol.rest.server"), "Log line from Inmanta server"),
         (logging.getLogger("inmanta.server.services.compilerservice"), "Log line from compiler service"),
-        (logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER).getChild(env_id), "Log line for resource action log"),
+        (logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER).getChild(str(env_id)), "Log line for resource action log"),
         (logging.getLogger("inmanta_lsm.callback"), "Log line from callback"),
         (logging.getLogger("inmanta.scheduler"), "Log line from the scheduler"),
         (logging.getLogger(const.LOGGER_NAME_EXECUTOR), "Log line from the executor"),
@@ -686,6 +688,7 @@ def validate_logging_config(options: argparse.Namespace) -> None:
         print(f" * Emitting log line '{msg}' at level <LEVEL> using logger '{logger.name}'", file=sys.stderr)
         for log_level in log_levels:
             logger.log(log_level, f"{msg} at level {logging.getLevelName(log_level)}")
+
 
 class Color(enum.Enum):
     RED = "red"
@@ -1008,6 +1011,7 @@ def print_versions_installed_components_and_exit() -> None:
     asyncio.run(print_status())
     sys.exit(0)
 
+
 def _get_log_context_variables(options: argparse.Namespace) -> dict[str, uuid.UUID]:
     """
     Returns a dictionary of context variables that should be used to populate logging config templates.
@@ -1021,6 +1025,7 @@ def _get_log_context_variables(options: argparse.Namespace) -> dict[str, uuid.UU
     if env:
         log_context[LOG_CONTEXT_VAR_ENVIRONMENT] = env
     return log_context
+
 
 def app() -> None:
     """

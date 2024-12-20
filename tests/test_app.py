@@ -32,7 +32,6 @@ import pytest
 
 import inmanta.util
 from inmanta import const
-from inmanta.agent.config import environment
 from inmanta.app import CompileSummaryReporter
 
 LOGGER = logging.getLogger(__name__)
@@ -521,6 +520,7 @@ def test_compiler_summary_reporter(monkeypatch, capsys) -> None:
     output = capsys.readouterr().err
     assert re.match(r"\n=+ EXCEPTION TRACE =+\n(.|\n)*\n=+ EXPORT FAILURE =+\nError: This is an export failure\n", output)
 
+
 def test_validate_logging_config(tmpdir):
     """
     Test the validate-logging-config command.
@@ -531,7 +531,8 @@ def test_validate_logging_config(tmpdir):
     logging_config_file = os.path.join(tmpdir, "logging_config.yml")
     # Write logging config that contains a syntax error
     with open(logging_config_file, "w") as fh:
-        fh.write(f"""
+        fh.write(
+            """
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
@@ -547,7 +548,8 @@ def test_validate_logging_config(tmpdir):
           level: DEBUG
         version: 1
         disable_existing_loggers: false
-        """)
+        """
+        )
     _, stderr, returncode = run_without_tty(
         args=[sys.executable, "-m", "inmanta.app", "validate-logging-config", logging_config_file],
     )
@@ -556,7 +558,8 @@ def test_validate_logging_config(tmpdir):
 
     # Simple logging config that writes all logs to stdout
     with open(logging_config_file, "w") as fh:
-        fh.write(f"""
+        fh.write(
+            """
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
@@ -572,22 +575,19 @@ def test_validate_logging_config(tmpdir):
           level: DEBUG
         version: 1
         disable_existing_loggers: false
-        """)
+        """
+        )
     stdout, stderr, returncode = run_without_tty(
         args=[sys.executable, "-m", "inmanta.app", "validate-logging-config", logging_config_file],
     )
     assert returncode == 0
     assert any(
-        "Emitting log line 'Log line from Inmanta server' at level <LEVEL> using logger 'inmanta.protocol.rest.server'"
-        in line for line in stderr
+        "Emitting log line 'Log line from Inmanta server' at level <LEVEL> using logger 'inmanta.protocol.rest.server'" in line
+        for line in stderr
     )
-    assert any(
-        "INFO     inmanta.protocol.rest.server Log line from Inmanta server at level INFO"
-        in line for line in stdout
-    )
+    assert any("INFO     inmanta.protocol.rest.server Log line from Inmanta server at level INFO" in line for line in stdout)
     assert not any(
-        "DEBUG    inmanta.protocol.rest.server Log line from Inmanta server at level DEBUG"
-        in line for line in stdout
+        "DEBUG    inmanta.protocol.rest.server Log line from Inmanta server at level DEBUG" in line for line in stdout
     )
 
     # Write a logging config that works.
@@ -596,7 +596,8 @@ def test_validate_logging_config(tmpdir):
     assert not os.listdir(log_dir)
     logging_config_file = os.path.join(tmpdir, "logging_config.yml.tmpl")
     with open(logging_config_file, "w") as fh:
-        fh.write(f"""
+        fh.write(
+            f"""
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
@@ -626,18 +627,20 @@ def test_validate_logging_config(tmpdir):
           level: DEBUG
         version: 1
         disable_existing_loggers: false
-        """)
+        """
+        )
     env_id = uuid.uuid4()
     stdout, stderr, returncode = run_without_tty(
         args=[sys.executable, "-m", "inmanta.app", "validate-logging-config", "-e", str(env_id), logging_config_file],
     )
     assert any(
-        "Emitting log line 'Log line from callback' at level <LEVEL> using logger 'inmanta_lsm.callback'"
-        in line for line in stderr
+        "Emitting log line 'Log line from callback' at level <LEVEL> using logger 'inmanta_lsm.callback'" in line
+        for line in stderr
     )
     assert any(
         f"Emitting log line 'Log line for resource action log' at level <LEVEL> using logger 'inmanta.resource_action.{env_id}'"
-        in line for line in stderr
+        in line
+        for line in stderr
     )
     assert returncode == 0
     server_log_file = os.path.join(log_dir, "server.log")
@@ -652,13 +655,7 @@ def test_validate_logging_config(tmpdir):
 
     with open(resource_action_log_file, "r") as fh:
         content_log_file = fh.read()
-    assert (
-        f"inmanta.resource_action.{env_id} ERROR    Log line for resource action log at level ERROR"
-        in content_log_file
-    )
-    assert (
-        f"inmanta.resource_action.{env_id} INFO     Log line for resource action log at level INFO"
-        not in content_log_file
-    )
+    assert f"inmanta.resource_action.{env_id} ERROR    Log line for resource action log at level ERROR" in content_log_file
+    assert f"inmanta.resource_action.{env_id} INFO     Log line for resource action log at level INFO" not in content_log_file
     assert "WARNING  inmanta_lsm.callback Log line from callback at level WARNING" not in content_log_file
     assert "INFO     inmanta_lsm.callback Log line from callback at level INFO" not in content_log_file
