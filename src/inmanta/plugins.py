@@ -261,7 +261,7 @@ python_to_model = {
 }
 
 
-def primitive_python_type_to_model_domain(intype: Type) -> inmanta_type.Type:
+def primitive_python_type_to_model_domain(intype: type) -> inmanta_type.Type:
     """
     Convert a primtive python type to the model domain
 
