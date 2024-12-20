@@ -61,7 +61,7 @@ class DynamicProxy:
         Converts a value from the plugin domain to the internal domain.
         """
         if item is None:
-            return util.NoneValue()
+            return NoneValue()
 
         if isinstance(item, DynamicProxy):
             return item._get_instance()
@@ -93,10 +93,10 @@ class DynamicProxy:
         if value is None:
             return None
 
-        if isinstance(value, util.NoneValue):
+        if isinstance(value, NoneValue):
             return None
 
-        if isinstance(value, util.Unknown):
+        if isinstance(value, Unknown):
             raise UnknownException(value)
 
         if isinstance(value, (str, tuple, int, float, bool)):
@@ -144,7 +144,7 @@ class DynamicProxy:
         Return true if this value is unknown and cannot be determined
         during this compilation run
         """
-        if isinstance(self._get_instance(), util.Unknown):
+        if isinstance(self._get_instance(), Unknown):
             return True
         return False
 

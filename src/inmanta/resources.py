@@ -28,14 +28,14 @@ import inmanta.ast
 import inmanta.util
 from inmanta import const, references
 from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
-from inmanta.execute import util
+from inmanta.execute import util, proxy
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 
 if TYPE_CHECKING:
     from inmanta import export
     from inmanta.data import ResourceAction
-    from inmanta.execute import proxy, runtime
+    from inmanta.execute import runtime
 
 LOGGER = logging.getLogger(__name__)
 
@@ -252,7 +252,7 @@ def collect_references(value_reference_collector: ReferenceCollector, value: obj
             value_reference_collector.add_reference(path, value)
             return None
 
-        case proxy.DynamicProxy() | execute.util.Unknown():
+        case proxy.DynamicProxy() | util.Unknown():
             raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
 
         case _:
