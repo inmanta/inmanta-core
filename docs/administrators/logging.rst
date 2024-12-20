@@ -12,44 +12,17 @@ configured regarding to logging.
 Overview different log files
 ============================
 
-By default log files are collected in the directory ``/var/log/inmanta/``. Three different types of log files exist:
-
- 1. the server log (produced by the server)
- 2. the resource action logs (also produced by the server)
- 3. the scheduler logs. (produced by the scheduler)
+By default log files are collected in the directory ``/var/log/inmanta/``.  The following files are expected:
 
 
-Server log
-----------
+1. ``server.log`` is the main log file of the server. It shows general information about actions performed by the Inmanta server (renewing parameters, purging resource action logs, etc.), and the access log of the API.
+2. ``resource-actions-<environment-id>.log`` contains the all actions performed by all resources. Each environment has one resource action log file. This file mirrors the actions logged on resources in the database.
+3. ``agent-<environment-id>.log`` is the main log of the scheduler. It contains information about when any executor started a deployment, which trigger caused that deployment, whether heartbeat messages are received from the server, etc.
+4. ``agent-<environment-id>.out``: This log file contains all the messages written to the standard output stream of the scheduler and executors. Expected to be empty.
+5. ``agent-<environment-id>.err``: This log file contains all the messages written to the standard error stream of the scheduler and executors. Expected to be empty.
 
-The ``server.log`` file contains general debugging information regarding the Inmanta server. It shows information about actions
-performed by the Inmanta server (renewing parameters, purging resource action logs, etc.), API requests received by the
-Inmanta server, etc.
+For reasons of backward compatibility, th scheduler files are called 'agent' and not 'scheduler'
 
-
-Resource action logs
---------------------
-
-The resource action log files contain information about actions performed on all resources. Each environment has one
-resource action log file. The filename of this log file looks as follows:
-``resource-actions-<environment-id>.log``. The prefix can be configured with the configuration option
-:inmanta.config:option:`server.resource-action-log-prefix`.
-
-This file mirrors the actions logged on resources in the database.
-
-Scheduler logs
---------------
-
-For every environment, the scheduler produces the following three log files:
-
-* ``agent-<environment-id>.log``: This is the main log file of an scheduler. It contains information about when any executor
-  started a deployment, which trigger caused that deployment, whether heartbeat messages are received from the server, etc.
-* ``agent-<environment-id>.out``: This log file contains all the messages written to the standard output stream of the resource
-  handlers used by the scheduler.
-* ``agent-<environment-id>.err``: This log file contains all the messages written to the standard error stream of the resource
-  handlers used by the scheduler.
-
-For reasons of backward compatibility, these files are called 'agent' and not 'scheduler'
 
 Configure logging
 =================
