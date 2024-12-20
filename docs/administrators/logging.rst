@@ -80,7 +80,7 @@ Fine grained configuration
 ----------------------------
 For fine grained configuration, `a standard python dict config file <https://docs.python.org/3/library/logging.config.html#logging-config-dictschema>`_ can be passed in via the config file for each component individually:
 
-.. code-block:: toml
+.. code-block:: ini
 
     [logging]
     server = server_log.yml
@@ -98,7 +98,7 @@ The log config has to be either a ``yaml`` file, containing a `python dict confi
 
 The following log-related options can be set in an Inmanta config file:
 
-* :inmanta.config:option:`logging.compiler`: determines the log config for the compiler
+* :inmanta.config:option:`logging.compiler`: determines the log config for the compiler.
 * :inmanta.config:option:`logging.server`: determines the log config for the server
 * :inmanta.config:option:`logging.scheduler`: determines the log config for the scheduler. This is always a template.
 
@@ -106,7 +106,12 @@ The following log-related options can be set in an Inmanta config file:
 
 * ``-v``: When used in combination with a log file, it will force a CLI logger to be loaded on top of the provided configuration
 * ``--logging-config``: Log configuration file for this command, overrides the config option
+<<<<<<< Updated upstream
 * If a config file is loaded, all other coarse grained configuration options are ignored!
+=======
+* ``-X``: When exiting with an error, show full stack trace.
+* If a config file is loaded, all other course grained configuration options are ignored!
+>>>>>>> Stashed changes
 
 For templated config files, we use python f-string syntax.
 For the scheduler, one variable is available in the template: ``{environment}``. This is used to customize the scheduler log files to the environment the scheduler is working for.
@@ -120,7 +125,11 @@ For example, to convert the config for a component, take the command you use to 
 
 .. code-block:: sh
 
-    inmanta -c /etc/inmanta/inmanta.cfg --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs print-default-logging-config server
+    inmanta -c /etc/inmanta/inmanta.cfg \
+        --log-file /var/log/inmanta/server.log \
+        --log-file-level INFO \
+        --timed-logs \
+        print-default-logging-config server
 
 
 

@@ -868,7 +868,7 @@ def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequen
 
 
 @command(
-    "print_default_logging_config",
+    "print-default-logging-config",
     help_msg="Print the default log config for the provided component",
     parser_config=default_log_config_parser,
 )
