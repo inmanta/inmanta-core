@@ -42,6 +42,7 @@ from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.const import DATACLASS_SELF_FIELD
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, WrappedValueVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
+from inmanta.types import DataclassProtocol
 
 # pylint: disable-msg=R0902,R0904
 
@@ -101,7 +102,7 @@ class Entity(NamedType, WithComment):
 
         self.normalized = False
 
-        self._paired_dataclass: typing.Type[object] | None = None
+        self._paired_dataclass: type[DataclassProtocol] | None = None
         # Entities can be paired up to python dataclasses
         # If such a sibling exists, the type is kept here
         # Every instance of such entity can cary the associated python object in a slot called `DATACLASS_SELF_FIELD`
@@ -541,8 +542,8 @@ class Entity(NamedType, WithComment):
 
         # Find the dataclass
         dataclass_module = importlib.import_module(module_name)
-        dataclass = getattr(dataclass_module, self.name, None)
-        if dataclass is None:
+        dataclass_raw = getattr(dataclass_module, self.name, None)
+        if dataclass_raw is None:
             raise DataClassMismatchException(
                 self,
                 None,
@@ -551,15 +552,16 @@ class Entity(NamedType, WithComment):
                 "Dataclasses must have a python counterpart that is a frozen dataclass.",
             )
 
-        if not dataclasses.is_dataclass(dataclass):
+        if not dataclasses.is_dataclass(dataclass_raw):
             raise DataClassMismatchException(
                 self,
                 None,
                 dataclass_name,
-                f"The python object {module_name}.{dataclass.__name__} associated to  {self.get_full_name()} "
+                f"The python object {module_name}.{dataclass_raw.__name__} associated to  {self.get_full_name()} "
                 f"defined at {self.location} is not a dataclass. "
                 "Dataclasses must have a python counterpart that is a frozen dataclass.",
             )
+        dataclass: type[DataclassProtocol] = dataclass_raw
         if not dataclass.__dataclass_params__.frozen:
             raise DataClassMismatchException(
                 self,
