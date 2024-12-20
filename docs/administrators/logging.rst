@@ -116,13 +116,12 @@ Converting to fine grained configuration
 
 A tool is provided to convert the existing course grained configuration into a config file.
 
-For example, to
+For example, to convert the config for a component, take the command you use to start it, then put `print_default_logging_config` before the `server`, `compiler` or `scheduler`:
 
 .. code-block:: sh
 
     inmanta -c /etc/inmanta/inmanta.cfg --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs print_default_logging_config server
 
-To convert the config for a component, take a the command you use to start it, then put `print_default_logging_config` before the `server`, `compiler` or `scheduler`
 
 
 Default configurations
