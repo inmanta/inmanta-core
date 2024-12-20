@@ -211,7 +211,7 @@ class Null(inmanta_type.Type):
     def as_python_type_string(self) -> "str | None":
         return "None"
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         return pytype is type(None)
 
     def has_custom_to_python(self) -> bool:

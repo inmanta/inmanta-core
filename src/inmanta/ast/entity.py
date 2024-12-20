@@ -574,6 +574,7 @@ class Entity(NamedType, WithComment):
 
         # Validate fields, collect errors
         dc_fields = {f.name: f for f in dataclasses.fields(dataclass)}
+        dc_types = typing.get_type_hints(dataclass)
         failures = []
 
         for rel_or_attr_name in self.get_all_attribute_names():
@@ -593,7 +594,6 @@ class Entity(NamedType, WithComment):
                             "All attributes of a dataclasses must be identical in both the python and inmanta domain.",
                         )
                         continue
-                    field = dc_fields.pop(rel_or_attr_name)
                     inm_type = attr.get_type()
 
                     # all own fields are primitive
@@ -603,8 +603,10 @@ class Entity(NamedType, WithComment):
                             "All attributes of a dataclasses have to be of a primitive type.",
                         )
                         continue
+
+                    dc_fields.pop(rel_or_attr_name)
                     # Type correspondence
-                    if not inm_type.corresponds_to(field.type):
+                    if not inm_type.corresponds_to(dc_types[rel_or_attr_name]):
                         failures.append(
                             f"The attribute {rel_or_attr_name} does not have the same type as "
                             "the associated field in the python domain. "
@@ -673,8 +675,10 @@ class Entity(NamedType, WithComment):
             assert False, f"This class {self.get_full_name()} has no associated python type, this conversion is not supported"
 
         assert isinstance(instance, Instance)
-        if DATACLASS_SELF_FIELD in instance.slots:
-            return instance.slots.get(DATACLASS_SELF_FIELD).get_value()
+
+        dataclass_self = instance.slots.get(DATACLASS_SELF_FIELD, None)
+        if dataclass_self is not None:
+            return dataclass_self.get_value()
         else:
             # Handle unsets
             unset = [
@@ -695,7 +699,8 @@ class Entity(NamedType, WithComment):
             }
             out = self._paired_dataclass(**kwargs)
 
-            dataclass_self = WrappedValueVariable(out)
+            dataclass_self = ResultVariable()
+            dataclass_self.set_value(out, self.location, False)
             instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
             return out
 
@@ -707,6 +712,7 @@ class Entity(NamedType, WithComment):
          i.e. for which 'corresponds_to' returns True
          i.e. instances of the associated dataclass
         """
+        assert self._paired_dataclass is not None  # make mypy happy
         assert isinstance(value, self._paired_dataclass)
 
         def convert_none(x: object | None) -> object:
@@ -719,7 +725,8 @@ class Entity(NamedType, WithComment):
             location,
             None,
         )
-        dataclass_self = WrappedValueVariable(value)
+        dataclass_self: ResultVariable[Instance] = ResultVariable()
+        dataclass_self.set_value(instance, self.location, False)
         instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
         # generate an implementation
         for stmt in self.get_sub_constructor():

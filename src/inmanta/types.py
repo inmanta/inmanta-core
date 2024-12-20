@@ -86,5 +86,3 @@ ResourceType = NewType("ResourceType", str)
 """
     The type of the resource
 """
-
-

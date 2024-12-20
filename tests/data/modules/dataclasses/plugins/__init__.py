@@ -46,7 +46,7 @@ import inmanta.ast.type
 
 @dataclasses.dataclass(frozen=True)
 class Virtualmachine:
-    name: str
+    name: "str"
     os: dict
     ram: int | None
     cpus: dict[str, int]
