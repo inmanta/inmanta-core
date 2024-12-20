@@ -50,7 +50,7 @@ The following log-related options can be set in an Inmanta config file:
 * ``-X``: When exiting with an error, show full stack trace.
 * ``--keep-logger-names``: When using the compiler, don't shorten logger names.
 
-To update the server startup config when using the RPM based install, cop inmanta-server service
+To update the server startup config when using the RPM based install, copy the inmanta-server service
 file at ``/usr/lib/systemd/system/inmanta-server.service`` to ``/etc/systemd/system/inmanta-server.service`` and edit it.
 
 .. code-block:: text
