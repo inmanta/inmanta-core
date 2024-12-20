@@ -24,18 +24,20 @@ import typing
 import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from typing import Optional, Tuple
 from uuid import UUID
 
 import asyncpg
+from asyncpg import Connection
 
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.data import ConfigurationModel, Environment
-from inmanta.data.model import Discrepancy, ResourceIdStr, ResourceType, ResourceVersionIdStr, SchedulerStatusReport
+from inmanta.data.model import Discrepancy, SchedulerStatusReport
 from inmanta.deploy import timers, work
 from inmanta.deploy.persistence import StateUpdateManager, ToDbUpdateManager
 from inmanta.deploy.state import (
@@ -51,6 +53,7 @@ from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
+from inmanta.types import ResourceIdStr, ResourceType, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
@@ -301,7 +304,12 @@ class ResourceScheduler(TaskManager):
         Marks scheduler as running and triggers first deploys.
         """
         self._timer_manager.initialize()
-        async with self._intent_lock, self._scheduler_lock, data.Scheduler.get_connection() as con, con.transaction():
+        async with (
+            self._intent_lock,
+            self._scheduler_lock,
+            self._state_update_delegate.get_connection() as con,
+            con.transaction(),
+        ):
             # Make sure there is an entry for this scheduler in the scheduler database table
             await data.Scheduler._execute_query(
                 f"""
@@ -636,7 +644,7 @@ class ResourceScheduler(TaskManager):
 
         latest_version: int | None
         async with self._scheduler_lock:
-            async with data.Scheduler.get_connection() as connection:
+            async with self._state_update_delegate.get_connection() as connection:
                 try:
                     latest_version, resources_in_db, _, _ = await self._get_resources_in_version(connection=connection)
                 except KeyError:
@@ -734,7 +742,7 @@ class ResourceScheduler(TaskManager):
             2. A dict mapping every resource_id in the latest released version to its ResourceDetails.
             3. A dict mapping every resource_id in the latest released version to the set of resources it requires.
         """
-        async with ConfigurationModel.get_connection(connection) as con:
+        async with self._state_update_delegate.get_connection(connection) as con:
             if version is None:
                 # Fetch the latest released model version
                 cm_version = await ConfigurationModel.get_latest_version(self.environment, connection=con)
@@ -830,7 +838,7 @@ class ResourceScheduler(TaskManager):
         scheduler_lock = self._scheduler_lock if not scheduler_lock_acquired else asyncio.Lock()
         up_to_date_resources = set() if up_to_date_resources is None else up_to_date_resources
         undefined_resources = set() if undefined_resources is None else undefined_resources
-        async with data.Scheduler.get_connection(connection=connection) as con, con.transaction(), intent_lock:
+        async with self._state_update_delegate.get_connection(connection=connection) as con, con.transaction(), intent_lock:
             if version < self._state.version:
                 raise ValueError(
                     f"Invalid scheduler state: received out-of-order versions. Currently at version {self._state.version} but"
@@ -1277,6 +1285,9 @@ class ResourceScheduler(TaskManager):
 
     async def set_parameters(self, fact_result: FactResult) -> None:
         await self._state_update_delegate.set_parameters(fact_result)
+
+    def get_connection(self, connection: Optional[Connection] = None) -> AbstractAsyncContextManager[Connection]:
+        return self._state_update_delegate.get_connection(connection)
 
     async def update_resource_intent(
         self,

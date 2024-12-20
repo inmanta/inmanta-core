@@ -27,7 +27,16 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Seq
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
-from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException, WithComment
+from inmanta.ast import (  # noqa: F401 Plugin exception is part of the stable api
+    LocatableString,
+    Location,
+    Namespace,
+    PluginException,
+    Range,
+    RuntimeException,
+    TypeNotFoundException,
+    WithComment,
+)
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
@@ -715,16 +724,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
     def type_string(self) -> str:
         return self.get_full_name()
-
-
-@stable_api
-class PluginException(Exception):
-    """
-    Base class for custom exceptions raised from a plugin.
-    """
-
-    def __init__(self, message: str) -> None:
-        self.message = message
 
 
 @stable_api

@@ -50,8 +50,7 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data import ResourceIdStr
-from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, ResourceType
+from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceDetails
@@ -59,7 +58,7 @@ from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client, SessionEndpoint, methods
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
-from inmanta.types import Apireturn
+from inmanta.types import Apireturn, ResourceIdStr, ResourceType
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
 
@@ -505,13 +504,13 @@ class ClientHelper:
         if wait_for_released:
             await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
 
-    async def wait_for_released(self, version: int | None):
+    async def wait_for_released(self, version: int | None = None):
         """
         Version None means latest
         """
         await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
 
-    async def is_released(self, version: int | None) -> bool:
+    async def is_released(self, version: int | None = None) -> bool:
         """Version None means latest"""
         versions = await self.client.list_versions(tid=self.environment)
         assert versions.code == 200

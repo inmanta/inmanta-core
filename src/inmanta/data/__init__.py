@@ -46,25 +46,26 @@ from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
+import inmanta.protocol
+import inmanta.types
 from crontab import CronTab
 from inmanta import const, resources, util
-from inmanta.const import DATETIME_MIN_UTC, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
+from inmanta.const import (
+    DATETIME_MIN_UTC,
+    NAME_RESOURCE_ACTION_LOGGER,
+    UNDEPLOYABLE_NAMES,
+    AgentStatus,
+    LogLevel,
+    ResourceState,
+)
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import (
-    AuthMethod,
-    BaseModel,
-    PagingBoundaries,
-    PipConfig,
-    ResourceIdStr,
-    ResourceVersionIdStr,
-    api_boundary_datetime_normalizer,
-)
+from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
-from inmanta.types import JsonType, PrimitiveTypes
+from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
 
 LOGGER = logging.getLogger(__name__)
@@ -2886,7 +2887,7 @@ class Parameter(BaseDocument):
     value: str = ""
     environment: uuid.UUID
     source: str
-    resource_id: m.ResourceIdStr = ""
+    resource_id: ResourceIdStr = ""
     updated: Optional[datetime.datetime] = None
     metadata: Optional[JsonType] = None
     expires: bool
@@ -2969,7 +2970,7 @@ class UnknownParameter(BaseDocument):
     name: str
     environment: uuid.UUID
     source: str
-    resource_id: m.ResourceIdStr = ""
+    resource_id: ResourceIdStr = ""
     version: int
     metadata: Optional[dict[str, object]]
     resolved: bool = False
@@ -3927,6 +3928,13 @@ class LogLine(DataDocument):
     def write_to_logger(self, logger: logging.Logger) -> None:
         logger.log(self.log_level.to_int, self.msg, *self.args)
 
+    def write_to_logger_for_resource(
+        self, agent: str, resource_version_string: ResourceVersionIdStr, exc_info: bool = False
+    ) -> None:
+        logging.getLogger(NAME_RESOURCE_ACTION_LOGGER).getChild(agent).log(
+            self.log_level.to_int, "resource %s: %s", resource_version_string, self._data["msg"], exc_info=exc_info
+        )
+
     @classmethod
     def log(
         cls,
@@ -3979,7 +3987,7 @@ class ResourceAction(BaseDocument):
 
     environment: uuid.UUID
     version: int
-    resource_version_ids: list[m.ResourceVersionIdStr]
+    resource_version_ids: list[ResourceVersionIdStr]
 
     action_id: uuid.UUID
     action: const.ResourceAction
@@ -3989,7 +3997,7 @@ class ResourceAction(BaseDocument):
 
     messages: Optional[list[dict[str, object]]] = None
     status: Optional[const.ResourceState] = None
-    changes: Optional[dict[m.ResourceVersionIdStr, dict[str, object]]] = None
+    changes: Optional[dict[ResourceVersionIdStr, dict[str, object]]] = None
     change: Optional[const.Change] = None
 
     def __init__(self, from_postgres: bool = False, **kwargs: object) -> None:
@@ -4023,7 +4031,7 @@ class ResourceAction(BaseDocument):
     async def get_log(
         cls,
         environment: uuid.UUID,
-        resource_version_id: m.ResourceVersionIdStr,
+        resource_version_id: ResourceVersionIdStr,
         action: Optional[str] = None,
         limit: int = 0,
         connection: Optional[Connection] = None,
@@ -4110,7 +4118,7 @@ class ResourceAction(BaseDocument):
             self._updates["messages"] = []
         self._updates["messages"] += messages
 
-    def add_changes(self, changes: dict[m.ResourceVersionIdStr, dict[str, object]]) -> None:
+    def add_changes(self, changes: dict[ResourceVersionIdStr, dict[str, object]]) -> None:
         for resource, values in changes.items():
             for field, change in values.items():
                 if "changes" not in self._updates:
@@ -4122,7 +4130,7 @@ class ResourceAction(BaseDocument):
     async def set_and_save(
         self,
         messages: list[dict[str, object]],
-        changes: dict[m.ResourceVersionIdStr, dict[str, object]],
+        changes: dict[ResourceVersionIdStr, dict[str, object]],
         status: Optional[const.ResourceState],
         change: Optional[const.Change],
         finished: Optional[datetime.datetime],
@@ -4405,7 +4413,7 @@ class ResourcePersistentState(BaseDocument):
     environment: uuid.UUID
 
     # ID related
-    resource_id: m.ResourceIdStr
+    resource_id: ResourceIdStr
     resource_type: str
     agent: str
     resource_id_value: str
@@ -4607,8 +4615,8 @@ class Resource(BaseDocument):
     model: int
 
     # ID related
-    resource_id: m.ResourceIdStr
-    resource_type: m.ResourceType
+    resource_id: ResourceIdStr
+    resource_type: ResourceType
     resource_id_value: str
 
     agent: str
@@ -4623,7 +4631,7 @@ class Resource(BaseDocument):
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
     # the list contains full rv id's
-    provides: list[m.ResourceIdStr] = []
+    provides: list[ResourceIdStr] = []
 
     # Methods for backward compatibility
     @property
@@ -4657,7 +4665,7 @@ class Resource(BaseDocument):
     @classmethod
     async def get_last_non_deploying_state_for_dependencies(
         cls, environment: uuid.UUID, resource_version_id: "resources.Id", connection: Optional[Connection] = None
-    ) -> dict[m.ResourceVersionIdStr, ResourceState]:
+    ) -> dict[ResourceVersionIdStr, ResourceState]:
         """
         Return the last state of each dependency of the given resource that was not 'deploying'.
         """
@@ -4689,7 +4697,7 @@ class Resource(BaseDocument):
     async def get_resources(
         cls,
         environment: uuid.UUID,
-        resource_version_ids: list[m.ResourceVersionIdStr],
+        resource_version_ids: list[ResourceVersionIdStr],
         lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list["Resource"]:
@@ -4700,7 +4708,7 @@ class Resource(BaseDocument):
             return []
         query_lock: str = lock.value if lock is not None else ""
 
-        def convert_or_ignore(rvid: m.ResourceVersionIdStr) -> resources.Id | None:
+        def convert_or_ignore(rvid: ResourceVersionIdStr) -> resources.Id | None:
             """Method to retain backward compatibility, ignore bad ID's"""
             try:
                 return resources.Id.parse_resource_version_id(rvid)
@@ -4831,7 +4839,7 @@ class Resource(BaseDocument):
     async def set_deployed_multi(
         cls,
         environment: uuid.UUID,
-        resource_ids: Sequence[m.ResourceIdStr],
+        resource_ids: Sequence[ResourceIdStr],
         version: int,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
@@ -4879,12 +4887,12 @@ class Resource(BaseDocument):
     async def get_resource_ids_with_status(
         cls,
         environment: uuid.UUID,
-        resource_version_ids: list[m.ResourceIdStr],
+        resource_version_ids: list[ResourceIdStr],
         version: int,
         statuses: Sequence[const.ResourceState],
         lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> list[m.ResourceIdStr]:
+    ) -> list[ResourceIdStr]:
         query = (
             "SELECT resource_id as resource_id FROM resource WHERE "
             "environment=$1 AND model=$2 AND status = ANY($3) and resource_id =ANY($4) "
@@ -4893,7 +4901,7 @@ class Resource(BaseDocument):
             query += lock.value
         async with cls.get_connection(connection) as connection:
             return [
-                m.ResourceIdStr(cast(str, r["resource_id"]))
+                ResourceIdStr(cast(str, r["resource_id"]))
                 for r in await connection.fetch(query, environment, version, statuses, resource_version_ids)
             ]
 
@@ -4915,7 +4923,7 @@ class Resource(BaseDocument):
     async def get_resources_in_latest_version(
         cls,
         environment: uuid.UUID,
-        resource_type: Optional[m.ResourceType] = None,
+        resource_type: Optional[ResourceType] = None,
         attributes: dict[PrimitiveTypes, PrimitiveTypes] = {},
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
@@ -5103,7 +5111,7 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    async def get_latest_version(cls, environment: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional["Resource"]:
+    async def get_latest_version(cls, environment: uuid.UUID, resource_id: ResourceIdStr) -> Optional["Resource"]:
         resources = await cls.get_list(
             order_by_column="model", order="DESC", limit=1, environment=environment, resource_id=resource_id
         )
@@ -5112,7 +5120,7 @@ class Resource(BaseDocument):
         return None
 
     @staticmethod
-    def get_details_from_resource_id(resource_id: m.ResourceIdStr) -> m.ResourceIdDetails:
+    def get_details_from_resource_id(resource_id: ResourceIdStr) -> m.ResourceIdDetails:
         parsed_id = resources.Id.parse_id(resource_id)
         return m.ResourceIdDetails(
             resource_type=parsed_id.entity_type,
@@ -5125,7 +5133,7 @@ class Resource(BaseDocument):
     async def get(
         cls,
         environment: uuid.UUID,
-        resource_version_id: m.ResourceVersionIdStr,
+        resource_version_id: ResourceVersionIdStr,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Optional["Resource"]:
         """
@@ -5138,7 +5146,7 @@ class Resource(BaseDocument):
         return value
 
     @classmethod
-    def new(cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, **kwargs: object) -> "Resource":
+    def new(cls, environment: uuid.UUID, resource_version_id: ResourceVersionIdStr, **kwargs: object) -> "Resource":
         vid = resources.Id.parse_id(resource_version_id)
 
         attr = dict(
@@ -5176,7 +5184,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_released_resource_details(
-        cls, env: uuid.UUID, resource_id: m.ResourceIdStr
+        cls, env: uuid.UUID, resource_id: ResourceIdStr
     ) -> Optional[m.ReleasedResourceDetails]:
         def status_sub_query(resource_table_name: str) -> str:
             return f"""
@@ -5272,7 +5280,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_versioned_resource_details(
-        cls, environment: uuid.UUID, version: int, resource_id: m.ResourceIdStr
+        cls, environment: uuid.UUID, version: int, resource_id: ResourceIdStr
     ) -> Optional[m.VersionedResourceDetails]:
         resource = await cls.get_one(environment=environment, model=version, resource_id=resource_id)
         if not resource:
@@ -5333,7 +5341,7 @@ class Resource(BaseDocument):
         deleted_resource_sets: abc.Set[str],
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> dict[m.ResourceIdStr, str]:
+    ) -> dict[ResourceIdStr, str]:
         """
         Copy the resources that belong to an unchanged resource set of a partial compile,
         from source_version to destination_version. This method doesn't copy shared resources.
@@ -5541,8 +5549,8 @@ class ConfigurationModel(BaseDocument):
     total: int = 0
 
     # cached state for release
-    undeployable: list[m.ResourceIdStr] = []
-    skipped_for_undeployable: list[m.ResourceIdStr] = []
+    undeployable: list[ResourceIdStr] = []
+    skipped_for_undeployable: list[ResourceIdStr] = []
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
@@ -5929,13 +5937,13 @@ class ConfigurationModel(BaseDocument):
                 connection=con,
             )
 
-    def get_undeployable(self) -> list[m.ResourceIdStr]:
+    def get_undeployable(self) -> list[ResourceIdStr]:
         """
         Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
         """
         return self.undeployable
 
-    def get_skipped_for_undeployable(self) -> list[m.ResourceIdStr]:
+    def get_skipped_for_undeployable(self) -> list[ResourceIdStr]:
         """
         Returns a list of resource ids (NOT resource version ids)
         of resources which should get a skipped_for_undeployable state
@@ -5945,7 +5953,7 @@ class ConfigurationModel(BaseDocument):
     @classmethod
     async def get_increment(
         cls, environment: uuid.UUID, version: int, *, connection: Optional[Connection] = None
-    ) -> tuple[set[m.ResourceIdStr], set[m.ResourceIdStr]]:
+    ) -> tuple[set[ResourceIdStr], set[ResourceIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -6249,7 +6257,7 @@ class DryRun(BaseDocument):
     resources: dict[str, object] = {}
 
     @classmethod
-    async def update_resource(cls, dryrun_id: uuid.UUID, resource_id: m.ResourceVersionIdStr, dryrun_data: JsonType) -> None:
+    async def update_resource(cls, dryrun_id: uuid.UUID, resource_id: ResourceVersionIdStr, dryrun_data: JsonType) -> None:
         """
         Register a resource update with a specific query that sets the dryrun_data and decrements the todo counter, only
         if the resource has not been saved yet.
@@ -6464,8 +6472,8 @@ class DiscoveredResource(BaseDocument):
 
     environment: uuid.UUID
     discovered_at: datetime.datetime
-    discovered_resource_id: m.ResourceIdStr
-    discovery_resource_id: Optional[m.ResourceIdStr]
+    discovered_resource_id: ResourceIdStr
+    discovery_resource_id: Optional[ResourceIdStr]
     values: dict[str, object]
 
     __primary_key__ = ("environment", "discovered_resource_id")

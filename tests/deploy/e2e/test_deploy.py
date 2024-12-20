@@ -28,12 +28,13 @@ import pytest
 
 from inmanta import config, const, data, execute
 from inmanta.config import Config
-from inmanta.data import SERVER_COMPILE, ResourceIdStr
+from inmanta.data import SERVER_COMPILE
 from inmanta.data.model import SchedulerStatusReport
 from inmanta.deploy.state import BlockedStatus, ComplianceStatus, DeploymentResult, ResourceState
 from inmanta.deploy.work import TaskPriority
 from inmanta.resources import Id
 from inmanta.server import SLICE_PARAM, SLICE_SERVER
+from inmanta.types import ResourceIdStr
 from inmanta.util import get_compiler_version
 from utils import (
     assert_resource_persistent_state,

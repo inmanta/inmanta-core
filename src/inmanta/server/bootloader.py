@@ -65,14 +65,6 @@ class ConstrainedApplicationContext(ApplicationContext):
     def set_feature_manager(self, feature_manager: FeatureManager) -> None:
         self.parent.set_feature_manager(feature_manager)
 
-    def register_default_logging_config(self, logging_config: inmanta_logging.LoggingConfigExtension) -> None:
-        """
-        Used by an Inmanta extension to register the default configuration of specific loggers, formatters
-        and handlers it uses. The names of the formatters and handlers must be prefixed with `<name-extension>_`.
-        """
-        logging_config.validate_for_extension(self.namespace)
-        self.parent.register_default_logging_config(logging_config)
-
 
 @stable_api
 class InmantaBootloader:

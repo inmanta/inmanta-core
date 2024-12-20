@@ -342,8 +342,8 @@ async def test_dryrun_code_loading_failure(server, client, resource_container, e
     assert changes[0]["attributes"]["handler"] == {
         "from_value": "FAILED",
         "from_value_compare": "FAILED",
-        "to_value": "Resource is in an undeployable state",
-        "to_value_compare": "Resource is in an undeployable state",
+        "to_value": "Unable to construct an executor for this resource",
+        "to_value_compare": "Unable to construct an executor for this resource",
     }
 
 

@@ -29,8 +29,9 @@ import pyformance
 from inmanta import data, resources
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployResult
-from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType
+from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
+from inmanta.types import ResourceIdStr, ResourceType
 
 LOGGER = logging.getLogger(__name__)
 
@@ -174,6 +175,8 @@ class Deploy(Task):
                         error=str(e),
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
+                    # Not attached to ctx, needs to be flushed to logger explicitly
+                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
                     return
 
@@ -198,7 +201,10 @@ class Deploy(Task):
                         error=str(e),
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
+                    # Not attached to ctx, needs to be flushed to logger explicitly
+                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
+
             finally:
                 if deploy_result is not None:
                     # We signaled start, so we signal end
@@ -231,29 +237,42 @@ class DryRun(Task):
             my_executor: executor.Executor = await self.get_executor(
                 task_manager, agent, executor_resource_details.id.entity_type, self.version
             )
-
-            dryrun_result: executor.DryrunResult = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
-            await task_manager.dryrun_update(
-                env=task_manager.environment,
-                dryrun_result=dryrun_result,
-            )
-
         except Exception:
-            # FIXME: seems weird to conclude undeployable state from generic Exception on either of two method calls
             logger_for_agent(agent).error(
-                "Skipping dryrun for resource %s because it is in undeployable state",
+                "Skipping dryrun for resource %s because due to an error in constructing the executor",
                 executor_resource_details.rvid,
                 exc_info=True,
             )
-            result = executor.DryrunResult(
+            dryrun_result = executor.DryrunResult(
                 rvid=executor_resource_details.rvid,
                 dryrun_id=self.dry_run_id,
-                changes={"handler": AttributeStateChange(current="FAILED", desired="Resource is in an undeployable state")},
+                changes={
+                    "handler": AttributeStateChange(
+                        current="FAILED", desired="Unable to construct an executor for this resource"
+                    )
+                },
                 started=started,
                 finished=datetime.datetime.now().astimezone(),
                 messages=[],
             )
-            await task_manager.dryrun_update(env=task_manager.environment, dryrun_result=result)
+        else:
+            try:
+                dryrun_result = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
+            except Exception:
+                logger_for_agent(agent).error(
+                    "Skipping dryrun for resource %s because it is in undeployable state",
+                    executor_resource_details.rvid,
+                    exc_info=True,
+                )
+                dryrun_result = executor.DryrunResult(
+                    rvid=executor_resource_details.rvid,
+                    dryrun_id=self.dry_run_id,
+                    changes={"handler": AttributeStateChange(current="FAILED", desired="Resource is in an undeployable state")},
+                    started=started,
+                    finished=datetime.datetime.now().astimezone(),
+                    messages=[],
+                )
+        await task_manager.dryrun_update(env=task_manager.environment, dryrun_result=dryrun_result)
 
 
 class RefreshFact(Task):
