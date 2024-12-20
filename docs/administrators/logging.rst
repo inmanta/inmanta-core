@@ -12,9 +12,11 @@ configured regarding to logging.
 Overview different log files
 ============================
 
-By default log files are collected in the directory ``/var/log/inmanta/``. Three different types of log files exist: the
-server log, the resource action logs and the agent logs. The server log and the resource action log files are produced by
-the Inmanta server. The agent log files are produced by the Inmanta agents.
+By default log files are collected in the directory ``/var/log/inmanta/``. Three different types of log files exist:
+
+ 1. the server log (produced by the server)
+ 2. the resource action logs (also produced by the server)
+ 3. the scheduler logs. (produced by the scheduler)
 
 
 Server log
@@ -47,7 +49,7 @@ For every environment, the scheduler produces the following three log files:
 * ``agent-<environment-id>.err``: This log file contains all the messages written to the standard error stream of the resource
   handlers used by the scheduler.
 
-For reasons of backward comaptiblity, these files are called 'agent' and not 'scheduler'
+For reasons of backward compatibility, these files are called 'agent' and not 'scheduler'
 
 Configure logging
 =================
