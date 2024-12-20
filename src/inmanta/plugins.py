@@ -244,8 +244,7 @@ def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, valu
         # if the value is None, it becomes None
         return None
 
-    base_type = expected_type.get_base_type()
-    if base_type.has_custom_to_python():
+    if expected_type.has_custom_to_python():
         return expected_type.to_python(value)
     return DynamicProxy.return_value(value)
 
@@ -415,9 +414,6 @@ class PluginArgument(PluginValue):
             return "%s: %s = %s" % (self.arg_name, repr(self.arg_type), str(self.default_value))
         else:
             return "%s: %s" % (self.arg_name, repr(self.arg_type))
-
-    def to_python_domain(self, value: object) -> object:
-        return validate_and_convert_to_python_domain(self.resolved_type, value)
 
 
 class PluginReturn(PluginValue):

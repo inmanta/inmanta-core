@@ -649,6 +649,9 @@ class Entity(NamedType, WithComment):
 
         self._paired_dataclass = dataclass
 
+    def get_paired_dataclass(self) -> Optional[typing.Type[object]]:
+        return self._paired_dataclass
+
     def corresponds_to(self, pytype: typing.Type) -> bool:
         return self._paired_dataclass == pytype
 

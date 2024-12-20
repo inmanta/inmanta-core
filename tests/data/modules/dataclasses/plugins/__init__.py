@@ -92,3 +92,19 @@ def make_bad_virtual_machine() -> "dataclasses::Virtualmachine":
     out = Virtualmachine(name="Test", os={"X": "x"}, ram=5, cpus={"s": 5}, disk=["root"], slots=None)
 
     return out
+
+
+class SomeWhatStringLike(str):
+
+    def also_this(self) -> int:
+        return 5
+
+
+@plugin
+def odd_string() -> "string":
+    return SomeWhatStringLike("it")
+
+
+@plugin
+def is_odd_string(thing: "string") -> None:
+    assert isinstance(thing, SomeWhatStringLike)

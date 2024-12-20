@@ -439,7 +439,7 @@ class Bool(Primitive):
         return "bool"
 
     def to_python(self, instance: object) -> "object":
-        return object
+        return instance
 
 
 @stable_api
@@ -490,7 +490,7 @@ class String(Primitive):
         return "str"
 
     def to_python(self, instance: object) -> "object":
-        return str(instance)
+        return instance
 
 
 @stable_api
