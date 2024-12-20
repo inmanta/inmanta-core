@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Seq
 import typing_inspect
 
 import inmanta.ast.type as inmanta_type
-from inmanta import const, protocol, util, references
+from inmanta import const, protocol, references, util
 from inmanta.ast import LocatableString, Location, Namespace
 from inmanta.ast import PluginException as PluginException  # noqa: F401 Plugin exception is part of the stable api
 from inmanta.ast import Range, RuntimeException, TypeNotFoundException, WithComment, entity
@@ -431,6 +431,7 @@ class PluginReturn(PluginValue):
         # Post process dataclasses
         base_type = self.resolved_type.get_base_type()
         if isinstance(base_type, entity.Entity) and (dc_type := base_type.get_paired_dataclass()) is not None:
+
             def make_dc(value: object) -> object:
                 if isinstance(value, dc_type) or references.is_reference_of(value, dc_type):
                     return base_type.from_python(value, resolver, queue, location)

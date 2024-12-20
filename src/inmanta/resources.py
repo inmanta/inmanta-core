@@ -28,7 +28,7 @@ import inmanta.ast
 import inmanta.util
 from inmanta import const, references
 from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
-from inmanta.execute import util, proxy
+from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 
