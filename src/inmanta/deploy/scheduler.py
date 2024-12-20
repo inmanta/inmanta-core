@@ -1233,9 +1233,9 @@ class ResourceScheduler(TaskManager):
                     else f"Deploying because an event was received from {resource_id}"
                 ),
                 priority=priority,
-                # report no ongoing deploys because ongoing deploys can not capture the event. We desire new deploys
-                # to be scheduled, even if any are ongoing for the same intent.
-                deploying=set(),
+                # report no ongoing deploys for the given resources because ongoing deploys can not capture the event.
+                # We desire new deploys to be scheduled, even if any are ongoing for the same intent.
+                deploying=self._deploying_latest,
             )
 
     async def _get_last_non_deploying_state_for_dependencies(
