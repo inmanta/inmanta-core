@@ -895,16 +895,16 @@ def default_logging_config(options: argparse.Namespace) -> None:
 
     context = {var: f"{place_holder}{var}{place_holder}" for var in context_vars}
 
-    second_config = InmantaLoggerConfig(stream=sys.stdout, no_install=True)
-    second_config.apply_options(options, options.cmd, context)
+    component_config = InmantaLoggerConfig(stream=sys.stdout, no_install=True)
+    component_config.apply_options(options, options.cmd, context)
 
     if options.cmd == "server":
         # Upgrade with extensions
         ibl = InmantaBootloader()
-        ibl.start_loggers_for_extensions(second_config)
+        ibl.start_loggers_for_extensions(component_config)
 
-    assert second_config._loaded_config is not None  # make mypy happy
-    raw_dump = second_config._loaded_config.to_string()
+    assert component_config._loaded_config is not None  # make mypy happy
+    raw_dump = component_config._loaded_config.to_string()
 
     # 2. if we detect the placeholder
     if place_holder in raw_dump:
