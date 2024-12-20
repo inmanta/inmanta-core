@@ -188,23 +188,23 @@ class FullLoggingConfig(LoggingConfigExtension):
         FullLoggingConfig object that contains all the logging config of both objects.
         """
 
-        def warn_or_raise(component: str, names: set[str]) -> None:
-            if not allow_overwrite:
-                raise Exception(f"The following {component} names appear in multiple logging configs: {names}")
-            else:
-                logging.warning(
-                    "The following %s names appear in multiple logging configs: %s", component, common_formatter_names
-                )
+        def warn_or_raise_on_common(component: str, one_set: Mapping[str, object], other_set: Mapping[str, object]) -> None:
+            common_names = set(one_set.keys()) & set(other_set.keys())
+            # don't warn if identical!
+            common_names = {
+                common_name for common_name in common_names if one_set.get(common_name) == other_set.get(common_name)
+            }
+            if not common_names:
+                return
 
-        common_formatter_names = set(self.formatters.keys()) & set(logging_config_extension.formatters.keys())
-        if common_formatter_names:
-            warn_or_raise("formatter", common_formatter_names)
-        common_handler_names = set(self.handlers.keys()) & set(logging_config_extension.handlers.keys())
-        if common_handler_names:
-            warn_or_raise("handler", common_handler_names)
-        common_logger_names = set(self.loggers.keys()) & set(logging_config_extension.loggers.keys())
-        if common_logger_names:
-            warn_or_raise("logger", common_logger_names)
+            if not allow_overwrite:
+                raise Exception(f"The following {component} names appear in multiple logging configs: {common_names}")
+            else:
+                logging.warning("The following %s names appear in multiple logging configs: %s", component, common_names)
+
+        warn_or_raise_on_common("formatter", self.formatters, logging_config_extension.formatters)
+        warn_or_raise_on_common("handler", self.handlers, logging_config_extension.handlers)
+        warn_or_raise_on_common("logger", self.loggers, logging_config_extension.loggers)
 
         def update_join(one_dict: Mapping[str, object], two_dict: Mapping[str, object]) -> dict[str, object]:
             out = dict(**one_dict)
@@ -227,7 +227,7 @@ class FullLoggingConfig(LoggingConfigExtension):
             formatters=update_join(self.formatters, logging_config_extension.formatters),
             handlers=update_join(self.handlers, logging_config_extension.handlers),
             loggers=update_join(self.loggers, logging_config_extension.loggers),
-            root_handlers=sorted(self.root_handlers + logging_config_extension.root_handlers),
+            root_handlers=sorted(list(set(self.root_handlers) | set(logging_config_extension.root_handlers))),
             log_dirs_to_create=self.log_dirs_to_create | logging_config_extension.log_dirs_to_create,
             root_log_level=root_level,
         )
@@ -530,12 +530,15 @@ class InmantaLoggerConfig:
 
     _instance: Optional["InmantaLoggerConfig"] = None
 
-    def __init__(self, stream: TextIO = sys.stdout) -> None:
+    def __init__(self, stream: TextIO = sys.stdout, no_install: bool = False) -> None:
         """
         Set up the logging handler for Inmanta
 
         :param stream: The TextIO stream where the logs will be sent to.
         """
+        # Do we want to actually install the config?
+        self.no_install = no_install
+
         log_config: FullLoggingConfig = LoggingConfigBuilder().get_bootstrap_logging_config(stream)
         self._stream = stream
         self._handlers: Sequence[logging.Handler] = self._apply_logging_config(log_config)
@@ -715,7 +718,8 @@ class InmantaLoggerConfig:
         This method assume that the given config defines a single root handler.
         """
         handlers_before = list(logging.root.handlers)
-        logging_config.apply_config()
+        if not self.no_install:
+            logging_config.apply_config()
         self._loaded_config = logging_config
         return [handler for handler in logging.root.handlers if handler not in handlers_before]
 

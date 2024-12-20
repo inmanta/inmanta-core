@@ -113,10 +113,12 @@ class InmantaBootloader:
         await self.restserver.start()
         self.started = True
 
-    def start_loggers_for_extensions(self) -> FullLoggingConfig:
+    def start_loggers_for_extensions(self, on_config: InmantaLoggerConfig | None = None) -> FullLoggingConfig:
         ctx = self.load_slices()
         log_config_extenders = ctx.get_default_log_config_extenders()
-        return InmantaLoggerConfig.get_current_instance().extend_config(log_config_extenders)
+        if on_config is None:
+            on_config = InmantaLoggerConfig.get_current_instance()
+        return on_config.extend_config(log_config_extenders)
 
     async def stop(self, timeout: Optional[int] = None) -> None:
         """

@@ -63,7 +63,7 @@ from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import ALL_LOG_CONTEXT_VARS, EXIT_START_FAILED, LOG_CONTEXT_VAR_ENVIRONMENT
 from inmanta.export import cfg_env
-from inmanta.logging import FullLoggingConfig, InmantaLoggerConfig, LoggingConfigBuilder, _is_on_tty
+from inmanta.logging import InmantaLoggerConfig, _is_on_tty
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.databaseservice import initialize_database_connection_pool
@@ -874,8 +874,6 @@ def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequen
     parser_config=default_log_config_parser,
 )
 def default_logging_config(options: argparse.Namespace) -> None:
-    config_builder = LoggingConfigBuilder()
-
     # Because we want to have contex vars in the files,
     #   but the file can also contain other f-string formatters, this is a bit tricky.
     # We want to be able to
@@ -897,16 +895,15 @@ def default_logging_config(options: argparse.Namespace) -> None:
 
     context = {var: f"{place_holder}{var}{place_holder}" for var in context_vars}
 
-    logging_config: FullLoggingConfig = config_builder.get_logging_config_from_options(
-        sys.stdout, options, options.cmd, context
-    )
+    second_config = InmantaLoggerConfig(stream=sys.stdout, no_install=True)
+    second_config.apply_options(options, options.cmd, context)
 
     if options.cmd == "server":
         # Upgrade with extensions
         ibl = InmantaBootloader()
-        logging_config = ibl.start_loggers_for_extensions()
+        ibl.start_loggers_for_extensions(second_config)
 
-    raw_dump = logging_config.to_string()
+    raw_dump = second_config._loaded_config.to_string()
 
     # 2. if we detect the placeholder
     if place_holder in raw_dump:

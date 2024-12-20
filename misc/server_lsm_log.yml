@@ -13,7 +13,6 @@ formatters:
       ERROR: red
       INFO: green
       WARNING: yellow
-    no_color: false
   # Normal formatter
   core_log_formatter:
     format: '%(asctime)s %(levelname)-8s %(name)-10s %(message)s'
@@ -21,7 +20,7 @@ formatters:
   lsm_callback_formatter:
     format: '%(asctime)s %(name)-25s%(levelname)-8s%(message)s'
 handlers:
-  root_handler:
+  server_handler:
     # Main handler for the server
     class: logging.handlers.WatchedFileHandler
     filename: /var/log/inmanta/server.log
@@ -51,7 +50,7 @@ loggers:
     propagate: true
 root:
   handlers:
-  - root_handler
+  - server_handler
   level: INFO
 version: 1
 disable_existing_loggers: false
