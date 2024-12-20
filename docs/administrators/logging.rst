@@ -53,6 +53,7 @@ Configure logging
 =================
 
 Logging can be configured in two main way:
+
 - course grained configuration using configuration and command line options. This is sufficient in most cases.
 - fine grained configuration using a config file. Here the logging config is fully user controlled.
 
@@ -102,8 +103,7 @@ file at ``/usr/lib/systemd/system/inmanta-server.service``.
 
 Fine grained configuration
 ----------------------------
-
-For fine grained configuration, `a standard python dict config file<https://docs.python.org/3/library/logging.config.html#logging.config.dictConfig>` can be passed in via the config file for each component individually or via a cli option:
+For fine grained configuration, `a standard python dict config file <https://docs.python.org/3/library/logging.config.html#logging-config-dictschema>`_ can be passed in via the config file for each component individually:
 
 .. code-block:: yaml
 
@@ -112,14 +112,14 @@ For fine grained configuration, `a standard python dict config file<https://docs
     scheduler = scheduler.log.tmpl
     compiler = compiler.yml
 
-or
+or via a cli option:
 
 .. code-block:: sh
 
     inmanta --logging-config server_log.yml server
 
 
-The log config has to be either a `yaml` file, containing `python dict config<https://docs.python.org/3/library/logging.config.html#logging.config.dictConfig>` or a template of a `yaml` file. In this case, the file name has to end with `tmpl`.
+The log config has to be either a ``yaml`` file, containing a `python dict config <https://docs.python.org/3/library/logging.config.html#logging-config-dictschema>`_ or a template of a ``yaml`` file. In this case, the file name has to end with ``tmpl``.
 
 The following log-related options can be set in an Inmanta config file:
 
@@ -131,9 +131,10 @@ The following log-related options can be set in an Inmanta config file:
 
 * ``-v``: When used in combination with a log file, it will force a CLI logger to be loaded on top of the provided configuration
 * ``--logging-config``: Log configuration file for this command, overrides the config option
+* If a config file is loaded, all other course grained configuration options are ignored!
 
 For templated config files, we use pythons f-string syntax.
-For the scheduler, one variable is available in the template: `{environment}`. This is used to customize the scheduler log files to the environment the scheduler is working for.
+For the scheduler, one variable is available in the template: ``{environment}``. This is used to customize the scheduler log files to the environment the scheduler is working for.
 
 Converting to fine grained configuration
 ----------------------------------------
