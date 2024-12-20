@@ -28,18 +28,12 @@ Inmanta server, etc.
 Resource action logs
 --------------------
 
-The resource action log files contain information about actions performed on a specific resource. Each environment has one
+The resource action log files contain information about actions performed on all resources. Each environment has one
 resource action log file. The filename of this log file looks as follows:
 ``resource-actions-<environment-id>.log``. The prefix can be configured with the configuration option
 :inmanta.config:option:`server.resource-action-log-prefix`.
 
-The resource action log file contains information about the following resource action:
-
-* **Store**: A new version of a configuration model and its resources has been pushed to the Inmanta server.
-* **Pull**: An agent pulled its resources from the Inmanta server.
-* **Deploy**: When an agent starts and ends the deployment of a certain resource.
-* **Dryrun**: Execute a dryrun for a certain resource.
-
+This file mirrors the actions logged on resources in the database.
 
 Scheduler logs
 --------------
