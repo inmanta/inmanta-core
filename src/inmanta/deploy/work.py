@@ -448,7 +448,7 @@ class ScheduledWork:
 
         # lookup caches for visited nodes
         # queued or running, pre-populate with in-progress deploys
-        queued: set[ResourceIdStr] = set(deploying) if not force_deploy else (deploying - resources)
+        queued: set[ResourceIdStr] = set(deploying) if not force_deploy else set(deploying - resources)
         not_scheduled: set[ResourceIdStr] = set()
 
         # Bump the priority of (non-stale) deploying tasks. This will only increase the priority of propagated events
