@@ -1277,6 +1277,85 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert agent.executor_manager.executors["agent2"].execute_count == 3
     assert agent.executor_manager.executors["agent3"].execute_count == 0
 
+    ###########################################################################################
+    # Verify resources wait for all dependencies to finish when they receive an event (#8514) #
+    ###########################################################################################
+    agent.executor_manager.reset_executor_counters()
+
+    # set up initial state: have rid3 depend on both other resources
+    resources = make_resources(
+        r1_value=1,
+        r2_value=1,
+        r3_value=1,
+        requires={
+            rid3: [rid1, rid2],
+        },
+        r1_send_event=True,
+        r2_send_event=False,
+    )
+    await agent.scheduler._new_version(18, resources, make_requires(resources))
+    await retry_limited_fast(lambda: rid2 in executor2.deploys)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
+    await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
+    assert len(agent.scheduler._work._waiting) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
+    assert agent.executor_manager.executors["agent3"].execute_count == 1
+
+    # release a change for rid2 to get it in a deploying state
+    resources = make_resources(
+        r1_value=1,
+        r2_value=2,
+        r3_value=1,
+        requires={
+            rid3: [rid1, rid2],
+        },
+        r1_send_event=True,
+        r2_send_event=False,
+    )
+    await agent.scheduler._new_version(19, resources, make_requires(resources))
+    await retry_limited_fast(lambda: rid2 in executor2.deploys)
+    # leave it hanging in deploying state for now. Assert that all else is stable
+    assert agent.scheduler._work.agent_queues._in_progress.keys() == {tasks.Deploy(resource=rid2)}
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
+    assert len(agent.scheduler._work._waiting) == 0
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
+    assert agent.executor_manager.executors["agent3"].execute_count == 1
+
+    # release a change for rid1
+    resources = make_resources(
+        r1_value=2,
+        r2_value=2,
+        r3_value=1,
+        requires={
+            rid3: [rid1, rid2],
+        },
+        r1_send_event=True,
+        r2_send_event=False,
+    )
+    await agent.scheduler._new_version(20, resources, make_requires(resources))
+    # wait until rid1 is done
+    await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 2)
+    # verify that rid2 is still in a deploying state
+    assert rid2 in executor2.deploys
+    assert agent.scheduler._work.agent_queues._in_progress.keys() == {tasks.Deploy(resource=rid2)}
+    # verify that rid3 got the event and is waiting for rid2
+    assert agent.scheduler._work._waiting.keys() == {rid3}
+    assert agent.scheduler._work._waiting[rid3].blocked_on == {rid2}
+    assert agent.scheduler._work._waiting[rid3].reason == f"Deploying because an event was received from {rid1}"
+
+    # finish rid2 deploy, assert end condition
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
+    await retry_limited_fast(lambda: agent.executor_manager.executors["agent3"].execute_count == 2)
+    assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
+    assert len(agent.scheduler._work._waiting) == 0
+    assert agent.executor_manager.executors["agent1"].execute_count == 2
+    assert agent.executor_manager.executors["agent2"].execute_count == 2
+    assert agent.executor_manager.executors["agent3"].execute_count == 2
+
 
 async def test_receive_events(agent: TestAgent, make_resource_minimal):
     """
