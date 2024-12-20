@@ -106,12 +106,8 @@ The following log-related options can be set in an Inmanta config file:
 
 * ``-v``: When used in combination with a log file, it will force a CLI logger to be loaded on top of the provided configuration
 * ``--logging-config``: Log configuration file for this command, overrides the config option
-<<<<<<< Updated upstream
-* If a config file is loaded, all other coarse grained configuration options are ignored!
-=======
 * ``-X``: When exiting with an error, show full stack trace.
-* If a config file is loaded, all other course grained configuration options are ignored!
->>>>>>> Stashed changes
+* If a config file is loaded, all other coarse grained configuration options are ignored!
 
 For templated config files, we use python f-string syntax.
 For the scheduler, one variable is available in the template: ``{environment}``. This is used to customize the scheduler log files to the environment the scheduler is working for.
