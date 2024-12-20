@@ -17,7 +17,7 @@ By default log files are collected in the directory ``/var/log/inmanta/``.  The 
 
 1. ``server.log`` is the main log file of the server. It shows general information about actions performed by the Inmanta server (renewing parameters, purging resource action logs, etc.), and the access log of the API.
 2. ``resource-actions-<environment-id>.log`` contains the all actions performed by all resources. Each environment has one resource action log file. This file mirrors the actions logged on resources in the database.
-3. ``agent-<environment-id>.log`` is the main log of the scheduler. It contains information about when any executor started a deployment, which trigger caused that deployment, whether heartbeat messages are received from the server, etc.
+3. ``agent-<environment-id>.log`` is the main log of the scheduler and executors. It contains information about when any executor started a deployment, which trigger caused that deployment, whether heartbeat messages are received from the server, etc.
 4. ``agent-<environment-id>.out``: This log file contains all the messages written to the standard output stream of the scheduler and executors. Expected to be empty.
 5. ``agent-<environment-id>.err``: This log file contains all the messages written to the standard error stream of the scheduler and executors. Expected to be empty.
 
