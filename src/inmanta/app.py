@@ -903,6 +903,7 @@ def default_logging_config(options: argparse.Namespace) -> None:
         ibl = InmantaBootloader()
         ibl.start_loggers_for_extensions(second_config)
 
+    assert second_config._loaded_config is not None  # make mypy happy
     raw_dump = second_config._loaded_config.to_string()
 
     # 2. if we detect the placeholder
