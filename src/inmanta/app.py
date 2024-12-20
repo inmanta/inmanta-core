@@ -645,19 +645,17 @@ def validate_logging_config_parser_config(
     parser_config=validate_logging_config_parser_config,
 )
 def validate_logging_config(options: argparse.Namespace) -> None:
+    if not os.path.exists(options.filename):
+        raise Exception(f"Logging config file {options.filename} doesn't exist.")
     log_config = InmantaLoggerConfig.get_instance()
     logger_context = _get_log_context_variables(options)
-    try:
-        log_config.apply_options(
-            options=Options(
-                verbose=0,
-                logging_config=options.filename,
-            ),
-            context=_get_log_context_variables(options),
-        )
-    except Exception as e:
-        print(str(e), file=sys.stderr)
-        sys.exit(1)
+    log_config.apply_options(
+        options=Options(
+            verbose=0,
+            logging_config=options.filename,
+        ),
+        context=_get_log_context_variables(options),
+    )
     env_id = logger_context.get(LOG_CONTEXT_VAR_ENVIRONMENT, "<env_id>")
     logger_and_message = [
         (logging.getLogger("inmanta.protocol.rest.server"), "Log line from Inmanta server"),
@@ -1049,7 +1047,11 @@ def app() -> None:
 
     if hasattr(options, "func") and options.func == validate_logging_config:
         # By-pass all other logging setup code when validating logging config.
-        options.func(options)
+        try:
+            options.func(options)
+        except Exception as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
         return
 
     # Bootstrap log config

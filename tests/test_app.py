@@ -528,11 +528,18 @@ def test_validate_logging_config(tmpdir):
     log_dir = os.path.join(tmpdir, "log")
     os.mkdir(log_dir)
 
+    logging_config_file = os.path.join(tmpdir, "non-existing-file")
+    _, stderr, returncode = run_without_tty(
+        args=[sys.executable, "-m", "inmanta.app", "validate-logging-config", logging_config_file],
+    )
+    assert returncode == 1
+    assert any(f"Logging config file {logging_config_file} doesn't exist" in line for line in stderr)
+
     logging_config_file = os.path.join(tmpdir, "logging_config.yml")
     # Write logging config that contains a syntax error
     with open(logging_config_file, "w") as fh:
         fh.write(
-            """
+        """
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
@@ -559,7 +566,7 @@ def test_validate_logging_config(tmpdir):
     # Simple logging config that writes all logs to stdout
     with open(logging_config_file, "w") as fh:
         fh.write(
-            """
+        """
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
@@ -597,7 +604,7 @@ def test_validate_logging_config(tmpdir):
     logging_config_file = os.path.join(tmpdir, "logging_config.yml.tmpl")
     with open(logging_config_file, "w") as fh:
         fh.write(
-            f"""
+        f"""
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
