@@ -34,19 +34,21 @@ from inmanta import config, const, data, loader, resources, util
 from inmanta.agent import executor, handler
 from inmanta.const import ParameterSource
 from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
-from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
-from inmanta.deploy import persistence
+from inmanta.data.model import AttributeStateChange
+from inmanta.deploy import persistence, state
 from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
 from utils import log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
 
+@pytest.mark.parametrize("no_agent", [True])
 @pytest.mark.parametrize(
     "n_versions_to_keep, n_versions_to_create",
     [
@@ -55,7 +57,7 @@ LOGGER = logging.getLogger(__name__)
         (2, 2),
     ],
 )
-async def test_create_too_many_versions(client, server, n_versions_to_keep, n_versions_to_create):
+async def test_create_too_many_versions(client, server, no_agent, n_versions_to_keep, n_versions_to_create):
     """
     - set AVAILABLE_VERSIONS_TO_KEEP environment setting to <n_versions_to_keep>
     - create <n_versions_to_create> versions
@@ -72,7 +74,7 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     env_1_id = result.result["environment"]["id"]
     result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep)
     assert result.code == 200
-    # Make sure we don't have a released version. _purge_versions() always keeps the latest released version.
+    # Perform release manually using the release_version() endpoint to prevent race conditions.
     result = await client.set_setting(env_1_id, AUTO_DEPLOY, False)
     assert result.code == 200
 
@@ -119,6 +121,9 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
         )
         assert res.code == 200
 
+        res = await client.release_version(tid=env_1_id, id=version)
+        assert res.code == 200
+
     versions = await client.list_versions(tid=env_1_id)
     assert versions.result["count"] == n_versions_to_create
 
@@ -134,14 +139,16 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
 
     versions = await client.list_versions(tid=env_1_id)
-    assert versions.result["count"] == min(n_versions_to_keep, n_versions_to_create)
+    # Add +1, because the latest released version is not included in the AVAILABLE_VERSIONS_TO_KEEP setting.
+    assert versions.result["count"] == min(n_versions_to_keep + 1, n_versions_to_create)
 
     prvs = await ResourcePersistentState.get_list()
-    assert len(prvs) == min(n_versions_to_keep, n_versions_to_create) + 1
+    # 1 variable resource per version + 1 fixed resource per version
+    assert len(prvs) == min(n_versions_to_keep + 2, n_versions_to_create + 1)
 
 
 @pytest.mark.parametrize("has_released_versions", [True, False])
-async def test_purge_versions(server, client, environment, has_released_versions: bool, agent) -> None:
+async def test_purge_versions(server, client, environment, has_released_versions: bool, agent_no_state_check) -> None:
     """
     Verify that the `OrchestrationService._purge_versions()` method works correctly and that it doesn't cleanup
     the latest released version.
@@ -655,33 +662,32 @@ async def test_batched_code_upload(
             assert info.content == source_code
 
 
-async def test_resource_action_log(server, client, environment):
-    version = (await client.reserve_version(environment)).result["data"]
-    resources = [
-        {
-            "group": "root",
-            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::testing::NullResource[vm1.dev.inmanta.com,name=network],v=%d" % version,
-            "owner": "root",
-            "path": "/etc/sysconfig/network",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "version": version,
-        }
-    ]
-    res = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-    )
-    assert res.code == 200
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_resource_action_log(server, client, environment, clienthelper, snippetcompiler):
+    await clienthelper.set_auto_deploy()
 
+    snippetcompiler.setup_for_snippet(
+        """\
+        import std::testing
+
+        std::testing::NullResource(name="network", agentname="internal")
+        """,
+        autostd=True,
+    )
+
+    version, _ = await snippetcompiler.do_export_and_deploy()
+
+    await clienthelper.wait_for_released(version)
+    await clienthelper.wait_for_deployed(version)
     resource_action_log = os.path.join(config.log_dir.get(), f"{opt.server_resource_action_log_prefix.get()}{environment}.log")
+    print(resource_action_log)
+    logging.root.warning("%s", resource_action_log)
+
+    log = os.path.join(config.log_dir.get(), f"agent-{environment}.log")
+    with open(log, "r") as fh:
+        for line in fh:
+            logging.warning(line)
+
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
     with open(resource_action_log) as f:
@@ -1100,6 +1106,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     assert action_ids == third_page_action_ids
 
 
+@pytest.mark.parametrize("no_agent", [True])
 @pytest.mark.parametrize("method_to_use", ["send_in_progress", "resource_action_update"])
 async def test_send_in_progress(server, client, environment, agent, method_to_use: str):
     """
@@ -1132,7 +1139,8 @@ async def test_send_in_progress(server, client, environment, agent, method_to_us
         last_non_deploying_status: const.NonDeployingResourceState,
         resource_version_id: str,
         attributes: dict[str, object],
-    ) -> data.Resource:
+        version: int,
+    ) -> None:
         r1 = data.Resource.new(
             environment=env_id,
             status=status,
@@ -1140,6 +1148,7 @@ async def test_send_in_progress(server, client, environment, agent, method_to_us
             attributes=attributes,
         )
         await r1.insert()
+        await data.ResourcePersistentState.populate_for_version(environment=uuid.UUID(environment), model_version=version)
         await r1.update_persistent_state(last_deploy=datetime.now(tz=UTC), last_non_deploying_status=last_non_deploying_status)
 
     await make_resource_with_last_non_deploying_status(
@@ -1147,25 +1156,28 @@ async def test_send_in_progress(server, client, environment, agent, method_to_us
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2, rvid_r3]},
+        version=model_version,
     )
     await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
+        version=model_version,
     )
     await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.failed,
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
+        version=model_version,
     )
 
     action_id = uuid.uuid4()
 
     if method_to_use == "send_in_progress":
         update_manager = persistence.ToDbUpdateManager(client, env_id)
-        await update_manager.send_in_progress(action_id, ResourceVersionIdStr(rvid_r1_v1))
+        await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid_r1_v1))
     else:
         await agent._client.resource_action_update(
             tid=env_id,
@@ -1225,7 +1237,7 @@ async def test_send_in_progress_action_id_conflict(server, client, environment, 
 
     async def execute_send_in_progress(expect_exception: bool, resulting_nr_resource_actions: int) -> None:
         try:
-            await update_manager.send_in_progress(action_id, rvid_r1_v1)
+            await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid_r1_v1))
         except ValueError:
             assert expect_exception
         else:
@@ -1243,33 +1255,27 @@ async def test_send_in_progress_action_id_conflict(server, client, environment, 
     "method_to_use",
     ["send_deploy_done", "resource_action_update"],
 )
-async def test_send_deploy_done(server, client, environment, agent, caplog, method_to_use):
+async def test_send_deploy_done(server, client, environment, null_agent, caplog, method_to_use, clienthelper):
     """
     Ensure that the `send_deploy_done` method behaves in the same way as the `resource_action_update` endpoint
     when the finished field is not None.
     """
+    result = await client.set_setting(environment, "auto_deploy", True)
+    assert result.code == 200
+
     env_id = uuid.UUID(environment)
-
-    model_version = 1
-    cm = data.ConfigurationModel(
-        environment=env_id,
-        version=model_version,
-        date=datetime.now().astimezone(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-        released=True,
-    )
-    await cm.insert()
-
-    rid_r1 = "std::testing::NullResource[agent1,name=file1]"
+    model_version = await clienthelper.get_version()
+    rid_r1 = ResourceIdStr("std::testing::NullResource[agent1,name=file1]")
     rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1},v={model_version}")
-    await data.Resource.new(
-        environment=env_id,
-        status=const.ResourceState.available,
-        resource_version_id=rvid_r1_v1,
-        attributes={"purge_on_delete": False, "purged": True, "requires": []},
-    ).insert()
+    attributes_r1 = {
+        "name": "file1",
+        "id": f"std::testing::NullResource[agent1,name=file1],v={model_version}",
+        "version": model_version,
+        "purge_on_delete": False,
+        "purged": True,
+        "requires": [],
+    }
+    await clienthelper.put_version_simple(resources=[attributes_r1], version=model_version, wait_for_released=True)
 
     # Add parameter for resource
     parameter_id = "test_param"
@@ -1284,13 +1290,14 @@ async def test_send_deploy_done(server, client, environment, agent, caplog, meth
 
     update_manager = persistence.ToDbUpdateManager(client, env_id)
     action_id = uuid.uuid4()
-    await update_manager.send_in_progress(action_id, rvid_r1_v1)
+    await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid_r1_v1))
 
     # Assert initial state
     result = await client.get_resource_actions(tid=env_id)
     assert result.code == 200, result.result
-    assert len(result.result["data"]) == 1
-    resource_action = result.result["data"][0]
+    deploy_resource_actions = [r for r in result.result["data"] if r["action"] == const.ResourceAction.deploy.value]
+    assert len(deploy_resource_actions) == 1
+    resource_action = deploy_resource_actions[0]
     assert resource_action["environment"] == str(env_id)
     assert resource_action["version"] == model_version
     assert resource_action["resource_version_ids"] == [rvid_r1_v1]
@@ -1315,17 +1322,23 @@ async def test_send_deploy_done(server, client, environment, agent, caplog, meth
         ]
         if method_to_use == "send_deploy_done":
             await update_manager.send_deploy_done(
+                attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes_r1),
                 result=executor.DeployResult(
                     rvid=rvid_r1_v1,
                     action_id=action_id,
-                    status=const.ResourceState.deployed,
+                    resource_state=const.HandlerResourceState.deployed,
                     messages=messages,
                     changes={"attr1": AttributeStateChange(current=None, desired="test")},
                     change=const.Change.purged,
-                )
+                ),
+                state=state.ResourceState(
+                    status=state.ComplianceStatus.COMPLIANT,
+                    deployment_result=state.DeploymentResult.DEPLOYED,
+                    blocked=state.BlockedStatus.NO,
+                ),
             )
         else:
-            result = await agent._client.resource_action_update(
+            result = await null_agent._client.resource_action_update(
                 tid=env_id,
                 resource_ids=[rvid_r1_v1],
                 action_id=action_id,
@@ -1340,14 +1353,11 @@ async def test_send_deploy_done(server, client, environment, agent, caplog, meth
             )
             assert result.code == 200, result.result
 
-    # Assert effect of send_deploy_done call
-    assert f"{rvid_r1_v1}: message" in caplog.messages
-    assert f"{rvid_r1_v1}: test" in caplog.messages
-
     result = await client.get_resource_actions(tid=env_id)
     assert result.code == 200, result.result
-    assert len(result.result["data"]) == 1
-    resource_action = result.result["data"][0]
+    deploy_resource_actions = [r for r in result.result["data"] if r["action"] == const.ResourceAction.deploy.value]
+    assert len(deploy_resource_actions) == 1
+    resource_action = deploy_resource_actions[0]
     assert resource_action["environment"] == str(env_id)
     assert resource_action["version"] == model_version
     assert resource_action["resource_version_ids"] == [rvid_r1_v1]
@@ -1398,58 +1408,21 @@ async def test_send_deploy_done(server, client, environment, agent, caplog, meth
     # A new send_deploy_done call for the same action_id should result in a ValueError
     with pytest.raises(ValueError):
         await update_manager.send_deploy_done(
+            attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes_r1),
             result=executor.DeployResult(
                 rvid=rvid_r1_v1,
                 action_id=action_id,
-                status=const.ResourceState.deployed,
+                resource_state=const.HandlerResourceState.deployed,
                 messages=[],
                 changes={"attr1": AttributeStateChange(current="test", desired="test2")},
                 change=const.Change.created,
-            )
+            ),
+            state=state.ResourceState(
+                status=state.ComplianceStatus.COMPLIANT,
+                deployment_result=state.DeploymentResult.DEPLOYED,
+                blocked=state.BlockedStatus.NO,
+            ),
         )
-
-
-async def test_send_deploy_done_invalid_state(server, client, environment, agent, caplog):
-    """
-    Ensure proper error handling when a transient state is passed to the `send_deploy_done` method.
-    """
-    env_id = uuid.UUID(environment)
-
-    model_version = 1
-    cm = data.ConfigurationModel(
-        environment=env_id,
-        version=model_version,
-        date=datetime.now().astimezone(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm.insert()
-
-    rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
-    await data.Resource.new(
-        environment=env_id,
-        status=const.ResourceState.available,
-        resource_version_id=rvid_r1_v1,
-        attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
-
-    action_id = uuid.uuid4()
-    update_manager = persistence.ToDbUpdateManager(client, env_id)
-    await update_manager.send_in_progress(action_id, rvid_r1_v1)
-
-    with pytest.raises(ValueError) as exec_info:
-        await update_manager.send_deploy_done(
-            result=executor.DeployResult(
-                rvid=rvid_r1_v1,
-                action_id=action_id,
-                status=const.ResourceState.deploying,
-                messages=[],
-                changes={"attr1": AttributeStateChange(current=None, desired="test")},
-                change=const.Change.created,
-            )
-        )
-    assert "No transient state can be used to mark a deployment as done" in str(exec_info.value)
 
 
 async def test_send_deploy_done_error_handling(server, client, environment, agent):
@@ -1472,14 +1445,20 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
     # Resource doesn't exist
     with pytest.raises(ValueError) as exec_info:
         await update_manager.send_deploy_done(
+            attribute_hash="",
             result=executor.DeployResult(
                 rvid=rvid_r1_v1,
                 action_id=uuid.uuid4(),
-                status=const.ResourceState.deployed,
+                resource_state=const.HandlerResourceState.deployed,
                 messages=[],
                 changes={},
                 change=const.Change.nochange,
-            )
+            ),
+            state=state.ResourceState(
+                status=state.ComplianceStatus.COMPLIANT,
+                deployment_result=state.DeploymentResult.DEPLOYED,
+                blocked=state.BlockedStatus.NO,
+            ),
         )
     assert "The resource with the given id does not exist in the given environment" in str(exec_info.value)
 
@@ -1494,14 +1473,20 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
     # Resource action doesn't exist
     with pytest.raises(ValueError) as exec_info:
         await update_manager.send_deploy_done(
+            attribute_hash="",
             result=executor.DeployResult(
                 rvid=rvid_r1_v1,
                 action_id=uuid.uuid4(),
-                status=const.ResourceState.deployed,
+                resource_state=const.HandlerResourceState.deployed,
                 messages=[],
                 changes={},
                 change=const.Change.nochange,
-            )
+            ),
+            state=state.ResourceState(
+                status=state.ComplianceStatus.COMPLIANT,
+                deployment_result=state.DeploymentResult.DEPLOYED,
+                blocked=state.BlockedStatus.NO,
+            ),
         )
     assert "No resource action exists for action_id" in str(exec_info.value)
 
@@ -1634,7 +1619,7 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
         assert sorted(agents_after_purge) == sorted(expected_agents_after_purge)
 
 
-async def test_serialization_attributes_of_resource_to_api(client, server, environment, clienthelper, agent) -> None:
+async def test_serialization_attributes_of_resource_to_api(client, server, environment, clienthelper, null_agent) -> None:
     """
     Due to a bug, the version of a resource was always included in the attribute dictionary.
     This issue has been patched in the database, but at the API boundary we still serve the version

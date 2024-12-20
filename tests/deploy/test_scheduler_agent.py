@@ -20,16 +20,19 @@
 
 import asyncio
 import hashlib
+import itertools
 import json
 import typing
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Set
 from concurrent.futures import ThreadPoolExecutor
-from typing import Mapping, Optional, Sequence, Tuple
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from typing import Any, Coroutine, Mapping, Optional, Sequence, Tuple
 from uuid import UUID
 
 import asyncpg
 import pytest
+from asyncpg import Connection
 
 import utils
 from inmanta import const, util
@@ -38,16 +41,16 @@ from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.const import Change
-from inmanta.data import ResourceIdStr
-from inmanta.data.model import ResourceVersionIdStr
 from inmanta.deploy import state, tasks
 from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ResourceScheduler
-from inmanta.deploy.state import BlockedStatus
-from inmanta.deploy.work import TaskPriority
+from inmanta.deploy.state import BlockedStatus, ComplianceStatus, DeploymentResult
+from inmanta.deploy.timers import TimerManager
+from inmanta.deploy.work import ScheduledWork, TaskPriority
 from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.resources import Id
+from inmanta.types import ResourceIdStr
 from inmanta.util import retry_limited
 from utils import DummyCodeManager, make_requires
 
@@ -79,7 +82,7 @@ class DummyExecutor(executor.Executor):
           Otherwise, the deploy is reported as successful.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.execute_count = 0
         self.dry_run_count = 0
         self.facts_count = 0
@@ -97,22 +100,25 @@ class DummyExecutor(executor.Executor):
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-        requires: dict[ResourceIdStr, const.ResourceState],
+        requires: Mapping[ResourceIdStr, const.HandlerResourceState],
     ) -> DeployResult:
         assert reason
         # Actual reason or test reason
         # The actual reasons are of the form `action because of reason`
         assert ("because" in reason) or ("Test" in reason)
         self.execute_count += 1
-        result = (
-            const.ResourceState.failed
-            if resource_details.attributes.get(FAIL_DEPLOY, False) is True
-            else const.ResourceState.deployed
-        )
+        if any(status != const.HandlerResourceState.deployed for status in requires.values()):
+            result = const.HandlerResourceState.skipped_for_dependency
+        else:
+            result = (
+                const.HandlerResourceState.failed
+                if resource_details.attributes.get(FAIL_DEPLOY, False) is True
+                else const.HandlerResourceState.deployed
+            )
         return DeployResult(
             resource_details.rvid,
             action_id,
-            status=result,
+            resource_state=result,
             messages=[],
             changes={},
             change=Change.nochange,
@@ -147,16 +153,16 @@ class ManagedExecutor(DummyExecutor):
 
     def __init__(self) -> None:
         super().__init__()
-        self._deploys: dict[ResourceIdStr, asyncio.Future[const.ResourceState]] = {}
+        self._deploys: dict[ResourceIdStr, asyncio.Future[const.HandlerResourceState]] = {}
 
     @property
-    def deploys(self) -> Mapping[ResourceIdStr, asyncio.Future[const.ResourceState]]:
+    def deploys(self) -> Mapping[ResourceIdStr, asyncio.Future[const.HandlerResourceState]]:
         return self._deploys
 
     async def stop(self) -> None:
         # resolve hanging futures to prevent test hanging during teardown
         for deploy in self._deploys.values():
-            deploy.set_result(const.ResourceState.undefined)
+            deploy.set_result(const.HandlerResourceState.failed)
 
     async def execute(
         self,
@@ -164,16 +170,23 @@ class ManagedExecutor(DummyExecutor):
         gid: uuid.UUID,
         resource_details: ResourceDetails,
         reason: str,
-        requires: dict[ResourceIdStr, const.ResourceState],
+        requires: dict[ResourceIdStr, const.HandlerResourceState],
     ) -> DeployResult:
         assert resource_details.rid not in self._deploys
         self._deploys[resource_details.rid] = asyncio.get_running_loop().create_future()
         # wait until the test case sets desired resource state
-        result: const.ResourceState = await self._deploys[resource_details.rid]
+        result: const.HandlerResourceState = await self._deploys[resource_details.rid]
         del self._deploys[resource_details.rid]
         self.execute_count += 1
 
-        return DeployResult(resource_details.rvid, action_id, status=result, messages=[], changes={}, change=Change.nochange)
+        return DeployResult(
+            resource_details.rvid,
+            action_id,
+            resource_state=const.HandlerResourceState(result),
+            messages=[],
+            changes={},
+            change=Change.nochange,
+        )
 
 
 class DummyManager(executor.ExecutorManager[executor.Executor]):
@@ -229,16 +242,40 @@ state_translation_table: dict[
 }
 
 
+class DummyTimerManager(TimerManager):
+    async def install_timer(
+        self, resource: ResourceIdStr, is_dirty: bool, action: Callable[..., Coroutine[Any, Any, None]]
+    ) -> None:
+        pass
+
+    def update_timer(self, resource: ResourceIdStr, *, is_compliant: bool) -> None:
+        pass
+
+    def stop_timer(self, resource: ResourceIdStr) -> None:
+        pass
+
+    def _trigger_global_deploy(self, cron_expression: str) -> None:
+        pass
+
+    def _trigger_global_repair(self, cron_expression: str) -> None:
+        pass
+
+
 class DummyStateManager(StateUpdateManager):
 
     def __init__(self):
         self.state: dict[ResourceIdStr, const.ResourceState] = {}
 
-    async def send_in_progress(self, action_id: UUID, resource_id: ResourceVersionIdStr) -> None:
-        self.state[Id.parse_id(resource_id).resource_str()] = const.ResourceState.deploying
+    async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
+        self.state[resource_id.resource_str()] = const.ResourceState.deploying
 
-    async def send_deploy_done(self, result: DeployResult) -> None:
-        self.state[Id.parse_id(result.rvid).resource_str()] = result.status
+    async def send_deploy_done(
+        self,
+        attribute_hash: str,
+        result: DeployResult,
+        state: state.ResourceState,
+    ) -> None:
+        self.state[result.resource_id] = result.status
 
     def check_with_scheduler(self, scheduler: ResourceScheduler) -> None:
         """Verify that the state we collected corresponds to the state as known by the scheduler"""
@@ -257,6 +294,29 @@ class DummyStateManager(StateUpdateManager):
 
     async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
         self.state[Id.parse_id(dryrun_result.rvid).resource_str()] = const.ResourceState.dry
+
+    async def update_resource_intent(
+        self,
+        environment: UUID,
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        update_blocked_state: bool,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        pass
+
+    async def mark_as_orphan(
+        self, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
+    ) -> None:
+        pass
+
+    async def set_last_processed_model_version(
+        self, environment: UUID, version: int, connection: Optional[Connection] = None
+    ) -> None:
+        pass
+
+    @asynccontextmanager
+    async def get_connection(self, connection: Optional[Connection] = None) -> AbstractAsyncContextManager[Connection]:
+        yield DummyDatabaseConnection()
 
 
 def state_manager_check(agent: "TestAgent"):
@@ -278,6 +338,7 @@ class TestScheduler(ResourceScheduler):
         self.code_manager = DummyCodeManager(client)
         self.mock_versions = {}
         self._state_update_delegate = DummyStateManager()
+        self._timer_manager = DummyTimerManager(self)
 
     async def read_version(
         self,
@@ -290,6 +351,7 @@ class TestScheduler(ResourceScheduler):
     async def _initialize(
         self,
     ) -> None:
+        self._running = True
         pass
 
     async def should_be_running(self) -> bool:
@@ -302,6 +364,10 @@ class TestScheduler(ResourceScheduler):
         self, version: int, *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> Mapping[ResourceIdStr, ResourceDetails]:
         return self.mock_versions[version]
+
+    async def _get_resource_details_of_defined_resources(self, env: uuid.UUID, version: int) -> list[ResourceDetails]:
+        assert self.environment == env
+        return list(self.mock_versions[version].values())
 
 
 class TestAgent(Agent):
@@ -343,8 +409,15 @@ async def config(inmanta_config, tmp_path):
     Config.set("agent", "executor-retention-time", "10")
 
 
+class DummyDatabaseConnection:
+
+    @asynccontextmanager
+    async def transaction(self):
+        yield None
+
+
 @pytest.fixture
-async def agent(environment, config):
+async def agent(environment, config, monkeypatch):
     """
     Provide a new agent, with a scheduler that uses the dummy executor
 
@@ -362,7 +435,7 @@ def make_resource_minimal(environment):
         rid: ResourceIdStr,
         values: dict[str, object],
         requires: list[str],
-        status: const.ResourceState = const.ResourceState.available,
+        status: state.ComplianceStatus = state.ComplianceStatus.HAS_UPDATE,
     ) -> state.ResourceDetails:
         """Produce a resource that is valid to the scheduler"""
         attributes = dict(values)
@@ -377,7 +450,7 @@ def make_resource_minimal(environment):
         m.update(character.encode("utf-8"))
         attribute_hash = m.hexdigest()
 
-        return state.ResourceDetails(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash, status=status)
+        return state.ResourceDetails(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash)
 
     return make_resource_minimal
 
@@ -398,6 +471,51 @@ async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
 
     assert agent.executor_manager.executors["agent1"].execute_count == 2
+
+
+async def test_shutdown(agent: TestAgent, make_resource_minimal):
+    """
+    Ensure the simples deploy scenario works: 2 dependant resources
+    """
+
+    # basic tests once more
+
+    rid1 = "test::Resource[agent1,name=1]"
+    rid2 = "test::Resource[agent1,name=2]"
+    resources = {
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, values={"value": "a"}, requires=[rid1]),
+    }
+
+    await agent.scheduler._new_version(1, resources, make_requires(resources))
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    assert agent.executor_manager.executors["agent1"].execute_count == 2
+
+    # Ensure proper shutdown
+
+    # We are running
+    assert len(agent.scheduler._workers) == 1
+    assert agent.scheduler._workers["agent1"].is_running()
+
+    # Make the agent active!
+    await agent.scheduler.repair(reason="Test")
+
+    # Shutdown
+    await agent.scheduler.stop()
+    assert len(agent.scheduler._workers) == 1
+    assert not agent.scheduler._workers["agent1"].is_running()
+    # This one can be used to validate the test case, but it is a race
+    # So it is commented as it will cause flakes
+    # assert not agent.scheduler._workers["agent1"]._task.done()
+
+    # Join
+    await agent.scheduler.join()
+    assert not agent.scheduler._workers["agent1"].is_running()
+    assert agent.scheduler._workers["agent1"]._task.done()
+
+    # Reset
+    await agent.scheduler._reset()
+    assert len(agent.scheduler._workers) == 0
 
 
 async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> None:
@@ -466,9 +584,9 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         return True
 
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
 
     await retry_limited_fast(done)
 
@@ -489,7 +607,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.executor_manager.executors["agent2"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
     state_manager_check(agent)
 
@@ -502,7 +620,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     await agent.scheduler._new_version(2, resources, make_requires(resources))
     # model handler failure
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.failed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.failed)
     # wait until r2 is done
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
 
@@ -512,13 +630,13 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
 
     # finish up: set r2 result and wait until it's done
-    executor2.deploys[rid2].set_result(const.ResourceState.failed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.failed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 2)
     assert agent.executor_manager.executors["agent1"].execute_count == 0
     assert agent.executor_manager.executors["agent2"].execute_count == 2
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
     state_manager_check(agent)
 
@@ -533,7 +651,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     await agent.scheduler.deploy(reason="Test")
     # verify that r2 did not get scheduled again, since it is already running for the same intent
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 1
 
     # same principle, this time through new_version instead of deploy -> release change to r3
@@ -545,7 +663,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.executor_manager.executors["agent2"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 1
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
     state_manager_check(agent)
 
@@ -555,7 +673,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.executor_manager.executors["agent2"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 1
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
     state_manager_check(agent)
 
@@ -563,21 +681,21 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     resources = make_resources(version=4, r1_value=0, r2_value=2, r3_value=1)
     await agent.scheduler._new_version(4, resources, make_requires(resources))
     # r2 got new intent => should be scheduled now even though it is already running
-    await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues) == 1)
+    await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues.queued()) == 1)
     assert agent.executor_manager.executors["agent1"].execute_count == 0
     assert agent.executor_manager.executors["agent2"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 1
-    assert agent.scheduler._work.agent_queues.keys() == {tasks.Deploy(resource=rid2)}  # one task scheduled
+    assert agent.scheduler._work.agent_queues.queued().keys() == {tasks.Deploy(resource=rid2)}  # one task scheduled
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]  # and one running
     state_manager_check(agent)
 
     # finish up
     # finish r2 deploy, failing it once more, twice
-    executor2.deploys[rid2].set_result(const.ResourceState.failed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.failed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.failed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.failed)
     assert agent.scheduler._work._waiting.keys() == {rid3}, f"{rid3} should still be waiting for {rid2}"
     # wait until r3 is done (executed after r2)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent3"].execute_count == 1)
@@ -585,7 +703,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.executor_manager.executors["agent2"].execute_count == 2
     assert agent.executor_manager.executors["agent3"].execute_count == 1
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
     state_manager_check(agent)
 
@@ -601,16 +719,16 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     # call repair, verify that only r1 is scheduled because r2 and r3 are running or scheduled respectively
     await agent.scheduler.repair(reason="Test")
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert agent.scheduler._work._waiting.keys() == {rid3}
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
     # finish deploy
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent3"].execute_count == 1)
     state_manager_check(agent)
 
@@ -631,7 +749,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     # reset counters and assert expected start state
     agent.executor_manager.reset_executor_counters()
     assert len(agent.scheduler._work._waiting) == 0
-    assert agent.scheduler._work.agent_queues.keys() == {tasks.Deploy(resource=rid2)}
+    assert agent.scheduler._work.agent_queues.queued().keys() == {tasks.Deploy(resource=rid2)}
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
     state_manager_check(agent)
 
@@ -641,14 +759,14 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
     # assert that queued r2 got moved out of the agent queues back to the waiting set
     assert agent.scheduler._work._waiting.keys() == {rid2}
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert tasks.Deploy(resource=rid1) in agent.scheduler._work.agent_queues._in_progress
 
     # finish r1 and a single r2
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     assert agent.executor_manager.executors["agent2"].execute_count == 0
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     assert len(agent.scheduler._work._waiting) == 0
@@ -659,23 +777,23 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
     # assert that r2 got rescheduled because both it and its dependency have an update available while r2 is still running
     assert agent.scheduler._work._waiting.keys() == {rid2}
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert tasks.Deploy(resource=rid1) in agent.scheduler._work.agent_queues._in_progress
     assert tasks.Deploy(resource=rid2) in agent.scheduler._work.agent_queues._in_progress
 
     # finish all deploys
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 2)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 3)
     # verify total number of deploys
     assert agent.executor_manager.executors["agent1"].execute_count == 2
     assert agent.executor_manager.executors["agent2"].execute_count == 3
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
     state_manager_check(agent)
 
@@ -701,7 +819,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.executor_manager.executors["agent2"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert agent.scheduler._work._waiting.keys() == {rid2}
-    assert agent.scheduler._work.agent_queues.keys() == {tasks.Deploy(resource=rid1)}
+    assert agent.scheduler._work.agent_queues.queued().keys() == {tasks.Deploy(resource=rid1)}
     assert tasks.Deploy(resource=rid1) in agent.scheduler._work.agent_queues._in_progress
     assert tasks.Deploy(resource=rid2) in agent.scheduler._work.agent_queues._in_progress
 
@@ -710,32 +828,32 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     await agent.scheduler._new_version(14, resources, make_requires(resources))
     # assert that r2 is no longer blocked
     assert len(agent.scheduler._work._waiting) == 0
-    assert agent.scheduler._work.agent_queues.keys() == {tasks.Deploy(resource=rid) for rid in (rid1, rid2)}
+    assert agent.scheduler._work.agent_queues.queued().keys() == {tasks.Deploy(resource=rid) for rid in (rid1, rid2)}
 
     # release new version: no changes to resources but add requires in the other direction
     resources = make_resources(version=15, r1_value=4, r2_value=7, r3_value=2, requires={rid1: [rid2]})
     await agent.scheduler._new_version(15, resources, make_requires(resources))
     # assert that r1 has become blocked now
     assert agent.scheduler._work._waiting.keys() == {rid1}
-    assert agent.scheduler._work.agent_queues.keys() == {tasks.Deploy(resource=rid2)}
+    assert agent.scheduler._work.agent_queues.queued().keys() == {tasks.Deploy(resource=rid2)}
 
     # advanced scenario: update resource + flip requires in one go
     resources = make_resources(version=16, r1_value=5, r2_value=8, r3_value=2)
     await agent.scheduler._new_version(16, resources, make_requires(resources))
     # assert that r2 has become blocked again
     assert agent.scheduler._work._waiting.keys() == {rid2}
-    assert agent.scheduler._work.agent_queues.keys() == {tasks.Deploy(resource=rid1)}
+    assert agent.scheduler._work.agent_queues.queued().keys() == {tasks.Deploy(resource=rid1)}
     state_manager_check(agent)
 
     # finish up: finish all waiting deploys
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 2)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 2)
     # verify total number of deploys
@@ -743,7 +861,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.executor_manager.executors["agent2"].execute_count == 2
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
     state_manager_check(agent)
 
@@ -775,7 +893,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert rid1 in agent.scheduler._state.dirty
 
     # finish stale deploy
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
     # verify that state remained the same
@@ -790,20 +908,20 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.executor_manager.executors["agent2"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert agent.scheduler._work._waiting.keys() == {rid2}
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid1)]
 
     # finish all deploys
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     # assert final state and total deploys
     assert agent.executor_manager.executors["agent1"].execute_count == 2
     assert agent.executor_manager.executors["agent2"].execute_count == 1
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
     assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         status=state.ComplianceStatus.COMPLIANT,
@@ -829,7 +947,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.executor_manager.executors["agent2"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert agent.scheduler._work._waiting.keys() == {rid2, rid3}
-    assert agent.scheduler._work.agent_queues.keys() == {tasks.Deploy(resource=rid1)}
+    assert agent.scheduler._work.agent_queues.queued().keys() == {tasks.Deploy(resource=rid1)}
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid1)]
 
     # release new model version without r1 or r2
@@ -842,17 +960,17 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert agent.executor_manager.executors["agent2"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 1
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid1)]
 
     # finish last deploy
-    executor1.deploys[rid1].set_result(const.ResourceState.deployed)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 1
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
 
 
@@ -871,7 +989,6 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
 
     def make_resources(
         *,
-        version: int,
         r1_value: Optional[int],
         r2_value: Optional[int],
         r3_value: Optional[int],
@@ -881,10 +998,10 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
         r1_fail: bool = False,
     ) -> dict[ResourceIdStr, state.ResourceDetails]:
         """
-        Returns three resources with a single attribute, whose value is set by the value parameters. The fail parameters
-        control whether the executor should fail or deploy successfully.
-
+        Returns three resources with a single attribute, whose value is set by the value parameters.
         Setting a resource value to None strips it from the model.
+
+        The r1_fail parameter controls whether the r1 resource should fail or deploy successfully.
 
         Unless explicitly overridden, the resources depend on one another like r1 -> r2 -> r3 (r1 provides r2 etc), but only r1
         sends events.
@@ -912,11 +1029,11 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
         }
 
     resources: Mapping[ResourceIdStr, state.ResourceDetails]
-    resources = make_resources(version=5, r1_value=0, r2_value=0, r3_value=0)
+    resources = make_resources(r1_value=0, r2_value=0, r3_value=0)
     await agent.scheduler._new_version(5, resources, make_requires(resources))
 
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent3")
 
     assert agent.executor_manager.executors["agent1"].execute_count == 1
@@ -928,26 +1045,27 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     ##################################
     agent.executor_manager.reset_executor_counters()
     # make a change to r2 only -> verify that only r2 gets redeployed because it has send_event=False
-    resources = make_resources(version=6, r1_value=0, r2_value=1, r3_value=0)
+    resources = make_resources(r1_value=0, r2_value=1, r3_value=0)
     await agent.scheduler._new_version(6, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     assert agent.executor_manager.executors["agent1"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 0
 
     # make a change to r1 only -> verify that r2 gets deployed due to event propagation
     agent.executor_manager.reset_executor_counters()
-    resources = make_resources(version=7, r1_value=1, r2_value=1, r3_value=0)
+    resources = make_resources(r1_value=1, r2_value=1, r3_value=0)
     await agent.scheduler._new_version(7, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
     # verify that r3 didn't get an event, i.e. it did not deploy and it is not scheduled or executing
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
 
     #########################
@@ -955,16 +1073,16 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     #########################
     agent.executor_manager.reset_executor_counters()
     # release change to r1, and make its deploy fail
-    resources = make_resources(version=8, r1_value=2, r2_value=1, r3_value=0, r1_fail=True)
+    resources = make_resources(r1_value=2, r2_value=1, r3_value=0, r1_fail=True)
     await agent.scheduler._new_version(8, resources, make_requires(resources))
     # assert that r2 got deployed through event propagation
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
 
     ################################################################
@@ -974,39 +1092,39 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     agent.executor_manager.reset_executor_counters()
 
     # hang r2 in the running state by releasing an update for it
-    resources = make_resources(version=9, r1_value=2, r2_value=2, r3_value=0)
+    resources = make_resources(r1_value=2, r2_value=2, r3_value=0)
     await agent.scheduler._new_version(9, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
 
     # reset counters and assert start state
     agent.executor_manager.reset_executor_counters()
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
     # trigger an event by releasing a change for r1
-    resources = make_resources(version=10, r1_value=3, r2_value=2, r3_value=0)
+    resources = make_resources(r1_value=3, r2_value=2, r3_value=0)
     await agent.scheduler._new_version(10, resources, make_requires(resources))
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
     # assert that r2 was rescheduled due to the event, even though it is already deploying for its latest intent
     assert len(agent.scheduler._work._waiting) == 0
-    assert agent.scheduler._work.agent_queues.keys() == {tasks.Deploy(resource=rid2)}
+    assert agent.scheduler._work.agent_queues.queued().keys() == {tasks.Deploy(resource=rid2)}
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
     # verify that it suffices for r2 to be already scheduled (vs deploying above), i.e. it does not get scheduled twice
     # trigger an event by releasing a change for r1
-    resources = make_resources(version=11, r1_value=4, r2_value=2, r3_value=0)
+    resources = make_resources(r1_value=4, r2_value=2, r3_value=0)
     await agent.scheduler._new_version(11, resources, make_requires(resources))
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 2)
     assert len(agent.scheduler._work._waiting) == 0
-    assert agent.scheduler._work.agent_queues.keys() == {tasks.Deploy(resource=rid2)}
+    assert agent.scheduler._work.agent_queues.queued().keys() == {tasks.Deploy(resource=rid2)}
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
     # finish up: deploy r2 twice
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.failed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.failed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 2)
 
     # verify total number of deploys
@@ -1014,7 +1132,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert agent.executor_manager.executors["agent2"].execute_count == 2  # two events
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
 
     ##############################################
@@ -1027,11 +1145,11 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     #   and will be notified by it
     agent.executor_manager.reset_executor_counters()
     # release a new version with an update to r2, where it sends events
-    resources = make_resources(version=12, r1_value=4, r2_value=3, r3_value=0, r2_send_event=True)
+    resources = make_resources(r1_value=4, r2_value=3, r3_value=0, r2_send_event=True)
     await agent.scheduler._new_version(12, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     # release another change to r2, making the currently running deploy stale
-    resources = make_resources(version=13, r1_value=4, r2_value=4, r3_value=0, r2_send_event=True)
+    resources = make_resources(r1_value=4, r2_value=4, r3_value=0, r2_send_event=True)
     await agent.scheduler._new_version(13, resources, make_requires(resources))
 
     # verify expected intermediate state
@@ -1039,22 +1157,22 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert agent.executor_manager.executors["agent2"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
-    assert agent.scheduler._work.agent_queues.keys() == {tasks.Deploy(resource=rid2)}
+    assert agent.scheduler._work.agent_queues.queued().keys() == {tasks.Deploy(resource=rid2)}
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
     # finish stale r2 deploy and verify that it does not send out an event
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent2"].execute_count == 1)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     assert agent.executor_manager.executors["agent1"].execute_count == 0
     assert agent.executor_manager.executors["agent2"].execute_count == 1
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
     # finish up: deploy r2 and r3 (this time it does get an event from non-stale r2)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent3"].execute_count == 1)
 
     # verify total number of deploys
@@ -1062,7 +1180,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert agent.executor_manager.executors["agent2"].execute_count == 2  # two changes
     assert agent.executor_manager.executors["agent3"].execute_count == 1  # one non-stale event
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
 
     ##################################################
@@ -1072,29 +1190,29 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     # => should not produce events
     agent.executor_manager.reset_executor_counters()
     # release a new version with an update to r2, where it sends events
-    resources = make_resources(version=13, r1_value=4, r2_value=5, r3_value=0, r2_send_event=True)
-    await agent.scheduler._new_version(13, resources, make_requires(resources))
+    resources = make_resources(r1_value=4, r2_value=5, r3_value=0, r2_send_event=True)
+    await agent.scheduler._new_version(14, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
     # drop r2, making the currently running deploy stale
-    resources = make_resources(version=14, r1_value=4, r2_value=None, r3_value=0)
-    await agent.scheduler._new_version(14, resources, make_requires(resources))
+    resources = make_resources(r1_value=4, r2_value=None, r3_value=0)
+    await agent.scheduler._new_version(15, resources, make_requires(resources))
 
     # verify expected intermediate state
     assert agent.executor_manager.executors["agent1"].execute_count == 0
     assert agent.executor_manager.executors["agent2"].execute_count == 0
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
     # finish stale r2 deploy and verify that it doesn't send out an event
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
     assert agent.executor_manager.executors["agent1"].execute_count == 0
     assert agent.executor_manager.executors["agent2"].execute_count == 1
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
 
     #################################################################################################
@@ -1103,10 +1221,10 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     agent.executor_manager.reset_executor_counters()
 
     # set up initial state
-    resources = make_resources(version=16, r1_value=4, r2_value=0, r3_value=0)
+    resources = make_resources(r1_value=4, r2_value=0, r3_value=0)
     await agent.scheduler._new_version(16, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
     # verify initial state
     assert rid2 not in executor2.deploys
@@ -1121,7 +1239,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert len(agent.scheduler._state.dirty) == 0
 
     # release change for r1, sending event to r2 when it finishes
-    resources = make_resources(version=17, r1_value=5, r2_value=0, r3_value=0)
+    resources = make_resources(r1_value=5, r2_value=0, r3_value=0)
     await agent.scheduler._new_version(17, resources, make_requires(resources))
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
 
@@ -1135,7 +1253,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
 
     # fail r2
     # failed works just as well but skipped is even more of an edge case
-    executor2.deploys[rid2].set_result(const.ResourceState.skipped)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.skipped)
     await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
     assert rid2 not in executor2.deploys
     assert agent.executor_manager.executors["agent1"].execute_count == 1
@@ -1153,7 +1271,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     # trigger a deploy, verify that r2 gets scheduled because it is dirty
     await agent.scheduler.deploy(reason="Test")
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
-    executor2.deploys[rid2].set_result(const.ResourceState.deployed)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 3
@@ -1227,7 +1345,7 @@ async def test_receive_events(agent: TestAgent, make_resource_minimal):
     assert agent.executor_manager.executors["listen"].execute_count == 2
     assert agent.executor_manager.executors["deaf"].execute_count == 1
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
 
     # reset counters
@@ -1243,7 +1361,7 @@ async def test_receive_events(agent: TestAgent, make_resource_minimal):
     assert agent.executor_manager.executors["listen"].execute_count == 2
     assert agent.executor_manager.executors["deaf"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
 
     # reset counters
@@ -1259,7 +1377,7 @@ async def test_receive_events(agent: TestAgent, make_resource_minimal):
     assert agent.executor_manager.executors["listen"].execute_count == 0
     assert agent.executor_manager.executors["deaf"].execute_count == 0
     assert len(agent.scheduler._work._waiting) == 0
-    assert len(agent.scheduler._work.agent_queues) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
 
 
@@ -1350,11 +1468,11 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         attribute_hash: str,
     ) -> None:
         """
-        Assert that the given resource has the given ResourceStatus, DeploymentResult and BlockedStatus.
+        Assert that the given resource has the given ComplianceStatus, DeploymentResult and BlockedStatus.
         If not, this method raises an AssertionError.
 
         :param resource: The resource of which the above-mentioned parameters have to be asserted.
-        :param status: The ResourceStatus to assert.
+        :param status: The ComplianceStatus to assert.
         :param deployment_result: The DeploymentResult to assert.
         :param blocked_status: The BlockedStatus to assert.
         :param attribute_hash: The hash of the attributes of the resource.
@@ -1370,16 +1488,24 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
             rid=rid1,
             values={"value": "unknown"},
             requires=[rid2, rid3, rid4],
-            status=const.ResourceState.skipped_for_undefined,
         ),
         rid2: make_resource_minimal(rid=rid2, values={"value": "a"}, requires=[rid5]),
         rid3: make_resource_minimal(rid=rid3, values={"value": "a"}, requires=[rid5, rid6]),
-        rid4: make_resource_minimal(rid=rid4, values={"value": "unknown"}, requires=[], status=const.ResourceState.undefined),
+        rid4: make_resource_minimal(rid=rid4, values={"value": "unknown"}, requires=[]),
         rid5: make_resource_minimal(rid=rid5, values={"value": "a"}, requires=[]),
         rid6: make_resource_minimal(rid=rid6, values={"value": "a"}, requires=[rid7]),
         rid7: make_resource_minimal(rid=rid7, values={"value": "a"}, requires=[]),
     }
-    await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
+
+    #                             +-- rid2  <- rid5
+    #                             |              |
+    #      "Provides"      rid1 <-+-- rid3  <----+
+    #        view                 |              |
+    #                             +-- rid4     rid6 <- rid7
+
+    await agent.scheduler._new_version(
+        version=1, resources=resources, requires=make_requires(resources), undefined_resources={rid4}
+    )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 7
     assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
@@ -1444,20 +1570,17 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     # rid4 becomes deployable
     # rid5 and rid6 are undefined
     # Change the desired state of rid2
-    resources[rid4] = make_resource_minimal(rid=rid4, values={"value": "a"}, requires=[], status=const.ResourceState.available)
-    resources[rid5] = make_resource_minimal(
-        rid=rid5, values={"value": "unknown"}, requires=[], status=const.ResourceState.undefined
+    resources[rid4] = make_resource_minimal(rid=rid4, values={"value": "a"}, requires=[])
+    resources[rid5] = make_resource_minimal(rid=rid5, values={"value": "unknown"}, requires=[])
+    resources[rid6] = make_resource_minimal(rid=rid6, values={"value": "unknown"}, requires=[rid7])
+    resources[rid2] = make_resource_minimal(rid=rid2, values={"value": "b"}, requires=[rid5])
+    resources[rid3] = make_resource_minimal(rid=rid3, values={"value": "a"}, requires=[rid5, rid6])
+    await agent.scheduler._new_version(
+        version=2,
+        resources=resources,
+        requires=make_requires(resources),
+        undefined_resources={rid5, rid6},
     )
-    resources[rid6] = make_resource_minimal(
-        rid=rid6, values={"value": "unknown"}, requires=[rid7], status=const.ResourceState.undefined
-    )
-    resources[rid2] = make_resource_minimal(
-        rid=rid2, values={"value": "b"}, requires=[rid5], status=const.ResourceState.skipped_for_undefined
-    )
-    resources[rid3] = make_resource_minimal(
-        rid=rid3, values={"value": "a"}, requires=[rid5, rid6], status=const.ResourceState.skipped_for_undefined
-    )
-    await agent.scheduler._new_version(version=2, resources=resources, requires=make_requires(resources))
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 7
 
@@ -1519,11 +1642,11 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     )
 
     # rid5 no longer has an unknown attribute
-    resources[rid5] = make_resource_minimal(rid=rid5, values={"value": "a"}, requires=[], status=const.ResourceState.available)
-    resources[rid2] = make_resource_minimal(
-        rid=rid2, values={"value": "b"}, requires=[rid5], status=const.ResourceState.available
+    resources[rid5] = make_resource_minimal(rid=rid5, values={"value": "a"}, requires=[])
+    resources[rid2] = make_resource_minimal(rid=rid2, values={"value": "b"}, requires=[rid5])
+    await agent.scheduler._new_version(
+        version=3, resources=resources, requires=make_requires(resources), undefined_resources={rid6}
     )
-    await agent.scheduler._new_version(version=3, resources=resources, requires=make_requires(resources))
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 7
 
@@ -1588,12 +1711,12 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     rid8 = ResourceIdStr("test::Resource[agent1,name=8]")
     rid9 = ResourceIdStr("test::Resource[agent1,name=9]")
     resources = {
-        rid8: make_resource_minimal(rid=rid8, values={"value": "unknown"}, requires=[], status=const.ResourceState.undefined),
-        rid9: make_resource_minimal(
-            rid=rid9, values={"value": "unknown"}, requires=[rid8], status=const.ResourceState.undefined
-        ),
+        rid8: make_resource_minimal(rid=rid8, values={"value": "unknown"}, requires=[]),
+        rid9: make_resource_minimal(rid=rid9, values={"value": "unknown"}, requires=[rid8]),
     }
-    await agent.scheduler._new_version(version=4, resources=resources, requires=make_requires(resources))
+    await agent.scheduler._new_version(
+        version=4, resources=resources, requires=make_requires(resources), undefined_resources={rid8, rid9}
+    )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 2
     assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
@@ -1614,9 +1737,14 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     )
 
     # rid8 is no longer undefined
-    resources[rid8] = make_resource_minimal(rid=rid8, values={"value": "a"}, requires=[], status=const.ResourceState.available)
+    resources[rid8] = make_resource_minimal(rid=rid8, values={"value": "a"}, requires=[])
 
-    await agent.scheduler._new_version(version=5, resources=resources, requires=make_requires(resources))
+    await agent.scheduler._new_version(
+        version=5,
+        resources=resources,
+        requires=make_requires(resources),
+        undefined_resources={rid9},
+    )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.resources) == 2
     assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
@@ -1663,9 +1791,9 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
 
     # The tasks are consumed in the priority order
     first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(first_task[0], tasks.Deploy)
+    assert isinstance(first_task.task, tasks.Deploy)
     second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(second_task[0], tasks.DryRun)
+    assert isinstance(second_task.task, tasks.DryRun)
 
     # The same is true if a task with lesser priority is added first
     # Add a fact refresh task to the queue
@@ -1677,9 +1805,9 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
 
     # The tasks are consumed in the priority order
     first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(first_task[0], tasks.Deploy)
+    assert isinstance(first_task.task, tasks.Deploy)
     second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(second_task[0], tasks.RefreshFact)
+    assert isinstance(second_task.task, tasks.RefreshFact)
     # Assert that all tasks were consumed
     queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
     assert len(queue) == 0
@@ -1703,9 +1831,9 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
     await agent.trigger_update(environment, "$__scheduler", incremental_deploy=True)
 
     first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(first_task[0], tasks.Deploy)
+    assert isinstance(first_task.task, tasks.Deploy)
     second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(second_task[0], tasks.DryRun)
+    assert isinstance(second_task.task, tasks.DryRun)
 
     # Interval deploy is still in the queue but marked as deleted
     queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
@@ -1736,13 +1864,343 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
 
     # The order is unaffected, the interval deploy was essentially ignored
     first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(first_task[0], tasks.Deploy)
+    assert isinstance(first_task.task, tasks.Deploy)
     second_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
-    assert isinstance(second_task[0], tasks.DryRun)
+    assert isinstance(second_task.task, tasks.DryRun)
 
     # All tasks were consumed
     queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
     assert len(queue) == 0
+
+
+async def test_scheduler_priority_rescheduling(agent: TestAgent, environment, make_resource_minimal):
+    """
+    Verify behavior of task rescheduling (e.g. because of new requires) with respect to priorities, both explicit and relative
+    to other scheduled task (i.e. current queue position).
+    """
+
+    # General flow of the test: all deploy tasks, all on the same agent, different priorities. Tasks are never picked up,
+    # only added or shifted around (due to changing priorities or requires edges).
+    # This test interacts with scheduled work directly rather than to go through the scheduler for verbosity reasons.
+    # For a basic priority test that does go via the scheduler see test_scheduler_priority.
+
+    # define some resources
+    rid1 = ResourceIdStr("test::Resource[agent,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent,name=2]")
+    rid3 = ResourceIdStr("test::Resource[agent,name=3]")
+    rid4 = ResourceIdStr("test::Resource[agent,name=4]")
+    rid5 = ResourceIdStr("test::Resource[agent,name=5]")
+    rid6 = ResourceIdStr("test::Resource[agent,name=6]")
+    rid7 = ResourceIdStr("test::Resource[agent,name=7]")
+    task1 = tasks.Deploy(resource=rid1)
+    task2 = tasks.Deploy(resource=rid2)
+    task3 = tasks.Deploy(resource=rid3)
+    task4 = tasks.Deploy(resource=rid4)
+    task5 = tasks.Deploy(resource=rid5)
+    task6 = tasks.Deploy(resource=rid6)
+    task7 = tasks.Deploy(resource=rid7)
+
+    # set up the scheduled work
+    requires: state.RequiresProvidesMapping = state.RequiresProvidesMapping()
+    work: ScheduledWork = ScheduledWork(
+        requires=requires, provides=requires.provides_view(), new_agent_notify=lambda *args, **kwargs: None
+    )
+
+    # three different deploy requests, each for a different resource. Verify that order ends up as expected
+    work.deploy_with_context(
+        resources={rid1},
+        reason="First deploy",
+        priority=TaskPriority(3),
+    )
+    work.deploy_with_context(
+        resources={rid2},
+        reason="Second deploy",
+        priority=TaskPriority(1),
+    )
+    work.deploy_with_context(
+        resources={rid3},
+        reason="Third deploy",
+        priority=TaskPriority(4),
+    )
+
+    assert [item.task for item in work.agent_queues.sorted("agent")] == [task2, task1, task3]
+
+    # add some more tasks to the middle priority level
+    work.deploy_with_context(
+        resources={rid1, rid2, rid3, rid4, rid5},
+        reason="Bulk deploy",
+        priority=TaskPriority(3),
+    )
+    # add two more tasks to more urgent priority level for some relative ordering asserts later on
+    work.deploy_with_context(
+        resources={rid6},
+        reason="deploy rid6",
+        priority=TaskPriority(1),
+    )
+    work.deploy_with_context(
+        resources={rid7},
+        reason="deploy rid7",
+        priority=TaskPriority(2),
+    )
+
+    def get_sorted_tasks() -> Sequence[tuple[tasks.Task, str]]:
+        return [(item.task, item.reason) for item in work.agent_queues.sorted("agent")]
+
+    # may be updated after each assertion
+    original_sorted_tasks: Sequence[tuple[tasks.Task, str]] = get_sorted_tasks()
+
+    # -> priority 1: rid2, rid6
+    # -> priority 2: rid7
+    # -> priority 3: rid1, rid3, rid4, rid5 (latter three in any order)
+    assert original_sorted_tasks[:4] == [
+        # rid2 already had a more urgent priority, it should remain first
+        (task2, "Second deploy"),
+        # rid6 was added later with a more urgent priority, it should move before the others but after rid2
+        (task6, "deploy rid6"),
+        # rid6 was added later with a more urgent priority, it should move before the others but after rid6
+        (task7, "deploy rid7"),
+        # rid1 was added first among those with this priority + it keeps its original reason
+        (task1, "First deploy"),
+    ]
+    # other priorities are equal and non-deterministic
+    assert set(original_sorted_tasks[4:]) == {
+        (task3, "Bulk deploy"),
+        (task4, "Bulk deploy"),
+        (task5, "Bulk deploy"),
+    }
+
+    # add a requires edge, lifting a resource out of the agent queues because it becomes blocked
+    rid_first_requires: ResourceIdStr = original_sorted_tasks[4][0].resource
+    requires[rid_first_requires] = {rid1}
+    work.deploy_with_context(
+        {rid_first_requires},
+        reason="add first requires",
+        # less urgent priority
+        priority=TaskPriority(5),
+        added_requires={rid_first_requires: {rid1}},
+    )
+    # expect same order as before, minus the fourth element
+    assert get_sorted_tasks() == original_sorted_tasks[:4] + original_sorted_tasks[5:]
+    # drop the requires edge, unblocking the task again
+    requires[rid_first_requires] = set()
+    work.deploy_with_context(
+        {rid_first_requires},
+        reason="drop first requires",
+        # less urgent priority
+        priority=TaskPriority(5),
+        dropped_requires={rid_first_requires: {rid1}},
+    )
+    # expect same order as original: because new priority is less urgent, the old priority, relative order and reason are kept
+    assert get_sorted_tasks() == original_sorted_tasks
+
+    # do the same for an equal priority task
+    requires[rid_first_requires] = {rid1}
+    work.deploy_with_context(
+        {rid_first_requires},
+        reason="add second requires",
+        # equal priority
+        priority=TaskPriority(3),
+        added_requires={rid_first_requires: {rid1}},
+    )
+    # expect same order as before, minus the third element
+    assert get_sorted_tasks() == original_sorted_tasks[:4] + original_sorted_tasks[5:]
+    # drop the requires edge, unblocking the task again
+    requires[rid_first_requires] = set()
+    work.deploy_with_context(
+        {rid_first_requires},
+        reason="drop second requires",
+        # equal priority
+        priority=TaskPriority(3),
+        dropped_requires={rid_first_requires: {rid1}},
+    )
+    # expect same order as original: even though new priority is lower, the old priority, relative order and reason are kept
+    assert get_sorted_tasks() == original_sorted_tasks
+
+    # same now for more urgent priority task in request that blocks it
+    requires[rid_first_requires] = {rid1}
+    work.deploy_with_context(
+        {rid_first_requires},
+        reason="add third requires",
+        # more urgent priority
+        priority=TaskPriority(1),
+        added_requires={rid_first_requires: {rid1}},
+    )
+    # expect same order as before, minus the third element
+    assert get_sorted_tasks() == original_sorted_tasks[:4] + original_sorted_tasks[5:]
+    # drop the requires edge, unblocking the task again
+    requires[rid_first_requires] = set()
+    work.deploy_with_context(
+        {rid_first_requires},
+        reason="drop third requires",
+        # equal priority as original
+        priority=TaskPriority(3),
+        dropped_requires={rid_first_requires: {rid1}},
+    )
+    # task is moved to new, more urgent priority, and receives the new message
+    assert get_sorted_tasks() == [
+        *original_sorted_tasks[:2],  # rid2, rid6
+        # message from adding the requires
+        (tasks.Deploy(resource=rid_first_requires), "add third requires"),
+        original_sorted_tasks[2],  # rid7
+        original_sorted_tasks[3],  # rid1
+        *original_sorted_tasks[5:],
+    ]
+
+    # update original_sorted_tasks to reflect new order
+    original_sorted_tasks = get_sorted_tasks()
+
+    # same now but request the more urgent priority for the request that unblocks it
+    rid_fourth_requires: ResourceIdStr = original_sorted_tasks[5][0].resource
+    requires[rid_fourth_requires] = {rid1}
+    work.deploy_with_context(
+        {rid_fourth_requires},
+        reason="add fourth requires",
+        # equal priority as original
+        priority=TaskPriority(3),
+        added_requires={rid_fourth_requires: {rid1}},
+    )
+    # expect same order as before, minus the fourth element
+    assert get_sorted_tasks() == original_sorted_tasks[:5] + original_sorted_tasks[6:]
+    # drop the requires edge, unblocking the task again
+    requires[rid_fourth_requires] = set()
+    work.deploy_with_context(
+        {rid_fourth_requires},
+        reason="drop fourth requires",
+        # most urgent priority
+        priority=TaskPriority(0),
+        dropped_requires={rid_fourth_requires: {rid1}},
+    )
+    # task is moved to new, more urgent priority, and receives the new message
+    assert get_sorted_tasks() == [
+        # message from dropping the requires
+        (tasks.Deploy(resource=rid_fourth_requires), "drop fourth requires"),
+        *original_sorted_tasks[:5],
+        *original_sorted_tasks[6:],
+    ]
+
+    # update original_sorted_tasks to reflect new order
+    original_sorted_tasks = get_sorted_tasks()
+
+    # add a requires with an extremely urgent priority, but for a resource that's not in the to-deploy set
+    # => priority should not affect this resource
+    rid_fifth_requires: ResourceIdStr = original_sorted_tasks[2][0].resource
+    requires[rid_fifth_requires] = {rid1}
+    work.deploy_with_context(
+        set(),
+        reason="add fifth requires",
+        # most urgent priority
+        priority=TaskPriority(-1),
+        added_requires={rid_fifth_requires: {rid1}},
+    )
+    # expect same order as before, minus the third element
+    assert get_sorted_tasks() == original_sorted_tasks[:2] + original_sorted_tasks[3:]
+    # drop the requires edge, unblocking the task again
+    requires[rid_fifth_requires] = set()
+    work.deploy_with_context(
+        set(),
+        reason="drop fifth requires",
+        # most urgent priority
+        priority=TaskPriority(-1),
+        dropped_requires={rid_fifth_requires: {rid1}},
+    )
+    # no priority shifting took place: original is restored
+    assert get_sorted_tasks() == original_sorted_tasks
+
+    # get a single item from the queue, and while it's "deploying" add a dependency for it
+    await work.agent_queues.queue_get("agent")
+    assert work.agent_queues._in_progress == {tasks.Deploy(resource=rid_fourth_requires): TaskPriority(0)}
+    # expect same order as before, minus the first element
+    assert get_sorted_tasks() == original_sorted_tasks[1:]
+    requires[rid_fourth_requires] = {rid1}
+    work.deploy_with_context(
+        set(),
+        reason="add dependency while deploying",
+        # most urgent priority
+        priority=TaskPriority(-1),
+        added_requires={rid_fourth_requires: {rid1}},
+        deploying={rid_fourth_requires},
+    )
+    # no difference because new task is blocked
+    assert get_sorted_tasks() == original_sorted_tasks[1:]
+    assert rid_fourth_requires in work._waiting
+    requires[rid_fourth_requires] = set()
+    # unblock the task
+    work.deploy_with_context(
+        set(),
+        reason="drop dependency again",
+        # most urgent priority
+        priority=TaskPriority(-1),
+        dropped_requires={rid_fourth_requires: {rid1}},
+        deploying={rid_fourth_requires},
+    )
+    # task got added again with original priority but a new message
+    task_fourth_requires = tasks.Deploy(resource=rid_fourth_requires)
+    assert get_sorted_tasks() == [
+        (
+            task_fourth_requires,
+            "rescheduling because a dependency was added to this resource while it was deploying",
+        ),
+        *original_sorted_tasks[1:],
+    ]
+    # assert it has the same priority as the in-progress task
+    assert work.agent_queues.queued()[task_fourth_requires].priority == TaskPriority(0)
+
+    # update original_sorted_tasks to reflect new order
+    original_sorted_tasks = get_sorted_tasks()
+
+    # while resource is still deploying, request a deploy for it with a more urgent priority
+    work.deploy_with_context(
+        {rid_fourth_requires},
+        reason="deploy again while deploying",
+        # most urgent priority
+        priority=TaskPriority(-1),
+        deploying={rid_fourth_requires},
+    )
+    # same order but different message
+    assert get_sorted_tasks() == [
+        (
+            task_fourth_requires,
+            "deploy again while deploying",
+        ),
+        *original_sorted_tasks[1:],
+    ]
+    # assert priorities
+    # in-progress priority should have been shifted to increase priority of events that may be sent
+    assert work.agent_queues.in_progress == {task_fourth_requires: TaskPriority(-1)}
+    # queued priority should have been shifted as well, and requested_at refreshed
+    assert work.agent_queues.queued()[task_fourth_requires].priority == TaskPriority(-1)
+    assert work.agent_queues.queued()[task_fourth_requires].requested_at == work.agent_queues._entry_count - 1
+
+    # update original_sorted_tasks to reflect new order
+    original_sorted_tasks = get_sorted_tasks()
+
+    # verify priority bumping on waiting task (not yet in queue)
+    # add dependency to move task to waiting
+    requires[rid2] = {rid1}
+    work.deploy_with_context(
+        {rid2},
+        reason="add sixth requires",
+        # low urgency priority
+        priority=TaskPriority(5),
+        added_requires={rid2: {rid1}},
+    )
+    assert get_sorted_tasks() == [original_sorted_tasks[0], *original_sorted_tasks[2:]]
+    work.deploy_with_context(
+        {rid2},
+        reason="bump priority for rid2",
+        # higher urgency priority
+        priority=TaskPriority(0),
+        # still waiting for rid1 => not queued
+        added_requires={},
+        dropped_requires={},
+    )
+    # unchanged versus previous check
+    assert get_sorted_tasks() == [original_sorted_tasks[0], *original_sorted_tasks[2:]]
+    assert rid2 in work._waiting
+    # assert that waiting task's priority was bumped and its requested_at refreshed
+    assert work._waiting[rid2].priority == TaskPriority(0)
+    assert work._waiting[rid2].requested_at == work.agent_queues._entry_count - 1
+    assert work._waiting[rid2].reason == "bump priority for rid2"
 
 
 async def test_repair_does_not_trigger_for_blocked_resources(agent: TestAgent, make_resource_minimal):
@@ -1774,3 +2232,303 @@ async def test_repair_does_not_trigger_for_blocked_resources(agent: TestAgent, m
 
     # Only r2 was deployed
     assert agent.executor_manager.executors["agent1"].execute_count == 1
+
+
+async def test_state_of_skipped_resources_for_dependencies(agent: TestAgent, make_resource_minimal):
+    """
+    Ensure that when a resource is skipped for its dependencies the scheduler marks it with BlockedStatus.TRANSIENT
+    """
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent2,name=2]")
+
+    # make agent2's executors managed, leave the agent1 auto fails
+    executor2: ManagedExecutor = ManagedExecutor()
+    agent.executor_manager.register_managed_executor("agent2", executor2)
+
+    resources = {
+        rid1: make_resource_minimal(rid=rid1, values={"value": "r1_value", FAIL_DEPLOY: True}, requires=[]),
+        rid2: make_resource_minimal(rid=rid2, values={"value": "r2_value"}, requires=[rid1]),
+    }
+    await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
+    await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
+
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.skipped_for_dependency)
+    await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent2")
+
+    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
+        # We are skipped, so not compliant
+        status=state.ComplianceStatus.NON_COMPLIANT,
+        deployment_result=state.DeploymentResult.SKIPPED,
+        blocked=state.BlockedStatus.TRANSIENT,
+    )
+
+
+class BrokenDummyManager(executor.ExecutorManager[executor.Executor]):
+    """
+    A broken dummy ExecutorManager that fails on get_executor to test failure paths
+    """
+
+    async def get_executor(
+        self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
+    ) -> DummyExecutor:
+        raise Exception()
+
+    async def stop_for_agent(self, agent_name: str) -> list[DummyExecutor]:
+        pass
+
+    async def start(self) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
+
+    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
+        pass
+
+
+class BadTestAgent(Agent):
+    """
+    An agent (scheduler) that uses the broken dummy manager:
+    """
+
+    def __init__(
+        self,
+        environment: Optional[uuid.UUID] = None,
+    ):
+        super().__init__(environment)
+        self.executor_manager = BrokenDummyManager()
+        self.scheduler = TestScheduler(self.scheduler.environment, self.executor_manager, self.scheduler.client)
+
+
+@pytest.fixture
+async def bad_agent(environment, config):
+    """
+    Provide a new agent, with a scheduler that uses the broken dummy executor
+
+    Allows testing without server, or executor
+    """
+    out = BadTestAgent(environment)
+    await out.start_working()
+    yield out
+    await out.stop_working()
+
+
+async def test_broken_executor_deploy(bad_agent: TestAgent, make_resource_minimal):
+    """
+    Ensure the simple deploy scenario works: 2 dependant resources
+    """
+
+    rid1 = "test::Resource[agent1,name=1]"
+    rid2 = "test::Resource[agent1,name=2]"
+    resources = {
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, values={"value": "a"}, requires=[rid1]),
+    }
+
+    await bad_agent.scheduler._new_version(1, resources, make_requires(resources))
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=bad_agent.scheduler, agent_name="agent1")
+
+
+async def test_deploy_blocked_state(agent: TestAgent, make_resource_minimal) -> None:
+    """
+    Verify topology changes that update recursive properties
+    """
+
+    # Shorthand variables for specific resources
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent1,name=2]")
+    rid3 = ResourceIdStr("test::Resource[agent1,name=3]")
+    rid4 = ResourceIdStr("test::Resource[agent1,name=4]")
+    rid5 = ResourceIdStr("test::Resource[agent1,name=5]")
+    rid6 = ResourceIdStr("test::Resource[agent1,name=6]")
+    rid7 = ResourceIdStr("test::Resource[agent1,name=7]")
+    rid8 = ResourceIdStr("test::Resource[agent1,name=8]")
+    rid9 = ResourceIdStr("test::Resource[agent1,name=9]")
+
+    version = 1
+
+    async def make_resources(rx_requires: list[list[ResourceIdStr]], undef: list[ResourceIdStr] = [rid1]) -> None:
+        """
+        Build as many resources as required, with subsequent ids
+
+        :param rx_requires: the requires relation for each resources
+        :param undef: rids of undefined resources
+
+        hashes change every time
+        """
+        nonlocal version
+        rids = (ResourceIdStr(f"test::Resource[agent1,name={i + 1}]") for i in itertools.count())
+        resources = {
+            rid: make_resource_minimal(
+                rid,
+                values={"value": version},
+                requires=requires,
+                status=const.ResourceState.undefined if rid in undef else const.ResourceState.deployed,
+            )
+            for rid, requires in zip(rids, rx_requires)
+        }
+        await agent.scheduler._new_version(version, resources, make_requires(resources), undefined_resources=undef)
+        version += 1
+        await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
+
+    def is_deployed(rid: ResourceIdStr):
+        assert agent.scheduler._state.resource_state[rid].deployment_result == DeploymentResult.DEPLOYED
+        assert agent.scheduler._state.resource_state[rid].status == ComplianceStatus.COMPLIANT
+        assert agent.scheduler._state.resource_state[rid].blocked == BlockedStatus.NO
+
+    def is_blocked(rid: ResourceIdStr):
+        assert agent.scheduler._state.resource_state[rid].deployment_result == DeploymentResult.DEPLOYED, rid
+        assert agent.scheduler._state.resource_state[rid].status == ComplianceStatus.HAS_UPDATE, rid
+        assert agent.scheduler._state.resource_state[rid].blocked == BlockedStatus.YES, rid
+
+    def is_undefined(rid: ResourceIdStr):
+        assert agent.scheduler._state.resource_state[rid].deployment_result == DeploymentResult.DEPLOYED
+        assert agent.scheduler._state.resource_state[rid].status == ComplianceStatus.UNDEFINED
+        assert agent.scheduler._state.resource_state[rid].blocked == BlockedStatus.YES
+
+    def is_new_undefined(rid: ResourceIdStr):
+        assert agent.scheduler._state.resource_state[rid].deployment_result == DeploymentResult.NEW
+        assert agent.scheduler._state.resource_state[rid].status == ComplianceStatus.UNDEFINED
+        assert agent.scheduler._state.resource_state[rid].blocked == BlockedStatus.YES
+
+    def is_new_blocked(rid: ResourceIdStr):
+        assert agent.scheduler._state.resource_state[rid].deployment_result == DeploymentResult.NEW
+        assert agent.scheduler._state.resource_state[rid].status == ComplianceStatus.HAS_UPDATE
+        assert agent.scheduler._state.resource_state[rid].blocked == BlockedStatus.YES
+
+    # Chain of 3
+    # 3 -> 1 -> 2
+    # 1 is undefined
+    # 2 is free to deploy
+    # 3 is blocked
+    await make_resources(
+        [
+            [rid2],
+            [],
+            [rid1],
+        ],
+        undef=[rid1],
+    )
+    is_new_undefined(rid1)
+    is_deployed(rid2)
+    is_new_blocked(rid3)
+
+    # reverse order
+    # 3 <- 1 <- 2
+    # 1 is undefined
+    # 3 is free to deploy
+    # 2 is blocked
+    await make_resources(
+        [[rid3], [rid1], []],
+        undef=[rid1],
+    )
+
+    is_new_undefined(rid1)
+    is_blocked(rid2)
+    is_deployed(rid3)
+
+    # diamond 1 < 2,3,4 < 5
+    diamond = [[rid2, rid3, rid4], [rid5], [rid5], [rid5], [], []]
+    # 1 is undefined
+    # rest is free
+    await make_resources(diamond, [rid1])
+    is_deployed(rid2)
+    is_deployed(rid3)
+    is_deployed(rid4)
+    is_deployed(rid5)
+    is_deployed(rid6)
+    is_new_undefined(rid1)
+
+    # 5 is undefined
+    # rest is blocked
+    await make_resources(diamond, [rid5])
+
+    is_blocked(rid2)
+    is_blocked(rid3)
+    is_blocked(rid4)
+    is_undefined(rid5)
+    is_deployed(rid6)
+    is_new_blocked(rid1)
+
+    # Unblock it all
+    await make_resources(diamond, [])
+
+    is_deployed(rid2)
+    is_deployed(rid3)
+    is_deployed(rid4)
+    is_deployed(rid5)
+    is_deployed(rid6)
+    is_deployed(rid1)
+
+    # Mixed graph
+    # graph of 4 levels high, with 2 tops, where every node requires the two nodes below
+    # layer 1: 1 -> 3,4  2->4,5
+    # layer 2: 3 -> 6,7  4->7,8 ....
+    # Layer n has n+1 nodes
+    # Each node i in layer n requires i+n and i+n+1
+
+    def make_node_layer(n):
+        offset_row_below = int((n + 1) * (n + 2) / 2)
+        nr_of_nodes = n + 1
+        return [
+            [
+                ResourceIdStr(f"test::Resource[agent1,name={offset_row_below + i}]"),
+                ResourceIdStr(f"test::Resource[agent1,name={offset_row_below + i + 1}]"),
+            ]
+            for i in range(nr_of_nodes)
+        ]
+
+    graph = [*make_node_layer(1), *make_node_layer(2), *make_node_layer(3), *[[]] * 5]
+
+    # Deploy all
+    await make_resources(graph, [])
+    for rid in range(14):
+        is_deployed(f"test::Resource[agent1,name={rid + 1}]")
+
+    # Block 6,7 and 5, causing 1,2,3,4 to be blocked
+    await make_resources(graph, [rid6, rid7, rid5])
+    for rid in range(4):
+        is_blocked(f"test::Resource[agent1,name={rid + 1}]")
+    for rid in range(4, 7):
+        is_undefined(f"test::Resource[agent1,name={rid + 1}]")
+    for rid in range(7, 14):
+        is_deployed(f"test::Resource[agent1,name={rid + 1}]")
+
+    # Unblock 5 and 7
+    # Block 9
+    # 1,3 blocked due to 6
+    # 2,5 blocked due to nine
+    # 4,7,8 unblocked
+    await make_resources(graph, [rid6, rid9])
+    is_undefined(rid6)
+    is_undefined(rid9)
+    is_blocked(rid1)
+    is_blocked(rid2)
+    is_blocked(rid3)
+    is_blocked(rid5)
+    is_deployed(rid4)
+    is_deployed(rid7)
+    is_deployed(rid8)
+    for rid in range(9, 14):
+        is_deployed(f"test::Resource[agent1,name={rid + 1}]")
+
+    # Also unblock 9
+    # 1,3 blocked due to 6
+    # 2,4,5,7,8 unblocked
+    await make_resources(graph, [rid6])
+    is_undefined(rid6)
+    is_blocked(rid1)
+    is_blocked(rid3)
+    is_deployed(rid2)
+    is_deployed(rid4)
+    is_deployed(rid5)
+    for rid in range(6, 14):
+        is_deployed(f"test::Resource[agent1,name={rid + 1}]")
+
+    # Drop half of it, deploy all
+    graph = [*make_node_layer(1), *[[]] * 3]
+    await make_resources(graph, [])
+    for rid in range(5):
+        is_deployed(f"test::Resource[agent1,name={rid + 1}]")
+    for rid in range(5, 14):
+        assert f"test::Resource[agent1,name={rid + 1}]" not in agent.scheduler._state.resource_state

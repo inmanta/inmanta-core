@@ -181,7 +181,7 @@ def test_module_update_with_v2_module(
     ProjectTool().update()
     assert_version_installed(module_name="module1", version="1.2.4")
     assert_version_installed(module_name="module2", version="2.2.0")
-    assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.2")
+    assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.1")
 
 
 @pytest.mark.parametrize("install_mode", [InstallMode.release, InstallMode.prerelease])

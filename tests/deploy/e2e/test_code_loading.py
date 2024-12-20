@@ -53,11 +53,11 @@ async def agent(server, environment, deactive_venv):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     a = Agent(environment)
-
+    loop = asyncio.get_running_loop()
     executor = InProcessExecutorManager(
         environment,
         a._client,
-        asyncio.get_event_loop(),
+        loop,
         LOGGER,
         a.thread_pool,
         str(pathlib.Path(a._storage["executors"]) / "code"),

@@ -443,7 +443,7 @@ class Bool(Primitive):
         return "bool"
 
     def to_python(self, instance: object) -> "object":
-        return object
+        return instance
 
 
 @stable_api
@@ -495,7 +495,7 @@ class String(Primitive):
         return "str"
 
     def to_python(self, instance: object) -> "object":
-        return str(instance)
+        return instance
 
 
 @stable_api
@@ -826,7 +826,7 @@ class Union(Type):
         types = [tp.as_python_type_string() for tp in self.types]
         if any((tp is None for tp in types)):
             return None
-        return f"Union[{', '.join(types)}]"
+        return f" | ".join(types)
 
     def has_custom_to_python(self) -> bool:
         # If we mix convertible and non convertible, it won't work, so we avoid it

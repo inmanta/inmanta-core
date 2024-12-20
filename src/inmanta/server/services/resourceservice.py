@@ -42,15 +42,11 @@ from inmanta.data.model import (
     DiscoveredResource,
     LatestReleasedResource,
     LinkedDiscoveredResource,
-    LogLine,
     ReleasedResourceDetails,
     Resource,
     ResourceAction,
     ResourceHistory,
-    ResourceIdStr,
     ResourceLog,
-    ResourceType,
-    ResourceVersionIdStr,
     VersionedResource,
     VersionedResourceDetails,
 )
@@ -65,7 +61,7 @@ from inmanta.server import config as opt
 from inmanta.server import extensions, protocol
 from inmanta.server.services.environmentlistener import EnvironmentAction, EnvironmentListener
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, JsonType, PrimitiveTypes
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
 
 resource_discovery = extensions.BoolFeature(
@@ -328,114 +324,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                 await data.Resource.set_deployed_multi(env.id, resources_id_filtered, version, connection=inner_connection)
                 # Resource persistent state should not be affected
 
-    async def _update_deploy_state(
-        self,
-        env: data.Environment,
-        resource_id: ResourceIdStr,
-        timestamp: datetime.datetime,
-        version: int,
-        status: ResourceState,
-        message: str,
-        fail_on_error: bool,
-        connection: Optional[Connection] = None,
-        can_overwrite_available: bool = True,
-    ) -> None:
-        """
-        Set the status of the provided resources as to skipped or failed
-
-        Performs all required bookkeeping for this.
-
-        Factored out the code to set a status on a resource
-
-
-        :param env: Environment to consider.
-        :param resource_id: resource to mark.
-        :param timestamp: Timestamp for the log message and the resource action entry.
-        :param version: Version of the resources to consider.
-        :param status: status to set
-        :param message: reason to log on the transfer
-        :param fail_on_error: When encountering an undeployable state: fail or do nothing?.
-        :param can_overwrite_available: can we overwrite available.
-            If set to false, we return without changes if the current state is available
-        """
-        resource_version_id = resource_id + ",v=" + str(version)
-        logline = LogLine(
-            level=const.LogLevel.INFO,
-            msg=f"Setting {status.value} because of {message}",
-            timestamp=timestamp,
-        )
-
-        assert status in [ResourceState.failed, ResourceState.skipped]
-        # this method is purpose specific for now.
-
-        async with data.Resource.get_connection(connection) as connection:
-            async with connection.transaction():
-                # validate resources
-                resource = await data.Resource.get_one(
-                    environment=env.id,
-                    resource_id=resource_id,
-                    model=version,
-                    # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
-                    # cascading deletes
-                    lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
-                    connection=connection,
-                )
-                if not resource:
-                    raise NotFound("The resource with the given ids do not exist in the given environment.")
-
-                # no escape from terminal
-                if resource.status != status and resource.status in TERMINAL_STATES:
-                    if not fail_on_error:
-                        return
-                    else:
-                        LOGGER.error("Attempting to set undeployable resource to deployable state")
-                        raise AssertionError("Attempting to set undeployable resource to deployable state")
-
-                if resource.status == ResourceState.available and not can_overwrite_available:
-                    return
-
-                resource_action = data.ResourceAction(
-                    environment=env.id,
-                    version=version,
-                    resource_version_ids=[resource_version_id],
-                    action_id=uuid.uuid4(),
-                    action=const.ResourceAction.deploy,
-                    started=timestamp,
-                    messages=[
-                        {
-                            **logline.dict(),
-                            "timestamp": logline.timestamp.astimezone().isoformat(timespec="microseconds"),
-                        }
-                    ],
-                    changes={},
-                    status=status,
-                    change=const.Change.nochange,
-                    finished=timestamp,
-                )
-                await resource_action.insert(connection=connection)
-
-                self.log_resource_action(
-                    env.id,
-                    [resource_version_id],
-                    logline.level.to_int,
-                    logline.timestamp,
-                    logline.msg,
-                )
-
-                self.clear_env_cache(env)
-
-                await resource.update_fields(
-                    status=status,
-                    connection=connection,
-                )
-                await resource.update_persistent_state(
-                    last_deploy=timestamp,
-                    last_deployed_version=version,
-                    last_deployed_attribute_hash=resource.attribute_hash,
-                    last_non_deploying_status=const.NonDeployingResourceState(status),
-                    connection=connection,
-                )
-
     async def get_increment(
         self,
         env: data.Environment,
@@ -686,11 +574,11 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                                 ResourceState.skipped_for_undefined,
                             }:
                                 extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
+                                extra_fields["last_deployed_attribute_hash"] = res.attribute_hash
 
                             await res.update_persistent_state(
                                 **extra_fields,
                                 last_deploy=finished,
-                                last_deployed_attribute_hash=res.attribute_hash,
                                 connection=inner_connection,
                             )
 
@@ -866,7 +754,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
 
     @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ReleasedResourceDetails:
-        details = await data.Resource.get_resource_details(env.id, rid)
+        details = await data.Resource.get_released_resource_details(env.id, rid)
         if not details:
             raise NotFound("The resource with the given id does not exist, or was not released yet in the given environment.")
         return details

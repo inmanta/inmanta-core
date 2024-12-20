@@ -24,18 +24,18 @@ import uuid
 from collections.abc import Iterable, Iterator, Sequence
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
 
+import inmanta.ast
 import inmanta.util
-from inmanta import const, execute, plugins, references
+from inmanta import const, references
 from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
-from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
-from inmanta.execute import proxy, util
+from inmanta.execute import util
 from inmanta.stable_api import stable_api
-from inmanta.types import JsonType
+from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 
 if TYPE_CHECKING:
     from inmanta import export
     from inmanta.data import ResourceAction
-    from inmanta.execute import runtime
+    from inmanta.execute import proxy, runtime
 
 LOGGER = logging.getLogger(__name__)
 
@@ -363,9 +363,9 @@ class Resource(metaclass=ResourceMeta):
 
                 agent_value = getattr(agent_value, el)
 
-            except proxy.UnsetException as e:
+            except inmanta.ast.UnsetException as e:
                 raise e
-            except proxy.UnknownException as e:
+            except inmanta.ast.UnknownException as e:
                 raise e
             except Exception:
                 raise Exception(
@@ -375,7 +375,7 @@ class Resource(metaclass=ResourceMeta):
 
         attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
         if isinstance(attribute_value, util.Unknown):
-            raise proxy.UnknownException(attribute_value)
+            raise inmanta.ast.UnknownException(attribute_value)
         if not isinstance(agent_value, str):
             raise ResourceException(
                 f"The agent attribute should lead to a string, got {agent_value} of type {type(agent_value)}"
@@ -415,9 +415,9 @@ class Resource(metaclass=ResourceMeta):
             return value
         except IgnoreResourceException:
             raise  # will be handled in _load_resources of export.py
-        except proxy.UnknownException as e:
+        except inmanta.ast.UnknownException as e:
             return e.unknown
-        except plugins.PluginException as e:
+        except inmanta.ast.PluginException as e:
             raise ExplicitPluginException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
         except CompilerException:
             # Internal exceptions (like UnsetException) should be propagated without being wrapped

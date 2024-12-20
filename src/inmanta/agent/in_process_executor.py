@@ -29,11 +29,12 @@ import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, FailedResources, ResourceDetails
-from inmanta.agent.handler import HandlerAPI, SkipResource
-from inmanta.const import ParameterSource
-from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
+from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
+from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
+from inmanta.data.model import AttributeStateChange
 from inmanta.loader import CodeLoader
 from inmanta.resources import Resource
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import NamedLock, join_threadpools
 
 
@@ -71,6 +72,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         self.activity_lock = asyncio.Lock()
 
         self.logger: logging.Logger = parent_logger.getChild(self.name)
+        self.resource_action_logger = logging.getLogger(NAME_RESOURCE_ACTION_LOGGER).getChild(self.name)
 
         self._stopped = False
 
@@ -160,7 +162,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         try:
             provider = await self.get_provider(resource)
         except Exception:
-            ctx.set_status(const.ResourceState.unavailable)
+            ctx.set_resource_state(const.HandlerResourceState.unavailable)
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=resource.id.resource_version_str())
             return
         else:
@@ -174,12 +176,19 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                     requires,
                 )
                 if ctx.status is None:
-                    ctx.set_status(const.ResourceState.deployed)
+                    ctx.set_resource_state(const.HandlerResourceState.deployed)
+            except SkipResourceForDependencies as e:
+                ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
+                ctx.warning(
+                    msg="Resource %(resource_id)s was skipped: %(reason)s",
+                    resource_id=resource.id,
+                    reason=e.args,
+                )
             except SkipResource as e:
-                ctx.set_status(const.ResourceState.skipped)
+                ctx.set_resource_state(const.HandlerResourceState.skipped)
                 ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
             except Exception as e:
-                ctx.set_status(const.ResourceState.failed)
+                ctx.set_resource_state(const.HandlerResourceState.failed)
                 ctx.exception(
                     "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
                     resource_id=str(resource.id),
@@ -234,7 +243,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             )
             return DeployResult.undeployable(resource_details.rvid, action_id, msg)
 
-        ctx = handler.HandlerContext(resource, action_id=action_id, logger=self.logger)
+        ctx = handler.HandlerContext(resource, action_id=action_id, logger=self.resource_action_logger)
 
         ctx.debug(
             "Start run for resource %(resource)s because %(reason)s",
@@ -288,14 +297,14 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         messages=[],
                     )
                 assert resource_obj is not None
-                ctx = handler.HandlerContext(resource_obj, True)
+                ctx = handler.HandlerContext(resource_obj, True, logger=self.resource_action_logger)
                 provider = None
 
                 dryrun_result: Optional[DryrunResult] = None
                 resource_id: ResourceVersionIdStr = resource.rvid
 
                 try:
-                    self.logger.debug("Running dryrun for %s", resource_id)
+                    self.resource_action_logger.debug("Running dryrun for %s", resource_id)
 
                     try:
                         provider = await self.get_provider(resource_obj)
@@ -393,7 +402,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                     error_msg=f"Unable to deserialize resource {resource.id}",
                 )
             assert resource_obj is not None
-            ctx = handler.HandlerContext(resource_obj)
+            ctx = handler.HandlerContext(resource_obj, logger=self.resource_action_logger)
             async with self.activity_lock:
                 try:
                     with self._cache:
@@ -426,7 +435,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
                 except Exception:
                     error_msg = "Unable to retrieve facts for resource %s" % resource.id
-                    self.logger.exception(error_msg)
+                    self.resource_action_logger.exception(error_msg)
                     return FactResult(
                         resource_id=resource.rvid,
                         action_id=ctx.action_id,
@@ -440,7 +449,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         except Exception:
             error_msg = "Unable to find a handler for %s" % resource.id
-            self.logger.exception(error_msg)
+            self.resource_action_logger.exception(error_msg)
             return FactResult(
                 resource_id=resource.rvid,
                 action_id=None,

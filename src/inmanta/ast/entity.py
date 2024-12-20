@@ -30,6 +30,7 @@ from inmanta.ast import (
     DuplicateException,
     Locatable,
     Location,
+    MultiUnsetException,
     Named,
     Namespace,
     NotFoundException,
@@ -40,7 +41,6 @@ from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.const import DATACLASS_SELF_FIELD
-from inmanta.execute.proxy import MultiUnsetException
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, WrappedValueVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
 
@@ -649,6 +649,9 @@ class Entity(NamedType, WithComment):
             )
 
         self._paired_dataclass = dataclass
+
+    def get_paired_dataclass(self) -> Optional[typing.Type[object]]:
+        return self._paired_dataclass
 
     def corresponds_to(self, pytype: typing.Type) -> bool:
         return self._paired_dataclass == pytype

@@ -68,7 +68,7 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
         services:
             postgres:
                 container_name: inmanta_db
-                image: postgres:13
+                image: postgres:16
                 environment:
                     POSTGRES_USER: inmanta
                     POSTGRES_PASSWORD: inmanta
@@ -111,7 +111,7 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
         services:
             postgres:
                 container_name: inmanta_db
-                image: postgres:13
+                image: postgres:16
                 environment:
                     POSTGRES_USER: inmanta
                     POSTGRES_PASSWORD: inmanta

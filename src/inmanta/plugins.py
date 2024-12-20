@@ -31,17 +31,10 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Seq
 import typing_inspect
 
 import inmanta.ast.type as inmanta_type
-from inmanta import const, protocol, references, util
-from inmanta.ast import (
-    LocatableString,
-    Location,
-    Namespace,
-    Range,
-    RuntimeException,
-    TypeNotFoundException,
-    WithComment,
-    entity,
-)
+from inmanta import const, protocol, util, references
+from inmanta.ast import LocatableString, Location, Namespace
+from inmanta.ast import PluginException as PluginException  # noqa: F401 Plugin exception is part of the stable api
+from inmanta.ast import Range, RuntimeException, TypeNotFoundException, WithComment, entity
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
@@ -251,10 +244,7 @@ def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, valu
         # if the value is None, it becomes None
         return None
 
-    base_type = expected_type.get_base_type()
-    if base_type.has_custom_to_python():
-        if isinstance(value, references.Reference):
-            return value
+    if expected_type.has_custom_to_python():
         return expected_type.to_python(value)
     return DynamicProxy.return_value(value)
 
@@ -270,7 +260,7 @@ python_to_model = {
 }
 
 
-def primitive_python_type_to_model_domain(intype: Type) -> inmanta_type.Type:
+def primitive_python_type_to_model_domain(intype: type) -> inmanta_type.Type:
     """
     Convert a primtive python type to the model domain
 
@@ -424,9 +414,6 @@ class PluginArgument(PluginValue):
             return "%s: %s = %s" % (self.arg_name, repr(self.arg_type), str(self.default_value))
         else:
             return "%s: %s" % (self.arg_name, repr(self.arg_type))
-
-    def to_python_domain(self, value: object) -> object:
-        return validate_and_convert_to_python_domain(self.resolved_type, value)
 
 
 class PluginReturn(PluginValue):
@@ -892,16 +879,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
     def to_python(self, instance: object) -> "object":
         raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
-
-
-@stable_api
-class PluginException(Exception):
-    """
-    Base class for custom exceptions raised from a plugin.
-    """
-
-    def __init__(self, message: str) -> None:
-        self.message = message
 
 
 @stable_api

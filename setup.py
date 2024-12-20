@@ -49,7 +49,7 @@ version = "15.0.0"
 
 setup(
     version=version,
-    python_requires=">=3.11",  # also update classifiers
+    python_requires=">=3.12",  # also update classifiers
     # Meta data
     name="inmanta-core",
     description="Inmanta deployment tool",
@@ -66,7 +66,7 @@ setup(
         "Operating System :: POSIX :: Linux",
         "Topic :: System :: Systems Administration",
         "Topic :: Utilities",
-        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
     ],
     keywords="orchestrator orchestration configurationmanagement",
     project_urls={

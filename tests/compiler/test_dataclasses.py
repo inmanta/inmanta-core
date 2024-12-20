@@ -86,6 +86,24 @@ other_selected = dataclasses::select_vm(c1.vms, "A")
 
 the_vms = dataclasses::make_vms()
 std::print(the_vms)
+
+entity HasString:
+    string thestring
+end
+implement HasString using std::none
+
+
+# Make sure we pass string like things unchanged
+# but otherwise have it as a string
+hs = HasString(thestring = dataclasses::odd_string())
+if hs.thestring != "it":
+   a = 1
+   a = 2
+else:
+   hs.thestring = "it"
+end
+dataclasses::is_odd_string(hs.thestring)
+
 """,
         ministd=True,
     )
@@ -161,7 +179,7 @@ class Virtualmachine:
 
     assert (
         """entity Virtualmachine extends std::Dataclass:
-   \""" Python comment \"""
+   \"""Python comment\"""
    int cpus
    ERROR disk
    int it
