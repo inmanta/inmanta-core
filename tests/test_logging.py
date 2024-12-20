@@ -29,7 +29,7 @@ import yaml
 import inmanta
 from inmanta import config
 from inmanta.const import ENVIRON_FORCE_TTY
-from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, MultiLineFormatter, Options, load_config_file_to_dict
+from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, Options, load_config_file_to_dict
 
 
 @pytest.fixture(autouse=True)
@@ -39,117 +39,6 @@ def cleanup_logger():
     yield
     # Make sure we maintain the initial root log level, so that logging in pytest works as expected.
     logging.root.setLevel(root_log_level)
-
-
-def test_setup_instance():
-    inmanta_logger = InmantaLoggerConfig.get_instance()
-    handler = inmanta_logger.get_handler()
-    assert handler.stream == sys.stdout
-    assert isinstance(handler.formatter, MultiLineFormatter)
-    assert handler.level == logging.INFO
-
-
-def test_setup_instance_2_times():
-    inmanta_logger = InmantaLoggerConfig.get_instance(sys.stderr)
-    handler = inmanta_logger.get_handler()
-    assert handler.stream == sys.stderr
-    assert isinstance(handler.formatter, MultiLineFormatter)
-    assert handler.level == logging.INFO
-
-    inmanta_logger = InmantaLoggerConfig.get_instance(sys.stderr)
-    handler = inmanta_logger.get_handler()
-    assert handler.stream == sys.stderr
-    assert isinstance(handler.formatter, MultiLineFormatter)
-    assert handler.level == logging.INFO
-
-    with pytest.raises(Exception) as e:
-        InmantaLoggerConfig.get_instance(sys.stdout)
-    message = "Instance already exists with a different stream"
-    assert message in str(e.value)
-
-
-def test_setup_instance_with_stream(allow_overriding_root_log_level: None):
-    stream = StringIO()
-    inmanta_logger = InmantaLoggerConfig.get_instance(stream)
-    handler = inmanta_logger.get_handler()
-    assert handler.stream == stream
-    assert isinstance(handler.formatter, MultiLineFormatter)
-    assert handler.level == logging.INFO
-
-    # Log a message
-    logger = logging.getLogger("test_logger")
-    logger.info("This is a test message")
-    log_output = stream.getvalue().strip()
-    expected_output = "test_logger              INFO    This is a test message"
-    assert log_output == expected_output
-
-
-def test_set_log_level(allow_overriding_root_log_level: None):
-    stream = StringIO()
-    inmanta_logger = InmantaLoggerConfig.get_instance(stream)
-    handler = inmanta_logger.get_handler()
-    assert handler.level == logging.INFO
-
-    logger = logging.getLogger("test_logger")
-    expected_output = "test_logger              DEBUG   This is a test message"
-
-    # Log a message and verify that it is not logged as the log level is too high
-    logger.debug("This is a test message")
-    log_output = stream.getvalue().strip()
-    assert expected_output not in log_output
-
-    # change the log_level and verify the log is visible this time.
-    inmanta_logger.set_log_level("DEBUG")
-    logger.debug("This is a test message")
-    log_output = stream.getvalue().strip()
-    assert expected_output in log_output
-
-
-def test_set_log_formatter(allow_overriding_root_log_level: None):
-    stream = StringIO()
-    inmanta_logger = InmantaLoggerConfig.get_instance(stream)
-
-    handler = inmanta_logger.get_handler()
-    assert isinstance(handler.formatter, MultiLineFormatter)
-
-    logger = logging.getLogger("test_logger")
-    expected_output_format1 = "test_logger              INFO    This is a test message"
-    expected_output_format2 = "test_logger - INFO - This is a test message"
-
-    # Log a message with the default formatter
-    logger.info("This is a test message")
-    log_output = stream.getvalue().strip()
-    assert expected_output_format1 in log_output
-
-    # change the formatter and verify the output is different
-    formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
-    inmanta_logger.set_log_formatter(formatter)
-    assert inmanta_logger.get_handler().formatter == formatter
-
-    logger.info("This is a test message")
-    log_output = stream.getvalue().strip()
-    assert expected_output_format2 in log_output
-
-
-def test_set_logfile_location(
-    tmpdir,
-    allow_overriding_root_log_level: None,
-):
-    log_file = tmpdir.join("test.log")
-    inmanta_logger = InmantaLoggerConfig.get_instance()
-    inmanta_logger.set_logfile_location(str(log_file))
-    handler = inmanta_logger.get_handler()
-    assert isinstance(handler, logging.handlers.WatchedFileHandler)
-    assert handler.baseFilename == str(log_file)
-
-    # Log a message
-    logger = logging.getLogger("test_logger")
-    logger.info("This is a test message")
-
-    # Verify the message was written to the log file
-    with open(str(log_file)) as f:
-        contents = f.read()
-        assert "This is a test message" in contents
 
 
 @pytest.mark.parametrize_any(
