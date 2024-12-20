@@ -40,13 +40,13 @@ from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
-from inmanta.const import Change, ResourceState
+from inmanta.const import Change
 from inmanta.data import LogLine
-from inmanta.data.model import AttributeStateChange, PipConfig, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.data.model import AttributeStateChange, PipConfig
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
-from inmanta.types import JsonType
+from inmanta.types import JsonType, ResourceIdStr, ResourceType, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
@@ -485,33 +485,50 @@ class FactResult:
 @dataclass
 class DeployResult:
     rvid: ResourceVersionIdStr
+    resource_id: ResourceIdStr = dataclasses.field(init=False)
     action_id: uuid.UUID
-    status: ResourceState
+    resource_state: const.HandlerResourceState
     messages: list[LogLine]
     changes: dict[str, AttributeStateChange]
     change: Optional[Change]
+
+    def __post_init__(self) -> None:
+        if self.status in {*const.TRANSIENT_STATES, *const.UNDEPLOYABLE_STATES, const.ResourceState.dry}:
+            raise ValueError(f"Resource state {self.status} is not a valid state for a deployment result.")
+        self.resource_id = Id.parse_id(self.rvid).resource_str()
+
+    @property
+    def status(self) -> const.ResourceState:
+        """
+        Translates the new HandlerResourceState to the const.ResourceState that some of the code still uses
+        (mainly parts of the code that communicate with the server)
+        """
+        if self.resource_state is const.HandlerResourceState.skipped_for_dependency:
+            return const.ResourceState.skipped
+        return const.ResourceState(self.resource_state)
 
     @classmethod
     def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext) -> "DeployResult":
         if ctx.status is None:
             ctx.warning("Deploy status field is None, failing!")
-            ctx.set_status(ResourceState.failed)
-
+            ctx.set_resource_state(const.HandlerResourceState.failed)
+        # Make mypy happy
+        assert ctx.resource_state is not None
         return DeployResult(
             rvid=rvid,
             action_id=ctx.action_id,
-            status=ctx.status or ResourceState.failed,
+            resource_state=ctx.resource_state or const.HandlerResourceState.failed,
             messages=ctx.logs,
             changes=ctx.changes,
             change=ctx.change,
         )
 
     @classmethod
-    def undeployable(self, rvid: ResourceVersionIdStr, action_id: UUID, message: LogLine) -> "DeployResult":
+    def undeployable(cls, rvid: ResourceVersionIdStr, action_id: UUID, message: LogLine) -> "DeployResult":
         return DeployResult(
             rvid=rvid,
             action_id=action_id,
-            status=ResourceState.unavailable,
+            resource_state=const.HandlerResourceState.unavailable,
             messages=[message],
             changes={},
             change=Change.nochange,

@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import copy
 import logging.config
 import pathlib
 import warnings
@@ -31,7 +32,6 @@ from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
-from inmanta.data.model import ResourceIdStr
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
@@ -141,7 +141,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
-from inmanta.types import JsonType
+from inmanta.types import JsonType, ResourceIdStr
 from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
@@ -805,7 +805,7 @@ async def server_multi(
 
 
 @pytest.fixture(scope="function")
-async def auto_start_agent():
+async def auto_start_agent() -> bool:
     """Marker fixture, indicates if we expect scheduler autostart.
     If set to False, any attempt to start the scheduler results in failure"""
     return False
@@ -822,45 +822,94 @@ async def clienthelper(client, environment):
     return utils.ClientHelper(client, environment)
 
 
+DISABLE_STATE_CHECK = False
+
+
 @pytest.fixture(scope="function")
-async def agent(server, environment):
+async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    agents: list[Agent] = []
+
+    async def create(environment: uuid.UUID) -> Agent:
+        # Mock scheduler state-dir: outside of tests this happens
+        # when the scheduler config is loaded, before starting the scheduler
+        server_state_dir = config.Config.get("config", "state-dir")
+        scheduler_state_dir = pathlib.Path(server_state_dir) / "server" / str(environment)
+        scheduler_state_dir.mkdir(exist_ok=True)
+        config.Config.set("config", "state-dir", str(scheduler_state_dir))
+        a = Agent(environment)
+        agents.append(a)
+        # Restore state-dir
+        config.Config.set("config", "state-dir", str(server_state_dir))
+
+        executor = InProcessExecutorManager(
+            environment,
+            a._client,
+            asyncio.get_running_loop(),
+            logger,
+            a.thread_pool,
+            str(pathlib.Path(a._storage["executors"]) / "code"),
+            str(pathlib.Path(a._storage["executors"]) / "venvs"),
+            False,
+        )
+
+        executor = WriteBarierExecutorManager(executor)
+
+        a.executor_manager = executor
+        a.scheduler.executor_manager = executor
+        a.scheduler.code_manager = utils.DummyCodeManager(a._client)
+        await a.start()
+        await utils.retry_limited(
+            lambda: agentmanager.get_agent_client(tid=environment, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=True)
+            is not None,
+            timeout=10,
+        )
+        return a
+
+    yield create
+
+    global DISABLE_STATE_CHECK
+    try:
+        if not DISABLE_STATE_CHECK:
+            for agent in agents:
+                the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
+                for r, state in the_state.items():
+                    print(r, state)
+                await agent.stop_working()
+                monkeypatch.setattr(agent.scheduler._work.agent_queues, "_new_agent_notify", lambda x: x)
+                await agent.start_working()
+                new_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
+                assert the_state == new_state
+
+        await asyncio.gather(*[agent.stop() for agent in agents])
+    finally:
+        DISABLE_STATE_CHECK = False
+
+
+@pytest.fixture(scope="function")
+async def agent(
+    server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch
+) -> AsyncIterator[Agent]:
     """Construct an agent that can execute using the resource container"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
-    # Mock scheduler state-dir: outside of tests this happens
-    # when the scheduler config is loaded, before starting the scheduler
-    server_state_dir = config.Config.get("config", "state-dir")
-    scheduler_state_dir = pathlib.Path(server_state_dir) / "server" / str(environment)
-    scheduler_state_dir.mkdir(exist_ok=True)
-    config.Config.set("config", "state-dir", str(scheduler_state_dir))
-    a = Agent(environment)
-    # Restore state-dir
-    config.Config.set("config", "state-dir", str(server_state_dir))
-
-    executor = InProcessExecutorManager(
-        environment,
-        a._client,
-        asyncio.get_event_loop(),
-        logger,
-        a.thread_pool,
-        str(pathlib.Path(a._storage["executors"]) / "code"),
-        str(pathlib.Path(a._storage["executors"]) / "venvs"),
-        False,
-    )
-
-    executor = WriteBarierExecutorManager(executor)
-
-    a.executor_manager = executor
-    a.scheduler.executor_manager = executor
-    a.scheduler.code_manager = utils.DummyCodeManager(a._client)
-
-    await a.start()
-
+    a: Agent = await agent_factory(uuid.UUID(environment))
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     yield a
 
-    await a.stop()
+
+@pytest.fixture(scope="function")
+async def agent_no_state_check(server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch):
+    """Construct an agent that can execute using the resource container"""
+    global DISABLE_STATE_CHECK
+    DISABLE_STATE_CHECK = True
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    a: Agent = await agent_factory(uuid.UUID(environment))
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
 
 
 @pytest.fixture(scope="function")

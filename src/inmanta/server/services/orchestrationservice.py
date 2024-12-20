@@ -38,9 +38,8 @@ from inmanta.data.model import (
     PipConfig,
     PromoteTriggerMethod,
     ResourceDiff,
-    ResourceIdStr,
     ResourceMinimal,
-    ResourceVersionIdStr,
+    SchedulerStatusReport,
 )
 from inmanta.db.util import ConnectionInTransaction
 from inmanta.protocol import handle, methods, methods_v2
@@ -60,7 +59,7 @@ from inmanta.server import config as opt
 from inmanta.server import diff, protocol
 from inmanta.server.services import resourceservice
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ReturnTupple
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
 
 LOGGER = logging.getLogger(__name__)
 PLOGGER = logging.getLogger("performance")
@@ -1105,7 +1104,10 @@ class OrchestrationService(protocol.ServerSlice):
                             f"is older then the latest released version {latest_version}."
                         )
 
-                    # Already mark undeployable resources as deployed to create a better UX (change the version counters)
+                    # Ensure there is a record for every resource in the resource_persistent_state table.
+                    await data.ResourcePersistentState.populate_for_version(env.id, version_id, connection=connection)
+
+                    # # Already mark undeployable resources as deployed to create a better UX (change the version counters)
                     undep = model.get_undeployable()
                     now = datetime.datetime.now().astimezone()
 
@@ -1304,6 +1306,34 @@ class OrchestrationService(protocol.ServerSlice):
         version_diff = to_state.generate_diff(from_state)
 
         return version_diff
+
+    @handle(methods_v2.get_scheduler_status, env="tid")
+    async def get_scheduler_status(
+        self,
+        env: data.Environment,
+    ) -> SchedulerStatusReport:
+        try:
+            await self.autostarted_agent_manager._ensure_scheduler(env.id)
+        except Exception as e:
+            raise ServerError(f"Scheduler in env {env.id} failed to start.") from e
+        else:
+            client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
+
+            if client is None:
+                raise ServerError(f"Cannot retrieve session for scheduler in env {env.id}.")
+
+            status = await client.trigger_get_status(env.id)
+
+            status_code = status.code
+            result = status.result
+
+            if status_code != 200:
+                raise BaseHttpException(status_code, result["message"] if result else "")
+
+            assert result is not None
+
+            resp = SchedulerStatusReport.model_validate(result["data"])
+            return resp
 
     def convert_resources(self, resources: list[data.Resource]) -> dict[ResourceIdStr, diff.Resource]:
         return {res.resource_id: diff.Resource(resource_id=res.resource_id, attributes=res.attributes) for res in resources}

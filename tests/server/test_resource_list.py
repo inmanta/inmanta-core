@@ -21,6 +21,7 @@ import json
 import logging
 import time
 import typing
+import urllib.parse
 import uuid
 from datetime import datetime
 from operator import itemgetter
@@ -33,12 +34,14 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 import inmanta.util
 import util.performance
 import utils
-from inmanta import data
+from inmanta import const, data, resources, util
 from inmanta.agent.executor import DeployResult
 from inmanta.const import ResourceState
-from inmanta.data.model import LatestReleasedResource, ResourceIdStr, ResourceVersionIdStr
-from inmanta.deploy import persistence
+from inmanta.data.model import LatestReleasedResource
+from inmanta.deploy import persistence, state
+from inmanta.deploy.state import DeploymentResult
 from inmanta.server import config
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
 
 async def test_resource_list_no_released_version(server, client):
@@ -96,50 +99,59 @@ async def test_has_only_one_version_from_resource(server, client):
         )
         await cm.insert()
 
+    res1_name = "file" + str(1)
+    res1_key = "std::testing::NullResource[agent1,name=" + res1_name + "]"
+    res2_name = "file" + str(2)
+    res2_key = "std::testing::NullResource[agent1,name=" + res2_name + "]"
+
     version = 1
-    name = "file" + str(1)
-    key = "std::testing::NullResource[agent1,name=" + name + "]"
-    res1_v1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
+    res1_v1 = data.Resource.new(
+        environment=env.id, resource_version_id=res1_key + ",v=%d" % version, attributes={"name": res1_name}
+    )
     await res1_v1.insert()
+    res2_v1 = data.Resource.new(
+        environment=env.id, resource_version_id=res2_key + ",v=%d" % version, attributes={"name": res2_name}
+    )
+    await res2_v1.insert()
+    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
+
     version = 2
     res1_v2 = data.Resource.new(
         environment=env.id,
-        resource_version_id=key + ",v=%d" % version,
-        attributes={"name": name},
+        resource_version_id=res1_key + ",v=%d" % version,
+        attributes={"name": res1_name},
         status=ResourceState.deploying,
     )
     await res1_v2.insert()
-    version = 3
-    res1_v3 = data.Resource.new(
-        environment=env.id,
-        resource_version_id=key + ",v=%d" % version,
-        attributes={"name": name},
-        status=ResourceState.deployed,
-    )
-    await res1_v3.insert()
-    version = 4
-    res1_v4 = data.Resource.new(
-        environment=env.id,
-        resource_version_id=key + ",v=%d" % version,
-        attributes={"name": name, "new_attr": 123, "requires": ["abc"]},
-        status=ResourceState.deployed,
-    )
-    await res1_v4.insert()
-    await res1_v4.update_persistent_state(last_non_deploying_status=ResourceState.deployed)
-
-    version = 1
-    name = "file" + str(2)
-    key = "std::testing::NullResource[agent1,name=" + name + "]"
-    res2_v1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
-    await res2_v1.insert()
-    version = 2
     res2_v2 = data.Resource.new(
         environment=env.id,
-        resource_version_id=key + ",v=%d" % version,
-        attributes={"name": name},
+        resource_version_id=res2_key + ",v=%d" % version,
+        attributes={"name": res2_name},
         status=ResourceState.deploying,
     )
     await res2_v2.insert()
+    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
+
+    version = 3
+    res1_v3 = data.Resource.new(
+        environment=env.id,
+        resource_version_id=res1_key + ",v=%d" % version,
+        attributes={"name": res1_name},
+        status=ResourceState.deployed,
+    )
+    await res1_v3.insert()
+    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
+
+    version = 4
+    res1_v4 = data.Resource.new(
+        environment=env.id,
+        resource_version_id=res1_key + ",v=%d" % version,
+        attributes={"name": res1_name, "new_attr": 123, "requires": ["abc"]},
+        status=ResourceState.deployed,
+    )
+    await res1_v4.insert()
+    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
+    await res1_v4.update_persistent_state(last_non_deploying_status=ResourceState.deployed)
 
     result = await client.resource_list(env.id, sort="status.asc")
     assert result.code == 200
@@ -183,6 +195,7 @@ async def env_with_resources(server, client):
                 status=status,
             )
             await res.insert()
+            await data.ResourcePersistentState.populate_for_version(environment=environment, model_version=version)
             await res.update_persistent_state(
                 last_deploy=datetime.now(tz=UTC),
                 last_non_deploying_status=(
@@ -451,6 +464,140 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     assert response["metadata"] == {"total": 5, "before": 2, "after": 1, "page_size": 2}
 
 
+async def test_none_resources_paging(server, client, env_with_resources):
+    """Test the output when listing resources when the pagination criteria does not match any result.
+    We want to assert that metadata and the provided links are still consistent in that particular situation"""
+    env = env_with_resources
+
+    no_result_desc_prev = await client.resource_list(
+        env.id,
+        limit=2,
+        sort="agent.DESC",
+        end="aaaa",
+        last_id="aaa",
+    )
+    assert no_result_desc_prev.code == 200
+    assert len(no_result_desc_prev.result["data"]) == 0
+    assert no_result_desc_prev.result["links"] == {
+        "prev": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&start=aaaa&first_id=aaa",
+        "first": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False",
+        "self": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False",
+    }
+    assert no_result_desc_prev.result["metadata"] == {"after": 0, "before": 6, "page_size": 2, "total": 6}
+
+    # If we try to fetch resources on the linked page, it should return something
+    query_parameters_desc_prev = dict(
+        urllib.parse.parse_qsl(urllib.parse.urlsplit(no_result_desc_prev.result["links"]["prev"]).query)
+    )
+
+    actual_result_desc_prev = await client.resource_list(env.id, **query_parameters_desc_prev)
+    assert actual_result_desc_prev.code == 200
+    expected_result_desc_prev = {
+        "prev": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&start=agent1&"
+        "first_id=test%3A%3AFile%5Bagent1%2Cpath%3D%2Fetc%2Ffile2%5D",
+        "first": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False",
+        "self": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&first_id=aaa&start=aaaa",
+    }
+    assert actual_result_desc_prev.result["links"] == expected_result_desc_prev
+    assert actual_result_desc_prev.result["metadata"] == {"after": 0, "before": 4, "page_size": 2, "total": 6}
+    assert len(actual_result_desc_prev.result["data"]) == 2
+
+    no_result_desc_next = await client.resource_list(
+        env.id,
+        limit=2,
+        sort="agent.DESC",
+        start="zzz",
+        first_id="zzzz",
+    )
+    assert no_result_desc_next.code == 200
+    assert len(no_result_desc_next.result["data"]) == 0
+    assert no_result_desc_next.result["links"] == {
+        "next": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&end=zzz&last_id=zzzz",
+        "self": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&first_id=zzzz&start=zzz",
+    }
+    assert no_result_desc_next.result["metadata"] == {"after": 6, "before": 0, "page_size": 2, "total": 6}
+
+    # If we try to fetch resources on the linked page, it should return something
+    query_parameters_desc_next = dict(
+        urllib.parse.parse_qsl(urllib.parse.urlsplit(no_result_desc_next.result["links"]["next"]).query)
+    )
+
+    actual_result_desc_next = await client.resource_list(env.id, **query_parameters_desc_next)
+    assert actual_result_desc_next.code == 200
+    expected_result_desc_next = {
+        "next": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False&end=agent2&last_id=test%3A%3AFile%5Bagent2%2"
+        "Cpath%3D%2Ftmp%2Ffile4%5D",
+        "self": "/api/v2/resource?limit=2&sort=agent.desc&deploy_summary=False",
+    }
+    assert actual_result_desc_next.result["links"] == expected_result_desc_next
+    assert actual_result_desc_next.result["metadata"] == {"after": 4, "before": 0, "page_size": 2, "total": 6}
+    assert len(actual_result_desc_next.result["data"]) == 2
+
+    no_result_asc_prev = await client.resource_list(
+        env.id,
+        limit=2,
+        sort="agent.ASC",
+        start="zzz",
+        first_id="zzzz",
+    )
+    assert no_result_asc_prev.code == 200
+    assert len(no_result_asc_prev.result["data"]) == 0
+    assert no_result_asc_prev.result["links"] == {
+        "prev": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&end=zzz&last_id=zzzz",
+        "first": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False",
+        "self": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&first_id=zzzz&start=zzz",
+    }
+    assert no_result_asc_prev.result["metadata"] == {"after": 0, "before": 6, "page_size": 2, "total": 6}
+
+    # If we try to fetch resources on the linked page, it should return something
+    query_parameters_asc_prev = dict(
+        urllib.parse.parse_qsl(urllib.parse.urlsplit(no_result_asc_prev.result["links"]["prev"]).query)
+    )
+
+    actual_result_asc_prev = await client.resource_list(env.id, **query_parameters_asc_prev)
+    assert actual_result_asc_prev.code == 200
+    expected_result_asc_prev = {
+        "prev": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&end=agent2&"
+        "last_id=test%3A%3AFile%5Bagent2%2Cpath%3D%2Ftmp%2Ffile4%5D",
+        "first": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False",
+        "self": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False",
+    }
+    assert actual_result_asc_prev.result["links"] == expected_result_asc_prev
+    assert actual_result_asc_prev.result["metadata"] == {"after": 0, "before": 4, "page_size": 2, "total": 6}
+    assert len(actual_result_asc_prev.result["data"]) == 2
+
+    no_result_asc_next = await client.resource_list(
+        env.id,
+        limit=2,
+        sort="agent.ASC",
+        end="aaaaa",
+        last_id="aa",
+    )
+    assert no_result_asc_next.code == 200
+    assert len(no_result_asc_next.result["data"]) == 0
+    assert no_result_asc_next.result["links"] == {
+        "next": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&start=aaaaa&first_id=aa",
+        "self": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False",
+    }
+    assert no_result_asc_next.result["metadata"] == {"after": 6, "before": 0, "page_size": 2, "total": 6}
+
+    # If we try to fetch resources on the linked page, it should return something
+    query_parameters_asc_next = dict(
+        urllib.parse.parse_qsl(urllib.parse.urlsplit(no_result_asc_next.result["links"]["next"]).query)
+    )
+
+    actual_result_asc_next = await client.resource_list(env.id, **query_parameters_asc_next)
+    assert actual_result_asc_next.code == 200
+    expected_result_asc_next = {
+        "next": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&start=agent1&"
+        "first_id=test%3A%3AFile%5Bagent1%2Cpath%3D%2Fetc%2Ffile2%5D",
+        "self": "/api/v2/resource?limit=2&sort=agent.asc&deploy_summary=False&first_id=aa&start=aaaaa",
+    }
+    assert actual_result_asc_next.result["links"] == expected_result_asc_next
+    assert actual_result_asc_next.result["metadata"] == {"after": 4, "before": 0, "page_size": 2, "total": 6}
+    assert len(actual_result_asc_next.result["data"]) == 2
+
+
 @pytest.mark.parametrize(
     "sort, expected_status",
     [
@@ -587,7 +734,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 ri += 10
             return f"test::XResource{int(ri / 20)}[agent{tenant_index},sub={ri}]"
 
-        resources = [
+        attributes = [
             {
                 "id": f"{resource_id(ri)},v={version}",
                 "send_event": False,
@@ -603,7 +750,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
             result = await client.put_version(
                 environment,
                 version,
-                resources,
+                attributes,
                 resource_state,
                 [],
                 {},
@@ -617,7 +764,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 resource_state=resource_state,
                 unknowns=[],
                 version_info={},
-                resources=resources,
+                resources=attributes,
                 resource_sets=resource_sets,
             )
             assert result.code == 200
@@ -644,25 +791,37 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
             rvid = ResourceVersionIdStr(resource["resource_version_id"])
             actionid = uuid.uuid4()
             deploy_counter = deploy_counter + 1
-            await to_db_update_manager.send_in_progress(actionid, rvid)
+            await to_db_update_manager.send_in_progress(actionid, resources.Id.parse_id(rvid))
             if "sub=4]" in rid:
                 return
             else:
                 if "sub=2]" in rid:
-                    status = ResourceState.failed
+                    status = const.HandlerResourceState.failed
+                    compliance_status = state.ComplianceStatus.NON_COMPLIANT
+                    deployment_result = DeploymentResult.FAILED
                 elif "sub=3]" in rid:
-                    status = ResourceState.skipped
+                    status = const.HandlerResourceState.skipped
+                    compliance_status = state.ComplianceStatus.NON_COMPLIANT
+                    deployment_result = DeploymentResult.SKIPPED
                 else:
-                    status = ResourceState.deployed
+                    status = const.HandlerResourceState.deployed
+                    compliance_status = state.ComplianceStatus.COMPLIANT
+                    deployment_result = DeploymentResult.DEPLOYED
                 await to_db_update_manager.send_deploy_done(
+                    attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resource),
                     result=DeployResult(
                         rvid=rvid,
                         action_id=actionid,
-                        status=status,
+                        resource_state=status,
                         messages=[],
                         changes={},
                         change=None,
-                    )
+                    ),
+                    state=state.ResourceState(
+                        status=compliance_status,
+                        deployment_result=deployment_result,
+                        blocked=state.BlockedStatus.NO,
+                    ),
                 )
 
         await asyncio.gather(*(deploy(resource) for resource in resources_in_increment_for_agent))

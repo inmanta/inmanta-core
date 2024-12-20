@@ -26,11 +26,12 @@ from dataclasses import dataclass
 
 import pyformance
 
-from inmanta import const, data, resources
+from inmanta import data, resources
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployResult
-from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceType
+from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
+from inmanta.types import ResourceIdStr, ResourceType
 
 LOGGER = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ def logger_for_agent(agent: str) -> logging.Logger:
     return logging.getLogger("agent").getChild(agent)
 
 
+# must remain frozen because it's used as key/identity for deploy intent
 @dataclass(frozen=True, kw_only=True)
 class Task(abc.ABC):
     """
@@ -113,54 +115,46 @@ class PoisonPill(Task):
 class Deploy(Task):
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str, reason: str | None = None) -> None:
         with pyformance.timer("internal.deploy").time():
-            # First do scheduler book keeping to establish what to do
-            version: int
-            resource_details: "state.ResourceDetails"
-            intent = await task_manager.get_resource_intent_for_deploy(self.resource)
-            if intent is None:
-                # Stale resource, can simply be dropped.
-                return
-            # From this point on, we HAVE to call report_resource_state to make the scheduler propagate state
-
-            # The main difficulty off this code is exception handling
-            # We collect state here to report back in the finally block
-
-            # Full status of the deploy,
-            # may be unset if we fail before signaling start to the server, will be set if we signaled start
-            deploy_result: DeployResult | None = None
-            scheduler_deployment_result: state.DeploymentResult = state.DeploymentResult.FAILED
-
+            # The main difficulty of this code is exception handling.
+            # We collect state here to report back in the finally block.
+            # This try catch block ensures we report at the end of the task.
             try:
-                # This try catch block ensures we report at the end of the task
-
-                # Dependencies are always set when calling get_resource_intent_for_deploy
-                assert intent.dependencies is not None
-                # Resolve to exector form
-                version = intent.model_version
-                resource_details = intent.details
-                executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(
-                    version, resource_details
-                )
+                # Full status of the deploy,
+                # may be unset if we fail before signaling start to the server, will be set if we signaled start
+                deploy_result: DeployResult | None = None
 
                 # Make id's
                 gid = uuid.uuid4()
                 action_id = uuid.uuid4()  # can this be gid ?
 
-                # Signal start to DB
+                # First do scheduler book keeping to establish what to do
                 try:
-                    await task_manager.send_in_progress(action_id, executor_resource_details.rvid)
+                    intent = await task_manager.deploy_start(action_id, self.resource)
                 except Exception:
                     # Unrecoverable, can't reach DB
-                    scheduler_deployment_result = state.DeploymentResult.FAILED
                     LOGGER.error(
                         "Failed to report the start of the deployment to the server for %s",
-                        resource_details.resource_id,
+                        self.resource,
                         exc_info=True,
                     )
                     return
+
+                if intent is None:
+                    # Stale resource, can simply be dropped.
+                    return
+
                 # From this point on, we HAVE to call send_deploy_done to make sure we are not stuck in deploying
                 # This is done by setting deploy_result
                 # The surrounding try_catch will call report_resource_state
+
+                # Dependencies are always set when calling get_resource_intent_for_deploy
+                assert intent.dependencies is not None
+                # Resolve to executor form
+                version: int = intent.model_version
+                resource_details: "state.ResourceDetails" = intent.details
+                executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(
+                    version, resource_details
+                )
 
                 # Get executor
                 try:
@@ -181,8 +175,9 @@ class Deploy(Task):
                         error=str(e),
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
+                    # Not attached to ctx, needs to be flushed to logger explicitly
+                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
-                    scheduler_deployment_result = state.DeploymentResult.FAILED
                     return
 
                 assert reason is not None  # Should always be set for deploy
@@ -191,14 +186,7 @@ class Deploy(Task):
                     deploy_result = await my_executor.execute(
                         action_id, gid, executor_resource_details, reason, intent.dependencies
                     )
-                    # Translate deploy result status to the new deployment result state
-                    match deploy_result.status:
-                        case const.ResourceState.deployed:
-                            scheduler_deployment_result = state.DeploymentResult.DEPLOYED
-                        case const.ResourceState.skipped:
-                            scheduler_deployment_result = state.DeploymentResult.SKIPPED
-                        case _:
-                            scheduler_deployment_result = state.DeploymentResult.FAILED
+
                 except Exception as e:
                     # This should not happen
 
@@ -213,31 +201,21 @@ class Deploy(Task):
                         error=str(e),
                         traceback="".join(traceback.format_tb(e.__traceback__)),
                     )
+                    # Not attached to ctx, needs to be flushed to logger explicitly
+                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
-                    scheduler_deployment_result = state.DeploymentResult.FAILED
+
             finally:
                 if deploy_result is not None:
                     # We signaled start, so we signal end
                     try:
-                        await task_manager.send_deploy_done(deploy_result)
+                        await task_manager.deploy_done(resource_details.attribute_hash, deploy_result)
                     except Exception:
-                        scheduler_deployment_result = state.DeploymentResult.FAILED
                         LOGGER.error(
                             "Failed to report the end of the deployment to the server for %s",
                             resource_details.resource_id,
                             exc_info=True,
                         )
-                # Always notify scheduler
-                await task_manager.report_resource_state(
-                    resource=self.resource,
-                    attribute_hash=resource_details.attribute_hash,
-                    status=(
-                        state.ComplianceStatus.COMPLIANT
-                        if scheduler_deployment_result == state.DeploymentResult.DEPLOYED
-                        else state.ComplianceStatus.NON_COMPLIANT
-                    ),
-                    deployment_result=scheduler_deployment_result,
-                )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -259,29 +237,42 @@ class DryRun(Task):
             my_executor: executor.Executor = await self.get_executor(
                 task_manager, agent, executor_resource_details.id.entity_type, self.version
             )
-
-            dryrun_result: executor.DryrunResult = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
-            await task_manager.dryrun_update(
-                env=task_manager.environment,
-                dryrun_result=dryrun_result,
-            )
-
         except Exception:
-            # FIXME: seems weird to conclude undeployable state from generic Exception on either of two method calls
             logger_for_agent(agent).error(
-                "Skipping dryrun for resource %s because it is in undeployable state",
+                "Skipping dryrun for resource %s because due to an error in constructing the executor",
                 executor_resource_details.rvid,
                 exc_info=True,
             )
-            result = executor.DryrunResult(
+            dryrun_result = executor.DryrunResult(
                 rvid=executor_resource_details.rvid,
                 dryrun_id=self.dry_run_id,
-                changes={"handler": AttributeStateChange(current="FAILED", desired="Resource is in an undeployable state")},
+                changes={
+                    "handler": AttributeStateChange(
+                        current="FAILED", desired="Unable to construct an executor for this resource"
+                    )
+                },
                 started=started,
                 finished=datetime.datetime.now().astimezone(),
                 messages=[],
             )
-            await task_manager.dryrun_update(env=task_manager.environment, dryrun_result=result)
+        else:
+            try:
+                dryrun_result = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
+            except Exception:
+                logger_for_agent(agent).error(
+                    "Skipping dryrun for resource %s because it is in undeployable state",
+                    executor_resource_details.rvid,
+                    exc_info=True,
+                )
+                dryrun_result = executor.DryrunResult(
+                    rvid=executor_resource_details.rvid,
+                    dryrun_id=self.dry_run_id,
+                    changes={"handler": AttributeStateChange(current="FAILED", desired="Resource is in an undeployable state")},
+                    started=started,
+                    finished=datetime.datetime.now().astimezone(),
+                    messages=[],
+                )
+        await task_manager.dryrun_update(env=task_manager.environment, dryrun_result=dryrun_result)
 
 
 class RefreshFact(Task):

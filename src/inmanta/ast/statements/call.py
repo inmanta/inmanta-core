@@ -21,6 +21,7 @@ from collections import abc
 from itertools import chain
 from typing import Mapping, Optional, Sequence
 
+import inmanta.ast
 import inmanta.ast.type as InmantaType
 import inmanta.execute.dataflow as dataflow
 from inmanta import plugins
@@ -29,15 +30,17 @@ from inmanta.ast import (
     ExternalException,
     LocatableString,
     Location,
+    MultiUnsetException,
     Namespace,
     RuntimeException,
     TypeReferenceAnchor,
+    UnknownException,
+    UnsetException,
     WrappingRuntimeException,
 )
 from inmanta.ast.statements import AttributeAssignmentLHS, ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.proxy import MultiUnsetException, UnknownException, UnsetException
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, VariableABC, Waiter
 from inmanta.execute.util import NoneValue, Unknown
 
@@ -231,7 +234,7 @@ class PluginFunction(Function):
                 raise WrappingRuntimeException(
                     self.ast_node, "Exception in direct execution for plugin %s" % self.ast_node.name, e
                 )
-            except plugins.PluginException as e:
+            except inmanta.ast.PluginException as e:
                 raise ExplicitPluginException(
                     self.ast_node, "PluginException in direct execution for plugin %s" % self.ast_node.name, e
                 )
@@ -282,7 +285,7 @@ class PluginFunction(Function):
                 raise e
             except RuntimeException as e:
                 raise WrappingRuntimeException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
-            except plugins.PluginException as e:
+            except inmanta.ast.PluginException as e:
                 raise ExplicitPluginException(self.ast_node, "PluginException in plugin %s" % self.ast_node.name, e)
             except Exception as e:
                 raise ExternalException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)

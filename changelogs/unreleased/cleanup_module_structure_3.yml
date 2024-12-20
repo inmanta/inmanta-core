@@ -1,0 +1,3 @@
+description: Fix for mypy
+change-type: patch
+destination-branches: [master]

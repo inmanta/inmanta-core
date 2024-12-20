@@ -32,16 +32,9 @@ import typing_inspect
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
-from inmanta.ast import (
-    LocatableString,
-    Location,
-    Namespace,
-    Range,
-    RuntimeException,
-    TypeNotFoundException,
-    WithComment,
-    entity,
-)
+from inmanta.ast import LocatableString, Location, Namespace
+from inmanta.ast import PluginException as PluginException  # noqa: F401 Plugin exception is part of the stable api
+from inmanta.ast import Range, RuntimeException, TypeNotFoundException, WithComment, entity
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
@@ -888,16 +881,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
     def to_python(self, instance: object) -> "object":
         raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
-
-
-@stable_api
-class PluginException(Exception):
-    """
-    Base class for custom exceptions raised from a plugin.
-    """
-
-    def __init__(self, message: str) -> None:
-        self.message = message
 
 
 @stable_api
