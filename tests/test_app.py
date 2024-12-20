@@ -539,7 +539,7 @@ def test_validate_logging_config(tmpdir):
     # Write logging config that contains a syntax error
     with open(logging_config_file, "w") as fh:
         fh.write(
-        """
+            """
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
@@ -566,7 +566,7 @@ def test_validate_logging_config(tmpdir):
     # Simple logging config that writes all logs to stdout
     with open(logging_config_file, "w") as fh:
         fh.write(
-        """
+            """
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
@@ -604,7 +604,7 @@ def test_validate_logging_config(tmpdir):
     logging_config_file = os.path.join(tmpdir, "logging_config.yml.tmpl")
     with open(logging_config_file, "w") as fh:
         fh.write(
-        f"""
+            f"""
         formatters:
           server_log_formatter:
             format: '%(levelname)-8s %(name)-10s %(message)s'
