@@ -1,0 +1,6 @@
+---
+description: Added the `validate-logging-config` command.
+issue-nr: 8482
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master]
