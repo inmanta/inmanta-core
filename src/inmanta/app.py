@@ -64,7 +64,7 @@ from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import ALL_LOG_CONTEXT_VARS, EXIT_START_FAILED, LOG_CONTEXT_VAR_ENVIRONMENT
 from inmanta.export import cfg_env
-from inmanta.logging import FullLoggingConfig, LoggingConfigBuilder, Options, _is_on_tty, InmantaLoggerConfig
+from inmanta.logging import InmantaLoggerConfig, Options, _is_on_tty
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.databaseservice import initialize_database_connection_pool
