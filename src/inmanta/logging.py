@@ -192,7 +192,7 @@ class FullLoggingConfig(LoggingConfigExtension):
             common_names = set(one_set.keys()) & set(other_set.keys())
             # don't warn if identical!
             common_names = {
-                common_name for common_name in common_names if one_set.get(common_name) == other_set.get(common_name)
+                common_name for common_name in common_names if one_set.get(common_name) != other_set.get(common_name)
             }
             if not common_names:
                 return
