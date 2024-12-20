@@ -21,20 +21,20 @@ By default log files are collected in the directory ``/var/log/inmanta/``.  The 
 4. ``agent-<environment-id>.out``: This log file contains all the messages written to the standard output stream of the scheduler and executors. Expected to be empty.
 5. ``agent-<environment-id>.err``: This log file contains all the messages written to the standard error stream of the scheduler and executors. Expected to be empty.
 
-For reasons of backward compatibility, th scheduler files are called 'agent' and not 'scheduler'
+For reasons of backward compatibility, the scheduler files are called 'agent' and not 'scheduler'
 
 
 Configure logging
 =================
 
-Logging can be configured in two main way:
+Logging can be configured in two main ways:
 
-- course grained configuration using configuration and command line options. This is sufficient in most cases.
+- coarse grained configuration using configuration and command line options. This is sufficient in most cases.
 - fine grained configuration using a config file. Here the logging config is fully user controlled.
 
 
 
-Course grained configuration
+Coarse grained configuration
 ----------------------------
 
 The following log-related options can be set in an Inmanta config file:
@@ -80,7 +80,7 @@ Fine grained configuration
 ----------------------------
 For fine grained configuration, `a standard python dict config file <https://docs.python.org/3/library/logging.config.html#logging-config-dictschema>`_ can be passed in via the config file for each component individually:
 
-.. code-block:: yaml
+.. code-block:: toml
 
     [logging]
     server = server_log.yml
@@ -116,7 +116,7 @@ Converting to fine grained configuration
 
 A tool is provided to convert the existing course grained configuration into a config file.
 
-For example, to convert the config for a component, take the command you use to start it, then put `print_default_logging_config` before the `server`, `compiler` or `scheduler`:
+For example, to convert the config for a component, take the command you use to start it, then put `print-default-logging-config` before the `server`, `compiler` or `scheduler`:
 
 .. code-block:: sh
 
