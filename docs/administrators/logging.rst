@@ -30,7 +30,7 @@ Resource action logs
 
 The resource action log files contain information about actions performed on a specific resource. Each environment has one
 resource action log file. The filename of this log file looks as follows:
-``<server.resource-action-log-prefix>-<environment-id>.log``. The prefix can be configured with the configuration option
+``resource-actions-<environment-id>.log``. The prefix can be configured with the configuration option
 :inmanta.config:option:`server.resource-action-log-prefix`.
 
 The resource action log file contains information about the following resource action:
@@ -41,40 +41,47 @@ The resource action log file contains information about the following resource a
 * **Dryrun**: Execute a dryrun for a certain resource.
 
 
-Agent logs
-----------
+Scheduler logs
+--------------
 
-One agent produces the following three log files:
+For every environment, the scheduler produces the following three log files:
 
-* ``agent-<environment-id>.log``: This is the main log file of an agent. It contains information about when the agent
-  started a deployment, which trigger caused that deployment, whether heartbeat messages are received from the server,
-  whether the agent is a primary agent, etc.
+* ``agent-<environment-id>.log``: This is the main log file of an scheduler. It contains information about when any executor
+  started a deployment, which trigger caused that deployment, whether heartbeat messages are received from the server, etc.
 * ``agent-<environment-id>.out``: This log file contains all the messages written to the standard output stream of the resource
-  handlers used by the agent.
+  handlers used by the scheduler.
 * ``agent-<environment-id>.err``: This log file contains all the messages written to the standard error stream of the resource
-  handlers used by the agent.
+  handlers used by the scheduler.
 
+For reasons of backward comaptiblity, these files are called 'agent' and not 'scheduler'
 
 Configure logging
 =================
 
-Configuration options in Inmanta config file
---------------------------------------------
+Logging can be configured in two main way:
+- course grained configuration using configuration and command line options. This is sufficient in most cases.
+- fine grained configuration using a config file. Here the logging config is fully user controlled.
+
+
+
+Course grained configuration
+----------------------------
 
 The following log-related options can be set in an Inmanta config file:
 
-* ``log-dir``
-* ``purge-resource-action-logs-interval``
-* ``resource-action-log-prefix``
+* :inmanta.config:option:`config.log-dir`: determines the folder that will contain the log files
 
-Documentation on these options can be found in the :ref:`Inmanta configuration reference<config_reference>`.
+:ref:`As command line options,<reference_commands_inmanta>` the following are available:
 
+* ``--timed-logs``: Add timestamps to logs
+* ``--log-file``: Path to the logfile, enables logging to file, disables logging to console
+* ``--log-file-level``: Log level for messages going to the logfile, options  `ERROR`, `WARNING`, `INFO`, `DEBUG`, `TRACE`
+* ``-v``: Log level for messages going to the console. Default is warnings only. -v warning, -vv info, -vvv debug and -vvvv trace.
+* ``-X``: When exiting with an error, show full stack trace.
+* ``--keep-logger-names``: When using the compiler, don't shorten logger names
 
-Change log levels server log
-----------------------------
-
-Edit the ``--log-file-level`` option in the ExecStart command of the inmanta-server service file. The inmanta-server service
-file can be found at ``/usr/lib/systemd/system/inmanta-server.service``.
+To update the server startup config when using the RPM based install, edit the inmanta-server service
+file at ``/usr/lib/systemd/system/inmanta-server.service``.
 
 .. code-block:: text
 
@@ -86,15 +93,12 @@ file can be found at ``/usr/lib/systemd/system/inmanta-server.service``.
   Type=simple
   User=inmanta
   Group=inmanta
-  ExecStart=/usr/bin/inmanta --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs server
+  ExecStart=/usr/bin/inmanta --log-file /var/log/inmanta/server.log --log-file-level INFO --timed-logs server
   Restart=on-failure
 
   [Install]
   WantedBy=multi-user.target
 
-The ``--log-file-level`` takes the log-level as an integer, where ``0=ERROR``, ``1=WARNING``, ``2=INFO`` and ``3=DEBUG``.
-
-Apply the changes by reloading the service file and restarting the Inmanta server:
 
 .. code-block:: sh
 
@@ -102,43 +106,86 @@ Apply the changes by reloading the service file and restarting the Inmanta serve
   sudo systemctl restart inmanta-server
 
 
-Log level manually started agent
---------------------------------
+Fine grained configuration
+----------------------------
 
-The log level of a manually started agent can be changed in the same way as changing the log level of the Inmanta server. The
-service file for a Inmanta agent can be found at ``/usr/lib/systemd/system/inmanta-agent.service``.
+For fine grained configuration, `a standard python dict config file<https://docs.python.org/3/library/logging.config.html#logging.config.dictConfig>` can be passed in via the config file for each component individually or via a cli option:
 
+.. code-block:: yaml
 
-Log level auto-started agents
------------------------------
+    [logging]
+    server = server_log.yml
+    scheduler = scheduler.log.tmpl
+    compiler = compiler.yml
 
-The default log level of an auto-started agent is INFO. Currently it's not possible to change this log level.
+or
 
+.. code-block:: sh
 
-Resource action logs
---------------------
-
-The log level of the resource action log file is DEBUG. Currently it's not possible to change this log level.
-
-
-Log level server-side compiles
-------------------------------
-
-The logs of a server side compile can be seen via the "Compile Reports" button in the web-console. The log level of these logs is
-DEBUG. Currently, it's not possible to change this log level.
+    inmanta --logging-config server_log.yml server
 
 
-Log level on CLI
-----------------
+The log config has to be either a `yaml` file, containing `python dict config<https://docs.python.org/3/library/logging.config.html#logging.config.dictConfig>` or a template of a `yaml` file. In this case, the file name has to end with `tmpl`.
 
-By default logs are written to standard output when the ``inmanta`` or the ``inmanta-cli`` command is executed. The default
-log level is INFO. The log level of these commands can be changed by passing the correct number of v's with the option
-``-v``.
+The following log-related options can be set in an Inmanta config file:
 
-* ``-v = warning``
-* ``-vv = info``
-* ``-vvv = debug``
-* ``-vvvv = traces``
+* :inmanta.config:option:`logging.compiler`: determines the log config for the compiler
+* :inmanta.config:option:`logging.server`: determines the log config for the server
+* :inmanta.config:option:`logging.scheduler`: determines the log config for the scheduler. This is always a template.
 
-By specifying the ``-X`` option, stacktraces are also shown written to standard output when an error occurs. When the
-``--log-file`` option is specified on the commandline, logs are written to file instead of the standard output.
+:ref:`As command line options,<reference_commands_inmanta>` the following are available:
+
+* ``-v``: When used in combination with a log file, it will force a CLI logger to be loaded on top of the provided configuration
+* ``--logging-config``: Log configuration file for this command, overrides the config option
+
+For templated config files, we use pythons f-string syntax.
+For the scheduler, one variable is available in the template: `{environment}`. This is used to customize the scheduler log files to the environment the scheduler is working for.
+
+Converting to fine grained configuration
+----------------------------------------
+
+A tool is provided to convert the existing course grained configuration into a config file.
+
+For example, to
+
+.. code-block:: sh
+
+    inmanta -c /etc/inmanta/inmanta.cfg --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs print_default_logging_config server
+
+To convert the config for a component, take a the command you use to start it, then put `print_default_logging_config` before the `server`, `compiler` or `scheduler`
+
+
+Default configurations
+----------------------
+
+
+.. only:: oss
+
+    Default configuration for the server:
+
+    .. literalinclude:: ../../misc/server_log.yml
+        :linenos:
+        :language: yaml
+        :caption: server_log.yml
+
+
+.. only:: iso
+
+    Default configuration for the server, including LSM:
+
+    .. literalinclude:: ../../misc/server_lsm_log.yml
+        :linenos:
+        :language: yaml
+        :caption: server_log.yml
+
+
+
+Default configuration for the scheduler:
+
+.. literalinclude:: ../../misc/scheduler_log.yml.tmpl
+        :linenos:
+        :language: yaml
+        :caption: scheduler_log.yml.tmpl
+
+
+
