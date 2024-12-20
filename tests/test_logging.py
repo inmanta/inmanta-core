@@ -402,7 +402,10 @@ def test_server_documentation_conformance(inmanta_config, monkeypatch):
 
     default = LoggingConfigBuilder()
     from_config = default.get_logging_config_from_options(
-        sys.stdout, Options(log_file_level="INFO", log_file="/var/log/inmanta/server.log"), component="server", context={}
+        sys.stdout,
+        Options(log_file_level="INFO", log_file="/var/log/inmanta/server.log", timed=True),
+        component="server",
+        context={},
     )
 
     assert from_config._to_dict_config() == from_file_dict

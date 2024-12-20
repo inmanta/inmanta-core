@@ -38,9 +38,7 @@ from inmanta.data.model import (
     PipConfig,
     PromoteTriggerMethod,
     ResourceDiff,
-    ResourceIdStr,
     ResourceMinimal,
-    ResourceVersionIdStr,
     SchedulerStatusReport,
 )
 from inmanta.db.util import ConnectionInTransaction
@@ -61,7 +59,7 @@ from inmanta.server import config as opt
 from inmanta.server import diff, protocol
 from inmanta.server.services import resourceservice
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ReturnTupple
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
 
 LOGGER = logging.getLogger(__name__)
 PLOGGER = logging.getLogger("performance")
