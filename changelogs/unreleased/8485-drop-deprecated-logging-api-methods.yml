@@ -1,0 +1,10 @@
+description: >
+  Drop deprecated methods: `set_log_level`, `set_log_formatter`, `set_logfile_location` and `get_handler`
+  from the stable api of the logging.
+issue-nr: 8485
+change-type: minor
+destination-branches: [master]
+sections:
+  deprecation-note: "{{description}}"
+
+
