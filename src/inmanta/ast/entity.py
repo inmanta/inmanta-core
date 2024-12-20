@@ -649,10 +649,10 @@ class Entity(NamedType, WithComment):
 
         self._paired_dataclass = dataclass
 
-    def get_paired_dataclass(self) -> Optional[typing.Type[object]]:
+    def get_paired_dataclass(self) -> Optional[type[object]]:
         return self._paired_dataclass
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         return self._paired_dataclass == pytype
 
     def as_python_type_string(self) -> "str | None":
@@ -776,7 +776,7 @@ class Implementation(NamedType):
     def as_python_type_string(self) -> "str | None":
         raise NotImplementedError("Implementations should not be arguments to plugins, this code is not expected to be called")
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         raise NotImplementedError("Implementations should not be arguments to plugins, this code is not expected to be called")
 
     def to_python(self, instance: object) -> "object":

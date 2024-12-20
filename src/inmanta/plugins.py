@@ -430,11 +430,10 @@ class PluginReturn(PluginValue):
 
         # Post process dataclasses
         base_type = self.resolved_type.get_base_type()
-        is_datclass_based = isinstance(base_type, entity.Entity) and base_type.get_paired_dataclass() is not None
-        if is_datclass_based:
+        if isinstance(base_type, entity.Entity) and (dc_type := base_type.get_paired_dataclass()) is not None:
 
             def make_dc(value: object) -> object:
-                if isinstance(value, base_type.get_paired_dataclass()):
+                if isinstance(value, dc_type):
                     return base_type.from_python(value, resolver, queue, location)
                 else:
                     raise RuntimeException(None, f"Invalid value '{value}', expected {base_type.type_string()}")
@@ -872,7 +871,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     def as_python_type_string(self) -> "str | None":
         raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
 
-    def corresponds_to(self, pytype: Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
 
     def to_python(self, instance: object) -> "object":
