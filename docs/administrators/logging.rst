@@ -16,7 +16,7 @@ By default log files are collected in the directory ``/var/log/inmanta/``.  The 
 
 
 1. ``server.log`` is the main log file of the server. It shows general information about actions performed by the Inmanta server (renewing parameters, purging resource action logs, etc.), and the access log of the API.
-2. ``resource-actions-<environment-id>.log`` contains the all actions performed by all resources. Each environment has one resource action log file. This file mirrors the actions logged on resources in the database.
+2. ``resource-actions-<environment-id>.log`` contains all actions performed by all resources. Each environment has one resource action log file. This file mirrors the actions logged on resources in the database.
 3. ``agent-<environment-id>.log`` is the main log of the scheduler and executors. It contains information about when any executor started a deployment, which trigger caused that deployment, whether heartbeat messages are received from the server, etc.
 4. ``agent-<environment-id>.out``: This log file contains all the messages written to the standard output stream of the scheduler and executors. Expected to be empty.
 5. ``agent-<environment-id>.err``: This log file contains all the messages written to the standard error stream of the scheduler and executors. Expected to be empty.
@@ -45,10 +45,10 @@ The following log-related options can be set in an Inmanta config file:
 
 * ``--timed-logs``: Add timestamps to logs
 * ``--log-file``: Path to the logfile, enables logging to file, disables logging to console
-* ``--log-file-level``: Log level for messages going to the logfile, options  `ERROR`, `WARNING`, `INFO`, `DEBUG`, `TRACE`
+* ``--log-file-level``: Log level for messages going to the logfile, options  `ERROR`, `WARNING`, `INFO`, `DEBUG` and `TRACE`
 * ``-v``: Log level for messages going to the console. Default is warnings only. -v warning, -vv info, -vvv debug and -vvvv trace.
 * ``-X``: When exiting with an error, show full stack trace.
-* ``--keep-logger-names``: When using the compiler, don't shorten logger names
+* ``--keep-logger-names``: When using the compiler, don't shorten logger names.
 
 To update the server startup config when using the RPM based install, edit the inmanta-server service
 file at ``/usr/lib/systemd/system/inmanta-server.service``.
@@ -106,21 +106,21 @@ The following log-related options can be set in an Inmanta config file:
 
 * ``-v``: When used in combination with a log file, it will force a CLI logger to be loaded on top of the provided configuration
 * ``--logging-config``: Log configuration file for this command, overrides the config option
-* If a config file is loaded, all other course grained configuration options are ignored!
+* If a config file is loaded, all other coarse grained configuration options are ignored!
 
-For templated config files, we use pythons f-string syntax.
+For templated config files, we use python f-string syntax.
 For the scheduler, one variable is available in the template: ``{environment}``. This is used to customize the scheduler log files to the environment the scheduler is working for.
 
 Converting to fine grained configuration
 ----------------------------------------
 
-A tool is provided to convert the existing course grained configuration into a config file.
+A tool is provided to convert the existing coarse grained configuration into a config file.
 
 For example, to convert the config for a component, take the command you use to start it, then put `print-default-logging-config` before the `server`, `compiler` or `scheduler`:
 
 .. code-block:: sh
 
-    inmanta -c /etc/inmanta/inmanta.cfg --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs print_default_logging_config server
+    inmanta -c /etc/inmanta/inmanta.cfg --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs print-default-logging-config server
 
 
 
