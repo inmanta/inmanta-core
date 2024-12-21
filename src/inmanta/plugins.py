@@ -18,25 +18,23 @@
 
 import asyncio
 import collections.abc
+import dataclasses
 import inspect
+import numbers
 import os
 import subprocess
+import typing
 import warnings
 from collections import abc
 from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Sequence, Type, TypeVar
 
+import typing_inspect
+
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
-from inmanta.ast import (  # noqa: F401 Plugin exception is part of the stable api
-    LocatableString,
-    Location,
-    Namespace,
-    PluginException,
-    Range,
-    RuntimeException,
-    TypeNotFoundException,
-    WithComment,
-)
+from inmanta.ast import LocatableString, Location, Namespace
+from inmanta.ast import PluginException as PluginException  # noqa: F401 Plugin exception is part of the stable api
+from inmanta.ast import Range, RuntimeException, TypeNotFoundException, WithComment, entity
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
@@ -210,14 +208,94 @@ class Null(inmanta_type.Type):
     def type_string_internal(self) -> str:
         return self.type_string()
 
+    def as_python_type_string(self) -> "str | None":
+        return "None"
+
+    def corresponds_to(self, pytype: type[object]) -> bool:
+        return pytype is type(None)
+
+    def has_custom_to_python(self) -> bool:
+        return True
+
+    def to_python(self, instance: object) -> "object":
+        assert instance is None
+        return None
+
 
 # Define some types which are used in the context of plugins.
 PLUGIN_TYPES = {
-    "any": inmanta_type.Type(),  # Any value will pass validation
-    "expression": inmanta_type.Type(),  # Any value will pass validation
+    "any": inmanta_type.AnyType(),  # Any value will pass validation
+    "expression": inmanta_type.AnyType(),  # Any value will pass validation
     "null": Null(),  # Only NoneValue will pass validation
     None: Null(),  # Only NoneValue will pass validation
 }
+
+
+def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, value: object) -> object:
+    """
+    Given a model domain value and an inmanta type, produce the corresponding python object
+
+    Unknowns are not handled by this method!
+    """
+    expected_type.validate(value)
+
+    if isinstance(value, NoneValue):
+        # if the type is not nullable, it will fail when validating
+        # if the value is None, it becomes None
+        return None
+
+    if expected_type.has_custom_to_python():
+        return expected_type.to_python(value)
+    return DynamicProxy.return_value(value)
+
+
+python_to_model = {
+    str: inmanta_type.String(),
+    float: inmanta_type.Float(),
+    numbers.Number: inmanta_type.Number(),
+    int: inmanta_type.Integer(),
+    bool: inmanta_type.Bool(),
+    dict: inmanta_type.LiteralDict(),
+    list: inmanta_type.LiteralList(),
+}
+
+
+def primitive_python_type_to_model_domain(intype: type) -> inmanta_type.Type:
+    """
+    Convert a primtive python type to the model domain
+
+    Currently only used to construct explainer messages
+    """
+    if typing_inspect.is_union_type(intype):
+        # only Optional should reach this
+        assert any(typing_inspect.is_optional_type(tt) for tt in typing_inspect.get_args(intype, evaluate=True))
+        other_types = [tt for tt in typing_inspect.get_args(intype, evaluate=True) if not typing_inspect.is_optional_type(tt)]
+        assert len(other_types) == 1
+        return inmanta_type.NullableType(primitive_python_type_to_model_domain(other_types[0]))
+    if typing_inspect.is_generic_type(intype):
+        orig = typing_inspect.get_origin(intype)
+        assert orig is not None  # Make mypy happy
+
+        if issubclass(orig, dict):
+            args = typing_inspect.get_args(intype, evaluate=True)
+            assert len(args) == 2
+            assert issubclass(args[0], str)  # TODO
+            return inmanta_type.TypedDict(primitive_python_type_to_model_domain(args[1]))
+        else:
+            assert issubclass(orig, list)  # Only one type of generic should get here
+            args = typing_inspect.get_args(intype, evaluate=True)
+            assert len(args) == 1
+            return inmanta_type.TypedList(primitive_python_type_to_model_domain(args[0]))
+    return python_to_model[intype]
+
+
+class PluginCallContext:
+    """
+    Internal state of a plugin call
+
+    Used to carry state from the argument validation to the return validation
+
+    """
 
 
 class PluginValue:
@@ -345,6 +423,46 @@ class PluginReturn(PluginValue):
 
     VALUE_TYPE = "returned value"
     VALUE_NAME = "return value"
+
+    def to_model_domain(self, value: object, resolver: Resolver, queue: QueueScheduler, location: Location) -> object:
+        # Basic unwrap
+        value = DynamicProxy.unwrap(value)
+
+        # Post process dataclasses
+        base_type = self.resolved_type.get_base_type()
+        if isinstance(base_type, entity.Entity) and (dc_type := base_type.get_paired_dataclass()) is not None:
+
+            def make_dc(value: object) -> object:
+                if isinstance(value, dc_type):
+                    return base_type.from_python(value, resolver, queue, location)
+                else:
+                    raise RuntimeException(None, f"Invalid value '{value}', expected {base_type.type_string()}")
+
+            outer_type = self.resolved_type
+
+            if isinstance(outer_type, inmanta_type.NullableType):
+                if isinstance(value, NoneValue):
+                    return value
+                outer_type = outer_type.element_type
+
+            if isinstance(outer_type, inmanta_type.List):
+                if isinstance(value, Sequence):
+                    return [make_dc(v) for v in value]
+                else:
+                    raise RuntimeException(None, f"Invalid value '{value}', expected {self.resolved_type.type_string()}")
+            else:
+                return make_dc(value)
+
+        self.validate(value)
+        return value
+
+
+@dataclasses.dataclass
+class CheckedArgs:
+
+    args: list[object]
+    kwargs: Mapping[str, object]
+    unknows: bool
 
 
 class Plugin(NamedType, WithComment, metaclass=PluginMeta):
@@ -592,7 +710,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # would have raised as exception
             raise RuntimeException(None, f"{func}() missing {len(missing_args)} required {args_sort} arguments: {arg_names}")
 
-    def check_args(self, args: Sequence[object], kwargs: Mapping[str, object]) -> bool:
+    def check_args(self, args: Sequence[object], kwargs: Mapping[str, object]) -> CheckedArgs:
         """
         Check if the arguments of the call match the function signature.
 
@@ -636,15 +754,23 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         ]
         self.report_missing_arguments(missing_keyword_arguments, "keyword-only")
 
+        converted_args = []
+        is_unknown = False
+
         # Validate all positional arguments
         for position, value in enumerate(args):
             # (1) Get the corresponding argument, fails if we don't have one
             arg = self.get_arg(position)
+            result: object
+            if isinstance(value, Unknown):
+                result = value
+                is_unknown = True
+            else:
+                # (4) Validate the input value
+                result = validate_and_convert_to_python_domain(arg.resolved_type, value)
+            converted_args.append(result)
 
-            # (4) Validate the input value
-            if not arg.validate(value):
-                return False
-
+        converted_kwargs = {}
         # Validate all kw arguments
         for name, value in kwargs.items():
             # (1) Get the corresponding kwarg, fails if we don't have one
@@ -657,9 +783,14 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 raise RuntimeException(None, f"{self.get_full_name()}() got multiple values for argument '{name}'")
 
             # (4) Validate the input value
-            if not kwarg.validate(value):
-                return False
-        return True
+            if isinstance(value, Unknown):
+                result = value
+                is_unknown = True
+            else:
+                result = validate_and_convert_to_python_domain(kwarg.resolved_type, value)
+            converted_kwargs[name] = result
+
+        return CheckedArgs(args=converted_args, kwargs=converted_kwargs, unknows=is_unknown)
 
     def emit_statement(self) -> "DynamicStatement":
         """
@@ -691,6 +822,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     def __call__(self, *args: object, **kwargs: object) -> object:
         """
         The function call itself
+
+        As a call, for backward compact
         """
         if self.deprecated:
             msg: str = f"Plugin '{self.get_full_name()}' is deprecated."
@@ -699,18 +832,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             warnings.warn(PluginDeprecationWarning(msg))
         self.check_requirements()
 
-        def new_arg(arg: object) -> object:
-            if isinstance(arg, Context):
-                return arg
-            elif isinstance(arg, Unknown) and self.is_accept_unknowns():
-                return arg
-            else:
-                return DynamicProxy.return_value(arg)
-
-        new_args = [new_arg(arg) for arg in args]
-        new_kwargs = {k: new_arg(v) for k, v in kwargs.items()}
-
-        value = self.call(*new_args, **new_kwargs)
+        value = self.call(*args, **kwargs)
 
         value = DynamicProxy.unwrap(value)
 
@@ -719,11 +841,41 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         return value
 
+    def call_in_context(
+        self,
+        args: Sequence[object],
+        kwargs: Mapping[str, object],
+        resolver: Resolver,
+        queue: QueueScheduler,
+        location: Location,
+    ) -> object:
+        """
+        The function call itself, with compiler context
+        """
+        if self.deprecated:
+            msg: str = f"Plugin '{self.get_full_name()}' is deprecated."
+            if self.replaced_by:
+                msg += f" It should be replaced by '{self.replaced_by}'."
+            warnings.warn(PluginDeprecationWarning(msg))
+        self.check_requirements()
+        value = self.call(*args, **kwargs)
+        # Validate the returned value
+        return self.return_type.to_model_domain(value, resolver, queue, location)
+
     def get_full_name(self) -> str:
         return f"{self.ns.get_full_name()}::{self.__class__.__function_name__}"
 
     def type_string(self) -> str:
         return self.get_full_name()
+
+    def as_python_type_string(self) -> "str | None":
+        raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
+
+    def corresponds_to(self, pytype: type[object]) -> bool:
+        raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
+
+    def to_python(self, instance: object) -> "object":
+        raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
 
 
 @stable_api

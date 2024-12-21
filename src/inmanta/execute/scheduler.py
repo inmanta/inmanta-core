@@ -32,6 +32,7 @@ from inmanta.ast import (
     CycleException,
     Location,
     MultiException,
+    MultiUnsetException,
     RuntimeException,
     UnsetException,
 )
@@ -54,7 +55,6 @@ from inmanta.execute.runtime import (
     Waiter,
     WaiterSet,
 )
-from inmanta.execute.tracking import ModuleTracker
 
 if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, NamedType, Statement  # noqa: F401
@@ -273,6 +273,12 @@ class Scheduler:
 
         self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
+        # Dataclass validation
+        data_class_root = self.types["std::Dataclass"]
+        assert isinstance(data_class_root, Entity)
+        for dataclass in data_class_root.get_all_child_entities():
+            dataclass.pair_dataclass()
+
     def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
     ) -> Sequence[tuple[Location, AnchorTarget]]:
@@ -396,7 +402,7 @@ class Scheduler:
 
         # emit all top level statements
         for block in blocks:
-            block.context.emit(queue.for_tracker(ModuleTracker(block)))
+            block.context.emit(queue)
 
         # start an evaluation loop
         i = 0
@@ -433,6 +439,10 @@ class Scheduler:
                 except UnsetException as e:
                     # some statements don't know all their dependencies up front,...
                     next.requeue_with_additional_requires(object(), e.get_result_variable())
+                except MultiUnsetException as e:
+                    # some statements don't know all their dependencies up front,...
+                    for rv in e.result_variables:
+                        next.requeue_with_additional_requires(object(), rv)
 
             # all safe stmts are done
             progress = False
