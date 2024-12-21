@@ -20,6 +20,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from typing import Callable, Union
 
+from inmanta import references
+
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
 from inmanta.ast import AttributeNotFound as AttributeNotFound
 from inmanta.ast import NotFoundException, RuntimeException
@@ -82,7 +84,9 @@ class DynamicProxy:
         return item
 
     @classmethod
-    def return_value(cls, value: object) -> Union[None, str, tuple[object, ...], int, float, bool, "DynamicProxy"]:
+    def return_value(
+        cls, value: object
+    ) -> Union[None, str, tuple[object, ...], int, float, bool, "DynamicProxy", references.Reference[references.RefValue]]:
         """
         Converts a value from the internal domain to the plugin domain.
         """
@@ -109,6 +113,9 @@ class DynamicProxy:
 
         if hasattr(value, "__call__"):
             return CallProxy(value)
+
+        if isinstance(value, references.Reference):
+            return value
 
         return DynamicProxy(value)
 
