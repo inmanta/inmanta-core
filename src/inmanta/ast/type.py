@@ -102,7 +102,7 @@ class Type(Locatable):
         """
         return base_type
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         """
         Return if the python type corresponds to this inmanta type
 
@@ -189,7 +189,7 @@ class NullableType(Type):
     def is_primitive(self) -> bool:
         return self.element_type.is_primitive()
 
-    def corresponds_to(self, pytype: typing.Type[object]) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         if not typing_inspect.is_optional_type(pytype):
             return False
         # remove options from union
@@ -211,7 +211,7 @@ class NullableType(Type):
 
 class AnyType(Type):
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         return True
 
     def as_python_type_string(self) -> "str | None":
@@ -306,7 +306,7 @@ class Number(Primitive):
     def type_string_internal(self) -> str:
         return self.type_string()
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         return pytype in [int, float, numbers.Number]
 
     def as_python_type_string(self) -> "str | None":
@@ -352,7 +352,7 @@ class Float(Primitive):
     def type_string_internal(self) -> str:
         return self.type_string()
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         return pytype is float
 
     def as_python_type_string(self) -> "str | None":
@@ -388,7 +388,7 @@ class Integer(Number):
     def type_string(self) -> str:
         return "int"
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         return pytype is int
 
     def as_python_type_string(self) -> "str | None":
@@ -436,7 +436,7 @@ class Bool(Primitive):
     def get_location(self) -> None:
         return None
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         return pytype is bool
 
     def as_python_type_string(self) -> "str | None":
@@ -488,7 +488,7 @@ class String(Primitive):
     def get_location(self) -> None:
         return None
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         return pytype is str
 
     def as_python_type_string(self) -> "str | None":
@@ -530,7 +530,7 @@ class List(Type):
     def get_location(self) -> None:
         return None
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         if typing_inspect.is_union_type(pytype):
             return False
 
@@ -600,7 +600,7 @@ class TypedList(List):
     def is_primitive(self) -> bool:
         return self.get_base_type().is_primitive()
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         if typing_inspect.is_union_type(pytype):
             return False
 
@@ -690,7 +690,7 @@ class Dict(Type):
     def as_python_type_string(self) -> "str | None":
         return "dict"
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         if typing_inspect.is_union_type(pytype):
             return False
 
@@ -742,7 +742,7 @@ class TypedDict(Dict):
     def get_location(self) -> None:
         return None
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         if typing_inspect.is_union_type(pytype):
             return False
 
@@ -824,15 +824,18 @@ class Union(Type):
 
     def as_python_type_string(self) -> "str | None":
         types = [tp.as_python_type_string() for tp in self.types]
-        if any((tp is None for tp in types)):
+
+        effective_types = [tp for tp in types if tp is not None]
+        if len(types) != len(effective_types):
+            # One is not converted
             return None
-        return f" | ".join(types)
+        return f" | ".join(effective_types)
 
     def has_custom_to_python(self) -> bool:
         # If we mix convertible and non convertible, it won't work, so we avoid it
         return False
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         raise NotImplementedError("No unions can be specified on the plugin boundary")
 
 
@@ -853,7 +856,7 @@ class Literal(Union):
         # Keep it simple
         return "object"
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         # Infinite recursive type, avoid the mess
         if pytype in [int, float, bool, str]:
             return True
@@ -944,7 +947,7 @@ class ConstraintType(NamedType):
         # Substitute for base type for now
         return self.get_base_type().has_custom_to_python()
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         return self.get_base_type().corresponds_to(pytype)
 
     def as_python_type_string(self) -> "str | None":

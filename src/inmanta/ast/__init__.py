@@ -17,7 +17,6 @@
 """
 
 import traceback
-import typing
 from abc import abstractmethod
 from functools import lru_cache
 from typing import Dict, List, Optional, Union
@@ -26,6 +25,7 @@ from inmanta import warnings
 from inmanta.ast import export
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
+from inmanta.types import DataclassProtocol
 from inmanta.warnings import InmantaWarning
 
 try:
@@ -880,7 +880,7 @@ class DataClassMismatchException(DataClassException):
     def __init__(
         self,
         entity: "Entity",
-        dataclass: "typing.Type[object] | None",
+        dataclass: DataclassProtocol | None,
         dataclass_python_name: str,
         msg: str,
     ) -> None:

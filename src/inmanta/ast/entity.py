@@ -43,6 +43,7 @@ from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.const import DATACLASS_SELF_FIELD
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, WrappedValueVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
+from inmanta.types import DataclassProtocol
 
 # pylint: disable-msg=R0902,R0904
 
@@ -102,7 +103,7 @@ class Entity(NamedType, WithComment):
 
         self.normalized = False
 
-        self._paired_dataclass: typing.Type[object] | None = None
+        self._paired_dataclass: type[DataclassProtocol] | None = None
         # Entities can be paired up to python dataclasses
         # If such a sibling exists, the type is kept here
         # Every instance of such entity can cary the associated python object in a slot called `DATACLASS_SELF_FIELD`
@@ -542,8 +543,8 @@ class Entity(NamedType, WithComment):
 
         # Find the dataclass
         dataclass_module = importlib.import_module(module_name)
-        dataclass = getattr(dataclass_module, self.name, None)
-        if dataclass is None:
+        dataclass_raw = getattr(dataclass_module, self.name, None)
+        if dataclass_raw is None:
             raise DataClassMismatchException(
                 self,
                 None,
@@ -552,15 +553,16 @@ class Entity(NamedType, WithComment):
                 "Dataclasses must have a python counterpart that is a frozen dataclass.",
             )
 
-        if not dataclasses.is_dataclass(dataclass):
+        if not dataclasses.is_dataclass(dataclass_raw):
             raise DataClassMismatchException(
                 self,
                 None,
                 dataclass_name,
-                f"The python object {module_name}.{dataclass.__name__} associated to  {self.get_full_name()} "
+                f"The python object {module_name}.{dataclass_raw.__name__} associated to  {self.get_full_name()} "
                 f"defined at {self.location} is not a dataclass. "
                 "Dataclasses must have a python counterpart that is a frozen dataclass.",
             )
+        dataclass: type[DataclassProtocol] = dataclass_raw
         if not dataclass.__dataclass_params__.frozen:
             raise DataClassMismatchException(
                 self,
@@ -573,6 +575,7 @@ class Entity(NamedType, WithComment):
 
         # Validate fields, collect errors
         dc_fields = {f.name: f for f in dataclasses.fields(dataclass)}
+        dc_types = typing.get_type_hints(dataclass)
         failures = []
 
         for rel_or_attr_name in self.get_all_attribute_names():
@@ -592,7 +595,6 @@ class Entity(NamedType, WithComment):
                             "All attributes of a dataclasses must be identical in both the python and inmanta domain.",
                         )
                         continue
-                    field = dc_fields.pop(rel_or_attr_name)
                     inm_type = attr.get_type()
 
                     # all own fields are primitive
@@ -602,8 +604,10 @@ class Entity(NamedType, WithComment):
                             "All attributes of a dataclasses have to be of a primitive type.",
                         )
                         continue
+
+                    dc_fields.pop(rel_or_attr_name)
                     # Type correspondence
-                    if not inm_type.corresponds_to(field.type):
+                    if not inm_type.corresponds_to(dc_types[rel_or_attr_name]):
                         failures.append(
                             f"The attribute {rel_or_attr_name} does not have the same type as "
                             "the associated field in the python domain. "
@@ -653,7 +657,7 @@ class Entity(NamedType, WithComment):
     def get_paired_dataclass(self) -> Optional[type[object]]:
         return self._paired_dataclass
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         return self._paired_dataclass == pytype
 
     def as_python_type_string(self) -> "str | None":
@@ -672,8 +676,10 @@ class Entity(NamedType, WithComment):
             assert False, f"This class {self.get_full_name()} has no associated python type, this conversion is not supported"
 
         assert isinstance(instance, Instance)
-        if DATACLASS_SELF_FIELD in instance.slots:
-            return instance.slots.get(DATACLASS_SELF_FIELD).get_value()
+
+        dataclass_self = instance.slots.get(DATACLASS_SELF_FIELD, None)
+        if dataclass_self is not None:
+            return dataclass_self.get_value()
         else:
             # Handle unsets
             unset = [
@@ -694,7 +700,8 @@ class Entity(NamedType, WithComment):
             }
             out = self._paired_dataclass(**kwargs)
 
-            dataclass_self = WrappedValueVariable(out)
+            dataclass_self = ResultVariable()
+            dataclass_self.set_value(out, self.location, False)
             instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
             return out
 
@@ -706,9 +713,8 @@ class Entity(NamedType, WithComment):
          i.e. for which 'corresponds_to' returns True
          i.e. instances of the associated dataclass
         """
-        assert self._paired_dataclass and (
-            isinstance(value, self._paired_dataclass) or references.is_reference_of(value, self._paired_dataclass)
-        )
+        assert self._paired_dataclass is not None  # make mypy happy
+        assert isinstance(value, self._paired_dataclass) or references.is_reference_of(value, self._paired_dataclass)
 
         def convert_none(x: object | None) -> object:
             return x if x is not None else NoneValue()
@@ -720,7 +726,8 @@ class Entity(NamedType, WithComment):
             location,
             None,
         )
-        dataclass_self = WrappedValueVariable(value)
+        dataclass_self: ResultVariable[Instance] = ResultVariable()
+        dataclass_self.set_value(instance, self.location, False)
         instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
         # generate an implementation
         for stmt in self.get_sub_constructor():
@@ -779,7 +786,7 @@ class Implementation(NamedType):
     def as_python_type_string(self) -> "str | None":
         raise NotImplementedError("Implementations should not be arguments to plugins, this code is not expected to be called")
 
-    def corresponds_to(self, pytype: typing.Type) -> bool:
+    def corresponds_to(self, pytype: type[object]) -> bool:
         raise NotImplementedError("Implementations should not be arguments to plugins, this code is not expected to be called")
 
     def to_python(self, instance: object) -> "object":

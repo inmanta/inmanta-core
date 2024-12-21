@@ -33,6 +33,15 @@ if TYPE_CHECKING:
     from inmanta.protocol.common import ReturnValue  # noqa: F401
 
 
+# Typing of dataclass.* methods relies entirely on the definition in typeshed that only exists during typechecking.
+# This ensures that our code works during typechecking and at runtime.
+if not TYPE_CHECKING:
+    DataclassProtocol = object
+else:
+    import _typeshed
+
+    DataclassProtocol = _typeshed.DataclassInstance
+
 # kept for backwards compatibility
 StrictNonIntBool = pydantic.StrictBool
 
