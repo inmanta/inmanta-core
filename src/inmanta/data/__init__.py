@@ -28,7 +28,7 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Callable, Iterable, Sequence, Set
+from collections.abc import Awaitable, Callable, Collection, Iterable, Sequence, Set
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
 from itertools import chain
@@ -163,8 +163,8 @@ class RangeOperator(enum.Enum):
             raise ValueError(f"Failed to parse {text} as a RangeOperator")
 
 
-RangeConstraint = list[tuple[RangeOperator, int]]
-DateRangeConstraint = list[tuple[RangeOperator, datetime.datetime]]
+RangeConstraint = Sequence[tuple[RangeOperator, int]]
+DateRangeConstraint = Sequence[tuple[RangeOperator, datetime.datetime]]
 QueryFilter = tuple[QueryType, object]
 
 
@@ -1960,22 +1960,26 @@ class BaseDocument(metaclass=DocumentMeta):
     def get_filter_for_query_type(
         cls, query_type: QueryType, key: str, value: object, index_count: int
     ) -> tuple[str, list[object]]:
-        if query_type == QueryType.EQUALS:
-            (filter_statement, filter_values) = cls._get_filter(key, value, index_count)
-        elif query_type == QueryType.IS_NOT_NULL:
-            (filter_statement, filter_values) = cls.get_is_not_null_filter(key)
-        elif query_type == QueryType.CONTAINS:
-            (filter_statement, filter_values) = cls.get_contains_filter(key, value, index_count)
-        elif query_type == QueryType.CONTAINS_PARTIAL:
-            (filter_statement, filter_values) = cls.get_contains_partial_filter(key, value, index_count)
-        elif query_type == QueryType.RANGE:
-            (filter_statement, filter_values) = cls.get_range_filter(key, value, index_count)
-        elif query_type == QueryType.NOT_CONTAINS:
-            (filter_statement, filter_values) = cls.get_not_contains_filter(key, value, index_count)
-        elif query_type == QueryType.COMBINED:
-            (filter_statement, filter_values) = cls.get_filter_for_combined_query_type(
-                key, cast(dict[QueryType, object], value), index_count
-            )
+        match query_type:
+            case QueryType.EQUALS:
+                (filter_statement, filter_values) = cls._get_filter(key, value, index_count)
+            case QueryType.IS_NOT_NULL:
+                (filter_statement, filter_values) = cls.get_is_not_null_filter(key)
+            case QueryType.CONTAINS:
+                (filter_statement, filter_values) = cls.get_contains_filter(key, value, index_count)
+            case QueryType.CONTAINS_PARTIAL:
+                (filter_statement, filter_values) = cls.get_contains_partial_filter(key, value, index_count)
+            case QueryType.RANGE:
+                (filter_statement, filter_values) = cls.get_range_filter(key, value, index_count)
+            case QueryType.NOT_CONTAINS:
+                (filter_statement, filter_values) = cls.get_not_contains_filter(key, value, index_count)
+            case QueryType.COMBINED:
+                (filter_statement, filter_values) = cls.get_filter_for_combined_query_type(
+                    key, cast(dict[QueryType, object], value), index_count
+                )
+            case _ as _never:
+                typing.assert_never(_never)
+
         else:
             raise InvalidQueryType(f"Query type should be one of {[query for query in QueryType]}")
         return (filter_statement, filter_values)
@@ -5058,6 +5062,48 @@ class Resource(BaseDocument):
                 res["attributes"] = json.loads(res["attributes"])
         return resources
 
+    # TODO: name, after all parameters are set in stone
+    @classmethod
+    async def get_resources_since_version_raw(
+        cls,
+        environment: uuid.UUID,
+        *,
+        since: int,
+        projection: Optional[Collection[typing.LiteralString]],
+        connection: Optional[Connection] = None,
+    ) -> list[tuple[int, list[dict[str, object]]]]:
+        """
+        Returns all released model versions with associated resources since (excluding) the given model version.
+        Returns resources as raw dicts with the requested fields
+        """
+        resource_columns: typing.LiteralString = ", ".join(f"r.{c}" for c in projection) if projection else "r.*"
+        query: typing.LiteralString = f"""
+            SELECT m.version, {resource_columns}
+            FROM {ConfigurationModel.table_name()} as m
+            LEFT JOIN {cls.table_name()} as r
+                ON m.environment = r.environment AND m.version = r.model
+            WHERE m.environment = $1 AND m.version > $2
+            ORDER BY m.version ASC
+        """
+        resource_records = await cls._fetch_query(
+            query,
+            values=[cls._get_value(environment, cls._get_value(since)],
+            connection=connection,
+        )
+        result: list[tuple[int, dict[str, object]]] = []
+        for version, raw_resources in itertools.groupby(resource_records, key=lambda r: r["version"]):
+            parsed_resources: list[dict[str, object]] = []
+            for raw_resource in raw_resources:
+                if resource["resource_id"] is None:
+                    # left join produced no resources
+                    continue
+                resource: dict[str, object] = dict(resource)
+                if "attributes" in resource:
+                    resource["attributes"] = json.loads(resource["attributes"])
+                parsed_resources.append(resource)
+            result.append(version, parsed_resources)
+        return result
+
     @classmethod
     async def get_resources_for_version_raw_with_persistent_state(
         cls,
@@ -5838,8 +5884,9 @@ class ConfigurationModel(BaseDocument):
             return None
         return int(result["version"])
 
+    # TODO: delete?
     @classmethod
-    async def get_released_versions_in_interval(
+    async def get_released_versions_since(
         cls,
         environment: uuid.UUID,
         lower_bound: int,
@@ -5848,7 +5895,7 @@ class ConfigurationModel(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Sequence[int]:
         """
-        Return all the released model version between model version lower_bound and upper_bound (bounds included).
+        Return all the released model versions since (including) the given model version.
         The version numbers are returned in descending order.
         """
         if lower_bound > upper_bound:

@@ -21,12 +21,13 @@ import dataclasses
 import enum
 import itertools
 import json
+import typing
 import uuid
 from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
-from enum import StrEnum
-from typing import TYPE_CHECKING
+from enum import Enum, StrEnum
+from typing import TYPE_CHECKING, Self
 
 import asyncpg
 
@@ -332,6 +333,68 @@ class ModelState:
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
 
+    # TODO: remove old similar methods
+    def update_resource(
+        self,
+        details: ResourceDetails,
+        *,
+        force_new: bool = False,
+        undefined: bool = False,
+        known_compliant: bool = False,
+    ) -> None:
+        """
+        Register a change of intent for a resource. Registers the new resource details, as well as its undefined status.
+        Does not touch or take into account requires-provides. To update these, call update_requires().
+
+        Sets blocked status for undefined resources, but not vice versa because this depends on transitive properties, which
+        requires a full view, including fully updated requires. When you call this method, you must also call
+        update_transitive_state() after all direct state and requires have been updated.
+
+        :param force_new: Whether to consider this a new resource, even if we happen to know one with the same id (in which case the
+            old one is dropped from the model before registering the new one).
+        :param undefined: Whether this resource's intent is undefined, i.e. there's an unknown attribute. Mutually exclusive
+            with known_compliant.
+        :param known_compliant: Whether this resource is known to be in a good state (compliant and last deploy was successful).
+            Useful for restoring previously known state when scheduler is started. Mutually exclusive with undefined.
+        """
+        # TODO: review this method. Is it as simple as it can be?
+        if undefined and known_compliant:
+            raise ValueError("A resource can not be both undefined and compliant")
+        compliance_status: ComplianceStatus = (
+            ComplianceStatus.COMPLIANT if force_compliant
+            else ComplianceStatus.UNDEFINED if undefined
+            else ComplianceStatus.HAS_UPDATE
+        )
+        # Latest requires are not set yet, transitve blocked status are handled in update_transitive_state
+        blocked: BlockedStatus = BlockedStatus.YES if undefined else BlockedStatus.NO
+        already_known: bool = details.resource_id in self.resources
+        if force_new and already_known:
+            # register this as a new resource, even if we happen to know one with the same id
+            self.drop(details.resource_id)
+        if not already_known or force_new:
+            self.resource_state[resource] = ResourceState(
+                status=compliance_status,
+                deployment_result=DeploymentResult.DEPLOYED if known_compliant else DeploymentResult.NEW,
+                blocked=blocked,
+            )
+            if resource not in self.requires:
+                self.requires[resource] = set()
+            self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
+        else:
+            self.resource_state[resource].status = compliance_status
+            # Override blocked status only if it is definitely blocked now.
+            # We can't set it the other way around because a resource might still be transitively blocked, see note above
+            if blocked is BlockedStatus.YES:
+                self.resource_state[resource].blocked = blocked
+            if known_compliant:
+                self.resource_state[resource].deployment_result = DeploymentResult.DEPLOYED
+
+        self.resources[resource] = details
+        if not known_compliant and self.resource_state[resource].blocked is BlockedStatus.NO:
+            self.dirty.add(resource)
+        else:
+            self.dirty.discard(resource)
+
     def update_desired_state(
         self,
         resource: "ResourceIdStr",
@@ -373,12 +436,6 @@ class ModelState:
             self.resource_state[resource].status = ComplianceStatus.UNDEFINED
             self.resource_state[resource].blocked = BlockedStatus.YES
         else:
-            self.resource_state[resource] = ResourceState(
-                status=ComplianceStatus.UNDEFINED,
-                deployment_result=DeploymentResult.NEW,
-                blocked=BlockedStatus.YES,
-            )
-            self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         self.dirty.discard(resource)
 
     def update_requires(self, resource: "ResourceIdStr", requires: Set["ResourceIdStr"]) -> None:
@@ -442,7 +499,7 @@ class ModelState:
          In turn this method ensures transitive state consistency for the entire model.
 
         :param new_undefined: resources that have become undefined.
-            These have already moved to the blocked state by update_resource_to_undefined
+            These have already moved to the blocked state by update_resource
         :param verify_blocked: resources that may have gotten blocked, e.g. due to added requires.
             If blocked, will propagate the check to its provides even if not in this set.
         :param verify_unblocked: resources that may have gotten unblocked,
@@ -672,3 +729,41 @@ class ModelState:
         my_state.blocked = BlockedStatus.NO
         if my_state.status in [ComplianceStatus.HAS_UPDATE, ComplianceStatus.NON_COMPLIANT]:
             self.dirty.add(resource)
+
+
+# TODO: does this belong here or in scheduler?
+class ResourceIntentChange(Enum):
+    """
+    A state change for a single resource's intent. Represents in which way, if any, a resource changed in a new model version
+    versus the currently managed one.
+    """
+    # TODO: narrow this to simply NEW / DELETED / UPDATED where UNDEFINED is a second axis?
+    NEW = enum.auto()
+    """
+    To be considered a new resource, even if one with the same resource id is already managed.
+    """
+
+    UPDATED = enum.auto()
+    """
+    The resource has an update to its desired state, without a change in its undefined status.
+    """
+
+    DEFINED = enum.auto()
+    """
+    The resource became defined relative to the currently managed version.
+    """
+
+    UNDEFINED = enum.auto()
+    """
+    The resource became undefined relative to the currently managed version.
+    """
+
+    UNDEFINED_NEW = enum.auto()
+    """
+    The resource is both new and undefined.
+    """
+
+    DELETED = enum.auto()
+    """
+    The resource was deleted.
+    """
