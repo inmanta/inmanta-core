@@ -356,14 +356,21 @@ class TestScheduler(ResourceScheduler):
     async def should_runner_be_running(self, endpoint: str) -> bool:
         return True
 
-    async def _build_resource_mappings_from_db(
-        self, version: int, *, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Mapping[ResourceIdStr, ResourceDetails]:
-        return self.mock_versions[version]
+    # TODO: may not be needed to override at all, since read_version is overridden
+    async def _get_new_model_versions_from_db(
+        self, *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> list[ModelVersion]:
+        # TODO: return self.mock_versions, sorted, > self._state.version
+        raise NotImplementedError()
 
-    async def _get_resource_details_of_defined_resources(self, env: uuid.UUID, version: int) -> list[ResourceDetails]:
-        assert self.environment == env
-        return list(self.mock_versions[version].values())
+    async def _get_single_model_version_from_db(
+        self,
+        *,
+        version: int | None = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> ModelVersion:
+        # TODO: return self.mock_versions[version]
+        raise NotImplementedError()
 
 
 class TestAgent(Agent):
@@ -1117,6 +1124,13 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     # assert that r2 was rescheduled due to the event, even though it is already deploying for its latest intent
     assert len(agent.scheduler._work._waiting) == 0
     assert agent.scheduler._work.agent_queues.queued().keys() == {tasks.Deploy(resource=rid2)}
+    # TODO: this assertion fails because for some reason we reschedule running deploys when a new dependency comes in
+    #   => question is: should we? Either update that behavior or update this test case. Either way update the message
+    #       to say "new dependency was scheduled" instead of "new dependency was added to this resource"
+    #   => also verify by hand that this scenario fails if event propagation does not force_deploy=True
+    assert agent.scheduler._work.agent_queues.queued()[tasks.Deploy(resource=rid2)].reason == (
+        f"Deploying because an event was received from {rid1}"
+    )
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
     # verify that it suffices for r2 to be already scheduled (vs deploying above), i.e. it does not get scheduled twice

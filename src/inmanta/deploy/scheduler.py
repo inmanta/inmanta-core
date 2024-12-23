@@ -26,7 +26,7 @@ import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Set
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Self, Tuple
 from uuid import UUID
 
 import asyncpg
@@ -74,6 +74,17 @@ class ResourceIntent:
     dependencies: Optional[Mapping[ResourceIdStr, const.ResourceState]]
 
 
+class ResourceRecord(typing.TypedDict):
+    resource_id: str
+    status: str
+    attributes: Mapping[str, object]
+    attribute_hash: str
+
+    @classmethod
+    def projection(cls) -> Set[typing.LiteralString]
+        return cls.__required_keys__ | cls.__optional_keys__
+
+
 @dataclass(frozen=True)
 class ModelVersion:
     """
@@ -83,6 +94,32 @@ class ModelVersion:
     resources: Mapping[ResourceIdStr, ResourceDetails]
     requires: Mapping[ResourceIdStr, Set[ResourceIdStr]]
     undefined: Set[ResourceIdStr]
+
+    @classmethod
+    def from_db_records(cls: type[Self], version: int, resources: Collection[ResourceRecord]) -> Self:
+        return cls(
+            version=version,
+            resources={
+                ResourceIdStr(resource["resource_id"]): ResourceDetails(
+                    resource_id=ResourceIdStr(resource["resource_id"]),
+                    attribute_hash=resource["attribute_hash"],
+                    attributes=resource["attributes"],
+                )
+                for resource in resources
+            },
+            requires={
+                ResourceIdStr(resource["resource_id"]): {
+                    Id.parse_id(req).resource_str()
+                    for req in resource["attributes"].get("requires", [])},
+                }
+                for resource in resources
+            },
+            undefined={
+                ResourceIdStr(resource["resource_id"])
+                for resource in resources
+                if const.ResourceState(resource["status"]) is const.ResourceState.undefined
+            },
+        )
 
 
 class TaskManager(abc.ABC):
@@ -418,29 +455,26 @@ class ResourceScheduler(TaskManager):
                 priority=TaskPriority.NEW_VERSION_DEPLOY,
             )
 
+    # TODO: review connection argument
     async def _recover_scheduler_state_using_increments_calculation(self, *, connection: asyncpg.connection.Connection) -> None:
         """
         This method exists for backwards compatibility reasons. It initializes the scheduler state
         by relying on the increments calculation logic. This method starts the deployment process.
         """
         try:
-            version, resources, requires, undefined_resources = await self._get_resources_in_version(connection=connection)
+            model: ModelVersion = await self._get_single_model_version_from_db(connection=connection)
         except KeyError:
             # No model version has been released yet.
             return
         # Rely on the incremental calculation to determine which resources should be deployed and which not.
         up_to_date_resources: set[ResourceIdStr]
-        _, up_to_date_resources = await ConfigurationModel.get_increment(self.environment, version, connection=connection)
+        _, up_to_date_resources = await ConfigurationModel.get_increment(self.environment, model.version, connection=connection)
         await self._new_version(
-            version,
-            resources=resources,
-            requires=requires,
+            [model],
             up_to_date_resources=up_to_date_resources,
             reason="Deploy was triggered because the scheduler was started",
+            # TODO: review
             start_deployment=False,
-            intent_lock_acquired=True,
-            scheduler_lock_acquired=True,
-            undefined_resources=undefined_resources,
             connection=connection,
         )
 
@@ -477,35 +511,17 @@ class ResourceScheduler(TaskManager):
                 self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
             )
 
-    # TODO: don't forget that this (and other methods) is mocked in tests/deploy/tests_scheduler_agent
-    async def _get_resource_details_of_defined_resources(self, version: int) -> list[ResourceDetails]:
-        """
-        This method is only used by the dryrun() method. It exists so that it can be mocked by the test suite.
-        """
-        resources_in_version = await data.Resource.get_list(environment=self.environment, model=version)
-        result = []
-        for res in resources_in_version:
-            if res.status is not const.ResourceState.undefined:
-                # Make mypy happy
-                assert res.attribute_hash is not None
-                result.append(
-                    ResourceDetails(
-                        resource_id=res.resource_id,
-                        attribute_hash=res.attribute_hash,
-                        attributes=res.attributes,
-                    )
-                )
-        return result
-
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         if not self._running:
             return
-        resource_details = await self._get_resource_details_of_defined_resources(version=version)
-        for details in resource_details:
+        model: ModelVersion = self._get_single_model_version_from_db(version=version)
+        for resource, details in model.resources.items():
+            if resource in model.undefined:
+                continue
             self._work.agent_queues.queue_put_nowait(
                 DryRun(
                     resource=details.resource_id,
-                    version=version,
+                    version=model.version,
                     resource_details=ResourceDetails(
                         resource_id=details.resource_id,
                         attribute_hash=details.attribute_hash,
@@ -546,70 +562,6 @@ class ResourceScheduler(TaskManager):
                 deploying=self._deploying_latest,
             )
 
-    async def _build_resource_mappings_from_db(
-        self, version: int, *, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Tuple[Mapping[ResourceIdStr, ResourceDetails], Set[ResourceIdStr]]:
-        """
-        Build a view on current resources. Might be filtered for a specific environment, used when a new version is released
-
-        :return: resource_mapping {id -> resource details}
-        """
-        resources_from_db = await data.Resource.get_resources_for_version(
-            environment=self.environment,
-            version=version,
-            projection=[
-                "resource_id",
-                "status",
-                "attributes",
-                "attribute_hash",
-            ],
-            connection=connection,
-        )
-        undefined_resources: Set[ResourceIdStr] = {
-            r["resource_id"] for r in resources_from_db if const.ResourceState[r["status"]] is const.ResourceState.undefined
-        }
-        resource_details = {
-            resource["resource_id"]: ResourceDetails(
-                resource_id=resource["resource_id"],
-                attribute_hash=resource["attribute_hash"],
-                attributes=json.loads(resource["attributes"]),
-            )
-            for resource in resources_from_db
-        }
-        return resource_details, undefined_resources
-
-    def _construct_requires_mapping(
-        self, resources: Mapping[ResourceIdStr, ResourceDetails]
-    ) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
-        require_mapping = {
-            resource: {Id.parse_id(req).resource_str() for req in details.attributes.get("requires", [])}
-            for resource, details in resources.items()
-        }
-        return require_mapping
-
-    async def _get_resources_in_version(
-        self,
-        *,
-        version: int | None = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> tuple[int, Mapping[ResourceIdStr, ResourceDetails], Mapping[ResourceIdStr, Set[ResourceIdStr]], Set[ResourceIdStr]]:
-        """
-        Returns a tuple containing:
-            1. The version number of the configuration model.
-            2. A dict mapping every resource_id in the latest released version to its ResourceDetails.
-            3. A dict mapping every resource_id in the latest released version to the set of resources it requires.
-        """
-        async with ConfigurationModel.get_connection(connection) as con:
-            if version is None:
-                # Fetch the latest released model version
-                cm_version = await ConfigurationModel.get_latest_version(self.environment, connection=con)
-                if cm_version is None:
-                    raise KeyError()
-                version = cm_version.version
-            resource_details, undefined_resources = await self._build_resource_mappings_from_db(version=version, connection=con)
-            requires = self._construct_requires_mapping(resource_details)
-            return version, resource_details, requires, undefined_resources
-
     async def read_version(
         self,
     ) -> None:
@@ -624,8 +576,36 @@ class ResourceScheduler(TaskManager):
             return
         await self._read_version()
 
+    async def _get_single_model_version_from_db(
+        self,
+        *,
+        version: int | None = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> ModelVersion:
+        """
+        Returns a single model version as fetched from the database. Returns the requested version if provided
+        (regardless of whether it has been released or not), otherwise returns the latest released version.
+        """
+        async with ConfigurationModel.get_connection(connection) as con:
+            if version is None:
+                # Fetch the latest released model version
+                cm_version = await ConfigurationModel.get_latest_version(self.environment, connection=con)
+                if cm_version is None:
+                    raise KeyError()
+                version = cm_version.version
+
+            resources_from_db = await data.Resource.get_resources_for_version_raw(
+                environment=self.environment,
+                version=version,
+                projection=ResourceRecord.projection(),
+                connection=con,
+            )
+
+            return ModelVersion.from_db_records(version, resources_from_db)
+
+    # TODO: if this turns out to have only one caller, consider inlining it instead
     # TODO: does this need to run in an outer transaction? Or opposite (not allowed to)?
-    async def _get_new_model_versions(
+    async def _get_new_model_versions_from_db(
         self, *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> list[ModelVersion]:
         """
@@ -644,41 +624,11 @@ class ResourceScheduler(TaskManager):
             ) = data.Resource.get_resources_since_version_raw(
                 self.environment,
                 since=self._state.version,
-                projection=(
-                    "resource_id",
-                    "status",
-                    "attributes",
-                    "attribute_hash",
-                ),
+                projection=ResourceRecord.projection(),
                 connection=con,
             )
 
-            return [
-                ModelVersion(
-                    version=version,
-                    resources={
-                        ResourceIdStr(resource["resource_id"]): ResourceDetails(
-                            resource_id=ResourceIdStr(resource["resource_id"]),
-                            attribute_hash=resource["attribute_hash"],
-                            attributes=resource["attributes"],
-                        )
-                        for resource in resources
-                    ),
-                    requires={
-                        ResourceIdStr(resource["resource_id"]): {
-                            Id.parse_id(req).resource_str()
-                            for req in resource["attributes"].get("requires", [])},
-                        }
-                        for resource in resources
-                    },
-                    undefined={
-                        ResourceIdStr(resource["resource_id"])
-                        for resource in resources
-                        if const.ResourceState(resource["status"]) is const.ResourceState.undefined
-                    },
-                )
-                for version, resources in resources_by_version
-            ]
+            return [ModelVersion.from_db_records(version, resources) for version, resources in resources_by_version]
 
     async def _read_version(
         self,
@@ -690,7 +640,7 @@ class ResourceScheduler(TaskManager):
     ) -> None:
         # TODO: might want to use a single connection
         async with self._intent_lock:
-            new_versions: Sequence[ModelVersion] = await self._get_new_model_versions(connection=connection)
+            new_versions: Sequence[ModelVersion] = await self._get_new_model_versions_from_db(connection=connection)
             await self._new_version(
                 # TODO: simply update method to accept a ModelVersion instead of seperate parameters
                 new_versions
@@ -1418,7 +1368,8 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             async with data.Scheduler.get_connection() as connection:
                 try:
-                    latest_version, resources_in_db, _, _ = await self._get_resources_in_version(connection=connection)
+                    # TODO: update this call
+                    latest_version, resources_in_db, _, _ = await self._get_single_model_version_from_db(connection=connection)
                 except KeyError:
                     return SchedulerStatusReport(scheduler_state={}, db_state={}, resource_states={}, discrepancies={})
                 if latest_version != self._state.version:

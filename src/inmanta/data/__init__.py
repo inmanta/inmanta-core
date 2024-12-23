@@ -5047,7 +5047,12 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resources_for_version_raw(
-        cls, environment: uuid.UUID, version: int, projection: Optional[list[str]], *, connection: Optional[Connection] = None
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        projection: Optional[Collection[LiteralString]],
+        *,
+        connection: Optional[Connection] = None,
     ) -> list[dict[str, object]]:
         if not projection:
             projection = "*"
