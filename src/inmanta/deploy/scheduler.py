@@ -277,6 +277,7 @@ class ResourceScheduler(TaskManager):
         :param executor_manager: the executor manager that will provide us with executors
         :param client: connection to the server
         """
+        # state and work may be reassigned during initialize
         self._state: ModelState = ModelState(version=0)
         self._work: work.ScheduledWork = work.ScheduledWork(
             requires=self._state.requires.requires_view(),
@@ -373,7 +374,12 @@ class ResourceScheduler(TaskManager):
         Marks scheduler as running and triggers first deploys.
         """
         self._timer_manager.initialize()
-        async with self._intent_lock, self._scheduler_lock, data.Scheduler.get_connection() as con, con.transaction():
+        # TODO: transaction correct?
+        # do not start a transaction because:
+        # 1. nothing we do here before read_version is inherently transactional: the only write is atomic, and reads to not
+        #   benefit from READ COMMITTED (default) isolation level.
+        # 2. read_version expects to receive a connection outside of a transaction context
+        async with data.Scheduler.get_connection() as con:
             # Make sure there is an entry for this scheduler in the scheduler database table
             await data.Scheduler._execute_query(
                 f"""
@@ -392,6 +398,7 @@ class ResourceScheduler(TaskManager):
             if latest_release_model is None:
                 # No model version has been released yet. No scheduler state to restore from db.
                 self._running = True
+                # TODO: is return appropriate?
                 return
 
             # Check at which model version the scheduler was before it went down
@@ -401,65 +408,41 @@ class ResourceScheduler(TaskManager):
             if last_processed_model_version is not None:
                 # Restore scheduler state like it was before the scheduler went down
                 self._state = await ModelState.create_from_db(self.environment, last_processed_model_version, connection=con)
-                self._work.link_to_new_requires_provides_view(
-                    requires_view=self._state.requires.requires_view(),
-                    provides_view=self._state.requires.provides_view(),
+                self._work = work.ScheduledWork(
+                    requires=self._state.requires.requires_view(),
+                    provides=self._state.requires.provides_view(),
+                    new_agent_notify=self._create_agent,
                 )
+                # Set running flag because we're ready to start accepting tasks.
+                # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
+                self._running = True
+                await self.read_version(connection=con)
             else:
-                # This case can occur in two different situations:
-                #   * A model version has been released, but the scheduler didn't process any version yet.
+                # This case can occur in three different situations:
+                #   1 A model version has been released, but the scheduler didn't process any version yet.
                 #     In this case there is no scheduler state to restore.
-                #   * We migrated the Inmanta server from an old version, that didn't have the resource state
+                #   2 The last processed version has been deleted since the scheduler was last running
+                #   3 We migrated the Inmanta server from an old version, that didn't have the resource state
                 #     tracking in the database, to a version that does. To cover this case, we rely on the
                 #     increment calculation to determine which resources have to be considered dirty and which
                 #     not. This migration code path can be removed in a later major version.
+                #
+                # In cases 1 and 2, all resources are expected to be in the increment (scheduler hasn't processed any versions
+                # means we haven't ever deployed anything yet), so those could be covered by simply reading in only the latest
+                # version, or by keeping state as is and calling into normal read_version() flow. However, while the migration
+                # path is still required for backwards compatibility (3) anyway, we unifi the three cases for simplicity.
+
+                # Set running flag because we're ready to start accepting tasks.
+                # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
+                self._running = True
                 await self._recover_scheduler_state_using_increments_calculation(connection=con)
 
-            if last_processed_model_version is not None and last_processed_model_version < latest_release_model.version:
-                # We restored the scheduler state from the database, but a newer, released version is available.
-                # Apply the changes from each subsequent model version to the scheduler.
-                versions = await data.ConfigurationModel.get_released_versions_in_interval(
-                    environment=self.environment,
-                    lower_bound=last_processed_model_version + 1,
-                    upper_bound=latest_release_model.version,
-                    connection=con,
-                )
-                for version in reversed(versions):
-                    # Apply version from old to new
-                    await self._read_version(
-                        version=version,
-                        start_deployment=False,
-                        intent_lock_acquired=True,
-                        scheduler_lock_acquired=True,
-                        connection=con,
-                    )
-
-            # Set running flag because we're ready to start accepting tasks.
-            # Set before scheduling first tasks (even if in practice it shouldn't matter because we retain control of the IO
-            # loop until we return.
-            self._running = True
-            self._timer_manager.update_timers(
-                {
-                    resource
-                    for resource, state in self._state.resource_state.items()
-                    if state.blocked is not BlockedStatus.YES
-                    if resource not in self._state.dirty
-                },
-                # non-compliant resources are in the dirty set at this point
-                are_compliant=True,
-            )
-            # Start deploying everything in dirty set.
-            self._work.deploy_with_context(
-                self._state.dirty,
-                reason="Deploy was triggered because the scheduler was started",
-                priority=TaskPriority.NEW_VERSION_DEPLOY,
-            )
-
-    # TODO: review connection argument
     async def _recover_scheduler_state_using_increments_calculation(self, *, connection: asyncpg.connection.Connection) -> None:
         """
         This method exists for backwards compatibility reasons. It initializes the scheduler state
         by relying on the increments calculation logic. This method starts the deployment process.
+
+        :param connection: Connection to use for db operations. Should not be in a transaction context.
         """
         try:
             model: ModelVersion = await self._get_single_model_version_from_db(connection=connection)
@@ -467,14 +450,12 @@ class ResourceScheduler(TaskManager):
             # No model version has been released yet.
             return
         # Rely on the incremental calculation to determine which resources should be deployed and which not.
-        up_to_date_resources: set[ResourceIdStr]
+        up_to_date_resources: Set[ResourceIdStr]
         _, up_to_date_resources = await ConfigurationModel.get_increment(self.environment, model.version, connection=connection)
         await self._new_version(
             [model],
             up_to_date_resources=up_to_date_resources,
             reason="Deploy was triggered because the scheduler was started",
-            # TODO: review
-            start_deployment=False,
             connection=connection,
         )
 
@@ -562,20 +543,6 @@ class ResourceScheduler(TaskManager):
                 deploying=self._deploying_latest,
             )
 
-    async def read_version(
-        self,
-    ) -> None:
-        """
-        Update model state and scheduled work based on the latest released version in the database,
-        e.g. when a new version is released. Triggers a deploy after updating internal state:
-        - schedules new or updated resources to be deployed
-        - schedules any resources that are not in a known good state.
-        - rearranges deploy tasks by requires if required
-        """
-        if not self._running:
-            return
-        await self._read_version()
-
     async def _get_single_model_version_from_db(
         self,
         *,
@@ -603,50 +570,48 @@ class ResourceScheduler(TaskManager):
 
             return ModelVersion.from_db_records(version, resources_from_db)
 
-    # TODO: if this turns out to have only one caller, consider inlining it instead
-    # TODO: does this need to run in an outer transaction? Or opposite (not allowed to)?
-    async def _get_new_model_versions_from_db(
-        self, *, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> list[ModelVersion]:
+    async def read_version(
+        self,
+        *,
+        # TODO: which of these is still required?
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
         """
-        Returns all new versions of the model (newer than the one currently managed) in the order they were released. May return
-        an empty list if no new versions have been released since the last update of scheduler state.
+        Update model state and scheduled work based on the latest released version in the database,
+        e.g. when a new version is released. Triggers a deploy after updating internal state:
+        - schedules new or updated resources to be deployed
+        - schedules any resources that are not in a known good state.
+        - rearranges deploy tasks by requires if required
+
+        :param connection: Connection to use for db operations. Should not be in a transaction context.
         """
-        # Note: we're not very sensitive to races on the latest released version here. The server will always notify us *after*
-        # a new version is released. So we'll always be in one of two scenearios:
-        # - the latest released version was released before we started processing this notification
-        # - a new version was released after we started processing this communication or is being released now, in which
-        #   case a new notification will be / have been sent and blocked on the intent locked until we're done here.
-        # So if we end up with a race, we can be confident that we'll always process the associated notification soon.
-        async with data.Resource.get_connection(connection) as con, con.transaction():
+        # TODO: might want to use a single connection
+        if not self._running:
+            return
+        async with self._intent_lock, data.Resource.get_connection(connection) as con:
+            # Note: we're not very sensitive to races on the latest released version here. The server will always notify us
+            # *after* a new version is released. So we'll always be in one of two scenearios:
+            # - the latest released version was released before we started processing this notification
+            # - a new version was released after we started processing this communication or is being released now, in which
+            #   case a new notification will be / have been sent and blocked on the intent locked until we're done here.
+            # So if we end up with a race, we can be confident that we'll always process the associated notification soon.
             resources_by_version: (
                 Sequence[tuple[int, Sequence[Mapping[str, object]]]]
-            ) = data.Resource.get_resources_since_version_raw(
+            ) = await data.Resource.get_resources_since_version_raw(
                 self.environment,
                 since=self._state.version,
                 projection=ResourceRecord.projection(),
                 connection=con,
             )
+            new_versions: Sequence[ModelVersion] = [
+                ModelVersion.from_db_records(version, resources) for version, resources in resources_by_version
+            ]
 
-            return [ModelVersion.from_db_records(version, resources) for version, resources in resources_by_version]
-
-    async def _read_version(
-        self,
-        *,
-        # TODO: which of these is still required?
-        start_deployment: bool = True,
-        scheduler_lock_acquired: bool = False,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        # TODO: might want to use a single connection
-        async with self._intent_lock:
-            new_versions: Sequence[ModelVersion] = await self._get_new_model_versions_from_db(connection=connection)
             await self._new_version(
                 # TODO: simply update method to accept a ModelVersion instead of seperate parameters
                 new_versions
                 reason="Deploy was triggered because a new version has been released",
-                start_deployment=start_deployment,
-                connection=connection,
+                connection=con,
             )
 
     async def _get_intent_changes(
@@ -712,7 +677,6 @@ class ResourceScheduler(TaskManager):
                 is_undefined: bool
                 if resource in model.undefined:
                     undefined.add(resource)
-                    # TODO: delete from work. Here or later?
                     is_undefined = True
                 else:
                     undefined.discard(resource)
@@ -735,17 +699,12 @@ class ResourceScheduler(TaskManager):
             intent_changes,
         )
 
-    # TODO TODO TODO TODO: finish implementation
-    # TODO: replace original
     async def _new_version(
         self,
         new_versions: Sequence[ModelVersion],
-        # TODO: consider up_to_date_resources etc
         *
         up_to_date_resources: Optional[Set[ResourceIdStr]] = None,
         reason: str = "Deploy was triggered because a new version has been released",
-        # TODO: start_deployment still relevant?
-        start_deployment: bool = True,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
@@ -758,12 +717,13 @@ class ResourceScheduler(TaskManager):
             successful deploy for the same intent. Should not include any blocked resources. Mostly intended for the very first
             version when the scheduler is started with a fresh state.
         :param reason: The reason to associate with any deploys caused by this newly released version.
+        :param connection: Connection to use for db operations. Should not be in a transaction context (because this method
+            may have a long pre-processing phase, it opens a transaction itself when appropriate)
         """
-        # TODO: docstring: start_deployment iff still relevant
-        # TODO: docstring: connection iff transaction status is important (might be required to live outside of transaction)
-        if consolidated is None:
-            # TODO: return still appropriate here? Should we call deploy? Or should we make both methods more defensive, i.e.  expect at least one version?
+        if not new_versions:
             return
+        if connection is not None and connection.is_in_transaction():
+            raise ValueError("_new_version() expects its connection to not be in a transaction context")
         up_to_date_resources = set() if up_to_date_resources is None else up_to_date_resources
 
         # TODO: review entire method.
@@ -787,7 +747,7 @@ class ResourceScheduler(TaskManager):
                 dropped_requires[resource] = removed
             await asyncio.sleep(0)
 
-        # TODO: are deleted resources dropped from state and work?
+        # TODO: deleted-then-reappeared should be recognized as such in deploy_done()
         # convert intent changes to sets for bulk processing
         deleted: set[ResourceIdStr] = set()
         new_or_updated: set[ResourceIdStr] = set()
@@ -824,7 +784,6 @@ class ResourceScheduler(TaskManager):
         # 2. pass context once more to event loop before starting on the sync path
         #    (could be achieved with a simple sleep(0) if desired)
         # 3. clarity: it clearly signifies that this is the atomic and performance-sensitive part
-        # TODO: is transaction really required?
         async with data.Resource.get_connection(connection=connection) as con, con.transaction():
             async with scheduler_lock:
                 self._state.version = version
@@ -859,33 +818,34 @@ class ResourceScheduler(TaskManager):
                 #    - deleted from the model
                 self._timer_manager.stop_timers(self._state.dirty | became_undefined | transitive_blocked)
                 self._timer_manager.remove_timers(deleted)
-                if start_deployment:
-                    # Install timers for initial up-to-date resources. They are up-to-date now,
-                    # but we want to make sure we periodically repair them.
-                    self._timer_manager.update_timers(
-                        up_to_date_resources | (transitive_unblocked - self._state.dirty), are_compliant=True
-                    )
+                # Install timers for initial up-to-date resources. They are up-to-date now,
+                # but we want to make sure we periodically repair them.
+                self._timer_manager.update_timers(
+                    up_to_date_resources | (transitive_unblocked - self._state.dirty), are_compliant=True
+                )
 
-                    # ensure deploy for ALL dirty resources, not just the new ones
-                    # TODO: even if not deploying, pass in added and dropped requires? -> only relevant if start_deployment remains
-                    self._work.deploy_with_context(
-                        self._state.dirty,
-                        reason=reason,
-                        priority=TaskPriority.NEW_VERSION_DEPLOY,
-                        deploying=self._deploying_latest,
-                        added_requires=added_requires,
-                        dropped_requires=dropped_requires,
-                    )
+                # ensure deploy for ALL dirty resources, not just the new ones
+                self._work.deploy_with_context(
+                    self._state.dirty,
+                    reason=reason,
+                    priority=TaskPriority.NEW_VERSION_DEPLOY,
+                    deploying=self._deploying_latest,
+                    added_requires=added_requires,
+                    dropped_requires=dropped_requires,
+                )
                 for resource in deleted:
                     self._state.drop(resource)  # Removes from the dirty set
-                for resource in became_undefined | transitive_blocked:
+                for resource in deleted | became_undefined | transitive_blocked:
                     self._work.delete_resource(resource)
 
                 # Updating the blocked state should be done under the scheduler lock, because this state is written
                 # by both the deploy and the new version code path.
                 resources_with_updated_blocked_state: Set[ResourceIdStr] = became_undefined | transitive_blocked | transitive_unblocked
 
-                # TODO: this requires connection -> when to acquire? right before scheduler lock?
+                # TODO: this method is called both here and further down. Still correct? Also correct that this is under lock
+                #   and the other is not? Consider what other under/post-lock operations write to DB and whether that depends on
+                #   scheduler state (i.e. we need to commit first, probably yes, i.e. everything fully under lock, including
+                #   transaction start)
                 await self.state_update_manager.update_resource_intent(
                     self.environment,
                     intent={
@@ -896,15 +856,6 @@ class ResourceScheduler(TaskManager):
                     connection=con,
                 )
 
-            # Once more, drop all resources that do not exist in this version from the scheduled work,
-            # in case they got added again by a deploy trigger (because we dropped them outside the lock).
-            for resource in deleted_resources:
-                # Delete the deleted resources outside the _scheduler_lock, because we do not want to keep
-                # the _scheduler_lock acquired longer than required. The worst that can happen here is that
-                # we deploy the deleted resources one time too many, which is not so bad.
-                self._work.delete_resource(resource)
-
-            # TODO: should orphaned-then-new resources be persisted somehow?
             # TODO: are undefined resources updated correctly? They are now passed along with all others to update_resource_intent()
             # Update intent for resources with new desired state
             await self.state_update_manager.update_resource_intent(
@@ -1368,12 +1319,11 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             async with data.Scheduler.get_connection() as connection:
                 try:
-                    # TODO: update this call
-                    latest_version, resources_in_db, _, _ = await self._get_single_model_version_from_db(connection=connection)
+                    latest_model: ModelVersion = await self._get_single_model_version_from_db(connection=connection)
                 except KeyError:
                     return SchedulerStatusReport(scheduler_state={}, db_state={}, resource_states={}, discrepancies={})
-                if latest_version != self._state.version:
-                    return report_model_version_mismatch(latest_version)
+                if latest_model.version != self._state.version:
+                    return report_model_version_mismatch(latest_model.version)
 
                 resource_states_in_db: Mapping[ResourceIdStr, const.ResourceState]
                 latest_version, resource_states_in_db = await data.Resource.get_resource_states_latest_version(
@@ -1385,7 +1335,7 @@ class ResourceScheduler(TaskManager):
             discrepancy_map = await _build_discrepancy_map(resource_states_in_db=resource_states_in_db)
             return SchedulerStatusReport(
                 scheduler_state=self._state.resource_state,
-                db_state=resources_in_db,
+                db_state=latest_model.resources,
                 resource_states=resource_states_in_db,
                 discrepancies=discrepancy_map,
             )

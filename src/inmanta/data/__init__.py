@@ -5087,7 +5087,7 @@ class Resource(BaseDocument):
             FROM {ConfigurationModel.table_name()} as m
             LEFT JOIN {cls.table_name()} as r
                 ON m.environment = r.environment AND m.version = r.model
-            WHERE m.environment = $1 AND m.version > $2
+            WHERE m.environment = $1 AND m.version > $2 AND m.release=true
             ORDER BY m.version ASC
         """
         resource_records = await cls._fetch_query(
@@ -5114,10 +5114,10 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         version: int,
-        projection: Optional[list[typing.LiteralString]],
-        projection_persistent: Optional[list[typing.LiteralString]],
-        project_attributes: Optional[list[typing.LiteralString]] = None,
         *,
+        projection: Optional[Collection[typing.LiteralString]],
+        projection_persistent: Optional[Collection[typing.LiteralString]],
+        project_attributes: Optional[Collection[typing.LiteralString]] = None,
         connection: Optional[Connection] = None,
     ) -> list[dict[str, object]]:
         """This method performs none of the mangling required to produce valid resources!
@@ -6026,7 +6026,12 @@ class ConfigurationModel(BaseDocument):
 
         # get resources for agent
         resources = await Resource.get_resources_for_version_raw_with_persistent_state(
-            environment, version, projection_a_resource, projection_a_state, projection_a_attributes, connection=connection
+            environment,
+            version,
+            projection=projection_a_resource,
+            projection_persistent=projection_a_state,
+            project_attributes=projection_a_attributes,
+            connection=connection,
         )
 
         # to increment

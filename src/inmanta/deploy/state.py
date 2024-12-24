@@ -214,9 +214,10 @@ class ModelState:
     @classmethod
     async def create_from_db(
         cls, environment: uuid.UUID, last_processed_model_version: int, *, connection: asyncpg.connection.Connection
-    ) -> "ModelState":
+    ) -> Optional["ModelState"]:
         """
         Create a new instance of the ModelState object, by restoring the model state from the database.
+        Returns None iff no such (released) version exists (e.g. it has been cleaned up).
 
         :param environment: The environment the model state belongs to.
         :param last_processed_model_version: The model version that was last processed by the scheduler, i.e. the version
@@ -239,20 +240,31 @@ class ModelState:
                 "last_success",
                 "last_produced_events",
             ],
+            # TODO: what about receive events?
             project_attributes=["requires", const.RESOURCE_ATTRIBUTE_SEND_EVENTS],
             connection=connection,
         )
+        if not resource_records:
+            configuration_model: Optional[data.ConfigurationModel] = data.ConfigurationModel.get_one(
+                environment=environment, version=last_processed_model_version, released=True, connection=connection
+            )
+            if configuration_model is None:
+                # the version does not exist at all (anymore)
+                return None
+            # it's simply an empty version, continue with normal flow
         by_resource_id = {r["resource_id"]: r for r in resource_records}
-        for res in resource_records:
-            resource_id = res["resource_id"]
-
-            print(f"{resource_id} -- {dict(res)}")
-
+        # TODO: review this whole loop below
+        for resource_id, res in by_resource_id.items():
             # Populate resource_state
             compliance_status: ComplianceStatus
             if res["is_orphan"]:
+                # TODO: not correct: is_orphan represents orphan vs latest released state, which is not the one we're restoring
+                #   BUT we should???
                 compliance_status = ComplianceStatus.ORPHAN
             elif res["is_undefined"]:
+                # TODO: also not correct: same reasoning. Should be based on resource's resource state
+                #   UNLESS we assume that rps has not progressed since scheduler was last live, which is a pretty safe
+                #   assumption but rather deeply nested here.???
                 compliance_status = ComplianceStatus.UNDEFINED
             elif (
                 res["last_deployed_attribute_hash"] is None

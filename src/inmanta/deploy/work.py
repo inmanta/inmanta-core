@@ -153,9 +153,6 @@ class AgentQueues:
         self._entry_count: int = 0
         self._in_progress: dict[tasks.Task, TaskPriority] = {}
 
-    def is_empty(self) -> bool:
-        return len(self._in_progress) == 0 and len(self._tasks_by_resource) == 0
-
     @property
     def in_progress(self) -> Mapping[tasks.Task, TaskPriority]:
         return self._in_progress
@@ -399,19 +396,6 @@ class ScheduledWork:
     def reset(self) -> None:
         self.agent_queues.reset()
         self._waiting.clear()
-
-    def link_to_new_requires_provides_view(
-        self,
-        requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]],
-        provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]],
-    ) -> None:
-        """
-        Link the requires and provides fields to the views given by the arguments.
-        """
-        # This method should only be called during the initialization phase of the scheduler. No work should be scheduled yet.
-        assert self.agent_queues.is_empty() and len(self._waiting) == 0
-        self.requires = requires_view
-        self.provides = provides_view
 
     def deploy_with_context(
         self,
