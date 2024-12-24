@@ -82,10 +82,11 @@ class InmantaBootloader:
     # Cache field for available extensions
     AVAILABLE_EXTENSIONS: Optional[dict[str, str]] = None
 
-    def __init__(self, configure_logging: bool = False) -> None:
+    def __init__(self, *, configure_logging: bool = True) -> None:
         """
         :param configure_logging: This config option is used by the tests to configure the logging framework.
                                   In normal execution, the logging framework is configured by the app.py
+                                  Defaults to true for backwards compatibility.
         """
         self.restserver = Server()
         self.started = False
