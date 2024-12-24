@@ -21,13 +21,12 @@ import dataclasses
 import enum
 import itertools
 import json
-import typing
 import uuid
 from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import Enum, StrEnum
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Optional
 
 import asyncpg
 
@@ -372,10 +371,11 @@ class ModelState:
         # TODO: review this method. Is it as simple as it can be?
         if undefined and known_compliant:
             raise ValueError("A resource can not be both undefined and compliant")
+        resource: ResourceIdStr = details.resource_id
         compliance_status: ComplianceStatus = (
-            ComplianceStatus.COMPLIANT if force_compliant
-            else ComplianceStatus.UNDEFINED if undefined
-            else ComplianceStatus.HAS_UPDATE
+            ComplianceStatus.COMPLIANT
+            if known_compliant
+            else ComplianceStatus.UNDEFINED if undefined else ComplianceStatus.HAS_UPDATE
         )
         # Latest requires are not set yet, transitve blocked status are handled in update_transitive_state
         blocked: BlockedStatus = BlockedStatus.YES if undefined else BlockedStatus.NO
@@ -406,49 +406,6 @@ class ModelState:
             self.dirty.add(resource)
         else:
             self.dirty.discard(resource)
-
-    def update_desired_state(
-        self,
-        resource: "ResourceIdStr",
-        details: ResourceDetails,
-    ) -> None:
-        """
-        Register a new desired state for a resource.
-
-        The resource is not currently blocked
-
-        For undefined resources, update_resource_to_undefined() should be called instead.
-        to update requires and provides, also call update_requires
-        """
-        self.resources[resource] = details
-        if resource in self.resource_state:
-            self.resource_state[resource].status = ComplianceStatus.HAS_UPDATE
-            # Blocked status is handled in update_transitive_state
-        else:
-            self.resource_state[resource] = ResourceState(
-                status=ComplianceStatus.HAS_UPDATE,
-                deployment_result=DeploymentResult.NEW,
-                blocked=BlockedStatus.NO,  # Requires are not set yet, handled in update_transitive_state
-            )
-            self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
-        self.dirty.add(resource)
-
-    def update_resource_to_undefined(self, resource: "ResourceIdStr", details: ResourceDetails) -> None:
-        """
-        Mark the given resource as blocked, i.e. it's not deployable. This method updates the resource details
-        and the resource_status.
-
-        To propagate this state change, update_transitive_state must be called with this resource in the 'new_undefined' set
-
-        :param resource: The resource that should be blocked.
-        :param details: The details of the resource that should be blocked.
-        """
-        self.resources[resource] = details
-        if resource in self.resource_state:
-            self.resource_state[resource].status = ComplianceStatus.UNDEFINED
-            self.resource_state[resource].blocked = BlockedStatus.YES
-        else:
-        self.dirty.discard(resource)
 
     def update_requires(self, resource: "ResourceIdStr", requires: Set["ResourceIdStr"]) -> None:
         """
@@ -749,6 +706,7 @@ class ResourceIntentChange(Enum):
     A state change for a single resource's intent. Represents in which way, if any, a resource changed in a new model version
     versus the currently managed one.
     """
+
     # TODO: narrow this to simply NEW / DELETED / UPDATED where UNDEFINED is a second axis?
     NEW = enum.auto()
     """

@@ -69,6 +69,7 @@ class ResourceIntent:
     """
     Deploy intent for a single resource. Includes dependency state to provide to the resource handler.
     """
+
     model_version: int
     details: ResourceDetails
     dependencies: Optional[Mapping[ResourceIdStr, const.ResourceState]]
@@ -81,7 +82,7 @@ class ResourceRecord(typing.TypedDict):
     attribute_hash: str
 
     @classmethod
-    def projection(cls) -> Set[typing.LiteralString]
+    def projection(cls) -> Set[typing.LiteralString]:
         return cls.__required_keys__ | cls.__optional_keys__
 
 
@@ -90,6 +91,7 @@ class ModelVersion:
     """
     A version of the model to be managed by the scheduler.
     """
+
     version: int
     resources: Mapping[ResourceIdStr, ResourceDetails]
     requires: Mapping[ResourceIdStr, Set[ResourceIdStr]]
@@ -109,8 +111,7 @@ class ModelVersion:
             },
             requires={
                 ResourceIdStr(resource["resource_id"]): {
-                    Id.parse_id(req).resource_str()
-                    for req in resource["attributes"].get("requires", [])},
+                    Id.parse_id(req).resource_str() for req in resource["attributes"].get("requires", [])
                 }
                 for resource in resources
             },
@@ -585,7 +586,6 @@ class ResourceScheduler(TaskManager):
 
         :param connection: Connection to use for db operations. Should not be in a transaction context.
         """
-        # TODO: might want to use a single connection
         if not self._running:
             return
         async with self._intent_lock, data.Resource.get_connection(connection) as con:
@@ -595,21 +595,20 @@ class ResourceScheduler(TaskManager):
             # - a new version was released after we started processing this communication or is being released now, in which
             #   case a new notification will be / have been sent and blocked on the intent locked until we're done here.
             # So if we end up with a race, we can be confident that we'll always process the associated notification soon.
-            resources_by_version: (
-                Sequence[tuple[int, Sequence[Mapping[str, object]]]]
-            ) = await data.Resource.get_resources_since_version_raw(
-                self.environment,
-                since=self._state.version,
-                projection=ResourceRecord.projection(),
-                connection=con,
+            resources_by_version: Sequence[tuple[int, Sequence[Mapping[str, object]]]] = (
+                await data.Resource.get_resources_since_version_raw(
+                    self.environment,
+                    since=self._state.version,
+                    projection=ResourceRecord.projection(),
+                    connection=con,
+                )
             )
             new_versions: Sequence[ModelVersion] = [
                 ModelVersion.from_db_records(version, resources) for version, resources in resources_by_version
             ]
 
             await self._new_version(
-                # TODO: simply update method to accept a ModelVersion instead of seperate parameters
-                new_versions
+                new_versions,
                 reason="Deploy was triggered because a new version has been released",
                 connection=con,
             )
@@ -628,7 +627,7 @@ class ResourceScheduler(TaskManager):
 
         version: int
         resource_details: dict[ResourceIdStr, ResourceDetails] = {}
-        resource_requires: dict[ResourceIdStr, Set[ResourceIdStr] = {}
+        resource_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
         # keep track of all new resource details and all changes of intent relative to the currently managed version
         intent_changes: dict[ResourceIdStr, ResourceIntentChange] = {}
         # all undefined resources in the new model versions. Newer version information overrides older ones.
@@ -638,7 +637,7 @@ class ResourceScheduler(TaskManager):
             version = model.version
             # resources that don't exist anymore in this version
             for resource in self._state.resources.keys() - model.resources.keys():
-                with contextlib.suppress(KeyError)
+                with contextlib.suppress(KeyError):
                     del resource_details[resource]
                     del resource_requires[resource]
                 undefined.discard(resource)
@@ -681,9 +680,8 @@ class ResourceScheduler(TaskManager):
                 else:
                     undefined.discard(resource)
                     is_undefined = False
-                if (
-                    resource not in intent_changes
-                    and is_undefined != (self._state.resource_state[resource].status is ComplianceStatus.UNDEFINED)
+                if resource not in intent_changes and is_undefined != (
+                    self._state.resource_state[resource].status is ComplianceStatus.UNDEFINED
                 ):
                     # resource's defined status changed
                     intent_change[resource] = ResourceIntentChange.UPDATED
@@ -702,7 +700,7 @@ class ResourceScheduler(TaskManager):
     async def _new_version(
         self,
         new_versions: Sequence[ModelVersion],
-        *
+        *,
         up_to_date_resources: Optional[Set[ResourceIdStr]] = None,
         reason: str = "Deploy was triggered because a new version has been released",
         connection: Optional[asyncpg.connection.Connection] = None,
@@ -717,8 +715,10 @@ class ResourceScheduler(TaskManager):
             successful deploy for the same intent. Should not include any blocked resources. Mostly intended for the very first
             version when the scheduler is started with a fresh state.
         :param reason: The reason to associate with any deploys caused by this newly released version.
-        :param connection: Connection to use for db operations. Should not be in a transaction context (because this method
-            may have a long pre-processing phase, it opens a transaction itself when appropriate)
+        :param connection: Connection to use for db operations. Should not be in a transaction context for two reasons:
+            1. This method acquires the scheduler lock, and needs to have control about how it is allowed to interleave with
+                transaction commit, if at all.
+            2. This method may have a long pre-processing phase, it opens a transaction itself when appropriate
         """
         if not new_versions:
             return
@@ -840,7 +840,9 @@ class ResourceScheduler(TaskManager):
 
                 # Updating the blocked state should be done under the scheduler lock, because this state is written
                 # by both the deploy and the new version code path.
-                resources_with_updated_blocked_state: Set[ResourceIdStr] = became_undefined | transitive_blocked | transitive_unblocked
+                resources_with_updated_blocked_state: Set[ResourceIdStr] = (
+                    became_undefined | transitive_blocked | transitive_unblocked
+                )
 
                 # TODO: this method is called both here and further down. Still correct? Also correct that this is under lock
                 #   and the other is not? Consider what other under/post-lock operations write to DB and whether that depends on
@@ -866,7 +868,9 @@ class ResourceScheduler(TaskManager):
             )
             # Mark orphaned resources
             await self.state_update_manager.mark_as_orphan(self.environment, deleted, connection=con)
-            await self.state_update_manager.set_last_processed_model_version(self.environment, self._state..version, connection=con)
+            await self.state_update_manager.set_last_processed_model_version(
+                self.environment, self._state.version, connection=con
+            )
 
     def _create_agent(self, agent: str) -> None:
         """Start processing for the given agent"""

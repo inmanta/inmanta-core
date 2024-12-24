@@ -20,6 +20,7 @@ import asyncio
 import copy
 import datetime
 import enum
+import itertools
 import json
 import logging
 import re
@@ -1979,9 +1980,6 @@ class BaseDocument(metaclass=DocumentMeta):
                 )
             case _ as _never:
                 typing.assert_never(_never)
-
-        else:
-            raise InvalidQueryType(f"Query type should be one of {[query for query in QueryType]}")
         return (filter_statement, filter_values)
 
     @classmethod
@@ -5050,7 +5048,7 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         version: int,
-        projection: Optional[Collection[LiteralString]],
+        projection: Optional[Collection[typing.LiteralString]],
         *,
         connection: Optional[Connection] = None,
     ) -> list[dict[str, object]]:
@@ -5092,17 +5090,17 @@ class Resource(BaseDocument):
         """
         resource_records = await cls._fetch_query(
             query,
-            values=[cls._get_value(environment, cls._get_value(since)],
+            values=[cls._get_value(environment), cls._get_value(since)],
             connection=connection,
         )
         result: list[tuple[int, dict[str, object]]] = []
         for version, raw_resources in itertools.groupby(resource_records, key=lambda r: r["version"]):
             parsed_resources: list[dict[str, object]] = []
             for raw_resource in raw_resources:
-                if resource["resource_id"] is None:
+                if raw_resource["resource_id"] is None:
                     # left join produced no resources
                     continue
-                resource: dict[str, object] = dict(resource)
+                resource: dict[str, object] = dict(raw_resource)
                 if "attributes" in resource:
                     resource["attributes"] = json.loads(resource["attributes"])
                 parsed_resources.append(resource)
