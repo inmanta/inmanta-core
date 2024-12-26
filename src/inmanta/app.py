@@ -43,7 +43,6 @@ import socket
 import sys
 import time
 import traceback
-import uuid
 from argparse import ArgumentParser
 from asyncio import ensure_future
 from collections import abc
