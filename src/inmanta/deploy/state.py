@@ -212,17 +212,23 @@ class ModelState:
 
     @classmethod
     async def create_from_db(
-        cls, environment: uuid.UUID, last_processed_model_version: int, *, connection: asyncpg.connection.Connection
+        cls, environment: uuid.UUID, *, connection: asyncpg.connection.Connection
     ) -> Optional["ModelState"]:
         """
         Create a new instance of the ModelState object, by restoring the model state from the database.
-        Returns None iff no such (released) version exists (e.g. it has been cleaned up).
+        Returns None iff no such (released) version exists (e.g. the scheduler hasn't processed any
+        versions in the past or its last seen version has been cleaned up).
 
         :param environment: The environment the model state belongs to.
-        :param last_processed_model_version: The model version that was last processed by the scheduler, i.e. the version
-                                             associated with the state in the persistent_resource_state table.
         """
         from inmanta import data, resources
+
+        scheduler: Optional[data.Scheduler] = await data.Scheduler.get_one(environment=environment, connection=connection)
+        # TODO: this assert is always correct, but does it belong here?
+        assert scheduler is not None
+        last_processed_model_version: Optional[int] = scheduler.last_processed_model_version
+        if last_processed_model_version is None:
+            return None
 
         result = ModelState(version=last_processed_model_version)
         resource_records = await data.Resource.get_resources_for_version_raw_with_persistent_state(
@@ -244,7 +250,7 @@ class ModelState:
             connection=connection,
         )
         if not resource_records:
-            configuration_model: Optional[data.ConfigurationModel] = data.ConfigurationModel.get_one(
+            configuration_model: Optional[data.ConfigurationModel] = await data.ConfigurationModel.get_one(
                 environment=environment, version=last_processed_model_version, released=True, connection=connection
             )
             if configuration_model is None:

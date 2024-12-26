@@ -73,15 +73,12 @@ class ResourceIntent:
     dependencies: Optional[Mapping[ResourceIdStr, const.ResourceState]]
 
 
+# TODO: docstring, also mention it's purely for type documentation purposes, as we can't statically verify it
 class ResourceRecord(typing.TypedDict):
     resource_id: str
     status: str
     attributes: Mapping[str, object]
     attribute_hash: str
-
-    @classmethod
-    def projection(cls) -> Set[typing.LiteralString]:
-        return cls.__required_keys__ | cls.__optional_keys__
 
 
 @dataclass(frozen=True)
@@ -400,13 +397,11 @@ class ResourceScheduler(TaskManager):
                 # TODO: is return appropriate?
                 return
 
-            # Check at which model version the scheduler was before it went down
-            scheduler: Optional[data.Scheduler] = await data.Scheduler.get_one(environment=self.environment, connection=con)
-            assert scheduler is not None
-            last_processed_model_version = scheduler.last_processed_model_version
-            if last_processed_model_version is not None:
+            # Check if we can restore the scheduler state from a previous run
+            restored_state: Optional[ModelState] = await ModelState.create_from_db(self.environment, connection=con)
+            if restored_state is not None:
                 # Restore scheduler state like it was before the scheduler went down
-                self._state = await ModelState.create_from_db(self.environment, last_processed_model_version, connection=con)
+                self._state = restored_state
                 self._work = work.ScheduledWork(
                     requires=self._state.requires.requires_view(),
                     provides=self._state.requires.provides_view(),
@@ -494,7 +489,7 @@ class ResourceScheduler(TaskManager):
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         if not self._running:
             return
-        model: ModelVersion = self._get_single_model_version_from_db(version=version)
+        model: ModelVersion = await self._get_single_model_version_from_db(version=version)
         for resource, details in model.resources.items():
             if resource in model.undefined:
                 continue
@@ -563,11 +558,14 @@ class ResourceScheduler(TaskManager):
             resources_from_db = await data.Resource.get_resources_for_version_raw(
                 environment=self.environment,
                 version=version,
-                projection=ResourceRecord.projection(),
+                projection=ResourceRecord.__required_keys__,
                 connection=con,
             )
 
-            return ModelVersion.from_db_records(version, resources_from_db)
+            return ModelVersion.from_db_records(
+                version,
+                resources_from_db,  # type: ignore
+            )
 
     async def read_version(
         self,
@@ -597,12 +595,16 @@ class ResourceScheduler(TaskManager):
                 await data.Resource.get_resources_since_version_raw(
                     self.environment,
                     since=self._state.version,
-                    projection=ResourceRecord.projection(),
+                    projection=ResourceRecord.__required_keys__,
                     connection=con,
                 )
             )
             new_versions: Sequence[ModelVersion] = [
-                ModelVersion.from_db_records(version, resources) for version, resources in resources_by_version
+                ModelVersion.from_db_records(
+                    version,
+                    resources,  # type: ignore
+                )
+                for version, resources in resources_by_version
             ]
 
             await self._new_version(
@@ -798,7 +800,7 @@ class ResourceScheduler(TaskManager):
                     )
                 # update requires
                 for resource in added_requires.keys() | dropped_requires.keys():
-                    self._state.update_requires(resource, requires[resource])
+                    self._state.update_requires(resource, model.requires[resource])
 
                 # update transitive state
                 transitive_unblocked, transitive_blocked = self._state.update_transitive_state(

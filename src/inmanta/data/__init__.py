@@ -5093,7 +5093,7 @@ class Resource(BaseDocument):
             values=[cls._get_value(environment), cls._get_value(since)],
             connection=connection,
         )
-        result: list[tuple[int, dict[str, object]]] = []
+        result: list[tuple[int, list[dict[str, object]]]] = []
         for version, raw_resources in itertools.groupby(resource_records, key=lambda r: r["version"]):
             parsed_resources: list[dict[str, object]] = []
             for raw_resource in raw_resources:
@@ -5104,7 +5104,7 @@ class Resource(BaseDocument):
                 if "attributes" in resource:
                     resource["attributes"] = json.loads(resource["attributes"])
                 parsed_resources.append(resource)
-            result.append(version, parsed_resources)
+            result.append((version, parsed_resources))
         return result
 
     @classmethod
@@ -5125,7 +5125,7 @@ class Resource(BaseDocument):
         all projections must be disjoint, as they become named fields in the output record
         """
 
-        def collect_projection(projection: Optional[list[str]], prefix: str) -> str:
+        def collect_projection(projection: Optional[Collection[str]], prefix: str) -> str:
             if not projection:
                 return f"{prefix}.*"
             else:
