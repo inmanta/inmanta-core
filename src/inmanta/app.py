@@ -99,7 +99,7 @@ def start_server(options: argparse.Namespace) -> None:
     tracing.configure_logfire("server")
     util.ensure_event_loop()
 
-    ibl = InmantaBootloader(configure_logging=False)
+    ibl = InmantaBootloader()
 
     setup_signal_handlers(ibl.stop)
 
@@ -900,7 +900,7 @@ def default_logging_config(options: argparse.Namespace) -> None:
 
     if options.cmd == "server":
         # Upgrade with extensions
-        ibl = InmantaBootloader(configure_logging=False)
+        ibl = InmantaBootloader()
         ibl.start_loggers_for_extensions(component_config)
 
     assert component_config._loaded_config is not None  # make mypy happy
@@ -922,7 +922,7 @@ def default_logging_config(options: argparse.Namespace) -> None:
 def print_versions_installed_components_and_exit() -> None:
     # coroutine to make sure event loop is running for server slices
     async def print_status() -> None:
-        bootloader = InmantaBootloader(configure_logging=False)
+        bootloader = InmantaBootloader()
         app_context = bootloader.load_slices()
         product_metadata = app_context.get_product_metadata()
         extension_statuses = app_context.get_extension_statuses()
