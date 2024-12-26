@@ -760,14 +760,17 @@ class ResourceScheduler(TaskManager):
                     continue
                 case ResourceIntentChange.NEW | ResourceIntentChange.UPDATED:
                     new_or_updated.add(resource)
+                    resource_state: Optional[ResourceState] = self._state.resource_state.get(resource)
+                    if resource_state is None:
+                        continue
                     if (
                         resource in model.undefined
-                        and self._state.resource_state[resource].status is not ComplianceStatus.UNDEFINED
+                        and resource_state.status is not ComplianceStatus.UNDEFINED
                     ):
                         became_undefined.add(resource)
                     elif (
                         resource not in model.undefined
-                        and self._state.resource_state[resource].status is ComplianceStatus.UNDEFINED
+                        and resource_state.status is ComplianceStatus.UNDEFINED
                     ):
                         became_defined.add(resource)
 

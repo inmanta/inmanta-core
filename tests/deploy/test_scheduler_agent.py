@@ -27,7 +27,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Set
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from typing import Any, Coroutine, Mapping, Optional, Sequence, Tuple
+from typing import Any, Coroutine, Mapping, Never, Optional, Sequence, Tuple
 from uuid import UUID
 
 import asyncpg
@@ -348,7 +348,6 @@ class TestScheduler(ResourceScheduler):
         self,
     ) -> None:
         self._running = True
-        pass
 
     async def should_be_running(self) -> bool:
         return True
@@ -412,6 +411,15 @@ class DummyDatabaseConnection:
     async def transaction(self):
         yield None
 
+    async def execute(self, *args, **kwargs) -> Never:
+        raise NotImplementedError(
+            "Tried to execute a query on the dummy database connection. This likely indicates a bug in the"
+            " test framework. All queries should be mocked out when using the dummy database connection."
+        )
+
+    async def executemany(self, *args, **kwargs) -> Never:
+        await self.execute()
+
 
 @pytest.fixture
 async def agent(environment, config, monkeypatch):
@@ -423,8 +431,8 @@ async def agent(environment, config, monkeypatch):
     out = TestAgent(environment)
     await out.start_working()
 
-    def _initialize_mock() -> None:
-        pass
+    def _initialize_mock(self) -> None:
+        self._running = True
 
     monkeypatch.setattr(ResourceScheduler, "_initialize", _initialize_mock)
 
