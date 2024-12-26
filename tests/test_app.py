@@ -521,18 +521,15 @@ def test_compiler_summary_reporter(monkeypatch, capsys) -> None:
     assert re.match(r"\n=+ EXCEPTION TRACE =+\n(.|\n)*\n=+ EXPORT FAILURE =+\nError: This is an export failure\n", output)
 
 
-def test_validate_logging_config(tmpdir):
+def test_validate_logging_config(tmpdir, monkeypatch):
     """
     Test the validate-logging-config command.
     """
-    log_dir = os.path.join(tmpdir, "log")
-    os.mkdir(log_dir)
-
     _, stderr, returncode = run_without_tty(
         args=[sys.executable, "-m", "inmanta.app", "validate-logging-config"],
     )
     assert returncode == 1
-    assert any("Option --logging-config not provided." in line for line in stderr)
+    assert any("No logging configuration file found." in line for line in stderr)
 
     logging_config_file = os.path.join(tmpdir, "non-existing-file")
     _, stderr, returncode = run_without_tty(
@@ -594,6 +591,7 @@ def test_validate_logging_config(tmpdir):
         args=[sys.executable, "-m", "inmanta.app", "--logging-config", logging_config_file, "validate-logging-config"],
     )
     assert returncode == 0
+    assert any(f"Using logging config file: {logging_config_file}" in line for line in stderr)
     assert any(
         "Emitting log line 'Log line from Inmanta server' at level <LEVEL> using logger 'inmanta.protocol.rest.server'" in line
         for line in stderr
@@ -606,6 +604,8 @@ def test_validate_logging_config(tmpdir):
     # Write a logging config that works.
     #  * Write all logs to server.log
     #  * Write resource-action-log to different file.
+    log_dir = os.path.join(tmpdir, "log")
+    os.mkdir(log_dir)
     assert not os.listdir(log_dir)
     logging_config_file = os.path.join(tmpdir, "logging_config.yml.tmpl")
     with open(logging_config_file, "w") as fh:
@@ -655,6 +655,7 @@ def test_validate_logging_config(tmpdir):
             str(env_id),
         ],
     )
+    assert any(f"Using logging config file: {logging_config_file}" in line for line in stderr)
     assert any(
         "Emitting log line 'Log line from callback' at level <LEVEL> using logger 'inmanta_lsm.callback'" in line
         for line in stderr
@@ -681,3 +682,47 @@ def test_validate_logging_config(tmpdir):
     assert f"inmanta.resource_action.{env_id} INFO     Log line for resource action log at level INFO" not in content_log_file
     assert "WARNING  inmanta_lsm.callback Log line from callback at level WARNING" not in content_log_file
     assert "INFO     inmanta_lsm.callback Log line from callback at level INFO" not in content_log_file
+
+    # Test whether component config file is picked up correctly
+    monkeypatch.chdir(tmpdir)
+    logging_config_file = os.path.join(tmpdir, f"{logging_config_file}.yml")
+    dot_inmanta_file = os.path.join(tmpdir, ".inmanta")
+    for component_name in ["server", "scheduler", "compiler"]:
+        with open(logging_config_file, "w") as fh:
+            fh.write(
+                f"""
+                    formatters:
+                      server_log_formatter:
+                        format: '{component_name} -- %(message)s'
+                    handlers:
+                      server_handler:
+                        class: logging.StreamHandler
+                        level: INFO
+                        formatter: server_log_formatter
+                        stream: ext://sys.stdout
+                    root:
+                      handlers:
+                      - server_handler
+                      level: DEBUG
+                    version: 1
+                    disable_existing_loggers: false
+                """
+            )
+        with open(dot_inmanta_file, "w") as fh:
+            fh.write(
+                f"""
+                    [logging]
+                    {component_name} = {logging_config_file}
+                """
+            )
+        stdout, stderr, returncode = run_without_tty(
+            args=[sys.executable, "-m", "inmanta.app", "validate-logging-config", component_name],
+        )
+        assert any(f"Using logging config file: {logging_config_file}" in line for line in stderr)
+        assert any(
+            "Emitting log line 'Log line from Inmanta server' at level <LEVEL> using logger 'inmanta.protocol.rest.server'"
+            in line
+            for line in stderr
+        )
+        assert any(f"{component_name} -- Log line from Inmanta server at level INFO" in line for line in stdout)
+        assert returncode == 0

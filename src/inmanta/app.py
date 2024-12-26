@@ -634,6 +634,13 @@ def validate_logging_config_parser_config(
         default="0c111d30-feaf-4f5b-b2d6-83d589480a4a",
     )
 
+    sub_parsers = parser.add_subparsers(title="subcommand", dest="cmd")
+    for component_name in ["server", "scheduler", "compiler"]:
+        sub_parser = sub_parsers.add_parser(
+            component_name, help=f"Validate the logging config for the {component_name}", parents=parent_parsers
+        )
+        sub_parser.set_defaults(component=component_name)
+
 
 @command(
     "validate-logging-config",
@@ -643,11 +650,10 @@ def validate_logging_config_parser_config(
     parser_config=validate_logging_config_parser_config,
 )
 def validate_logging_config(options: argparse.Namespace) -> None:
-    logging_config = options.logging_config
-    if logging_config is None:
-        raise Exception("Option --logging-config not provided.")
-    if not os.path.exists(logging_config):
-        raise Exception(f"Logging config file {logging_config} doesn't exist.")
+    logging_config = InmantaLoggerConfig.get_current_instance()
+    if logging_config.loaded_config_file is None:
+        raise Exception("No logging configuration file found.")
+    print(f"Using logging config file: {logging_config.loaded_config_file}", file=sys.stderr)
     env_id = options.environment
     logger_and_message = [
         (logging.getLogger("inmanta.protocol.rest.server"), "Log line from Inmanta server"),

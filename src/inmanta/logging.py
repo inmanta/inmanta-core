@@ -551,6 +551,9 @@ class InmantaLoggerConfig:
         self._options_applied: Options | None = None
         self._component: str | None = None
         self._context: Mapping[str, str] | None = None
+        # If this logger config was loaded from a config file, this file contains the path to that file.
+        # Otherwise its value remains None.
+        self.loaded_config_file: str | None = None
 
     @classmethod
     def get_current_instance(cls) -> "InmantaLoggerConfig":
@@ -700,6 +703,7 @@ class InmantaLoggerConfig:
             root_handlers=root.get("handlers", []),
             root_log_level=root.get("level", None),
         )
+        self.loaded_config_file = config_file
 
     def _apply_logging_config_from_options(
         self, options: Options, component: str | None = None, context: Mapping[str, str] = {}
