@@ -5085,12 +5085,13 @@ class Resource(BaseDocument):
             FROM {ConfigurationModel.table_name()} as m
             LEFT JOIN {cls.table_name()} as r
                 ON m.environment = r.environment AND m.version = r.model
-            WHERE m.environment = $1 AND m.version > $2 AND m.release=true
+            WHERE m.environment = $1 AND m.version > $2 AND m.released=true
             ORDER BY m.version ASC
         """
         resource_records = await cls._fetch_query(
             query,
-            values=[cls._get_value(environment), cls._get_value(since)],
+            cls._get_value(environment),
+            cls._get_value(since),
             connection=connection,
         )
         result: list[tuple[int, list[dict[str, object]]]] = []

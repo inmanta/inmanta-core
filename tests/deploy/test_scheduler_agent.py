@@ -107,7 +107,8 @@ class DummyExecutor(executor.Executor):
         # The actual reasons are of the form `action because of reason`
         assert ("because" in reason) or ("Test" in reason)
         self.execute_count += 1
-        # TODO: remove first branch depending on Slack discussion
+        # TODO: remove first branch, but document clearly that this executor emulates a simplified handler that doesn't
+        #   care about its dependencies' state.
         if False and any(status != const.HandlerResourceState.deployed for status in requires.values()):
             result = const.HandlerResourceState.skipped_for_dependency
         else:
