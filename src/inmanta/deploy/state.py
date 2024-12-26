@@ -361,8 +361,8 @@ class ModelState:
         requires a full view, including fully updated requires. When you call this method, you must also call
         update_transitive_state() after all direct state and requires have been updated.
 
-        :param force_new: Whether to consider this a new resource, even if we happen to know one with the same id (in which case the
-            old one is dropped from the model before registering the new one).
+        :param force_new: Whether to consider this a new resource, even if we happen to know one with the same id
+            (in which case the old one is dropped from the model before registering the new one).
         :param undefined: Whether this resource's intent is undefined, i.e. there's an unknown attribute. Mutually exclusive
             with known_compliant.
         :param known_compliant: Whether this resource is known to be in a good state (compliant and last deploy was successful).

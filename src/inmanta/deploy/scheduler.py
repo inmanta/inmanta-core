@@ -19,15 +19,13 @@
 import abc
 import asyncio
 import contextlib
-import json
 import logging
 import typing
 import uuid
 from abc import abstractmethod
-from collections.abc import Collection, Mapping, Set
+from collections.abc import Collection, Mapping, Sequence, Set
 from dataclasses import dataclass
 from typing import Optional, Self, Tuple
-from uuid import UUID
 
 import asyncpg
 
@@ -641,7 +639,7 @@ class ResourceScheduler(TaskManager):
                     del resource_details[resource]
                     del resource_requires[resource]
                 undefined.discard(resource)
-                intent_change[resource] = ResourceIntentChange.DELETED
+                intent_changes[resource] = ResourceIntentChange.DELETED
 
             for resource, details in model.resources.keys():
                 # this loop is race-free, potentially slow, and completely synchronous
@@ -655,22 +653,22 @@ class ResourceScheduler(TaskManager):
                 resource_requires[resource] = model.requires.get(resource, set())
 
                 # determine change of intent
-                ## no change of intent, by definition
+                # no change of intent, by definition
                 if resource in up_to_date_resources:
                     continue
-                ## new resources
+                # new resources
                 if (
                     # exists in this version but not in managed version
                     resource not in self._state.resources.keys()
                     # deleted in a previously processed version and reappeared now
                     # => consider as a new resource rather than an update
-                    or intent_change[resource] in (ResourceIntentChange.DELETED, ResourceIntentChange.NEW)
+                    or intent_changes[resource] in (ResourceIntentChange.DELETED, ResourceIntentChange.NEW)
                 ):
-                    intent_change[resource] = ResourceIntentChange.NEW
-                ## resources we already manage
+                    intent_changes[resource] = ResourceIntentChange.NEW
+                # resources we already manage
                 elif details.attribute_hash != self._state.resources[resource].attribute_hash:
-                    intent_change[resource] = ResourceIntentChange.UPDATED
-                ## no change of intent for this resource, unless defined status changed
+                    intent_changes[resource] = ResourceIntentChange.UPDATED
+                # no change of intent for this resource, unless defined status changed
 
                 # determine new defined status
                 is_undefined: bool
@@ -684,7 +682,7 @@ class ResourceScheduler(TaskManager):
                     self._state.resource_state[resource].status is ComplianceStatus.UNDEFINED
                 ):
                     # resource's defined status changed
-                    intent_change[resource] = ResourceIntentChange.UPDATED
+                    intent_changes[resource] = ResourceIntentChange.UPDATED
                     # TODO: should we warn on attribute hash? Perhaps not, using (attribute_hash, undefined) as metric instead?
 
         return (
@@ -729,10 +727,9 @@ class ResourceScheduler(TaskManager):
         # TODO: review entire method.
 
         # pre-process new model versions before acquiring the scheduler lock.
-        consolidated = self._get_intent_changes(new_versions, up_to_date_resources=up_to_date_resources)
         model: ModelVersion
         intent_changes: Mapping[ResourceIdStr, ResourceIntentChange]
-        model, intent_changes = consolidated
+        model, intent_changes = self._get_intent_changes(new_versions, up_to_date_resources=up_to_date_resources)
 
         # Track potential changes in requires per resource
         added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}  # includes new resources if they have at least one req
@@ -785,8 +782,8 @@ class ResourceScheduler(TaskManager):
         #    (could be achieved with a simple sleep(0) if desired)
         # 3. clarity: it clearly signifies that this is the atomic and performance-sensitive part
         async with data.Resource.get_connection(connection=connection) as con, con.transaction():
-            async with scheduler_lock:
-                self._state.version = version
+            async with self._scheduler_lock:
+                self._state.version = model.version
                 # update resource details
                 for resource in up_to_date_resources:
                     # Registers resource and removes from the dirty set
@@ -858,7 +855,8 @@ class ResourceScheduler(TaskManager):
                     connection=con,
                 )
 
-            # TODO: are undefined resources updated correctly? They are now passed along with all others to update_resource_intent()
+            # TODO: are undefined resources updated correctly? They are now passed along with all others to
+            #           update_resource_intent()
             # Update intent for resources with new desired state
             await self.state_update_manager.update_resource_intent(
                 self.environment,
@@ -1182,8 +1180,6 @@ class ResourceScheduler(TaskManager):
         state and that of the DB.
         """
 
-        resources_in_db: Mapping[ResourceIdStr, ResourceDetails]
-
         async def _build_discrepancy_map(
             resource_states_in_db: Mapping[ResourceIdStr, const.ResourceState],
         ) -> dict[ResourceIdStr, list[Discrepancy]]:
@@ -1246,7 +1242,7 @@ class ResourceScheduler(TaskManager):
             iteration_counter: int = 0
 
             # For resources in both the DB and the scheduler, check for discrepancies in state
-            for rid in resources_in_db.keys() & self._state.resource_state.keys():
+            for rid in resource_states_in_db.keys() & self._state.resource_state.keys():
                 resource_discrepancies: list[Discrepancy] = []
 
                 db_resource_status = resource_states_in_db[rid]
