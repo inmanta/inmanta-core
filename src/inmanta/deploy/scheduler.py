@@ -641,7 +641,7 @@ class ResourceScheduler(TaskManager):
                 undefined.discard(resource)
                 intent_changes[resource] = ResourceIntentChange.DELETED
 
-            for resource, details in model.resources.keys():
+            for resource, details in model.resources.items():
                 # this loop is race-free, potentially slow, and completely synchronous
                 # => regularly pass control to the event loop to not block scheduler operation during update prep
                 await asyncio.sleep(0)
@@ -695,6 +695,7 @@ class ResourceScheduler(TaskManager):
             intent_changes,
         )
 
+    # TODO: tests for multiple versions, including special cases (e.g. delete-then-reappear)
     async def _new_version(
         self,
         new_versions: Sequence[ModelVersion],
@@ -729,7 +730,7 @@ class ResourceScheduler(TaskManager):
         # pre-process new model versions before acquiring the scheduler lock.
         model: ModelVersion
         intent_changes: Mapping[ResourceIdStr, ResourceIntentChange]
-        model, intent_changes = self._get_intent_changes(new_versions, up_to_date_resources=up_to_date_resources)
+        model, intent_changes = await self._get_intent_changes(new_versions, up_to_date_resources=up_to_date_resources)
 
         # Track potential changes in requires per resource
         added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}  # includes new resources if they have at least one req
