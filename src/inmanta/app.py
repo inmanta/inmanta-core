@@ -1012,25 +1012,14 @@ def print_versions_installed_components_and_exit() -> None:
     sys.exit(0)
 
 
-def _get_log_context_variables(options: argparse.Namespace) -> dict[str, uuid.UUID]:
-    """
-    Returns a dictionary of context variables that should be used to populate logging config templates.
-    """
-    log_context = {}
-    env = None
-    if hasattr(options, "environment"):
-        env = options.environment
-    if not env:
-        env = agent_config.environment.get()
-    if env:
-        log_context[LOG_CONTEXT_VAR_ENVIRONMENT] = env
-    return log_context
-
-
 def app() -> None:
     """
     Run the compiler
     """
+    # Bootstrap log config
+    log_config = InmantaLoggerConfig.get_instance()
+    logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
+
     # do an initial load of known config files to build the libdir path
     Config.load_config()
     parser = cmd_parser()
@@ -1043,15 +1032,18 @@ def app() -> None:
     # Load the configuration
     Config.load_config(options.config_file, options.config_dir)
 
-    # Bootstrap log config
-    log_config = InmantaLoggerConfig.get_instance()
-    logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
-
-    log_context: dict[str, uuid.UUID] = _get_log_context_variables(options)
+    # Collect potential log context
+    log_context = {}
+    env = None
+    if hasattr(options, "environment"):
+        env = options.environment
+    if not env:
+        env = agent_config.environment.get()
+    if env:
+        log_context[LOG_CONTEXT_VAR_ENVIRONMENT] = env
 
     # Log config
     component = options.component if hasattr(options, "component") else None
-
     log_config.apply_options(options, component, log_context)
     logging.captureWarnings(True)
 
