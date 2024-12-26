@@ -675,6 +675,8 @@ class InmantaLoggerConfig:
         """
         Apply the given logging config file.
         """
+        if not os.path.exists(config_file):
+            raise Exception(f"Logging config file {config_file} doesn't exist.")
         handlers_before = list(logging.root.handlers)
         dict_config = load_config_file_to_dict(config_file, context)
         try:

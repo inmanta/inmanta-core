@@ -528,9 +528,15 @@ def test_validate_logging_config(tmpdir):
     log_dir = os.path.join(tmpdir, "log")
     os.mkdir(log_dir)
 
+    _, stderr, returncode = run_without_tty(
+        args=[sys.executable, "-m", "inmanta.app", "validate-logging-config"],
+    )
+    assert returncode == 1
+    assert any("Option --logging-config not provided." in line for line in stderr)
+
     logging_config_file = os.path.join(tmpdir, "non-existing-file")
     _, stderr, returncode = run_without_tty(
-        args=[sys.executable, "-m", "inmanta.app", "validate-logging-config", logging_config_file],
+        args=[sys.executable, "-m", "inmanta.app", "--logging-config", logging_config_file, "validate-logging-config"],
     )
     assert returncode == 1
     assert any(f"Logging config file {logging_config_file} doesn't exist" in line for line in stderr)
@@ -558,7 +564,7 @@ def test_validate_logging_config(tmpdir):
         """
         )
     _, stderr, returncode = run_without_tty(
-        args=[sys.executable, "-m", "inmanta.app", "validate-logging-config", logging_config_file],
+        args=[sys.executable, "-m", "inmanta.app", "--logging-config", logging_config_file, "validate-logging-config"],
     )
     assert returncode == 1
     assert any("could not find expected ':'" in line for line in stderr)
@@ -585,7 +591,7 @@ def test_validate_logging_config(tmpdir):
         """
         )
     stdout, stderr, returncode = run_without_tty(
-        args=[sys.executable, "-m", "inmanta.app", "validate-logging-config", logging_config_file],
+        args=[sys.executable, "-m", "inmanta.app", "--logging-config", logging_config_file, "validate-logging-config"],
     )
     assert returncode == 0
     assert any(
@@ -638,7 +644,16 @@ def test_validate_logging_config(tmpdir):
         )
     env_id = uuid.uuid4()
     stdout, stderr, returncode = run_without_tty(
-        args=[sys.executable, "-m", "inmanta.app", "validate-logging-config", "-e", str(env_id), logging_config_file],
+        args=[
+            sys.executable,
+            "-m",
+            "inmanta.app",
+            "--logging-config",
+            logging_config_file,
+            "validate-logging-config",
+            "-e",
+            str(env_id),
+        ],
     )
     assert any(
         "Emitting log line 'Log line from callback' at level <LEVEL> using logger 'inmanta_lsm.callback'" in line

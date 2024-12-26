@@ -64,7 +64,7 @@ from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import ALL_LOG_CONTEXT_VARS, EXIT_START_FAILED, LOG_CONTEXT_VAR_ENVIRONMENT
 from inmanta.export import cfg_env
-from inmanta.logging import InmantaLoggerConfig, Options, _is_on_tty
+from inmanta.logging import InmantaLoggerConfig, _is_on_tty
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.databaseservice import initialize_database_connection_pool
@@ -628,39 +628,31 @@ def validate_logging_config_parser_config(
     Config parser for the validate-logging-config command.
     """
     parser.add_argument(
-        "filename",
-        help="Path to the logging configuration file.",
-    )
-    parser.add_argument(
         "-e",
         dest="environment",
         help="The environment id to be used as context variable in logging config templates.",
+        default="0c111d30-feaf-4f5b-b2d6-83d589480a4a",
     )
 
 
 @command(
     "validate-logging-config",
-    help_msg="This command loads the logging config and produces log lines. It provides a tool to verify that the"
-    " logging config doesn't contain any syntax errors and that it behaves as expected.",
+    help_msg="This command loads the logging config from the --logging-config option and produces log lines."
+    " It provides a tool to verify that the logging config doesn't contain any syntax errors"
+    " and that the config results in the desired behavior.",
     parser_config=validate_logging_config_parser_config,
 )
 def validate_logging_config(options: argparse.Namespace) -> None:
-    if not os.path.exists(options.filename):
-        raise Exception(f"Logging config file {options.filename} doesn't exist.")
-    log_config = InmantaLoggerConfig.get_instance()
-    logger_context = _get_log_context_variables(options)
-    log_config.apply_options(
-        options=Options(
-            verbose=0,
-            logging_config=options.filename,
-        ),
-        context=_get_log_context_variables(options),
-    )
-    env_id = logger_context.get(LOG_CONTEXT_VAR_ENVIRONMENT, "<env_id>")
+    logging_config = options.logging_config
+    if logging_config is None:
+        raise Exception("Option --logging-config not provided.")
+    if not os.path.exists(logging_config):
+        raise Exception(f"Logging config file {logging_config} doesn't exist.")
+    env_id = options.environment
     logger_and_message = [
         (logging.getLogger("inmanta.protocol.rest.server"), "Log line from Inmanta server"),
         (logging.getLogger("inmanta.server.services.compilerservice"), "Log line from compiler service"),
-        (logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER).getChild(str(env_id)), "Log line for resource action log"),
+        (logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER).getChild(env_id), "Log line for resource action log"),
         (logging.getLogger("inmanta_lsm.callback"), "Log line from callback"),
         (logging.getLogger("inmanta.scheduler"), "Log line from the scheduler"),
         (logging.getLogger(const.LOGGER_NAME_EXECUTOR), "Log line from the executor"),
@@ -1044,15 +1036,6 @@ def app() -> None:
 
     # Load the configuration
     Config.load_config(options.config_file, options.config_dir)
-
-    if hasattr(options, "func") and options.func == validate_logging_config:
-        # By-pass all other logging setup code when validating logging config.
-        try:
-            options.func(options)
-        except Exception as e:
-            print(str(e), file=sys.stderr)
-            sys.exit(1)
-        return
 
     # Bootstrap log config
     log_config = InmantaLoggerConfig.get_instance()
