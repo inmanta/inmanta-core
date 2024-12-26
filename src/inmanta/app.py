@@ -629,7 +629,8 @@ def validate_logging_config_parser_config(
     parser.add_argument(
         "-e",
         dest="environment",
-        help="The environment id to be used as context variable in logging config templates.",
+        help="The environment id to be used as context variable in logging config templates. If not specified,"
+        " 0c111d30-feaf-4f5b-b2d6-83d589480a4a will be used.",
         default="0c111d30-feaf-4f5b-b2d6-83d589480a4a",
     )
 
@@ -643,9 +644,10 @@ def validate_logging_config_parser_config(
 
 @command(
     "validate-logging-config",
-    help_msg="This command loads the logging config from the --logging-config option and produces log lines."
-    " It provides a tool to verify that the logging config doesn't contain any syntax errors"
-    " and that the config results in the desired behavior.",
+    help_msg="This command loads a logging config file, taking into account the precedence rules for logging config files,"
+    " and produces log lines. It serves as a tool to validate whether a logging config file is syntactically correct"
+    " and behaves as expected. Optionally, a sub-command can be specified to indicate the component for which the"
+    " logging config file should be loaded.",
     parser_config=validate_logging_config_parser_config,
 )
 def validate_logging_config(options: argparse.Namespace) -> None:
