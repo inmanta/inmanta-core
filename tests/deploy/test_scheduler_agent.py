@@ -1200,9 +1200,9 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     #   => question is: should we? Either update that behavior or update this test case. Either way update the message
     #       to say "new dependency was scheduled" instead of "new dependency was added to this resource"
     #   => also verify by hand that this scenario fails if event propagation does not force_deploy=True
-    #assert agent.scheduler._work.agent_queues.queued()[tasks.Deploy(resource=rid2)].reason == (
+    # assert agent.scheduler._work.agent_queues.queued()[tasks.Deploy(resource=rid2)].reason == (
     #    f"Deploying because an event was received from {rid1}"
-    #)
+    # )
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
     # verify that it suffices for r2 to be already scheduled (vs deploying above), i.e. it does not get scheduled twice

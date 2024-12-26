@@ -763,15 +763,9 @@ class ResourceScheduler(TaskManager):
                     resource_state: Optional[ResourceState] = self._state.resource_state.get(resource)
                     if resource_state is None:
                         continue
-                    if (
-                        resource in model.undefined
-                        and resource_state.status is not ComplianceStatus.UNDEFINED
-                    ):
+                    if resource in model.undefined and resource_state.status is not ComplianceStatus.UNDEFINED:
                         became_undefined.add(resource)
-                    elif (
-                        resource not in model.undefined
-                        and resource_state.status is ComplianceStatus.UNDEFINED
-                    ):
+                    elif resource not in model.undefined and resource_state.status is ComplianceStatus.UNDEFINED:
                         became_defined.add(resource)
 
         # A resource should not be present in more than one of these resource sets
