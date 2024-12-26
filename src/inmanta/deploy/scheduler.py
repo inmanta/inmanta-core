@@ -664,7 +664,7 @@ class ResourceScheduler(TaskManager):
                     resource not in self._state.resources.keys()
                     # deleted in a previously processed version and reappeared now
                     # => consider as a new resource rather than an update
-                    or intent_changes[resource] in (ResourceIntentChange.DELETED, ResourceIntentChange.NEW)
+                    or intent_changes.get(resource) in (ResourceIntentChange.DELETED, ResourceIntentChange.NEW)
                 ):
                     intent_changes[resource] = ResourceIntentChange.NEW
                 # resources we already manage
