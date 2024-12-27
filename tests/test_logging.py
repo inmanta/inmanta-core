@@ -411,6 +411,7 @@ def test_server_documentation_conformance(inmanta_config, monkeypatch):
 
     assert from_config._to_dict_config() == from_file_dict
 
+
 def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdir) -> None:
     """
     Verify that the environment variables, that contain the content of the logging configuration,

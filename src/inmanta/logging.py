@@ -34,7 +34,7 @@ from colorlog.formatter import LogColors
 from yaml import Dumper, Node
 
 from inmanta import config, const
-from inmanta.config import component_log_configs, logging_config, Option
+from inmanta.config import Option, component_log_configs, logging_config
 from inmanta.const import LOG_CONTEXT_VAR_ENVIRONMENT, NAME_RESOURCE_ACTION_LOGGER
 from inmanta.server import config as server_config
 from inmanta.stable_api import stable_api
@@ -100,8 +100,10 @@ log_levels = {
 
 logging.addLevelName(3, "TRACE")
 
+
 class NoLoggingConfigFound(Exception):
     pass
+
 
 class LogConfigDumper(Dumper):
     """
@@ -640,9 +642,8 @@ class InmantaLoggerConfig:
                     source=f"from environment variable {content_env_var}",
                 )
         # Check if the configuration option for the given component is set that references a logging config file.
-        config_option: Option[str|None] = (
-            component_log_configs[component_name]
-            if component_name is not None else logging_config
+        config_option: Option[str | None] = (
+            component_log_configs[component_name] if component_name is not None else logging_config
         )
         file_name: str | None = config_option.get(ignore_default=component_name is not None)
         if file_name is not None:
@@ -1070,6 +1071,7 @@ def load_config_file_to_dict(file_name: str, context: Mapping[str, str]) -> dict
 
     return yaml.safe_load(content)
 
+
 def convert_logging_config_str_to_dict(
     config_as_str: str, is_template: bool, context: Mapping[str, str], source: str
 ) -> dict[str, object]:
@@ -1077,9 +1079,8 @@ def convert_logging_config_str_to_dict(
         config_as_str = render_logging_config_to_dict(template=config_as_str, context=context, source=source)
     return yaml.safe_load(config_as_str)
 
-def render_logging_config_to_dict(
-    template: str, context: Mapping[str, str], source: str
-) -> str:
+
+def render_logging_config_to_dict(template: str, context: Mapping[str, str], source: str) -> str:
     """
     This method fills in the template variables present in the given logging configuration template
 
