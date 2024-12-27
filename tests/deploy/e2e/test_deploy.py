@@ -1456,17 +1456,24 @@ async def test_redeploy_after_dependency_recovered(resource_container, server, c
     # Trigger deploy without incrementing version
     await scheduler.deploy_resource(rid1, reason="Deploy rid1", priority=TaskPriority.USER_DEPLOY)
 
-    await clienthelper.wait_for_deployed()
-    assert scheduler._state.resource_state[rid1] == ResourceState(
-        status=ComplianceStatus.COMPLIANT,
-        deployment_result=DeploymentResult.DEPLOYED,
-        blocked=BlockedStatus.NO,
-    )
-    assert scheduler._state.resource_state[rid2] == ResourceState(
-        status=ComplianceStatus.COMPLIANT,
-        deployment_result=DeploymentResult.DEPLOYED,
-        blocked=BlockedStatus.NO,
-    )
+    async def wait_for_resource_state() -> bool:
+        if scheduler._state.resource_state[rid1] != ResourceState(
+            status=ComplianceStatus.COMPLIANT,
+            deployment_result=DeploymentResult.DEPLOYED,
+            blocked=BlockedStatus.NO,
+        ):
+            return False
+        if scheduler._state.resource_state[rid2] != ResourceState(
+            status=ComplianceStatus.COMPLIANT,
+            deployment_result=DeploymentResult.DEPLOYED,
+            blocked=BlockedStatus.NO,
+        ):
+            return False
+        return True
+
+    # We can't rely on clienthelper.wait_for_deployed() here to wait until the re-deployment has finished,
+    # because that method assumes we are deploying a version that hasn't been deployed yet.
+    await retry_limited(wait_for_resource_state, timeout=10)
 
     # Assert that no new version was created
     result = await client.list_versions(tid=environment)
