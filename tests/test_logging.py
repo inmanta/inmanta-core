@@ -358,7 +358,7 @@ def test_log_file_or_template(tmp_path):
 
     with pytest.raises(
         Exception,
-        match="The configuration template at .* refers to context variable 'test',"
+        match="The logging configuration template at .* refers to context variable 'test',"
         " but this variable is not available. The context is limited to xvar, yvar",
     ):
         load_config_file_to_dict(

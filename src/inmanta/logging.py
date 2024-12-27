@@ -24,6 +24,7 @@ import re
 import sys
 from argparse import Namespace
 from collections.abc import Mapping, Sequence, Set
+from fileinput import filename
 from io import TextIOWrapper
 from logging import handlers
 from typing import Optional, TextIO
@@ -34,7 +35,7 @@ from colorlog.formatter import LogColors
 from yaml import Dumper, Node
 
 from inmanta import config, const
-from inmanta.config import component_log_configs
+from inmanta.config import component_log_configs, logging_config, Option
 from inmanta.const import LOG_CONTEXT_VAR_ENVIRONMENT, NAME_RESOURCE_ACTION_LOGGER
 from inmanta.server import config as server_config
 from inmanta.stable_api import stable_api
@@ -100,6 +101,8 @@ log_levels = {
 
 logging.addLevelName(3, "TRACE")
 
+class NoLoggingConfigFound(Exception):
+    pass
 
 class LogConfigDumper(Dumper):
     """
@@ -535,8 +538,9 @@ class InmantaLoggerConfig:
         Set up the logging handler for Inmanta
 
         :param stream: The TextIO stream where the logs will be sent to.
+        :param no_install: True iff we want to install (apply) the logging config to the Python logging framework.
+                           This parameter is set to True by the print-default-logging-config tool.
         """
-        # Do we want to actually install the config?
         self.no_install = no_install
 
         log_config: FullLoggingConfig = LoggingConfigBuilder().get_bootstrap_logging_config(stream)
@@ -551,6 +555,11 @@ class InmantaLoggerConfig:
         self._options_applied: Options | None = None
         self._component: str | None = None
         self._context: Mapping[str, str] | None = None
+
+        # If None, no logging config was loaded yet (i.e. the apply_options() method wasn't called yet).
+        # If True, a logging config was defined by the user and it was loaded.
+        # If False, no logging config was defined by the user. The logging config was build from the provided CLI options.
+        self._config_loaded_from_logging_config: bool | None = None
 
     @classmethod
     def get_current_instance(cls) -> "InmantaLoggerConfig":
@@ -593,27 +602,83 @@ class InmantaLoggerConfig:
         logging.shutdown()
         cls._instance = None
 
-    def _get_path_to_logging_config_file(self, options: Options, component: str | None = None) -> Optional[str]:
+    def _get_content_env_var_for_component(self, component_name: str | None) -> str | None:
         """
-        Returns the path to the logging config file that was configured by the user
-        or None if no logging config file was set.
+        Returns the name of the environment variable that contains the content of the logging configuration
+        for the given component. This can be either the regular (`*_CONTENT`) or the template-based (`*_TMPL`)
+        environment variable. None is returned if none of the environment variables was populated.
 
-        The configuration options are considered in the following order:
-           1. The --logging-config CLI option.
-           2. The INMANTA_CONFIG_LOGGING_CONFIG environment variable.
-           3. The component specific log config option
-           4. The logging_config option in the config files.
-
-        :param options: The configuration options passed on the CLI.
+        :raises Exception: If more than one such environment variables is found.
         """
+        option = component_log_configs[component_name] if component_name is not None else logging_config
+        base_env_var_name = option.get_environment_variable()
+        content_env_var_names = {f"{base_env_var_name}_CONTENT", f"{base_env_var_name}_TMPL"}
+        env_vars_set_by_user = content_env_var_names & os.environ.keys()
+        if not env_vars_set_by_user:
+            return None
+        if len(env_vars_set_by_user) > 0:
+            raise Exception()
+        return env_vars_set_by_user.pop()
+
+    def _get_logging_config_for_component(
+        self, component_name: str | None, context: Mapping[str, str]
+    ) -> dict[str, object] | None:
+        # Check if one of the environment variables, that contain the content of the logging config, are set.
+        content_env_var: str | None = self._get_content_env_var_for_component(component_name=component_name)
+        if content_env_var is not None:
+            logging_config_as_str: str | None = os.environ.get(content_env_var)
+            if logging_config_as_str is not None:
+                return convert_logging_config_str_to_dict(
+                    config_as_str=logging_config_as_str,
+                    is_template=content_env_var.endswith("_TMPL"),
+                    context=context,
+                    source=f"from environment variable {content_env_var}",
+                )
+        # Check if the configuration option for the given component is set that references a logging config file.
+        config_option: Option[str|None] = (
+            component_log_configs[component_name]
+            if component_name is not None else logging_config
+        )
+        file_name: str | None = config_option.get()
+        if file_name is not None:
+            return load_config_file_to_dict(file_name=file_name, context=context)
+        # No logging configuration was found for the given component.
+        return None
+
+    def _get_logging_config(
+        self, options: Options, component: str | None = None, context: Mapping[str, str] | None = None
+    ) -> dict[str, object]:
+        """
+        This method returns the logging config in dictionary form as defined by the user or raises
+        a NoLoggingConfigFound exception if no logging config was defined. The following precedence rules
+        are taken into account (lower number higher precedence):
+
+          1. The --logging-config CLI option.
+          2. The INMANTA_LOGGING_<COMPONENT>_CONTENT environment variable.
+          3. The INMANTA_LOGGING_<COMPONENT> environment variable.
+          4. The component specific log config option.
+          5. The INMANTA_CONFIG_LOGGING_CONFIG_CONTENT environment variable.
+          6. The INMANTA_CONFIG_LOGGING_CONFIG environment variable.
+          7. The config.logging_config option in the config files.
+        """
+        if context is None:
+            context = {}
+        # Check --logging-config CLI option.
         if options.logging_config:
-            return options.logging_config
+            return load_config_file_to_dict(file_name=options.logging_config, context=context)
+        # Check component-specific logging config options.
         if component is not None:
-            return component_log_configs[component].get()
-        return config.logging_config.get()
+            logging_config_as_dct = self._get_logging_config_for_component(component_name=component, context=context)
+            if logging_config_as_dct is not None:
+                return logging_config_as_dct
+        # Check component-independent logging config options.
+        logging_config_as_dct = self._get_logging_config_for_component(component_name=None, context=context)
+        if logging_config_as_dct is not None:
+            return logging_config_as_dct
+        raise NoLoggingConfigFound()
 
     @stable_api
-    def apply_options(self, options: Options, component: str | None = None, context: Mapping[str, str] = {}) -> None:
+    def apply_options(self, options: Options, component: str | None = None, context: Mapping[str, str] | None = None) -> None:
         """
         Apply the logging options to the current handler. A handler should have been created before
 
@@ -625,15 +690,20 @@ class InmantaLoggerConfig:
         """
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
+        if context is None:
+            context = {}
 
-        logging_config_file: Optional[str] = self._get_path_to_logging_config_file(options, component)
-        if logging_config_file:
-            self._apply_logging_config_from_file(logging_config_file, context)
+        try:
+            logging_config_dct: dict[str, object] = self._get_logging_config(options, component, context)
+        except NoLoggingConfigFound:
+            self._apply_logging_config_from_options(options, component, context)
+            self._config_loaded_from_logging_config = False
+        else:
+            self._apply_logging_config_from_dict(logging_config_dct)
+            self._config_loaded_from_logging_config = True
             if options.verbose != 0:
                 # Force cli as well
                 self.force_cli(convert_inmanta_log_level(str(options.verbose), cli=True))
-        else:
-            self._apply_logging_config_from_options(options, component, context)
 
         self._options_applied = options
         self._component = component
@@ -651,9 +721,9 @@ class InmantaLoggerConfig:
         if not extenders:
             # No extensions, easy
             return self._loaded_config
-        logging_config_file: Optional[str] = self._get_path_to_logging_config_file(self._options_applied, self._component)
-        if logging_config_file:
-            # Config file, no extenders needed
+
+        if self._config_loaded_from_logging_config:
+            # A logging config was defined, no extenders needed
             return self._loaded_config
 
         config = self._loaded_config
@@ -671,12 +741,11 @@ class InmantaLoggerConfig:
         logger_config = config_builder.get_bootstrap_logging_config(python_log_level=python_log_level)
         self.add_extension_config(logger_config)
 
-    def _apply_logging_config_from_file(self, config_file: str, context: Mapping[str, str] = {}) -> None:
+    def _apply_logging_config_from_dict(self, dict_config: dict[str, object]) -> None:
         """
-        Apply the given logging config file.
+        Apply the given logging config dictionary.
         """
         handlers_before = list(logging.root.handlers)
-        dict_config = load_config_file_to_dict(config_file, context)
         try:
             logging.config.dictConfig(dict_config)
         except Exception:
@@ -992,16 +1061,34 @@ def load_config_file_to_dict(file_name: str, context: Mapping[str, str]) -> dict
         content = fh.read()
 
     if file_name.endswith(".tmpl"):
-        try:
-            content = content.format(**context)
-        except KeyError as e:
-            all_keys = ", ".join(context.keys())
-            # Not very good exception
-            raise Exception(
-                f"The configuration template at {file_name} refers to context variable {str(e)}, "
-                f"but this variable is not available. The context is limited to {all_keys}"
-            )
+        content = render_logging_config_to_dict(template=content, context=context, source=f"at {file_name}")
 
-    dict_config = yaml.safe_load(content)
+    return yaml.safe_load(content)
 
-    return dict_config
+def convert_logging_config_str_to_dict(
+    config_as_str: str, is_template: bool, context: Mapping[str, str], source: str
+) -> dict[str, object]:
+    if is_template:
+        config_as_str = render_logging_config_to_dict(template=config_as_str, context=context, source=source)
+    return yaml.safe_load(config_as_str)
+
+def render_logging_config_to_dict(
+    template: str, context: Mapping[str, str], source: str
+) -> str:
+    """
+    This method fills in the template variables present in the given logging configuration template
+
+    :param template: The logging configuration template
+    :param context: The context variables that should be used to populate the template
+    :param source: The file or environment variable from which the template was retrieved. This is used in
+                   the error reporting when a context variable is not found.
+    """
+    try:
+        return template.format(**context)
+    except KeyError as e:
+        all_keys = ", ".join(context.keys())
+        # Not very good exception
+        raise Exception(
+            f"The logging configuration template {source} refers to context variable {str(e)}, "
+            f"but this variable is not available. The context is limited to {all_keys}"
+        )
