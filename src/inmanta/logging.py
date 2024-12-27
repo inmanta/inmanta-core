@@ -24,7 +24,6 @@ import re
 import sys
 from argparse import Namespace
 from collections.abc import Mapping, Sequence, Set
-from fileinput import filename
 from io import TextIOWrapper
 from logging import handlers
 from typing import Optional, TextIO
@@ -612,12 +611,18 @@ class InmantaLoggerConfig:
         """
         option = component_log_configs[component_name] if component_name is not None else logging_config
         base_env_var_name = option.get_environment_variable()
-        content_env_var_names = {f"{base_env_var_name}_CONTENT", f"{base_env_var_name}_TMPL"}
-        env_vars_set_by_user = content_env_var_names & os.environ.keys()
+        content_env_var_names = [f"{base_env_var_name}_CONTENT", f"{base_env_var_name}_TMPL"]
+        env_vars_set_by_user = set(content_env_var_names) & os.environ.keys()
         if not env_vars_set_by_user:
             return None
-        if len(env_vars_set_by_user) > 0:
-            raise Exception()
+        if len(env_vars_set_by_user) > 1:
+            LOGGER.warning(
+                "Environment variables %s and &s are set simultaneously. Using %s.",
+                content_env_var_names[0],
+                content_env_var_names[1],
+                content_env_var_names[0],
+            )
+            return content_env_var_names[0]
         return env_vars_set_by_user.pop()
 
     def _get_logging_config_for_component(
@@ -639,7 +644,7 @@ class InmantaLoggerConfig:
             component_log_configs[component_name]
             if component_name is not None else logging_config
         )
-        file_name: str | None = config_option.get()
+        file_name: str | None = config_option.get(ignore_default=component_name is not None)
         if file_name is not None:
             return load_config_file_to_dict(file_name=file_name, context=context)
         # No logging configuration was found for the given component.

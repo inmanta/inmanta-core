@@ -28,6 +28,7 @@ import yaml
 
 import inmanta
 from inmanta import config
+from inmanta.config import logging_config
 from inmanta.const import ENVIRON_FORCE_TTY
 from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, MultiLineFormatter, Options, load_config_file_to_dict
 
@@ -409,3 +410,150 @@ def test_server_documentation_conformance(inmanta_config, monkeypatch):
     )
 
     assert from_config._to_dict_config() == from_file_dict
+
+def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdir) -> None:
+    """
+    Verify that the environment variables, that contain the content of the logging configuration,
+    are correctly taken into account when loading the logging configuration.
+    """
+    logging_config_file = os.path.join(tmpdir, "config.yml")
+    with open(logging_config_file, "w") as fh:
+        fh.write(
+            """
+                disable_existing_loggers: false
+                formatters:
+                  console_formatter:
+                    format: "DONT_USE -- %(message)s"
+                handlers:
+                  console_handler:
+                    class: logging.StreamHandler
+                    formatter: console_formatter
+                    level: INFO
+                    stream: ext://sys.stdout
+                root:
+                  handlers:
+                  - console_handler
+                  level: INFO
+                version: 1
+            """
+        )
+    logging_config.set(logging_config_file)
+
+    # Set the INMANTA_CONFIG_LOGGING_CONFIG_TMPL environment variable and verify that it overrides
+    # the logging config set via the logging.server configuration option.
+    logging_config1 = """
+        disable_existing_loggers: false
+        formatters:
+          console_formatter:
+            format: "{environment} -- %(message)s"
+        handlers:
+          console_handler:
+            class: logging.StreamHandler
+            formatter: console_formatter
+            level: INFO
+            stream: ext://sys.stdout
+        root:
+          handlers:
+          - console_handler
+          level: INFO
+        version: 1
+    """
+    env_id = str(uuid.uuid4())
+    monkeypatch.setenv("INMANTA_CONFIG_LOGGING_CONFIG_TMPL", logging_config1)
+    inmanta_logging_config = InmantaLoggerConfig.get_instance(stream=sys.stdout)
+    inmanta_logging_config.apply_options(options=Options(), component="server", context={"environment": env_id})
+    logger = logging.getLogger("test")
+    capsys.readouterr()  # Clear buffer
+    logger.info("test")
+    captured = capsys.readouterr()
+    assert f"{env_id} -- test" in captured.out
+
+    # Set the component-specific template and verify that it overrides the config from INMANTA_CONFIG_LOGGING_CONFIG_TMPL
+    logging_config2 = """
+        disable_existing_loggers: false
+        formatters:
+          console_formatter:
+            format: "%(message)s -- {environment}"
+        handlers:
+          console_handler:
+            class: logging.StreamHandler
+            formatter: console_formatter
+            level: INFO
+            stream: ext://sys.stdout
+        root:
+          handlers:
+          - console_handler
+          level: INFO
+        version: 1
+    """
+    monkeypatch.setenv("INMANTA_LOGGING_SERVER_TMPL", logging_config2)
+    inmanta_logging_config.clean_instance()
+    inmanta_logging_config = InmantaLoggerConfig.get_instance(stream=sys.stdout)
+    inmanta_logging_config.apply_options(options=Options(), component="server", context={"environment": env_id})
+    logger = logging.getLogger("test")
+    capsys.readouterr()  # Clear buffer
+    logger.info("test")
+    captured = capsys.readouterr()
+    assert f"test -- {env_id}" in captured.out
+
+    # Set INMANTA_LOGGING_SERVER_TMPL AND INMANTA_LOGGING_SERVER_CONTENT simultaneously.
+    # Assert that INMANTA_LOGGING_SERVER_CONTENT is used.
+    logging_config3 = """
+        disable_existing_loggers: false
+        formatters:
+          console_formatter:
+            format: "{environment} -- %(message)s"
+        handlers:
+          console_handler:
+            class: logging.StreamHandler
+            formatter: console_formatter
+            level: INFO
+            stream: ext://sys.stdout
+        root:
+          handlers:
+          - console_handler
+          level: INFO
+        version: 1
+    """
+    monkeypatch.setenv("INMANTA_LOGGING_SERVER_CONTENT", logging_config3)
+    inmanta_logging_config.clean_instance()
+    inmanta_logging_config = InmantaLoggerConfig.get_instance(stream=sys.stdout)
+    inmanta_logging_config.apply_options(options=Options(), component="server", context={"environment": env_id})
+    logger = logging.getLogger("test")
+    capsys.readouterr()  # Clear buffer
+    logger.info("test")
+    captured = capsys.readouterr()
+    assert "{environment} -- test" in captured.out
+
+    # Verify that the --logging-config CLI option still overrides all other config.
+    other_logging_config_file = os.path.join(tmpdir, "cli.yml")
+    with open(other_logging_config_file, "w") as fh:
+        fh.write(
+            """
+                disable_existing_loggers: false
+                formatters:
+                  console_formatter:
+                    format: "CLI -- %(message)s"
+                handlers:
+                  console_handler:
+                    class: logging.StreamHandler
+                    formatter: console_formatter
+                    level: INFO
+                    stream: ext://sys.stdout
+                root:
+                  handlers:
+                  - console_handler
+                  level: INFO
+                version: 1
+            """
+        )
+    inmanta_logging_config.clean_instance()
+    inmanta_logging_config = InmantaLoggerConfig.get_instance(stream=sys.stdout)
+    inmanta_logging_config.apply_options(
+        options=Options(logging_config=other_logging_config_file), component="server", context={"environment": env_id}
+    )
+    logger = logging.getLogger("test")
+    capsys.readouterr()  # Clear buffer
+    logger.info("test")
+    captured = capsys.readouterr()
+    assert "CLI -- test" in captured.out

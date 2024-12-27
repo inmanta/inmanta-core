@@ -167,8 +167,12 @@ class Config:
         return cls.get_for_option(option) if option is not None else cls._get_value(section, name, default_value)
 
     @classmethod
-    def get_for_option(cls, option: "Option[T]") -> T:
-        raw_value: str | T = cls._get_value(option.section, option.name, option.get_default_value())
+    def get_for_option(cls, option: "Option[T]", ignore_default: bool = False) -> T:
+        """
+        :param ignore_default: if True, ignore the actual default value and return None by default.
+        """
+        default_value = option.get_default_value() if not ignore_default else None
+        raw_value: str | T = cls._get_value(option.section, option.name, default_value)
         return option.validate(raw_value)
 
     @classmethod
@@ -375,7 +379,10 @@ class Option(Generic[T]):
         self.predecessor_option = predecessor_option
         Config.register_option(self)
 
-    def get(self) -> T:
+    def get(self, ignore_default: bool = False) -> T:
+        """
+        :param ignore_default: if True, ignore the actual default value and return None by default.
+        """
         raw_config: ConfigParser = Config.get()
         if self.predecessor_option:
             has_deprecated_option = raw_config.has_option(self.predecessor_option.section, self.predecessor_option.name)
@@ -385,8 +392,8 @@ class Option(Generic[T]):
                     f"Config option {self.predecessor_option.name} is deprecated. Use {self.name} instead.",
                     category=DeprecationWarning,
                 )
-                return self.predecessor_option.get()
-        return Config.get_for_option(self)
+                return self.predecessor_option.get(ignore_default=ignore_default)
+        return Config.get_for_option(self, ignore_default=ignore_default)
 
     def get_type(self) -> Optional[str]:
         if callable(self.validator):
