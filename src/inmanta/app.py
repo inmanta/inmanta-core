@@ -661,7 +661,7 @@ def validate_logging_config(options: argparse.Namespace) -> None:
         (logging.getLogger("inmanta.server.services.compilerservice"), "Log line from compiler service"),
         (logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER).getChild(env_id), "Log line for resource action log"),
         (logging.getLogger("inmanta_lsm.callback"), "Log line from callback"),
-        (logging.getLogger("inmanta.scheduler"), "Log line from the scheduler"),
+        (logging.getLogger("inmanta.scheduler"), "Log line from the resource scheduler"),
         (logging.getLogger(const.LOGGER_NAME_EXECUTOR), "Log line from the executor"),
         (logging.getLogger(f"{const.LOGGER_NAME_EXECUTOR}.test"), "Log line from a sub-logger of the executor"),
         (logging.getLogger("performance"), "Performance log line"),
