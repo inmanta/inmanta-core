@@ -1,4 +1,6 @@
 ---
 description: "Fix race condition in test_redeploy_after_dependency_recovered test case."
+issue-nr: 8518
+issue-repo: inmanta-core
 change-type: patch
 destination-branches: [master]
