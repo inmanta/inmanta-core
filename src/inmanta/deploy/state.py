@@ -330,26 +330,6 @@ class ModelState:
         self.resource_state.clear()
         self.types_per_agent.clear()
 
-    def add_up_to_date_resource(self, resource: "ResourceIdStr", details: ResourceDetails) -> None:
-        """
-        Add a resource to this ModelState for which the desired state was successfully deployed before, has an up-to-date
-        desired state and for which the deployment isn't blocked at the moment.
-
-        - Only expected as scheduler start
-        - doesn't set requires/provides
-        """
-        self.resources[resource] = details
-        if resource in self.resource_state:
-            self.resource_state[resource].status = ComplianceStatus.COMPLIANT
-            self.resource_state[resource].deployment_result = DeploymentResult.DEPLOYED
-            self.resource_state[resource].blocked = BlockedStatus.NO
-        else:
-            self.resource_state[resource] = ResourceState(
-                status=ComplianceStatus.COMPLIANT, deployment_result=DeploymentResult.DEPLOYED, blocked=BlockedStatus.NO
-            )
-            self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
-        self.dirty.discard(resource)
-
     # TODO: remove old similar methods
     def update_resource(
         self,
@@ -400,9 +380,11 @@ class ModelState:
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         else:
             self.resource_state[resource].status = compliance_status
-            # Override blocked status only if it is definitely blocked now.
-            # We can't set it the other way around because a resource might still be transitively blocked, see note above
-            if blocked is BlockedStatus.YES:
+            # Override blocked status except if it was marked as blocked before. We can't unset it yet because a resource might
+            # still be transitively blocked, which we'll deal with later, see note above.
+            # We do however override TRANSIENT because we want to give it another chance when it gets an update
+            # (in part to progress the resource state from available).
+            if self.resource_state[resource].blocked is not BlockedStatus.YES:
                 self.resource_state[resource].blocked = blocked
             if known_compliant:
                 self.resource_state[resource].deployment_result = DeploymentResult.DEPLOYED

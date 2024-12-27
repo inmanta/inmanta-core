@@ -407,10 +407,20 @@ class ResourceScheduler(TaskManager):
                     provides=self._state.requires.provides_view(),
                     new_agent_notify=self._create_agent,
                 )
+                restored_version: int = self._state.version
+                # TODO[8453]: current implementation is a race. Better approach:
+                #   *register* all timers (self._state.resources.keys()). Then *start* timer manager only at end of method
+                self._timer_manager.update_timers(self._state.resources.keys() - self._state.dirty, are_compliant=True)
                 # Set running flag because we're ready to start accepting tasks.
                 # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
                 self._running = True
                 await self.read_version(connection=con)
+                if self._state.version == restored_version:
+                    # no new version was present. Simply trigger a deploy for everything that's not in a known good state
+                    await self.deploy(
+                        reason="Deploy was triggered because the resource scheduler was started",
+                        priority=TaskPriority.INTERVAL_DEPLOY,
+                    )
             else:
                 # This case can occur in three different situations:
                 #   1 A model version has been released, but the scheduler didn't process any version yet.
