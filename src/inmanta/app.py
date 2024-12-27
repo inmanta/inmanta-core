@@ -620,6 +620,74 @@ def export(options: argparse.Namespace) -> None:
     summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
 
 
+def validate_logging_config_parser_config(
+    parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]
+) -> None:
+    """
+    Config parser for the validate-logging-config command.
+    """
+    parser.add_argument(
+        "-e",
+        dest="environment",
+        help="The environment id to be used as context variable in logging config templates. If not specified,"
+        " 0c111d30-feaf-4f5b-b2d6-83d589480a4a will be used.",
+        default="0c111d30-feaf-4f5b-b2d6-83d589480a4a",
+    )
+
+    sub_parsers = parser.add_subparsers(title="subcommand", dest="cmd")
+    for component_name in ["server", "scheduler", "compiler"]:
+        sub_parser = sub_parsers.add_parser(
+            component_name, help=f"Validate the logging config for the {component_name}", parents=parent_parsers
+        )
+        sub_parser.set_defaults(component=component_name)
+
+
+@command(
+    "validate-logging-config",
+    help_msg="This command loads a logging config file, taking into account the precedence rules for logging config files,"
+    " and produces log lines. It serves as a tool to validate whether a logging config file is syntactically correct"
+    " and behaves as expected. Optionally, a sub-command can be specified to indicate the component for which the"
+    " logging config file should be loaded.",
+    parser_config=validate_logging_config_parser_config,
+)
+def validate_logging_config(options: argparse.Namespace) -> None:
+    logging_config = InmantaLoggerConfig.get_current_instance()
+    if logging_config.loaded_config_file is None:
+        raise Exception("No logging configuration file found.")
+    print(f"Using logging config file: {logging_config.loaded_config_file}", file=sys.stderr)
+    env_id = options.environment
+    logger_and_message = [
+        (logging.getLogger("inmanta.protocol.rest.server"), "Log line from Inmanta server"),
+        (logging.getLogger("inmanta.server.services.compilerservice"), "Log line from compiler service"),
+        (logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER).getChild(env_id), "Log line for resource action log"),
+        (logging.getLogger("inmanta_lsm.callback"), "Log line from callback"),
+        (logging.getLogger("inmanta.scheduler"), "Log line from the resource scheduler"),
+        (logging.getLogger(const.LOGGER_NAME_EXECUTOR), "Log line from the executor"),
+        (logging.getLogger(f"{const.LOGGER_NAME_EXECUTOR}.test"), "Log line from a sub-logger of the executor"),
+        (logging.getLogger("performance"), "Performance log line"),
+        (logging.getLogger("inmanta.warnings"), "Warning log line"),
+        (logging.getLogger("tornado.access"), "tornado access log"),
+        (logging.getLogger("tornado.general"), "tornado general log"),
+    ]
+    log_levels = [
+        logging.DEBUG,
+        logging.INFO,
+        logging.WARNING,
+        logging.ERROR,
+        logging.CRITICAL,
+        logging.NOTSET,
+    ]
+    print(
+        "Each of the log lines mentioned below will be emitted at the following log levels:"
+        f" {[logging.getLevelName(level) for level in log_levels]}:",
+        file=sys.stderr,
+    )
+    for logger, msg in logger_and_message:
+        print(f" * Emitting log line '{msg}' at level <LEVEL> using logger '{logger.name}'", file=sys.stderr)
+        for log_level in log_levels:
+            logger.log(log_level, f"{msg} at level {logging.getLevelName(log_level)}")
+
+
 class Color(enum.Enum):
     RED = "red"
     GREEN = "green"
