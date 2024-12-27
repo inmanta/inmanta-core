@@ -286,7 +286,7 @@ async def test_register_setting() -> None:
 
     config.server_enabled_extensions.set("testlogextender")
     with splice_extension_in("test_module_path"):
-        ibl = InmantaBootloader(configure_logging=False)
+        ibl = InmantaBootloader()
         ibl.start_loggers_for_extensions()
         logging.info("This is a log line")
     assert "TEST TEST TEST" in io.getvalue()

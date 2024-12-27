@@ -1,4 +1,0 @@
-description: "Changed default for InmantaBootloader's logging config argument"
-change-type: patch
-destination-branches:
-  - master
