@@ -44,7 +44,6 @@ from inmanta.deploy.state import (
     DeploymentResult,
     ModelState,
     ResourceDetails,
-    ResourceIntentChange,
     ResourceState,
 )
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
@@ -75,8 +74,36 @@ class ResourceIntent:
     dependencies: Optional[Mapping[ResourceIdStr, const.ResourceState]]
 
 
-# TODO: docstring, also mention it's purely for type documentation purposes, as we can't statically verify it
+class ResourceIntentChange(Enum):
+    """
+    A state change for a single resource's intent. Represents in which way, if any, a resource changed in a new model version
+    versus the currently managed one.
+
+    Internal class meant to unambiguosly categorize how resources have changed when processing multiple model versions at once.
+    """
+
+    NEW = enum.auto()
+    """
+    To be considered a new resource, even if one with the same resource id is already managed.
+    """
+
+    UPDATED = enum.auto()
+    """
+    The resource has an update to its desired state, this may include a transition from defined to undefined or vice versa.
+    """
+
+    DELETED = enum.auto()
+    """
+    The resource was deleted.
+    """
+
+
 class ResourceRecord(typing.TypedDict):
+    """
+    A dict represeting a resource database record with all fields relevant for the scheduler.
+
+    Purely for type documentation purposes, as we can't statically verify it, considering asyncpg's limitations.
+    """
     resource_id: str
     status: str
     attributes: Mapping[str, object]
@@ -377,7 +404,6 @@ class ResourceScheduler(TaskManager):
         Marks scheduler as running and triggers first deploys.
         """
         self._timer_manager.initialize()
-        # TODO: transaction correct?
         # do not start a transaction because:
         # 1. nothing we do here before read_version is inherently transactional: the only write is atomic, and reads to not
         #   benefit from READ COMMITTED (default) isolation level.
@@ -393,16 +419,6 @@ class ResourceScheduler(TaskManager):
                 self.environment,
                 connection=con,
             )
-
-            # Retrieve latest released model version
-            latest_release_model: Optional[data.ConfigurationModel] = await data.ConfigurationModel.get_latest_version(
-                environment=self.environment, connection=con
-            )
-            if latest_release_model is None:
-                # No model version has been released yet. No scheduler state to restore from db.
-                self._running = True
-                # TODO: is return appropriate?
-                return
 
             # Check if we can restore the scheduler state from a previous run
             restored_state: Optional[ModelState] = await ModelState.create_from_db(self.environment, connection=con)
@@ -563,6 +579,8 @@ class ResourceScheduler(TaskManager):
         """
         Returns a single model version as fetched from the database. Returns the requested version if provided
         (regardless of whether it has been released or not), otherwise returns the latest released version.
+
+        Raises KeyError if no specific version has been provided and no released versions exist.
         """
         async with self.state_update_manager.get_connection(connection) as con:
             if version is None:
@@ -587,7 +605,6 @@ class ResourceScheduler(TaskManager):
     async def read_version(
         self,
         *,
-        # TODO: which of these is still required?
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
@@ -636,7 +653,18 @@ class ResourceScheduler(TaskManager):
         *,
         up_to_date_resources: Optional[Set[ResourceIdStr]] = None,
     ) -> tuple[ModelVersion, dict[ResourceIdStr, ResourceIntentChange]]:
-        # TODO: docstring
+        """
+        Returns a consolidated overview of changes to resource intent, given a series of model versions to process.
+
+        Returns a tuple of
+        - the resulting model version after processing all versions.
+        - a mapping of resources to their change of intent, after processing all versions in sequence. Only contains resources
+            with a change of intent.
+
+        :param new_versions: The new versions to process, in ascending order.
+        :param up_to_date_resources: A set of resources that are considered up to date and in a known good state, regardless
+            of the current state information.
+        """
         up_to_date_resources = set() if up_to_date_resources is None else up_to_date_resources
 
         if not new_versions:
@@ -703,6 +731,8 @@ class ResourceScheduler(TaskManager):
                     # resource's defined status changed
                     intent_changes[resource] = ResourceIntentChange.UPDATED
                     # TODO: should we warn on attribute hash? Perhaps not, using (attribute_hash, undefined) as metric instead?
+                    #       => the above was on the assumption that Wouter added `undefined: bool`, which doesn't seem to be
+                    #           the case after all. => do warn as on master
 
         return (
             ModelVersion(

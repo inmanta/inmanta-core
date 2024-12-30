@@ -331,7 +331,6 @@ class ModelState:
         self.resource_state.clear()
         self.types_per_agent.clear()
 
-    # TODO: remove old similar methods
     def update_resource(
         self,
         details: ResourceDetails,
@@ -355,9 +354,9 @@ class ModelState:
         :param known_compliant: Whether this resource is known to be in a good state (compliant and last deploy was successful).
             Useful for restoring previously known state when scheduler is started. Mutually exclusive with undefined.
         """
-        # TODO: review this method. Is it as simple as it can be?
         if undefined and known_compliant:
             raise ValueError("A resource can not be both undefined and compliant")
+
         resource: ResourceIdStr = details.resource_id
         compliance_status: ComplianceStatus = (
             ComplianceStatus.COMPLIANT
@@ -366,11 +365,14 @@ class ModelState:
         )
         # Latest requires are not set yet, transitve blocked status are handled in update_transitive_state
         blocked: BlockedStatus = BlockedStatus.YES if undefined else BlockedStatus.NO
+
         already_known: bool = details.resource_id in self.resources
         if force_new and already_known:
             # register this as a new resource, even if we happen to know one with the same id
             self.drop(details.resource_id)
+
         if not already_known or force_new:
+            # we don't know the resource yet (/ anymore) => create it
             self.resource_state[resource] = ResourceState(
                 status=compliance_status,
                 deployment_result=DeploymentResult.DEPLOYED if known_compliant else DeploymentResult.NEW,
@@ -380,15 +382,17 @@ class ModelState:
                 self.requires[resource] = set()
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
         else:
+            # we already know the resource => update relevant fields
             self.resource_state[resource].status = compliance_status
-            # Override blocked status except if it was marked as blocked before. We can't unset it yet because a resource might
-            # still be transitively blocked, which we'll deal with later, see note above.
-            # We do however override TRANSIENT because we want to give it another chance when it gets an update
-            # (in part to progress the resource state from available).
-            if self.resource_state[resource].blocked is not BlockedStatus.YES:
-                self.resource_state[resource].blocked = blocked
+            # update deployment result only if we know it's compliant. Otherwise it is kept, representing latest result
             if known_compliant:
                 self.resource_state[resource].deployment_result = DeploymentResult.DEPLOYED
+            # Override blocked status except if it was marked as blocked before. We can't unset it yet because a resource might
+            # still be transitively blocked, which we'll deal with later, see note in docstring.
+            # We do however override TRANSIENT because we want to give it another chance when it gets an update
+            # (in part to progress the resource state away from available).
+            if self.resource_state[resource].blocked is not BlockedStatus.YES:
+                self.resource_state[resource].blocked = blocked
 
         self.resources[resource] = details
         if not known_compliant and self.resource_state[resource].blocked is BlockedStatus.NO:
@@ -402,7 +406,6 @@ class ModelState:
 
         When updating requires, also call update_transitive_state to ensure transient state is also updated
         """
-        # TODO: verify this is correct and needed
         check_dependencies: bool = self.resource_state[resource].blocked is BlockedStatus.TRANSIENT and bool(
             self.requires[resource] - requires
         )
@@ -440,10 +443,10 @@ class ModelState:
         :param resource: The id of the resource to find the dependencies for
         """
         dependencies: Set[ResourceIdStr] = self.requires.get(resource, set())
+        # TODO: test case where resource has two dependencies: one failed, one new. The failed one recovers, the new deploys
+        #       (in that order), then the resource should deploy as well. Verify that on master it doesn't because
+        #       the new one is seen as a reason not to move out of the skip-for-dependencies state.
         return any(
-            # TODO: test case where resource has two dependencies: one failed, one new. The failed one recovers, the new deploys
-            #       (in that order), then the resource should deploy as well. Verify that on master it doesn't because
-            #       the new one is seen as a reason not to move out of the skip-for-dependencies state.
             # Determine based on latest deploy result rather than compliance status, because compliance status is unstable
             # (e.g. HAS_UPDATE).
             # Make sure to not skip on NEW (never deployed) resources, because they will not generate a discovery event.
@@ -695,27 +698,3 @@ class ModelState:
         my_state.blocked = BlockedStatus.NO
         if my_state.status in [ComplianceStatus.HAS_UPDATE, ComplianceStatus.NON_COMPLIANT]:
             self.dirty.add(resource)
-
-
-# TODO: does this belong here or in scheduler?
-class ResourceIntentChange(Enum):
-    # TODO: verify all docstrings
-    """
-    A state change for a single resource's intent. Represents in which way, if any, a resource changed in a new model version
-    versus the currently managed one.
-    """
-
-    NEW = enum.auto()
-    """
-    To be considered a new resource, even if one with the same resource id is already managed.
-    """
-
-    UPDATED = enum.auto()
-    """
-    The resource has an update to its desired state, without a change in its undefined status.
-    """
-
-    DELETED = enum.auto()
-    """
-    The resource was deleted.
-    """
