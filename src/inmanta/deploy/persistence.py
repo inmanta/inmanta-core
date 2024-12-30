@@ -58,8 +58,14 @@ class StateUpdateManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: state.ResourceState) -> None:
-        pass
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: Optional[state.ResourceState]) -> None:
+        """
+        Update the db to reflect the result of a deploy for a given resource.
+
+        :param attribute_hash: The attribute hash of the intent that just finished deploying
+        :param result: The deploy result of the finished deploy. Includes version information.
+        :param state: The current state of this resource. None for stale deploys.
+        """
 
     @abc.abstractmethod
     async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
@@ -160,10 +166,8 @@ class ToDbUpdateManager(StateUpdateManager):
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
-    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: state.ResourceState) -> None:
-        """
-        Update the db to reflect the result of a deploy for a given resource.
-        """
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: Optional[state.ResourceState]) -> None:
+        stale_deploy: bool = state is None
 
         def error_and_log(message: str, **context: Any) -> None:
             """
@@ -285,7 +289,12 @@ class ToDbUpdateManager(StateUpdateManager):
                     connection=connection,
                 )
 
-                if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
+                if (
+                    not stale_deploy
+                    and "purged" in resource.attributes
+                    and resource.attributes["purged"]
+                    and status == const.ResourceState.deployed
+                ):
                     await data.Parameter.delete_all(
                         environment=self.environment, resource_id=resource.resource_id, connection=connection
                     )

@@ -272,7 +272,8 @@ class ModelState:
                 #   assumption but rather deeply nested here.???
                 compliance_status = ComplianceStatus.UNDEFINED
             elif (
-                res["last_deployed_attribute_hash"] is None
+                DeploymentResult[res["deployment_result"]] is DeploymentResult.NEW
+                or res["last_deployed_attribute_hash"] is None
                 or res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]
             ):
                 compliance_status = ComplianceStatus.HAS_UPDATE
@@ -409,7 +410,7 @@ class ModelState:
         # If the resource is blocked transiently, and we drop at least one of its requirements
         # we check to see if the resource can now be unblocked
         # i.e. all of its dependencies are now compliant with the desired state.
-        if check_dependencies and self.are_dependencies_compliant(resource):
+        if check_dependencies and not self.should_skip_for_dependencies(resource):
             self.resource_state[resource].blocked = BlockedStatus.NO
             self.dirty.add(resource)
 
@@ -431,16 +432,24 @@ class ModelState:
             del self.types_per_agent[details.id.agent_name][details.id.entity_type]
         self.dirty.discard(resource)
 
-    def are_dependencies_compliant(self, resource: "ResourceIdStr") -> bool:
+    def should_skip_for_dependencies(self, resource: "ResourceIdStr") -> bool:
         """
-        Checks if a resource has all of its dependencies in a compliant state.
+        Returns true if this resource satisfies the conditions to skip for dependencies, provided that its handler requested it.
+        Concretely, checks if a resource has at least one dependency that was not successful in its last deploy, if any.
 
         :param resource: The id of the resource to find the dependencies for
         """
-        requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.requires.requires_view()
-        dependencies: Set[ResourceIdStr] = requires_view.get(resource, set())
-
-        return all(self.resource_state[dep_id].status is ComplianceStatus.COMPLIANT for dep_id in dependencies)
+        dependencies: Set[ResourceIdStr] = self.requires.get(resource, set())
+        return any(
+            # TODO: test case where resource has two dependencies: one failed, one new. The failed one recovers, the new deploys
+            #       (in that order), then the resource should deploy as well. Verify that on master it doesn't because
+            #       the new one is seen as a reason not to move out of the skip-for-dependencies state.
+            # Determine based on latest deploy result rather than compliance status, because compliance status is unstable
+            # (e.g. HAS_UPDATE).
+            # Make sure to not skip on NEW (never deployed) resources, because they will not generate a discovery event.
+            self.resource_state[dep_id].deployment_result not in (DeploymentResult.DEPLOYED, DeploymentResult.NEW)
+            for dep_id in dependencies
+        )
 
     def update_transitive_state(
         self,
@@ -690,12 +699,12 @@ class ModelState:
 
 # TODO: does this belong here or in scheduler?
 class ResourceIntentChange(Enum):
+    # TODO: verify all docstrings
     """
     A state change for a single resource's intent. Represents in which way, if any, a resource changed in a new model version
     versus the currently managed one.
     """
 
-    # TODO: narrow this to simply NEW / DELETED / UPDATED where UNDEFINED is a second axis?
     NEW = enum.auto()
     """
     To be considered a new resource, even if one with the same resource id is already managed.
@@ -704,21 +713,6 @@ class ResourceIntentChange(Enum):
     UPDATED = enum.auto()
     """
     The resource has an update to its desired state, without a change in its undefined status.
-    """
-
-    DEFINED = enum.auto()
-    """
-    The resource became defined relative to the currently managed version.
-    """
-
-    UNDEFINED = enum.auto()
-    """
-    The resource became undefined relative to the currently managed version.
-    """
-
-    UNDEFINED_NEW = enum.auto()
-    """
-    The resource is both new and undefined.
     """
 
     DELETED = enum.auto()

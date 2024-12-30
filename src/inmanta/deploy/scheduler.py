@@ -19,6 +19,7 @@
 import abc
 import asyncio
 import contextlib
+import itertools
 import logging
 import typing
 import uuid
@@ -303,6 +304,10 @@ class ResourceScheduler(TaskManager):
         # deploy task, there is a (typically) short window of time where it's considered in progress by the agent queue, but
         # it has not yet started on the actual deploy, i.e. it will still see updates to the resource intent.
         self._deploying_latest: set[ResourceIdStr] = set()
+        # Set of orphaned resources for which a deploy is in progress, i.e. a deploy for a resource that went from managed to
+        # unmanaged (even if it became managed again afterward, in which case it's considered a new resource that happens to
+        # share the resource id)
+        self._deploying_unmanaged: set[ResourceIdStr] = set()
 
         self.environment = environment
         self.client = client
@@ -330,6 +335,7 @@ class ResourceScheduler(TaskManager):
             await worker.join()
         self._workers.clear()
         self._deploying_latest.clear()
+        self._deploying_unmanaged.clear()
         await self._timer_manager.reset()
 
     async def start(self) -> None:
@@ -757,30 +763,41 @@ class ResourceScheduler(TaskManager):
                 dropped_requires[resource] = removed
             await asyncio.sleep(0)
 
-        # TODO: deleted-then-reappeared should be recognized as such in deploy_done()
         # convert intent changes to sets for bulk processing
         deleted: set[ResourceIdStr] = set()
-        new_or_updated: set[ResourceIdStr] = set()
-        became_defined: set[ResourceIdStr] = set()  # resources that were previously undefined but not anymore
-        became_undefined: set[ResourceIdStr] = set()  # resources that are now undefined but weren't before (including new)
+        new: set[ResourceIdStr] = set()
+        updated: set[ResourceIdStr] = set()
+        # resources that were previously undefined but not anymore, including those considered new if they match this property
+        became_defined: set[ResourceIdStr] = set()
+        # resources that are now undefined but weren't before, including new resources if they are undefined
+        became_undefined: set[ResourceIdStr] = set()
         for resource, change in intent_changes.items():
             match change:
                 case ResourceIntentChange.DELETED:
                     deleted.add(resource)
                     continue
-                case ResourceIntentChange.NEW | ResourceIntentChange.UPDATED:
-                    new_or_updated.add(resource)
-                    resource_state: Optional[ResourceState] = self._state.resource_state.get(resource)
-                    if resource_state is None:
-                        continue
-                    if resource in model.undefined and resource_state.status is not ComplianceStatus.UNDEFINED:
-                        became_undefined.add(resource)
-                    elif resource not in model.undefined and resource_state.status is ComplianceStatus.UNDEFINED:
-                        became_defined.add(resource)
+                case ResourceIntentChange.NEW:
+                    new.add(resource)
+                case ResourceIntentChange.UPDATED:
+                    updated.add(resource)
+                case _ as _never:
+                    typing.assert_never(_never)
+            resource_state: Optional[ResourceState] = self._state.resource_state.get(resource)
+            if resource_state is None:
+                if resource in model.undefined:
+                    became_undefined.add(resource)
+            elif resource in model.undefined and resource_state.status is not ComplianceStatus.UNDEFINED:
+                became_undefined.add(resource)
+            elif resource not in model.undefined and resource_state.status is ComplianceStatus.UNDEFINED:
+                became_defined.add(resource)
 
         # A resource should not be present in more than one of these resource sets
-        assert len(intent_changes.keys()) == (len(deleted) + len(new_or_updated))
+        # TODO: review assertions
+        assert len(intent_changes.keys()) == (len(deleted) + len(new) + len(updated))
         assert len(became_defined | became_undefined) == (len(became_defined) + len(became_undefined))
+
+        # resources that are to be considered new, even if they are already being managed
+        force_new: Set[ResourceIdStr] = self._state.resources.keys() & new
 
         # in the current implementation everything below the lock is synchronous, it is however still required (1)
         # and desired even if it weren't strictly required (2,3):
@@ -798,7 +815,7 @@ class ResourceScheduler(TaskManager):
                 for resource in up_to_date_resources:
                     # Registers resource and removes from the dirty set
                     self._state.update_resource(model.resources[resource], known_compliant=True)
-                for resource in new_or_updated:
+                for resource in new | updated:
                     # update resource state and dirty set
                     self._state.update_resource(
                         model.resources[resource],
@@ -815,7 +832,21 @@ class ResourceScheduler(TaskManager):
                     verify_blocked=added_requires.keys(),
                     verify_unblocked=became_defined | dropped_requires.keys(),
                 )
+                # update TRANSIENT (skipped-for-dependencies) state for resources with a dependency for which state was reset
+                resources_with_reset_requires: Set[ResourceIdStr] = set(
+                    itertools.chain.from_iterable(self._state.requires.provides_view() for resource in force_new)
+                )
+                for resource in resources_with_reset_requires:
+                    if (
+                        # it is currently TRANSIENT blocked
+                        self._state.resource_state[resource].blocked is BlockedStatus.TRANSIENT
+                        # it shouldn't be any longer
+                        and not self._state.should_skip_for_dependencies(resource)
+                    ):
+                        self._state.resource_state[resource].blocked = BlockedStatus.NO
 
+                # Update set of in-progress deploys that became unmanaged
+                self._deploying_unmanaged.update(self._deploying_latest & (new | deleted))
                 # Update set of in-progress non-stale deploys by trimming resources with new state
                 self._deploying_latest.difference_update(intent_changes.keys(), transitive_blocked)
 
@@ -845,6 +876,7 @@ class ResourceScheduler(TaskManager):
                 for resource in deleted | became_undefined | transitive_blocked:
                     self._work.delete_resource(resource)
 
+                # TODO: should this write changes to the transient state???
                 # Updating the blocked state should be done under the scheduler lock, because this state is written
                 # by both the deploy and the new version code path.
                 resources_with_updated_blocked_state: Set[ResourceIdStr] = (
@@ -868,13 +900,15 @@ class ResourceScheduler(TaskManager):
             # TODO: are undefined resources updated correctly? They are now passed along with all others to
             #           update_resource_intent()
             # Update intent for resources with new desired state
+            # TODO: double check that this writes resource state for the NEW resources (including non-forced)
             await self.state_update_manager.update_resource_intent(
                 self.environment,
-                intent={rid: (self._state.resource_state[rid], self._state.resources[rid]) for rid in new_or_updated},
+                intent={rid: (self._state.resource_state[rid], self._state.resources[rid]) for rid in new | updated},
                 update_blocked_state=False,
                 connection=con,
             )
             # Mark orphaned resources
+            # TODO: should force-new resources be marked as orphaned? I don't think so
             await self.state_update_manager.mark_as_orphan(self.environment, deleted, connection=con)
             await self.state_update_manager.set_last_processed_model_version(
                 self.environment, self._state.version, connection=con
@@ -977,14 +1011,20 @@ class ResourceScheduler(TaskManager):
 
     async def deploy_done(self, attribute_hash: str, result: executor.DeployResult) -> None:
         deployment_result: DeploymentResult = DeploymentResult.from_handler_resource_state(result.resource_state)
+        state: Optional[ResourceState]
         try:
             state = await self.update_scheduler_state_for_finished_deploy(attribute_hash, result, deployment_result)
         except StaleResource:
-            # The resource is no longer managed, no need to update the database state.
-            pass
-        else:
-            # Write deployment result to the database.
-            await self.state_update_manager.send_deploy_done(attribute_hash, result, state)
+            # The resource is no longer managed (or in rare cases it has shortly become unmanaged sometime between this version
+            # and the currently managed version, either way, the deploy that finished represents a stale intent).
+            # We do still want to report that the deploy finished for this version, even if it is stale, we simply don't report
+            # any state.
+            # new, ununtouched state for this resource id), because that still represents the most current state for this
+            # resource, even if it is independent from this deploy.
+            # The scheduler will then report that this resource id with this specific version finished deploy.
+            state = None
+        # Write deployment result to the database.
+        await self.state_update_manager.send_deploy_done(attribute_hash, result, state)
 
     async def dryrun_done(self, result: executor.DryrunResult) -> None:
         await self.state_update_manager.dryrun_update(env=self.environment, dryrun_result=result)
@@ -1009,26 +1049,34 @@ class ResourceScheduler(TaskManager):
             # refresh resource details for latest model state
             details: Optional[ResourceDetails] = self._state.resources.get(resource_id, None)
 
-            # TODO: consider the case where resource was deleted and then a new resource with same id released -> should also be
-            #   considered stale
-            if details is None:
+            # TODO: advanced test case for this scenario:
+            #       - start deploying resource
+            #       - release version without the resource
+            #       - release version with the resource
+            #       - finish deploying resource
+            #       - assert db status and scheduler status (e.g. still DeploymentResult.NEW)
+            if details is None or resource_id in self._deploying_unmanaged:
                 # we are stale and removed
+                self._deploying_unmanaged.discard(resource_id)
                 raise StaleResource()
 
             state: ResourceState = self._state.resource_state[resource_id]
 
+            # TODO: make abstraction of this check to ensure it is consistent with should_skip_for_dependencies()?
             recovered_from_failure: bool = deployment_result is DeploymentResult.DEPLOYED and state.deployment_result not in (
                 DeploymentResult.DEPLOYED,
                 DeploymentResult.NEW,
             )
 
+            # TODO[#8453]: make sure that timer is running even if we return early
             if details.attribute_hash != attribute_hash:
                 # We are stale but still the last deploy
                 # We can update the deployment_result (which is about last deploy)
                 # We can't update status (which is about active state only)
                 # None of the event propagation or other update happen either for the same reason
                 # except for the event to notify dependents of failure recovery (to unblock skipped for dependencies)
-                # because we might otherwise miss the recovery.
+                # because we might otherwise miss the recovery (in the sense that the next deploy wouldn't be a transition
+                # from a bad to a good state, since we're transitioning to that good state now).
                 state.deployment_result = deployment_result
                 if recovered_from_failure:
                     self._send_events(details, stale_deploy=True, recovered_from_failure=True)
@@ -1042,7 +1090,8 @@ class ResourceScheduler(TaskManager):
             # first update state, then send out events
             self._deploying_latest.remove(resource_id)
             state.deployment_result = deployment_result
-            # TODO: BUG?! State has note been reported yet. Can be safely moved to deploy_done under second short-lived lock
+            # TODO: BUG?! State has not been reported yet.
+            #       Can be safely moved one level up to deploy_done under second short-lived lock
             self._work.finished_deploy(resource_id)
 
             # Check if we need to mark a resource as transiently blocked
@@ -1054,7 +1103,7 @@ class ResourceScheduler(TaskManager):
             if (
                 state.blocked is not BlockedStatus.YES
                 and result.resource_state is const.HandlerResourceState.skipped_for_dependency
-                and not self._state.are_dependencies_compliant(resource_id)
+                and self._state.should_skip_for_dependencies(resource_id)
             ):
                 state.blocked = BlockedStatus.TRANSIENT
                 # Remove this resource from the dirty set when we block it
