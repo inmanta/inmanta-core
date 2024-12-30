@@ -19,6 +19,7 @@
 import abc
 import asyncio
 import contextlib
+import enum
 import itertools
 import logging
 import typing
@@ -26,6 +27,7 @@ import uuid
 from abc import abstractmethod
 from collections.abc import Collection, Mapping, Sequence, Set
 from dataclasses import dataclass
+from enum import Enum
 from typing import Optional, Self, Tuple
 
 import asyncpg
@@ -104,6 +106,7 @@ class ResourceRecord(typing.TypedDict):
 
     Purely for type documentation purposes, as we can't statically verify it, considering asyncpg's limitations.
     """
+
     resource_id: str
     status: str
     attributes: Mapping[str, object]

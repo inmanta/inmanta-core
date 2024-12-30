@@ -25,7 +25,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
-from enum import Enum, StrEnum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Optional
 
 import asyncpg
@@ -64,26 +64,18 @@ class ComplianceStatus(StrEnum):
         but we have reason to believe operational state might not comply with latest resource intent,
         based on a deploy attempt / compliance check for that intent.
     UNDEFINED: The resource status is undefined, because it has an unknown attribute.
-    ORPHAN: The resource has become an orphan, i.e. it is no longer present in the latest released model version.
     """
 
     COMPLIANT = enum.auto()
     HAS_UPDATE = enum.auto()
     NON_COMPLIANT = enum.auto()
     UNDEFINED = enum.auto()
-    ORPHAN = enum.auto()
 
     def is_dirty(self) -> bool:
         """
         Return True iff the status indicates the resource is not up-to-date and is ready to be deployed.
         """
         return self in [ComplianceStatus.HAS_UPDATE, ComplianceStatus.NON_COMPLIANT]
-
-    def is_deployable(self) -> bool:
-        """
-        Return True iff the status indicates the resource is ready to be deployed.
-        """
-        return self not in [ComplianceStatus.UNDEFINED, ComplianceStatus.ORPHAN]
 
 
 @dataclass(frozen=True)
@@ -157,9 +149,6 @@ class BlockedStatus(StrEnum):
     NO = enum.auto()
     TRANSIENT = enum.auto()
 
-    def is_blocked(self) -> bool:
-        return self != BlockedStatus.NO
-
 
 @dataclass
 class ResourceState:
@@ -178,12 +167,6 @@ class ResourceState:
         Return True iff the status indicates the resource is not up-to-date and is ready to be deployed.
         """
         return self.status.is_dirty()
-
-    def is_deployable(self) -> bool:
-        """
-        Return True iff the status indicates the resource is ready to be deployed.
-        """
-        return self.status.is_deployable() and not self.blocked.is_blocked()
 
 
 @dataclass(kw_only=True)
@@ -224,7 +207,6 @@ class ModelState:
         from inmanta import data, resources
 
         scheduler: Optional[data.Scheduler] = await data.Scheduler.get_one(environment=environment, connection=connection)
-        # TODO: this assert is always correct, but does it belong here?
         assert scheduler is not None
         last_processed_model_version: Optional[int] = scheduler.last_processed_model_version
         if last_processed_model_version is None:
@@ -245,8 +227,11 @@ class ModelState:
                 "last_success",
                 "last_produced_events",
             ],
-            # TODO: what about receive events?
-            project_attributes=["requires", const.RESOURCE_ATTRIBUTE_SEND_EVENTS],
+            project_attributes=[
+                "requires",
+                const.RESOURCE_ATTRIBUTE_SEND_EVENTS,
+                const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS,
+            ],
             connection=connection,
         )
         if not resource_records:
@@ -256,20 +241,19 @@ class ModelState:
             if configuration_model is None:
                 # the version does not exist at all (anymore)
                 return None
-            # it's simply an empty version, continue with normal flow
+            # otherwise it's simply an empty version => continue with normal flow
         by_resource_id = {r["resource_id"]: r for r in resource_records}
-        # TODO: review this whole loop below
         for resource_id, res in by_resource_id.items():
             # Populate resource_state
+
             compliance_status: ComplianceStatus
             if res["is_orphan"]:
-                # TODO: not correct: is_orphan represents orphan vs latest released state, which is not the one we're restoring
-                #   BUT we should???
-                compliance_status = ComplianceStatus.ORPHAN
+                # it was marked as an orphan by the scheduler when (or sometime before) it read the version we're currently
+                # processing => exclude it from the model
+                continue
             elif res["is_undefined"]:
-                # TODO: also not correct: same reasoning. Should be based on resource's resource state
-                #   UNLESS we assume that rps has not progressed since scheduler was last live, which is a pretty safe
-                #   assumption but rather deeply nested here.???
+                # it was marked as undefined by the scheduler when it read the version we're currently processing
+                # (scheduler is only writer)
                 compliance_status = ComplianceStatus.UNDEFINED
             elif (
                 DeploymentResult[res["deployment_result"]] is DeploymentResult.NEW
@@ -281,6 +265,7 @@ class ModelState:
                 compliance_status = ComplianceStatus.COMPLIANT
             else:
                 compliance_status = ComplianceStatus.NON_COMPLIANT
+
             resource_state = ResourceState(
                 status=compliance_status,
                 deployment_result=DeploymentResult[res["deployment_result"]],
@@ -304,11 +289,11 @@ class ModelState:
             result.requires[resource_id] = requires
 
             # Check whether resource is dirty
-            if resource_state.is_deployable():
+            if resource_state.blocked is BlockedStatus.NO:
                 if resource_state.is_dirty():
                     # Resource is dirty by itself.
                     result.dirty.add(details.id.resource_str())
-                else:
+                elif res.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True):
                     # Check whether the resource should be deployed because of an outstanding event.
                     last_success = res["last_success"] or const.DATETIME_MIN_UTC
                     for req in requires:
@@ -318,7 +303,7 @@ class ModelState:
                         if (
                             last_produced_events is not None
                             and last_produced_events > last_success
-                            and req_res[const.RESOURCE_ATTRIBUTE_SEND_EVENTS]
+                            and req_res.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False)
                         ):
                             result.dirty.add(details.id.resource_str())
                             break

@@ -4482,7 +4482,6 @@ class ResourcePersistentState(BaseDocument):
 
         :param update_blocked_state: True iff this method should update the blocked_status column in the database.
         """
-        assert all(resource_state.status is not state.ComplianceStatus.ORPHAN for (resource_state, _) in intent.values())
         values = [
             (
                 environment,
@@ -4575,12 +4574,12 @@ class ResourcePersistentState(BaseDocument):
             connection=connection,
         )
 
-    def get_compliance_status(self) -> state.ComplianceStatus:
+    def get_compliance_status(self) -> Optional[state.ComplianceStatus]:
         """
-        Return the ComplianceStatus associated with this resource_persistent_state.
+        Return the ComplianceStatus associated with this resource_persistent_state. Returns None for orphaned resources.
         """
         if self.is_orphan:
-            return state.ComplianceStatus.ORPHAN
+            return None
         elif self.is_undefined:
             return state.ComplianceStatus.UNDEFINED
         elif (
@@ -5129,7 +5128,8 @@ class Resource(BaseDocument):
     ) -> list[dict[str, object]]:
         """This method performs none of the mangling required to produce valid resources!
 
-        project_attributes performs a projection on the json attributes of the resources table
+        project_attributes performs a projection on the json attributes of the resources table. If the attribute does not exist,
+        it is left out of the result dict.
 
         all projections must be disjoint, as they become named fields in the output record
         """
