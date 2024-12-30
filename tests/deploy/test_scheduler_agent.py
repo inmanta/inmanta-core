@@ -1181,18 +1181,24 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
 
     # trigger an event by deploying r1
     await agent.scheduler.deploy_resource(
-        rid1, reason="Test: deploying r1 to trigger an event for r2", priority=TaskPriority.USER_DEPLOY
+        rid1,
+        reason="Test: deploying r1 to trigger an event for r2",
+        # use same priority as running r2 deploy
+        priority=TaskPriority.NEW_VERSION_DEPLOY,
     )
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
     # assert that r2 was rescheduled due to the event, even though it is already deploying for its latest intent
     assert len(agent.scheduler._work._waiting) == 0
     assert agent.scheduler._work.agent_queues.queued().keys() == {tasks.Deploy(resource=rid2)}
-    # TODO: this assertion fails because for some reason we reschedule running deploys when a new dependency comes in
-    #   => question is: should we? Either update that behavior or update this test case. Either way update the message
-    #       to say "new dependency was scheduled" instead of "new dependency was added to this resource"
-    #   => also verify by hand that this scenario fails if event propagation does not force_deploy=True
+    # Note: turns out this scenario is no longer really reachable in the way it was intended: they only way it's possible
+    #   for both r1 and r2 to be deploying concurrently, is if r1 was triggered while r2 was already deploying (as set up
+    #   above). However, in that case, r2 gets rescheduled when the r1 deploy is *requested*, rather than when it *finishes*
+    #   (see assert on message below).
+    #   The scenario is kept anyway, because the concept remains important. We don't want to fully rely on the
+    #   reschedule-on-request behavior. If that would ever change, we want to make sure we retain this property. In which case
+    #   this assert on the message is expected to break, but the rest of the scenario should remain valid.
     assert agent.scheduler._work.agent_queues.queued()[tasks.Deploy(resource=rid2)].reason == (
-        f"Deploying because an event was received from {rid1}"
+        "rescheduling because a dependency was scheduled while it was deploying"
     )
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
@@ -2462,7 +2468,7 @@ async def test_scheduler_priority_rescheduling(agent: TestAgent, environment, ma
     assert get_sorted_tasks() == [
         (
             task_fourth_requires,
-            "rescheduling because a dependency was added to this resource while it was deploying",
+            "rescheduling because a dependency was scheduled while it was deploying",
         ),
         *original_sorted_tasks[1:],
     ]

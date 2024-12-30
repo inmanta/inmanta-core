@@ -511,7 +511,7 @@ class ScheduledWork:
                     new_priority = self.agent_queues.in_progress.get(task, priority)
                     # old task is already running, consider this a new request
                     new_requested_at = self.agent_queues.reserve_requested_at()
-                    new_reason = "rescheduling because a dependency was added to this resource while it was deploying"
+                    new_reason = "rescheduling because a dependency was scheduled while it was deploying"
 
                 queued.remove(resource)
                 self._waiting[resource] = BlockedDeploy(
