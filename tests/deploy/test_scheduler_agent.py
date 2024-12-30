@@ -1186,12 +1186,11 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     agent.executor_manager.reset_executor_counters()
     assert len(agent.scheduler._work._waiting) == 0
     assert len(agent.scheduler._work.agent_queues.queued()) == 0
-    assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
+    assert agent.scheduler._work.agent_queues._in_progress.keys() == {tasks.Deploy(resource=rid2)}
 
-    # trigger an event by releasing a change for r1
-    resources = make_resources(r1_value=3, r2_value=2, r3_value=0)
-    await agent.scheduler._new_version(
-        [ModelVersion(version=10, resources=resources, requires=make_requires(resources), undefined=set())]
+    # trigger an event by deploying r1
+    await agent.scheduler.deploy_resource(
+        rid1, reason="Test: deploying r1 to trigger an event for r2", priority=TaskPriority.USER_DEPLOY
     )
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
     # assert that r2 was rescheduled due to the event, even though it is already deploying for its latest intent
@@ -1201,9 +1200,9 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     #   => question is: should we? Either update that behavior or update this test case. Either way update the message
     #       to say "new dependency was scheduled" instead of "new dependency was added to this resource"
     #   => also verify by hand that this scenario fails if event propagation does not force_deploy=True
-    # assert agent.scheduler._work.agent_queues.queued()[tasks.Deploy(resource=rid2)].reason == (
-    #    f"Deploying because an event was received from {rid1}"
-    # )
+    assert agent.scheduler._work.agent_queues.queued()[tasks.Deploy(resource=rid2)].reason == (
+       f"Deploying because an event was received from {rid1}"
+    )
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
     # verify that it suffices for r2 to be already scheduled (vs deploying above), i.e. it does not get scheduled twice
