@@ -29,7 +29,6 @@ from dataclasses import dataclass
 from typing import Optional, Self, Tuple
 
 import asyncpg
-from asyncpg import Connection
 
 from inmanta import const, data
 from inmanta.agent import executor
@@ -533,7 +532,6 @@ class ResourceScheduler(TaskManager):
             RefreshFact(resource=rid),
             priority=TaskPriority.FACT_REFRESH,
         )
-
 
     async def deploy_resource(self, resource: ResourceIdStr, reason: str, priority: TaskPriority) -> None:
         """

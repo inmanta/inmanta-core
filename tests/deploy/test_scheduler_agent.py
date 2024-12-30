@@ -1192,7 +1192,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     #       to say "new dependency was scheduled" instead of "new dependency was added to this resource"
     #   => also verify by hand that this scenario fails if event propagation does not force_deploy=True
     assert agent.scheduler._work.agent_queues.queued()[tasks.Deploy(resource=rid2)].reason == (
-       f"Deploying because an event was received from {rid1}"
+        f"Deploying because an event was received from {rid1}"
     )
     assert [*agent.scheduler._work.agent_queues._in_progress.keys()] == [tasks.Deploy(resource=rid2)]
 
