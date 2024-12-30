@@ -61,9 +61,9 @@ from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
 from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
-from inmanta.const import EXIT_START_FAILED
+from inmanta.const import ALL_LOG_CONTEXT_VARS, EXIT_START_FAILED, LOG_CONTEXT_VAR_ENVIRONMENT
 from inmanta.export import cfg_env
-from inmanta.logging import InmantaLoggerConfig, LoggerMode, LoggerModeManager, _is_on_tty
+from inmanta.logging import InmantaLoggerConfig, _is_on_tty
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.databaseservice import initialize_database_connection_pool
@@ -85,7 +85,7 @@ def server_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
     )
 
 
-@command("server", help_msg="Start the inmanta server", parser_config=server_parser_config)
+@command("server", help_msg="Start the inmanta server", parser_config=server_parser_config, component="server")
 def start_server(options: argparse.Namespace) -> None:
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
@@ -100,6 +100,7 @@ def start_server(options: argparse.Namespace) -> None:
     util.ensure_event_loop()
 
     ibl = InmantaBootloader()
+
     setup_signal_handlers(ibl.stop)
 
     ioloop = IOLoop.current()
@@ -125,7 +126,7 @@ def start_server(options: argparse.Namespace) -> None:
         exit(EXIT_START_FAILED)
 
 
-@command("scheduler", help_msg="Start the resource scheduler")
+@command("scheduler", help_msg="Start the resource scheduler", component="scheduler")
 def start_scheduler(options: argparse.Namespace) -> None:
     """
     Start the new agent with the Resource Scheduler
@@ -140,7 +141,7 @@ def start_scheduler(options: argparse.Namespace) -> None:
     if max_clients:
         AsyncHTTPClient.configure(None, max_clients=max_clients)
 
-    tracing.configure_logfire("agent_rs")
+    tracing.configure_logfire("scheduler")
 
     util.ensure_event_loop()
     a = agent_new.Agent()
@@ -269,69 +270,71 @@ def compiler_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequenc
 
 
 @command(
-    "compile", help_msg="Compile the project to a configuration model", parser_config=compiler_config, require_project=True
+    "compile",
+    help_msg="Compile the project to a configuration model",
+    parser_config=compiler_config,
+    require_project=True,
+    component="compiler",
 )
 def compile_project(options: argparse.Namespace) -> None:
-    logger_mode_manager = LoggerModeManager.get_instance()
-    with logger_mode_manager.run_in_logger_mode(LoggerMode.COMPILER):
-        if options.environment is not None:
-            Config.set("config", "environment", options.environment)
+    if options.environment is not None:
+        Config.set("config", "environment", options.environment)
 
-        if options.server is not None:
-            Config.set("compiler_rest_transport", "host", options.server)
+    if options.server is not None:
+        Config.set("compiler_rest_transport", "host", options.server)
 
-        if options.port is not None:
-            Config.set("compiler_rest_transport", "port", options.port)
+    if options.port is not None:
+        Config.set("compiler_rest_transport", "port", options.port)
 
-        if options.user is not None:
-            Config.set("compiler_rest_transport", "username", options.user)
+    if options.user is not None:
+        Config.set("compiler_rest_transport", "username", options.user)
 
-        if options.password is not None:
-            Config.set("compiler_rest_transport", "password", options.password)
+    if options.password is not None:
+        Config.set("compiler_rest_transport", "password", options.password)
 
-        if options.ssl:
-            Config.set("compiler_rest_transport", "ssl", "true")
+    if options.ssl:
+        Config.set("compiler_rest_transport", "ssl", "true")
 
-        if options.ca_cert is not None:
-            Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
+    if options.ca_cert is not None:
+        Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
 
-        if options.export_compile_data is True:
-            Config.set("compiler", "export_compile_data", "true")
+    if options.export_compile_data is True:
+        Config.set("compiler", "export_compile_data", "true")
 
-        if options.export_compile_data_file is not None:
-            Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
+    if options.export_compile_data_file is not None:
+        Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
 
-        if options.feature_compiler_cache is False:
-            Config.set("compiler", "cache", "false")
+    if options.feature_compiler_cache is False:
+        Config.set("compiler", "cache", "false")
 
-        if options.datatrace is True:
-            Config.set("compiler", "datatrace_enable", "true")
+    if options.datatrace is True:
+        Config.set("compiler", "datatrace_enable", "true")
 
-        if options.dataflow_graphic is True:
-            Config.set("compiler", "dataflow_graphic_enable", "true")
+    if options.dataflow_graphic is True:
+        Config.set("compiler", "dataflow_graphic_enable", "true")
 
-        strict_deps_check = moduletool.get_strict_deps_check(
-            no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
-        )
-        module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
+    strict_deps_check = moduletool.get_strict_deps_check(
+        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
+    )
+    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
-        with tracing.span("compile"):
-            summary_reporter = CompileSummaryReporter()
-            if options.profile:
-                import cProfile
-                import pstats
+    with tracing.span("compile"):
+        summary_reporter = CompileSummaryReporter()
+        if options.profile:
+            import cProfile
+            import pstats
 
-                with summary_reporter.compiler_exception.capture():
-                    cProfile.runctx("do_compile()", globals(), {}, "run.profile")
-                p = pstats.Stats("run.profile")
-                p.strip_dirs().sort_stats("time").print_stats(20)
-            else:
-                t1 = time.time()
-                with summary_reporter.compiler_exception.capture():
-                    do_compile()
-                LOGGER.debug("The entire compile command took %0.03f seconds", time.time() - t1)
+            with summary_reporter.compiler_exception.capture():
+                cProfile.runctx("do_compile()", globals(), {}, "run.profile")
+            p = pstats.Stats("run.profile")
+            p.strip_dirs().sort_stats("time").print_stats(20)
+        else:
+            t1 = time.time()
+            with summary_reporter.compiler_exception.capture():
+                do_compile()
+            LOGGER.debug("The entire compile command took %0.03f seconds", time.time() - t1)
 
-            summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
+        summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
 
 
 @command("list-commands", help_msg="Print out an overview of all commands", add_verbose_flag=False)
@@ -499,119 +502,190 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
     moduletool.add_deps_check_arguments(parser)
 
 
-@command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
+@command(
+    "export",
+    help_msg="Export the configuration",
+    parser_config=export_parser_config,
+    require_project=True,
+    component="compiler",
+)
 def export(options: argparse.Namespace) -> None:
-    logger_mode_manager = LoggerModeManager.get_instance()
-    with logger_mode_manager.run_in_logger_mode(LoggerMode.COMPILER):
-        resource_sets_to_remove: set[str] = set(options.delete_resource_set) if options.delete_resource_set else set()
+    resource_sets_to_remove: set[str] = set(options.delete_resource_set) if options.delete_resource_set else set()
 
-        if const.INMANTA_REMOVED_SET_ID in os.environ:
-            removed_sets = set(os.environ[const.INMANTA_REMOVED_SET_ID].split())
+    if const.INMANTA_REMOVED_SET_ID in os.environ:
+        removed_sets = set(os.environ[const.INMANTA_REMOVED_SET_ID].split())
 
-            resource_sets_to_remove.update(removed_sets)
+        resource_sets_to_remove.update(removed_sets)
 
-        if not options.partial_compile and resource_sets_to_remove:
-            raise CLIException(
-                "A full export was requested but resource sets were marked for deletion (via the --delete-resource-set cli "
-                "option or the INMANTA_REMOVED_SET_ID env variable). Deleting a resource set can only be performed during a "
-                "partial export. To trigger a partial export, use the --partial option.",
-                exitcode=1,
+    if not options.partial_compile and resource_sets_to_remove:
+        raise CLIException(
+            "A full export was requested but resource sets were marked for deletion (via the --delete-resource-set cli "
+            "option or the INMANTA_REMOVED_SET_ID env variable). Deleting a resource set can only be performed during a "
+            "partial export. To trigger a partial export, use the --partial option.",
+            exitcode=1,
+        )
+
+    if options.environment is not None:
+        Config.set("config", "environment", options.environment)
+
+    if options.server is not None:
+        Config.set("compiler_rest_transport", "host", options.server)
+
+    if options.port is not None:
+        Config.set("compiler_rest_transport", "port", options.port)
+
+    if options.token is not None:
+        Config.set("compiler_rest_transport", "token", options.token)
+
+    if options.ssl is not None:
+        Config.set("compiler_rest_transport", "ssl", f"{options.ssl}".lower())
+
+    if options.ca_cert is not None:
+        Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
+
+    if options.export_compile_data is True:
+        Config.set("compiler", "export_compile_data", "true")
+
+    if options.export_compile_data_file is not None:
+        Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
+
+    if options.feature_compiler_cache is False:
+        Config.set("compiler", "cache", "false")
+
+    tracing.configure_logfire("compiler")
+
+    # try to parse the metadata as json. If a normal string, create json for it.
+    if options.metadata is not None and len(options.metadata) > 0:
+        try:
+            metadata = json.loads(options.metadata)
+        except json.decoder.JSONDecodeError:
+            metadata = {"message": options.metadata}
+    else:
+        metadata = {"message": "Manual compile on the CLI by user"}
+
+    if "cli-user" not in metadata and "USERNAME" in os.environ:
+        metadata["cli-user"] = os.environ["USERNAME"]
+
+    if "hostname" not in metadata:
+        metadata["hostname"] = socket.gethostname()
+
+    if "type" not in metadata:
+        metadata["type"] = "manual"
+
+    strict_deps_check = moduletool.get_strict_deps_check(
+        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
+    )
+    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
+
+    from inmanta.export import Exporter  # noqa: H307
+
+    with tracing.span("compiler"):
+        summary_reporter = CompileSummaryReporter()
+
+        types: Optional[dict[str, inmanta_type.Type]]
+        scopes: Optional[Namespace]
+
+        t1 = time.time()
+        with summary_reporter.compiler_exception.capture():
+            try:
+                (types, scopes) = do_compile()
+            except Exception:
+                types, scopes = (None, None)
+                raise
+
+    # Even if the compile failed we might have collected additional data such as unknowns. So
+    # continue the export
+    with tracing.span("exporter"):
+        export = Exporter(options)
+        with summary_reporter.exporter_exception.capture():
+            results = export.run(
+                types,
+                scopes,
+                metadata=metadata,
+                model_export=options.model_export,
+                export_plugin=options.export_plugin,
+                partial_compile=options.partial_compile,
+                resource_sets_to_remove=list(resource_sets_to_remove),
             )
 
-        if options.environment is not None:
-            Config.set("config", "environment", options.environment)
+        if not summary_reporter.is_failure() and options.deploy:
+            version = results[0]
+            conn = protocol.SyncClient("compiler")
+            LOGGER.info("Triggering deploy for version %d" % version)
+            tid = cfg_env.get()
+            agent_trigger_method = const.AgentTriggerMethod.get_agent_trigger_method(options.full_deploy)
+            conn.release_version(tid, version, True, agent_trigger_method)
 
-        if options.server is not None:
-            Config.set("compiler_rest_transport", "host", options.server)
+    LOGGER.debug("The entire export command took %0.03f seconds", time.time() - t1)
+    summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
 
-        if options.port is not None:
-            Config.set("compiler_rest_transport", "port", options.port)
 
-        if options.token is not None:
-            Config.set("compiler_rest_transport", "token", options.token)
+def validate_logging_config_parser_config(
+    parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]
+) -> None:
+    """
+    Config parser for the validate-logging-config command.
+    """
+    parser.add_argument(
+        "-e",
+        dest="environment",
+        help="The environment id to be used as context variable in logging config templates. If not specified,"
+        " 0c111d30-feaf-4f5b-b2d6-83d589480a4a will be used.",
+        default="0c111d30-feaf-4f5b-b2d6-83d589480a4a",
+    )
 
-        if options.ssl is not None:
-            Config.set("compiler_rest_transport", "ssl", f"{options.ssl}".lower())
-
-        if options.ca_cert is not None:
-            Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
-
-        if options.export_compile_data is True:
-            Config.set("compiler", "export_compile_data", "true")
-
-        if options.export_compile_data_file is not None:
-            Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
-
-        if options.feature_compiler_cache is False:
-            Config.set("compiler", "cache", "false")
-
-        tracing.configure_logfire("compiler")
-
-        # try to parse the metadata as json. If a normal string, create json for it.
-        if options.metadata is not None and len(options.metadata) > 0:
-            try:
-                metadata = json.loads(options.metadata)
-            except json.decoder.JSONDecodeError:
-                metadata = {"message": options.metadata}
-        else:
-            metadata = {"message": "Manual compile on the CLI by user"}
-
-        if "cli-user" not in metadata and "USERNAME" in os.environ:
-            metadata["cli-user"] = os.environ["USERNAME"]
-
-        if "hostname" not in metadata:
-            metadata["hostname"] = socket.gethostname()
-
-        if "type" not in metadata:
-            metadata["type"] = "manual"
-
-        strict_deps_check = moduletool.get_strict_deps_check(
-            no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
+    sub_parsers = parser.add_subparsers(title="subcommand", dest="cmd")
+    for component_name in ["server", "scheduler", "compiler"]:
+        sub_parser = sub_parsers.add_parser(
+            component_name, help=f"Validate the logging config for the {component_name}", parents=parent_parsers
         )
-        module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
+        sub_parser.set_defaults(component=component_name)
 
-        from inmanta.export import Exporter  # noqa: H307
 
-        with tracing.span("compiler"):
-            summary_reporter = CompileSummaryReporter()
-
-            types: Optional[dict[str, inmanta_type.Type]]
-            scopes: Optional[Namespace]
-
-            t1 = time.time()
-            with summary_reporter.compiler_exception.capture():
-                try:
-                    (types, scopes) = do_compile()
-                except Exception:
-                    types, scopes = (None, None)
-                    raise
-
-    with logger_mode_manager.run_in_logger_mode(LoggerMode.EXPORTER):
-        # Even if the compile failed we might have collected additional data such as unknowns. So
-        # continue the export
-        with tracing.span("exporter"):
-            export = Exporter(options)
-            with summary_reporter.exporter_exception.capture():
-                results = export.run(
-                    types,
-                    scopes,
-                    metadata=metadata,
-                    model_export=options.model_export,
-                    export_plugin=options.export_plugin,
-                    partial_compile=options.partial_compile,
-                    resource_sets_to_remove=list(resource_sets_to_remove),
-                )
-
-            if not summary_reporter.is_failure() and options.deploy:
-                version = results[0]
-                conn = protocol.SyncClient("compiler")
-                LOGGER.info("Triggering deploy for version %d" % version)
-                tid = cfg_env.get()
-                agent_trigger_method = const.AgentTriggerMethod.get_agent_trigger_method(options.full_deploy)
-                conn.release_version(tid, version, True, agent_trigger_method)
-
-        LOGGER.debug("The entire export command took %0.03f seconds", time.time() - t1)
-        summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
+@command(
+    "validate-logging-config",
+    help_msg="This command loads a logging config file, taking into account the precedence rules for logging config files,"
+    " and produces log lines. It serves as a tool to validate whether a logging config file is syntactically correct"
+    " and behaves as expected. Optionally, a sub-command can be specified to indicate the component for which the"
+    " logging config file should be loaded.",
+    parser_config=validate_logging_config_parser_config,
+)
+def validate_logging_config(options: argparse.Namespace) -> None:
+    logging_config = InmantaLoggerConfig.get_current_instance()
+    if logging_config.loaded_config_file is None:
+        raise Exception("No logging configuration file found.")
+    print(f"Using logging config file: {logging_config.loaded_config_file}", file=sys.stderr)
+    env_id = options.environment
+    logger_and_message = [
+        (logging.getLogger("inmanta.protocol.rest.server"), "Log line from Inmanta server"),
+        (logging.getLogger("inmanta.server.services.compilerservice"), "Log line from compiler service"),
+        (logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER).getChild(env_id), "Log line for resource action log"),
+        (logging.getLogger("inmanta_lsm.callback"), "Log line from callback"),
+        (logging.getLogger("inmanta.scheduler"), "Log line from the resource scheduler"),
+        (logging.getLogger(const.LOGGER_NAME_EXECUTOR), "Log line from the executor"),
+        (logging.getLogger(f"{const.LOGGER_NAME_EXECUTOR}.test"), "Log line from a sub-logger of the executor"),
+        (logging.getLogger("performance"), "Performance log line"),
+        (logging.getLogger("inmanta.warnings"), "Warning log line"),
+        (logging.getLogger("tornado.access"), "tornado access log"),
+        (logging.getLogger("tornado.general"), "tornado general log"),
+    ]
+    log_levels = [
+        logging.DEBUG,
+        logging.INFO,
+        logging.WARNING,
+        logging.ERROR,
+        logging.CRITICAL,
+        logging.NOTSET,
+    ]
+    print(
+        "Each of the log lines mentioned below will be emitted at the following log levels:"
+        f" {[logging.getLevelName(level) for level in log_levels]}:",
+        file=sys.stderr,
+    )
+    for logger, msg in logger_and_message:
+        print(f" * Emitting log line '{msg}' at level <LEVEL> using logger '{logger.name}'", file=sys.stderr)
+        for log_level in log_levels:
+            logger.log(log_level, f"{msg} at level {logging.getLevelName(log_level)}")
 
 
 class Color(enum.Enum):
@@ -784,7 +858,8 @@ def cmd_parser() -> argparse.ArgumentParser:
         "--verbose",
         action="count",
         default=0,
-        help="Log level for messages going to the console. Default is warnings,"
+        help="Log level for messages going to the console. Default is warnings only. "
+        "When used in combination with a logging config file, it will force a cli logger to be added to the config."
         "-v warning, -vv info, -vvv debug and -vvvv trace",
     )
     parser.add_argument(
@@ -808,7 +883,7 @@ def cmd_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--keep-logger-names",
         dest="keep_logger_names",
-        help="Display the log messages using the name of the logger that created the log messages.",
+        help="Display the log messages using the name of the logger that created the log messages when running the compiler.",
         action="store_true",
         default=False,
     )
@@ -834,9 +909,82 @@ def cmd_parser() -> argparse.ArgumentParser:
         if cmd_options["parser_config"] is not None:
             cmd_options["parser_config"](cmd_subparser, parent_parsers)
         cmd_subparser.set_defaults(func=cmd_options["function"])
+        cmd_subparser.set_defaults(component=cmd_options["component"])
         cmd_subparser.set_defaults(require_project=cmd_options["require_project"])
 
     return parser
+
+
+def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
+    subparser = parser.add_subparsers(title="subcommand", dest="cmd")
+
+    subparser.add_parser(
+        "server",
+        help="Output default log file for the server, given the current configuration file and options",
+        parents=parent_parsers,
+    )
+    subparser.add_parser(
+        "scheduler",
+        help="Output default log file template for the scheduler, "
+        "given the current configuration file and options. Store in a file ending with `.tmpl`",
+        parents=parent_parsers,
+    )
+    subparser.add_parser(
+        "compiler",
+        help="Output default log file template for the compiler, given the current configuration file and options",
+        parents=parent_parsers,
+    )
+
+
+@command(
+    "print-default-logging-config",
+    help_msg="Print the default log config for the provided component",
+    parser_config=default_log_config_parser,
+)
+def default_logging_config(options: argparse.Namespace) -> None:
+    # Because we want to have contex vars in the files,
+    #   but the file can also contain other f-string formatters, this is a bit tricky.
+    # We want to be able to
+    #   1. replace all env_vars with a template `{env_var}`
+    #   2. if we form a template, escape all existing '{' into '{{' and `}` into `}}`
+    # What we do is:
+    #   1. set all env vars to {placeholder}{var}{placeholder}
+    #   2. if we detect the placeholder
+    #   3. do escaping
+    #   4. replace placeholder with {placeholder}{var}{placeholder} with {{{var}}}
+
+    # Al possible context vars:
+    context_vars = ALL_LOG_CONTEXT_VARS
+
+    # 1. Replace variables by placeholder
+    # Should be safe as we only expect default configs
+    # That don't contain this placeholder
+    place_holder = "__PLACE_HOLDER__"
+
+    context = {var: f"{place_holder}{var}{place_holder}" for var in context_vars}
+
+    component_config = InmantaLoggerConfig(stream=sys.stdout, no_install=True)
+    component_config.apply_options(options, options.cmd, context)
+
+    if options.cmd == "server":
+        # Upgrade with extensions
+        ibl = InmantaBootloader()
+        ibl.start_loggers_for_extensions(component_config)
+
+    assert component_config._loaded_config is not None  # make mypy happy
+    raw_dump = component_config._loaded_config.to_string()
+
+    # 2. if we detect the placeholder
+    if place_holder in raw_dump:
+        # 3. escape all '{' and '}'
+        # i.e. we could be a template of a template
+        raw_dump = raw_dump.replace("{", "{{")
+        raw_dump = raw_dump.replace("}", "}}")
+        # 4. replace placeholder with `{`
+        for context_var in context_vars:
+            raw_dump = raw_dump.replace(f"{place_holder}{context_var}{place_holder}", "{" + context_var + "}")
+
+    print(raw_dump)
 
 
 def print_versions_installed_components_and_exit() -> None:
@@ -869,6 +1017,7 @@ def app() -> None:
     """
     Run the compiler
     """
+    # Bootstrap log config
     log_config = InmantaLoggerConfig.get_instance()
     logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
 
@@ -878,15 +1027,26 @@ def app() -> None:
     options, other = parser.parse_known_args()
     options.other = other
 
-    log_config.apply_options(options)
-
-    logging.captureWarnings(True)
-
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
     # Load the configuration
     Config.load_config(options.config_file, options.config_dir)
+
+    # Collect potential log context
+    log_context = {}
+    env = None
+    if hasattr(options, "environment"):
+        env = options.environment
+    if not env:
+        env = agent_config.environment.get()
+    if env:
+        log_context[LOG_CONTEXT_VAR_ENVIRONMENT] = env
+
+    # Log config
+    component = options.component if hasattr(options, "component") else None
+    log_config.apply_options(options, component, log_context)
+    logging.captureWarnings(True)
 
     if options.inmanta_version:
         print_versions_installed_components_and_exit()

@@ -21,6 +21,7 @@ import datetime
 import logging
 import uuid
 from collections.abc import Set
+from contextlib import AbstractAsyncContextManager
 from typing import Any, Optional
 from uuid import UUID
 
@@ -30,11 +31,10 @@ from inmanta import const, data
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult
 from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import LogLine
-from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.deploy import state
 from inmanta.protocol import Client
 from inmanta.resources import Id
-from inmanta.server.services import resourceservice
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +45,10 @@ class StateUpdateManager(abc.ABC):
 
     This interface is split off from the taskmanager, to make mocking it easier
     """
+
+    @abc.abstractmethod
+    def get_connection(self, connection: Optional[Connection] = None) -> AbstractAsyncContextManager[Connection]:
+        pass
 
     @abc.abstractmethod
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
@@ -107,23 +111,9 @@ class ToDbUpdateManager(StateUpdateManager):
         self.environment = environment
         # TODO: The client is only here temporarily while we fix the dryrun_update
         self.client = client
-        # FIXME: We may want to move the writing of the log to the scheduler side as well,
-        #  when all uses of this logger are moved
-        self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
 
-    def get_resource_action_logger(self, environment: UUID) -> logging.Logger:
-        """Get the resource action logger for the given environment.
-        :param environment: The environment to get a logger for
-        :return: The logger for the given environment.
-        """
-        return self._resource_action_logger.getChild(str(environment))
-
-    def log_resource_action(self, env: UUID, resource_id: str, log_level: int, ts: datetime.datetime, message: str) -> None:
-        """Write the given log to the correct resource action logger"""
-        logger = self.get_resource_action_logger(env)
-        message = resource_id + ": " + message
-        log_record = resourceservice.ResourceActionLogLine(logger.name, log_level, message, ts)
-        logger.handle(log_record)
+    def get_connection(self, connection: Optional[Connection] = None) -> AbstractAsyncContextManager[Connection]:
+        return data.Scheduler.get_connection()
 
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         """
@@ -142,6 +132,14 @@ class ToDbUpdateManager(StateUpdateManager):
                 )
                 assert resource is not None, f"Resource {resource_id} does not exists in the database, this should not happen"
 
+                log_line = data.LogLine.log(
+                    logging.INFO,
+                    "Resource deploy started on agent %(agent)s, setting status to deploying",
+                    agent=resource_id.agent_name,
+                )
+                # Not in Handler context, need to flush explicitly
+                log_line.write_to_logger_for_resource(resource_id.agent_name, resource_id.resource_version_str(), False)
+
                 resource_action = data.ResourceAction(
                     environment=self.environment,
                     version=resource_id.version,
@@ -149,13 +147,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     action_id=action_id,
                     action=const.ResourceAction.deploy,
                     started=datetime.datetime.now().astimezone(),
-                    messages=[
-                        data.LogLine.log(
-                            logging.INFO,
-                            "Resource deploy started on agent %(agent)s, setting status to deploying",
-                            agent=resource_id.agent_name,
-                        )
-                    ],
+                    messages=[log_line],
                     status=const.ResourceState.deploying,
                 )
                 try:
@@ -238,16 +230,6 @@ class ToDbUpdateManager(StateUpdateManager):
                 if resource_action.finished is not None:
                     raise ValueError(
                         f"Resource action with id {resource_id_str} was already marked as done at {resource_action.finished}."
-                    )
-
-                for log in messages:
-                    # All other data is stored in the database. The msg was already formatted at the client side.
-                    self.log_resource_action(
-                        self.environment,
-                        resource_id_str,
-                        log.log_level.to_int,
-                        log.timestamp,
-                        log.msg,
                     )
 
                 await resource_action.set_and_save(

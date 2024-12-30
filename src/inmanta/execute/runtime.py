@@ -20,6 +20,7 @@ from abc import abstractmethod
 from collections.abc import Hashable, Sequence, Set
 from typing import TYPE_CHECKING, Deque, Generic, List, Literal, NewType, Optional, TypeVar, Union, cast
 
+import inmanta.ast
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
 from inmanta import ast
 from inmanta.ast import (
@@ -35,7 +36,7 @@ from inmanta.ast import (
     RuntimeException,
 )
 from inmanta.ast.type import Type
-from inmanta.execute import dataflow, proxy
+from inmanta.execute import dataflow
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.tracking import Tracker
 from inmanta.execute.util import NoneValue, Unknown
@@ -295,7 +296,7 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
 
     def get_value(self) -> T:
         if not self.hasValue:
-            raise proxy.UnsetException("Value not available", self)
+            raise inmanta.ast.UnsetException("Value not available", self)
 
         return self.value
 
@@ -1361,7 +1362,7 @@ class Instance(ExecutionContext):
                         # list for n-ary relations
                         length = 0 if v.value is None else len(v.value)
                         excns.append(
-                            proxy.UnsetException(
+                            inmanta.ast.UnsetException(
                                 "The object %s is not complete: attribute %s (%s) requires %d values but only %d are set"
                                 % (self, k, attr.location, low, length),
                                 self,
@@ -1370,7 +1371,7 @@ class Instance(ExecutionContext):
                         )
                     else:
                         excns.append(
-                            proxy.UnsetException(
+                            inmanta.ast.UnsetException(
                                 f"The object {self} is not complete: attribute {k} ({attr.location}) is not set",
                                 self,
                                 attr,

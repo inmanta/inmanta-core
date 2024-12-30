@@ -19,6 +19,7 @@
 import logging
 import os.path
 import sys
+import uuid
 from io import StringIO
 from typing import Optional
 
@@ -27,7 +28,8 @@ import yaml
 
 import inmanta
 from inmanta import config
-from inmanta.logging import InmantaLoggerConfig, MultiLineFormatter, Options
+from inmanta.const import ENVIRON_FORCE_TTY
+from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, MultiLineFormatter, Options, load_config_file_to_dict
 
 
 @pytest.fixture(autouse=True)
@@ -332,3 +334,78 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
         )
         logger.info("test")
         assert "HHH test" in stream.getvalue()
+
+
+def test_log_file_or_template(tmp_path):
+
+    with pytest.raises(FileNotFoundError):
+        # TODO: do we want more specific exceptions?
+        load_config_file_to_dict(str(tmp_path / "test"), {})
+
+    content_1 = {"test": "x"}
+    content_2 = {"test": "{xvar}", "flah": "\n\n\n{yvar}\n", "{test}": "value"}
+
+    f1 = tmp_path / "test.yaml"
+    f2 = tmp_path / "test.yaml.tmpl"
+
+    with open(f1, "w") as fh:
+        yaml.dump(content_1, fh)
+
+    with open(f2, "w") as fh:
+        yaml.dump(content_2, fh)
+
+    assert load_config_file_to_dict(str(f1), {}) == content_1
+
+    with pytest.raises(
+        Exception,
+        match="The configuration template at .* refers to context variable 'test',"
+        " but this variable is not available. The context is limited to xvar, yvar",
+    ):
+        load_config_file_to_dict(
+            str(f2),
+            {
+                "xvar": "A",
+                "yvar": "B",
+            },
+        )
+
+    config = load_config_file_to_dict(str(f2), {"xvar": "A", "yvar": "B", "test": "key"})
+    assert config == {"test": "A", "flah": "\n\n\nB\n", "key": "value"}
+
+    # we control the values, so not very relevant from security perspective
+    # overwrite type of injection
+    config = load_config_file_to_dict(str(f2), {"xvar": "A", "yvar": "B", "test": "flah"})
+    assert config == {"test": "A", "flah": "value"}
+
+    # Full on injection
+    config = load_config_file_to_dict(str(f2), {"xvar": "A", "yvar": "B", "test": "flah': 'zxxx'\ntest: zzz\nflah: zzz\n#"})
+    assert config == {"test": "zzz", "flah": "zzz"}
+
+
+def test_scheduler_documentation_conformance(inmanta_config, monkeypatch):
+    monkeypatch.setenv(ENVIRON_FORCE_TTY, "yes")
+    env = uuid.uuid4()
+    from_file_dict = load_config_file_to_dict(
+        os.path.join(os.path.dirname(__file__), "..", "misc/scheduler_log.yml.tmpl"), context={"environment": env}
+    )
+    default = LoggingConfigBuilder()
+    from_config = default.get_logging_config_from_options(
+        sys.stdout, Options(log_file_level="DEBUG"), component="scheduler", context={"environment": env}
+    )
+
+    assert from_config._to_dict_config() == from_file_dict
+
+
+def test_server_documentation_conformance(inmanta_config, monkeypatch):
+    monkeypatch.setenv(ENVIRON_FORCE_TTY, "yes")
+    from_file_dict = load_config_file_to_dict(os.path.join(os.path.dirname(__file__), "..", "misc/server_log.yml"), context={})
+
+    default = LoggingConfigBuilder()
+    from_config = default.get_logging_config_from_options(
+        sys.stdout,
+        Options(log_file_level="INFO", log_file="/var/log/inmanta/server.log", timed=True),
+        component="server",
+        context={},
+    )
+
+    assert from_config._to_dict_config() == from_file_dict

@@ -35,7 +35,7 @@ from inmanta.util.collections import BidirectionalManyMapping
 
 if TYPE_CHECKING:
     from inmanta import resources
-    from inmanta.data.model import ResourceIdStr, ResourceType
+    from inmanta.types import ResourceIdStr, ResourceType
 
 
 class RequiresProvidesMapping(BidirectionalManyMapping["ResourceIdStr", "ResourceIdStr"]):

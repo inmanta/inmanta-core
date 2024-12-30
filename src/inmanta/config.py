@@ -460,6 +460,22 @@ logging_config = Option(
 )
 
 
+def make_option_for_log_file(component_name: str) -> Option[str | None]:
+    return Option(
+        section="logging",
+        name=component_name,
+        default=option_as_default(logging_config),
+        documentation=f"The path to the configuration file for the logging of the {component_name}. This is a YAML file that follows "
+        "the dictionary-schema accepted by logging.config.dictConfig(). All other log-related configuration "
+        "options will be ignored when this option is set.",
+        validator=is_str_opt,
+    )
+
+
+component_log_configs = {k: make_option_for_log_file(k) for k in ["server", "scheduler", "compiler"]}
+scheduler_log_config = component_log_configs["scheduler"]
+
+
 def get_executable() -> Optional[str]:
     """``os.path.abspath(sys.argv[0])``"""
     try:

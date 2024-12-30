@@ -29,12 +29,13 @@ from dataclasses import dataclass
 from typing import Optional, Self, Tuple
 
 import asyncpg
+from asyncpg import Connection
 
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.data import ConfigurationModel, Environment
-from inmanta.data.model import Discrepancy, ResourceIdStr, ResourceType, ResourceVersionIdStr, SchedulerStatusReport
+from inmanta.data.model import Discrepancy, SchedulerStatusReport
 from inmanta.deploy import timers, work
 from inmanta.deploy.persistence import ToDbUpdateManager
 from inmanta.deploy.state import (
@@ -51,6 +52,7 @@ from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
+from inmanta.types import ResourceIdStr, ResourceType, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
@@ -381,7 +383,7 @@ class ResourceScheduler(TaskManager):
         # 1. nothing we do here before read_version is inherently transactional: the only write is atomic, and reads to not
         #   benefit from READ COMMITTED (default) isolation level.
         # 2. read_version expects to receive a connection outside of a transaction context
-        async with data.Scheduler.get_connection() as con:
+        async with self.state_update_manager.get_connection() as con:
             # Make sure there is an entry for this scheduler in the scheduler database table
             await data.Scheduler._execute_query(
                 f"""
@@ -532,6 +534,7 @@ class ResourceScheduler(TaskManager):
             priority=TaskPriority.FACT_REFRESH,
         )
 
+
     async def deploy_resource(self, resource: ResourceIdStr, reason: str, priority: TaskPriority) -> None:
         """
         Make sure the given resource is marked for deployment with at least the provided priority.
@@ -563,7 +566,7 @@ class ResourceScheduler(TaskManager):
         Returns a single model version as fetched from the database. Returns the requested version if provided
         (regardless of whether it has been released or not), otherwise returns the latest released version.
         """
-        async with ConfigurationModel.get_connection(connection) as con:
+        async with self.state_update_manager.get_connection(connection) as con:
             if version is None:
                 # Fetch the latest released model version
                 cm_version = await ConfigurationModel.get_latest_version(self.environment, connection=con)
@@ -600,7 +603,7 @@ class ResourceScheduler(TaskManager):
         """
         if not self._running:
             return
-        async with self._intent_lock, data.Resource.get_connection(connection) as con:
+        async with self._intent_lock, self.state_update_manager.get_connection(connection) as con:
             # Note: we're not very sensitive to races on the latest released version here. The server will always notify us
             # *after* a new version is released. So we'll always be in one of two scenearios:
             # - the latest released version was released before we started processing this notification
@@ -808,7 +811,7 @@ class ResourceScheduler(TaskManager):
         # 2. pass context once more to event loop before starting on the sync path
         #    (could be achieved with a simple sleep(0) if desired)
         # 3. clarity: it clearly signifies that this is the atomic and performance-sensitive part
-        async with data.Resource.get_connection(connection=connection) as con, con.transaction():
+        async with self.state_update_manager.get_connection(connection=connection) as con, con.transaction():
             async with self._scheduler_lock:
                 self._state.version = model.version
                 # update resource details
@@ -1190,9 +1193,10 @@ class ResourceScheduler(TaskManager):
                     else f"Deploying because an event was received from {resource_id}"
                 ),
                 priority=priority,
-                # report no ongoing deploys because ongoing deploys can not capture the event. We desire new deploys
-                # to be scheduled, even if any are ongoing for the same intent.
-                deploying=set(),
+                deploying=self._deploying_latest,
+                # force a new deploy to be scheduled because ongoing deploys can not capture the event.
+                # We desire new deploys to be scheduled, even if any are ongoing for the same intent.
+                force_deploy=True,
             )
 
     async def _get_last_non_deploying_state_for_dependencies(
@@ -1376,7 +1380,7 @@ class ResourceScheduler(TaskManager):
 
         latest_version: int | None
         async with self._scheduler_lock:
-            async with data.Scheduler.get_connection() as connection:
+            async with self.state_update_manager.get_connection() as connection:
                 try:
                     latest_model: ModelVersion = await self._get_single_model_version_from_db(connection=connection)
                 except KeyError:

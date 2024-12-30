@@ -38,10 +38,10 @@ import inmanta.server.services.environmentlistener
 from inmanta import config as global_config
 from inmanta import const, data, tracing
 from inmanta.agent import config as agent_cfg
-from inmanta.config import Config, config_map_to_str
+from inmanta.config import Config, config_map_to_str, scheduler_log_config
 from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
 from inmanta.data import APILIMIT, Environment, InvalidSort, model
-from inmanta.data.model import DataBaseReport, ResourceIdStr
+from inmanta.data.model import DataBaseReport
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
@@ -59,7 +59,7 @@ from inmanta.server import protocol
 from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, SessionManager
 from inmanta.server.server import Server
 from inmanta.server.services import environmentservice
-from inmanta.types import Apireturn, ArgumentTypes, ReturnTupple
+from inmanta.types import Apireturn, ArgumentTypes, ResourceIdStr, ReturnTupple
 
 from ..data.dataview import AgentView
 from . import config as server_config
@@ -1232,19 +1232,13 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         out: str = os.path.join(self._server_storage["logs"], "agent-%s.out" % env.id)
         err: str = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
 
-        agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
-
         proc: subprocess.Process = await self._fork_inmanta(
             [
                 "--log-file-level",
                 "DEBUG",
-                "--timed-logs",
                 "--config",
                 config_path,
-                "--config-dir",
-                Config._config_dir if Config._config_dir is not None else "",
-                "--log-file",
-                agent_log,
+                *(["--config-dir", Config._config_dir] if Config._config_dir is not None else []),
                 "scheduler",
             ],
             out,
@@ -1354,6 +1348,14 @@ password = {opt.influxdb_password.get()}
 interval = {opt.influxdb_interval.get()}
 tags = {config_map_to_str(opt.influxdb_tags.get())}
 """
+
+        if scheduler_log_config.get():
+            config += f"""
+
+[logging]
+scheduler = {os.path.abspath(scheduler_log_config.get())}
+"""
+
         return config
 
     async def _fork_inmanta(

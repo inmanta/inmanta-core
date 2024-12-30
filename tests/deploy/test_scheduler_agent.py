@@ -26,8 +26,8 @@ import typing
 import uuid
 from collections.abc import Awaitable, Callable, Set
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
-from typing import Any, Coroutine, Mapping, Never, Optional, Sequence, Tuple
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from typing import Any, Coroutine, Mapping, Never, Optional, Sequence
 from uuid import UUID
 
 import asyncpg
@@ -35,13 +35,12 @@ import pytest
 from asyncpg import Connection
 
 import utils
-from inmanta import const, data, util
+from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.const import Change
-from inmanta.data import ResourceIdStr
 from inmanta.deploy import state, tasks
 from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ModelVersion, ResourceScheduler
@@ -51,6 +50,7 @@ from inmanta.deploy.work import ScheduledWork, TaskPriority
 from inmanta.protocol import Client
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.resources import Id
+from inmanta.types import ResourceIdStr
 from inmanta.util import retry_limited
 from utils import DummyCodeManager, make_requires
 
@@ -79,7 +79,6 @@ class DummyExecutor(executor.Executor):
         * It doesn't actually do any deploys, but instead keeps track of the actions
           (execute, dryrun, get_facts, etc.) that were requested on it.
         * It reports a deploy as failed if the resource has an attribute with the value of the `FAIL_DEPLOY` variable.
-          Otherwise, the deploy is reported as successful.
     """
 
     def __init__(self) -> None:
@@ -228,7 +227,7 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
 
 
 state_translation_table: dict[
-    const.ResourceState, Tuple[state.DeploymentResult, state.BlockedStatus, state.ComplianceStatus]
+    const.ResourceState, tuple[state.DeploymentResult, state.BlockedStatus, state.ComplianceStatus]
 ] = {
     # A table to translate the old states into the new states
     # None means don't care, mostly used for values we can't derive from the old state
@@ -315,6 +314,10 @@ class DummyStateManager(StateUpdateManager):
         self, environment: UUID, version: int, connection: Optional[Connection] = None
     ) -> None:
         pass
+
+    @asynccontextmanager
+    async def get_connection(self, connection: Optional[Connection] = None) -> AbstractAsyncContextManager[Connection]:
+        yield DummyDatabaseConnection()
 
 
 def state_manager_check(agent: "TestAgent"):
@@ -441,18 +444,6 @@ async def agent(environment, config, monkeypatch):
     """
     out = TestAgent(environment)
     await out.start_working()
-
-    def _initialize_mock(self) -> None:
-        self._running = True
-
-    monkeypatch.setattr(ResourceScheduler, "_initialize", _initialize_mock)
-
-    @asynccontextmanager
-    async def get_connection_mock(connection: Optional[asyncpg.connection.Connection] = None):
-        yield DummyDatabaseConnection()
-
-    monkeypatch.setattr(data.BaseDocument, "get_connection", get_connection_mock)
-
     yield out
     await out.stop_working()
 
@@ -1384,6 +1375,180 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert agent.executor_manager.executors["agent1"].execute_count == 1
     assert agent.executor_manager.executors["agent2"].execute_count == 3
     assert agent.executor_manager.executors["agent3"].execute_count == 0
+
+    ###########################################################################################
+    # Verify resources wait for all dependencies to finish when they receive an event (#8514) #
+    ###########################################################################################
+    agent.executor_manager.reset_executor_counters()
+
+    # set up initial state: have rid3 depend on both other resources
+    resources = make_resources(
+        r1_value=1,
+        r2_value=1,
+        r3_value=1,
+        requires={
+            rid3: [rid1, rid2],
+        },
+        r1_send_event=True,
+        r2_send_event=False,
+    )
+    await agent.scheduler._new_version(18, resources, make_requires(resources))
+    await retry_limited_fast(lambda: rid2 in executor2.deploys)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
+    await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
+    assert len(agent.scheduler._work._waiting) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
+    assert agent.executor_manager.executors["agent3"].execute_count == 1
+
+    # release a change for rid2 to get it in a deploying state
+    resources = make_resources(
+        r1_value=1,
+        r2_value=2,
+        r3_value=1,
+        requires={
+            rid3: [rid1, rid2],
+        },
+        r1_send_event=True,
+        r2_send_event=False,
+    )
+    await agent.scheduler._new_version(19, resources, make_requires(resources))
+    await retry_limited_fast(lambda: rid2 in executor2.deploys)
+    # leave it hanging in deploying state for now. Assert that all else is stable
+    assert agent.scheduler._work.agent_queues._in_progress.keys() == {tasks.Deploy(resource=rid2)}
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
+    assert len(agent.scheduler._work._waiting) == 0
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
+    assert agent.executor_manager.executors["agent3"].execute_count == 1
+
+    # release a change for rid1
+    resources = make_resources(
+        r1_value=2,
+        r2_value=2,
+        r3_value=1,
+        requires={
+            rid3: [rid1, rid2],
+        },
+        r1_send_event=True,
+        r2_send_event=False,
+    )
+    await agent.scheduler._new_version(20, resources, make_requires(resources))
+    # wait until rid1 is done
+    await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 2)
+    # verify that rid2 is still in a deploying state
+    assert rid2 in executor2.deploys
+    assert agent.scheduler._work.agent_queues._in_progress.keys() == {tasks.Deploy(resource=rid2)}
+    # verify that rid3 got the event and is waiting for rid2
+    assert agent.scheduler._work._waiting.keys() == {rid3}
+    assert agent.scheduler._work._waiting[rid3].blocked_on == {rid2}
+    assert agent.scheduler._work._waiting[rid3].reason == f"Deploying because an event was received from {rid1}"
+
+    # finish rid2 deploy, assert end condition
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
+    await retry_limited_fast(lambda: agent.executor_manager.executors["agent3"].execute_count == 2)
+    assert len(agent.scheduler._work.agent_queues._in_progress) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
+    assert len(agent.scheduler._work._waiting) == 0
+    assert agent.executor_manager.executors["agent1"].execute_count == 2
+    assert agent.executor_manager.executors["agent2"].execute_count == 2
+    assert agent.executor_manager.executors["agent3"].execute_count == 2
+
+
+async def test_skipped_for_dependencies_with_normal_event_propagation_disabled(agent: TestAgent, make_resource_minimal):
+    """
+    Ensure that a resource that was skipped for its dependencies gets scheduled when the
+    dependency succeeds, even when normal event propagation is disabled.
+    """
+
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent2,name=2]")
+
+    # make both agent's executors managed
+    executor1: ManagedExecutor = ManagedExecutor()
+    agent.executor_manager.register_managed_executor("agent1", executor1)
+
+    executor2: ManagedExecutor = ManagedExecutor()
+    agent.executor_manager.register_managed_executor("agent2", executor2)
+
+    # Create resources and set send_event to False
+    resources = {
+        rid1: make_resource_minimal(
+            rid=rid1, values={"value": "r1_value", const.RESOURCE_ATTRIBUTE_SEND_EVENTS: False}, requires=[]
+        ),
+        rid2: make_resource_minimal(
+            rid=rid2, values={"value": "r2_value", const.RESOURCE_ATTRIBUTE_SEND_EVENTS: False}, requires=[rid1]
+        ),
+    }
+    await agent.scheduler._new_version(version=1, resources=resources, requires=make_requires(resources))
+
+    # Make both resources succeed
+    await retry_limited_fast(lambda: rid1 in executor1.deploys)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
+
+    await retry_limited_fast(lambda: rid2 in executor2.deploys)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
+
+    await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
+    assert len(agent.scheduler._work._waiting) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
+
+    # Deploy rid1 and make sure that rid2 does not get scheduled because event propagation is disabled
+    await agent.scheduler.deploy_resource(rid1, reason="Deploy rid1", priority=TaskPriority.USER_DEPLOY)
+    await retry_limited_fast(lambda: rid1 in executor1.deploys)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.failed)
+
+    await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
+    assert len(agent.scheduler._work._waiting) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
+    assert rid2 not in executor2.deploys
+
+    # Deploy rid2 and make it skip for dependencies
+    await agent.scheduler.deploy_resource(rid2, reason="Deploy rid2", priority=TaskPriority.USER_DEPLOY)
+
+    await retry_limited_fast(lambda: rid2 in executor2.deploys)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.skipped_for_dependency)
+    await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
+    assert len(agent.scheduler._work._waiting) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
+
+    assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
+        status=state.ComplianceStatus.NON_COMPLIANT,
+        deployment_result=state.DeploymentResult.FAILED,
+        blocked=state.BlockedStatus.NO,
+    )
+
+    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
+        # We are skipped, so not compliant
+        status=state.ComplianceStatus.NON_COMPLIANT,
+        deployment_result=state.DeploymentResult.SKIPPED,
+        blocked=state.BlockedStatus.TRANSIENT,
+    )
+
+    # Recover rid1 and verify that rid2 also gets scheduled
+    await agent.scheduler.deploy_resource(rid1, reason="Recover rid1", priority=TaskPriority.USER_DEPLOY)
+    await retry_limited_fast(lambda: rid1 in executor1.deploys)
+    executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
+
+    # rid2 gets scheduled when rid1 recovers despite send_event being set to False
+    await retry_limited_fast(lambda: rid2 in executor2.deploys)
+    executor2.deploys[rid2].set_result(const.HandlerResourceState.deployed)
+    await retry_limited_fast(lambda: len(agent.scheduler._work.agent_queues._in_progress) == 0)
+    assert len(agent.scheduler._work._waiting) == 0
+    assert len(agent.scheduler._work.agent_queues.queued()) == 0
+
+    assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
+        status=state.ComplianceStatus.COMPLIANT,
+        deployment_result=state.DeploymentResult.DEPLOYED,
+        blocked=state.BlockedStatus.NO,
+    )
+
+    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
+        status=state.ComplianceStatus.COMPLIANT,
+        deployment_result=state.DeploymentResult.DEPLOYED,
+        blocked=state.BlockedStatus.NO,
+    )
 
 
 async def test_receive_events(agent: TestAgent, make_resource_minimal):
@@ -2416,6 +2581,72 @@ async def test_state_of_skipped_resources_for_dependencies(agent: TestAgent, mak
         deployment_result=state.DeploymentResult.SKIPPED,
         blocked=state.BlockedStatus.TRANSIENT,
     )
+
+
+class BrokenDummyManager(executor.ExecutorManager[executor.Executor]):
+    """
+    A broken dummy ExecutorManager that fails on get_executor to test failure paths
+    """
+
+    async def get_executor(
+        self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
+    ) -> DummyExecutor:
+        raise Exception()
+
+    async def stop_for_agent(self, agent_name: str) -> list[DummyExecutor]:
+        pass
+
+    async def start(self) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
+
+    async def join(self, thread_pool_finalizer: list[ThreadPoolExecutor], timeout: float) -> None:
+        pass
+
+
+class BadTestAgent(Agent):
+    """
+    An agent (scheduler) that uses the broken dummy manager:
+    """
+
+    def __init__(
+        self,
+        environment: Optional[uuid.UUID] = None,
+    ):
+        super().__init__(environment)
+        self.executor_manager = BrokenDummyManager()
+        self.scheduler = TestScheduler(self.scheduler.environment, self.executor_manager, self.scheduler.client)
+
+
+@pytest.fixture
+async def bad_agent(environment, config):
+    """
+    Provide a new agent, with a scheduler that uses the broken dummy executor
+
+    Allows testing without server, or executor
+    """
+    out = BadTestAgent(environment)
+    await out.start_working()
+    yield out
+    await out.stop_working()
+
+
+async def test_broken_executor_deploy(bad_agent: TestAgent, make_resource_minimal):
+    """
+    Ensure the simple deploy scenario works: 2 dependant resources
+    """
+
+    rid1 = "test::Resource[agent1,name=1]"
+    rid2 = "test::Resource[agent1,name=2]"
+    resources = {
+        ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        ResourceIdStr(rid2): make_resource_minimal(rid2, values={"value": "a"}, requires=[rid1]),
+    }
+
+    await bad_agent.scheduler._new_version(1, resources, make_requires(resources))
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=bad_agent.scheduler, agent_name="agent1")
 
 
 async def test_deploy_blocked_state(agent: TestAgent, make_resource_minimal) -> None:

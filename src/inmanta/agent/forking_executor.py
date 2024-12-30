@@ -97,7 +97,7 @@ from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
 from inmanta.agent.executor import DeployResult, FactResult
 from inmanta.agent.resourcepool import PoolManager, PoolMember
-from inmanta.data.model import ResourceIdStr, ResourceType
+from inmanta.const import LOGGER_NAME_EXECUTOR
 from inmanta.protocol.ipc_light import (
     FinalizingIPCClient,
     IPCMethod,
@@ -107,9 +107,10 @@ from inmanta.protocol.ipc_light import (
     LogShipper,
     ReturnType,
 )
+from inmanta.types import ResourceIdStr, ResourceType
 from setproctitle import setproctitle
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger(LOGGER_NAME_EXECUTOR)
 
 
 class ExecutorContext:
@@ -135,10 +136,10 @@ class ExecutorContext:
     # We have no join here yet, don't know if we need it
     async def init_for(self, name: str, uri: str) -> None:
         """Initialize a new executor in this process"""
-        LOGGER.info("Starting for %s", name)
+        self.server.logger.info("Starting for %s", name)
         if name in self.executors:
             # We existed before
-            LOGGER.info("Waiting for old executor %s to shutdown", name)
+            self.server.logger.info("Waiting for old executor %s to shutdown", name)
             old_one = self.executors[name]
             # But were stopped
             assert old_one.is_stopped()
@@ -146,7 +147,7 @@ class ExecutorContext:
             await old_one.join()
 
         loop = asyncio.get_running_loop()
-        parent_logger = logging.getLogger("agent.executor")
+        parent_logger = LOGGER
         assert self.client  # mypy
         # Setup agent instance
         executor = inmanta.agent.in_process_executor.InProcessExecutor(
@@ -401,7 +402,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         assert context.server.timer_venv_scheduler_interval is None, "InitCommand should be only called once!"
 
         loop = asyncio.get_running_loop()
-        parent_logger = logging.getLogger("agent.executor")
+        parent_logger = LOGGER
         logger = parent_logger.getChild(context.name)
 
         context.server.post_init(self._venv_touch_interval)
@@ -534,6 +535,7 @@ def mp_worker_entrypoint(
 ) -> None:
     """Entry point for child processes"""
     set_executor_status(name, "connecting")
+
     # Set up logging stage 1
     # Basic config, starts on std.out
     config_builder = inmanta.logging.LoggingConfigBuilder()
@@ -542,13 +544,13 @@ def mp_worker_entrypoint(
     logging.captureWarnings(True)
 
     # Set up our own logger
-    logger = logging.getLogger(f"agent.executor.{name}")
+    logger = logging.getLogger(f"{LOGGER_NAME_EXECUTOR}.{name}")
 
     # Load config
     inmanta.config.Config.load_config_from_dict(config)
 
     # Make sure logfire is configured correctly
-    tracing.configure_logfire("agent.executor")
+    tracing.configure_logfire("executor")
 
     async def serve() -> None:
         loop = asyncio.get_running_loop()
@@ -774,6 +776,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
             self.in_flight -= 1
 
     async def start(self) -> None:
+
         await self.call(InitCommandFor(self.name, self.id.agent_uri))
 
     async def request_shutdown(self) -> None:
@@ -918,6 +921,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         return ext_id
 
     async def create_member(self, blueprint: executor.ExecutorBlueprint) -> MPProcess:
+
         venv = await self.environment_manager.get_environment(blueprint.to_env_blueprint())
         executor = await self.make_child_and_connect(blueprint, venv)
         LOGGER.debug(
@@ -950,7 +954,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         """Async code to make a child process and share a socket with it"""
         loop = asyncio.get_running_loop()
         name = executor_id.blueprint_hash()  # FIXME: improve naming https://github.com/inmanta/inmanta-core/issues/7999
-
         # Start child
         process, parent_conn = await loop.run_in_executor(
             self.thread_pool, functools.partial(self._make_child, name, self.environment, self.log_level, self.cli_log)
@@ -959,7 +962,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         transport, protocol = await loop.connect_accepted_socket(
             functools.partial(ExecutorClient, f"executor.{name}"), parent_conn
         )
-
         child_handle = MPProcess(name, process, protocol, executor_id, venv, self.thread_pool)
         return child_handle
 
@@ -1076,15 +1078,19 @@ class MPManager(
         return my_executor
 
     async def create_member(self, executor_id: executor.ExecutorId) -> MPExecutor:
-        process = await self.process_pool.get(executor_id.blueprint)
-        # FIXME: we have a race here: the process can become empty between these two calls
-        # Current thinking is that this race is unlikely
-        result = await process.get(executor_id)
+        try:
+            process = await self.process_pool.get(executor_id.blueprint)
+            # FIXME: we have a race here: the process can become empty between these two calls
+            # Current thinking is that this race is unlikely
+            result = await process.get(executor_id)
 
-        executors = self.agent_map.get(executor_id.agent_name)
-        assert executors is not None  # make mypy happy
-        executors.add(result)
-        return result
+            executors = self.agent_map.get(executor_id.agent_name)
+            assert executors is not None  # make mypy happy
+            executors.add(result)
+            return result
+        except Exception:
+            LOGGER.info("Could not create executor.", exc_info=True)
+            raise
 
     async def notify_member_shutdown(self, pool_member: MPExecutor) -> bool:
         executors = self.agent_map.get(pool_member.get_id().agent_name)
