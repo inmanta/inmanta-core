@@ -189,6 +189,8 @@ class TaskManager(abc.ABC):
         along with the last non-deploying state for its dependencies, or None if it is not (anymore)
         managed by the scheduler.
 
+        If this method returns an intent, the caller must also call deploy_done() at the end of the deploy attempt.
+
         Acquires appropriate locks.
         """
 
@@ -1044,10 +1046,9 @@ class ResourceScheduler(TaskManager):
             return resource_intent
 
     async def deploy_done(self, attribute_hash: str, result: executor.DeployResult) -> None:
-        deployment_result: DeploymentResult = DeploymentResult.from_handler_resource_state(result.resource_state)
         state: Optional[ResourceState]
         try:
-            state = await self.update_scheduler_state_for_finished_deploy(attribute_hash, result, deployment_result)
+            state = await self._update_scheduler_state_for_finished_deploy(attribute_hash, result)
         except StaleResource:
             # The resource is no longer managed (or in rare cases it has shortly become unmanaged sometime between this version
             # and the currently managed version, either way, the deploy that finished represents a stale intent).
@@ -1066,8 +1067,8 @@ class ResourceScheduler(TaskManager):
     async def fact_refresh_done(self, result: executor.FactResult) -> None:
         await self.state_update_manager.set_parameters(fact_result=result)
 
-    async def update_scheduler_state_for_finished_deploy(
-        self, attribute_hash: str, result: executor.DeployResult, deployment_result: DeploymentResult
+    async def _update_scheduler_state_for_finished_deploy(
+        self, attribute_hash: str, result: executor.DeployResult
     ) -> ResourceState:
         """
         Update the state of the scheduler based on the DeploymentResult of the given resource.
@@ -1075,13 +1076,12 @@ class ResourceScheduler(TaskManager):
         :raise StaleResource: This update is about a resource that is no longer managed by the server.
         :return: The new blocked status of the resource. Or None if the blocked status shouldn't be updated.
         """
-        resource_id: ResourceIdStr = result.resource_id
-        if deployment_result is DeploymentResult.NEW:
-            raise ValueError("update_scheduler_state_for_finished_deploy should not be called to register new resources")
+        resource: ResourceIdStr = result.resource_id
+        deployment_result: DeploymentResult = DeploymentResult.from_handler_resource_state(result.resource_state)
 
         async with self._scheduler_lock:
             # refresh resource details for latest model state
-            details: Optional[ResourceDetails] = self._state.resources.get(resource_id, None)
+            details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
 
             # TODO: advanced test case for this scenario:
             #       - start deploying resource
@@ -1089,12 +1089,12 @@ class ResourceScheduler(TaskManager):
             #       - release version with the resource
             #       - finish deploying resource
             #       - assert db status and scheduler status (e.g. still DeploymentResult.NEW)
-            if details is None or resource_id in self._deploying_unmanaged:
+            if details is None or resource in self._deploying_unmanaged:
                 # we are stale and removed
-                self._deploying_unmanaged.discard(resource_id)
+                self._deploying_unmanaged.discard(resource)
                 raise StaleResource()
 
-            state: ResourceState = self._state.resource_state[resource_id]
+            state: ResourceState = self._state.resource_state[resource]
 
             # TODO: make abstraction of this check to ensure it is consistent with should_skip_for_dependencies()?
             recovered_from_failure: bool = deployment_result is DeploymentResult.DEPLOYED and state.deployment_result not in (
@@ -1113,6 +1113,9 @@ class ResourceScheduler(TaskManager):
                 # from a bad to a good state, since we're transitioning to that good state now).
                 state.deployment_result = deployment_result
                 if recovered_from_failure:
+                    # TODO: review recovery events with respect to recovery.
+                    #   - When is last_produced_events written?
+                    #   - Should we somehow recognize recovery events (ignoring receive_events) at recovery?
                     self._send_events(details, stale_deploy=True, recovered_from_failure=True)
                 return state
 
@@ -1122,11 +1125,11 @@ class ResourceScheduler(TaskManager):
             )
 
             # first update state, then send out events
-            self._deploying_latest.remove(resource_id)
+            self._deploying_latest.remove(resource)
             state.deployment_result = deployment_result
             # TODO: BUG?! State has not been reported yet.
             #       Can be safely moved one level up to deploy_done under second short-lived lock
-            self._work.finished_deploy(resource_id)
+            self._work.finished_deploy(resource)
 
             # Check if we need to mark a resource as transiently blocked
             # We only do that if it is not already blocked (BlockedStatus.YES)
@@ -1137,26 +1140,26 @@ class ResourceScheduler(TaskManager):
             if (
                 state.blocked is not BlockedStatus.YES
                 and result.resource_state is const.HandlerResourceState.skipped_for_dependency
-                and self._state.should_skip_for_dependencies(resource_id)
+                and self._state.should_skip_for_dependencies(resource)
             ):
                 state.blocked = BlockedStatus.TRANSIENT
                 # Remove this resource from the dirty set when we block it
-                self._state.dirty.discard(resource_id)
+                self._state.dirty.discard(resource)
             elif deployment_result is DeploymentResult.DEPLOYED:
                 # Remove this resource from the dirty set if it is successfully deployed
-                self._state.dirty.discard(resource_id)
+                self._state.dirty.discard(resource)
             else:
                 # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
                 # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
                 # (or skip) causes it to become dirty now.
-                self._state.dirty.add(resource_id)
+                self._state.dirty.add(resource)
 
             # propagate events
             self._send_events(details, recovered_from_failure=recovered_from_failure)
 
             # No matter the deployment result, schedule a re-deploy for this resource unless it's blocked
             if state.blocked is BlockedStatus.NO:
-                self._timer_manager.update_timer(resource_id, is_compliant=(state.status is ComplianceStatus.COMPLIANT))
+                self._timer_manager.update_timer(resource, is_compliant=(state.status is ComplianceStatus.COMPLIANT))
 
             return state
 
@@ -1266,6 +1269,7 @@ class ResourceScheduler(TaskManager):
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
 
+    # TODO: review changes to this method
     async def get_resource_state(self) -> SchedulerStatusReport:
         """
         Check that the state of the resources in the DB corresponds

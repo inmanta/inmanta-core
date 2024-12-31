@@ -34,7 +34,7 @@ from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
 from itertools import chain
 from re import Pattern
-from typing import Generic, NewType, Optional, Tuple, TypeVar, Union, cast, overload
+from typing import Generic, NewType, Optional, TypeVar, Union, cast, overload
 from uuid import UUID
 
 import asyncpg
@@ -4523,6 +4523,7 @@ class ResourcePersistentState(BaseDocument):
             connection=connection,
         )
 
+    # TODO: seems to me that this would need an ON CONFLICT clause. Create a test to confirm!
     @classmethod
     async def populate_for_version(
         cls, environment: uuid.UUID, model_version: int, connection: Optional[Connection] = None
@@ -4758,7 +4759,7 @@ class Resource(BaseDocument):
     @classmethod
     async def get_resource_states_latest_version(
         cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Tuple[Optional[int], abc.Mapping[ResourceIdStr, ResourceState]]:
+    ) -> tuple[Optional[int], abc.Mapping[ResourceIdStr, ResourceState]]:
         query = """
             WITH latest_released_version AS (
                 SELECT max(version) AS version

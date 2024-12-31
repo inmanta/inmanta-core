@@ -31,10 +31,10 @@ from typing import TYPE_CHECKING, Optional
 import asyncpg
 
 from inmanta import const
+from inmanta import resources
 from inmanta.util.collections import BidirectionalManyMapping
 
 if TYPE_CHECKING:
-    from inmanta import resources
     from inmanta.types import ResourceIdStr, ResourceType
 
 
@@ -63,7 +63,8 @@ class ComplianceStatus(StrEnum):
     NON_COMPLIANT: The resource intent has not been updated since latest deploy attempt (if any)
         but we have reason to believe operational state might not comply with latest resource intent,
         based on a deploy attempt / compliance check for that intent.
-    UNDEFINED: The resource status is undefined, because it has an unknown attribute.
+    UNDEFINED: The resource status is undefined, because it has an unknown attribute. i.e. undefined status <=> undefined
+        intent.
     """
 
     COMPLIANT = enum.auto()
@@ -87,8 +88,6 @@ class ResourceDetails:
     id: "resources.Id" = dataclasses.field(init=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
-        from inmanta import resources
-
         # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
         object.__setattr__(self, "id", resources.Id.parse_id(self.resource_id))
 
@@ -183,9 +182,6 @@ class ModelState:
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict["ResourceIdStr", ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
-    # (might be simply a change of its dependencies), which are still being processed by
-    # the resource scheduler. This is a short-lived transient state, used for internal concurrency control. Kept separate from
-    # ResourceStatus so that it lives outside the scheduler lock's scope.
     dirty: set["ResourceIdStr"] = dataclasses.field(default_factory=set)
     # types per agent keeps track of which resource types live on which agent by doing a reference count
     # the dict is agent_name -> resource_type -> resource_count
