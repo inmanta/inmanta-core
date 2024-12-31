@@ -20,6 +20,7 @@ import logging
 import os.path
 import sys
 import uuid
+from collections.abc import Mapping
 from io import StringIO
 from typing import Optional
 
@@ -30,8 +31,11 @@ import inmanta
 from inmanta import config
 from inmanta.config import logging_config
 from inmanta.const import ENVIRON_FORCE_TTY
-from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, MultiLineFormatter, Options, load_config_file_to_dict
+from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, MultiLineFormatter, Options, LoggingConfigFromFile
 
+def load_config_file_to_dict(file_name: str, context: Mapping[str, str]) -> dict[str, object]:
+    logging_config_source = LoggingConfigFromFile(file_name=file_name)
+    return logging_config_source.read_logging_config(context=context)
 
 @pytest.fixture(autouse=True)
 def cleanup_logger():
@@ -359,7 +363,7 @@ def test_log_file_or_template(tmp_path):
 
     with pytest.raises(
         Exception,
-        match="The logging configuration template at .* refers to context variable 'test',"
+        match="The logging configuration template from .* refers to context variable 'test',"
         " but this variable is not available. The context is limited to xvar, yvar",
     ):
         load_config_file_to_dict(
@@ -441,12 +445,12 @@ def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdi
     logging_config.set(logging_config_file)
 
     # Set the INMANTA_CONFIG_LOGGING_CONFIG_TMPL environment variable and verify that it overrides
-    # the logging config set via the logging.server configuration option.
+    # the logging config set via the config.logging_config configuration option.
     logging_config1 = """
         disable_existing_loggers: false
         formatters:
           console_formatter:
-            format: "{environment} -- %(message)s"
+            format: "config1 -- {environment} -- %(message)s"
         handlers:
           console_handler:
             class: logging.StreamHandler
@@ -467,14 +471,14 @@ def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdi
     capsys.readouterr()  # Clear buffer
     logger.info("test")
     captured = capsys.readouterr()
-    assert f"{env_id} -- test" in captured.out
+    assert f"config1 -- {env_id} -- test" in captured.out
 
     # Set the component-specific template and verify that it overrides the config from INMANTA_CONFIG_LOGGING_CONFIG_TMPL
     logging_config2 = """
         disable_existing_loggers: false
         formatters:
           console_formatter:
-            format: "%(message)s -- {environment}"
+            format: "config2 -- {environment} -- %(message)s"
         handlers:
           console_handler:
             class: logging.StreamHandler
@@ -495,7 +499,7 @@ def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdi
     capsys.readouterr()  # Clear buffer
     logger.info("test")
     captured = capsys.readouterr()
-    assert f"test -- {env_id}" in captured.out
+    assert f"config2 -- {env_id} -- test" in captured.out
 
     # Set INMANTA_LOGGING_SERVER_TMPL AND INMANTA_LOGGING_SERVER_CONTENT simultaneously.
     # Assert that INMANTA_LOGGING_SERVER_CONTENT is used.
@@ -503,7 +507,7 @@ def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdi
         disable_existing_loggers: false
         formatters:
           console_formatter:
-            format: "{environment} -- %(message)s"
+            format: "config3 -- {environment} -- %(message)s"
         handlers:
           console_handler:
             class: logging.StreamHandler
@@ -524,7 +528,7 @@ def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdi
     capsys.readouterr()  # Clear buffer
     logger.info("test")
     captured = capsys.readouterr()
-    assert "{environment} -- test" in captured.out
+    assert "config3 -- {environment} -- test" in captured.out
 
     # Verify that the --logging-config CLI option still overrides all other config.
     other_logging_config_file = os.path.join(tmpdir, "cli.yml")
