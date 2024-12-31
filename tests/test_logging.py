@@ -20,6 +20,7 @@ import logging
 import os.path
 import sys
 import uuid
+from asyncio import TimeoutError, subprocess, wait_for
 from io import StringIO
 from typing import Optional
 
@@ -406,3 +407,46 @@ def test_server_documentation_conformance(inmanta_config, monkeypatch):
     )
 
     assert from_config._to_dict_config() == from_file_dict
+
+
+async def test_print_default_logging_cmd(inmanta_config, tmp_path):
+    """
+    Test that piping to file does not change the logging config
+    """
+    components = ["scheduler", "server", "compiler"]
+    for component in components:
+        log_to_cli = [sys.executable, "-m", "inmanta.app", "print_default_logging_config", component]
+
+        # Output the logging config on the CLI
+        process = await subprocess.create_subprocess_exec(*log_to_cli, stdout=subprocess.PIPE, env={ENVIRON_FORCE_TTY: "yes"})
+        await process.wait()
+        try:
+            (stdout, _) = await wait_for(process.communicate(), timeout=5)
+        except TimeoutError as e:
+            process.kill()
+            await process.communicate()
+            raise e
+        assert process.returncode == 0
+
+        file_config_stdout = stdout.decode("utf-8")
+
+        # Pipe the logging for each component to a respective file
+        file_path = f"{tmp_path}/logging_config_{component}.yml"
+        with open(file_path, "w") as file:
+            process = await subprocess.create_subprocess_exec(*log_to_cli, stdout=file)
+            await process.wait()
+            try:
+                await wait_for(process.communicate(), timeout=5)
+            except TimeoutError as e:
+                process.kill()
+                await process.communicate()
+                raise e
+            assert process.returncode == 0
+
+        # Compare the config in the generated file to the config printed on the CLI
+        with open(file_path, "r") as file:
+            assert file.read() == file_config_stdout
+            # Assert that TTY was present
+            assert "no_color: false" in file_config_stdout
+            assert "reset: true" in file_config_stdout
+            assert "log_colors: null" not in file_config_stdout
