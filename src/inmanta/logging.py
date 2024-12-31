@@ -556,6 +556,9 @@ class InmantaLoggerConfig:
         self._options_applied: Options | None = None
         self._component: str | None = None
         self._context: Mapping[str, str] | None = None
+        # If this logger config was loaded from a config file, this file contains the path to that file.
+        # Otherwise its value remains None.
+        self.loaded_config_file: str | None = None
 
         # If None, no logging config was loaded yet (i.e. the apply_options() method wasn't called yet).
         # If True, a logging config was defined by the user and it was loaded.
@@ -751,6 +754,8 @@ class InmantaLoggerConfig:
         """
         Apply the given logging config dictionary.
         """
+        if not os.path.exists(config_file):
+            raise Exception(f"Logging config file {config_file} doesn't exist.")
         handlers_before = list(logging.root.handlers)
         try:
             logging.config.dictConfig(dict_config)
@@ -773,6 +778,7 @@ class InmantaLoggerConfig:
             root_handlers=root.get("handlers", []),
             root_log_level=root.get("level", None),
         )
+        self.loaded_config_file = config_file
 
     def _apply_logging_config_from_options(
         self, options: Options, component: str | None = None, context: Mapping[str, str] = {}
