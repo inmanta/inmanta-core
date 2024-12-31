@@ -423,9 +423,6 @@ class ModelState:
         :param resource: The id of the resource to find the dependencies for
         """
         dependencies: Set[ResourceIdStr] = self.requires.get(resource, set())
-        # TODO: test case where resource has two dependencies: one failed, one new. The failed one recovers, the new deploys
-        #       (in that order), then the resource should deploy as well. Verify that on master it doesn't because
-        #       the new one is seen as a reason not to move out of the skip-for-dependencies state.
         return any(
             # Determine based on latest deploy result rather than compliance status, because compliance status is unstable
             # (e.g. HAS_UPDATE).

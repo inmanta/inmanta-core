@@ -686,12 +686,16 @@ class ResourceScheduler(TaskManager):
         for model in new_versions:
             version = model.version
             # resources that don't exist anymore in this version
-            for resource in self._state.resources.keys() - model.resources.keys():
+            for resource in (self._state.resources.keys() | resource_details.keys()) - model.resources.keys():
                 with contextlib.suppress(KeyError):
                     del resource_details[resource]
                     del resource_requires[resource]
                 undefined.discard(resource)
-                intent_changes[resource] = ResourceIntentChange.DELETED
+                if resource in self._state.resources:
+                    intent_changes[resource] = ResourceIntentChange.DELETED
+                else:
+                    with contextlib.suppress(KeyError):
+                        del intent_changes[resource]
 
             for resource, details in model.resources.items():
                 # this loop is race-free, potentially slow, and completely synchronous
@@ -746,7 +750,6 @@ class ResourceScheduler(TaskManager):
             intent_changes,
         )
 
-    # TODO: tests for multiple versions, including special cases (e.g. delete-then-reappear)
     async def _new_version(
         self,
         new_versions: Sequence[ModelVersion],
@@ -1087,12 +1090,6 @@ class ResourceScheduler(TaskManager):
             # refresh resource details for latest model state
             details: Optional[ResourceDetails] = self._state.resources.get(resource, None)
 
-            # TODO: advanced test case for this scenario:
-            #       - start deploying resource
-            #       - release version without the resource
-            #       - release version with the resource
-            #       - finish deploying resource
-            #       - assert db status and scheduler status (e.g. still DeploymentResult.NEW)
             if details is None or resource in self._deploying_unmanaged:
                 # we are stale and removed
                 self._deploying_unmanaged.discard(resource)
@@ -1267,7 +1264,6 @@ class ResourceScheduler(TaskManager):
     def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
         return list(self._state.types_per_agent[agent])
 
-    # TODO: review changes to this method
     async def get_resource_state(self) -> SchedulerStatusReport:
         """
         Check that the state of the resources in the DB corresponds
