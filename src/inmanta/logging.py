@@ -337,7 +337,7 @@ class LoggingConfigBuilder:
         return logging_config_core
 
     def get_logging_config_from_options(
-        self, stream: TextIO, options: Options, component: str | None, context: Mapping[str, str], force_tty: bool = False
+        self, stream: TextIO, options: Options, component: str | None, context: Mapping[str, str]
     ) -> FullLoggingConfig:
         """
         Return the logging config based on the given configuration options, passed on the CLI,
@@ -347,7 +347,6 @@ class LoggingConfigBuilder:
         :param options: The config options passed on the CLI.
         :param component: component we are starting
         :param context: the component context we are starting with
-        :param force_tty: True if we want to force tty configuration to be returned
         """
         handlers: dict[str, object] = {}
         loggers: dict[str, object] = {}
@@ -397,7 +396,7 @@ class LoggingConfigBuilder:
         formatters = {
             # Always add all the formatters, even if they are not used by configuration. This way
             # the formatters can be used if the user dumps the default logging config to file.
-            "core_console_formatter": self._get_multiline_formatter_config(not short_names, options, force_tty=force_tty),
+            "core_console_formatter": self._get_multiline_formatter_config(not short_names, options),
             "core_log_formatter": {
                 "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
             },
@@ -461,23 +460,19 @@ class LoggingConfigBuilder:
 
         return full_logging_config
 
-    def _get_multiline_formatter_config(
-        self, keep_logger_names: bool, options: Optional[Options] = None, force_tty: bool = False
-    ) -> dict[str, object]:
+    def _get_multiline_formatter_config(self, keep_logger_names: bool, options: Optional[Options] = None) -> dict[str, object]:
         """
         Returns the dict-based formatter config for logs that will be sent to the console.
 
         :param options: The config options requested by the user or None if the config options are not parsed yet and
                         the bootstrap_logger_config should be used.
-        :param force_tty: True if we want to force tty configuration to be returned
         """
 
         # Use a shorter space padding if we know that we will use short names as the logger name.
         # Otherwise the log records contains too much white spaces.
         space_padding_after_logger_name = 25 if (keep_logger_names) else 15
         log_format = "%(asctime)s " if options and options.timed else ""
-        use_tty = _is_on_tty() or force_tty
-        if use_tty:
+        if _is_on_tty():
             log_format += f"%(log_color)s%(name)-{space_padding_after_logger_name}s%(levelname)-8s%(reset)s%(blue)s%(message)s"
             log_colors = {"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"}
         else:
@@ -488,8 +483,8 @@ class LoggingConfigBuilder:
             "()": "inmanta.logging.MultiLineFormatter",
             "fmt": log_format,
             "log_colors": log_colors,
-            "reset": use_tty,
-            "no_color": not use_tty,
+            "reset": _is_on_tty(),
+            "no_color": not _is_on_tty(),
             "keep_logger_names": keep_logger_names,
         }
 

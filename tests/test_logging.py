@@ -418,11 +418,13 @@ async def test_print_default_logging_cmd(inmanta_config, tmp_path):
     """
     components = ["scheduler", "server", "compiler"]
     for component in components:
-        args = [sys.executable, "-m", "inmanta.app", "print_default_logging_config", component]
+        args = [sys.executable, "-m", "inmanta.app", "print-default-logging-config", component]
 
         # Output the logging config on the CLI.
         # Here we force ENVIRON_FORCE_TTY to be set to simulate that we are on a TTY
-        process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, env={ENVIRON_FORCE_TTY: "yes"})
+        process = await subprocess.create_subprocess_exec(
+            *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env={ENVIRON_FORCE_TTY: "yes"}
+        )
         await process.wait()
         try:
             (stdout, _) = await wait_for(process.communicate(), timeout=5)
