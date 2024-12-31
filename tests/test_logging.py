@@ -31,11 +31,13 @@ import inmanta
 from inmanta import config
 from inmanta.config import logging_config
 from inmanta.const import ENVIRON_FORCE_TTY
-from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, MultiLineFormatter, Options, LoggingConfigFromFile
+from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, LoggingConfigFromFile, MultiLineFormatter, Options
+
 
 def load_config_file_to_dict(file_name: str, context: Mapping[str, str]) -> dict[str, object]:
     logging_config_source = LoggingConfigFromFile(file_name=file_name)
     return logging_config_source.read_logging_config(context=context)
+
 
 @pytest.fixture(autouse=True)
 def cleanup_logger():

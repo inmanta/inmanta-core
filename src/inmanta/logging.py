@@ -17,7 +17,6 @@
 """
 
 import abc
-import enum
 import logging
 import logging.config
 import os
@@ -27,9 +26,7 @@ from argparse import Namespace
 from collections.abc import Mapping, Sequence, Set
 from io import TextIOWrapper
 from logging import handlers
-from tkinter.font import names
 from typing import Optional, TextIO
-from dataclasses import dataclass
 
 import colorlog
 import yaml
@@ -103,8 +100,10 @@ log_levels = {
 
 logging.addLevelName(3, "TRACE")
 
+
 class NoLoggingConfigFound(Exception):
     pass
+
 
 class LogConfigDumper(Dumper):
     """
@@ -527,21 +526,21 @@ class LoggingConfigSource(abc.ABC):
         """
         Read the logging config from this LoggingConfigSource and return it in dictionary form.
         """
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @abc.abstractmethod
     def is_template(self) -> bool:
         """
         Return True iff this LoggingConfigSource needs to be considered as a template.
         """
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @abc.abstractmethod
     def source(self) -> str:
         """
         Return a string representation that indicates the source of the config. This is used in error reporting.
         """
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def convert_logging_config_str_to_dict(self, logging_config_str: str, context: Mapping[str, str]) -> dict[str, object]:
         """
@@ -569,6 +568,7 @@ class LoggingConfigSource(abc.ABC):
                 f"but this variable is not available. The context is limited to {all_keys}"
             )
 
+
 class LoggingConfigFromFile(LoggingConfigSource):
     """
     A LoggingConfig present in a file.
@@ -587,6 +587,7 @@ class LoggingConfigFromFile(LoggingConfigSource):
 
     def source(self) -> str:
         return f"file {self.file_name}"
+
 
 class LoggingConfigFromEnvVar(LoggingConfigSource):
     """
@@ -609,6 +610,7 @@ class LoggingConfigFromEnvVar(LoggingConfigSource):
 
     def source(self) -> str:
         return f"environment variable {self.env_var_name}"
+
 
 @stable_api
 class InmantaLoggerConfig:
@@ -858,9 +860,7 @@ class InmantaLoggerConfig:
             root_log_level=root.get("level", None),
         )
 
-    def _apply_logging_config_from_options(
-        self, options: Options, component: str | None, context: Mapping[str, str]
-    ) -> None:
+    def _apply_logging_config_from_options(self, options: Options, component: str | None, context: Mapping[str, str]) -> None:
         """
         Apply the logging configuration as defined by the CLI options when the --logging-config option is not set.
         """
