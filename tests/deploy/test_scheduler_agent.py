@@ -79,6 +79,7 @@ class DummyExecutor(executor.Executor):
         * It doesn't actually do any deploys, but instead keeps track of the actions
           (execute, dryrun, get_facts, etc.) that were requested on it.
         * It reports a deploy as failed if the resource has an attribute with the value of the `FAIL_DEPLOY` variable.
+        * It doesn't inspect dependencies' state, unlike the default handler
     """
 
     def __init__(self) -> None:
@@ -106,16 +107,11 @@ class DummyExecutor(executor.Executor):
         # The actual reasons are of the form `action because of reason`
         assert ("because" in reason) or ("Test" in reason)
         self.execute_count += 1
-        # TODO: remove first branch, but document clearly that this executor emulates a simplified handler that doesn't
-        #   care about its dependencies' state.
-        if False and any(status != const.HandlerResourceState.deployed for status in requires.values()):
-            result = const.HandlerResourceState.skipped_for_dependency
-        else:
-            result = (
-                const.HandlerResourceState.failed
-                if resource_details.attributes.get(FAIL_DEPLOY, False) is True
-                else const.HandlerResourceState.deployed
-            )
+        result = (
+            const.HandlerResourceState.failed
+            if resource_details.attributes.get(FAIL_DEPLOY, False) is True
+            else const.HandlerResourceState.deployed
+        )
         return DeployResult(
             resource_details.rvid,
             action_id,
@@ -373,8 +369,6 @@ class TestScheduler(ResourceScheduler):
         return ModelVersion(
             version=version,
             resources=self.mock_versions[version],
-            # TODO: these two are not used in practice for the dry-run flow, but it feels bad hardcoding that here
-            #       Better to make self.mock_versions: dict[int, ModelVersion]?
             requires={},
             undefined=set(),
         )

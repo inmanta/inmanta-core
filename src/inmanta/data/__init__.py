@@ -4523,7 +4523,6 @@ class ResourcePersistentState(BaseDocument):
             connection=connection,
         )
 
-    # TODO: seems to me that this would need an ON CONFLICT clause. Create a test to confirm!
     @classmethod
     async def populate_for_version(
         cls, environment: uuid.UUID, model_version: int, connection: Optional[Connection] = None
@@ -5073,7 +5072,6 @@ class Resource(BaseDocument):
                 res["attributes"] = json.loads(res["attributes"])
         return resources
 
-    # TODO: name, after all parameters are set in stone
     @classmethod
     async def get_resources_since_version_raw(
         cls,
@@ -5896,31 +5894,6 @@ class ConfigurationModel(BaseDocument):
         if not result:
             return None
         return int(result["version"])
-
-    # TODO: delete?
-    @classmethod
-    async def get_released_versions_since(
-        cls,
-        environment: uuid.UUID,
-        lower_bound: int,
-        upper_bound: int,
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> Sequence[int]:
-        """
-        Return all the released model versions since (including) the given model version.
-        The version numbers are returned in descending order.
-        """
-        if lower_bound > upper_bound:
-            raise Exception("lower_bound cannot be larger than upper_bound.")
-        query = f"""
-            SELECT version
-            FROM {ConfigurationModel.table_name()}
-            WHERE environment=$1 AND released AND version BETWEEN $2 AND $3
-            ORDER BY version DESC
-        """
-        result = await cls._fetch_query(query, cls._get_value(environment), lower_bound, upper_bound, connection=connection)
-        return [int(r["version"]) for r in result]
 
     @classmethod
     async def get_agents(
