@@ -249,10 +249,15 @@ class ToDbUpdateManager(StateUpdateManager):
 
                 extra_datetime_fields: dict[str, datetime.datetime] = {}
                 if status == ResourceState.deployed:
+                    # TODO: why is this resource_action.started while we use finished for last_deploy?
                     extra_datetime_fields["last_success"] = resource_action.started
 
                 # keep track IF we need to propagate if we are stale
                 # but only do it at the end of the transaction
+                # TODO: only for an actual change? might lsm miss events like this?
+                #   I THINK we used to only need the last_produced_events to catch a race condition, handling the other
+                #   cases via the increment calculation. But it has become more broad now, we don't do increment
+                #   calculation anymore
                 if change != Change.nochange:
                     # We are producing an event
                     extra_datetime_fields["last_produced_events"] = finished

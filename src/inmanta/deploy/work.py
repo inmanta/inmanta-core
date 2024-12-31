@@ -607,11 +607,16 @@ class ScheduledWork:
 
     def finished_deploy(self, resource: ResourceIdStr) -> None:
         """
-        Report that a resource has finished deploying for its current desired state, regardless of the deploy result (success /
-        failure). Stale deploys must never be reported.
+        Report that a resource has finished deploying, regardless of the intent version (including stale deploys)
+        and regardless of the deploy result (success / failure).
         """
         if resource in self._waiting or tasks.Deploy(resource=resource) in self.agent_queues:
-            # a new deploy task was scheduled in the meantime, no need to do anything else
+            # A new deploy task was scheduled in the meantime, no need to do anything else
+            # This check also happens to cover the case of stale deploys. They are always expected to have a non-stale
+            # one in the queue, so they would fall in this NOOP condition. If for some reason (e.g. due to a bug in the
+            # scheduler) this invariant is not met, we'd rather clean up the state that have the risk of stuck deploys.
+            # This is why the docstring states that all deploys, even stale ones, should be reported, even if we expect
+            # stale ones to be a NOOP.
             return
         for dependant in self.provides.get(resource, []):
             blocked_deploy: Optional[BlockedDeploy] = self._waiting.get(dependant, None)

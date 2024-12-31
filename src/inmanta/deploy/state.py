@@ -30,8 +30,7 @@ from typing import TYPE_CHECKING, Optional
 
 import asyncpg
 
-from inmanta import const
-from inmanta import resources
+from inmanta import const, resources
 from inmanta.util.collections import BidirectionalManyMapping
 
 if TYPE_CHECKING:

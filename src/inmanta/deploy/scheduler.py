@@ -735,9 +735,6 @@ class ResourceScheduler(TaskManager):
                 ):
                     # resource's defined status changed
                     intent_changes[resource] = ResourceIntentChange.UPDATED
-                    # TODO: should we warn on attribute hash? Perhaps not, using (attribute_hash, undefined) as metric instead?
-                    #       => the above was on the assumption that Wouter added `undefined: bool`, which doesn't seem to be
-                    #           the case after all. => do warn as on master
 
         return (
             ModelVersion(
@@ -779,8 +776,6 @@ class ResourceScheduler(TaskManager):
             raise ValueError("_new_version() expects its connection to not be in a transaction context")
         up_to_date_resources = set() if up_to_date_resources is None else up_to_date_resources
 
-        # TODO: review entire method.
-
         # pre-process new model versions before acquiring the scheduler lock.
         model: ModelVersion
         intent_changes: Mapping[ResourceIdStr, ResourceIntentChange]
@@ -797,6 +792,7 @@ class ResourceScheduler(TaskManager):
             removed = old_requires - requires
             if removed:
                 dropped_requires[resource] = removed
+            # pass control back to event loop to maintain scheduler operations until we acquire the lock
             await asyncio.sleep(0)
 
         # convert intent changes to sets for bulk processing
@@ -808,6 +804,8 @@ class ResourceScheduler(TaskManager):
         # resources that are now undefined but weren't before, including new resources if they are undefined
         became_undefined: set[ResourceIdStr] = set()
         for resource, change in intent_changes.items():
+            # pass control back to event loop to maintain scheduler operations until we acquire the lock
+            await asyncio.sleep(0)
             match change:
                 case ResourceIntentChange.DELETED:
                     deleted.add(resource)
@@ -822,30 +820,40 @@ class ResourceScheduler(TaskManager):
             if resource_state is None:
                 if resource in model.undefined:
                     became_undefined.add(resource)
-            elif resource in model.undefined and resource_state.status is not ComplianceStatus.UNDEFINED:
+                continue
+            attribute_hash_changed: bool = (
+                model.resources[resource].attribute_hash != self._state.resources[resource].attribute_hash
+            )
+            attribute_hash_unchanged_warning_fmt: str = (
+                "The resource with id %s has become %s, but the hash has not changed."
+                " This may lead to unexpected deploy behavior"
+            )
+            if resource in model.undefined and resource_state.status is not ComplianceStatus.UNDEFINED:
+                if not attribute_hash_changed:
+                    LOGGER.warning(attribute_hash_unchanged_warning_fmt, resource, "undefined")
                 became_undefined.add(resource)
             elif resource not in model.undefined and resource_state.status is ComplianceStatus.UNDEFINED:
+                if not attribute_hash_changed:
+                    LOGGER.warning(attribute_hash_unchanged_warning_fmt, resource, "defined")
                 became_defined.add(resource)
-
-        # A resource should not be present in more than one of these resource sets
-        # TODO: review assertions
-        assert len(intent_changes.keys()) == (len(deleted) + len(new) + len(updated))
-        assert len(became_defined | became_undefined) == (len(became_defined) + len(became_undefined))
 
         # resources that are to be considered new, even if they are already being managed
         force_new: Set[ResourceIdStr] = self._state.resources.keys() & new
 
+        # assert invariants of the constructed sets
+        assert len(intent_changes) == len(deleted | new | updated) == len(deleted) + len(new) + len(updated)
+        assert len(became_defined | became_undefined) == (len(became_defined) + len(became_undefined))
+
         # in the current implementation everything below the lock is synchronous, it is however still required (1)
-        # and desired even if it weren't strictly required (2,3):
+        # and desired even if it weren't strictly required (2):
         # 1. other operations under lock may pass control back to the event loop under the lock. Meaning that even if this
         #   method itself were fully syncronous, it will always still be called in some async context, which may interleave
         #   with awaits in other operations under lock.
         #   and has to be even apart from motivations 2-3, it may interleave with
-        # 2. pass context once more to event loop before starting on the sync path
-        #    (could be achieved with a simple sleep(0) if desired)
-        # 3. clarity: it clearly signifies that this is the atomic and performance-sensitive part
+        # 2. clarity: it clearly signifies that this is the atomic and performance-sensitive part
         async with self.state_update_manager.get_connection(connection=connection) as con, con.transaction():
             async with self._scheduler_lock:
+                # update model version
                 self._state.version = model.version
                 # update resource details
                 for resource in up_to_date_resources:
@@ -912,17 +920,12 @@ class ResourceScheduler(TaskManager):
                 for resource in deleted | became_undefined | transitive_blocked:
                     self._work.delete_resource(resource)
 
-                # TODO: should this write changes to the transient state???
                 # Updating the blocked state should be done under the scheduler lock, because this state is written
                 # by both the deploy and the new version code path.
                 resources_with_updated_blocked_state: Set[ResourceIdStr] = (
                     became_undefined | transitive_blocked | transitive_unblocked
                 )
 
-                # TODO: this method is called both here and further down. Still correct? Also correct that this is under lock
-                #   and the other is not? Consider what other under/post-lock operations write to DB and whether that depends on
-                #   scheduler state (i.e. we need to commit first, probably yes, i.e. everything fully under lock, including
-                #   transaction start)
                 await self.state_update_manager.update_resource_intent(
                     self.environment,
                     intent={
@@ -933,10 +936,9 @@ class ResourceScheduler(TaskManager):
                     connection=con,
                 )
 
-            # TODO: are undefined resources updated correctly? They are now passed along with all others to
-            #           update_resource_intent()
             # Update intent for resources with new desired state
-            # TODO: double check that this writes resource state for the NEW resources (including non-forced)
+            # Safe to update outside of the lock: scheduler persisted intent is allowed to lag behind its in-memory intent
+            # because we always update again after recovering.
             await self.state_update_manager.update_resource_intent(
                 self.environment,
                 intent={rid: (self._state.resource_state[rid], self._state.resources[rid]) for rid in new | updated},
@@ -944,7 +946,6 @@ class ResourceScheduler(TaskManager):
                 connection=con,
             )
             # Mark orphaned resources
-            # TODO: should force-new resources be marked as orphaned? I don't think so
             await self.state_update_manager.mark_as_orphan(self.environment, deleted, connection=con)
             await self.state_update_manager.set_last_processed_model_version(
                 self.environment, self._state.version, connection=con
@@ -1060,6 +1061,9 @@ class ResourceScheduler(TaskManager):
             state = None
         # Write deployment result to the database.
         await self.state_update_manager.send_deploy_done(attribute_hash, result, state)
+        async with self._scheduler_lock:
+            # report to the scheduled work that we're done. Never report stale deploys.
+            self._work.finished_deploy(result.resource_id)
 
     async def dryrun_done(self, result: executor.DryrunResult) -> None:
         await self.state_update_manager.dryrun_update(env=self.environment, dryrun_result=result)
@@ -1096,14 +1100,13 @@ class ResourceScheduler(TaskManager):
 
             state: ResourceState = self._state.resource_state[resource]
 
-            # TODO: make abstraction of this check to ensure it is consistent with should_skip_for_dependencies()?
             recovered_from_failure: bool = deployment_result is DeploymentResult.DEPLOYED and state.deployment_result not in (
                 DeploymentResult.DEPLOYED,
                 DeploymentResult.NEW,
             )
 
             # TODO[#8453]: make sure that timer is running even if we return early
-            if details.attribute_hash != attribute_hash:
+            if details.attribute_hash != attribute_hash or state.status is ComplianceStatus.UNDEFINED:
                 # We are stale but still the last deploy
                 # We can update the deployment_result (which is about last deploy)
                 # We can't update status (which is about active state only)
@@ -1113,9 +1116,6 @@ class ResourceScheduler(TaskManager):
                 # from a bad to a good state, since we're transitioning to that good state now).
                 state.deployment_result = deployment_result
                 if recovered_from_failure:
-                    # TODO: review recovery events with respect to recovery.
-                    #   - When is last_produced_events written?
-                    #   - Should we somehow recognize recovery events (ignoring receive_events) at recovery?
                     self._send_events(details, stale_deploy=True, recovered_from_failure=True)
                 return state
 
@@ -1127,9 +1127,6 @@ class ResourceScheduler(TaskManager):
             # first update state, then send out events
             self._deploying_latest.remove(resource)
             state.deployment_result = deployment_result
-            # TODO: BUG?! State has not been reported yet.
-            #       Can be safely moved one level up to deploy_done under second short-lived lock
-            self._work.finished_deploy(resource)
 
             # Check if we need to mark a resource as transiently blocked
             # We only do that if it is not already blocked (BlockedStatus.YES)
@@ -1209,6 +1206,7 @@ class ResourceScheduler(TaskManager):
             # These resources might be able to progress now -> unblock them in addition to sending the event
             self._state.dirty.update(recovery_listeners)
             for skipped_dependent in recovery_listeners:
+                # TODO[#8541]: this is never written!
                 self._state.resource_state[skipped_dependent].blocked = BlockedStatus.NO
 
         all_listeners: Set[ResourceIdStr] = event_listeners | recovery_listeners
