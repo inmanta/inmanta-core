@@ -415,10 +415,11 @@ async def test_print_default_logging_cmd(inmanta_config, tmp_path):
     """
     components = ["scheduler", "server", "compiler"]
     for component in components:
-        log_to_cli = [sys.executable, "-m", "inmanta.app", "print_default_logging_config", component]
+        args = [sys.executable, "-m", "inmanta.app", "print_default_logging_config", component]
 
-        # Output the logging config on the CLI
-        process = await subprocess.create_subprocess_exec(*log_to_cli, stdout=subprocess.PIPE, env={ENVIRON_FORCE_TTY: "yes"})
+        # Output the logging config on the CLI.
+        # Here we force ENVIRON_FORCE_TTY to be set to simulate that we are on a TTY
+        process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, env={ENVIRON_FORCE_TTY: "yes"})
         await process.wait()
         try:
             (stdout, _) = await wait_for(process.communicate(), timeout=5)
@@ -428,25 +429,24 @@ async def test_print_default_logging_cmd(inmanta_config, tmp_path):
             raise e
         assert process.returncode == 0
 
-        file_config_stdout = stdout.decode("utf-8")
+        tty_config_stdout = stdout.decode("utf-8")
+        # Assert that TTY was present
+        assert "no_color: false" in tty_config_stdout
+        assert "reset: true" in tty_config_stdout
+        assert "log_colors: null" not in tty_config_stdout
 
-        # Pipe the logging for each component to a respective file
-        file_path = f"{tmp_path}/logging_config_{component}.yml"
-        with open(file_path, "w") as file:
-            process = await subprocess.create_subprocess_exec(*log_to_cli, stdout=file)
-            await process.wait()
-            try:
-                await wait_for(process.communicate(), timeout=5)
-            except TimeoutError as e:
-                process.kill()
-                await process.communicate()
-                raise e
-            assert process.returncode == 0
+        # Output the logging config on the CLI with TTY unset
+        # This is the same as piping to a file
+        process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE)
+        await process.wait()
+        try:
+            (stdout, _) = await wait_for(process.communicate(), timeout=5)
+        except TimeoutError as e:
+            process.kill()
+            await process.communicate()
+            raise e
+        assert process.returncode == 0
 
-        # Compare the config in the generated file to the config printed on the CLI
-        with open(file_path, "r") as file:
-            assert file.read() == file_config_stdout
-            # Assert that TTY was present
-            assert "no_color: false" in file_config_stdout
-            assert "reset: true" in file_config_stdout
-            assert "log_colors: null" not in file_config_stdout
+        normal_config_stdout = stdout.decode("utf-8")
+        # Assert that the outputs are equal
+        assert normal_config_stdout == tty_config_stdout
