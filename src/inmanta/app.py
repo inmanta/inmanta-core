@@ -896,8 +896,9 @@ def default_logging_config(options: argparse.Namespace) -> None:
 
     context = {var: f"{place_holder}{var}{place_holder}" for var in context_vars}
 
+    # Force TTY so that this command outputs the same config when piping to a file
     logging_config: FullLoggingConfig = config_builder.get_logging_config_from_options(
-        sys.stdout, options, options.cmd, context
+        sys.stdout, options, options.cmd, context, force_tty=True
     )
 
     raw_dump = logging_config.to_string()

@@ -319,11 +319,7 @@ class LoggingConfigBuilder:
         return logging_config_core
 
     def get_logging_config_from_options(
-        self,
-        stream: TextIO,
-        options: Options,
-        component: str | None,
-        context: Mapping[str, str],
+        self, stream: TextIO, options: Options, component: str | None, context: Mapping[str, str], force_tty: bool = False
     ) -> FullLoggingConfig:
         """
         Return the logging config based on the given configuration options, passed on the CLI,
@@ -333,6 +329,7 @@ class LoggingConfigBuilder:
         :param options: The config options passed on the CLI.
         :param component: component we are starting
         :param context: the component context we are starting with
+        :param force_tty: True if we want to force tty configuration to be returned
         """
         handlers: dict[str, object] = {}
         loggers: dict[str, object] = {}
@@ -382,8 +379,7 @@ class LoggingConfigBuilder:
         formatters = {
             # Always add all the formatters, even if they are not used by configuration. This way
             # the formatters can be used if the user dumps the default logging config to file.
-            # Force TTY so that this command outputs the same config when piping to a file
-            "core_console_formatter": self._get_multiline_formatter_config(not short_names, options, force_tty=True),
+            "core_console_formatter": self._get_multiline_formatter_config(not short_names, options, force_tty=force_tty),
             "core_log_formatter": {
                 "format": "%(asctime)s %(levelname)-8s %(name)-10s %(message)s",
             },
