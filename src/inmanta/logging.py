@@ -337,7 +337,11 @@ class LoggingConfigBuilder:
         return logging_config_core
 
     def get_logging_config_from_options(
-        self, stream: TextIO, options: Options, component: str | None, context: Mapping[str, str]
+        self,
+        stream: TextIO,
+        options: Options,
+        component: str | None,
+        context: Mapping[str, str],
     ) -> FullLoggingConfig:
         """
         Return the logging config based on the given configuration options, passed on the CLI,
