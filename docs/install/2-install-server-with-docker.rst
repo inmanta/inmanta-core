@@ -140,7 +140,7 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
 
 You should be able to reach the orchestrator to this address: `http://127.0.0.1:8888 <http://127.0.0.1:8888>`_.
 
-To stop the orchestrator and the database, use ``docker compose`` again:
+To stop the orchestrator and the database and remove the containers, use ``docker compose`` again:
 
 .. code-block:: sh
 
