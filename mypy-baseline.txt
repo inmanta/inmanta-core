@@ -65,6 +65,7 @@ src/inmanta/signals.py:0: error: Argument 2 to "signal" has incompatible type "C
 src/inmanta/protocol/auth.py:0: error: Module has no attribute "server_jwt_header"  [attr-defined]
 src/inmanta/protocol/auth.py:0: error: Incompatible return value type (got "tuple[Mapping[str, str | Sequence[str]], AuthJWTConfig]", expected "Mapping[str, str | Sequence[str]] | None")  [return-value]
 src/inmanta/logging.py:0: error: Returning Any from function declared to return "dict[str, object]"  [no-any-return]
+src/inmanta/logging.py:0: error: Returning Any from function declared to return "dict[str, object]"  [no-any-return]
 src/inmanta/logging.py:0: error: Argument "root_handlers" to "FullLoggingConfig" has incompatible type "object"; expected "list[str] | None"  [arg-type]
 src/inmanta/logging.py:0: error: Argument "root_log_level" to "FullLoggingConfig" has incompatible type "object"; expected "int | str | None"  [arg-type]
 src/inmanta/deploy/state.py:0: error: Enum index should be a string (actual index type "object")  [misc]
