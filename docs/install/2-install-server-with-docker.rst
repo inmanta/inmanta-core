@@ -4,7 +4,7 @@ Install Inmanta with Docker
 ***************************
 
 This page explains how to setup an orchestration server using docker.
-This guide assumes you already have `docker <https://docs.docker.com/get-docker/>`_ and `docker-compose <https://docs.docker.com/compose/install/>`_ installed on your machine.
+This guide assumes you already have `docker <https://docs.docker.com/get-docker/>`_ installed on your machine.
 
 Pull the image
 ##############
@@ -15,7 +15,7 @@ Pull the image
 
     .. code-block:: sh
 
-        docker pull ghcr.io/inmanta/orchestrator:latest
+        sudo docker pull ghcr.io/inmanta/orchestrator:latest
 
 
     This command will pull the latest version of the Inmanta OSS Orchestrator image.
@@ -29,7 +29,7 @@ Pull the image
 
     .. code-block:: console
 
-        $ docker login containers.inmanta.com
+        $ sudo docker login containers.inmanta.com
         Username: containers
         Password: <your-entitlement-token>
 
@@ -48,7 +48,7 @@ Pull the image
     .. code-block:: sh
        :substitutions:
 
-        docker pull containers.inmanta.com/containers/service-orchestrator:|version_major|
+        sudo docker pull containers.inmanta.com/containers/service-orchestrator:|version_major|
 
 
     This command will pull the latest version of the Inmanta Service Orchestrator image.
@@ -58,99 +58,75 @@ Start the server with docker-compose
 
 Here is a minimalistic docker-compose file content that can be used to deploy the server on your machine.
 
-
-
 .. only:: oss
 
     .. code-block:: yaml
 
-        version: '3'
         services:
-            postgres:
-                container_name: inmanta_db
+            db:
+                container_name: inmanta-db
                 image: postgres:16
                 environment:
                     POSTGRES_USER: inmanta
                     POSTGRES_PASSWORD: inmanta
-                    PGDATA: /var/lib/postgresql/data/pgdata
-                networks:
-                    inm_net:
-                        ipv4_address: 172.30.0.2
                 volumes:
-                    - type: volume
-                      source: pgdata
-                      target: /var/lib/postgresql/data
-            inmanta-server:
-                container_name: inmanta_orchestrator
+                    - inmanta-db-data:/var/lib/postgresql/data
+                command: "postgres -c jit=off"
+            server:
+                container_name: inmanta-orchestrator
                 image: ghcr.io/inmanta/orchestrator:latest
                 ports:
-                    - 8888:8888
+                    - 127.0.0.1:8888:8888
                 environment:
-                    INMANTA_DATABASE_HOST: inmanta_db
+                    INMANTA_DATABASE_HOST: inmanta-db
                     INMANTA_DATABASE_USERNAME: inmanta
                     INMANTA_DATABASE_PASSWORD: inmanta
-                networks:
-                    inm_net:
-                        ipv4_address: 172.30.0.3
-                depends_on:
-                    - "postgres"
+                volumes:
+                    - inmanta-server-data:/var/lib/inmanta
+                    - inmanta-server-logs:/var/log/inmanta
 
-        networks:
-            inm_net:
-                ipam:
-                    driver: default
-                    config:
-                        - subnet: 172.30.0.0/16
         volumes:
-            pgdata:
+            inmanta-db-data: {}
+            inmanta-server-data: {}
+            inmanta-server-logs: {}
 
+    You can paste this yaml snippet in a file named `docker-compose.yml`.
 
 .. only:: iso
 
     .. code-block:: yaml
        :substitutions:
 
-        version: '3'
         services:
-            postgres:
-                container_name: inmanta_db
+            db:
+                container_name: inmanta-db
                 image: postgres:16
                 environment:
                     POSTGRES_USER: inmanta
                     POSTGRES_PASSWORD: inmanta
-                    PGDATA: /var/lib/postgresql/data/pgdata
-                networks:
-                    inm_net:
-                        ipv4_address: 172.30.0.2
                 volumes:
-                    - type: volume
-                      source: pgdata
-                      target: /var/lib/postgresql/data
-            inmanta-server:
-                container_name: inmanta_orchestrator
+                    - inmanta-db-data:/var/lib/postgresql/data
+                command: "postgres -c jit=off"
+            server:
+                container_name: inmanta-orchestrator
                 image: containers.inmanta.com/containers/service-orchestrator:|version_major|
                 ports:
-                    - 8888:8888
+                    - 127.0.0.1:8888:8888
                 volumes:
                     - ./resources/com.inmanta.license:/etc/inmanta/license.key
                     - ./resources/com.inmanta.jwe:/etc/inmanta/entitlement.jwe
                 environment:
-                    INMANTA_DATABASE_HOST: inmanta_db
+                    INMANTA_DATABASE_HOST: inmanta-db
                     INMANTA_DATABASE_USERNAME: inmanta
                     INMANTA_DATABASE_PASSWORD: inmanta
-                networks:
-                    inm_net:
-                        ipv4_address: 172.30.0.3
-                depends_on:
-                    - "postgres"
-        networks:
-            inm_net:
-                ipam:
-                    driver: default
-                    config:
-                        - subnet: 172.30.0.0/16
+                volumes:
+                    - inmanta-server-data:/var/lib/inmanta
+                    - inmanta-server-logs:/var/log/inmanta
+
         volumes:
-            pgdata:
+            inmanta-db-data: {}
+            inmanta-server-data: {}
+            inmanta-server-logs: {}
 
     You can paste this yaml snippet in a file named `docker-compose.yml` and ensure you have your license files available.
     With the proposed config, they should be located in a ``resources/`` folder on the side of the docker-compose file you create,
@@ -160,13 +136,20 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
 
 .. code-block:: sh
 
-    docker-compose up
+    sudo docker compose up
 
-You should be able to reach the orchestrator to this address: `http://172.30.0.3:8888 <http://172.30.0.3:8888>`_.
+You should be able to reach the orchestrator to this address: `http://127.0.0.1:8888 <http://127.0.0.1:8888>`_.
 
-The PostgreSQL server started by the above-mentioned docker-compose file has a named volume ``pgdata`` attached. This
-means that no data will be lost when the PostgreSQL container restarts. Pass the ``-v`` option to the
-``docker-compose down`` to remove the volume.
+To stop the orchestrator and the database, use ``docker compose`` again:
+
+.. code-block:: sh
+
+    sudo docker compose down
+
+.. note:: 
+    The database and orchestrator containers started in the above-mentioned docker-compose file make use of docker volume to persist their relevant data in between restarts.
+    If you want to clear this data, you must remove these volumes, which can be done easily done by adding the ``-v`` option to the ``sudo docker compose down`` command.
+    Be aware that using ``-v`` will remove all volumes (for both the database and orchestrator containers).
 
 The default server config assumes that the orchestrator can reach the database server on localhost.
 To change this behavior you can use the environment variables as shown in the snippet above.
@@ -179,7 +162,6 @@ matching your needs.  You can find more instructions for overwriting the config 
     container as shown here is not ideal in term of performance, reliability and raises some serious data
     persistence concerns.
 
-
 .. _docker_overwrite_server_conf:
 
 Overwrite default server configuration
@@ -189,114 +171,57 @@ If you want to change the default server configuration, the recommended way is t
 config options via environment variables as done in the above example.
 All the different options and associated environment variables are described :ref:`here<config_reference>`.
 It is also possible to provide a configuration file. Make sure to mount it in ``/etc/inmanta/inmanta.cfg``.
-
-Starting the ssh server
-#######################
-
-By default, no ssh server is running in the container.  You don't need it to have a functional
-orchestrator.
-If you want to enable ssh anyway, for easy access to the orchestrator,
-you can overwrite the startup command of the container with the following:
-
-.. code-block:: sh
-
-    server-with-ssh
-
-
-If you use docker-compose, it should look like:
-
-.. code-block:: yaml
-
-    inmanta-server:
-        container_name: inmanta_orchestrator
-        ...
-        command: "server-with-ssh"
-
-.. warning::
-    By default, the inmanta user doesn't have any password, if you want to ssh into the container,
-    you also need to set the authorized_keys file for the inmanta user.  You can do so by mounting
-    your public key to the following path in the container: ``/var/lib/inmanta/.ssh/authorized_keys``.
-    When starting, the container will make sure that the file has the correct ownership and permissions.
+Be aware that values provided in the configuration file are overwritten by values provided in environment variables, and that
+the orchestrator image contains some `default environment variable values <https://raw.githubusercontent.com/inmanta/inmanta/refs/heads/master/docker/native_image/Dockerfile#:~:text=ENV>`_.
 
 Setting environment variables
 #############################
 
-You might want your inmanta server to be able to reach some environment variables.
-There are two ways you can achieve this:
+The inmanta server will share any environment variable it received from docker with all its compiler and agent sub processes.  So if you need
+to make some environment variables available to the compiler or agent, you can simply tell docker to pass them on to the orchestrator container.
+In the example shown above, this can be done by using either of the ``environment`` or ``env_file`` attributes in the ``server`` service of the docker compose file.
+More details about these options can be found in `docker's documentation <https://docs.docker.com/reference/compose-file/services/>`_.
 
-    1.  Set the environment variables with docker, either using the ``--env`` argument or in your
-        docker-compose file.  Those variables will be accessible to the inmanta server and any
-        agent it starts, but not to any other process running in the container.
+Accessing the orchestrator file system
+######################################
 
-    2.  Set the environment variables in a file and use the ``env_file`` section of docker compose to specify the path of your env file.
+If you want to have a look inside the running orchestrator container, it contains a traditional file system, you can enter it using ``docker exec`` on the host where the container is running:
 
-.. only:: oss
+.. code-block:: sh
 
-    .. code-block:: yaml
+    sudo docker exec -ti inmanta-orchestrator bash
 
-        inmanta-server:
-            container_name: inmanta_orchestrator
-            image: ghcr.io/inmanta/orchestrator:latest
-            ports:
-                - 8888:8888
-            env_file: ./resources/my-env-file
-            environment:
-                INMANTA_DATABASE_HOST: inmanta_db
-                INMANTA_DATABASE_USERNAME: inmanta
-                INMANTA_DATABASE_PASSWORD: inmanta
-            volumes:
-                - ./resources/my-server-conf.cfg:/etc/inmanta/inmanta.cfg
-
-.. only:: iso
-
-    .. code-block:: yaml
-        :substitutions:
-
-        inmanta-server:
-            container_name: inmanta_orchestrator
-            image: containers.inmanta.com/containers/service-orchestrator:|version_major|
-            ports:
-                - 8888:8888
-            env_file: ./resources/my-env-file
-            environment:
-                INMANTA_DATABASE_HOST: inmanta_db
-                INMANTA_DATABASE_USERNAME: inmanta
-                INMANTA_DATABASE_PASSWORD: inmanta
-            volumes:
-                - ./resources/com.inmanta.license:/etc/inmanta/license/com.inmanta.license
-                - ./resources/com.inmanta.jwe:/etc/inmanta/license/com.inmanta.jwe
-                - ./resources/my-server-conf.cfg:/etc/inmanta/inmanta.cfg
+If you need to enter the container via ssh, we recommend deploying an ssh sidecar, alongside the orchestrator container, as shown here: `https://github.com/inmanta/inmanta-docker <https://github.com/inmanta/inmanta-docker>_`
 
 Mounting files/directories
 ##########################
 
-The recommended way to mount files and directories is to use docker volumes:
-
-.. code-block:: sh
-
-    docker volume create mydockervolume
-
-And then you can use it in docker-compose file:
-
-.. code-block:: yaml
-
-    volumes:
-        - mydockervolume:/etc/inmanta/myfolder
-
+The recommended way to persist the orchestrator data is to use docker volumes, as shown in the example above.
 
 However if you really need to mount a file or directory from the host, you can use bind mounts. You just need to make sure to change the ownership of
-the file/directory you want to mount to make sure it has same uid/gid as the inmanta user inside the container. To find them, in the container, you can use ``id`` command.
+the file/directory you want to mount to make sure it has same uid/gid as the inmanta user inside the container. To find them, in the container, you can use ``id`` command:
+
+.. only:: oss
+
+    .. code-block:: sh
+
+        sudo docker run --rm -ti ghcr.io/inmanta/orchestrator:latest id
+
+.. only:: iso
+
+    .. code-block:: sh
+        :substitutions:
+
+        sudo docker run --rm -ti containers.inmanta.com/containers/service-orchestrator:|version_major| id
+
 By default, currently, inmanta user ``uid`` is 997 and ``gid`` is 995. On your host you can easily change ownership of your file/directory with these values:
 
 .. code-block:: sh
 
     sudo chown -R 997:995 myfolder/
 
-
 Log rotation
 ############
 
 By default, the container won't do any log rotation, to let you the choice of dealing with the logs
-according to your own preferences.  We recommend that you do so by mounting a folder inside of the container
-at the following path: ``/var/log``. This path contains all the logs of inmanta (unless you specified
-a different path in the config of the server).
+according to your own preferences.  You can setup log rotation using a sidecar as shown here: `https://github.com/inmanta/inmanta-docker <https://github.com/inmanta/inmanta-docker>_`
