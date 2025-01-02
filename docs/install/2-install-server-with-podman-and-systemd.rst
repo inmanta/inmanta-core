@@ -8,15 +8,19 @@ This guide assumes you already have `Podman <http://podman.io/>`_ installed on y
 
 .. note::
     The instructions below will show you how to install the orchestrator, and make the orchestrator run as a non-root user on the host.  To achieve this
-    you can either follow the rootless instructions (``User setup``), running them as a simple user without elevated privileged, or as root (``Root setup``).  
+    you can either follow the rootless instructions (``User setup``), running them as a simple user without elevated privileged, or as root (``Root setup``).
     If you follow the latter, make sure to create a system user that we will use to run the orchestrator process.  We will assume in the next steps that such
     system user is named ``inmanta`` and its ``HOME`` folder is ``/var/lib/inmanta``.
+
+.. warning::
+    The following instructions make some assumptions on the system used, you may have to adapt the examples depending on your environment.
+    For example the uids and gids may already be in use, selinux may be configured differently, ...
 
 
 Podman configuration
 ####################
 
-Follow the `Podman documentation <https://github.com/containers/podman/blob/2ba36051082d7ba6ba387f4151e1cfcf338bbc4d/docs/tutorials/rootless_tutorial.md>`_ to make sure that:  
+Follow the `Podman documentation <https://github.com/containers/podman/blob/2ba36051082d7ba6ba387f4151e1cfcf338bbc4d/docs/tutorials/rootless_tutorial.md>`_ to make sure that:
 
 1.  The user that will run the orchestrator (your unprivileged user, or the ``inmanta`` system user) has a range of ``subuids`` and ``subgids`` available to use.
     You can check it is the case running those commands:
@@ -28,10 +32,10 @@ Follow the `Podman documentation <https://github.com/containers/podman/blob/2ba3
 
             .. code-block:: console
 
-                $ podman unshare cat /proc/self/uid_map 
+                $ podman unshare cat /proc/self/uid_map
                         0       1000          1
                         1     524288      65536
-                $ podman unshare cat /proc/self/gid_map 
+                $ podman unshare cat /proc/self/gid_map
                         0       1000          1
                         1     524288      65536
 
@@ -40,10 +44,10 @@ Follow the `Podman documentation <https://github.com/containers/podman/blob/2ba3
 
             .. code-block:: console
 
-                # sudo -i -u inmanta -- podman unshare cat /proc/self/uid_map 
+                # sudo -i -u inmanta -- podman unshare cat /proc/self/uid_map
                         0        976          1
                         1    1000000      65536
-                # sudo -i -u inmanta -- podman unshare cat /proc/self/gid_map 
+                # sudo -i -u inmanta -- podman unshare cat /proc/self/gid_map
                         0        975          1
                         1    1000000      65536
 
@@ -75,8 +79,8 @@ Follow the `Podman documentation <https://github.com/containers/podman/blob/2ba3
 
                 # sudo -i -u inmanta -- podman info | grep runRoot
                   runRoot: /run/inmanta/containers
-            
-            We overwrite the default value that podman will set for this system user for two reasons:  
+
+            We overwrite the default value that podman will set for this system user for two reasons:
 
             1.  The default values it picks depends on the way you used ``podman`` for the first time with this user.
             2.  The default values it picks will contain the id of the ``inmanta`` user in its path, which we don't want to make any assumption about in the next steps.
@@ -244,10 +248,10 @@ Prepare the orchestrator configuration
     to reflect the setup you have.
 
     .. note::
-        The setup described here assumes you already have a PostgreSQL instance available that the orchestrator can use for its persistent storage.  If it is not the case, 
+        The setup described here assumes you already have a PostgreSQL instance available that the orchestrator can use for its persistent storage.  If it is not the case,
         please :ref:`jump to the end of this document<install-postgresql-with-podman>`, where we explain to you how to easily deploy a database using Postman and Systemd.
 
-3.  Make sure that there is a folder on your host that can persist all the logs of the server and that it is owned by the user running the orchestrator service.  
+3.  Make sure that there is a folder on your host that can persist all the logs of the server and that it is owned by the user running the orchestrator service.
 
     .. tab-set::
 
@@ -270,7 +274,7 @@ Prepare the orchestrator configuration
                 # mkdir -p /var/log/inmanta
                 # chown -R inmanta:inmanta /var/log/inmanta
 
-    .. warning:: 
+    .. warning::
         Inside of the container, this folder will be mounted at ``/var/log/inmanta`` as it is the default location where the orchestrator saves its logs.  This
         location is configurable in the orchestrator configuration file.  If you for any reason would change this location in the configuration, make sure to update any usage
         of the ``/var/log/inmanta`` folder in the next installation steps.
@@ -280,14 +284,14 @@ Prepare the orchestrator configuration
     4.  Get the license files:
 
         Together with the access to the inmanta container repo, you should also have received a license and an entitlement file. The orchestrator will need them
-        in order to run properly.  You can also place them in a config directory on your host.  
-        
+        in order to run properly.  You can also place them in a config directory on your host.
+
         .. tab-set::
 
             .. tab-item:: User setup
                 :sync: rootless-setup
 
-                After this step, we assume that this folder is ``~/.config/inmanta/license/`` and that both files are named ``com.inmanta.license`` 
+                After this step, we assume that this folder is ``~/.config/inmanta/license/`` and that both files are named ``com.inmanta.license``
                 and ``com.inmanta.jwe`` respectively.
 
                 .. code-block:: console
@@ -304,7 +308,7 @@ Prepare the orchestrator configuration
             .. tab-item:: Root setup
                 :sync: rootful-setup
 
-                After this step, we assume that this folder is ``/etc/inmanta/license/`` and that both files are named ``com.inmanta.license`` 
+                After this step, we assume that this folder is ``/etc/inmanta/license/`` and that both files are named ``com.inmanta.license``
                 and ``com.inmanta.jwe`` respectively.
 
                 .. code-block:: console
@@ -336,7 +340,7 @@ Here is a systemd unit file that can be used to deploy the server on your machin
             .. code-block:: systemd
 
                 [Unit]
-                Description=Podman 
+                Description=Podman
                 Documentation=https://docs.inmanta.com
                 Wants=network-online.target
                 After=network-online.target
@@ -385,7 +389,7 @@ Here is a systemd unit file that can be used to deploy the server on your machin
                 :substitutions:
 
                 [Unit]
-                Description=Podman 
+                Description=Podman
                 Documentation=https://docs.inmanta.com
                 Wants=network-online.target
                 After=network-online.target
@@ -442,7 +446,7 @@ Here is a systemd unit file that can be used to deploy the server on your machin
             .. code-block:: systemd
 
                 [Unit]
-                Description=Podman 
+                Description=Podman
                 Documentation=https://docs.inmanta.com
                 Wants=network-online.target
                 After=network-online.target
@@ -493,7 +497,7 @@ Here is a systemd unit file that can be used to deploy the server on your machin
                 :substitutions:
 
                 [Unit]
-                Description=Podman 
+                Description=Podman
                 Documentation=https://docs.inmanta.com
                 Wants=network-online.target
                 After=network-online.target
@@ -550,8 +554,8 @@ Here is a systemd unit file that can be used to deploy the server on your machin
 
     This allow us to easily share files between the host user and the ``inmanta`` user inside the container, avoiding any ownership conflict as they
     are then the same user (just seen from a different user namespace).
-    Strictly speaking, if the image is already pulled on the host, you might get away with mapping only the ``inmanta`` 
-    (``--uidmap=997:0:1 --gidmap=995:0:1``) and the ``root`` (``--uidmap=0:1:1 --gidmap=0:1:1``) user and group inside of the container. 
+    Strictly speaking, if the image is already pulled on the host, you might get away with mapping only the ``inmanta``
+    (``--uidmap=997:0:1 --gidmap=995:0:1``) and the ``root`` (``--uidmap=0:1:1 --gidmap=0:1:1``) user and group inside of the container.
     But you would face issue if the container image was deleted from your host and the ``run`` command in the unit file tried to automatically
     pull the image, as the container image does contain a lot more users and groups than ``inmanta`` and ``root`` in its filesystem.
 
@@ -561,7 +565,7 @@ Once the systemd unit files are in place, make sure to enable them and reload th
 
     .. tab-item:: User setup
         :sync: rootless-setup
-        
+
         .. code-block:: console
 
             $ systemctl --user daemon-reload
@@ -640,7 +644,7 @@ Deploy postgresql with podman and systemd
             .. code-block:: systemd
 
                 [Unit]
-                Description=Podman 
+                Description=Podman
                 Documentation=https://docs.inmanta.com
                 Wants=network-online.target
                 After=network-online.target
