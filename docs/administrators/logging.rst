@@ -105,7 +105,7 @@ The following log-related options can be set in an Inmanta config file:
 Each of the above-mentioned configurations can also be provided directly into an environment variable in the
 following way:
 
-* :inmanta.config:option:`config.logging_config`: ``INMANTA_CONFIG_LOGGING_CONFIG_CONTENT`` or ``INMANTA_CONFIG_LOGGING_CONFIG_TMPL``
+* :inmanta.config:option:`config.logging-config`: ``INMANTA_CONFIG_LOGGING_CONFIG_CONTENT`` or ``INMANTA_CONFIG_LOGGING_CONFIG_TMPL``
 * :inmanta.config:option:`logging.compiler`: ``INMANTA_LOGGING_COMPILER_CONTENT`` or ``INMANTA_LOGGING_COMPILER_TMPL``
 * :inmanta.config:option:`logging.server`: ``INMANTA_LOGGING_SERVER_CONTENT`` or ``INMANTA_LOGGING_SERVER_TMPL``
 * :inmanta.config:option:`logging.scheduler`: ``INMANTA_LOGGING_SCHEDULER_CONTENT`` or ``INMANTA_LOGGING_SCHEDULER_TMPL``
