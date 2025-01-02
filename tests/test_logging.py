@@ -422,10 +422,7 @@ async def test_print_default_logging_cmd(inmanta_config, tmp_path):
 
         # Output the logging config on the CLI.
         # Here we force ENVIRON_FORCE_TTY to be set to simulate that we are on a TTY
-        process = await subprocess.create_subprocess_exec(
-            *args, stdout=subprocess.PIPE, env={ENVIRON_FORCE_TTY: "yes"}
-        )
-        await process.wait()
+        process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, env={ENVIRON_FORCE_TTY: "yes"})
         try:
             (stdout, _) = await wait_for(process.communicate(), timeout=5)
         except TimeoutError as e:
@@ -444,7 +441,6 @@ async def test_print_default_logging_cmd(inmanta_config, tmp_path):
         # This is the same as piping to a file
         assert "ENVIRON_FORCE_TTY" not in os.environ
         process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE)
-        await process.wait()
         try:
             (stdout, _) = await wait_for(process.communicate(), timeout=5)
         except TimeoutError as e:
