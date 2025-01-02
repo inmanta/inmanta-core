@@ -542,16 +542,7 @@ class LoggingConfigSource(abc.ABC):
         """
         raise NotImplementedError()
 
-    def convert_logging_config_str_to_dict(self, logging_config_str: str, context: Mapping[str, str]) -> dict[str, object]:
-        """
-        This method also does template rendering.
-        """
-        if self.is_template():
-            logging_config_str = self._render_logging_config_template(template=logging_config_str, context=context)
-
-        return yaml.safe_load(logging_config_str)
-
-    def _render_logging_config_template(self, template: str, context: Mapping[str, str]) -> str:
+    def render_logging_config_template(self, template: str, context: Mapping[str, str]) -> str:
         """
         This method fills in the template variables present in the given logging configuration template.
 
@@ -578,9 +569,21 @@ class LoggingConfigFromFile(LoggingConfigSource):
         self.file_name = file_name
 
     def read_logging_config(self, context: Mapping[str, str]) -> dict[str, object]:
-        with open(self.file_name, "r") as fh:
-            logging_config_as_str = fh.read()
-        return self.convert_logging_config_str_to_dict(logging_config_as_str, context)
+        try:
+            with open(self.file_name, "r") as fh:
+                logging_config_as_str = fh.read()
+        except FileNotFoundError:
+            raise Exception(f"Logging config file {self.file_name} doesn't exist.")
+        except Exception:
+            raise Exception(f"Failed to read logging config file from {self.file_name}.")
+
+        if self.is_template():
+            logging_config_as_str = self.render_logging_config_template(template=logging_config_as_str, context=context)
+
+        try:
+            return yaml.safe_load(logging_config_as_str)
+        except Exception:
+            raise Exception(f"Failed to parse logging config file from {self.file_name} as yaml.")
 
     def is_template(self) -> bool:
         return self.file_name.endswith(".tmpl")
@@ -595,15 +598,20 @@ class LoggingConfigFromEnvVar(LoggingConfigSource):
     """
 
     def __init__(self, env_var_name: str) -> None:
-        if os.getenv(env_var_name) is None:
-            raise Exception(f"Environment variable {env_var_name} not found.")
         self.env_var_name = env_var_name
 
     def read_logging_config(self, context: Mapping[str, str]) -> dict[str, object]:
-        logging_config_as_str = os.getenv(self.env_var_name)
-        # Make mypy happy
-        assert logging_config_as_str is not None
-        return self.convert_logging_config_str_to_dict(logging_config_as_str, context)
+        logging_config_as_str = os.getenv(self.env_var_name, None)
+        if logging_config_as_str is None:
+            raise Exception(f"Environment variable {self.env_var_name} not found.")
+
+        if self.is_template():
+            logging_config_as_str = self.render_logging_config_template(template=logging_config_as_str, context=context)
+
+        try:
+            return yaml.safe_load(logging_config_as_str)
+        except Exception:
+            raise Exception(f"Failed to parse logging config from environment variable {self.env_var_name} as yaml.")
 
     def is_template(self) -> bool:
         return self.env_var_name.endswith("_TMPL")
