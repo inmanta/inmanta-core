@@ -966,11 +966,10 @@ def default_logging_config(options: argparse.Namespace) -> None:
     component_config = InmantaLoggerConfig(stream=sys.stdout, no_install=True)
     # Force TTY so that this command outputs the same config when piping to a file
     original_force_tty = os.environ.get(const.ENVIRON_FORCE_TTY, None)
-    os.environ[const.ENVIRON_FORCE_TTY] = original_force_tty if original_force_tty else "yes"
+    if original_force_tty is None:
+        os.environ[const.ENVIRON_FORCE_TTY] = "yes"
     try:
         component_config.apply_options(options, options.cmd, context)
-    except Exception as e:
-        raise e
     finally:
         # Revert this env var back to its original state
         if original_force_tty is None:
