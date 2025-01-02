@@ -167,11 +167,8 @@ class Config:
         return cls.get_for_option(option) if option is not None else cls._get_value(section, name, default_value)
 
     @classmethod
-    def get_for_option(cls, option: "Option[T]", ignore_default: bool = False) -> T:
-        """
-        :param ignore_default: if True, ignore the actual default value and return None by default.
-        """
-        default_value = option.get_default_value() if not ignore_default else None
+    def get_for_option(cls, option: "Option[T]") -> T:
+        default_value = option.get_default_value()
         raw_value: str | T = cls._get_value(option.section, option.name, default_value)
         return option.validate(raw_value)
 
@@ -379,10 +376,7 @@ class Option(Generic[T]):
         self.predecessor_option = predecessor_option
         Config.register_option(self)
 
-    def get(self, ignore_default: bool = False) -> T:
-        """
-        :param ignore_default: if True, ignore the actual default value and return None by default.
-        """
+    def get(self) -> T:
         raw_config: ConfigParser = Config.get()
         if self.predecessor_option:
             has_deprecated_option = raw_config.has_option(self.predecessor_option.section, self.predecessor_option.name)
@@ -392,8 +386,8 @@ class Option(Generic[T]):
                     f"Config option {self.predecessor_option.name} is deprecated. Use {self.name} instead.",
                     category=DeprecationWarning,
                 )
-                return self.predecessor_option.get(ignore_default=ignore_default)
-        return Config.get_for_option(self, ignore_default=ignore_default)
+                return self.predecessor_option.get()
+        return Config.get_for_option(self)
 
     def get_type(self) -> Optional[str]:
         if callable(self.validator):
@@ -471,7 +465,7 @@ def make_option_for_log_file(component_name: str) -> Option[str | None]:
     return Option(
         section="logging",
         name=component_name,
-        default=option_as_default(logging_config),
+        default=None,
         documentation=f"The path to the configuration file for the logging of the {component_name}. This is a YAML file that follows "
         "the dictionary-schema accepted by logging.config.dictConfig(). All other log-related configuration "
         "options will be ignored when this option is set.",

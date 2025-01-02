@@ -737,7 +737,7 @@ class InmantaLoggerConfig:
         )
         # The logging config of a component defaults to the general config.logging_config config option.
         # As such, we ignore the default here when a component_name is provided.
-        file_name: str | None = config_option.get(ignore_default=component_name is not None)
+        file_name: str | None = config_option.get()
         if file_name is not None:
             return LoggingConfigFromFile(file_name=file_name)
         # No logging configuration was found for the given component.
