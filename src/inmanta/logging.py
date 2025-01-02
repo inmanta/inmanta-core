@@ -643,7 +643,7 @@ class InmantaLoggerConfig:
         Set up the logging handler for Inmanta
 
         :param stream: The TextIO stream where the logs will be sent to.
-        :param no_install: True iff we want to install (apply) the logging config to the Python logging framework.
+        :param no_install: True iff we don't want to install (apply) the logging config to the Python logging framework.
                            This parameter is set to True by the print-default-logging-config tool.
         """
         self.no_install = no_install

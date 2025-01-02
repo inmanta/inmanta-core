@@ -526,8 +526,12 @@ def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdi
     inmanta_logging_config.clean_instance()
     inmanta_logging_config = InmantaLoggerConfig.get_instance(stream=sys.stdout)
     inmanta_logging_config.apply_options(options=Options(), component="server", context={"environment": env_id})
+    captured = capsys.readouterr()
+    assert (
+        "Environment variables INMANTA_LOGGING_SERVER_CONTENT and INMANTA_LOGGING_SERVER_TMPL are set simultaneously."
+        " Using INMANTA_LOGGING_SERVER_CONTENT" in captured.out
+    )
     logger = logging.getLogger("test")
-    capsys.readouterr()  # Clear buffer
     logger.info("test")
     captured = capsys.readouterr()
     assert "config3 -- {environment} -- test" in captured.out
