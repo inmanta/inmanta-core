@@ -81,7 +81,7 @@ class ResourceIntentChange(Enum):
     A state change for a single resource's intent. Represents in which way, if any, a resource changed in a new model version
     versus the currently managed one.
 
-    Internal class meant to unambiguosly categorize how resources have changed when processing multiple model versions at once.
+    Internal class meant to unambiguously categorize how resources have changed when processing multiple model versions at once.
     """
 
     NEW = enum.auto()
