@@ -1183,7 +1183,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     # assert that r2 was rescheduled due to the event, even though it is already deploying for its latest intent
     assert len(agent.scheduler._work._waiting) == 0
     assert agent.scheduler._work.agent_queues.queued().keys() == {tasks.Deploy(resource=rid2)}
-    # Note: turns out this scenario is no longer really reachable in the way it was intended: they only way it's possible
+    # Note: turns out this scenario is no longer really reachable in the way it was intended: the only way it's possible
     #   for both r1 and r2 to be deploying concurrently, is if r1 was triggered while r2 was already deploying (as set up
     #   above). However, in that case, r2 gets rescheduled when the r1 deploy is *requested*, rather than when it *finishes*
     #   (see assert on message below).
