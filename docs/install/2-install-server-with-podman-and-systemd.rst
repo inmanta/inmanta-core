@@ -465,12 +465,7 @@ Here is a systemd unit file that can be used to deploy the server on your machin
                         -d \
                         --replace \
                         --publish=127.0.0.1:8888:8888 \
-                        --uidmap=997:0:1 \
-                        --uidmap=0:1:997 \
-                        --uidmap=998:998:64539 \
-                        --gidmap=995:0:1 \
-                        --gidmap=0:1:995 \
-                        --gidmap=996:996:64541 \
+                        --userns=keep-id:uid=997,gid=995 \
                         --name=inmanta-orchestrator-server \
                         --volume=/etc/inmanta/inmanta.cfg:/etc/inmanta/inmanta.cfg:z \
                         --volume=/var/log/inmanta:/var/log/inmanta:z \
@@ -516,12 +511,7 @@ Here is a systemd unit file that can be used to deploy the server on your machin
                         -d \
                         --replace \
                         --publish=127.0.0.1:8888:8888 \
-                        --uidmap=997:0:1 \
-                        --uidmap=0:1:997 \
-                        --uidmap=998:998:64539 \
-                        --gidmap=995:0:1 \
-                        --gidmap=0:1:995 \
-                        --gidmap=996:996:64541 \
+                        --userns=keep-id:uid=997,gid=995 \
                         --name=inmanta-orchestrator-server \
                         --volume=/etc/inmanta/inmanta.cfg:/etc/inmanta/inmanta.cfg:z \
                         --volume=/etc/inmanta/license/com.inmanta.license:/etc/inmanta/license/com.inmanta.license:z \
@@ -661,12 +651,7 @@ Deploy postgresql with podman and systemd
                         -d \
                         --replace \
                         --network=inmanta-orchestrator-net:ip=172.42.0.2 \
-                        --uidmap=999:0:1 \
-                        --uidmap=0:1:999 \
-                        --uidmap=1000:1000:64537 \
-                        --gidmap=999:0:1 \
-                        --gidmap=0:1:999 \
-                        --gidmap=1000:1000:64537 \
+                        --userns=keep-id:uid=999,gid=999 \
                         --name=inmanta-orchestrator-db \
                         --volume=%h/.local/share/inmanta-orchestrator-db/data:/var/lib/postgresql/data:z \
                         --env=POSTGRES_USER=inmanta \
