@@ -37,9 +37,9 @@ REGEX_INMANTA_MODULE: str = r"^(inmanta|inmanta\..*|inmanta_.*)$"
 
 
 class WarningBehaviour(Enum):
-    WARN: Literal["default"] = "default"
-    IGNORE: Literal["ignore"] = "ignore"
-    ERROR: Literal["error"] = "error"
+    WARN = "default"
+    IGNORE = "ignore"
+    ERROR = "error"
 
 
 class WarningRule:
