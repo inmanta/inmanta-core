@@ -872,10 +872,10 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
     try:
         if not DISABLE_STATE_CHECK:
             for agent in agents:
+                await agent.stop_working()
                 the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
                 for r, state in the_state.items():
                     print(r, state)
-                await agent.stop_working()
                 monkeypatch.setattr(agent.scheduler._work.agent_queues, "_new_agent_notify", lambda x: x)
                 await agent.start_working()
                 new_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))

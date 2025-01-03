@@ -1223,7 +1223,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             is_orphan=(i == 1),
             deployment_result=DeploymentResult.DEPLOYED,
             blocked_status=BlockedStatus.NO,
-            expected_compliance_status=ComplianceStatus.ORPHAN if i == 1 else ComplianceStatus.COMPLIANT,
+            expected_compliance_status=None if i == 1 else ComplianceStatus.COMPLIANT,
         )
 
     # Make key4 undefined again

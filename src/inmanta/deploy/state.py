@@ -26,15 +26,14 @@ from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import asyncpg
 
-from inmanta import const
+from inmanta import const, resources
 from inmanta.util.collections import BidirectionalManyMapping
 
 if TYPE_CHECKING:
-    from inmanta import resources
     from inmanta.types import ResourceIdStr, ResourceType
 
 
@@ -63,27 +62,20 @@ class ComplianceStatus(StrEnum):
     NON_COMPLIANT: The resource intent has not been updated since latest deploy attempt (if any)
         but we have reason to believe operational state might not comply with latest resource intent,
         based on a deploy attempt / compliance check for that intent.
-    UNDEFINED: The resource status is undefined, because it has an unknown attribute.
-    ORPHAN: The resource has become an orphan, i.e. it is no longer present in the latest released model version.
+    UNDEFINED: The resource status is undefined, because it has an unknown attribute. i.e. undefined status <=> undefined
+        intent.
     """
 
     COMPLIANT = enum.auto()
     HAS_UPDATE = enum.auto()
     NON_COMPLIANT = enum.auto()
     UNDEFINED = enum.auto()
-    ORPHAN = enum.auto()
 
     def is_dirty(self) -> bool:
         """
         Return True iff the status indicates the resource is not up-to-date and is ready to be deployed.
         """
         return self in [ComplianceStatus.HAS_UPDATE, ComplianceStatus.NON_COMPLIANT]
-
-    def is_deployable(self) -> bool:
-        """
-        Return True iff the status indicates the resource is ready to be deployed.
-        """
-        return self not in [ComplianceStatus.UNDEFINED, ComplianceStatus.ORPHAN]
 
 
 @dataclass(frozen=True)
@@ -95,8 +87,6 @@ class ResourceDetails:
     id: "resources.Id" = dataclasses.field(init=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
-        from inmanta import resources
-
         # use object.__setattr__ because this is a frozen dataclass, see dataclasses docs
         object.__setattr__(self, "id", resources.Id.parse_id(self.resource_id))
 
@@ -157,9 +147,6 @@ class BlockedStatus(StrEnum):
     NO = enum.auto()
     TRANSIENT = enum.auto()
 
-    def is_blocked(self) -> bool:
-        return self != BlockedStatus.NO
-
 
 @dataclass
 class ResourceState:
@@ -179,12 +166,6 @@ class ResourceState:
         """
         return self.status.is_dirty()
 
-    def is_deployable(self) -> bool:
-        """
-        Return True iff the status indicates the resource is ready to be deployed.
-        """
-        return self.status.is_deployable() and not self.blocked.is_blocked()
-
 
 @dataclass(kw_only=True)
 class ModelState:
@@ -200,9 +181,6 @@ class ModelState:
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict["ResourceIdStr", ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
-    # (might be simply a change of its dependencies), which are still being processed by
-    # the resource scheduler. This is a short-lived transient state, used for internal concurrency control. Kept separate from
-    # ResourceStatus so that it lives outside the scheduler lock's scope.
     dirty: set["ResourceIdStr"] = dataclasses.field(default_factory=set)
     # types per agent keeps track of which resource types live on which agent by doing a reference count
     # the dict is agent_name -> resource_type -> resource_count
@@ -212,16 +190,22 @@ class ModelState:
 
     @classmethod
     async def create_from_db(
-        cls, environment: uuid.UUID, last_processed_model_version: int, *, connection: asyncpg.connection.Connection
-    ) -> "ModelState":
+        cls, environment: uuid.UUID, *, connection: asyncpg.connection.Connection
+    ) -> Optional["ModelState"]:
         """
         Create a new instance of the ModelState object, by restoring the model state from the database.
+        Returns None iff no such (released) version exists (e.g. the scheduler hasn't processed any
+        versions in the past or its last seen version has been cleaned up).
 
         :param environment: The environment the model state belongs to.
-        :param last_processed_model_version: The model version that was last processed by the scheduler, i.e. the version
-                                             associated with the state in the persistent_resource_state table.
         """
         from inmanta import data, resources
+
+        scheduler: Optional[data.Scheduler] = await data.Scheduler.get_one(environment=environment, connection=connection)
+        assert scheduler is not None
+        last_processed_model_version: Optional[int] = scheduler.last_processed_model_version
+        if last_processed_model_version is None:
+            return None
 
         result = ModelState(version=last_processed_model_version)
         resource_records = await data.Resource.get_resources_for_version_raw_with_persistent_state(
@@ -238,23 +222,37 @@ class ModelState:
                 "last_success",
                 "last_produced_events",
             ],
-            project_attributes=["requires", const.RESOURCE_ATTRIBUTE_SEND_EVENTS],
+            project_attributes=[
+                "requires",
+                const.RESOURCE_ATTRIBUTE_SEND_EVENTS,
+                const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS,
+            ],
             connection=connection,
         )
+        if not resource_records:
+            configuration_model: Optional[data.ConfigurationModel] = await data.ConfigurationModel.get_one(
+                environment=environment, version=last_processed_model_version, released=True, connection=connection
+            )
+            if configuration_model is None:
+                # the version does not exist at all (anymore)
+                return None
+            # otherwise it's simply an empty version => continue with normal flow
         by_resource_id = {r["resource_id"]: r for r in resource_records}
-        for res in resource_records:
-            resource_id = res["resource_id"]
-
-            print(f"{resource_id} -- {dict(res)}")
-
+        for resource_id, res in by_resource_id.items():
             # Populate resource_state
+
             compliance_status: ComplianceStatus
             if res["is_orphan"]:
-                compliance_status = ComplianceStatus.ORPHAN
+                # it was marked as an orphan by the scheduler when (or sometime before) it read the version we're currently
+                # processing => exclude it from the model
+                continue
             elif res["is_undefined"]:
+                # it was marked as undefined by the scheduler when it read the version we're currently processing
+                # (scheduler is only writer)
                 compliance_status = ComplianceStatus.UNDEFINED
             elif (
-                res["last_deployed_attribute_hash"] is None
+                DeploymentResult[res["deployment_result"]] is DeploymentResult.NEW
+                or res["last_deployed_attribute_hash"] is None
                 or res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]
             ):
                 compliance_status = ComplianceStatus.HAS_UPDATE
@@ -262,6 +260,7 @@ class ModelState:
                 compliance_status = ComplianceStatus.COMPLIANT
             else:
                 compliance_status = ComplianceStatus.NON_COMPLIANT
+
             resource_state = ResourceState(
                 status=compliance_status,
                 deployment_result=DeploymentResult[res["deployment_result"]],
@@ -285,11 +284,11 @@ class ModelState:
             result.requires[resource_id] = requires
 
             # Check whether resource is dirty
-            if resource_state.is_deployable():
+            if resource_state.blocked is BlockedStatus.NO:
                 if resource_state.is_dirty():
                     # Resource is dirty by itself.
                     result.dirty.add(details.id.resource_str())
-                else:
+                elif res.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True):
                     # Check whether the resource should be deployed because of an outstanding event.
                     last_success = res["last_success"] or const.DATETIME_MIN_UTC
                     for req in requires:
@@ -299,7 +298,7 @@ class ModelState:
                         if (
                             last_produced_events is not None
                             and last_produced_events > last_success
-                            and req_res[const.RESOURCE_ATTRIBUTE_SEND_EVENTS]
+                            and req_res.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False)
                         ):
                             result.dirty.add(details.id.resource_str())
                             break
@@ -312,74 +311,74 @@ class ModelState:
         self.resource_state.clear()
         self.types_per_agent.clear()
 
-    def add_up_to_date_resource(self, resource: "ResourceIdStr", details: ResourceDetails) -> None:
-        """
-        Add a resource to this ModelState for which the desired state was successfully deployed before, has an up-to-date
-        desired state and for which the deployment isn't blocked at the moment.
-
-        - Only expected as scheduler start
-        - doesn't set requires/provides
-        """
-        self.resources[resource] = details
-        if resource in self.resource_state:
-            self.resource_state[resource].status = ComplianceStatus.COMPLIANT
-            self.resource_state[resource].deployment_result = DeploymentResult.DEPLOYED
-            self.resource_state[resource].blocked = BlockedStatus.NO
-        else:
-            self.resource_state[resource] = ResourceState(
-                status=ComplianceStatus.COMPLIANT, deployment_result=DeploymentResult.DEPLOYED, blocked=BlockedStatus.NO
-            )
-            self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
-        self.dirty.discard(resource)
-
-    def update_desired_state(
+    def update_resource(
         self,
-        resource: "ResourceIdStr",
         details: ResourceDetails,
+        *,
+        force_new: bool = False,
+        undefined: bool = False,
+        known_compliant: bool = False,
     ) -> None:
         """
-        Register a new desired state for a resource.
+        Register a change of intent for a resource. Registers the new resource details, as well as its undefined status.
+        Does not touch or take into account requires-provides. To update these, call update_requires().
 
-        The resource is not currently blocked
+        Sets blocked status for undefined resources, but not vice versa because this depends on transitive properties, which
+        requires a full view, including fully updated requires. When you call this method, you must also call
+        update_transitive_state() after all direct state and requires have been updated.
 
-        For undefined resources, update_resource_to_undefined() should be called instead.
-        to update requires and provides, also call update_requires
+        :param force_new: Whether to consider this a new resource, even if we happen to know one with the same id
+            (in which case the old one is dropped from the model before registering the new one).
+        :param undefined: Whether this resource's intent is undefined, i.e. there's an unknown attribute. Mutually exclusive
+            with known_compliant.
+        :param known_compliant: Whether this resource is known to be in a good state (compliant and last deploy was successful).
+            Useful for restoring previously known state when scheduler is started. Mutually exclusive with undefined.
         """
-        self.resources[resource] = details
-        if resource in self.resource_state:
-            self.resource_state[resource].status = ComplianceStatus.HAS_UPDATE
-            # Blocked status is handled in update_transitive_state
-        else:
+        if undefined and known_compliant:
+            raise ValueError("A resource can not be both undefined and compliant")
+
+        resource: ResourceIdStr = details.resource_id
+        compliance_status: ComplianceStatus = (
+            ComplianceStatus.COMPLIANT
+            if known_compliant
+            else ComplianceStatus.UNDEFINED if undefined else ComplianceStatus.HAS_UPDATE
+        )
+        # Latest requires are not set yet, transitve blocked status are handled in update_transitive_state
+        blocked: BlockedStatus = BlockedStatus.YES if undefined else BlockedStatus.NO
+
+        already_known: bool = details.resource_id in self.resources
+        if force_new and already_known:
+            # register this as a new resource, even if we happen to know one with the same id
+            self.drop(details.resource_id)
+
+        if not already_known or force_new:
+            # we don't know the resource yet (/ anymore) => create it
             self.resource_state[resource] = ResourceState(
-                status=ComplianceStatus.HAS_UPDATE,
-                deployment_result=DeploymentResult.NEW,
-                blocked=BlockedStatus.NO,  # Requires are not set yet, handled in update_transitive_state
+                status=compliance_status,
+                deployment_result=DeploymentResult.DEPLOYED if known_compliant else DeploymentResult.NEW,
+                blocked=blocked,
             )
+            if resource not in self.requires:
+                self.requires[resource] = set()
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
-        self.dirty.add(resource)
-
-    def update_resource_to_undefined(self, resource: "ResourceIdStr", details: ResourceDetails) -> None:
-        """
-        Mark the given resource as blocked, i.e. it's not deployable. This method updates the resource details
-        and the resource_status.
-
-        To propagate this state change, update_transitive_state must be called with this resource in the 'new_undefined' set
-
-        :param resource: The resource that should be blocked.
-        :param details: The details of the resource that should be blocked.
-        """
-        self.resources[resource] = details
-        if resource in self.resource_state:
-            self.resource_state[resource].status = ComplianceStatus.UNDEFINED
-            self.resource_state[resource].blocked = BlockedStatus.YES
         else:
-            self.resource_state[resource] = ResourceState(
-                status=ComplianceStatus.UNDEFINED,
-                deployment_result=DeploymentResult.NEW,
-                blocked=BlockedStatus.YES,
-            )
-            self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
-        self.dirty.discard(resource)
+            # we already know the resource => update relevant fields
+            self.resource_state[resource].status = compliance_status
+            # update deployment result only if we know it's compliant. Otherwise it is kept, representing latest result
+            if known_compliant:
+                self.resource_state[resource].deployment_result = DeploymentResult.DEPLOYED
+            # Override blocked status except if it was marked as blocked before. We can't unset it yet because a resource might
+            # still be transitively blocked, which we'll deal with later, see note in docstring.
+            # We do however override TRANSIENT because we want to give it another chance when it gets an update
+            # (in part to progress the resource state away from available).
+            if self.resource_state[resource].blocked is not BlockedStatus.YES:
+                self.resource_state[resource].blocked = blocked
+
+        self.resources[resource] = details
+        if not known_compliant and self.resource_state[resource].blocked is BlockedStatus.NO:
+            self.dirty.add(resource)
+        else:
+            self.dirty.discard(resource)
 
     def update_requires(self, resource: "ResourceIdStr", requires: Set["ResourceIdStr"]) -> None:
         """
@@ -387,7 +386,6 @@ class ModelState:
 
         When updating requires, also call update_transitive_state to ensure transient state is also updated
         """
-        # TODO: verify this is correct and needed
         check_dependencies: bool = self.resource_state[resource].blocked is BlockedStatus.TRANSIENT and bool(
             self.requires[resource] - requires
         )
@@ -395,7 +393,7 @@ class ModelState:
         # If the resource is blocked transiently, and we drop at least one of its requirements
         # we check to see if the resource can now be unblocked
         # i.e. all of its dependencies are now compliant with the desired state.
-        if check_dependencies and self.are_dependencies_compliant(resource):
+        if check_dependencies and not self.should_skip_for_dependencies(resource):
             self.resource_state[resource].blocked = BlockedStatus.NO
             self.dirty.add(resource)
 
@@ -417,16 +415,21 @@ class ModelState:
             del self.types_per_agent[details.id.agent_name][details.id.entity_type]
         self.dirty.discard(resource)
 
-    def are_dependencies_compliant(self, resource: "ResourceIdStr") -> bool:
+    def should_skip_for_dependencies(self, resource: "ResourceIdStr") -> bool:
         """
-        Checks if a resource has all of its dependencies in a compliant state.
+        Returns true if this resource satisfies the conditions to skip for dependencies, provided that its handler requested it.
+        Concretely, checks if a resource has at least one dependency that was not successful in its last deploy, if any.
 
         :param resource: The id of the resource to find the dependencies for
         """
-        requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]] = self.requires.requires_view()
-        dependencies: Set[ResourceIdStr] = requires_view.get(resource, set())
-
-        return all(self.resource_state[dep_id].status is ComplianceStatus.COMPLIANT for dep_id in dependencies)
+        dependencies: Set[ResourceIdStr] = self.requires.get(resource, set())
+        return any(
+            # Determine based on latest deploy result rather than compliance status, because compliance status is unstable
+            # (e.g. HAS_UPDATE).
+            # Make sure to not skip on NEW (never deployed) resources, because they will not generate a discovery event.
+            self.resource_state[dep_id].deployment_result not in (DeploymentResult.DEPLOYED, DeploymentResult.NEW)
+            for dep_id in dependencies
+        )
 
     def update_transitive_state(
         self,
@@ -442,7 +445,7 @@ class ModelState:
          In turn this method ensures transitive state consistency for the entire model.
 
         :param new_undefined: resources that have become undefined.
-            These have already moved to the blocked state by update_resource_to_undefined
+            These have already moved to the blocked state by update_resource
         :param verify_blocked: resources that may have gotten blocked, e.g. due to added requires.
             If blocked, will propagate the check to its provides even if not in this set.
         :param verify_unblocked: resources that may have gotten unblocked,
