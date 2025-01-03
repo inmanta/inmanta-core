@@ -850,7 +850,7 @@ class ResourceScheduler(TaskManager):
         # in the current implementation everything below the lock is synchronous, it is however still required (1)
         # and desired even if it weren't strictly required (2):
         # 1. other operations under lock may pass control back to the event loop under the lock. Meaning that even if this
-        #   method itself were fully syncronous, it will always still be called in some async context, which may interleave
+        #   method itself were fully synchronous, it will always still be called in some async context, which may interleave
         #   with awaits in other operations under lock.
         #   and has to be even apart from motivations 2-3, it may interleave with
         # 2. clarity: it clearly signifies that this is the atomic and performance-sensitive part
