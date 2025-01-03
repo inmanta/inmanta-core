@@ -588,7 +588,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         )
         if dependencies_waiting_to_be_deployed:
             ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
-            ctx.debug(
+            ctx.info(
                 "Resource %(resource)s skipped because some dependencies %(reqs)s "
                 "got a new desired state while we were preparing to deploy."
                 "We will retry when all dependencies get deployed successfully",
