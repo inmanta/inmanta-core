@@ -759,7 +759,7 @@ class ResourceScheduler(TaskManager):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
-        Register one or more newly released version with the scheduler. Updates scheduled state and scheduled work accordingly.
+        Register one or more newly released versions with the scheduler. Updates scheduled state and scheduled work accordingly.
 
         Expects to be called under the intent lock, and with monotonically increasing versions (relative to the previous calls
         as well as within the new_versions sequence.
