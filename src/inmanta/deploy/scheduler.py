@@ -102,7 +102,7 @@ class ResourceIntentChange(Enum):
 
 class ResourceRecord(typing.TypedDict):
     """
-    A dict represeting a resource database record with all fields relevant for the scheduler.
+    A dict representing a resource database record with all fields relevant for the scheduler.
 
     Purely for type documentation purposes, as we can't statically verify it, considering asyncpg's limitations.
     """
