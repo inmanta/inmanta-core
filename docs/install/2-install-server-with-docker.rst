@@ -196,23 +196,23 @@ If you need to enter the container via ssh, we recommend deploying an ssh sideca
 Mounting files/directories
 ##########################
 
-The recommended way to persist the orchestrator data is to use docker volumes, as shown in the example above.
-
-However if you really need to mount a file or directory from the host, you can use bind mounts. You just need to make sure to change the ownership of
-the file/directory you want to mount to make sure it has same uid/gid as the inmanta user inside the container. To find them, in the container, you can use ``id`` command:
+The recommended way to persist the orchestrator data is to use docker volumes, as shown in the example above. However if you really need to mount a file or directory from the host, you can use bind mounts. You just need to make sure to change the ownership of
+the file/directory you want to mount to make sure it has same uid/gid as the inmanta user inside the container. To find them, in the container, you can use the ``id`` command:
 
 .. only:: oss
 
-    .. code-block:: sh
+    .. code-block:: console
 
-        sudo docker run --rm -ti ghcr.io/inmanta/orchestrator:latest id
+        $ sudo docker run --rm -ti --entrypoint bash ghcr.io/inmanta/orchestrator:latest -c id
+        uid=997(inmanta) gid=995(inmanta) groups=995(inmanta)
 
 .. only:: iso
 
-    .. code-block:: sh
+    .. code-block:: console
         :substitutions:
 
-        sudo docker run --rm -ti containers.inmanta.com/containers/service-orchestrator:|version_major| id
+        $ sudo docker run --rm -ti --entrypoint bash containers.inmanta.com/containers/service-orchestrator:|version_major| -c id
+        uid=997(inmanta) gid=995(inmanta) groups=995(inmanta)
 
 By default, currently, inmanta user ``uid`` is 997 and ``gid`` is 995. On your host you can easily change ownership of your file/directory with these values:
 
