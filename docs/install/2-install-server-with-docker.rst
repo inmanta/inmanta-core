@@ -147,8 +147,8 @@ To stop the orchestrator and the database and remove the containers, use ``docke
     sudo docker compose down
 
 .. note:: 
-    The database and orchestrator containers started in the above-mentioned docker-compose file make use of docker volume to persist their relevant data in between restarts.
-    If you want to clear this data, you must remove these volumes, which can be done easily done by adding the ``-v`` option to the ``sudo docker compose down`` command.
+    The database and orchestrator containers started in the above-mentioned docker-compose file make use of docker volumes to persist their relevant data in between restarts.
+    If you want to clear this data, you must remove these volumes, which can be done easily by adding the ``-v`` option to the ``sudo docker compose down`` command.
     Be aware that using ``-v`` will remove all volumes (for both the database and orchestrator containers).
 
 The default server config assumes that the orchestrator can reach the database server on localhost.
