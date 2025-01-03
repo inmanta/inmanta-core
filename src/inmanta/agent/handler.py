@@ -564,22 +564,7 @@ class HandlerAPI(ABC, Generic[TResource]):
 
             return {rid: state for rid, state in reqs.items() if state in states}
 
-        # Check if any dependencies got a new desired state while this resource was waiting to deploy
-        dependencies_waiting_to_be_deployed = filter_resources_by_state(
-            requires, {const.ResourceState.available, const.ResourceState.deploying}
-        )
-        if dependencies_waiting_to_be_deployed:
-            ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
-            ctx.debug(
-                "Resource %(resource)s skipped because some dependencies %(reqs)s "
-                "got a new desired state while we were preparing to deploy."
-                "We will retry when all dependencies get deployed successfully",
-                resource=resource.id.resource_version_str(),
-                reqs=str({rid for rid in dependencies_waiting_to_be_deployed.keys()}),
-            )
-            return
-
-        # Check if any dependencies got into any other unexpected state
+        # Check if any dependencies got into any unexpected state
         dependencies_in_unexpected_state = filter_resources_by_state(
             requires,
             {
@@ -594,6 +579,21 @@ class HandlerAPI(ABC, Generic[TResource]):
                 "Resource %(resource)s skipped because a dependency is in an unexpected state: %(unexpected_states)s",
                 resource=resource.id.resource_version_str(),
                 unexpected_states=str({rid: state.value for rid, state in dependencies_in_unexpected_state.items()}),
+            )
+            return
+
+        # Check if any dependencies got a new desired state while this resource was waiting to deploy
+        dependencies_waiting_to_be_deployed = filter_resources_by_state(
+            requires, {const.ResourceState.available, const.ResourceState.deploying}
+        )
+        if dependencies_waiting_to_be_deployed:
+            ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
+            ctx.debug(
+                "Resource %(resource)s skipped because some dependencies %(reqs)s "
+                "got a new desired state while we were preparing to deploy."
+                "We will retry when all dependencies get deployed successfully",
+                resource=resource.id.resource_version_str(),
+                reqs=str({rid for rid in dependencies_waiting_to_be_deployed.keys()}),
             )
             return
 
