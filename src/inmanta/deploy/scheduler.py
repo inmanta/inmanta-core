@@ -762,7 +762,7 @@ class ResourceScheduler(TaskManager):
         Register one or more newly released versions with the scheduler. Updates scheduled state and scheduled work accordingly.
 
         Expects to be called under the intent lock, and with monotonically increasing versions (relative to the previous calls
-        as well as within the new_versions sequence.
+        as well as within the new_versions sequence).
 
         :param up_to_date_resources: Set of resources that are to be considered in an assumed good state due to a previously
             successful deploy for the same intent. Should not include any blocked resources. Mostly intended for the very first
