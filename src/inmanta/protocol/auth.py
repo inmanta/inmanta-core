@@ -382,7 +382,7 @@ class AuthJWTConfig:
         if "jwt-username-claim" in self._config:
             if self.sign:
                 raise ValueError(f"auth config {self.section} used for signing cannot use a custom claim.")
-            self.jwt_username_claim = self._config.get("jwt-username-claim")
+            self.jwt_username_claim = self._config["jwt-username-claim"]
 
     def parse_claim_matching(self, claim_conf: str) -> None:
         """Parse claim matching expressions"""
@@ -431,7 +431,10 @@ class AuthJWTConfig:
         self.jwks_uri = self._config["jwks_uri"]
 
         if "validate_cert" in self._config:
-            self.validate_cert = self._config.getboolean("validate_cert")
+            validate_cert = self._config.getboolean("validate_cert")
+            # Make mypy happy
+            assert validate_cert is not None
+            self.validate_cert = validate_cert
         else:
             self.validate_cert = True
 

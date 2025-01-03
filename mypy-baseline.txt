@@ -65,7 +65,7 @@ src/inmanta/agent/io/local.py:0: error: Incompatible return value type (got "dic
 src/inmanta/agent/io/local.py:0: note: "Dict" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
 src/inmanta/agent/io/local.py:0: note: Consider using "Mapping" instead, which is covariant in the value type
 src/inmanta/agent/io/local.py:0: note: Perhaps you need a type annotation for "status"? Suggestion: "dict[str, int | str]"
-src/inmanta/agent/io/local.py:0: error: Argument 1 to "write" of "BufferedWriter" has incompatible type "str"; expected "Buffer"  [arg-type]
+src/inmanta/agent/io/local.py:0: error: Argument 1 to "write" of "_BufferedIOBase" has incompatible type "str"; expected "Buffer"  [arg-type]
 src/inmanta/agent/io/local.py:0: error: Incompatible types in assignment (expression has type "int", variable has type "str | None")  [assignment]
 src/inmanta/agent/io/local.py:0: error: Incompatible types in assignment (expression has type "int | None", variable has type "str | None")  [assignment]
 src/inmanta/agent/io/local.py:0: error: Incompatible types in assignment (expression has type "int", variable has type "str | None")  [assignment]
@@ -446,7 +446,7 @@ src/inmanta/protocol/endpoints.py:0: error: Value of type "BaseModel | UUID | in
 src/inmanta/protocol/endpoints.py:0: error: No overload variant of "__getitem__" of "Sequence" matches argument type "str"  [call-overload]
 src/inmanta/protocol/endpoints.py:0: note: Possible overload variants:
 src/inmanta/protocol/endpoints.py:0: note: def __getitem__(self, int, /) -> BaseModel | UUID | bool | int | float | datetime | str
-src/inmanta/protocol/endpoints.py:0: note: def __getitem__(self, slice, /) -> Sequence[BaseModel | UUID | bool | int | float | datetime | str]
+src/inmanta/protocol/endpoints.py:0: note: def __getitem__(self, slice[Any, Any, Any], /) -> Sequence[BaseModel | UUID | bool | int | float | datetime | str]
 src/inmanta/protocol/endpoints.py:0: error: Incompatible types in assignment (expression has type "Any | BaseModel | UUID | int | float | datetime | str", variable has type "str")  [assignment]
 src/inmanta/protocol/endpoints.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "RESTClient")  [assignment]
 src/inmanta/protocol/endpoints.py:0: error: Function is missing a return type annotation  [no-untyped-def]
@@ -665,7 +665,7 @@ src/inmanta/data/__init__.py:0: note: def [_T] __init__(self, Iterable[_T], /) -
 src/inmanta/data/__init__.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "__init__" of "BaseDocument" has incompatible type "**dict[str, object]"; expected "bool"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Need type annotation for "_status" (hint: "_status: dict[<type>, <type>] = ...")  [var-annotated]
-src/inmanta/data/__init__.py:0: error: Invalid index type "str" for "str"; expected type "SupportsIndex | slice"  [index]
+src/inmanta/data/__init__.py:0: error: Invalid index type "str" for "str"; expected type "SupportsIndex | slice[Any, Any, Any]"  [index]
 src/inmanta/data/__init__.py:0: error: Signature of "get_list" incompatible with supertype "BaseDocument"  [override]
 src/inmanta/data/__init__.py:0: note: Superclass:
 src/inmanta/data/__init__.py:0: note: @classmethod
@@ -864,7 +864,7 @@ src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type an
 src/inmanta/ast/constraint/expression.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/agent/handler.py:0: error: Argument 3 to "log" of "LogLine" has incompatible type "**dict[str, object]"; expected "datetime | None"  [arg-type]
 src/inmanta/agent/handler.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
-src/inmanta/agent/handler.py:0: error: Argument 2 to "chain_future" has incompatible type "concurrent.futures._base.Future[T]"; expected "asyncio.futures.Future[Any]"  [arg-type]
+src/inmanta/agent/handler.py:0: error: Argument 2 to "chain_future" has incompatible type "concurrent.futures._base.Future[T]"; expected "_asyncio.Future[Any]"  [arg-type]
 src/inmanta/server/extensions.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/parser/plyInmantaLex.py:0: error: Item "LocatableString" of "str | LocatableString" has no attribute "index"  [union-attr]
 src/inmanta/parser/plyInmantaLex.py:0: error: Value of type "str | LocatableString" is not indexable  [index]
@@ -1096,7 +1096,6 @@ src/inmanta/model.py:0: error: Call to untyped function "ReferenceValue" in type
 src/inmanta/model.py:0: error: "Value" has no attribute "to_dict"  [attr-defined]
 src/inmanta/model.py:0: error: "Value" has no attribute "to_dict"  [attr-defined]
 src/inmanta/main.py:0: error: Returning Any from function declared to return "dict[str, Any] | None"  [no-any-return]
-src/inmanta/main.py:0: error: Invalid index type "str" for "str"; expected type "SupportsIndex | slice"  [index]
 src/inmanta/main.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/main.py:0: error: Need type annotation for "bar"  [var-annotated]
 src/inmanta/data/dataview.py:0: error: Argument "resource_id" to "LatestReleasedResource" has incompatible type "object"; expected "ResourceIdStr"  [arg-type]
