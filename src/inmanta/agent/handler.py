@@ -552,7 +552,7 @@ class HandlerAPI(ABC, Generic[TResource]):
             return result.result["data"]
 
         def filter_resources_by_state(
-            reqs: abc.Mapping[ResourceIdStr, ResourceState], states: typing.Set[const.ResourceState]
+            reqs: abc.Mapping[ResourceIdStr, ResourceState], states: typing.Set[ResourceState]
         ) -> abc.Mapping[ResourceIdStr, ResourceState]:
             """
             Return a sub-dictionary of dependencies of this resource.
@@ -591,7 +591,7 @@ class HandlerAPI(ABC, Generic[TResource]):
             ctx.info(
                 "Resource %(resource)s skipped because some dependencies %(reqs)s "
                 "got a new desired state while we were preparing to deploy."
-                "We will retry when all dependencies get deployed successfully",
+                " We will retry when all dependencies get deployed successfully",
                 resource=resource.id.resource_version_str(),
                 reqs=str({rid for rid in dependencies_waiting_to_be_deployed.keys()}),
             )
