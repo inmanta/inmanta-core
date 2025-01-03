@@ -113,8 +113,8 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
                 ports:
                     - 127.0.0.1:8888:8888
                 volumes:
-                    - ./resources/com.inmanta.license:/etc/inmanta/license.key
-                    - ./resources/com.inmanta.jwe:/etc/inmanta/entitlement.jwe
+                    - ./resources/license.key:/etc/inmanta/license.key
+                    - ./resources/entitlement.jwe:/etc/inmanta/entitlement.jwe
                 environment:
                     INMANTA_DATABASE_HOST: inmanta-db
                     INMANTA_DATABASE_USERNAME: inmanta
@@ -130,7 +130,7 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
 
     You can paste this yaml snippet in a file named `docker-compose.yml` and ensure you have your license files available.
     With the proposed config, they should be located in a ``resources/`` folder on the side of the docker-compose file you create,
-    and the license files should be named ``com.inmanta.license`` and ``com.inmanta.jwe``. You can of course update the content
+    and the license files should be named ``license.key`` and ``entitlement.jwe``. You can of course update the content
     of the docker-compose file to match your current configuration.
     Then bring the containers up by running the following command:
 
