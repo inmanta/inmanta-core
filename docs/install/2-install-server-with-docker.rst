@@ -112,9 +112,6 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
                 image: containers.inmanta.com/containers/service-orchestrator:|version_major|
                 ports:
                     - 127.0.0.1:8888:8888
-                volumes:
-                    - ./resources/license.key:/etc/inmanta/license.key
-                    - ./resources/entitlement.jwe:/etc/inmanta/entitlement.jwe
                 environment:
                     INMANTA_DATABASE_HOST: inmanta-db
                     INMANTA_DATABASE_USERNAME: inmanta
@@ -122,6 +119,8 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
                 volumes:
                     - inmanta-server-data:/var/lib/inmanta
                     - inmanta-server-logs:/var/log/inmanta
+                    - ./resources/license.key:/etc/inmanta/license.key
+                    - ./resources/entitlement.jwe:/etc/inmanta/entitlement.jwe
 
         volumes:
             inmanta-db-data: {}
