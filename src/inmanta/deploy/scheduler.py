@@ -410,7 +410,7 @@ class ResourceScheduler(TaskManager):
         """
         self._timer_manager.initialize()
         # do not start a transaction because:
-        # 1. nothing we do here before read_version is inherently transactional: the only write is atomic, and reads to not
+        # 1. nothing we do here before read_version is inherently transactional: the only write is atomic, and reads do not
         #   benefit from READ COMMITTED (default) isolation level.
         # 2. read_version expects to receive a connection outside of a transaction context
         async with self.state_update_manager.get_connection() as con:
