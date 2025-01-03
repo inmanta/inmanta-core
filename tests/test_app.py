@@ -529,7 +529,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
         args=[sys.executable, "-m", "inmanta.app", "validate-logging-config"],
     )
     assert returncode == 1
-    assert any("No logging configuration file found." in line for line in stderr)
+    assert any("No logging configuration found." in line for line in stderr)
 
     logging_config_file = os.path.join(tmpdir, "non-existing-file")
     _, stderr, returncode = run_without_tty(
@@ -591,7 +591,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
         args=[sys.executable, "-m", "inmanta.app", "--logging-config", logging_config_file, "validate-logging-config"],
     )
     assert returncode == 0
-    assert any(f"Using logging config file: {logging_config_file}" in line for line in stderr)
+    assert any(f"Using logging config from file {logging_config_file}" in line for line in stderr)
     assert any(
         "Emitting log line 'Log line from Inmanta server' at level <LEVEL> using logger 'inmanta.protocol.rest.server'" in line
         for line in stderr
@@ -655,7 +655,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
             str(env_id),
         ],
     )
-    assert any(f"Using logging config file: {logging_config_file}" in line for line in stderr)
+    assert any(f"Using logging config from file {logging_config_file}" in line for line in stderr)
     assert any(
         "Emitting log line 'Log line from callback' at level <LEVEL> using logger 'inmanta_lsm.callback'" in line
         for line in stderr
@@ -718,7 +718,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
         stdout, stderr, returncode = run_without_tty(
             args=[sys.executable, "-m", "inmanta.app", "validate-logging-config", component_name],
         )
-        assert any(f"Using logging config file: {logging_config_file}" in line for line in stderr)
+        assert any(f"Using logging config from file {logging_config_file}" in line for line in stderr)
         assert any(
             "Emitting log line 'Log line from Inmanta server' at level <LEVEL> using logger 'inmanta.protocol.rest.server'"
             in line

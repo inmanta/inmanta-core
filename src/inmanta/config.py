@@ -168,7 +168,8 @@ class Config:
 
     @classmethod
     def get_for_option(cls, option: "Option[T]") -> T:
-        raw_value: str | T = cls._get_value(option.section, option.name, option.get_default_value())
+        default_value = option.get_default_value()
+        raw_value: str | T = cls._get_value(option.section, option.name, default_value)
         return option.validate(raw_value)
 
     @classmethod
@@ -464,7 +465,7 @@ def make_option_for_log_file(component_name: str) -> Option[str | None]:
     return Option(
         section="logging",
         name=component_name,
-        default=option_as_default(logging_config),
+        default=None,
         documentation=f"The path to the configuration file for the logging of the {component_name}. This is a YAML file that follows "
         "the dictionary-schema accepted by logging.config.dictConfig(). All other log-related configuration "
         "options will be ignored when this option is set.",
