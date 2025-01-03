@@ -191,7 +191,7 @@ If you want to have a look inside the running orchestrator container, it contain
 
     sudo docker exec -ti inmanta-orchestrator bash
 
-If you need to enter the container via ssh, we recommend deploying an ssh sidecar, alongside the orchestrator container, as shown here: `https://github.com/inmanta/inmanta-docker <https://github.com/inmanta/inmanta-docker>_`
+If you need to enter the container via ssh, we recommend deploying an ssh sidecar, alongside the orchestrator container, as shown here: `https://github.com/inmanta/inmanta-docker <https://github.com/inmanta/inmanta-docker>`_
 
 Mounting files/directories
 ##########################
@@ -224,4 +224,4 @@ Log rotation
 ############
 
 By default, the container won't do any log rotation, to let you the choice of dealing with the logs
-according to your own preferences.  You can setup log rotation using a sidecar as shown here: `https://github.com/inmanta/inmanta-docker <https://github.com/inmanta/inmanta-docker>_`
+according to your own preferences.  You can setup log rotation using a sidecar as shown here: `https://github.com/inmanta/inmanta-docker <https://github.com/inmanta/inmanta-docker>`_
