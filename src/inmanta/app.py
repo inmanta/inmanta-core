@@ -652,9 +652,9 @@ def validate_logging_config_parser_config(
 )
 def validate_logging_config(options: argparse.Namespace) -> None:
     logging_config = InmantaLoggerConfig.get_current_instance()
-    if logging_config.loaded_config_file is None:
-        raise Exception("No logging configuration file found.")
-    print(f"Using logging config file: {logging_config.loaded_config_file}", file=sys.stderr)
+    if logging_config.logging_config_source is None:
+        raise Exception("No logging configuration found.")
+    print(f"Using logging config from {logging_config.logging_config_source.source()}", file=sys.stderr)
     env_id = options.environment
     logger_and_message = [
         (logging.getLogger("inmanta.protocol.rest.server"), "Log line from Inmanta server"),
