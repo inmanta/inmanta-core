@@ -824,7 +824,7 @@ class Union(Type):
         if len(types) != len(effective_types):
             # One is not converted
             return None
-        return f" | ".join(effective_types)
+        return " | ".join(effective_types)
 
     def has_custom_to_python(self) -> bool:
         # If we mix convertible and non convertible, it won't work, so we avoid it

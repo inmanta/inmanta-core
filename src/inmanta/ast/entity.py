@@ -40,7 +40,7 @@ from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.const import DATACLASS_SELF_FIELD
-from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, WrappedValueVariable, dataflow
+from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
 from inmanta.types import DataclassProtocol
 
@@ -57,7 +57,7 @@ if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute, RelationAttribute  # noqa: F401
     from inmanta.ast.statements import ExpressionStatement, Statement  # noqa: F401
     from inmanta.ast.statements.define import DefineAttribute, DefineImport, DefineIndex  # noqa: F401
-    from inmanta.execute.runtime import ExecutionContext, ResultVariable  # noqa: F401
+    from inmanta.execute.runtime import ExecutionContext  # noqa: F401
 
 import inmanta.ast.attribute
 
@@ -725,8 +725,8 @@ class Entity(NamedType, WithComment):
             location,
             None,
         )
-        dataclass_self: ResultVariable[Instance] = ResultVariable()
-        dataclass_self.set_value(instance, self.location, False)
+        dataclass_self: ResultVariable[object] = ResultVariable()
+        dataclass_self.set_value(value, self.location, False)
         instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
         # generate an implementation
         for stmt in self.get_sub_constructor():
