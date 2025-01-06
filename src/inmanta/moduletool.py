@@ -216,10 +216,10 @@ class ModuleLikeTool:
 @total_ordering
 @enum.unique
 class ChangeType(enum.Enum):
-    MAJOR: str = "major"
-    MINOR: str = "minor"
-    PATCH: str = "patch"
-    REVISION: str = "revision"
+    MAJOR = "major"
+    MINOR = "minor"
+    PATCH = "patch"
+    REVISION = "revision"
 
     def __lt__(self, other: "ChangeType") -> bool:
         order: list[ChangeType] = [ChangeType.REVISION, ChangeType.PATCH, ChangeType.MINOR, ChangeType.MAJOR]

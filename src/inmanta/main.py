@@ -740,7 +740,7 @@ def version_report(client: Client, environment: str, version: str, show_detailed
     if not result:
         return
 
-    agents: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    agents: dict[str, dict[str, list[dict[str, object]]]] = defaultdict(lambda: defaultdict(list))
     for res in result["resources"]:
         if len(res["actions"]) > 0 or show_detailed_report:
             agents[res["agent"]][res["resource_type"]].append(res)
@@ -750,7 +750,8 @@ def version_report(client: Client, environment: str, version: str, show_detailed
         click.echo("=" * 72)
 
         for t in sorted(agents[agent].keys()):
-            parsed_resource_version_id = Id.parse_id(ResourceVersionIdStr(agents[agent][t][0]["resource_version_id"]))
+            resource_version_id = cast(ResourceVersionIdStr, agents[agent][t][0]["resource_version_id"])
+            parsed_resource_version_id = Id.parse_id(resource_version_id)
             click.echo(click.style("Resource type:", bold=True) + f"{t} ({parsed_resource_version_id.attribute})")
             click.echo("-" * 72)
 
