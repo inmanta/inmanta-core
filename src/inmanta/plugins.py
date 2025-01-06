@@ -19,13 +19,16 @@
 import asyncio
 import collections.abc
 import inspect
+import numbers
 import os
 import subprocess
+import typing
 import warnings
 from collections import abc
-from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Sequence, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Sequence, Type, TypeVar, Dict
 
 import inmanta.ast.type as inmanta_type
+import typing_inspect
 from inmanta import const, protocol, util
 from inmanta.ast import (  # noqa: F401 Plugin exception is part of the stable api
     LocatableString,
@@ -35,7 +38,7 @@ from inmanta.ast import (  # noqa: F401 Plugin exception is part of the stable a
     Range,
     RuntimeException,
     TypeNotFoundException,
-    WithComment,
+    WithComment, TypingException,
 )
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
@@ -210,6 +213,9 @@ class Null(inmanta_type.Type):
     def type_string_internal(self) -> str:
         return self.type_string()
 
+    def __eq__(self, other):
+        return type(self) == type(other)
+
 
 # Define some types which are used in the context of plugins.
 PLUGIN_TYPES = {
@@ -218,6 +224,78 @@ PLUGIN_TYPES = {
     "null": Null(),  # Only NoneValue will pass validation
     None: Null(),  # Only NoneValue will pass validation
 }
+
+python_to_model = {
+    str: inmanta_type.String(),
+    float: inmanta_type.Float(),
+    numbers.Number: inmanta_type.Number(),
+    int: inmanta_type.Integer(),
+    bool: inmanta_type.Bool(),
+    dict: inmanta_type.LiteralDict(),
+    list: inmanta_type.LiteralList(),
+}
+
+
+def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
+    """
+    :param python_type: The evaluated python type as provided in the Python type annotation.
+    """
+    # Any to any
+    if python_type is typing.Any:
+        return inmanta_type.AnyType()
+
+    if python_type is type(None):
+        return Null()
+
+    if typing_inspect.is_union_type(python_type):
+        if any(typing_inspect.is_optional_type(tt) for tt in typing.get_args(python_type)):
+            # Optional type
+            other_types = [tt for tt in typing.get_args(python_type) if not typing_inspect.is_optional_type(tt)]
+            if len(other_types) == 0:
+                # Probably not possible
+                return Null()
+            if len(other_types) == 1:
+                return inmanta_type.NullableType(to_dsl_type(other_types[0]))
+            # TODO: optional unions
+            return inmanta_type.AnyType()
+        else:
+            return inmanta_type.AnyType()
+
+    # TODO: unions
+    # bases: Sequence[inmanta.ast.type.Type] = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
+    # return inmanta.ast.type.Union(bases)
+
+    if typing_inspect.is_generic_type(python_type):
+        origin = typing.get_origin(python_type)
+        if  origin is Sequence:
+            # Can this fail?
+            base: inmanta.ast.type.Type = typing.get_args(python_type)[0]
+            return inmanta.ast.type.TypedList(to_dsl_type(base))
+
+        if issubclass(origin, dict) or origin is collections.abc.Mapping:
+            args = typing_inspect.get_args(python_type)
+            assert len(args) == 2
+            if not issubclass(args[0], str):
+                raise TypingException(None, f"invalid type {python_type}, the keys of any dict should be 'str', got {args[0]} instead")
+            return inmanta_type.TypedDict(to_dsl_type(args[1]))
+
+
+    # TODO annotated types
+    # if typing.get_origin(t) is typing.Annotated:
+    #     args: Sequence[object] = typing.get_args(python_type)
+    #     inmanta_types: Sequence[plugin_typing.InmantaType] = [arg if isinstance(arg, plugin_typing.InmantaType) for arg in args]
+    #     if inmanta_types:
+    #         if len(inmanta_types) > 1:
+    #             # TODO
+    #             raise Exception()
+    #         # TODO
+    #         return parse_dsl_type(inmanta_types[0].dsl_type)
+    #     # the annotation doesn't concern us => use base type
+    #     return to_dsl_type(args[0])
+    if python_type in python_to_model:
+        return python_to_model[python_type]
+
+    return inmanta_type.AnyType()
 
 
 class PluginValue:
@@ -267,11 +345,13 @@ class PluginValue:
             return self._resolved_type
 
         if not isinstance(self.type_expression, str):
-            raise RuntimeException(
-                stmt=None,
-                msg="Bad annotation in plugin %s for %s, expected str but got %s (%s)"
-                % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression),
-            )
+            if not isinstance(python_type, type) and typing.get_origin(python_type) is None:
+                raise RuntimeException(
+                    stmt=None,
+                    msg="Bad annotation in plugin %s for %s, expected str or python type but got %s (%s)"
+                        % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression),
+                )
+            self._resolved_type = to_dsl_type(self.type_expression)
 
         plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
         locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, resolver)

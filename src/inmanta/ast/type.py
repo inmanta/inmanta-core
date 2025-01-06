@@ -371,6 +371,9 @@ class String(Primitive):
         return None
 
 
+    def __eq__(self, other):
+        return type(self) == type(other)
+
 @stable_api
 class List(Type):
     """
@@ -543,6 +546,11 @@ class TypedDict(Dict):
 
     def get_location(self) -> None:
         return None
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, TypedDict):
+            return NotImplemented
+        return self.element_type == other.element_type
 
 
 @stable_api
