@@ -175,6 +175,23 @@ Read through the logs of the agent. These logs can be found at the following loc
 More information about the different log files can be found :ref:`here<administrators_doc_logging>`. When reading
 those log files, pay specific attention to error messages and warnings that could explain why the agent is marked as down.
 
+Potential reasons why an agent wouldn't start:
+
+* **bind-address set incorrectly:** The Inmanta server listens on all the interfaces configured
+  via the :inmanta.config:option:`server.bind-address` option. If the server doesn't listen on an interface used by a remote
+  agent, the agent will not be able to connect to the server.
+* **Authentication issue:** If the Inmanta server has been setup with authentication, a misconfiguration may deny an agent
+  access to the Inmanta API. For example, not configuring a token provider (issuer) with ``sign=true`` in the ``auth_jwt_<ID>``
+  section of the Inmanta configuration file. Documentation on how to configure authentication correctly can be found
+  :ref:`here<auth-setup>`.
+* **SSL problems:** If the Inmanta server is configured to use SSL, the Agent should be configured to use SSL as well (See the
+  SSL-related configuration options in the :inmanta.config:group:`server` and :inmanta.config:group:`agent_rest_transport`
+  section of the Inmanta configuration reference)
+* **Network issue:** Many network-related issue may exist which don't allow the agent to establish a connection with the Inmanta
+  server. A firewall may blocks traffic between the Inmanta agent and the server, no network route may exist towards the Inmanta
+  server, etc.
+
+
 Recompilation failed
 ====================
 
