@@ -233,8 +233,8 @@ python_to_model = {
     numbers.Number: inmanta_type.Number(),
     int: inmanta_type.Integer(),
     bool: inmanta_type.Bool(),
-    dict: inmanta_type.LiteralDict(),
-    list: inmanta_type.LiteralList(),
+    dict: inmanta_type.TypedDict(inmanta_type.Type()),
+    list: inmanta_type.List(),
 }
 
 
@@ -247,13 +247,13 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
         return inmanta_type.Type()
 
     # None to None
-    if python_type is type(None):
+    if python_type is type(None) or python_type is None:
         return Null()
 
     # Unions and optionals
     if typing_inspect.is_union_type(python_type):
         # Optional type
-        if any(typing_inspect.is_optional_type(tt) for tt in typing.get_args(python_type)):
+        if typing_inspect.is_optional_type(python_type):
             other_types = [tt for tt in typing.get_args(python_type) if not typing_inspect.is_optional_type(tt)]
             if len(other_types) == 0:
                 # Probably not possible
@@ -273,18 +273,25 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
         # List
         origin = typing.get_origin(python_type)
         if origin is Sequence:
-            # Can this fail?
-            base: inmanta_type.Type = typing.get_args(python_type)[0]
-            return inmanta_type.TypedList(to_dsl_type(base))
+            args = typing.get_args(python_type)
+            if not args:
+                return inmanta_type.List()
+            return inmanta_type.TypedList(to_dsl_type(args[0]))
 
         # dict
         if issubclass(origin, collections.abc.Mapping):
             args = typing_inspect.get_args(python_type)
-            assert len(args) == 2
+            if not args:
+                return inmanta_type.TypedDict(inmanta_type.Type())
+
             if not issubclass(args[0], str):
                 raise TypingException(
                     None, f"invalid type {python_type}, the keys of any dict should be 'str', got {args[0]} instead"
                 )
+
+            if len(args) == 1:
+                return inmanta_type.TypedDict(inmanta_type.Type())
+
             return inmanta_type.TypedDict(to_dsl_type(args[1]))
 
     # TODO annotated types
