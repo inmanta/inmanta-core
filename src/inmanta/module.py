@@ -2761,8 +2761,8 @@ class ModuleGeneration(Enum):
     The generation of a module. This might affect the on-disk structure of a module as well as how it's distributed.
     """
 
-    V1: int = 1
-    V2: int = 2
+    V1 = 1
+    V2 = 2
 
 
 @stable_api
