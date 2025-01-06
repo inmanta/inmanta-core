@@ -44,6 +44,7 @@ from asyncpg import Connection
 import inmanta.data.model as model
 import inmanta.server.services.environmentlistener
 from inmanta import config, const, data, protocol, server, tracing
+from inmanta.config import compiler_log_config
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView
 from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvActivationFailedError, VirtualEnv
@@ -464,6 +465,12 @@ class CompileRun:
                 "--export-compile-data-file",
                 compile_data_json_file.name,
             ]
+
+            # # Pass down the logging config to the compiler
+            compiler_log_config_file: str | None = compiler_log_config.get()
+            if compiler_log_config_file:
+                cmd.append("--logging-config")
+                cmd.append(os.path.abspath(compiler_log_config_file))
 
             if self.request.exporter_plugin:
                 cmd.append("--export-plugin")
