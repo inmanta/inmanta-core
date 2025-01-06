@@ -370,9 +370,9 @@ class String(Primitive):
     def get_location(self) -> None:
         return None
 
-
     def __eq__(self, other):
         return type(self) == type(other)
+
 
 @stable_api
 class List(Type):

@@ -1,10 +1,12 @@
-from typing import Mapping, Any, Union
+import collections.abc
+from typing import Any, Mapping, Union
 
 import pytest
-from inmanta.ast import RuntimeException
-from inmanta.plugins import to_dsl_type, Null
+
 import inmanta.ast.type as inmanta_type
-import collections.abc
+from inmanta.ast import RuntimeException
+from inmanta.plugins import Null, to_dsl_type
+
 
 def test_conversion():
     assert inmanta_type.Integer() == to_dsl_type(int)
@@ -15,11 +17,9 @@ def test_conversion():
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(Mapping[str, str])
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(collections.abc.Mapping[str, str])
 
-    assert Null() == to_dsl_type(Union[None] )
+    assert Null() == to_dsl_type(Union[None])
 
     assert isinstance(to_dsl_type(Any), inmanta_type.AnyType)
 
-
     with pytest.raises(RuntimeException):
         to_dsl_type(dict[int, int])
-

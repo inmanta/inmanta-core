@@ -416,3 +416,25 @@ plugin_context_and_defaults::func()
         """
     )
     compiler.do_compile()
+
+
+def test_native_types(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    test the use of python types
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+import plugin_native_types
+
+a = "b"
+a = plugin_native_types::get_from_dict({"a":"b"}, "a")
+
+none = null
+none = plugin_native_types::get_from_dict({"a":"b"}, "B")
+
+a = plugin_native_types::many_arguments(["a","c","b"], 1)
+
+none = plugin_native_types::as_none("a")
+        """
+    )
+    compiler.do_compile()

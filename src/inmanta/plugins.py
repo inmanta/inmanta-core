@@ -25,10 +25,11 @@ import subprocess
 import typing
 import warnings
 from collections import abc
-from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Sequence, Type, TypeVar, Dict
+from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Mapping, Optional, Sequence, Type, TypeVar
+
+import typing_inspect
 
 import inmanta.ast.type as inmanta_type
-import typing_inspect
 from inmanta import const, protocol, util
 from inmanta.ast import (  # noqa: F401 Plugin exception is part of the stable api
     LocatableString,
@@ -38,7 +39,8 @@ from inmanta.ast import (  # noqa: F401 Plugin exception is part of the stable a
     Range,
     RuntimeException,
     TypeNotFoundException,
-    WithComment, TypingException,
+    TypingException,
+    WithComment,
 )
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
@@ -242,7 +244,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     """
     # Any to any
     if python_type is typing.Any:
-        return inmanta_type.AnyType()
+        return inmanta_type.Type()
 
     if python_type is type(None):
         return Null()
@@ -257,9 +259,9 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
             if len(other_types) == 1:
                 return inmanta_type.NullableType(to_dsl_type(other_types[0]))
             # TODO: optional unions
-            return inmanta_type.AnyType()
+            return inmanta_type.Type()
         else:
-            return inmanta_type.AnyType()
+            return inmanta_type.Type()
 
     # TODO: unions
     # bases: Sequence[inmanta.ast.type.Type] = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
@@ -267,18 +269,19 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
 
     if typing_inspect.is_generic_type(python_type):
         origin = typing.get_origin(python_type)
-        if  origin is Sequence:
+        if origin is Sequence:
             # Can this fail?
-            base: inmanta.ast.type.Type = typing.get_args(python_type)[0]
-            return inmanta.ast.type.TypedList(to_dsl_type(base))
+            base: inmanta_type.Type = typing.get_args(python_type)[0]
+            return inmanta_type.TypedList(to_dsl_type(base))
 
-        if issubclass(origin, dict) or origin is collections.abc.Mapping:
+        if issubclass(origin, collections.abc.Mapping):
             args = typing_inspect.get_args(python_type)
             assert len(args) == 2
             if not issubclass(args[0], str):
-                raise TypingException(None, f"invalid type {python_type}, the keys of any dict should be 'str', got {args[0]} instead")
+                raise TypingException(
+                    None, f"invalid type {python_type}, the keys of any dict should be 'str', got {args[0]} instead"
+                )
             return inmanta_type.TypedDict(to_dsl_type(args[1]))
-
 
     # TODO annotated types
     # if typing.get_origin(t) is typing.Annotated:
@@ -295,7 +298,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     if python_type in python_to_model:
         return python_to_model[python_type]
 
-    return inmanta_type.AnyType()
+    return inmanta_type.Type()
 
 
 class PluginValue:
@@ -345,17 +348,18 @@ class PluginValue:
             return self._resolved_type
 
         if not isinstance(self.type_expression, str):
-            if not isinstance(python_type, type) and typing.get_origin(python_type) is None:
+            if isinstance(self.type_expression, type) or typing.get_origin(self.type_expression) is not None:
+                self._resolved_type = to_dsl_type(self.type_expression)
+            else:
                 raise RuntimeException(
                     stmt=None,
                     msg="Bad annotation in plugin %s for %s, expected str or python type but got %s (%s)"
-                        % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression),
+                    % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression),
                 )
-            self._resolved_type = to_dsl_type(self.type_expression)
-
-        plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
-        locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, resolver)
-        self._resolved_type = inmanta_type.resolve_type(locatable_type, resolver)
+        else:
+            plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
+            locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, resolver)
+            self._resolved_type = inmanta_type.resolve_type(locatable_type, resolver)
         return self._resolved_type
 
     def validate(self, value: object) -> bool:
