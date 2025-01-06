@@ -1,5 +1,23 @@
+"""
+    Copyright 2025 Inmanta
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
+
 import collections.abc
-from typing import Any, Mapping, Union
+from typing import Any, Mapping, Sequence, Union
 
 import pytest
 
@@ -12,7 +30,12 @@ def test_conversion():
     assert inmanta_type.Integer() == to_dsl_type(int)
     assert inmanta_type.Float() == to_dsl_type(float)
     assert inmanta_type.NullableType(inmanta_type.Float()) == to_dsl_type(float | None)
-    assert isinstance(to_dsl_type(list), inmanta_type.List)
+    assert inmanta_type.List() == to_dsl_type(list)
+    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(list[str])
+    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(set[str])
+    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(Sequence[str])
+    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(collections.abc.Sequence[str])
+    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type(dict)
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(dict[str, str])
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(Mapping[str, str])
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(collections.abc.Mapping[str, str])

@@ -96,6 +96,12 @@ class Type(Locatable):
         """
         return base_type
 
+    def __eq__(self, other):
+        if type(self) != Type:  # noqa: E721
+            # Not for children
+            return NotImplemented
+        return type(self) == type(other)  # noqa: E721
+
 
 class NamedType(Type, Named):
     def get_double_defined_exception(self, other: "NamedType") -> "DuplicateException":
@@ -371,7 +377,7 @@ class String(Primitive):
         return None
 
     def __eq__(self, other: object) -> bool:
-        return type(self) == type(other)
+        return type(self) == type(other)  # noqa: E721
 
 
 @stable_api
@@ -405,6 +411,9 @@ class List(Type):
 
     def get_location(self) -> None:
         return None
+
+    def __eq__(self, other):
+        return type(self) == type(other)  # noqa: E721
 
 
 @stable_api

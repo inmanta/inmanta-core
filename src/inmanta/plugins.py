@@ -25,7 +25,7 @@ import subprocess
 import typing
 import warnings
 from collections import abc
-from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Mapping, Optional, Sequence, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Sequence, Type, TypeVar
 
 import typing_inspect
 
@@ -216,7 +216,7 @@ class Null(inmanta_type.Type):
         return self.type_string()
 
     def __eq__(self, other: object) -> bool:
-        return type(self) == type(other)
+        return type(self) == type(other)  # noqa: E721
 
 
 # Define some types which are used in the context of plugins.
@@ -235,6 +235,7 @@ python_to_model = {
     bool: inmanta_type.Bool(),
     dict: inmanta_type.TypedDict(inmanta_type.Type()),
     list: inmanta_type.List(),
+    object: inmanta_type.Type(),
 }
 
 
@@ -270,13 +271,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
 
     # Lists and dicts
     if typing_inspect.is_generic_type(python_type):
-        # List
         origin = typing.get_origin(python_type)
-        if origin is Sequence:
-            args = typing.get_args(python_type)
-            if not args:
-                return inmanta_type.List()
-            return inmanta_type.TypedList(to_dsl_type(args[0]))
 
         # dict
         if issubclass(origin, collections.abc.Mapping):
@@ -294,10 +289,18 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
 
             return inmanta_type.TypedDict(to_dsl_type(args[1]))
 
+        # List, set, ...
+        if issubclass(origin, collections.abc.Collection):
+            args = typing.get_args(python_type)
+            if not args:
+                return inmanta_type.List()
+            return inmanta_type.TypedList(to_dsl_type(args[0]))
+
     # TODO annotated types
     # if typing.get_origin(t) is typing.Annotated:
     #     args: Sequence[object] = typing.get_args(python_type)
-    #     inmanta_types: Sequence[plugin_typing.InmantaType] = [arg if isinstance(arg, plugin_typing.InmantaType) for arg in args]
+    #     inmanta_types: Sequence[plugin_typing.InmantaType] =
+    #     [arg if isinstance(arg, plugin_typing.InmantaType) for arg in args]
     #     if inmanta_types:
     #         if len(inmanta_types) > 1:
     #             # TODO
