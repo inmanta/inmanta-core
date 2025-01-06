@@ -240,6 +240,8 @@ python_to_model = {
 
 def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     """
+    Convert a python type annotation to an Inmanta DSL type annotation.
+
     :param python_type: The evaluated python type as provided in the Python type annotation.
     """
     # Any to any
