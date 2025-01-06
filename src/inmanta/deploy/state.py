@@ -26,7 +26,7 @@ from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Optional, Self
+from typing import TYPE_CHECKING, Optional
 
 import asyncpg
 
