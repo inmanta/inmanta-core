@@ -3,13 +3,7 @@
 Environment variables
 =====================
 
-Environment variables can be supplied to the Inmanta server and its agents.
-
-
-Supplying environment variables to the Inmanta server
------------------------------------------------------
-
-The Inmanta server loads the environment variables specified in ``/etc/sysconfig/inmanta-server`` at startup. The example
+The Inmanta server, installed from RPM, loads the environment variables specified in ``/etc/sysconfig/inmanta-server`` at startup. The example
 below defines three environment variables:
 
 .. code-block:: sh
@@ -33,9 +27,3 @@ These environment variables are accessible in a configurationmodel via the ``std
                                    password=std::get_env("OS_PASSWORD"),
                                    tenant="dev")
 
-
-Supplying environment variables to an agent
--------------------------------------------
-
-A manually started agent loads the environment variables specified in ``/etc/sysconfig/inmanta-agent`` at startup. This can
-be useful when a handler relies on the value of a certain environment variable.

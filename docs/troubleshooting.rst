@@ -78,8 +78,7 @@ error or warning messages that would explain why the agent is not deploying any 
 different log files exist. The log files are present in ``<config.log-dir>/agent-<environment-id>.[log|out|err]``. The
 environment ID can be found in the URL of the web-console, or in the ``Settings`` tab.
 More information about the different log files can be found
-:ref:`here<administrators_doc_logging>`. For manually started agents the log file is present in
-``/var/log/inmanta/agent.log``. If the log file doesn't provide any more information, trigger the agent to execute a
+:ref:`here<administrators_doc_logging>`. If the log file doesn't provide any more information, trigger the agent to execute a
 deployment by clicking on the ``Force repair`` button in the ``Agents`` tab of the web-console, as shown in the figure below:
 
 .. figure:: ./_static/troubleshooting/force_repair_button.png
@@ -171,88 +170,10 @@ shown below, the four agents are down.
    :width: 100%
    :align: center
 
-Agents can be started in two different ways, either automatically by the inmanta server (auto-started agents) or manually
-(manually-started) agents. More information about the configuration of both types of agent can be found on
-:ref:`this page<configure_agents>`. The Section :ref:`Auto-started agents<autostarted_agents>` describes how to troubleshoot
-this issue for agents started by the Inmanta server. The Section :ref:`Manually-started agents<manually_started_agents>`
-describes how to troubleshoot this issue for agents that were started manually.
-
-.. _autostarted_agents:
-
-Auto-started agents
--------------------
-
-An auto-started agent is only started when that agent is present in the ``autostart_agent_map`` environment setting. Verify that
-requirement in the ``Configuration`` panel of the ``Settings`` tab, as shown in the figure below.
-
-.. figure:: ./_static/troubleshooting/environment_settings_autostart_agent_map.png
-   :width: 100%
-   :align: center
-
-When the ``autostart_agent_map`` is configured correctly, but the agent is still not up, read the logs of the auto-started agent
-. These logs can be found at the following location: ``<config.log-dir>/agent-<environment-id>.[log|out|err]``. The
-environment ID is present in the URL of the web-console. More information about the different log files can be found
-:ref:`here<administrators_doc_logging>`. When reading those log files, pay specific attention to error
-messages and warnings that could explain why the agent is marked as down. Also, ensure that the name of the agent under
-consideration is added as an endpoint to the agent process. The log file should contain the following message when a certain
-agent is added as an endpoint to the process:
-
-.. code-block:: text
-
-    inmanta.agent.agent Adding endpoint <agent-name>
-
-
-When the agent is not added as an endpoint, log an issue on https://github.com/inmanta/inmanta-core/issues.
-
-An autostarted-agent connects to the Inmanta server via the address configured in the
-:inmanta.config:option:`server.server-address` config option. If this option is set incorrectly, the agent will not be able to
-connect to the server.
-
-
-.. _manually_started_agents:
-
-Manually started agents
------------------------
-
-When a manually-started agent doesn't come up, verify whether the agent process is still running via the following command:
-
-.. code-block:: sh
-
-    $ systemctl status inmanta-agent
-
-If the agent process is down, start and enable it via the following command:
-
-.. code-block:: sh
-
-    $ systemctl enable --now inmanta-agent
-
-Also check the log file of the manually-started agent. This log file is located at ``/var/log/inmanta/agent.log``. The standard
-output and the standard error streams produced by the agent, can be obtained via journalctl:
-
-.. code-block:: sh
-
-    $ journalctl -u inmanta-agent
-
-
-Potential reasons why an agent doesn't start
---------------------------------------------
-
-This section provides a list of potential reasons why an agent wouldn't start:
-
-* **bind-address set incorrectly:** The Inmanta server listens on all the interfaces configured
-  via the :inmanta.config:option:`server.bind-address` option. If the server doesn't listen on an interface used by a remote
-  agent, the agent will not be able to connect to the server.
-* **Authentication issue:** If the Inmanta server has been setup with authentication, a misconfiguration may deny an agent
-  access to the Inmanta API. For example, not configuring a token provider (issuer) with ``sign=true`` in the ``auth_jwt_<ID>``
-  section of the Inmanta configuration file. Documentation on how to configure authentication correctly can be found
-  :ref:`here<auth-setup>`.
-* **SSL problems:** If the Inmanta server is configured to use SSL, the Agent should be configured to use SSL as well (See the
-  SSL-related configuration options in the :inmanta.config:group:`server` and :inmanta.config:group:`agent_rest_transport`
-  section of the Inmanta configuration reference)
-* **Network issue:** Many network-related issue may exist which don't allow the agent to establish a connection with the Inmanta
-  server. A firewall may blocks traffic between the Inmanta agent and the server, no network route may exist towards the Inmanta
-  server, etc.
-
+Read through the logs of the agent. These logs can be found at the following location:
+``<config.log-dir>/agent-<environment-id>.[log|out|err]``. The environment ID is present in the URL of the web-console.
+More information about the different log files can be found :ref:`here<administrators_doc_logging>`. When reading
+those log files, pay specific attention to error messages and warnings that could explain why the agent is marked as down.
 
 Recompilation failed
 ====================
