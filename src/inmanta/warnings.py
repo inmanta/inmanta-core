@@ -20,7 +20,7 @@ import logging
 import warnings
 from collections.abc import Mapping
 from enum import Enum
-from typing import Literal, Optional, TextIO, Union
+from typing import Optional, TextIO, Union
 
 
 class InmantaWarning(Warning):
