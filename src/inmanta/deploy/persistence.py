@@ -62,8 +62,14 @@ class StateUpdateManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: state.ResourceState) -> None:
-        pass
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: Optional[state.ResourceState]) -> None:
+        """
+        Update the db to reflect the result of a deploy for a given resource.
+
+        :param attribute_hash: The attribute hash of the intent that just finished deploying
+        :param result: The deploy result of the finished deploy. Includes version information.
+        :param state: The current state of this resource. None for stale deploys.
+        """
 
     @abc.abstractmethod
     async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
@@ -152,10 +158,8 @@ class ToDbUpdateManager(StateUpdateManager):
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
-    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: state.ResourceState) -> None:
-        """
-        Update the db to reflect the result of a deploy for a given resource.
-        """
+    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: Optional[state.ResourceState]) -> None:
+        stale_deploy: bool = state is None
 
         def error_and_log(message: str, **context: Any) -> None:
             """
@@ -245,10 +249,15 @@ class ToDbUpdateManager(StateUpdateManager):
 
                 extra_datetime_fields: dict[str, datetime.datetime] = {}
                 if status == ResourceState.deployed:
+                    # TODO: why is this resource_action.started while we use finished for last_deploy?
                     extra_datetime_fields["last_success"] = resource_action.started
 
                 # keep track IF we need to propagate if we are stale
                 # but only do it at the end of the transaction
+                # TODO: only for an actual change? might lsm miss events like this?
+                #   I THINK we used to only need the last_produced_events to catch a race condition, handling the other
+                #   cases via the increment calculation. But it has become more broad now, we don't do increment
+                #   calculation anymore
                 if change != Change.nochange:
                     # We are producing an event
                     extra_datetime_fields["last_produced_events"] = finished
@@ -267,7 +276,12 @@ class ToDbUpdateManager(StateUpdateManager):
                     connection=connection,
                 )
 
-                if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
+                if (
+                    not stale_deploy
+                    and "purged" in resource.attributes
+                    and resource.attributes["purged"]
+                    and status == const.ResourceState.deployed
+                ):
                     await data.Parameter.delete_all(
                         environment=self.environment, resource_id=resource.resource_id, connection=connection
                     )
