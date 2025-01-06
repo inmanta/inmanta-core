@@ -20,6 +20,7 @@ import logging
 import os.path
 import sys
 import uuid
+from asyncio import TimeoutError, subprocess, wait_for
 from collections.abc import Mapping
 from io import StringIO
 from typing import Optional
@@ -568,3 +569,45 @@ def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdi
     logger.info("test")
     captured = capsys.readouterr()
     assert "CLI -- test" in captured.out
+
+
+async def test_print_default_logging_cmd(inmanta_config, tmp_path):
+    """
+    Test that piping to file does not change the logging config
+    """
+    components = ["scheduler", "server", "compiler"]
+    for component in components:
+        args = [sys.executable, "-m", "inmanta.app", "print-default-logging-config", component]
+
+        # Output the logging config on the CLI.
+        # Here we force ENVIRON_FORCE_TTY to be set to simulate that we are on a TTY
+        process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, env={ENVIRON_FORCE_TTY: "yes"})
+        try:
+            (stdout, _) = await wait_for(process.communicate(), timeout=5)
+        except TimeoutError as e:
+            process.kill()
+            await process.communicate()
+            raise e
+        assert process.returncode == 0
+
+        tty_config_stdout = stdout.decode("utf-8")
+        # Assert that TTY was present
+        assert "no_color: false" in tty_config_stdout
+        assert "reset: true" in tty_config_stdout
+        assert "log_colors: null" not in tty_config_stdout
+
+        # Output the logging config on the CLI with TTY unset
+        # This is the same as piping to a file
+        assert "ENVIRON_FORCE_TTY" not in os.environ
+        process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE)
+        try:
+            (stdout, _) = await wait_for(process.communicate(), timeout=5)
+        except TimeoutError as e:
+            process.kill()
+            await process.communicate()
+            raise e
+        assert process.returncode == 0
+
+        normal_config_stdout = stdout.decode("utf-8")
+        # Assert that the outputs are equal
+        assert normal_config_stdout == tty_config_stdout
