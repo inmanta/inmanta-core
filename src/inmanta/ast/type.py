@@ -370,7 +370,7 @@ class String(Primitive):
     def get_location(self) -> None:
         return None
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return type(self) == type(other)
 
 

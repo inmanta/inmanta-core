@@ -215,7 +215,7 @@ class Null(inmanta_type.Type):
     def type_string_internal(self) -> str:
         return self.type_string()
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return type(self) == type(other)
 
 
@@ -246,12 +246,14 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     if python_type is typing.Any:
         return inmanta_type.Type()
 
+    # None to None
     if python_type is type(None):
         return Null()
 
+    # Unions and optionals
     if typing_inspect.is_union_type(python_type):
+        # Optional type
         if any(typing_inspect.is_optional_type(tt) for tt in typing.get_args(python_type)):
-            # Optional type
             other_types = [tt for tt in typing.get_args(python_type) if not typing_inspect.is_optional_type(tt)]
             if len(other_types) == 0:
                 # Probably not possible
@@ -261,19 +263,21 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
             # TODO: optional unions
             return inmanta_type.Type()
         else:
+            # TODO: unions
             return inmanta_type.Type()
+        # bases: Sequence[inmanta.ast.type.Type] = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
+        # return inmanta.ast.type.Union(bases)
 
-    # TODO: unions
-    # bases: Sequence[inmanta.ast.type.Type] = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
-    # return inmanta.ast.type.Union(bases)
-
+    # Lists and dicts
     if typing_inspect.is_generic_type(python_type):
+        # List
         origin = typing.get_origin(python_type)
         if origin is Sequence:
             # Can this fail?
             base: inmanta_type.Type = typing.get_args(python_type)[0]
             return inmanta_type.TypedList(to_dsl_type(base))
 
+        # dict
         if issubclass(origin, collections.abc.Mapping):
             args = typing_inspect.get_args(python_type)
             assert len(args) == 2
