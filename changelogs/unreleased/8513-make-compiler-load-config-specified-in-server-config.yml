@@ -1,0 +1,6 @@
+description: >
+  If a specific compiler logging config file is set, make sure the server passes it down to the compiler
+  when starting it.
+issue-nr: 8513
+change-type: minor
+destination-branches: [master]
