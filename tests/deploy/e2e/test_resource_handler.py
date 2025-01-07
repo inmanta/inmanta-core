@@ -188,18 +188,20 @@ async def test_format_token_in_logline(server, agent, client, environment, resou
     assert result.code == 200
 
     # do a deploy
-    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
-    assert result.code == 200
-    assert result.result["model"]["released"]
+    # TODO: is this change correct?
+    with caplog.at_level("INFO"):
+        result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+        assert result.code == 200
+        assert result.result["model"]["released"]
 
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    await wait_until_deployment_finishes(client, environment)
+        result = await client.get_version(environment, version)
+        assert result.code == 200
+        await wait_until_deployment_finishes(client, environment)
 
-    assert await clienthelper.done_count() == 1
+        assert await clienthelper.done_count() == 1
 
-    log_string = "Set key '%(key)s' to value '%(value)s'" % dict(key=resource["key"], value=resource["value"])
-    assert log_string in caplog.text
+        log_string = "Set key '%(key)s' to value '%(value)s'" % dict(key=resource["key"], value=resource["value"])
+        assert log_string in caplog.text
 
 
 async def test_deploy_handler_method(server, client, environment, agent, clienthelper, resource_container):

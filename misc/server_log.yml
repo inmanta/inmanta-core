@@ -2,8 +2,9 @@
 formatters:
   core_console_formatter:
     # Console formatter with coloring
+    # This formatter also does indentation of multi-line log message, so all lines are put nicely underneath each other.
     (): inmanta.logging.MultiLineFormatter
-    fmt: '%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s'
+    fmt: '%(asctime)s %(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s'
     # Don't shorten logger names by default
     keep_logger_names: true
     log_colors:

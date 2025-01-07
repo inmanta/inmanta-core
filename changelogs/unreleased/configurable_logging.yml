@@ -1,0 +1,5 @@
+description: Added support for fine grained customization of log configuration
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}, see [logging documentation](administrators_doc_logging)."

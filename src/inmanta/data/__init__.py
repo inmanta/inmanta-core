@@ -20,6 +20,7 @@ import asyncio
 import copy
 import datetime
 import enum
+import itertools
 import json
 import logging
 import re
@@ -28,12 +29,12 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Callable, Iterable, Sequence, Set
+from collections.abc import Awaitable, Callable, Collection, Iterable, Sequence, Set
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
 from itertools import chain
 from re import Pattern
-from typing import Generic, NewType, Optional, Tuple, TypeVar, Union, cast, overload
+from typing import Generic, NewType, Optional, TypeVar, Union, cast, overload
 from uuid import UUID
 
 import asyncpg
@@ -126,10 +127,10 @@ class TableLockMode(enum.Enum):
     may be extended when a new lock mode is required.
     """
 
-    ROW_EXCLUSIVE: str = "ROW EXCLUSIVE"
-    SHARE_UPDATE_EXCLUSIVE: str = "SHARE UPDATE EXCLUSIVE"
-    SHARE: str = "SHARE"
-    SHARE_ROW_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
+    ROW_EXCLUSIVE = "ROW EXCLUSIVE"
+    SHARE_UPDATE_EXCLUSIVE = "SHARE UPDATE EXCLUSIVE"
+    SHARE = "SHARE"
+    SHARE_ROW_EXCLUSIVE = "SHARE ROW EXCLUSIVE"
 
 
 class RowLockMode(enum.Enum):
@@ -140,10 +141,10 @@ class RowLockMode(enum.Enum):
     https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
     """
 
-    FOR_UPDATE: str = "FOR UPDATE"
-    FOR_NO_KEY_UPDATE: str = "FOR NO KEY UPDATE"
-    FOR_SHARE: str = "FOR SHARE"
-    FOR_KEY_SHARE: str = "FOR KEY SHARE"
+    FOR_UPDATE = "FOR UPDATE"
+    FOR_NO_KEY_UPDATE = "FOR NO KEY UPDATE"
+    FOR_SHARE = "FOR SHARE"
+    FOR_KEY_SHARE = "FOR KEY SHARE"
 
 
 class RangeOperator(enum.Enum):
@@ -164,8 +165,8 @@ class RangeOperator(enum.Enum):
             raise ValueError(f"Failed to parse {text} as a RangeOperator")
 
 
-RangeConstraint = list[tuple[RangeOperator, int]]
-DateRangeConstraint = list[tuple[RangeOperator, datetime.datetime]]
+RangeConstraint = Sequence[tuple[RangeOperator, int]]
+DateRangeConstraint = Sequence[tuple[RangeOperator, datetime.datetime]]
 QueryFilter = tuple[QueryType, object]
 
 
@@ -1961,24 +1962,25 @@ class BaseDocument(metaclass=DocumentMeta):
     def get_filter_for_query_type(
         cls, query_type: QueryType, key: str, value: object, index_count: int
     ) -> tuple[str, list[object]]:
-        if query_type == QueryType.EQUALS:
-            (filter_statement, filter_values) = cls._get_filter(key, value, index_count)
-        elif query_type == QueryType.IS_NOT_NULL:
-            (filter_statement, filter_values) = cls.get_is_not_null_filter(key)
-        elif query_type == QueryType.CONTAINS:
-            (filter_statement, filter_values) = cls.get_contains_filter(key, value, index_count)
-        elif query_type == QueryType.CONTAINS_PARTIAL:
-            (filter_statement, filter_values) = cls.get_contains_partial_filter(key, value, index_count)
-        elif query_type == QueryType.RANGE:
-            (filter_statement, filter_values) = cls.get_range_filter(key, value, index_count)
-        elif query_type == QueryType.NOT_CONTAINS:
-            (filter_statement, filter_values) = cls.get_not_contains_filter(key, value, index_count)
-        elif query_type == QueryType.COMBINED:
-            (filter_statement, filter_values) = cls.get_filter_for_combined_query_type(
-                key, cast(dict[QueryType, object], value), index_count
-            )
-        else:
-            raise InvalidQueryType(f"Query type should be one of {[query for query in QueryType]}")
+        match query_type:
+            case QueryType.EQUALS:
+                (filter_statement, filter_values) = cls._get_filter(key, value, index_count)
+            case QueryType.IS_NOT_NULL:
+                (filter_statement, filter_values) = cls.get_is_not_null_filter(key)
+            case QueryType.CONTAINS:
+                (filter_statement, filter_values) = cls.get_contains_filter(key, value, index_count)
+            case QueryType.CONTAINS_PARTIAL:
+                (filter_statement, filter_values) = cls.get_contains_partial_filter(key, value, index_count)
+            case QueryType.RANGE:
+                (filter_statement, filter_values) = cls.get_range_filter(key, value, index_count)
+            case QueryType.NOT_CONTAINS:
+                (filter_statement, filter_values) = cls.get_not_contains_filter(key, value, index_count)
+            case QueryType.COMBINED:
+                (filter_statement, filter_values) = cls.get_filter_for_combined_query_type(
+                    key, cast(dict[QueryType, object], value), index_count
+                )
+            case _ as _never:
+                typing.assert_never(_never)
         return (filter_statement, filter_values)
 
     @classmethod
@@ -4480,7 +4482,6 @@ class ResourcePersistentState(BaseDocument):
 
         :param update_blocked_state: True iff this method should update the blocked_status column in the database.
         """
-        assert all(resource_state.status is not state.ComplianceStatus.ORPHAN for (resource_state, _) in intent.values())
         values = [
             (
                 environment,
@@ -4573,12 +4574,12 @@ class ResourcePersistentState(BaseDocument):
             connection=connection,
         )
 
-    def get_compliance_status(self) -> state.ComplianceStatus:
+    def get_compliance_status(self) -> Optional[state.ComplianceStatus]:
         """
-        Return the ComplianceStatus associated with this resource_persistent_state.
+        Return the ComplianceStatus associated with this resource_persistent_state. Returns None for orphaned resources.
         """
         if self.is_orphan:
-            return state.ComplianceStatus.ORPHAN
+            return None
         elif self.is_undefined:
             return state.ComplianceStatus.UNDEFINED
         elif (
@@ -4757,7 +4758,7 @@ class Resource(BaseDocument):
     @classmethod
     async def get_resource_states_latest_version(
         cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Tuple[Optional[int], abc.Mapping[ResourceIdStr, ResourceState]]:
+    ) -> tuple[Optional[int], abc.Mapping[ResourceIdStr, ResourceState]]:
         query = """
             WITH latest_released_version AS (
                 SELECT max(version) AS version
@@ -5051,7 +5052,12 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resources_for_version_raw(
-        cls, environment: uuid.UUID, version: int, projection: Optional[list[str]], *, connection: Optional[Connection] = None
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        projection: Optional[Collection[typing.LiteralString]],
+        *,
+        connection: Optional[Connection] = None,
     ) -> list[dict[str, object]]:
         if not projection:
             projection = "*"
@@ -5067,24 +5073,67 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
+    async def get_resources_since_version_raw(
+        cls,
+        environment: uuid.UUID,
+        *,
+        since: int,
+        projection: Optional[Collection[typing.LiteralString]],
+        connection: Optional[Connection] = None,
+    ) -> list[tuple[int, list[dict[str, object]]]]:
+        """
+        Returns all released model versions with associated resources since (excluding) the given model version.
+        Returns resources as raw dicts with the requested fields
+        """
+        resource_columns: typing.LiteralString = ", ".join(f"r.{c}" for c in projection) if projection else "r.*"
+        query: typing.LiteralString = f"""
+            SELECT m.version, {resource_columns}
+            FROM {ConfigurationModel.table_name()} as m
+            LEFT JOIN {cls.table_name()} as r
+                ON m.environment = r.environment AND m.version = r.model
+            WHERE m.environment = $1 AND m.version > $2 AND m.released=true
+            ORDER BY m.version ASC
+        """
+        resource_records = await cls._fetch_query(
+            query,
+            cls._get_value(environment),
+            cls._get_value(since),
+            connection=connection,
+        )
+        result: list[tuple[int, list[dict[str, object]]]] = []
+        for version, raw_resources in itertools.groupby(resource_records, key=lambda r: r["version"]):
+            parsed_resources: list[dict[str, object]] = []
+            for raw_resource in raw_resources:
+                if raw_resource["resource_id"] is None:
+                    # left join produced no resources
+                    continue
+                resource: dict[str, object] = dict(raw_resource)
+                if "attributes" in resource:
+                    resource["attributes"] = json.loads(resource["attributes"])
+                parsed_resources.append(resource)
+            result.append((version, parsed_resources))
+        return result
+
+    @classmethod
     async def get_resources_for_version_raw_with_persistent_state(
         cls,
         environment: uuid.UUID,
         version: int,
-        projection: Optional[list[typing.LiteralString]],
-        projection_persistent: Optional[list[typing.LiteralString]],
-        project_attributes: Optional[list[typing.LiteralString]] = None,
         *,
+        projection: Optional[Collection[typing.LiteralString]],
+        projection_persistent: Optional[Collection[typing.LiteralString]],
+        project_attributes: Optional[Collection[typing.LiteralString]] = None,
         connection: Optional[Connection] = None,
     ) -> list[dict[str, object]]:
         """This method performs none of the mangling required to produce valid resources!
 
-        project_attributes performs a projection on the json attributes of the resources table
+        project_attributes performs a projection on the json attributes of the resources table. If the attribute does not exist,
+        it is left out of the result dict.
 
         all projections must be disjoint, as they become named fields in the output record
         """
 
-        def collect_projection(projection: Optional[list[str]], prefix: str) -> str:
+        def collect_projection(projection: Optional[Collection[str]], prefix: str) -> str:
             if not projection:
                 return f"{prefix}.*"
             else:
@@ -5847,30 +5896,6 @@ class ConfigurationModel(BaseDocument):
         return int(result["version"])
 
     @classmethod
-    async def get_released_versions_in_interval(
-        cls,
-        environment: uuid.UUID,
-        lower_bound: int,
-        upper_bound: int,
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> Sequence[int]:
-        """
-        Return all the released model version between model version lower_bound and upper_bound (bounds included).
-        The version numbers are returned in descending order.
-        """
-        if lower_bound > upper_bound:
-            raise Exception("lower_bound cannot be larger than upper_bound.")
-        query = f"""
-            SELECT version
-            FROM {ConfigurationModel.table_name()}
-            WHERE environment=$1 AND released AND version BETWEEN $2 AND $3
-            ORDER BY version DESC
-        """
-        result = await cls._fetch_query(query, cls._get_value(environment), lower_bound, upper_bound, connection=connection)
-        return [int(r["version"]) for r in result]
-
-    @classmethod
     async def get_agents(
         cls, environment: uuid.UUID, version: int, *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> list[str]:
@@ -5982,7 +6007,12 @@ class ConfigurationModel(BaseDocument):
 
         # get resources for agent
         resources = await Resource.get_resources_for_version_raw_with_persistent_state(
-            environment, version, projection_a_resource, projection_a_state, projection_a_attributes, connection=connection
+            environment,
+            version,
+            projection=projection_a_resource,
+            projection_persistent=projection_a_state,
+            project_attributes=projection_a_attributes,
+            connection=connection,
         )
 
         # to increment

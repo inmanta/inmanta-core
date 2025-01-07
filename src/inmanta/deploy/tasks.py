@@ -115,39 +115,32 @@ class PoisonPill(Task):
 class Deploy(Task):
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str, reason: str | None = None) -> None:
         with pyformance.timer("internal.deploy").time():
-            # The main difficulty of this code is exception handling.
-            # We collect state here to report back in the finally block.
-            # This try catch block ensures we report at the end of the task.
+            # Make id's
+            gid = uuid.uuid4()
+            action_id = uuid.uuid4()  # can this be gid ?
+
+            # First do scheduler book keeping to establish what to do
             try:
-                # Full status of the deploy,
-                # may be unset if we fail before signaling start to the server, will be set if we signaled start
-                deploy_result: DeployResult | None = None
+                intent = await task_manager.deploy_start(action_id, self.resource)
+            except Exception:
+                # Unrecoverable, can't reach DB
+                LOGGER.error(
+                    "Failed to report the start of the deployment to the server for %s",
+                    self.resource,
+                    exc_info=True,
+                )
+                return
 
-                # Make id's
-                gid = uuid.uuid4()
-                action_id = uuid.uuid4()  # can this be gid ?
+            if intent is None:
+                # Stale resource, can simply be dropped.
+                return
 
-                # First do scheduler book keeping to establish what to do
-                try:
-                    intent = await task_manager.deploy_start(action_id, self.resource)
-                except Exception:
-                    # Unrecoverable, can't reach DB
-                    LOGGER.error(
-                        "Failed to report the start of the deployment to the server for %s",
-                        self.resource,
-                        exc_info=True,
-                    )
-                    return
-
-                if intent is None:
-                    # Stale resource, can simply be dropped.
-                    return
-
-                # From this point on, we HAVE to call send_deploy_done to make sure we are not stuck in deploying
-                # This is done by setting deploy_result
-                # The surrounding try_catch will call report_resource_state
-
-                # Dependencies are always set when calling get_resource_intent_for_deploy
+            # From this point on, we HAVE to call deploy_done to make sure we are not stuck in deploying
+            # We collect state here to report back in the finally block.
+            # This try-finally block ensures we report at the end of the task.
+            deploy_result: DeployResult
+            try:
+                # Dependencies are always set when calling deploy_start
                 assert intent.dependencies is not None
                 # Resolve to executor form
                 version: int = intent.model_version
@@ -206,16 +199,15 @@ class Deploy(Task):
                     deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
 
             finally:
-                if deploy_result is not None:
-                    # We signaled start, so we signal end
-                    try:
-                        await task_manager.deploy_done(resource_details.attribute_hash, deploy_result)
-                    except Exception:
-                        LOGGER.error(
-                            "Failed to report the end of the deployment to the server for %s",
-                            resource_details.resource_id,
-                            exc_info=True,
-                        )
+                # We signaled start, so we signal end
+                try:
+                    await task_manager.deploy_done(resource_details.attribute_hash, deploy_result)
+                except Exception:
+                    LOGGER.error(
+                        "Failed to report the end of the deployment to the server for %s",
+                        resource_details.resource_id,
+                        exc_info=True,
+                    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -272,7 +264,7 @@ class DryRun(Task):
                     finished=datetime.datetime.now().astimezone(),
                     messages=[],
                 )
-        await task_manager.dryrun_update(env=task_manager.environment, dryrun_result=dryrun_result)
+        await task_manager.dryrun_done(dryrun_result)
 
 
 class RefreshFact(Task):
@@ -299,8 +291,6 @@ class RefreshFact(Task):
 
         fact_result = await my_executor.get_facts(executor_resource_details)
         if fact_result.success:
-            await task_manager.set_parameters(
-                fact_result=fact_result,
-            )
+            await task_manager.fact_refresh_done(fact_result)
         else:
             raise Exception(f"Error encountered while executing RefreshTask: {fact_result.error_msg}")

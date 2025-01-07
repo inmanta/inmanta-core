@@ -98,7 +98,7 @@ async def test_add_new_resource_status_column(
         # would require an expensive query in the database migration script.
         deployment_result=state.DeploymentResult.NEW,
         blocked_status=state.BlockedStatus.NO,
-        expected_compliance_status=ComplianceStatus.ORPHAN,
+        expected_compliance_status=None,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key7]")],

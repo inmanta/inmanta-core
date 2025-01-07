@@ -18,11 +18,6 @@ formatters:
   core_log_formatter:
     format: '%(asctime)s %(levelname)-8s %(name)-10s %(message)s'
 handlers:
-  core_tornado_debug_log_handler:
-    # Special handler that captures tornado max_clients limit reached messages and turns them into warnings
-    # As these may cause instability
-    class: inmanta.logging.TornadoDebugLogHandler
-    level: DEBUG
   scheduler_handler:
     # Root handler for the scheduler
     class: logging.handlers.WatchedFileHandler
@@ -35,6 +30,11 @@ handlers:
     class: logging.handlers.WatchedFileHandler
     filename: /var/log/inmanta/resource-actions-{environment}.log
     formatter: core_log_formatter
+    level: DEBUG
+  core_tornado_debug_log_handler:
+    # Special handler that captures tornado max_clients limit reached messages and turns them into warnings
+    # As these may cause instability
+    class: inmanta.logging.TornadoDebugLogHandler
     level: DEBUG
 loggers:
   inmanta.resource_action:
