@@ -117,7 +117,7 @@ class NamedType(Type, Named):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, NamedType):
             return False
-        return self.get_full_name() == other
+        return self.get_full_name() == other.get_full_name()
 
     def __hash__(self) -> int:
         return hash(self.get_full_name())
