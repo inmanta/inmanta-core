@@ -3484,9 +3484,11 @@ WHERE -- have no primary ID set (that are down)
           SELECT id
           FROM public.environment
           WHERE NOT halted
-      );
+      )
+      -- Never delete the scheduler record.
+      AND a.name != $1;
 """
-        await cls._execute_query(query, connection=connection)
+        await cls._execute_query(query, const.AGENT_SCHEDULER_ID, connection=connection)
 
 
 @stable_api
