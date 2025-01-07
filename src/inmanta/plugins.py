@@ -32,11 +32,10 @@ import typing_inspect
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
-from inmanta.ast import (  # noqa: F401 Plugin exception is part of the stable api
+from inmanta.ast import (
     LocatableString,
     Location,
     Namespace,
-    PluginException,
     Range,
     RuntimeException,
     TypeNotFoundException,

@@ -1,5 +1,5 @@
 description: Added support for python types in plugin annotations
 change-type: minor
-destination-branches: [master, iso7]
+destination-branches: [iso7]
 sections:
   feature: "{{description}}"
