@@ -29,7 +29,7 @@ from asyncpg import Connection, UniqueViolationError
 
 from inmanta import const, data
 from inmanta.agent.executor import DeployResult, DryrunResult, FactResult
-from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
+from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, ResourceState
 from inmanta.data import LogLine
 from inmanta.deploy import state
 from inmanta.protocol import Client
