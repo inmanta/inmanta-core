@@ -626,3 +626,16 @@ async def test_print_default_logging_cmd(inmanta_config, tmp_path):
 
         with open(output_file, "r") as fh:
             assert fh.read().strip() == tty_config_stdout.strip()
+
+        # Assert we get an error if the output file already exists
+        process = await subprocess.create_subprocess_exec(*args,  stderr=subprocess.PIPE)
+        try:
+            (_, stderr) = await wait_for(process.communicate(), timeout=5)
+            assert f"The requested output location already exists: {output_file}" in stderr.decode()
+        except TimeoutError as e:
+            process.kill()
+            await process.communicate()
+            raise e
+        assert process.returncode == 1
+
+        os.remove(output_file)

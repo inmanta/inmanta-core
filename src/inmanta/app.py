@@ -948,6 +948,9 @@ def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequen
     parser_config=default_log_config_parser,
 )
 def default_logging_config(options: argparse.Namespace) -> None:
+    if options.file is not None and os.path.exists(options.file):
+        raise Exception(f"The requested output location already exists: {options.file}")
+
     # Because we want to have contex vars in the files,
     #   but the file can also contain other f-string formatters, this is a bit tricky.
     # We want to be able to
