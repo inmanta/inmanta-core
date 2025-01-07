@@ -32,7 +32,6 @@ def test_conversion():
     assert inmanta_type.NullableType(inmanta_type.Float()) == to_dsl_type(float | None)
     assert inmanta_type.List() == to_dsl_type(list)
     assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(list[str])
-    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(set[str])
     assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(Sequence[str])
     assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(collections.abc.Sequence[str])
     assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type(dict)
@@ -46,3 +45,6 @@ def test_conversion():
 
     with pytest.raises(RuntimeException):
         to_dsl_type(dict[int, int])
+
+    with pytest.raises(RuntimeException):
+        to_dsl_type(set[str])

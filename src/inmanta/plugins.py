@@ -291,12 +291,16 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
 
             return inmanta_type.TypedDict(to_dsl_type(args[1]))
 
-        # List, set, ...
+        # List
         if issubclass(origin, collections.abc.Sequence):
             args = typing.get_args(python_type)
             if not args:
                 return inmanta_type.List()
             return inmanta_type.TypedList(to_dsl_type(args[0]))
+
+        # Set
+        if issubclass(origin, collections.abc.Set):
+            raise TypingException(None, f"invalid type {python_type}, set is not supported on the plugin boundary")
 
     # TODO annotated types
     # if typing.get_origin(t) is typing.Annotated:

@@ -114,7 +114,7 @@ class NamedType(Type, Named):
     def type_string(self) -> str:
         return self.get_full_name()
 
-    def __eq__(self, other:object) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, NamedType):
             return False
         return self.get_full_name() == other
