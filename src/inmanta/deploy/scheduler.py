@@ -216,7 +216,7 @@ class TaskManager(abc.ABC):
 
         Acquires appropriate locks
 
-        :param attribute_hash: The resource's deploy intent as returned by deploy_start(). Limited scheduler state is updated
+        :param intent: The resource's deploy intent as returned by deploy_start(). Limited scheduler state is updated
             if the hash indicates the state information is stale.
         :param result: The DeployResult object describing the result of the deployment.
         """
