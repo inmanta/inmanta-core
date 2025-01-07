@@ -62,7 +62,14 @@ class StateUpdateManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: Optional[state.ResourceState]) -> None:
+    async def send_deploy_done(
+        self,
+        attribute_hash: str,
+        result: DeployResult,
+        state: Optional[state.ResourceState],
+        *,
+        started: datetime.datetime,
+    ) -> None:
         """
         Update the db to reflect the result of a deploy for a given resource.
 
@@ -158,7 +165,14 @@ class ToDbUpdateManager(StateUpdateManager):
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
-    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: Optional[state.ResourceState]) -> None:
+    async def send_deploy_done(
+        self,
+        attribute_hash: str,
+        result: DeployResult,
+        state: Optional[state.ResourceState],
+        *,
+        started: datetime.datetime,
+    ) -> None:
         stale_deploy: bool = state is None
 
         def error_and_log(message: str, **context: Any) -> None:
@@ -249,8 +263,8 @@ class ToDbUpdateManager(StateUpdateManager):
 
                 extra_datetime_fields: dict[str, datetime.datetime] = {}
                 if status == ResourceState.deployed:
-                    # TODO: why is this resource_action.started while we use finished for last_deploy?
-                    extra_datetime_fields["last_success"] = resource_action.started
+                    # use start time for last_success because it is used for comparison with dependencies' last_produced_events
+                    extra_datetime_fields["last_success"] = started
 
                 # keep track IF we need to propagate if we are stale
                 # but only do it at the end of the transaction
@@ -260,6 +274,7 @@ class ToDbUpdateManager(StateUpdateManager):
                 #   calculation anymore
                 if change != Change.nochange:
                     # We are producing an event
+                    # use finished time for last_produced_events because it is used for comparison with dependencies' start
                     extra_datetime_fields["last_produced_events"] = finished
 
                 await resource.update_fields(

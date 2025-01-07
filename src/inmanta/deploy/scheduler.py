@@ -19,6 +19,7 @@
 import abc
 import asyncio
 import contextlib
+import datetime
 import enum
 import itertools
 import logging
@@ -68,12 +69,21 @@ class StaleResource(Exception):
 @dataclass(frozen=True)
 class ResourceIntent:
     """
-    Deploy intent for a single resource. Includes dependency state to provide to the resource handler.
+    Resource intent for a single resource.
     """
 
     model_version: int
     details: ResourceDetails
-    dependencies: Optional[Mapping[ResourceIdStr, const.ResourceState]]
+
+
+@dataclass(frozen=True)
+class DeployIntent(ResourceIntent):
+    """
+    Deploy intent for a single resource. Includes dependency state to provide to the resource handler.
+    """
+
+    dependencies: Mapping[ResourceIdStr, const.ResourceState]
+    deploy_start: datetime.datetime
 
 
 class ResourceIntentChange(Enum):
@@ -185,7 +195,7 @@ class TaskManager(abc.ABC):
         self,
         action_id: uuid.UUID,
         resource: ResourceIdStr,
-    ) -> Optional[ResourceIntent]:
+    ) -> Optional[DeployIntent]:
         """
         Register the start of deployment for the given resource and return its current version details
         along with the last non-deploying state for its dependencies, or None if it is not (anymore)
@@ -197,7 +207,7 @@ class TaskManager(abc.ABC):
         """
 
     @abstractmethod
-    async def deploy_done(self, attribute_hash: str, result: executor.DeployResult) -> None:
+    async def deploy_done(self, intent: DeployIntent, result: executor.DeployResult) -> None:
         """
         Register the end of deployment for the given resource: update the resource state based on the deployment result
         and inform its dependencies that deployment is finished.
@@ -206,8 +216,8 @@ class TaskManager(abc.ABC):
 
         Acquires appropriate locks
 
-        :param attribute_hash: The resource's attribute hash for which this state applies. No scheduler state is updated if the
-            hash indicates the state information is stale.
+        :param attribute_hash: The resource's deploy intent as returned by deploy_start(). Limited scheduler state is updated
+            if the hash indicates the state information is stale.
         :param result: The DeployResult object describing the result of the deployment.
         """
 
@@ -1031,9 +1041,9 @@ class ResourceScheduler(TaskManager):
             resource_details = self._get_resource_intent(resource)
             if resource_details is None:
                 return None
-            return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=None)
+            return ResourceIntent(model_version=self._state.version, details=resource_details)
 
-    async def deploy_start(self, action_id: uuid.UUID, resource: ResourceIdStr) -> Optional[ResourceIntent]:
+    async def deploy_start(self, action_id: uuid.UUID, resource: ResourceIdStr) -> Optional[DeployIntent]:
         async with self._scheduler_lock:
             # fetch resource details under lock
             resource_details = self._get_resource_intent(resource)
@@ -1042,8 +1052,11 @@ class ResourceScheduler(TaskManager):
                 return None
             dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
             self._deploying_latest.add(resource)
-            resource_intent = ResourceIntent(
-                model_version=self._state.version, details=resource_details, dependencies=dependencies
+            resource_intent = DeployIntent(
+                model_version=self._state.version,
+                details=resource_details,
+                dependencies=dependencies,
+                deploy_start=datetime.datetime.now().astimezone(),
             )
             # Update the state in the database.
             await self.state_update_manager.send_in_progress(
@@ -1051,10 +1064,10 @@ class ResourceScheduler(TaskManager):
             )
             return resource_intent
 
-    async def deploy_done(self, attribute_hash: str, result: executor.DeployResult) -> None:
+    async def deploy_done(self, intent: DeployIntent, result: executor.DeployResult) -> None:
         state: Optional[ResourceState]
         try:
-            state = await self._update_scheduler_state_for_finished_deploy(attribute_hash, result)
+            state = await self._update_scheduler_state_for_finished_deploy(intent.details.attribute_hash, result)
         except StaleResource:
             # The resource is no longer managed (or in rare cases it has shortly become unmanaged sometime between this version
             # and the currently managed version, either way, the deploy that finished represents a stale intent).
@@ -1065,7 +1078,12 @@ class ResourceScheduler(TaskManager):
             # The scheduler will then report that this resource id with this specific version finished deploy.
             state = None
         # Write deployment result to the database.
-        await self.state_update_manager.send_deploy_done(attribute_hash, result, state)
+        await self.state_update_manager.send_deploy_done(
+            attribute_hash=intent.details.attribute_hash,
+            result=result,
+            state=state,
+            started=intent.deploy_start,
+        )
         async with self._scheduler_lock:
             # report to the scheduled work that we're done. Never report stale deploys.
             self._work.finished_deploy(result.resource_id)

@@ -201,7 +201,7 @@ class Deploy(Task):
             finally:
                 # We signaled start, so we signal end
                 try:
-                    await task_manager.deploy_done(resource_details.attribute_hash, deploy_result)
+                    await task_manager.deploy_done(intent, deploy_result)
                 except Exception:
                     LOGGER.error(
                         "Failed to report the end of the deployment to the server for %s",
