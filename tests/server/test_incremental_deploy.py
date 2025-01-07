@@ -424,6 +424,7 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
     async def deploy(rvid: ResourceVersionIdStr, change: Change = Change.nochange):
         update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
         action_id = uuid.uuid4()
+        start_time: datetime = datetime.now().astimezone()
         await update_manager.send_in_progress(action_id, Id.parse_id(rvid))
         await update_manager.send_deploy_done(
             attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resources[0]),
@@ -440,6 +441,7 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
                 deployment_result=state.DeploymentResult.DEPLOYED,
                 blocked=state.BlockedStatus.NO,
             ),
+            started=start_time,
         )
 
     async def assert_resources_to_deploy(

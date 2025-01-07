@@ -19,6 +19,7 @@
 """
 
 import asyncio
+import datetime
 import hashlib
 import itertools
 import json
@@ -273,6 +274,8 @@ class DummyStateManager(StateUpdateManager):
         attribute_hash: str,
         result: DeployResult,
         state: state.ResourceState,
+        *,
+        started: datetime.datetime,
     ) -> None:
         self.state[result.resource_id] = result.status
 
