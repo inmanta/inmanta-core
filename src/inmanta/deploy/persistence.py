@@ -266,16 +266,9 @@ class ToDbUpdateManager(StateUpdateManager):
                     # use start time for last_success because it is used for comparison with dependencies' last_produced_events
                     extra_datetime_fields["last_success"] = started
 
-                # keep track IF we need to propagate if we are stale
-                # but only do it at the end of the transaction
-                # TODO: only for an actual change? might lsm miss events like this?
-                #   I THINK we used to only need the last_produced_events to catch a race condition, handling the other
-                #   cases via the increment calculation. But it has become more broad now, we don't do increment
-                #   calculation anymore
-                if change != Change.nochange:
-                    # We are producing an event
-                    # use finished time for last_produced_events because it is used for comparison with dependencies' start
-                    extra_datetime_fields["last_produced_events"] = finished
+                # We are producing an event
+                # use finished time for last_produced_events because it is used for comparison with dependencies' start
+                extra_datetime_fields["last_produced_events"] = finished
 
                 await resource.update_fields(
                     status=status,
