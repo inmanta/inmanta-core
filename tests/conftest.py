@@ -27,6 +27,7 @@ from threading import Condition
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
+import inmanta.deploy.state
 import toml
 from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
@@ -875,8 +876,9 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
                 await agent.stop_working()
                 the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
                 for r, state in the_state.items():
-                    # TODO[#8541]: also persist TRANSIENT in database
-                    state.blocked = state.blocked.db_value()
+                    if state.blocked is inmanta.deploy.state.BlockedStatus.TRANSIENT:
+                        # TODO[#8541]: also persist TRANSIENT in database
+                        state.blocked = inmanta.deploy.state.BlockedStatus.NO
                     print(r, state)
                 monkeypatch.setattr(agent.scheduler._work.agent_queues, "_new_agent_notify", lambda x: x)
                 await agent.start_working()
