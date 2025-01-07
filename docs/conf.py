@@ -12,7 +12,7 @@
 # serve to show the default.
 import importlib.metadata
 import shutil
-import sys, os, datetime
+import sys, os, datetime, re
 from importlib.metadata import PackageNotFoundError
 from sphinx.errors import ConfigError
 
@@ -389,6 +389,11 @@ linkcheck_ignore = [
     '../../reference/modules/std.html#std.validate_type',
     '../reference/modules/std.html#std.getfact',
     r'https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux#user-content-sr-linux-topology',
+]
+
+linkcheck_anchors_ignore=[
+    # Ignore Scroll To Text Fragment anchors, because they are not supposed to be present in the HTML body.
+    f"{re.escape(':~:text=')}.*",
 ]
 
 graphviz_output_format = "svg"

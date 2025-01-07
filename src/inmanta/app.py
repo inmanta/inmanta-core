@@ -964,28 +964,37 @@ def default_logging_config(options: argparse.Namespace) -> None:
 
     context = {var: f"{place_holder}{var}{place_holder}" for var in context_vars}
 
-    component_config = InmantaLoggerConfig(stream=sys.stdout, no_install=True)
-    component_config.apply_options(options, options.cmd, context)
+    # Force TTY so that this command outputs the same config when piping to a file
+    original_force_tty = os.environ.get(const.ENVIRON_FORCE_TTY, None)
+    if original_force_tty is None:
+        os.environ[const.ENVIRON_FORCE_TTY] = "yes"
+    try:
+        component_config = InmantaLoggerConfig(stream=sys.stdout, no_install=True)
+        component_config.apply_options(options, options.cmd, context)
 
-    if options.cmd == "server":
-        # Upgrade with extensions
-        ibl = InmantaBootloader()
-        ibl.start_loggers_for_extensions(component_config)
+        if options.cmd == "server":
+            # Upgrade with extensions
+            ibl = InmantaBootloader()
+            ibl.start_loggers_for_extensions(component_config)
 
-    assert component_config._loaded_config is not None  # make mypy happy
-    raw_dump = component_config._loaded_config.to_string()
+        assert component_config._loaded_config is not None  # make mypy happy
+        raw_dump = component_config._loaded_config.to_string()
 
-    # 2. if we detect the placeholder
-    if place_holder in raw_dump:
-        # 3. escape all '{' and '}'
-        # i.e. we could be a template of a template
-        raw_dump = raw_dump.replace("{", "{{")
-        raw_dump = raw_dump.replace("}", "}}")
-        # 4. replace placeholder with `{`
-        for context_var in context_vars:
-            raw_dump = raw_dump.replace(f"{place_holder}{context_var}{place_holder}", "{" + context_var + "}")
+        # 2. if we detect the placeholder
+        if place_holder in raw_dump:
+            # 3. escape all '{' and '}'
+            # i.e. we could be a template of a template
+            raw_dump = raw_dump.replace("{", "{{")
+            raw_dump = raw_dump.replace("}", "}}")
+            # 4. replace placeholder with `{`
+            for context_var in context_vars:
+                raw_dump = raw_dump.replace(f"{place_holder}{context_var}{place_holder}", "{" + context_var + "}")
 
-    print(raw_dump)
+        print(raw_dump)
+    finally:
+        # Revert this env var back to its original state
+        if original_force_tty is None:
+            del os.environ[const.ENVIRON_FORCE_TTY]
 
 
 def print_versions_installed_components_and_exit() -> None:
