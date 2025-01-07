@@ -102,6 +102,9 @@ class Type(Locatable):
             return NotImplemented
         return type(self) == type(other)  # noqa: E721
 
+    def __hash__(self):
+        return hash(type(self))
+
 
 class NamedType(Type, Named):
     def get_double_defined_exception(self, other: "NamedType") -> "DuplicateException":
@@ -110,6 +113,14 @@ class NamedType(Type, Named):
 
     def type_string(self) -> str:
         return self.get_full_name()
+
+    def __eq__(self, other):
+        if not isinstance(other, NamedType):
+            return False
+        return self.get_full_name() == other
+
+    def __hash__(self):
+        return hash(self.get_full_name())
 
 
 @stable_api
