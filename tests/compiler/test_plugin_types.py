@@ -17,7 +17,7 @@
 """
 
 import collections.abc
-from typing import Any, Mapping, Sequence, Union
+from typing import Any, Mapping, Sequence, TypeVar, Union
 
 import pytest
 
@@ -53,10 +53,14 @@ def test_conversion():
     with pytest.raises(RuntimeException):
         to_dsl_type(set[str])
 
-    class CustomList[T](list[T]):
+    T = TypeVar("T")
+    K = TypeVar("K")
+    V = TypeVar("V")
+
+    class CustomList(list[T]):
         pass
 
-    class CustomDict[K, V](Mapping[K, V]):
+    class CustomDict(Mapping[K, V]):
         pass
 
     with pytest.raises(RuntimeException):
