@@ -144,7 +144,8 @@ Pull the image
 
     Together with the access to the inmanta container repo, you should also have received a license and an entitlement file.
     The orchestrator will need them in order to run properly.  We will assume that these files are named ``license.key`` and
-    ``entitlement.jwe`` and are located in the folder ``/etc/inmanta`` on the host where the containers will be deployed.
+    ``entitlement.jwe`` and are located in the folder ``/etc/inmanta`` on the host where the containers will be deployed and
+    owned by the user that will be running the orchestrator container.
 
 Start the server with systemd
 #############################
@@ -155,7 +156,7 @@ To learn more about quadlet and how podman integrates nicely with systemd, pleas
 Step 1: Install the required files
 ----------------------------------
 
-We need to create three files: one pod file, and two containers (one for the database and one for the orchestrator) that will join said pod.
+We need to create two files: two containers, one for the database and one for the orchestrator.
     
 .. tab-set::
 
@@ -168,7 +169,6 @@ We need to create three files: one pod file, and two containers (one for the dat
 
             .config/containers/systemd/
             ├── inmanta-orchestrator-db.container
-            ├── inmanta-orchestrator.pod
             └── inmanta-orchestrator-server.container
 
     .. tab-item:: Root setup
@@ -180,22 +180,7 @@ We need to create three files: one pod file, and two containers (one for the dat
 
             /etc/containers/systemd/users/
             ├── inmanta-orchestrator-db.container
-            ├── inmanta-orchestrator.pod
             └── inmanta-orchestrator-server.container
-
-The file ``inmanta-orchestrator.pod`` defines a pod that will group our two containers in a shared network namespace.
-We decide to expose the the port 8888 of the orchestrator container on localhost (on the host).
-
-.. code-block:: systemd
-
-    [Unit]
-    Description=Inmanta orchestrator
-    Documentation=https://docs.inmanta.com
-
-    [Pod]
-    PodName=inmanta
-    ServiceName=inmanta-orchestrator
-    PublishPort=127.0.0.1:8888:8888
 
 The file ``inmanta-orchestrator-db.container`` defines the database container, its storage is persisted in a volume named ``inmanta-db-data``.
 
@@ -210,9 +195,13 @@ The file ``inmanta-orchestrator-db.container`` defines the database container, i
     Image=docker.io/library/postgres:16
     Environment=POSTGRES_USER=inmanta
     Environment=POSTGRES_PASSWORD=inmanta
-    UserNS=keep-id:uid=999,gid=999
+    # The following mappings allow you to use bind mounts instead of volumes
+    # for persisting the storage of the orchestrator, while making sure that
+    # all the files on the host file system will be owned by the user running
+    # the container.  When using volumes it is optional.
+    # UIDMap=+999:0:1
+    # GIDMap=+999:0:1
     Volume=inmanta-db-data:/var/lib/postgresql/data:z
-    Pod=inmanta-orchestrator.pod
 
 The file ``inmanta-orchestrator-server.container`` defines the orchestrator containers, its storage is persisted in a volume named ``inmanta-server-data``
 and its logs in a volume named ``inmanta-server-logs``.
@@ -228,13 +217,18 @@ and its logs in a volume named ``inmanta-server-logs``.
         [Container]
         ContainerName=inmanta-orchestrator
         Image=ghcr.io/inmanta/orchestrator:latest
-        Environment=INMANTA_DATABASE_HOST=127.0.0.1
+        PublishPort=127.0.0.1:8888:8888
+        Environment=INMANTA_DATABASE_HOST=inmanta-db
         Environment=INMANTA_DATABASE_USERNAME=inmanta
         Environment=INMANTA_DATABASE_PASSWORD=inmanta
-        UserNS=keep-id:uid=997,gid=995
+        # The following mappings allow you to use bind mounts instead of volumes
+        # for persisting the storage of the orchestrator, while making sure that
+        # all the files on the host file system will be owned by the user running
+        # the container.  When using volumes it is optional.
+        # UIDMap=+997:0:1
+        # GIDMap=+995:0:1
         Volume=inmanta-server-data:/var/lib/inmanta:z
         Volume=inmanta-server-logs:/var/log/inmanta:z
-        Pod=inmanta-orchestrator.pod
 
 .. only:: iso
 
@@ -251,15 +245,20 @@ and its logs in a volume named ``inmanta-server-logs``.
         [Container]
         ContainerName=inmanta-orchestrator
         Image=containers.inmanta.com/containers/service-orchestrator:|version_major|
-        Environment=INMANTA_DATABASE_HOST=127.0.0.1
+        PublishPort=127.0.0.1:8888:8888
+        Environment=INMANTA_DATABASE_HOST=inmanta-db
         Environment=INMANTA_DATABASE_USERNAME=inmanta
         Environment=INMANTA_DATABASE_PASSWORD=inmanta
-        UserNS=keep-id:uid=997,gid=995
+        # The following mappings allow you to use bind mounts instead of volumes
+        # for persisting the storage of the orchestrator, while making sure that
+        # all the files on the host file system will be owned by the user running
+        # the container.  When using volumes it is optional.
+        # UIDMap=+997:0:1
+        # GIDMap=+995:0:1
         Volume=inmanta-server-data:/var/lib/inmanta:z
         Volume=inmanta-server-logs:/var/log/inmanta:z
         Volume=/etc/inmanta/license.key:/etc/inmanta/license.key:z
         Volume=/etc/inmanta/entitlement.jwe:/etc/inmanta/entitlement.jwe:z
-        Pod=inmanta-orchestrator.pod
 
 Step 2: Generate the systemd services
 -------------------------------------
@@ -285,7 +284,7 @@ Once the quadlet files are in place, let podman generate the corresponding syste
 Step 3: Start the orchestrator
 ------------------------------
 
-Then start the orchestrator pod by running the following command:
+Then start the orchestrator database and server by running the following commands:
 
 .. tab-set::
 
@@ -294,18 +293,20 @@ Then start the orchestrator pod by running the following command:
 
         .. code-block:: console
 
-            $ systemctl --user start inmanta-orchestrator.service
+            $ systemctl --user start inmanta-orchestrator-db.service
+            $ systemctl --user start inmanta-orchestrator-server.service
 
     .. tab-item:: Root setup
         :sync: rootful-setup
 
         .. code-block:: console
 
-            # sudo -i -u inmanta -- systemctl --user start inmanta-orchestrator.service
+            # sudo -i -u inmanta -- systemctl --user start inmanta-orchestrator-db.service
+            # sudo -i -u inmanta -- systemctl --user start inmanta-orchestrator-server.service
 
 You should be able to reach the orchestrator at this address: `http://127.0.0.1:8888 <http://127.0.0.1:8888>`_ on the host.
 
-(Optional) To make sure the orchestrator is started when the host is booted, enable the pod service:
+(Optional) To make sure the orchestrator is started when the host is booted, enable the container services:
 
 .. tab-set::
 
@@ -314,14 +315,16 @@ You should be able to reach the orchestrator at this address: `http://127.0.0.1:
 
         .. code-block:: console
 
-            $ systemctl --user enable inmanta-orchestrator.service
+            $ systemctl --user enable inmanta-orchestrator-db.service
+            $ systemctl --user enable inmanta-orchestrator-server.service
 
     .. tab-item:: Root setup
         :sync: rootful-setup
 
         .. code-block:: console
 
-            # sudo -i -u inmanta -- systemctl --user enable inmanta-orchestrator.service
+            # sudo -i -u inmanta -- systemctl --user enable inmanta-orchestrator-db.service
+            # sudo -i -u inmanta -- systemctl --user enable inmanta-orchestrator-server.service
 
 Overwrite default server configuration
 ######################################
@@ -368,7 +371,7 @@ Mounting files/directories
 The recommended way to persist the orchestrator data is to use podman volumes, as shown in the example above.
 However if you really need to mount a file or directory from the host, you can use bind mounts.
 You just need to make sure to configure podman to map your user on the host to the inmanta user inside the container.
-This can be done easily using the ``UserNS`` option and is already done for you in the example above.
+This can be done easily using the ``UIDMap`` and ``GIDMap`` options as shown in the example above.
 
 Log rotation
 ############
