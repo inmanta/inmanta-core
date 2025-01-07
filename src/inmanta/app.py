@@ -1105,6 +1105,7 @@ def app() -> None:
         except KeyboardInterrupt as e:
             report(e)
             sys.exit(1)
+        inst = InmantaLoggerConfig.get_current_instance()
         sys.exit(0)
 
 

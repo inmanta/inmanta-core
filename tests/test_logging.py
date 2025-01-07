@@ -235,7 +235,7 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
 
 def test_log_file_or_template(tmp_path):
 
-    with pytest.raises(Exception, match=f"Logging config file {str(tmp_path / "test")} doesn't exist."):
+    with pytest.raises(Exception, match=f"Logging config file {str(tmp_path / 'test')} doesn't exist."):
         # TODO: do we want more specific exceptions?
         load_config_file_to_dict(str(tmp_path / "test"), {})
 
