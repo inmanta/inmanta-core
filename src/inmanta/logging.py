@@ -787,6 +787,13 @@ class InmantaLoggerConfig:
         Used to select which config file option to use (logging.component)
         :param context: context variables to use if the config file is a template
         """
+        LOGGER.debug("apply_options")
+        LOGGER.debug(options)
+        LOGGER.debug(component)
+        LOGGER.debug(context)
+
+        LOGGER.debug("---"*10)
+
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
         if context is None:

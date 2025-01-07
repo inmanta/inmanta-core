@@ -510,6 +510,7 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
     component="compiler",
 )
 def export(options: argparse.Namespace) -> None:
+    LOGGER.debug("BLAH")
     resource_sets_to_remove: set[str] = set(options.delete_resource_set) if options.delete_resource_set else set()
 
     if const.INMANTA_REMOVED_SET_ID in os.environ:
@@ -1045,7 +1046,9 @@ def app() -> None:
 
     # Log config
     component = options.component if hasattr(options, "component") else None
+    LOGGER.error("before applying options")
     log_config.apply_options(options, component, log_context)
+    LOGGER.error("after applying options")
     logging.captureWarnings(True)
 
     if options.inmanta_version:

@@ -465,12 +465,13 @@ class CompileRun:
                 "--export-compile-data-file",
                 compile_data_json_file.name,
             ]
-
             # # Pass down the logging config to the compiler
             compiler_log_config_file: str | None = compiler_log_config.get()
             if compiler_log_config_file:
                 cmd.append("--logging-config")
                 cmd.append(os.path.abspath(compiler_log_config_file))
+            cmd.append("--timed-logs")
+
 
             if self.request.exporter_plugin:
                 cmd.append("--export-plugin")

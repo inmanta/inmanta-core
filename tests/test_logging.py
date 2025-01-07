@@ -18,6 +18,8 @@
 
 import logging
 import os.path
+import shutil
+import subprocess
 import sys
 import uuid
 from collections.abc import Mapping
@@ -29,9 +31,12 @@ import yaml
 
 import inmanta
 from inmanta import config
-from inmanta.config import logging_config
+from inmanta.config import logging_config, compiler_log_config
 from inmanta.const import ENVIRON_FORCE_TTY
 from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, LoggingConfigFromFile, MultiLineFormatter, Options
+from inmanta.server import SLICE_SERVER
+from inmanta.util import get_compiler_version
+from utils import wait_for_version
 
 
 def load_config_file_to_dict(file_name: str, context: Mapping[str, str]) -> dict[str, object]:
@@ -345,7 +350,7 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
 
 def test_log_file_or_template(tmp_path):
 
-    with pytest.raises(Exception, match=f"Logging config file {str(tmp_path / "test")} doesn't exist."):
+    with pytest.raises(Exception, match=f"Logging config file {str(tmp_path / 'test')} doesn't exist."):
         # TODO: do we want more specific exceptions?
         load_config_file_to_dict(str(tmp_path / "test"), {})
 
@@ -568,3 +573,89 @@ def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdi
     logger.info("test")
     captured = capsys.readouterr()
     assert "CLI -- test" in captured.out
+
+@pytest.fixture
+def setup_compiler_logging(tmpdir):
+    compiler_logging_config_file = os.path.join(tmpdir, "config.yml")
+    with open(compiler_logging_config_file, "w") as fh:
+        fh.write(
+            """
+                disable_existing_loggers: false
+                formatters:
+                  console_formatter:
+                    format: "COMPILER_CONFIG_FLAG -- %(message)s"
+                handlers:
+                  console_handler:
+                    class: logging.StreamHandler
+                    formatter: console_formatter
+                    level: DEBUG
+                    stream: ext://sys.stdout
+                root:
+                  handlers:
+                  - console_handler
+                  level: INFO
+                version: 1
+            """
+        )
+    compiler_log_config.set(compiler_logging_config_file)
+
+async def test_server_recompile(setup_compiler_logging, server, client, environment, monkeypatch):
+    """
+    Test a recompile on the server and verify recompile triggers
+    """
+
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), "compiler")
+    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "project")
+    print("Project at: ", project_dir)
+
+    shutil.copytree(project_source, project_dir)
+    subprocess.check_output(["git", "init"], cwd=project_dir)
+    subprocess.check_output(["git", "add", "*"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=project_dir)
+    subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_dir)
+
+    # Set environment variable to be passed to the compiler
+    key_env_var = "TEST_MESSAGE"
+    value_env_var = "a_message"
+    monkeypatch.setenv(key_env_var, value_env_var)
+
+    # add main.cf
+    with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
+        fd.write(
+            f"""
+        import std::testing
+
+        host = std::Host(name="test", os=std::linux)
+        std::testing::NullResource(name=host.name)
+        std::print(std::get_env("{key_env_var}"))
+    """
+        )
+
+    result = await client.notify_change(environment)
+    assert result.code == 200
+
+    versions = await wait_for_version(client, environment, 1, compile_timeout=40)
+    assert versions["versions"][0]["total"] == 1
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
+
+    # get compile reports and make sure the environment variables are not logged
+    reports = await client.get_reports(environment)
+    assert reports.code == 200
+    assert len(reports.result["reports"]) == 1
+    env_vars_compile = reports.result["reports"][0]["environment_variables"]
+    compile_id = reports.result["reports"][0]["id"]
+    assert key_env_var not in env_vars_compile
+
+
+    report = await client.get_report(uuid.UUID(compile_id))
+    assert report.code == 200
+
+    # Get the compile outstream
+    for report in  report.result["report"]["reports"]:
+        if report["name"] == 'Recompiling configuration model':
+            compile_oustream = report["outstream"]
+            break
+
+
+    assert "compiler       DEBUG   COMPILER_CONFIG_FLAG -- Starting compile" in compile_oustream
