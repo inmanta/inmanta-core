@@ -86,7 +86,9 @@ class ResourceIntentChange(Enum):
 
     NEW = enum.auto()
     """
-    To be considered a new resource, even if one with the same resource id is already managed.
+    To be considered a new resource, even if one with the same resource id is already managed in the current version.
+    e.g. if multiple versions have been released since the currently managed one, and in those a resource is deleted,
+    then reappears, we consider it new for all purposes.
     """
 
     UPDATED = enum.auto()

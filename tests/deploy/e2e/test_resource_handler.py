@@ -188,7 +188,6 @@ async def test_format_token_in_logline(server, agent, client, environment, resou
     assert result.code == 200
 
     # do a deploy
-    # TODO: is this change correct?
     with caplog.at_level("INFO"):
         result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
         assert result.code == 200

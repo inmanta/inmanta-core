@@ -3121,6 +3121,3 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
     # - resource becomes undefined and then defined again and vice versa
     # - resource is new+undefined / updated+undefined
     # - verify requires => like resources, should simply be `== all_models[-1].requires`, same for provides
-
-
-# TODO: test case for should_skip_for_dependencies() race
