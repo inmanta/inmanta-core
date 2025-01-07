@@ -26,7 +26,7 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
-from inmanta.server import config, SLICE_AGENT_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, config
 from inmanta.util import parse_timestamp
 
 
@@ -274,6 +274,7 @@ async def test_agent_process_details(client, environment: str) -> None:
     result = await client.get_agent_process_details(environment, process_sid, report=True)
     assert result.code == 200
     assert result.result["data"]["state"] is None
+
 
 async def test_agent_without_instance_or_process(server, client, environment):
     """
