@@ -1249,7 +1249,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
                                     END) as status""",
             from_clause=f"""
                             FROM {Agent.table_name()} a
-                            LEFT JOIN {AgentInstance.table_name()} ai ON a.id_primary=ai.id
+                            LEFT JOIN {AgentInstance.table_name()} ai ON a.id_primary = ai.id
                             LEFT JOIN {AgentProcess.table_name()} ap ON ai.process = ap.sid
                             """,
             filter_statements=[" a.environment = $1 ", " a.name <> $2 "],
