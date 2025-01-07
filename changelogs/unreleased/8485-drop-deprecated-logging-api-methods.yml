@@ -1,6 +1,6 @@
 description: >
-  Drop deprecated methods: `set_log_level`, `set_log_formatter`, `set_logfile_location` and `get_handler`
-  from the stable api of the logging.
+  Dropped deprecated methods `set_log_level`, `set_log_formatter`, `set_logfile_location` and `get_handler`
+  from `inmanta.logging.InmantaLoggerConfig`. Use the `apply_options` method or a log config file instead.
 issue-nr: 8485
 change-type: minor
 destination-branches: [master]
