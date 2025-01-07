@@ -339,8 +339,8 @@ the orchestrator image contains some `default environment variable values <https
 Setting environment variables
 #############################
 
-The inmanta server will share any environment variable it received from docker with all its compiler and agent sub processes.  So if you need
-to make some environment variables available to the compiler or agent, you can simply tell docker to pass them on to the orchestrator container.
+The inmanta server will share any environment variable it received from podman with all its compiler and agent sub processes.  So if you need
+to make some environment variables available to the compiler or agent, you can simply tell podman to pass them on to the orchestrator container.
 In the example shown above, this can be done by using either of the ``Environment`` or ``EnvironmentFile`` options in the orchestrator container unit (``inmanta-orchestrator-server.container``).
 More details about these options can be found in `podman's documentation <https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html#container-units-container>`_.
 
