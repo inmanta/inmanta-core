@@ -128,7 +128,7 @@ Converting to fine grained configuration
 
 A tool is provided to convert the existing coarse grained configuration into a config file.
 
-For example, to convert the config for a component, take the command you use to start it, then put `print-default-logging-config` before the `server`, `compiler` or `scheduler`:
+For example, to convert the config for a component, take the command you use to start it, then put `print-default-logging-config --output <output_file>` before the `server`, `compiler` or `scheduler`:
 
 .. code-block:: sh
 
@@ -136,7 +136,9 @@ For example, to convert the config for a component, take the command you use to 
         --log-file /var/log/inmanta/server.log \
         --log-file-level INFO \
         --timed-logs \
-        print-default-logging-config server
+        print-default-logging-config \
+        --output config.yml \
+        server
 
 
 
