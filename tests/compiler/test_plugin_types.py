@@ -33,10 +33,14 @@ def test_conversion():
     assert inmanta_type.List() == to_dsl_type(list)
     assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(list[str])
     assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(Sequence[str])
+    assert inmanta_type.List() == to_dsl_type(Sequence)
+    assert inmanta_type.List() == to_dsl_type(collections.abc.Sequence)
     assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(collections.abc.Sequence[str])
     assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type(dict)
+    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type(Mapping)
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(dict[str, str])
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(Mapping[str, str])
+
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(collections.abc.Mapping[str, str])
 
     assert Null() == to_dsl_type(Union[None])

@@ -234,7 +234,9 @@ python_to_model = {
     int: inmanta_type.Integer(),
     bool: inmanta_type.Bool(),
     dict: inmanta_type.TypedDict(inmanta_type.Type()),
+    Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
     list: inmanta_type.List(),
+    Sequence: inmanta_type.List(),
     object: inmanta_type.Type(),
 }
 

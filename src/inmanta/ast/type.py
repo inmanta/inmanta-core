@@ -398,7 +398,7 @@ class List(Type):
     This class refers to the list type used in plugin annotations. For the list type in the Inmanta DSL, see `LiteralList`.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         Type.__init__(self)
 
     def validate(self, value: Optional[object]) -> bool:
