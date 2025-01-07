@@ -292,7 +292,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
             return inmanta_type.TypedDict(to_dsl_type(args[1]))
 
         # List, set, ...
-        if issubclass(origin, collections.abc.Collection):
+        if issubclass(origin, collections.abc.Sequence):
             args = typing.get_args(python_type)
             if not args:
                 return inmanta_type.List()

@@ -96,13 +96,13 @@ class Type(Locatable):
         """
         return base_type
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if type(self) != Type:  # noqa: E721
             # Not for children
             return NotImplemented
         return type(self) == type(other)  # noqa: E721
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(type(self))
 
 
@@ -114,12 +114,12 @@ class NamedType(Type, Named):
     def type_string(self) -> str:
         return self.get_full_name()
 
-    def __eq__(self, other):
+    def __eq__(self, other:object) -> bool:
         if not isinstance(other, NamedType):
             return False
         return self.get_full_name() == other
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.get_full_name())
 
 
@@ -423,7 +423,7 @@ class List(Type):
     def get_location(self) -> None:
         return None
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721
 
 
@@ -650,7 +650,7 @@ class ConstraintType(NamedType):
         assert self.expression is not None
         self.expression.normalize()
 
-    def set_constraint(self, expression) -> None:
+    def set_constraint(self, expression: "ExpressionStatement") -> None:
         """
         Set the constraint for this type. This baseclass for constraint
         types requires the constraint to be set as a regex that can be
@@ -659,7 +659,7 @@ class ConstraintType(NamedType):
         self.expression = expression
         self._constraint = create_function(self, expression)
 
-    def get_constraint(self):
+    def get_constraint(self) -> "ExpressionStatement | None":
         """
         Get the string representation of the constraint
         """
