@@ -1101,7 +1101,8 @@ class ResourceScheduler(TaskManager):
         Update the state of the scheduler based on the DeploymentResult of the given resource.
 
         :raise StaleResource: This update is about a resource that is no longer managed by the server.
-        :return: The new blocked status of the resource. Or None if the blocked status shouldn't be updated.
+        :return: The new state of the resource, even if no changes were made. The returned object is a static copy that
+            represents the state at the end of the deploy, and can therefore safely be returned out of the scheduler lock.
         """
         resource: ResourceIdStr = result.resource_id
         deployment_result: DeploymentResult = DeploymentResult.from_handler_resource_state(result.resource_state)
@@ -1134,7 +1135,7 @@ class ResourceScheduler(TaskManager):
                 state.deployment_result = deployment_result
                 if recovered_from_failure:
                     self._send_events(details, stale_deploy=True, recovered_from_failure=True)
-                return state
+                return state.copy()
 
             # We are not stale
             state.status = (
@@ -1175,7 +1176,7 @@ class ResourceScheduler(TaskManager):
             if state.blocked is BlockedStatus.NO:
                 self._timer_manager.update_timer(resource, is_compliant=(state.status is ComplianceStatus.COMPLIANT))
 
-            return state
+            return state.copy()
 
     def _send_events(
         self,
