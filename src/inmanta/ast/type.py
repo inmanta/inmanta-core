@@ -96,6 +96,15 @@ class Type(Locatable):
         """
         return base_type
 
+    def __eq__(self, other: object) -> bool:
+        if type(self) != Type:  # noqa: E721
+            # Not for children
+            return NotImplemented
+        return type(self) == type(other)  # noqa: E721
+
+    def __hash__(self) -> int:
+        return hash(type(self))
+
 
 class NamedType(Type, Named):
     def get_double_defined_exception(self, other: "NamedType") -> "DuplicateException":
@@ -104,6 +113,14 @@ class NamedType(Type, Named):
 
     def type_string(self) -> str:
         return self.get_full_name()
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NamedType):
+            return False
+        return self.get_full_name() == other.get_full_name()
+
+    def __hash__(self) -> int:
+        return hash(self.get_full_name())
 
 
 @stable_api
@@ -370,6 +387,9 @@ class String(Primitive):
     def get_location(self) -> None:
         return None
 
+    def __eq__(self, other: object) -> bool:
+        return type(self) == type(other)  # noqa: E721
+
 
 @stable_api
 class List(Type):
@@ -378,7 +398,7 @@ class List(Type):
     This class refers to the list type used in plugin annotations. For the list type in the Inmanta DSL, see `LiteralList`.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         Type.__init__(self)
 
     def validate(self, value: Optional[object]) -> bool:
@@ -402,6 +422,9 @@ class List(Type):
 
     def get_location(self) -> None:
         return None
+
+    def __eq__(self, other: object) -> bool:
+        return type(self) == type(other)  # noqa: E721
 
 
 @stable_api
@@ -544,6 +567,11 @@ class TypedDict(Dict):
     def get_location(self) -> None:
         return None
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, TypedDict):
+            return NotImplemented
+        return self.element_type == other.element_type
+
 
 @stable_api
 class LiteralDict(TypedDict):
@@ -622,7 +650,7 @@ class ConstraintType(NamedType):
         assert self.expression is not None
         self.expression.normalize()
 
-    def set_constraint(self, expression) -> None:
+    def set_constraint(self, expression: "ExpressionStatement") -> None:
         """
         Set the constraint for this type. This baseclass for constraint
         types requires the constraint to be set as a regex that can be
@@ -631,7 +659,7 @@ class ConstraintType(NamedType):
         self.expression = expression
         self._constraint = create_function(self, expression)
 
-    def get_constraint(self):
+    def get_constraint(self) -> "ExpressionStatement | None":
         """
         Get the string representation of the constraint
         """
