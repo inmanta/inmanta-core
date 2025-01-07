@@ -25,7 +25,8 @@ import subprocess
 import typing
 import warnings
 from collections import abc
-from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Sequence, Type, TypeVar
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Type, TypeVar
 
 import typing_inspect
 
@@ -234,11 +235,11 @@ python_to_model = {
     int: inmanta_type.Integer(),
     bool: inmanta_type.Bool(),
     dict: inmanta_type.TypedDict(inmanta_type.Type()),
+    typing.Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
     Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
-    collections.abc.Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
     list: inmanta_type.List(),
+    typing.Sequence: inmanta_type.List(),
     Sequence: inmanta_type.List(),
-    collections.abc.Sequence: inmanta_type.List(),
     object: inmanta_type.Type(),
 }
 
@@ -280,7 +281,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
         origin = typing.get_origin(python_type)
 
         # dict
-        if issubclass(origin, collections.abc.Mapping):
+        if issubclass(origin, Mapping):
             if origin in [collections.abc.Mapping, dict, typing.Mapping]:
                 args = typing_inspect.get_args(python_type)
                 if not args:
@@ -299,7 +300,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
                 raise TypingException(None, f"invalid type {python_type}, dictionary types should be Mapping or dict")
 
         # List
-        if issubclass(origin, collections.abc.Sequence):
+        if issubclass(origin, Sequence):
             if origin in [collections.abc.Sequence, list, typing.Sequence]:
                 args = typing.get_args(python_type)
                 if not args:
