@@ -916,8 +916,14 @@ def cmd_parser() -> argparse.ArgumentParser:
 
 
 def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
-    subparser = parser.add_subparsers(title="subcommand", dest="cmd")
+    parser.add_argument(
+        "-o",
+        "--output",
+        dest="file",
+        help="The file to which the logging config has to be written.",
+    )
 
+    subparser = parser.add_subparsers(title="subcommand", dest="cmd")
     subparser.add_parser(
         "server",
         help="Output default log file for the server, given the current configuration file and options",
@@ -989,7 +995,11 @@ def default_logging_config(options: argparse.Namespace) -> None:
             for context_var in context_vars:
                 raw_dump = raw_dump.replace(f"{place_holder}{context_var}{place_holder}", "{" + context_var + "}")
 
-        print(raw_dump)
+        if options.file is not None:
+            with open(options.file, "w") as fh:
+                fh.write(raw_dump)
+        else:
+            print(raw_dump)
     finally:
         # Revert this env var back to its original state
         if original_force_tty is None:

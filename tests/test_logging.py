@@ -611,3 +611,18 @@ async def test_print_default_logging_cmd(inmanta_config, tmp_path):
         normal_config_stdout = stdout.decode("utf-8")
         # Assert that the outputs are equal
         assert normal_config_stdout == tty_config_stdout
+
+        # Use the --output option
+        output_file = tmp_path / "test.yml"
+        args = [sys.executable, "-m", "inmanta.app", "print-default-logging-config", "--output", output_file, component]
+        process = await subprocess.create_subprocess_exec(*args)
+        try:
+            await wait_for(process.communicate(), timeout=5)
+        except TimeoutError as e:
+            process.kill()
+            await process.communicate()
+            raise e
+        assert process.returncode == 0
+
+        with open(output_file, "r") as fh:
+            assert fh.read().strip() == tty_config_stdout.strip()
