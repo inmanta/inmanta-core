@@ -52,3 +52,15 @@ def test_conversion():
 
     with pytest.raises(RuntimeException):
         to_dsl_type(set[str])
+
+    class CustomList[T](list[T]):
+        pass
+
+    class CustomDict[K, V](Mapping[K, V]):
+        pass
+
+    with pytest.raises(RuntimeException):
+        to_dsl_type(CustomList[str])
+
+    with pytest.raises(RuntimeException):
+        to_dsl_type(CustomDict[str, str])

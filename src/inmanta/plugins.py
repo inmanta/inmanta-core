@@ -235,8 +235,10 @@ python_to_model = {
     bool: inmanta_type.Bool(),
     dict: inmanta_type.TypedDict(inmanta_type.Type()),
     Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
+    collections.abc.Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
     list: inmanta_type.List(),
     Sequence: inmanta_type.List(),
+    collections.abc.Sequence: inmanta_type.List(),
     object: inmanta_type.Type(),
 }
 
@@ -279,26 +281,32 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
 
         # dict
         if issubclass(origin, collections.abc.Mapping):
-            args = typing_inspect.get_args(python_type)
-            if not args:
-                return inmanta_type.TypedDict(inmanta_type.Type())
+            if origin in [collections.abc.Mapping, dict, typing.Mapping]:
+                args = typing_inspect.get_args(python_type)
+                if not args:
+                    return inmanta_type.TypedDict(inmanta_type.Type())
 
-            if not issubclass(args[0], str):
-                raise TypingException(
-                    None, f"invalid type {python_type}, the keys of any dict should be 'str', got {args[0]} instead"
-                )
+                if not issubclass(args[0], str):
+                    raise TypingException(
+                        None, f"invalid type {python_type}, the keys of any dict should be 'str', got {args[0]} instead"
+                    )
 
-            if len(args) == 1:
-                return inmanta_type.TypedDict(inmanta_type.Type())
+                if len(args) == 1:
+                    return inmanta_type.TypedDict(inmanta_type.Type())
 
-            return inmanta_type.TypedDict(to_dsl_type(args[1]))
+                return inmanta_type.TypedDict(to_dsl_type(args[1]))
+            else:
+                raise TypingException(None, f"invalid type {python_type}, dictionary types should be Mapping or dict")
 
         # List
         if issubclass(origin, collections.abc.Sequence):
-            args = typing.get_args(python_type)
-            if not args:
-                return inmanta_type.List()
-            return inmanta_type.TypedList(to_dsl_type(args[0]))
+            if origin in [collections.abc.Sequence, list, typing.Sequence]:
+                args = typing.get_args(python_type)
+                if not args:
+                    return inmanta_type.List()
+                return inmanta_type.TypedList(to_dsl_type(args[0]))
+            else:
+                raise TypingException(None, f"invalid type {python_type}, list types should be Sequence or list")
 
         # Set
         if issubclass(origin, collections.abc.Set):
