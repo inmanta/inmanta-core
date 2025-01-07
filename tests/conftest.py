@@ -875,6 +875,8 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
                 await agent.stop_working()
                 the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
                 for r, state in the_state.items():
+                    # TODO[#8541]: also persist TRANSIENT in database
+                    state.blocked = state.blocked.db_value()
                     print(r, state)
                 monkeypatch.setattr(agent.scheduler._work.agent_queues, "_new_agent_notify", lambda x: x)
                 await agent.start_working()
