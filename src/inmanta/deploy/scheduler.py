@@ -1172,6 +1172,8 @@ class ResourceScheduler(TaskManager):
                     # incorrect assumptions. If this happens, we mark it as unblocked and we trigger a warning.
                     state.blocked = BlockedStatus.NO
 
+                    # TODO: move to separate method!
+                    # TODO: is it appropriate as resource action log?
                     log_line: data.LogLine
                     bad_dependencies: Mapping[ResourceIdStr, const.ResourceState] = {
                         dependency: dependency_state
@@ -1208,8 +1210,9 @@ class ResourceScheduler(TaskManager):
                             (
                                 "Inconsistent internal state for resource %(resource)s. The inmanta resource scheduler"
                                 " assumed it was still blocked, pending a successful deploy of at least one of its requires."
-                                " However, all dependencies are already in a deployed state. This indicates a (non-critical)"
-                                " bug in the inmanta resource scheduler. Please report this incident."
+                                " However, all dependencies are already in a deployed state. This was expected to be impossible"
+                                " and it indicates a (non-critical) bug in the inmanta resource scheduler. Please report this"
+                                " incident."
                                 " In the meantime, if you encounter any resources stuck in the skipped state, triggering"
                                 " a repair will force them to be deployed anyway, working around the issue."
                             ),
