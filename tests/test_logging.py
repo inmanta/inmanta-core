@@ -580,7 +580,6 @@ async def test_output_default_logging_cmd(inmanta_config, tmp_path):
         else:
             output_file = str(tmp_path / f"{component}.yml")
 
-        context_var = ["-e", str(uuid.uuid4())] if component == "scheduler" else []
         args = [
             sys.executable,
             "-m",
@@ -588,7 +587,6 @@ async def test_output_default_logging_cmd(inmanta_config, tmp_path):
             "output-default-logging-config",
             "--component",
             component,
-            *context_var,
             output_file,
         ]
         process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE)
@@ -618,27 +616,6 @@ async def test_output_default_logging_cmd(inmanta_config, tmp_path):
         assert process.returncode == 1
 
         os.remove(output_file)
-
-    # Assert we get a proper error when the environment is not set when generating the logging config for the scheduler.
-    output_file = str(tmp_path / "test.yml.tmpl")
-    args = [
-        sys.executable,
-        "-m",
-        "inmanta.app",
-        "output-default-logging-config",
-        "--component",
-        "scheduler",
-        output_file,
-    ]
-    process = await subprocess.create_subprocess_exec(*args, stderr=subprocess.PIPE)
-    try:
-        (_, stderr) = await wait_for(process.communicate(), timeout=5)
-    except TimeoutError as e:
-        process.kill()
-        await process.communicate()
-        raise e
-    assert process.returncode == 1
-    assert "The -e option must be set when generating the config for the scheduler component." in stderr.decode()
 
     # Assert that the .tmpl suffix is enforced when generating the logging config for the scheduler.
     output_file = str(tmp_path / "test.yml")

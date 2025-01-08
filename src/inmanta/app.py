@@ -923,12 +923,6 @@ def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequen
         help="The component for which the logging configuration has to be generated.",
     )
     parser.add_argument(
-        "-e",
-        dest="environment",
-        help="The environment this logging config belongs to. This parameter must be provided when the"
-        " `--component scheduler` option is set.",
-    )
-    parser.add_argument(
         "output_file",
         help="The file where the logging config should be saved. For the scheduler component, this file must end with a .tmpl"
         " suffix, because a logging configuration template will be generated.",
@@ -947,8 +941,6 @@ def default_logging_config(options: argparse.Namespace) -> None:
         raise Exception(
             "The config being generated will be a template, but the given filename doesn't end with the .tmpl suffix."
         )
-    if options.config_for_component == "scheduler" and not options.environment:
-        raise Exception("The -e option must be set when generating the config for the scheduler component.")
 
     # Because we want to have contex vars in the files,
     #   but the file can also contain other f-string formatters, this is a bit tricky.
