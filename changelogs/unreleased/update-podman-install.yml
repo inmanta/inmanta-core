@@ -1,0 +1,5 @@
+change-type: patch
+description: Update podman install documentation
+destination-branches:
+- master
+sections: {}

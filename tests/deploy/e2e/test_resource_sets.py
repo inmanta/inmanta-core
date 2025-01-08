@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import datetime
 import uuid
 from collections import abc
 from typing import Optional
@@ -1268,6 +1269,7 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     update_manager = persistence.ToDbUpdateManager(client, env_id)
 
     # set key2 to deploying
+    start_time: datetime.datetime = datetime.datetime.now().astimezone()
     await update_manager.send_in_progress(
         action_id=uuid.uuid4(), resource_id=Id.parse_id(f"test::Resource[agent1,key=key2],v={version}")
     )
@@ -1291,6 +1293,7 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
             deployment_result=state.DeploymentResult.DEPLOYED,
             blocked=state.BlockedStatus.NO,
         ),
+        started=start_time,
     )
 
     # Partial compile

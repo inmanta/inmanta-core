@@ -320,7 +320,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                 is_undefined=False,
                 is_orphan=False,
                 deployment_result=deployment_result,
-                blocked_status=blocked_status,
+                blocked_status=blocked_status.db_value(),
                 expected_compliance_status=compliance_status,
             )
 
@@ -366,7 +366,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
                 is_undefined=False,
                 is_orphan=False,
                 deployment_result=deployment_result,
-                blocked_status=blocked_status,
+                blocked_status=blocked_status.db_value(),
                 expected_compliance_status=compliance_status,
             )
     # Unreleased resources are not present in the resource_persistent_state table.
@@ -795,7 +795,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
             is_undefined=False,
             is_orphan=False,
             deployment_result=DeploymentResult.FAILED if status == "failed" else DeploymentResult.SKIPPED,
-            blocked_status=BlockedStatus.NO if status == "failed" else BlockedStatus.TRANSIENT,
+            blocked_status=BlockedStatus.NO if status == "failed" else BlockedStatus.TRANSIENT.db_value(),
             expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
         )
 
@@ -1007,7 +1007,7 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
         is_undefined=False,
         is_orphan=False,
         deployment_result=DeploymentResult.SKIPPED if dep_state.name in {"skip", "fail"} else DeploymentResult.DEPLOYED,
-        blocked_status=BlockedStatus.TRANSIENT if dep_state.name in {"skip", "fail"} else BlockedStatus.NO,
+        blocked_status=BlockedStatus.TRANSIENT.db_value() if dep_state.name in {"skip", "fail"} else BlockedStatus.NO,
         expected_compliance_status=(
             ComplianceStatus.NON_COMPLIANT if dep_state.name in {"skip", "fail"} else ComplianceStatus.COMPLIANT
         ),
@@ -1180,7 +1180,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         is_undefined=False,
         is_orphan=False,
         deployment_result=DeploymentResult.SKIPPED,
-        blocked_status=BlockedStatus.TRANSIENT,
+        blocked_status=BlockedStatus.TRANSIENT.db_value(),
         expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
     )
     assert_resource_persistent_state(
