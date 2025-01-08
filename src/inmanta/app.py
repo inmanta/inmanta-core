@@ -918,7 +918,7 @@ def cmd_parser() -> argparse.ArgumentParser:
 def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     parser.add_argument(
         "--component",
-        dest="component",
+        dest="config_for_component",
         choices=["server", "scheduler", "compiler"],
         help="The component for which the logging configuration has to be generated.",
     )
@@ -943,11 +943,11 @@ def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequen
 def default_logging_config(options: argparse.Namespace) -> None:
     if os.path.exists(options.output_file):
         raise Exception(f"The requested output location already exists: {options.output_file}")
-    if options.component == "scheduler" and not options.output_file.endswith(".tmpl"):
+    if options.config_for_component == "scheduler" and not options.output_file.endswith(".tmpl"):
         raise Exception(
             "The config being generated will be a template, but the given filename doesn't end with the .tmpl suffix."
         )
-    if options.component == "scheduler" and not options.environment:
+    if options.config_for_component == "scheduler" and not options.environment:
         raise Exception("The -e option must be set when generating the config for the scheduler component.")
 
     # Because we want to have contex vars in the files,
@@ -977,9 +977,9 @@ def default_logging_config(options: argparse.Namespace) -> None:
         os.environ[const.ENVIRON_FORCE_TTY] = "yes"
     try:
         component_config = InmantaLoggerConfig(stream=sys.stdout, no_install=True)
-        component_config.apply_options(options, options.component, context)
+        component_config.apply_options(options, options.config_for_component, context)
 
-        if options.component == "server":
+        if options.config_for_component == "server":
             # Upgrade with extensions
             ibl = InmantaBootloader()
             ibl.start_loggers_for_extensions(component_config)
@@ -1063,12 +1063,7 @@ def app() -> None:
 
     # Log config
     component = options.component if hasattr(options, "component") else None
-    if hasattr(options, "func") and options.func.__name__ == "default_logging_config":
-        # The logging config related CLI options, passed to the output-default-logging-config command, are intended for
-        # the generated logging config and not for the logging of the execution of the command itself.
-        log_config.apply_options(Options(), component=None, context=log_context)
-    else:
-        log_config.apply_options(options, component=component, context=log_context)
+    log_config.apply_options(options, component=component, context=log_context)
     logging.captureWarnings(True)
 
     if options.inmanta_version:
