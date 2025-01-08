@@ -520,7 +520,9 @@ class ResourceScheduler(TaskManager):
 
         def _should_deploy(resource: ResourceIdStr) -> bool:
             if (resource_state := self._state.resource_state.get(resource)) is not None:
-                return resource_state.blocked is BlockedStatus.NO
+                # For now, we repair even resources marked as TRANSIENT, just in case our assumptions are wrong
+                # We will relax this once we have more confidence in the correct tracking of the state (#8580)
+                return resource_state.blocked is not BlockedStatus.YES
             # No state was found for this resource. Should probably not happen
             # but err on the side of caution and mark for redeploy.
             return True
@@ -575,6 +577,8 @@ class ResourceScheduler(TaskManager):
                 # The resource was removed from the model by the time this method was triggered
                 return
 
+            # When explicitly requested for a single resource, we allow deploying even deploys marked as
+            # BlockedStatus.TRANSIENT
             if self._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy
                 return
             self._timer_manager.stop_timer(resource)
@@ -1137,7 +1141,7 @@ class ResourceScheduler(TaskManager):
 
             # We are not stale
             state.status = (
-                ComplianceStatus.COMPLIANT if result.status is const.ResourceState.deployed else ComplianceStatus.NON_COMPLIANT
+                ComplianceStatus.COMPLIANT if deployment_result is DeploymentResult.DEPLOYED else ComplianceStatus.NON_COMPLIANT
             )
 
             # first update state, then send out events
@@ -1161,6 +1165,24 @@ class ResourceScheduler(TaskManager):
             elif deployment_result is DeploymentResult.DEPLOYED:
                 # Remove this resource from the dirty set if it is successfully deployed
                 self._state.dirty.discard(resource)
+                if state.blocked is BlockedStatus.TRANSIENT:
+                    # For now, we make sure to schedule even TRANSIENT resources for repair, just in case we have made
+                    # incorrect assumptions. This warning will trigger if that is the case. (#8580)
+                    LOGGER.warning(
+                        (
+                            # TODO: question for reviewers: is this message good? And is it sufficiently visible
+                            #   (should it be resource action log)?
+                            "Successfully deployed resource %s that was expected to skip for dependencies."
+                            " This likely indicates that its handler raised a SkipResourceForDependencies exception where it"
+                            " should have been a plain SkipResource exception. Please double check the handler implementation"
+                            " and the exception semantics."
+                            " If the raised exception is appropriate after all, this behavior may indicata a (non-critical)"
+                            " bug in inmanta's resource scheduler instead, in which case please report this incident."
+                            " If you encounter any resources stuck in the skipped state, a repair should resolve the issue."
+                        ),
+                        resource,
+                    )
+                    state.blocked = BlockedStatus.NO
             else:
                 # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
                 # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
