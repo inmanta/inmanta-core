@@ -210,14 +210,12 @@ class TaskManager(abc.ABC):
     async def deploy_done(self, intent: DeployIntent, result: executor.DeployResult) -> None:
         """
         Register the end of deployment for the given resource: update the resource state based on the deployment result
-        and inform its dependencies that deployment is finished.
-        Since knowledge of deployment result implies a finished deploy, it must only be set
-        when a deploy has just finished.
+        and inform its dependencies that deployment is finished. Depending on how fresh the intent is (compared to what is
+        currently managed, limited (for outdated) or no (for fully stale) scheduler state may be updated.
 
         Acquires appropriate locks
 
-        :param intent: The resource's deploy intent as returned by deploy_start(). Limited scheduler state is updated
-            if the hash indicates the state information is stale.
+        :param intent: The resource's deploy intent as returned by deploy_start().
         :param result: The DeployResult object describing the result of the deployment.
         """
 
