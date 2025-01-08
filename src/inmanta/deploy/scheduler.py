@@ -1069,7 +1069,7 @@ class ResourceScheduler(TaskManager):
     async def deploy_done(self, intent: DeployIntent, result: executor.DeployResult) -> None:
         state: Optional[ResourceState]
         try:
-            state = await self._update_scheduler_state_for_finished_deploy(intent.details.attribute_hash, result)
+            state = await self._update_scheduler_state_for_finished_deploy(intent, result)
         except StaleResource:
             # The resource is no longer managed (or in rare cases it has shortly become unmanaged sometime between this version
             # and the currently managed version, either way, the deploy that finished represents a stale intent).
@@ -1097,7 +1097,7 @@ class ResourceScheduler(TaskManager):
         await self.state_update_manager.set_parameters(fact_result=result)
 
     async def _update_scheduler_state_for_finished_deploy(
-        self, attribute_hash: str, result: executor.DeployResult
+        self, intent: DeployIntent, result: executor.DeployResult
     ) -> ResourceState:
         """
         Update the state of the scheduler based on the DeploymentResult of the given resource.
@@ -1128,7 +1128,7 @@ class ResourceScheduler(TaskManager):
             )
 
             # TODO[#8453]: make sure that timer is running even if we return early
-            if details.attribute_hash != attribute_hash or state.status is ComplianceStatus.UNDEFINED:
+            if details.attribute_hash != intent.details.attribute_hash or state.status is ComplianceStatus.UNDEFINED:
                 # We are stale but still the last deploy
                 # We can update the deployment_result (which is about last deploy)
                 # We can't update status (which is about active state only)
@@ -1168,24 +1168,55 @@ class ResourceScheduler(TaskManager):
                 # Remove this resource from the dirty set if it is successfully deployed
                 self._state.dirty.discard(resource)
                 if state.blocked is BlockedStatus.TRANSIENT:
-                    # TODO: test case
                     # For now, we make sure to schedule even TRANSIENT resources for repair, just in case we have made
-                    # incorrect assumptions. This warning will trigger if that is the case. (#8580)
-                    log_line: data.LogLine = data.LogLine.log(
-                        logging.WARNING,
-                        (
-                            "Successfully deployed resource %(resource)s that was expected to skip for dependencies. This"
-                            " likely indicates that its handler previously raised a SkipResourceForDependencies exception where"
-                            " it should have been a plain SkipResource exception. Please double check the handler"
-                            " implementation and the exception semantics."
-                            " If the raised exception is appropriate after all, this behavior may indicate a (non-critical)"
-                            " bug in inmanta's resource scheduler instead, in which case please report this incident."
-                            " If you encounter any resources stuck in the skipped state, a repair should resolve the issue."
-                        ),
-                        resource=resource,
-                    )
-                    result.messages.append(log_line)
+                    # incorrect assumptions. If this happens, we mark it as unblocked and we trigger a warning.
                     state.blocked = BlockedStatus.NO
+
+                    log_line: data.LogLine
+                    bad_dependencies: Mapping[ResourceIdStr, const.ResourceState] = {
+                        dependency: dependency_state
+                        for dependency, dependency_state in intent.dependencies.items()
+                        if dependency_state != const.ResourceState.deployed
+                    }
+                    if bad_dependencies:
+                        # TODO: test case
+                        log_line = data.LogLine.log(
+                            logging.WARNING,
+                            (
+                                "Resource %(resource)s was expected to skip for dependencies but it deployed successfully."
+                                " The handler for this resource raised a SkipResourceForDependencies exception in a previous"
+                                " execution, indicating that it would only be able to progress once all requires reached a"
+                                " deployed state. Some requires (%(dependencies)) are still in a non-deployed state,"
+                                " therefore it was assumed that a new deploy attempt would have no effect. However, because"
+                                " this is a relatively new feature, we decided to schedule it for repair anyway, to ensure"
+                                " that the impact of an incorrect usage of the exception would not lead to stuck resources,"
+                                " but we may not continue to do so in the future."
+                                " Please check your handler implementation, and make sure to raise the generic SkipResource"
+                                " rather than SkipResourceForDependencies if you wish to skip a deploy for any other reason"
+                                " than to wait until all requires are in a good state."
+                                " In the meantime, if you encounter any resources stuck in the skipped state, triggering"
+                                " a repair will force them to be deployed anyway."
+                                " Please report this incident if you believe your handler implementation is correct after all."
+                            ),
+                            resource=resource,
+                            dependencies=", ".join(f"{r}: {state.name}" for r, state in bad_dependencies.items()),
+                        )
+                    else:
+                        # TODO: test case
+                        log_line = data.LogLine.log(
+                            logging.WARNING,
+                            (
+                                "Inconsistent internal state for resource %(resource)s. The inmanta resource scheduler"
+                                " assumed it was still blocked, pending a successful deploy of at least one of its requires."
+                                " However, all dependencies are already in a deployed state. This indicates a (non-critical)"
+                                " bug in the inmanta resource scheduler. Please report this incident."
+                                " In the meantime, if you encounter any resources stuck in the skipped state, triggering"
+                                " a repair will force them to be deployed anyway, working around the issue."
+                            ),
+                            resource=resource,
+                            dependencies=", ".join(f"{r}: {state.name}" for r, state in bad_dependencies.items()),
+                        )
+                    result.messages.append(log_line)
             else:
                 # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
                 # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
