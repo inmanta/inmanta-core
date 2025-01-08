@@ -643,7 +643,7 @@ def setup_compiler_logging(tmpdir):
         )
     compiler_log_config.set(compiler_logging_config_file)
 
-
+@pytest.mark.slowtest
 async def test_server_passing_compiler_logging_config(setup_compiler_logging, server, client, environment):
     """
     Test that the server passes down the logging config to the compiler when starting it.
@@ -651,7 +651,6 @@ async def test_server_passing_compiler_logging_config(setup_compiler_logging, se
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), "compiler")
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "project")
-    print("Project at: ", project_dir)
 
     shutil.copytree(project_source, project_dir)
 
