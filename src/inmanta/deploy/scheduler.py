@@ -1176,7 +1176,7 @@ class ResourceScheduler(TaskManager):
                             " This likely indicates that its handler raised a SkipResourceForDependencies exception where it"
                             " should have been a plain SkipResource exception. Please double check the handler implementation"
                             " and the exception semantics."
-                            " If the raised exception is appropriate after all, this behavior may indicata a (non-critical)"
+                            " If the raised exception is appropriate after all, this behavior may indicate a (non-critical)"
                             " bug in inmanta's resource scheduler instead, in which case please report this incident."
                             " If you encounter any resources stuck in the skipped state, a repair should resolve the issue."
                         ),
