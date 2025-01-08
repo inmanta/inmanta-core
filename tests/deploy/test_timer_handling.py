@@ -18,7 +18,7 @@
 """
 
 import datetime
-from asyncio import Condition, Event
+from asyncio import Event
 from datetime import timedelta
 
 from inmanta.deploy.timers import ResourceTimer
