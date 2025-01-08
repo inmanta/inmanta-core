@@ -1174,6 +1174,7 @@ class ResourceScheduler(TaskManager):
 
                     # TODO: move to separate method!
                     # TODO: is it appropriate as resource action log?
+                    # TODO: consider whether we also want to log on a failed deploy
                     log_line: data.LogLine
                     bad_dependencies: Mapping[ResourceIdStr, const.ResourceState] = {
                         dependency: dependency_state
