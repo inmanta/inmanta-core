@@ -53,6 +53,16 @@ Pull the image
 
     This command will pull the latest version of the Inmanta Service Orchestrator image.
 
+.. only:: iso
+
+    Get the orchestrator license
+    ############################
+
+    Together with the access to the inmanta container repo, you should also have received a license and an entitlement file.
+    The orchestrator will need them in order to run properly.  We will assume that these files are named ``license.key`` and
+    ``entitlement.jwe`` and are located in the folder ``/etc/inmanta`` on the host where the containers will be deployed.
+
+
 Start the server with docker-compose
 ####################################
 
@@ -119,8 +129,8 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
                 volumes:
                     - inmanta-server-data:/var/lib/inmanta
                     - inmanta-server-logs:/var/log/inmanta
-                    - ./resources/license.key:/etc/inmanta/license.key
-                    - ./resources/entitlement.jwe:/etc/inmanta/entitlement.jwe
+                    - /etc/inmanta/license.key:/etc/inmanta/license.key
+                    - /etc/inmanta/entitlement.jwe:/etc/inmanta/entitlement.jwe
 
         volumes:
             inmanta-db-data: {}
@@ -128,9 +138,9 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
             inmanta-server-logs: {}
 
     You can paste this yaml snippet in a file named `docker-compose.yml` and ensure you have your license files available.
-    With the proposed config, they should be located in a ``resources/`` folder on the side of the docker-compose file you create,
-    and the license files should be named ``license.key`` and ``entitlement.jwe``. You can of course update the content
-    of the docker-compose file to match your current configuration.
+    With the proposed config, they should be located in a ``/etc/inmanta/`` folder, and the license files should be named 
+    ``license.key`` and ``entitlement.jwe``. You can of course update the content of the docker-compose file to match your
+    current configuration. 
     Then bring the containers up by running the following command:
 
 .. code-block:: sh
