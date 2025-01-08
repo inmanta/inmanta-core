@@ -673,7 +673,6 @@ async def test_server_passing_compiler_logging_config(setup_compiler_logging, se
     assert versions["versions"][0]["total"] == 1
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
 
-    # get compile reports and make sure the environment variables are not logged
     reports = await client.get_reports(environment)
     assert reports.code == 200
     assert len(reports.result["reports"]) == 1
