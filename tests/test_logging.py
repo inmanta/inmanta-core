@@ -643,6 +643,7 @@ def setup_compiler_logging(tmpdir):
         )
     compiler_log_config.set(compiler_logging_config_file)
 
+
 @pytest.mark.slowtest
 async def test_server_passing_compiler_logging_config(setup_compiler_logging, server, client, environment):
     """
