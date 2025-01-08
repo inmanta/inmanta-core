@@ -5532,8 +5532,8 @@ class Resource(BaseDocument):
 
     async def update_persistent_state(
         self,
-        last_deploy: Optional[datetime.datetime] = None,
-        last_deployed_version: Optional[int] = None,
+        last_deploy: datetime.datetime | None = None,
+        last_deployed_version: int | None = None,
         last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
         last_success: Optional[datetime.datetime] = None,
         last_produced_events: Optional[datetime.datetime] = None,
@@ -5978,9 +5978,23 @@ class ConfigurationModel(BaseDocument):
         return self.skipped_for_undeployable
 
     @classmethod
+    async def get_last_deployed_and_neg_increment(
+        cls, environment: uuid.UUID, version: int, *, connection: Optional[Connection] = None
+    ) -> tuple[set[ResourceIdStr], dict[ResourceIdStr, datetime.datetime]]:
+        outset, negative, last_deployed = await cls.get_increment_and_last_deployed(environment, version, connection=connection)
+        return outset, last_deployed
+
+    @classmethod
     async def get_increment(
         cls, environment: uuid.UUID, version: int, *, connection: Optional[Connection] = None
     ) -> tuple[set[ResourceIdStr], set[ResourceIdStr]]:
+        outset, negative, last_deployed = await cls.get_increment_and_last_deployed(environment, version, connection=connection)
+        return outset, negative
+
+    @classmethod
+    async def get_increment_and_last_deployed(
+        cls, environment: uuid.UUID, version: int, *, connection: Optional[Connection] = None
+    ) -> tuple[set[ResourceIdStr], set[ResourceIdStr], dict[ResourceIdStr, datetime.datetime]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -5991,6 +6005,8 @@ class ConfigurationModel(BaseDocument):
         error -> increment
         Deployed and same hash -> not increment
         deployed and different hash -> increment
+
+        We return a lot of data to not have to repeat the main query for different datapaths
         """
         # Depends on deploying
         projection_a_resource: list[typing.LiteralString] = [
@@ -6003,6 +6019,7 @@ class ConfigurationModel(BaseDocument):
             "last_produced_events",
             "last_deployed_attribute_hash",
             "last_non_deploying_status",
+            "last_deploy",
         ]
         projection_a_attributes: list[typing.LiteralString] = ["requires", const.RESOURCE_ATTRIBUTE_SEND_EVENTS]
         projection: list[typing.LiteralString] = ["resource_id", "status", "attribute_hash"]
@@ -6025,6 +6042,7 @@ class ConfigurationModel(BaseDocument):
 
         # start with outstanding events
         id_to_resource = {r["resource_id"]: r for r in resources}
+        id_to_resources_all = id_to_resource
         next: list[abc.Mapping[str, object]] = []
         for resource in work:
             in_increment = False
@@ -6152,7 +6170,10 @@ class ConfigurationModel(BaseDocument):
             outset.update(provides)
             negative.difference_update(provides)
 
-        return outset, negative
+        last_deployed: dict[ResourceIdStr, datetime.datetime] = {
+            rid: r["last_deploy"] for rid, r in id_to_resources_all.items()
+        }
+        return outset, negative, last_deployed
 
     @classmethod
     def active_version_subquery(cls, environment: uuid.UUID) -> tuple[str, list[object]]:

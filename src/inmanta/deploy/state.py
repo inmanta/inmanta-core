@@ -18,6 +18,7 @@
 
 import contextlib
 import dataclasses
+import datetime
 import enum
 import itertools
 import json
@@ -152,6 +153,8 @@ class BlockedStatus(StrEnum):
 class ResourceState:
     """
     State of a resource. Consists of multiple independent (mostly) state vectors that make up the final state.
+
+    :param last_deployed: when was this resource last deployed?  Should only be set in the Compliant or Non Compliant statuses
     """
 
     # FIXME: review / finalize resource state. Based on draft design in
@@ -159,6 +162,7 @@ class ResourceState:
     status: ComplianceStatus
     deployment_result: DeploymentResult
     blocked: BlockedStatus
+    last_deployed: datetime.datetime | None
 
     def is_dirty(self) -> bool:
         """
@@ -226,6 +230,7 @@ class ModelState:
                 "deployment_result",
                 "blocked_status",
                 "last_success",
+                "last_deploy",
                 "last_produced_events",
             ],
             project_attributes=[
@@ -248,6 +253,7 @@ class ModelState:
             # Populate resource_state
 
             compliance_status: ComplianceStatus
+            last_deployed = None if res["last_deploy"] is None else res["last_deploy"].astimezone()
             if res["is_orphan"]:
                 # it was marked as an orphan by the scheduler when (or sometime before) it read the version we're currently
                 # processing => exclude it from the model
@@ -256,12 +262,14 @@ class ModelState:
                 # it was marked as undefined by the scheduler when it read the version we're currently processing
                 # (scheduler is only writer)
                 compliance_status = ComplianceStatus.UNDEFINED
+                last_deployed = None
             elif (
                 DeploymentResult[res["deployment_result"]] is DeploymentResult.NEW
                 or res["last_deployed_attribute_hash"] is None
                 or res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]
             ):
                 compliance_status = ComplianceStatus.HAS_UPDATE
+                last_deployed = None
             elif DeploymentResult[res["deployment_result"]] is DeploymentResult.DEPLOYED:
                 compliance_status = ComplianceStatus.COMPLIANT
             else:
@@ -271,6 +279,7 @@ class ModelState:
                 status=compliance_status,
                 deployment_result=DeploymentResult[res["deployment_result"]],
                 blocked=BlockedStatus[res["blocked_status"]],
+                last_deployed=last_deployed,
             )
             result.resource_state[resource_id] = resource_state
 
@@ -324,6 +333,7 @@ class ModelState:
         force_new: bool = False,
         undefined: bool = False,
         known_compliant: bool = False,
+        last_deployed: datetime.datetime | None = None,
     ) -> None:
         """
         Register a change of intent for a resource. Registers the new resource details, as well as its undefined status.
@@ -339,6 +349,7 @@ class ModelState:
             with known_compliant.
         :param known_compliant: Whether this resource is known to be in a good state (compliant and last deploy was successful).
             Useful for restoring previously known state when scheduler is started. Mutually exclusive with undefined.
+        :param last_deployed: last deployed time. Only set when restoring previously known state when scheduler is started.
         """
         if undefined and known_compliant:
             raise ValueError("A resource can not be both undefined and compliant")
@@ -363,6 +374,7 @@ class ModelState:
                 status=compliance_status,
                 deployment_result=DeploymentResult.DEPLOYED if known_compliant else DeploymentResult.NEW,
                 blocked=blocked,
+                last_deployed=last_deployed if known_compliant else None,
             )
             if resource not in self.requires:
                 self.requires[resource] = set()
@@ -379,6 +391,9 @@ class ModelState:
             # (in part to progress the resource state away from available).
             if self.resource_state[resource].blocked is not BlockedStatus.YES:
                 self.resource_state[resource].blocked = blocked
+
+            if compliance_status not in [ComplianceStatus.COMPLIANT, ComplianceStatus.NON_COMPLIANT]:
+                self.resource_state[resource].last_deployed = None
 
         self.resources[resource] = details
         if not known_compliant and self.resource_state[resource].blocked is BlockedStatus.NO:

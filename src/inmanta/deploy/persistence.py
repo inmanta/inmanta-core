@@ -69,6 +69,7 @@ class StateUpdateManager(abc.ABC):
         state: Optional[state.ResourceState],
         *,
         started: datetime.datetime,
+        finished: datetime.datetime,
     ) -> None:
         """
         Update the db to reflect the result of a deploy for a given resource.
@@ -172,6 +173,7 @@ class ToDbUpdateManager(StateUpdateManager):
         state: Optional[state.ResourceState],
         *,
         started: datetime.datetime,
+        finished: datetime.datetime,
     ) -> None:
         stale_deploy: bool = state is None
 
@@ -192,8 +194,6 @@ class ToDbUpdateManager(StateUpdateManager):
         status = result.status
         messages = result.messages
         change = result.change
-
-        finished = datetime.datetime.now().astimezone()
 
         # TODO: clean up this particular dict
         changes_with_rvid: dict[ResourceVersionIdStr, dict[str, object]] = {
