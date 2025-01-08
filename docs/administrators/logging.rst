@@ -98,9 +98,7 @@ The log config has to be either a ``yaml`` file, containing a `python dict confi
 
 The following log-related options can be set in an Inmanta config file:
 
-* :inmanta.config:option:`logging.compiler`: determines the log config for the compiler. This affects the output
-    of all compiles performed by the server and can be used to fine tune the output displayed in the compile details
-    page of the Inmanta Web Console.
+* :inmanta.config:option:`logging.compiler`: determines the log config for the compiler. This affects the output of all compiles performed by the server and can be used to fine tune the output displayed in the compile details page of the Inmanta Web Console.
 * :inmanta.config:option:`logging.server`: determines the log config for the server
 * :inmanta.config:option:`logging.scheduler`: determines the log config for the scheduler. This is always a template.
 
