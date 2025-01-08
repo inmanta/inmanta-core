@@ -1336,6 +1336,7 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
                     deployment_result=state.DeploymentResult.DEPLOYED,
                     blocked=state.BlockedStatus.NO,
                 ),
+                started=now,
             )
         else:
             result = await null_agent._client.resource_action_update(
@@ -1422,6 +1423,7 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
                 deployment_result=state.DeploymentResult.DEPLOYED,
                 blocked=state.BlockedStatus.NO,
             ),
+            started=datetime.now().astimezone(),
         )
 
 
@@ -1459,6 +1461,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
                 deployment_result=state.DeploymentResult.DEPLOYED,
                 blocked=state.BlockedStatus.NO,
             ),
+            started=datetime.now().astimezone(),
         )
     assert "The resource with the given id does not exist in the given environment" in str(exec_info.value)
 
@@ -1487,6 +1490,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
                 deployment_result=state.DeploymentResult.DEPLOYED,
                 blocked=state.BlockedStatus.NO,
             ),
+            started=datetime.now().astimezone(),
         )
     assert "No resource action exists for action_id" in str(exec_info.value)
 

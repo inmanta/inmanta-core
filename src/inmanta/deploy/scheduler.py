@@ -19,6 +19,7 @@
 import abc
 import asyncio
 import contextlib
+import datetime
 import enum
 import itertools
 import logging
@@ -68,12 +69,21 @@ class StaleResource(Exception):
 @dataclass(frozen=True)
 class ResourceIntent:
     """
-    Deploy intent for a single resource. Includes dependency state to provide to the resource handler.
+    Resource intent for a single resource.
     """
 
     model_version: int
     details: ResourceDetails
-    dependencies: Optional[Mapping[ResourceIdStr, const.ResourceState]]
+
+
+@dataclass(frozen=True)
+class DeployIntent(ResourceIntent):
+    """
+    Deploy intent for a single resource. Includes dependency state to provide to the resource handler.
+    """
+
+    dependencies: Mapping[ResourceIdStr, const.ResourceState]
+    deploy_start: datetime.datetime
 
 
 class ResourceIntentChange(Enum):
@@ -86,7 +96,9 @@ class ResourceIntentChange(Enum):
 
     NEW = enum.auto()
     """
-    To be considered a new resource, even if one with the same resource id is already managed.
+    To be considered a new resource, even if one with the same resource id is already managed in the current version.
+    e.g. if multiple versions have been released since the currently managed one, and in those a resource is deleted,
+    then reappears, we consider it new for all purposes.
     """
 
     UPDATED = enum.auto()
@@ -183,7 +195,7 @@ class TaskManager(abc.ABC):
         self,
         action_id: uuid.UUID,
         resource: ResourceIdStr,
-    ) -> Optional[ResourceIntent]:
+    ) -> Optional[DeployIntent]:
         """
         Register the start of deployment for the given resource and return its current version details
         along with the last non-deploying state for its dependencies, or None if it is not (anymore)
@@ -195,17 +207,15 @@ class TaskManager(abc.ABC):
         """
 
     @abstractmethod
-    async def deploy_done(self, attribute_hash: str, result: executor.DeployResult) -> None:
+    async def deploy_done(self, intent: DeployIntent, result: executor.DeployResult) -> None:
         """
         Register the end of deployment for the given resource: update the resource state based on the deployment result
-        and inform its dependencies that deployment is finished.
-        Since knowledge of deployment result implies a finished deploy, it must only be set
-        when a deploy has just finished.
+        and inform its dependencies that deployment is finished. Depending on how fresh the intent is (compared to what is
+        currently managed, limited (for outdated) or no (for fully stale) scheduler state may be updated.
 
         Acquires appropriate locks
 
-        :param attribute_hash: The resource's attribute hash for which this state applies. No scheduler state is updated if the
-            hash indicates the state information is stale.
+        :param intent: The resource's deploy intent as returned by deploy_start().
         :param result: The DeployResult object describing the result of the deployment.
         """
 
@@ -1029,9 +1039,9 @@ class ResourceScheduler(TaskManager):
             resource_details = self._get_resource_intent(resource)
             if resource_details is None:
                 return None
-            return ResourceIntent(model_version=self._state.version, details=resource_details, dependencies=None)
+            return ResourceIntent(model_version=self._state.version, details=resource_details)
 
-    async def deploy_start(self, action_id: uuid.UUID, resource: ResourceIdStr) -> Optional[ResourceIntent]:
+    async def deploy_start(self, action_id: uuid.UUID, resource: ResourceIdStr) -> Optional[DeployIntent]:
         async with self._scheduler_lock:
             # fetch resource details under lock
             resource_details = self._get_resource_intent(resource)
@@ -1040,8 +1050,11 @@ class ResourceScheduler(TaskManager):
                 return None
             dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
             self._deploying_latest.add(resource)
-            resource_intent = ResourceIntent(
-                model_version=self._state.version, details=resource_details, dependencies=dependencies
+            resource_intent = DeployIntent(
+                model_version=self._state.version,
+                details=resource_details,
+                dependencies=dependencies,
+                deploy_start=datetime.datetime.now().astimezone(),
             )
             # Update the state in the database.
             await self.state_update_manager.send_in_progress(
@@ -1049,10 +1062,10 @@ class ResourceScheduler(TaskManager):
             )
             return resource_intent
 
-    async def deploy_done(self, attribute_hash: str, result: executor.DeployResult) -> None:
+    async def deploy_done(self, intent: DeployIntent, result: executor.DeployResult) -> None:
         state: Optional[ResourceState]
         try:
-            state = await self._update_scheduler_state_for_finished_deploy(attribute_hash, result)
+            state = await self._update_scheduler_state_for_finished_deploy(intent.details.attribute_hash, result)
         except StaleResource:
             # The resource is no longer managed (or in rare cases it has shortly become unmanaged sometime between this version
             # and the currently managed version, either way, the deploy that finished represents a stale intent).
@@ -1063,7 +1076,12 @@ class ResourceScheduler(TaskManager):
             # The scheduler will then report that this resource id with this specific version finished deploy.
             state = None
         # Write deployment result to the database.
-        await self.state_update_manager.send_deploy_done(attribute_hash, result, state)
+        await self.state_update_manager.send_deploy_done(
+            attribute_hash=intent.details.attribute_hash,
+            result=result,
+            state=state,
+            started=intent.deploy_start,
+        )
         async with self._scheduler_lock:
             # report to the scheduled work that we're done. Never report stale deploys.
             self._work.finished_deploy(result.resource_id)
@@ -1081,7 +1099,8 @@ class ResourceScheduler(TaskManager):
         Update the state of the scheduler based on the DeploymentResult of the given resource.
 
         :raise StaleResource: This update is about a resource that is no longer managed by the server.
-        :return: The new blocked status of the resource. Or None if the blocked status shouldn't be updated.
+        :return: The new state of the resource, even if no changes were made. The returned object is a static copy that
+            represents the state at the end of the deploy, and can therefore safely be returned out of the scheduler lock.
         """
         resource: ResourceIdStr = result.resource_id
         deployment_result: DeploymentResult = DeploymentResult.from_handler_resource_state(result.resource_state)
@@ -1114,7 +1133,7 @@ class ResourceScheduler(TaskManager):
                 state.deployment_result = deployment_result
                 if recovered_from_failure:
                     self._send_events(details, stale_deploy=True, recovered_from_failure=True)
-                return state
+                return state.copy()
 
             # We are not stale
             state.status = (
@@ -1155,7 +1174,7 @@ class ResourceScheduler(TaskManager):
             if state.blocked is BlockedStatus.NO:
                 self._timer_manager.update_timer(resource, is_compliant=(state.status is ComplianceStatus.COMPLIANT))
 
-            return state
+            return state.copy()
 
     def _send_events(
         self,
@@ -1203,7 +1222,7 @@ class ResourceScheduler(TaskManager):
             # These resources might be able to progress now -> unblock them in addition to sending the event
             self._state.dirty.update(recovery_listeners)
             for skipped_dependent in recovery_listeners:
-                # TODO[#8541]: this is never written!
+                # TODO[#8541]: persist in database
                 self._state.resource_state[skipped_dependent].blocked = BlockedStatus.NO
 
         all_listeners: Set[ResourceIdStr] = event_listeners | recovery_listeners

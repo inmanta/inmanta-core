@@ -590,6 +590,7 @@ async def test_move_to_available_state(server, environment, client, clienthelper
     for i in range(1, 3):
         action_id = uuid.uuid4()
         rvid = ResourceVersionIdStr(f"test::Resource[agent1,key=test{i}],v={version1}")
+        start_time: datetime.datetime = datetime.datetime.now().astimezone()
         await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid))
         await update_manager.send_deploy_done(
             attribute_hash=util.make_attribute_hash(
@@ -608,6 +609,7 @@ async def test_move_to_available_state(server, environment, client, clienthelper
                 deployment_result=state.DeploymentResult.DEPLOYED,
                 blocked=state.BlockedStatus.NO,
             ),
+            started=start_time,
         )
 
     # Create a new version containing:
