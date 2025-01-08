@@ -1335,6 +1335,7 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
                     status=state.ComplianceStatus.COMPLIANT,
                     deployment_result=state.DeploymentResult.DEPLOYED,
                     blocked=state.BlockedStatus.NO,
+                    last_deployed=now,
                 ),
                 started=now,
             )

@@ -446,9 +446,6 @@ class ResourceScheduler(TaskManager):
                     new_agent_notify=self._create_agent,
                 )
                 restored_version: int = self._state.version
-                # TODO[8453]: current implementation is a race. Better approach:
-                #   *register* all timers (self._state.resources.keys()). Then *start* timer manager only at end of method
-                self._timer_manager.update_timers(self._state.resources.keys() - self._state.dirty, are_compliant=True)
                 # Set running flag because we're ready to start accepting tasks.
                 # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
                 self._running = True
@@ -923,9 +920,7 @@ class ResourceScheduler(TaskManager):
                 self._timer_manager.remove_timers(deleted)
                 # Install timers for initial up-to-date resources. They are up-to-date now,
                 # but we want to make sure we periodically repair them.
-                self._timer_manager.update_timers(
-                    up_to_date_resources | (transitive_unblocked - self._state.dirty), are_compliant=True
-                )
+                self._timer_manager.update_timers(up_to_date_resources | (transitive_unblocked - self._state.dirty))
 
                 # ensure deploy for ALL dirty resources, not just the new ones
                 self._work.deploy_with_context(
@@ -1131,7 +1126,6 @@ class ResourceScheduler(TaskManager):
                 DeploymentResult.NEW,
             )
 
-            # TODO[#8453]: make sure that timer is running even if we return early
             if details.attribute_hash != attribute_hash or state.status is ComplianceStatus.UNDEFINED:
                 # We are stale but still the last deploy
                 # We can update the deployment_result (which is about last deploy)
@@ -1144,6 +1138,7 @@ class ResourceScheduler(TaskManager):
                 state.last_deployed = finished
                 if recovered_from_failure:
                     self._send_events(details, stale_deploy=True, recovered_from_failure=True)
+                self._timer_manager.update_timer(resource, state=state)
                 return state.copy()
 
             # We are not stale
@@ -1184,7 +1179,7 @@ class ResourceScheduler(TaskManager):
 
             # No matter the deployment result, schedule a re-deploy for this resource unless it's blocked
             if state.blocked is BlockedStatus.NO:
-                self._timer_manager.update_timer(resource, is_compliant=(state.status is ComplianceStatus.COMPLIANT))
+                self._timer_manager.update_timer(resource, state=state)
 
             return state.copy()
 

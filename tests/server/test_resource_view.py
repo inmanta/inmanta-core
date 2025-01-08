@@ -24,9 +24,15 @@ from inmanta import const, data
 
 
 async def test_consistent_resource_state_reporting(
-    server, agent, environment, resource_container, clienthelper, client
+    server,
+    agent_no_state_check,
+    environment,
+    resource_container,
+    clienthelper,
+    client,
 ) -> None:
     """Doesn't work for new scheduler, as every release is a deploy"""
+    agent = agent_no_state_check  # updating the resources via the server makes the scheduler out of date
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTO_DEPLOY, False)
     await env.set(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
@@ -79,8 +85,8 @@ async def test_consistent_resource_state_reporting(
         resource_ids=[f"{rid},v={version1}"],
         action_id=uuid.uuid4(),
         action=const.ResourceAction.deploy,
-        started=datetime.datetime.now(),
-        finished=datetime.datetime.now(),
+        started=datetime.datetime.now().astimezone(),
+        finished=datetime.datetime.now().astimezone(),
         messages=[],
         status=const.ResourceState.failed,
     )
