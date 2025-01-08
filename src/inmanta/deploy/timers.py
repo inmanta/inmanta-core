@@ -267,7 +267,9 @@ class TimerManager:
             return
 
         last_deployed = state.last_deployed
-        assert last_deployed is not None  # TODO: remove
+        if last_deployed is None:
+            # Should not happen
+            return
 
         def _setup_repair(repair_interval: int) -> None:
             self.resource_timers[resource].set_timer(
