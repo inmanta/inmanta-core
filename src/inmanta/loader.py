@@ -214,6 +214,16 @@ class ModuleSource:
     source: Optional[bytes] = None
     _client: Optional["protocol.SyncClient"] = None
 
+    def __lt__(self, other):
+        if not isinstance(other, ModuleSource):
+            return NotImplemented
+        return (self.name, self.hash_value, self.is_byte_code) < (other.name, other.hash_value, other.is_byte_code)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ModuleSource):
+            return False
+        return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
+
     def get_source_code(self) -> bytes:
         """Load the source code"""
         if self.source is not None:
