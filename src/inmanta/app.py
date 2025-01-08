@@ -1063,7 +1063,8 @@ def app() -> None:
 
     # Log config
     component = options.component if hasattr(options, "component") else None
-    if component == "server":
+    if component != "compiler":
+        # Log config for the compiler is handler within the "export" command
         log_config.apply_options(options, component, log_context)
 
     logging.captureWarnings(True)
