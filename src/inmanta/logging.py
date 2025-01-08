@@ -650,7 +650,7 @@ class InmantaLoggerConfig:
 
         log_config: FullLoggingConfig = LoggingConfigBuilder().get_bootstrap_logging_config(stream)
         self._stream = stream
-        self._apply_logging_config(log_config)
+        self._handlers: Sequence[logging.Handler] = self._apply_logging_config(log_config)
 
         self._loaded_config: FullLoggingConfig | None = None
         if logfire_enabled:
@@ -832,7 +832,7 @@ class InmantaLoggerConfig:
             config = extender.get_logging_config_from_options(
                 self._stream, self._options_applied, self._component, self._context, config
             )
-        self._apply_logging_config(config)
+        self._handlers = self._apply_logging_config(config)
         return config
 
     def force_cli(self, python_log_level: int) -> None:
@@ -876,17 +876,20 @@ class InmantaLoggerConfig:
         logging_config: FullLoggingConfig = config_builder.get_logging_config_from_options(
             self._stream, options, component, context
         )
-        self._apply_logging_config(logging_config)
+        self._handlers = self._apply_logging_config(logging_config)
 
-    def _apply_logging_config(self, logging_config: FullLoggingConfig) -> None:
+    def _apply_logging_config(self, logging_config: FullLoggingConfig) -> Sequence[logging.Handler]:
         """
         Apply the given logging_config as the current configuration of the logging system.
 
         This method assume that the given config defines a single root handler.
         """
+        handlers_before = list(logging.root.handlers)
+
         if not self.no_install:
             logging_config.apply_config()
         self._loaded_config = logging_config
+        return [handler for handler in logging.root.handlers if handler not in handlers_before]
 
     @stable_api
     def add_extension_config(self, logging_config: LoggingConfigExtension) -> None:
