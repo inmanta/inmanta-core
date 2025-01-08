@@ -1305,8 +1305,11 @@ async def test_compileservice_queue_count_on_trx_based_api(mocked_compiler_servi
             assert len(compiler_service._env_to_compile_task) == 0
     # Transaction committed
     await compiler_service.notify_compile_request_committed(compile_id)
-    assert compiler_service._queue_count_cache == 1
+    # Wait until the compile request is picked up the compiler service.
+    await retry_limited(lambda: compiler_service._queue_count_cache == 0, timeout=10)
     assert len(compiler_service._env_to_compile_task) == 1
+    compile_obj = await data.Compile.get_by_id(compile_id)
+    assert compile_obj.started is not None
 
     await run_compile_and_wait_until_compile_is_done(compiler_service, mocked_compiler_service_block, env.id)
     assert len(compiler_service._env_to_compile_task) == 0
