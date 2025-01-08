@@ -644,9 +644,9 @@ def setup_compiler_logging(tmpdir):
     compiler_log_config.set(compiler_logging_config_file)
 
 
-async def test_server_passing_compiler_logging_config(setup_compiler_logging, server, client, environment, monkeypatch):
+async def test_server_passing_compiler_logging_config(setup_compiler_logging, server, client, environment):
     """
-    Test a recompile on the server and verify recompile triggers
+    Test that the server passes down the logging config to the compiler when starting it.
     """
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), "compiler")
@@ -654,26 +654,15 @@ async def test_server_passing_compiler_logging_config(setup_compiler_logging, se
     print("Project at: ", project_dir)
 
     shutil.copytree(project_source, project_dir)
-    subprocess.check_output(["git", "init"], cwd=project_dir)
-    subprocess.check_output(["git", "add", "*"], cwd=project_dir)
-    subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=project_dir)
-    subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=project_dir)
-    subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_dir)
-
-    # Set environment variable to be passed to the compiler
-    key_env_var = "TEST_MESSAGE"
-    value_env_var = "a_message"
-    monkeypatch.setenv(key_env_var, value_env_var)
 
     # add main.cf
     with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
         fd.write(
-            f"""
+            """
         import std::testing
 
         host = std::Host(name="test", os=std::linux)
         std::testing::NullResource(name=host.name)
-        std::print(std::get_env("{key_env_var}"))
     """
         )
 
@@ -688,9 +677,7 @@ async def test_server_passing_compiler_logging_config(setup_compiler_logging, se
     reports = await client.get_reports(environment)
     assert reports.code == 200
     assert len(reports.result["reports"]) == 1
-    env_vars_compile = reports.result["reports"][0]["environment_variables"]
     compile_id = reports.result["reports"][0]["id"]
-    assert key_env_var not in env_vars_compile
 
     report = await client.get_report(uuid.UUID(compile_id))
     assert report.code == 200
