@@ -1217,7 +1217,6 @@ class ResourceScheduler(TaskManager):
                                 " a repair will force them to be deployed anyway, working around the issue."
                             ),
                             resource=resource,
-                            dependencies=", ".join(f"{r}: {state.name}" for r, state in bad_dependencies.items()),
                         )
                     result.messages.append(log_line)
             else:
