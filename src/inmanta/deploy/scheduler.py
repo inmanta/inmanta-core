@@ -1222,7 +1222,7 @@ class ResourceScheduler(TaskManager):
             # These resources might be able to progress now -> unblock them in addition to sending the event
             self._state.dirty.update(recovery_listeners)
             for skipped_dependent in recovery_listeners:
-                # TODO[#8541]: this is never written!
+                # TODO[#8541]: persist in database
                 self._state.resource_state[skipped_dependent].blocked = BlockedStatus.NO
 
         all_listeners: Set[ResourceIdStr] = event_listeners | recovery_listeners
