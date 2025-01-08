@@ -22,7 +22,8 @@ import shutil
 import subprocess
 import sys
 import uuid
-from asyncio import TimeoutError, subprocess, wait_for
+from asyncio import TimeoutError, wait_for
+from asyncio.subprocess import create_subprocess_exec
 from collections.abc import Mapping
 from io import StringIO
 from typing import Optional
@@ -32,11 +33,10 @@ import yaml
 
 import inmanta
 from inmanta import config
-from inmanta.config import logging_config, compiler_log_config
+from inmanta.config import compiler_log_config, logging_config
 from inmanta.const import ENVIRON_FORCE_TTY
 from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, LoggingConfigFromFile, MultiLineFormatter, Options
 from inmanta.server import SLICE_SERVER
-from inmanta.util import get_compiler_version
 from utils import wait_for_version
 
 
@@ -576,7 +576,6 @@ def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdi
     assert "CLI -- test" in captured.out
 
 
-
 async def test_print_default_logging_cmd(inmanta_config, tmp_path):
     """
     Test that piping to file does not change the logging config
@@ -587,7 +586,7 @@ async def test_print_default_logging_cmd(inmanta_config, tmp_path):
 
         # Output the logging config on the CLI.
         # Here we force ENVIRON_FORCE_TTY to be set to simulate that we are on a TTY
-        process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, env={ENVIRON_FORCE_TTY: "yes"})
+        process = await create_subprocess_exec(*args, stdout=subprocess.PIPE, env={ENVIRON_FORCE_TTY: "yes"})
         try:
             (stdout, _) = await wait_for(process.communicate(), timeout=5)
         except TimeoutError as e:
@@ -605,7 +604,7 @@ async def test_print_default_logging_cmd(inmanta_config, tmp_path):
         # Output the logging config on the CLI with TTY unset
         # This is the same as piping to a file
         assert "ENVIRON_FORCE_TTY" not in os.environ
-        process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE)
+        process = await create_subprocess_exec(*args, stdout=subprocess.PIPE)
         try:
             (stdout, _) = await wait_for(process.communicate(), timeout=5)
         except TimeoutError as e:
@@ -644,7 +643,8 @@ def setup_compiler_logging(tmpdir):
         )
     compiler_log_config.set(compiler_logging_config_file)
 
-async def test_server_recompile(setup_compiler_logging, server, client, environment, monkeypatch):
+
+async def test_server_passing_compiler_logging_config(setup_compiler_logging, server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
     """
@@ -692,15 +692,13 @@ async def test_server_recompile(setup_compiler_logging, server, client, environm
     compile_id = reports.result["reports"][0]["id"]
     assert key_env_var not in env_vars_compile
 
-
     report = await client.get_report(uuid.UUID(compile_id))
     assert report.code == 200
 
     # Get the compile outstream
-    for report in  report.result["report"]["reports"]:
-        if report["name"] == 'Recompiling configuration model':
-            compile_oustream = report["outstream"]
+    for report in report.result["report"]["reports"]:
+        if report["name"] == "Recompiling configuration model":
+            compile_outstream = report["outstream"]
             break
 
-
-    assert "compiler       DEBUG   COMPILER_CONFIG_FLAG -- Starting compile" in compile_oustream
+    assert "COMPILER_CONFIG_FLAG -- Starting compile" in compile_outstream

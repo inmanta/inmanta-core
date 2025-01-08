@@ -792,7 +792,7 @@ class InmantaLoggerConfig:
         LOGGER.debug(component)
         LOGGER.debug(context)
 
-        LOGGER.debug("---"*10)
+        LOGGER.debug("---" * 10)
 
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")

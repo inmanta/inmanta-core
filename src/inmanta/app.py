@@ -451,7 +451,13 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "the configuration file in the export setting.",
         default=None,
     )
-
+    parser.add_argument(
+        "--logging-config",
+        dest="logging_config",
+        help="The path to the configuration file for the logging framework. This is a YAML file that follows "
+        "the dictionary-schema accepted by logging.config.dictConfig(). All other log-related configuration "
+        "arguments will be ignored when this argument is provided.",
+    )
     parser.add_argument(
         "--export-compile-data",
         dest="export_compile_data",
@@ -510,7 +516,6 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
     component="compiler",
 )
 def export(options: argparse.Namespace) -> None:
-    LOGGER.debug("BLAH")
     resource_sets_to_remove: set[str] = set(options.delete_resource_set) if options.delete_resource_set else set()
 
     if const.INMANTA_REMOVED_SET_ID in os.environ:
@@ -552,6 +557,9 @@ def export(options: argparse.Namespace) -> None:
 
     if options.feature_compiler_cache is False:
         Config.set("compiler", "cache", "false")
+
+    log_config = InmantaLoggerConfig.get_instance()
+    log_config.apply_options(options, "compiler", None)
 
     tracing.configure_logfire("compiler")
 
@@ -1055,9 +1063,9 @@ def app() -> None:
 
     # Log config
     component = options.component if hasattr(options, "component") else None
-    LOGGER.error("before applying options")
-    log_config.apply_options(options, component, log_context)
-    LOGGER.error("after applying options")
+    if component == "server":
+        log_config.apply_options(options, component, log_context)
+
     logging.captureWarnings(True)
 
     if options.inmanta_version:
