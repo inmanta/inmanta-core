@@ -1102,6 +1102,8 @@ class ResourceScheduler(TaskManager):
         """
         Update the state of the scheduler based on the DeploymentResult of the given resource.
 
+        May add log messages to the given deploy result object.
+
         :raise StaleResource: This update is about a resource that is no longer managed by the server.
         :return: The new state of the resource, even if no changes were made. The returned object is a static copy that
             represents the state at the end of the deploy, and can therefore safely be returned out of the scheduler lock.
@@ -1166,22 +1168,23 @@ class ResourceScheduler(TaskManager):
                 # Remove this resource from the dirty set if it is successfully deployed
                 self._state.dirty.discard(resource)
                 if state.blocked is BlockedStatus.TRANSIENT:
+                    # TODO: test case
                     # For now, we make sure to schedule even TRANSIENT resources for repair, just in case we have made
                     # incorrect assumptions. This warning will trigger if that is the case. (#8580)
-                    LOGGER.warning(
+                    log_line: data.LogLine = data.LogLine.log(
+                        logging.WARNING,
                         (
-                            # TODO: question for reviewers: is this message good? And is it sufficiently visible
-                            #   (should it be resource action log)?
-                            "Successfully deployed resource %s that was expected to skip for dependencies."
-                            " This likely indicates that its handler raised a SkipResourceForDependencies exception where it"
-                            " should have been a plain SkipResource exception. Please double check the handler implementation"
-                            " and the exception semantics."
+                            "Successfully deployed resource %(resource)s that was expected to skip for dependencies. This"
+                            " likely indicates that its handler previously raised a SkipResourceForDependencies exception where"
+                            " it should have been a plain SkipResource exception. Please double check the handler"
+                            " implementation and the exception semantics."
                             " If the raised exception is appropriate after all, this behavior may indicate a (non-critical)"
                             " bug in inmanta's resource scheduler instead, in which case please report this incident."
                             " If you encounter any resources stuck in the skipped state, a repair should resolve the issue."
                         ),
-                        resource,
+                        resource=resource,
                     )
+                    result.messages.append(log_line)
                     state.blocked = BlockedStatus.NO
             else:
                 # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
