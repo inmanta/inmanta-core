@@ -26,7 +26,7 @@ from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Self
 
 import asyncpg
 
@@ -165,6 +165,12 @@ class ResourceState:
         Return True iff the status indicates the resource is not up-to-date and is ready to be deployed.
         """
         return self.status.is_dirty()
+
+    def copy(self: Self) -> Self:
+        """
+        Returns a copy of this resource state object.
+        """
+        return dataclasses.replace(self)
 
 
 @dataclass(kw_only=True)

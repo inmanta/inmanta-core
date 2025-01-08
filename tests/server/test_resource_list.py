@@ -791,6 +791,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
             rvid = ResourceVersionIdStr(resource["resource_version_id"])
             actionid = uuid.uuid4()
             deploy_counter = deploy_counter + 1
+            start_time: datetime = datetime.now().astimezone()
             await to_db_update_manager.send_in_progress(actionid, resources.Id.parse_id(rvid))
             if "sub=4]" in rid:
                 return
@@ -822,6 +823,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                         deployment_result=deployment_result,
                         blocked=state.BlockedStatus.NO,
                     ),
+                    started=start_time,
                 )
 
         await asyncio.gather(*(deploy(resource) for resource in resources_in_increment_for_agent))

@@ -5085,7 +5085,7 @@ class Resource(BaseDocument):
         Returns all released model versions with associated resources since (excluding) the given model version.
         Returns resources as raw dicts with the requested fields
         """
-        resource_columns: typing.LiteralString = ", ".join(f"r.{c}" for c in projection) if projection else "r.*"
+        resource_columns: typing.LiteralString = ", ".join(f"r.{c}" for c in projection) if projection is not None else "r.*"
         query: typing.LiteralString = f"""
             SELECT m.version, {resource_columns}
             FROM {ConfigurationModel.table_name()} as m
@@ -5110,6 +5110,8 @@ class Resource(BaseDocument):
                 resource: dict[str, object] = dict(raw_resource)
                 if "attributes" in resource:
                     resource["attributes"] = json.loads(resource["attributes"])
+                if projection is not None:
+                    assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
             result.append((version, parsed_resources))
         return result
