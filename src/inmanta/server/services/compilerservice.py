@@ -449,8 +449,15 @@ class CompileRun:
 
             server_address = opt.server_address.get()
             server_port = opt.server_bind_port.get()
-            cmd = [
-                "-vvv",
+
+            app_cli_args = ["-vvv"]
+            # Pass down the logging config to the compiler
+            compiler_log_config_file: str | None = compiler_log_config.get()
+            if compiler_log_config_file:
+                app_cli_args.append("--logging-config")
+                app_cli_args.append(os.path.abspath(compiler_log_config_file))
+
+            export_command = [
                 "export",
                 "-X",
                 "-e",
@@ -465,46 +472,41 @@ class CompileRun:
                 "--export-compile-data-file",
                 compile_data_json_file.name,
             ]
-            # # Pass down the logging config to the compiler
-            compiler_log_config_file: str | None = compiler_log_config.get()
-            if compiler_log_config_file:
-                cmd.append("--logging-config")
-                cmd.append(os.path.abspath(compiler_log_config_file))
 
             if self.request.exporter_plugin:
-                cmd.append("--export-plugin")
-                cmd.append(self.request.exporter_plugin)
+                export_command.append("--export-plugin")
+                export_command.append(self.request.exporter_plugin)
 
             if self.request.partial:
-                cmd.append("--partial")
+                export_command.append("--partial")
 
             if self.request.removed_resource_sets is not None:
                 for resource_set in self.request.removed_resource_sets:
-                    cmd.append("--delete-resource-set")
-                    cmd.append(resource_set)
+                    export_command.append("--delete-resource-set")
+                    export_command.append(resource_set)
 
             if self.request.soft_delete:
-                cmd.append("--soft-delete")
+                export_command.append("--soft-delete")
 
             if not self.request.do_export:
                 f = NamedTemporaryFile()
-                cmd.append("-j")
-                cmd.append(f.name)
+                export_command.append("-j")
+                export_command.append(f.name)
 
             if config.Config.get("server", "auth", False):
                 token = encode_token(["compiler", "api"], str(environment_id))
-                cmd.append("--token")
-                cmd.append(token)
+                export_command.append("--token")
+                export_command.append(token)
 
             if opt.server_ssl_cert.get() is not None:
-                cmd.append("--ssl")
+                export_command.append("--ssl")
             else:
-                cmd.append("--no-ssl")
+                export_command.append("--no-ssl")
 
             ssl_ca_cert = opt.server_ssl_ca_cert.get()
             if ssl_ca_cert is not None:
-                cmd.append("--ssl-ca-cert")
-                cmd.append(ssl_ca_cert)
+                export_command.append("--ssl-ca-cert")
+                export_command.append(ssl_ca_cert)
 
             self.tail_stdout = ""
 
@@ -512,6 +514,8 @@ class CompileRun:
             assert self.request.used_environment_variables is not None
             env_vars_compile: dict[str, str] = os.environ.copy()
             env_vars_compile.update(self.request.used_environment_variables)
+
+            cmd = app_cli_args + export_command
 
             result: data.Report = await run_compile_stage_in_venv(
                 "Recompiling configuration model", cmd, cwd=project_dir, env=env_vars_compile

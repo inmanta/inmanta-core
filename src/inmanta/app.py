@@ -451,13 +451,7 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "the configuration file in the export setting.",
         default=None,
     )
-    parser.add_argument(
-        "--logging-config",
-        dest="logging_config",
-        help="The path to the configuration file for the logging framework. This is a YAML file that follows "
-        "the dictionary-schema accepted by logging.config.dictConfig(). All other log-related configuration "
-        "arguments will be ignored when this argument is provided.",
-    )
+
     parser.add_argument(
         "--export-compile-data",
         dest="export_compile_data",
@@ -557,9 +551,6 @@ def export(options: argparse.Namespace) -> None:
 
     if options.feature_compiler_cache is False:
         Config.set("compiler", "cache", "false")
-
-    log_config = InmantaLoggerConfig.get_instance()
-    log_config.apply_options(options, "compiler", None)
 
     tracing.configure_logfire("compiler")
 
@@ -1063,9 +1054,7 @@ def app() -> None:
 
     # Log config
     component = options.component if hasattr(options, "component") else None
-    if component != "compiler":
-        # Log config for the compiler is handler within the "export" command
-        log_config.apply_options(options, component, log_context)
+    log_config.apply_options(options, component, log_context)
 
     logging.captureWarnings(True)
 
