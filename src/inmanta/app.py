@@ -930,7 +930,8 @@ def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequen
     )
     parser.add_argument(
         "output_file",
-        help="The file where the logging config should be saved.",
+        help="The file where the logging config should be saved. For the scheduler component, this file must end with a .tmpl"
+             " suffix, because a logging configuration template will be generated.",
     )
 
 
