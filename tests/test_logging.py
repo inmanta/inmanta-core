@@ -685,6 +685,7 @@ async def test_server_passing_compiler_logging_config(setup_compiler_logging, se
     for report in report.result["report"]["reports"]:
         if report["name"] == "Recompiling configuration model":
             compile_outstream = report["outstream"]
+            assert "COMPILER_CONFIG_FLAG -- Starting compile" in compile_outstream
             break
-
-    assert "COMPILER_CONFIG_FLAG -- Starting compile" in compile_outstream
+    else:
+        assert False, "Compile report doesn't contain a 'Recompiling configuration model' section."
