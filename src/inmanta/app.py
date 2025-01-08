@@ -63,7 +63,7 @@ from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import ALL_LOG_CONTEXT_VARS, EXIT_START_FAILED, LOG_CONTEXT_VAR_ENVIRONMENT
 from inmanta.export import cfg_env
-from inmanta.logging import InmantaLoggerConfig, _is_on_tty
+from inmanta.logging import InmantaLoggerConfig, Options, _is_on_tty
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.databaseservice import initialize_database_connection_pool
@@ -917,39 +917,37 @@ def cmd_parser() -> argparse.ArgumentParser:
 
 def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     parser.add_argument(
-        "-o",
-        "--output",
-        dest="file",
-        help="The file to which the logging config has to be written.",
+        "--component",
+        dest="component",
+        choices=["server", "scheduler", "compiler"],
+        help="The component for which the logging configuration has to be generated.",
     )
-
-    subparser = parser.add_subparsers(title="subcommand", dest="cmd")
-    subparser.add_parser(
-        "server",
-        help="Output default log file for the server, given the current configuration file and options",
-        parents=parent_parsers,
+    parser.add_argument(
+        "-e",
+        dest="environment",
+        help="The environment this logging config belongs to. This parameter must be provided when the"
+        " `--component scheduler` option is set.",
     )
-    subparser.add_parser(
-        "scheduler",
-        help="Output default log file template for the scheduler, "
-        "given the current configuration file and options. Store in a file ending with `.tmpl`",
-        parents=parent_parsers,
-    )
-    subparser.add_parser(
-        "compiler",
-        help="Output default log file template for the compiler, given the current configuration file and options",
-        parents=parent_parsers,
+    parser.add_argument(
+        "output_file",
+        help="The file where the logging config should be saved.",
     )
 
 
 @command(
-    "print-default-logging-config",
-    help_msg="Print the default log config for the provided component",
+    "output-default-logging-config",
+    help_msg="Write the default log config for the provided component to file",
     parser_config=default_log_config_parser,
 )
 def default_logging_config(options: argparse.Namespace) -> None:
-    if options.file is not None and os.path.exists(options.file):
-        raise Exception(f"The requested output location already exists: {options.file}")
+    if os.path.exists(options.output_file):
+        raise Exception(f"The requested output location already exists: {options.output_file}")
+    if options.component == "scheduler" and not options.output_file.endswith(".tmpl"):
+        raise Exception(
+            "The config being generated will be a template, but the given filename doesn't end with the .tmpl suffix."
+        )
+    if options.component == "scheduler" and not options.environment:
+        raise Exception("The -e option must be set when generating the config for the scheduler component.")
 
     # Because we want to have contex vars in the files,
     #   but the file can also contain other f-string formatters, this is a bit tricky.
@@ -978,9 +976,9 @@ def default_logging_config(options: argparse.Namespace) -> None:
         os.environ[const.ENVIRON_FORCE_TTY] = "yes"
     try:
         component_config = InmantaLoggerConfig(stream=sys.stdout, no_install=True)
-        component_config.apply_options(options, options.cmd, context)
+        component_config.apply_options(options, options.component, context)
 
-        if options.cmd == "server":
+        if options.component == "server":
             # Upgrade with extensions
             ibl = InmantaBootloader()
             ibl.start_loggers_for_extensions(component_config)
@@ -998,11 +996,8 @@ def default_logging_config(options: argparse.Namespace) -> None:
             for context_var in context_vars:
                 raw_dump = raw_dump.replace(f"{place_holder}{context_var}{place_holder}", "{" + context_var + "}")
 
-        if options.file is not None:
-            with open(options.file, "w") as fh:
-                fh.write(raw_dump)
-        else:
-            print(raw_dump)
+        with open(options.output_file, "w") as fh:
+            fh.write(raw_dump)
     finally:
         # Revert this env var back to its original state
         if original_force_tty is None:
@@ -1067,7 +1062,12 @@ def app() -> None:
 
     # Log config
     component = options.component if hasattr(options, "component") else None
-    log_config.apply_options(options, component, log_context)
+    if hasattr(options, "func") and options.func.__name__ == "default_logging_config":
+        # The logging config related CLI options, passed to the output-default-logging-config command, are intended for
+        # the generated logging config and not for the logging of the execution of the command itself.
+        log_config.apply_options(Options(), component=None, context=log_context)
+    else:
+        log_config.apply_options(options, component=component, context=log_context)
     logging.captureWarnings(True)
 
     if options.inmanta_version:
