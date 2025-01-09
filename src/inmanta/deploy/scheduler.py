@@ -921,7 +921,7 @@ class ResourceScheduler(TaskManager):
             self._timer_manager.remove_timers(deleted)
             # Install timers for initial up-to-date resources. They are up-to-date now,
             # but we want to make sure we periodically repair them.
-            self._timer_manager.update_timers(up_to_date_resources | (transitive_unblocked - self._state.dirty))
+            self._timer_manager.update_timers(up_to_date_resources | (transitive_unblocked | resources_with_reset_requires - self._state.dirty))
 
             # ensure deploy for ALL dirty resources, not just the new ones
             self._work.deploy_with_context(
