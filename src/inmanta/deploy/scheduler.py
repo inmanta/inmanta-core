@@ -1135,7 +1135,6 @@ class ResourceScheduler(TaskManager):
                 # because we might otherwise miss the recovery (in the sense that the next deploy wouldn't be a transition
                 # from a bad to a good state, since we're transitioning to that good state now).
                 state.deployment_result = deployment_result
-                state.last_deployed = finished
                 if recovered_from_failure:
                     self._send_events(details, stale_deploy=True, recovered_from_failure=True)
                 self._timer_manager.update_timer(resource, state=state)

@@ -154,7 +154,8 @@ class ResourceState:
     """
     State of a resource. Consists of multiple independent (mostly) state vectors that make up the final state.
 
-    :param last_deployed: when was this resource last deployed?  Should only be set in the Compliant or Non Compliant statuses
+    :param last_deployed: when was this resource last deployed with the latest hash?
+        Should only be set in the Compliant or Non Compliant statuses
     """
 
     # FIXME: review / finalize resource state. Based on draft design in

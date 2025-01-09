@@ -37,14 +37,6 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class TimerState(enum.Enum):
-
-    IDLE = 0
-    WAITING = 1
-    DEPLOY_REQUESTED = 2
-    REPAIR_REQUESTED = 3
-
-
 class ResourceTimer:
     """
     This class represents a single timer for a single resource.
@@ -259,7 +251,7 @@ class TimerManager:
                 return
             case BlockedStatus.NO:
                 repair_only = state.status == ComplianceStatus.COMPLIANT
-            case BlockedStatus.YES:
+            case BlockedStatus.TRANSIENT:
                 repair_only = True
 
         # Both periodic repairs and deploys are disabled on a per-resource basis.
