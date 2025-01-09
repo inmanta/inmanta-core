@@ -864,98 +864,93 @@ class ResourceScheduler(TaskManager):
         #   with awaits in other operations under lock.
         #   and has to be even apart from motivations 2-3, it may interleave with
         # 2. clarity: it clearly signifies that this is the atomic and performance-sensitive part
+        async with self._scheduler_lock:
+            # update model version
+            self._state.version = model.version
+            # update resource details
+            for resource in up_to_date_resources:
+                # Registers resource and removes from the dirty set
+                self._state.update_resource(model.resources[resource], known_compliant=True)
+            for resource in new | updated:
+                # update resource state and dirty set
+                self._state.update_resource(
+                    model.resources[resource],
+                    force_new=intent_changes[resource] is ResourceIntentChange.NEW,
+                    undefined=resource in model.undefined,
+                )
+            # update requires
+            for resource in added_requires.keys() | dropped_requires.keys():
+                self._state.update_requires(resource, model.requires[resource])
+
+            # update transitive state
+            transitive_unblocked, transitive_blocked = self._state.update_transitive_state(
+                new_undefined=became_undefined,
+                verify_blocked=added_requires.keys(),
+                verify_unblocked=became_defined | dropped_requires.keys(),
+            )
+            # update TRANSIENT (skipped-for-dependencies) state for resources with a dependency for which state was reset
+            resources_with_reset_requires: Set[ResourceIdStr] = set(
+                itertools.chain.from_iterable(self._state.requires.provides_view() for resource in force_new)
+            )
+            for resource in resources_with_reset_requires:
+                if (
+                    # it is currently TRANSIENT blocked
+                    self._state.resource_state[resource].blocked is BlockedStatus.TRANSIENT
+                    # it shouldn't be any longer
+                    and not self._state.should_skip_for_dependencies(resource)
+                ):
+                    self._state.resource_state[resource].blocked = BlockedStatus.NO
+
+            # Update set of in-progress deploys that became unmanaged
+            self._deploying_unmanaged.update(self._deploying_latest & (new | deleted))
+            # Update set of in-progress non-stale deploys by trimming resources with new state
+            self._deploying_latest.difference_update(intent_changes.keys(), transitive_blocked)
+
+            # Remove timers for resources that are:
+            #    - in the dirty set (because they will be picked up by the scheduler eventually)
+            #    - blocked: must not be deployed
+            #    - deleted from the model
+            self._timer_manager.stop_timers(self._state.dirty | became_undefined | transitive_blocked)
+            self._timer_manager.remove_timers(deleted)
+            # Install timers for initial up-to-date resources. They are up-to-date now,
+            # but we want to make sure we periodically repair them.
+            self._timer_manager.update_timers(
+                up_to_date_resources | (transitive_unblocked - self._state.dirty), are_compliant=True
+            )
+
+            # ensure deploy for ALL dirty resources, not just the new ones
+            self._work.deploy_with_context(
+                self._state.dirty,
+                reason=reason,
+                priority=TaskPriority.NEW_VERSION_DEPLOY,
+                deploying=self._deploying_latest,
+                added_requires=added_requires,
+                dropped_requires=dropped_requires,
+            )
+            for resource in deleted:
+                self._state.drop(resource)  # Removes from the dirty set
+            for resource in deleted | became_undefined | transitive_blocked:
+                self._work.delete_resource(resource)
+
+            # Updating the blocked state should be done under the scheduler lock, because this state is written
+            # by both the deploy and the new version code path.
+            resources_with_updated_blocked_state: Set[ResourceIdStr] = (
+                became_undefined | transitive_blocked | transitive_unblocked
+            )
+
         async with self.state_update_manager.get_connection(connection=connection) as con, con.transaction():
-            async with self._scheduler_lock:
-                # update model version
-                self._state.version = model.version
-                # update resource details
-                for resource in up_to_date_resources:
-                    # Registers resource and removes from the dirty set
-                    self._state.update_resource(model.resources[resource], known_compliant=True)
-                for resource in new | updated:
-                    # update resource state and dirty set
-                    self._state.update_resource(
-                        model.resources[resource],
-                        force_new=intent_changes[resource] is ResourceIntentChange.NEW,
-                        undefined=resource in model.undefined,
-                    )
-                # update requires
-                for resource in added_requires.keys() | dropped_requires.keys():
-                    self._state.update_requires(resource, model.requires[resource])
-
-                # update transitive state
-                transitive_unblocked, transitive_blocked = self._state.update_transitive_state(
-                    new_undefined=became_undefined,
-                    verify_blocked=added_requires.keys(),
-                    verify_unblocked=became_defined | dropped_requires.keys(),
-                )
-                # update TRANSIENT (skipped-for-dependencies) state for resources with a dependency for which state was reset
-                resources_with_reset_requires: Set[ResourceIdStr] = set(
-                    itertools.chain.from_iterable(self._state.requires.provides_view() for resource in force_new)
-                )
-                for resource in resources_with_reset_requires:
-                    if (
-                        # it is currently TRANSIENT blocked
-                        self._state.resource_state[resource].blocked is BlockedStatus.TRANSIENT
-                        # it shouldn't be any longer
-                        and not self._state.should_skip_for_dependencies(resource)
-                    ):
-                        self._state.resource_state[resource].blocked = BlockedStatus.NO
-
-                # Update set of in-progress deploys that became unmanaged
-                self._deploying_unmanaged.update(self._deploying_latest & (new | deleted))
-                # Update set of in-progress non-stale deploys by trimming resources with new state
-                self._deploying_latest.difference_update(intent_changes.keys(), transitive_blocked)
-
-                # Remove timers for resources that are:
-                #    - in the dirty set (because they will be picked up by the scheduler eventually)
-                #    - blocked: must not be deployed
-                #    - deleted from the model
-                self._timer_manager.stop_timers(self._state.dirty | became_undefined | transitive_blocked)
-                self._timer_manager.remove_timers(deleted)
-                # Install timers for initial up-to-date resources. They are up-to-date now,
-                # but we want to make sure we periodically repair them.
-                self._timer_manager.update_timers(
-                    up_to_date_resources | (transitive_unblocked - self._state.dirty), are_compliant=True
-                )
-
-                # ensure deploy for ALL dirty resources, not just the new ones
-                self._work.deploy_with_context(
-                    self._state.dirty,
-                    reason=reason,
-                    priority=TaskPriority.NEW_VERSION_DEPLOY,
-                    deploying=self._deploying_latest,
-                    added_requires=added_requires,
-                    dropped_requires=dropped_requires,
-                )
-                for resource in deleted:
-                    self._state.drop(resource)  # Removes from the dirty set
-                for resource in deleted | became_undefined | transitive_blocked:
-                    self._work.delete_resource(resource)
-
-                # Updating the blocked state should be done under the scheduler lock, because this state is written
-                # by both the deploy and the new version code path.
-                resources_with_updated_blocked_state: Set[ResourceIdStr] = (
-                    became_undefined | transitive_blocked | transitive_unblocked
-                )
-
-                await self.state_update_manager.update_resource_intent(
-                    self.environment,
-                    intent={
-                        rid: (self._state.resource_state[rid], self._state.resources[rid])
-                        for rid in resources_with_updated_blocked_state
-                    },
-                    update_blocked_state=True,
-                    connection=con,
-                )
-
             # Update intent for resources with new desired state
             # Safe to update outside of the lock: scheduler persisted intent is allowed to lag behind its in-memory intent
-            # because we always update again after recovering.
+            # because we always update again after recovering, and we never write to these same columns from any other place.
+            # TODO[#8541]: with the changes planned in #8541, the "never write to these same columns from any other places"
+            #   statement may not hold anymore. In any case, the transaction must not interleave or wrap the scheduler lock.
             await self.state_update_manager.update_resource_intent(
                 self.environment,
-                intent={rid: (self._state.resource_state[rid], self._state.resources[rid]) for rid in new | updated},
-                update_blocked_state=False,
+                intent={
+                    rid: (self._state.resource_state[rid], self._state.resources[rid])
+                    for rid in new | updated | resources_with_updated_blocked_state
+                },
+                update_blocked_state=True,
                 connection=con,
             )
             # Mark orphaned resources
