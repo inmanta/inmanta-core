@@ -650,7 +650,7 @@ async def test_output_default_logging_cmd(inmanta_config, tmp_path):
 
 
 @pytest.fixture
-def setup_compiler_logging(tmpdir, monkeypatch):
+def compiler_logging_config(tmpdir, monkeypatch):
     """
     Set up the logging config for the compiler to use a specific formatter.
     """
@@ -682,11 +682,16 @@ def setup_compiler_logging(tmpdir, monkeypatch):
 compiler = {os.path.abspath(compiler_logging_config_file)}
         """
         )
-    Config.load_config(min_c_config_file=config)
+    yield config
+
+
+@pytest.fixture(scope="function")
+def inmanta_config(clean_reset, compiler_logging_config):
+    Config.load_config(min_c_config_file=compiler_logging_config)
 
 
 @pytest.mark.slowtest
-async def test_server_passing_compiler_logging_config(setup_compiler_logging, server, client, environment):
+async def test_server_passing_compiler_logging_config(inmanta_config, server, client, environment):
     """
     Test that the server passes down the logging config to the compiler when starting it.
     """

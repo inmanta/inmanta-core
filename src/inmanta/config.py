@@ -100,6 +100,7 @@ class Config:
 
         else:
             files = [main_cfg_file] + cfg_files_in_config_dir + local_dot_inmanta_cfg_files
+            cls._min_c_config_file = None
 
         config = LenientConfigParser(interpolation=Interpolation())
         config.read(files)
@@ -145,6 +146,7 @@ class Config:
     def _reset(cls) -> None:
         cls.__instance = None
         cls._config_dir = None
+        cls._min_c_config_file = None
 
     @overload
     @classmethod
