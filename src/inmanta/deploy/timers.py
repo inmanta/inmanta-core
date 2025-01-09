@@ -235,6 +235,7 @@ class TimerManager:
         :param state: The state of the resource. To have a consistent view, either under lock or a copy
 
         it is expected that the resource has a last_deployed time already set, otherwise it will be ignored
+        under the assumption that it's already scheduled.
         """
 
         # Create if it is not known yet
