@@ -27,7 +27,7 @@ from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Optional, Self
+from typing import TYPE_CHECKING, Optional, Self, cast
 
 import asyncpg
 
@@ -264,7 +264,7 @@ class ModelState:
             # Populate resource_state
 
             compliance_status: ComplianceStatus
-            last_deployed = res["last_deploy"]
+            last_deployed = cast(datetime.datetime, res["last_deploy"])
             if res["is_orphan"]:
                 # it was marked as an orphan by the scheduler when (or sometime before) it read the version we're currently
                 # processing => exclude it from the model

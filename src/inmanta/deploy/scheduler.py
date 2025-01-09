@@ -928,7 +928,7 @@ class ResourceScheduler(TaskManager):
             # Install timers for initial up-to-date resources. They are up-to-date now,
             # but we want to make sure we periodically repair them.
             self._timer_manager.update_timers(
-                (last_deploy_time.keys() | transitive_unblocked | resources_with_reset_requires) - self._state.dirty
+                up_to_date_resources | ((transitive_unblocked | resources_with_reset_requires) - self._state.dirty)
             )
 
             # ensure deploy for ALL dirty resources, not just the new ones
@@ -1072,8 +1072,8 @@ class ResourceScheduler(TaskManager):
 
     async def deploy_done(self, intent: DeployIntent, result: executor.DeployResult) -> None:
         finished = datetime.datetime.now().astimezone()
-        state: Optional[ResourceState] = None
         try:
+            state: Optional[ResourceState]
             try:
                 state = await self._update_scheduler_state_for_finished_deploy(intent.details.attribute_hash, result, finished)
             except StaleResource:
@@ -1096,6 +1096,7 @@ class ResourceScheduler(TaskManager):
         finally:
             # Always do this, even if the DB is broken
             async with self._scheduler_lock:
+                state = self._state.resource_state.get(intent.details.resource_id)
                 if state is not None:
                     self._timer_manager.update_timer(intent.details.resource_id, state=state)
                 # report to the scheduled work that we're done

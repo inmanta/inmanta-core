@@ -302,7 +302,6 @@ src/inmanta/protocol/decorators.py:0: error: "FuncT" has no attribute "__protoco
 src/inmanta/protocol/decorators.py:0: error: "FuncT" has no attribute "__api_version__"  [attr-defined]
 src/inmanta/protocol/decorators.py:0: error: Missing type parameters for generic type "Callable"  [type-arg]
 src/inmanta/protocol/decorators.py:0: error: Missing type parameters for generic type "Callable"  [type-arg]
-src/inmanta/deploy/state.py:0: error: "object" has no attribute "astimezone"  [attr-defined]
 src/inmanta/deploy/state.py:0: error: Enum index should be a string (actual index type "object")  [misc]
 src/inmanta/deploy/state.py:0: error: Enum index should be a string (actual index type "object")  [misc]
 src/inmanta/deploy/state.py:0: error: Enum index should be a string (actual index type "object")  [misc]
