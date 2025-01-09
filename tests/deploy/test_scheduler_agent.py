@@ -248,7 +248,7 @@ class DummyTimerManager(TimerManager):
     ) -> None:
         pass
 
-    def update_timer(self, resource: ResourceIdStr, *, is_compliant: bool) -> None:
+    def update_timer(self, resource: ResourceIdStr, *, state: state.ResourceState) -> None:
         pass
 
     def stop_timer(self, resource: ResourceIdStr) -> None:
