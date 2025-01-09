@@ -243,6 +243,7 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     response = await client.get_resource(environment, "test::DoesNotExist[agent1,key=key2],v=%d" % version, logs=True)
     assert response.code == 200
 
+    # TODO: Do we want this behaviour?
     # resource stays available but an unavailable state is logged because of the failed dryrun
     result = response.result
     log_entry = result["logs"][0]

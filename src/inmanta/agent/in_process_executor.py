@@ -198,31 +198,6 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             if provider is not None:
                 provider.close()
 
-    async def deserialize(self, resource_details: ResourceDetails, action: const.ResourceAction) -> Optional[Resource]:
-        started: datetime.datetime = datetime.datetime.now().astimezone()
-        try:
-            return Resource.deserialize(resource_details.attributes)
-        except Exception as e:
-            msg = data.LogLine.log(
-                level=const.LogLevel.ERROR,
-                msg="Unable to deserialize %(resource_id)s: %(cause)s",
-                resource_id=resource_details.rvid,
-                cause=e,
-                timestamp=datetime.datetime.now().astimezone(),
-            )
-
-            await self.client.resource_action_update(
-                tid=self.environment,
-                resource_ids=[resource_details.rvid],
-                action_id=uuid.uuid4(),
-                action=action,
-                started=started,
-                finished=datetime.datetime.now().astimezone(),
-                status=const.ResourceState.unavailable,
-                messages=[msg],
-            )
-            raise
-
     @tracing.instrument("InProcessExecutor.execute", extract_args=True)
     async def execute(
         self,
@@ -286,15 +261,23 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             with self._cache:
                 started = datetime.datetime.now().astimezone()
                 try:
-                    resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
-                except Exception:
+                    resource_obj: Resource = Resource.deserialize(resource.attributes)
+                except Exception as e:
+                    msg = data.LogLine.log(
+                        level=const.LogLevel.ERROR,
+                        msg="Unable to deserialize %(resource_id)s: %(cause)s",
+                        resource_id=resource.rvid,
+                        cause=e,
+                        timestamp=datetime.datetime.now().astimezone(),
+                    )
                     return DryrunResult(
                         rvid=resource.rvid,
                         dryrun_id=dry_run_id,
                         changes={"handler": AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")},
                         started=started,
                         finished=datetime.datetime.now().astimezone(),
-                        messages=[],
+                        messages=[msg],
+                        resource_unavailable=True,
                     )
                 assert resource_obj is not None
                 ctx = handler.HandlerContext(resource_obj, True, logger=self.resource_action_logger)
@@ -389,17 +372,25 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         started = datetime.datetime.now().astimezone()
         try:
             try:
-                resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.getfact)
-            except Exception:
+                resource_obj: Resource = Resource.deserialize(resource.attributes)
+            except Exception as e:
+                msg = data.LogLine.log(
+                    level=const.LogLevel.ERROR,
+                    msg="Unable to deserialize %(resource_id)s: %(cause)s",
+                    resource_id=resource.rvid,
+                    cause=e,
+                    timestamp=datetime.datetime.now().astimezone(),
+                )
                 return FactResult(
                     resource_id=resource.rvid,
                     action_id=None,
                     parameters=[],
                     started=started,
                     finished=datetime.datetime.now().astimezone(),
-                    messages=[],
+                    messages=[msg],
                     success=False,
                     error_msg=f"Unable to deserialize resource {resource.id}",
+                    resource_unavailable=True,
                 )
             assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj, logger=self.resource_action_logger)

@@ -73,6 +73,7 @@ class DryrunResult:
     started: datetime.datetime
     finished: datetime.datetime
     messages: list[LogLine]
+    resource_unavailable: bool = False
 
 
 class ResourceDetails:
@@ -480,6 +481,7 @@ class FactResult:
     parameters: list[dict[str, Any]]
     messages: list[LogLine]
     error_msg: Optional[str] = None
+    resource_unavailable: bool = False
 
 
 @dataclass
