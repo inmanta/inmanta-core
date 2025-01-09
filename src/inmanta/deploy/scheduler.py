@@ -56,6 +56,7 @@ from inmanta.resources import Id
 from inmanta.types import ResourceIdStr, ResourceType, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
+NB_ITERATIONS_PASS_IO_LOOP: int = 100
 
 
 class StaleResource(Exception):
@@ -707,10 +708,14 @@ class ResourceScheduler(TaskManager):
                     with contextlib.suppress(KeyError):
                         del intent_changes[resource]
 
+            i: int = 0
             for resource, details in model.resources.items():
                 # this loop is race-free, potentially slow, and completely synchronous
                 # => regularly pass control to the event loop to not block scheduler operation during update prep
-                await asyncio.sleep(0)
+                if i >= NB_ITERATIONS_PASS_IO_LOOP:
+                    await asyncio.sleep(0)
+                    i = 0
+                i += 1
 
                 # register new resource details and requires, overriding previous information
                 resource_details[resource] = details
@@ -797,6 +802,7 @@ class ResourceScheduler(TaskManager):
         # Track potential changes in requires per resource
         added_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}  # includes new resources if they have at least one req
         dropped_requires: dict[ResourceIdStr, Set[ResourceIdStr]] = {}
+        i: int = 0
         for resource, requires in model.requires.items():
             old_requires: Set[ResourceIdStr] = self._state.requires.get(resource, set())
             added = requires - old_requires
@@ -805,8 +811,12 @@ class ResourceScheduler(TaskManager):
             removed = old_requires - requires
             if removed:
                 dropped_requires[resource] = removed
+
             # pass control back to event loop to maintain scheduler operations until we acquire the lock
-            await asyncio.sleep(0)
+            if i >= NB_ITERATIONS_PASS_IO_LOOP:
+                await asyncio.sleep(0)
+                i = 0
+            i += 1
 
         # convert intent changes to sets for bulk processing
         deleted: set[ResourceIdStr] = set()
@@ -816,9 +826,14 @@ class ResourceScheduler(TaskManager):
         became_defined: set[ResourceIdStr] = set()
         # resources that are now undefined but weren't before, including new resources if they are undefined
         became_undefined: set[ResourceIdStr] = set()
+        i = 0
         for resource, change in intent_changes.items():
             # pass control back to event loop to maintain scheduler operations until we acquire the lock
-            await asyncio.sleep(0)
+            if i >= NB_ITERATIONS_PASS_IO_LOOP:
+                await asyncio.sleep(0)
+                i = 0
+            i += 1
+
             match change:
                 case ResourceIntentChange.DELETED:
                     deleted.add(resource)
@@ -856,6 +871,9 @@ class ResourceScheduler(TaskManager):
         # assert invariants of the constructed sets
         assert len(intent_changes) == len(deleted | new | updated) == len(deleted) + len(new) + len(updated)
         assert len(became_defined | became_undefined) == (len(became_defined) + len(became_undefined))
+
+        # pass control to IO loop once more before we acquire the lock
+        await asyncio.sleep(0)
 
         # in the current implementation everything below the lock is synchronous, it is however still required (1)
         # and desired even if it weren't strictly required (2):
@@ -1345,8 +1363,7 @@ class ResourceScheduler(TaskManager):
                 ]
 
             # Keep track of the number of iterations to regularly pass control back to the io loop
-            iteration_counter: int = 0
-
+            i: int = 0
             # For resources in both the DB and the scheduler, check for discrepancies in state
             for rid in resource_states_in_db.keys() & self._state.resource_state.keys():
                 resource_discrepancies: list[Discrepancy] = []
@@ -1389,13 +1406,12 @@ class ResourceScheduler(TaskManager):
                 if resource_discrepancies:
                     discrepancy_map[rid] = resource_discrepancies
 
-                iteration_counter += 1
-
-                # Pass back control to the io loop every 1000 iterations to not
+                # Pass back control to the io loop every 100 iterations to not
                 # block scheduler operations in case we have a lot of resources.
-                if iteration_counter == 1000:
+                if i >= NB_ITERATIONS_PASS_IO_LOOP:
                     await asyncio.sleep(0)
-                    iteration_counter = 0
+                    i = 0
+                i += 1
 
             return discrepancy_map
 
