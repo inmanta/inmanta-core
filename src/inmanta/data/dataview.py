@@ -1246,8 +1246,10 @@ class AgentView(DataView[AgentOrder, model.Agent]):
                                                  THEN 'paused'
                                              WHEN EXISTS(
                                                  SELECT 1
-                                                 FROM {data.AgentInstance.table_name()} AS ai
-                                                 WHERE ai.tid=$1 AND ai.name=$2 AND ai.expired IS NOT NULL
+                                                 FROM {data.Agent.table_name()} AS a_inner
+                                                 WHERE a_inner.environment=$1
+                                                       AND a_inner.name=$2
+                                                       AND a_inner.id_primary IS NOT NULL
                                              )
                                                  THEN 'up'
                                                  ELSE 'down'
