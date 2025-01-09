@@ -608,8 +608,10 @@ async def test_move_to_available_state(server, environment, client, clienthelper
                 status=state.ComplianceStatus.COMPLIANT,
                 deployment_result=state.DeploymentResult.DEPLOYED,
                 blocked=state.BlockedStatus.NO,
+                last_deployed=datetime.datetime.now().astimezone(),
             ),
             started=start_time,
+            finished=datetime.datetime.now().astimezone(),
         )
 
     # Create a new version containing:

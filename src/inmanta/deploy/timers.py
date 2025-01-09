@@ -18,7 +18,6 @@
 
 import asyncio
 import contextlib
-import enum
 import logging
 import time
 from collections.abc import Collection
