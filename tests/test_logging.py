@@ -610,7 +610,7 @@ async def test_output_default_logging_cmd(inmanta_config, tmp_path):
         assert "log_colors: null" not in logging_config
 
         # Assert we get an error if the output file already exists
-        process = await subprocess.create_subprocess_exec(*args, stderr=subprocess.PIPE)
+        process = await create_subprocess_exec(*args, stderr=subprocess.PIPE)
         try:
             (_, stderr) = await wait_for(process.communicate(), timeout=5)
             assert f"The requested output location already exists: {output_file}" in stderr.decode()
@@ -635,7 +635,7 @@ async def test_output_default_logging_cmd(inmanta_config, tmp_path):
         str(uuid.uuid4()),
         output_file,
     ]
-    process = await subprocess.create_subprocess_exec(*args, stderr=subprocess.PIPE)
+    process = await create_subprocess_exec(*args, stderr=subprocess.PIPE)
     try:
         (_, stderr) = await wait_for(process.communicate(), timeout=5)
     except TimeoutError as e:
