@@ -165,8 +165,7 @@ class ResourceState:
     """
     State of a resource. Consists of multiple independent (mostly) state vectors that make up the final state.
 
-    :param last_deployed: when was this resource last deployed with the latest hash?
-        Should only be set in the Compliant or Non Compliant statuses
+    :param last_deployed: when was this resource last deployed
     """
 
     # FIXME: review / finalize resource state. Based on draft design in
@@ -274,14 +273,12 @@ class ModelState:
                 # it was marked as undefined by the scheduler when it read the version we're currently processing
                 # (scheduler is only writer)
                 compliance_status = ComplianceStatus.UNDEFINED
-                last_deployed = None
             elif (
                 DeploymentResult[res["deployment_result"]] is DeploymentResult.NEW
                 or res["last_deployed_attribute_hash"] is None
                 or res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]
             ):
                 compliance_status = ComplianceStatus.HAS_UPDATE
-                last_deployed = None
             elif DeploymentResult[res["deployment_result"]] is DeploymentResult.DEPLOYED:
                 compliance_status = ComplianceStatus.COMPLIANT
             else:
@@ -386,7 +383,7 @@ class ModelState:
                 status=compliance_status,
                 deployment_result=DeploymentResult.DEPLOYED if known_compliant else DeploymentResult.NEW,
                 blocked=blocked,
-                last_deployed=last_deployed if known_compliant else None,
+                last_deployed=last_deployed,
             )
             if resource not in self.requires:
                 self.requires[resource] = set()
@@ -403,9 +400,6 @@ class ModelState:
             # (in part to progress the resource state away from available).
             if self.resource_state[resource].blocked is not BlockedStatus.YES:
                 self.resource_state[resource].blocked = blocked
-
-            if compliance_status not in [ComplianceStatus.COMPLIANT, ComplianceStatus.NON_COMPLIANT]:
-                self.resource_state[resource].last_deployed = None
 
         self.resources[resource] = details
         if not known_compliant and self.resource_state[resource].blocked is BlockedStatus.NO:

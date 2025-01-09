@@ -225,17 +225,18 @@ class TimerManager:
 
     def update_timer(self, resource: ResourceIdStr, *, state: ResourceState) -> None:
         """
-        Make sure the given resource is marked for eventual re-deployment in the future.
+        Make sure the given resource is marked for eventual re-deployment in the future
 
-        This method will inspect self.periodic_repair_interval and self.periodic_deploy_interval
+        It will correctly handle all cases (for adding, moving or removing the timer), but should not be called when
+        - the resource is already queued (it is OK to add it again, but it will do nothing)
+        - the resource has no last_deployed time set (which implies the first condition), in which case we ignore it
+
+        This method will inspect the resource state, self.periodic_repair_interval and self.periodic_deploy_interval
         to decide when re-deployment will happen and whether this timer is global (i.e. pertains
         to all resources) or specific to this resource.
 
         :param resource: the resource to re-deploy.
         :param state: The state of the resource. To have a consistent view, either under lock or a copy
-
-        it is expected that the resource has a last_deployed time already set, otherwise it will be ignored
-        under the assumption that it's already scheduled.
         """
 
         # Create if it is not known yet

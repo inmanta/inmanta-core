@@ -778,6 +778,8 @@ class ResourceScheduler(TaskManager):
         :param up_to_date_resources: Set of resources that are to be considered in an assumed good state due to a previously
             successful deploy for the same intent. Should not include any blocked resources. Mostly intended for the very first
             version when the scheduler is started with a fresh state.
+        :param last_deploy_time: last known deploy time of all resources. only intended for the very first
+            version when the scheduler is started with a fresh state.
         :param reason: The reason to associate with any deploys caused by this newly released version.
         :param connection: Connection to use for db operations. Should not be in a transaction context for two reasons:
             1. This method acquires the scheduler lock, and needs to have control about how it is allowed to interleave with
@@ -1129,7 +1131,13 @@ class ResourceScheduler(TaskManager):
                 # except for the event to notify dependents of failure recovery (to unblock skipped for dependencies)
                 # because we might otherwise miss the recovery (in the sense that the next deploy wouldn't be a transition
                 # from a bad to a good state, since we're transitioning to that good state now).
+
+                # The second part of the or would not be required because is implied by the first,
+                # except that we don't enforce the hash diff.
+                # We emit a warning if we observe this, but that still doesn't prevent it.
+                # While it should not happen it can
                 state.deployment_result = deployment_result
+                state.last_deployed = finished
                 if recovered_from_failure:
                     self._send_events(details, stale_deploy=True, recovered_from_failure=True)
                 self._timer_manager.update_timer(resource, state=state)
