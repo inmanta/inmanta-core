@@ -6007,7 +6007,10 @@ class ConfigurationModel(BaseDocument):
         Deployed and same hash -> not increment
         deployed and different hash -> increment
 
-        We return a lot of data to not have to repeat the main query for different datapaths
+        We return a lot of data to not have to repeat the main query for different datapaths as a triple consisting of:
+        - outset: resources that require a deploy (e.g. different hash / responding to an event...)
+        - negative: resources that do not require a deploy
+        - last_deployed: mapping of rid -> last_deploy
         """
         # Depends on deploying
         projection_a_resource: list[typing.LiteralString] = [
