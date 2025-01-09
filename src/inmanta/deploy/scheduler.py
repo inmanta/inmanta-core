@@ -765,7 +765,7 @@ class ResourceScheduler(TaskManager):
         new_versions: Sequence[ModelVersion],
         *,
         up_to_date_resources: Optional[Set[ResourceIdStr]] = None,
-        last_deploy_time: dict[ResourceIdStr, datetime.datetime] | None = None,
+        last_deploy_time: Mapping[ResourceIdStr, datetime.datetime] | None = None,
         reason: str = "Deploy was triggered because a new version has been released",
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
