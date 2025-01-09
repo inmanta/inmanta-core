@@ -1,6 +1,5 @@
 description: >
-  If a specific compiler logging config file is set, make sure the server passes it down to the compiler
-  when starting it.
+  Make sure the compiler is aware of the full configuration context when started by the server.
 issue-nr: 8513
 change-type: minor
 destination-branches: [master]
