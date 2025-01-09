@@ -1235,22 +1235,29 @@ class AgentView(DataView[AgentOrder, model.Agent]):
 
     def get_base_query(self) -> SimpleQueryBuilder:
         base = SimpleQueryBuilder(
-            select_clause="""SELECT a.name,
-                                    a.environment,
-                                    a.last_failover,
-                                    a.paused,
-                                    a.unpause_on_resume,
-                                    ap.hostname as process_name,
-                                    ai.process as process_id,
-                                    (CASE
-                                        WHEN a.paused THEN 'paused'
-                                        WHEN NOT a.paused AND a.id_primary IS NULL THEN 'down'
-                                        ELSE 'up'
-                                    END) as status""",
+            select_clause=f"""SELECT a.name,
+                                     a.environment,
+                                     a.last_failover,
+                                     a.paused,
+                                     a.unpause_on_resume,
+                                     NULL AS process_name,
+                                     NULL AS process_id,
+                                     (
+                                         CASE
+                                             WHEN a.paused
+                                                 THEN 'paused'
+                                             WHEN EXISTS(
+                                                 SELECT 1
+                                                 FROM {data.AgentInstance.table_name()} AS ai
+                                                 WHERE ai.tid=$1 AND ai.name=$2 AND ai.expired IS NOT NULL
+                                             )
+                                                 THEN 'up'
+                                                 ELSE 'down'
+                                         END
+                                     ) AS status
+                          """,
             from_clause=f"""
                             FROM {Agent.table_name()} a
-                            LEFT JOIN {AgentInstance.table_name()} ai ON a.id_primary = ai.id
-                            LEFT JOIN {AgentProcess.table_name()} ap ON ai.process = ap.sid
                             """,
             filter_statements=[" a.environment = $1 ", " a.name <> $2 "],
             values=[self.environment.id, const.AGENT_SCHEDULER_ID],
