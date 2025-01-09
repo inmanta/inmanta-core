@@ -95,8 +95,7 @@ class ResourceTimer:
 
         Should not be called if the timer is already active.
 
-        :param when: In this many seconds in the future, this method will ensure the underlying
-            resource is scheduled for deploy.
+        :param when: Schedule the next deploy for this resource at this datetime. 
         :param reason: The reason argument that will be given for the deploy request.
         :param priority: The priority argument that will be given for the deploy request.
         """
