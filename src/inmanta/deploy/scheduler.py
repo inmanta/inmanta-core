@@ -451,7 +451,8 @@ class ResourceScheduler(TaskManager):
                 self._running = True
                 # All resources get a timer
                 await self.read_version(connection=con)
-                self._timer_manager.update_timers(restored_state.resources.keys() - self._state.dirty)
+                with self._scheduler_lock:
+                    self._timer_manager.update_timers(self._state.resources.keys() - self._state.dirty)
 
                 if self._state.version == restored_version:
                     # no new version was present. Simply trigger a deploy for everything that's not in a known good state
