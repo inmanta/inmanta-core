@@ -89,6 +89,7 @@ are as follows. This list should be extended when new locks (explicit or implici
 as `A -> B`, meaning A should be locked before B in any transaction that acquires a lock on both.
 - Code -> ConfigurationModel
 - Agentprocess -> Agentinstance -> Agent
+- ResourcePersistentState -> Scheduler
 """
 
 
@@ -2722,6 +2723,7 @@ class Environment(BaseDocument):
             await Resource.delete_all(environment=self.id, connection=con)
             await ConfigurationModel.delete_all(environment=self.id, connection=con)
             await ResourcePersistentState.delete_all(environment=self.id, connection=con)
+            await Scheduler.delete_all(environment=self.id, connection=con)
 
     async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
         """
