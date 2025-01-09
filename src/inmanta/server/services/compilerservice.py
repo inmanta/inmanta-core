@@ -44,10 +44,11 @@ from asyncpg import Connection
 import inmanta.data.model as model
 import inmanta.server.services.environmentlistener
 from inmanta import config, const, data, protocol, server, tracing
-from inmanta.config import compiler_log_config
+from inmanta.config import compiler_log_config, Config
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView
 from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvActivationFailedError, VirtualEnv
+from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -451,11 +452,27 @@ class CompileRun:
             server_port = opt.server_bind_port.get()
 
             app_cli_args = ["-vvv"]
-            # Pass down the logging config to the compiler
-            compiler_log_config_file: str | None = compiler_log_config.get()
-            if compiler_log_config_file:
-                app_cli_args.append("--logging-config")
-                app_cli_args.append(os.path.abspath(compiler_log_config_file))
+            logging_config = InmantaLoggerConfig.get_current_instance()
+            if logging_config.logging_config_source is not None:
+                LOGGER.error(f"{logging_config.logging_config_source=}")
+            else:
+                LOGGER.error(f"{logging_config=}")
+
+            # # Pass down the logging config to the compiler
+            # compiler_log_config_file: str | None = compiler_log_config.get()
+            # if compiler_log_config_file:
+            #     app_cli_args.append("--logging-config")
+            #     app_cli_args.append(os.path.abspath(compiler_log_config_file))
+
+            if Config._min_c_config_file is not None:
+                app_cli_args.append("-c")
+                app_cli_args.append(Config._min_c_config_file)
+
+            if Config._config_dir is not None:
+                app_cli_args.append("--config-dir")
+                app_cli_args.append(Config._config_dir)
+
+            LOGGER.error(f"{Config.get_config_options()=}")
 
             export_command = [
                 "export",
@@ -516,6 +533,8 @@ class CompileRun:
             env_vars_compile.update(self.request.used_environment_variables)
 
             cmd = app_cli_args + export_command
+
+            LOGGER.error(f"{env_vars_compile=}")
 
             result: data.Report = await run_compile_stage_in_venv(
                 "Recompiling configuration model", cmd, cwd=project_dir, env=env_vars_compile

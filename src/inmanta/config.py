@@ -64,6 +64,7 @@ class LenientConfigParser(ConfigParser):
 class Config:
     __instance: Optional[ConfigParser] = None
     _config_dir: Optional[str] = None  # The directory this config was loaded from
+    _min_c_config_file: Optional[str] = None  # Config file
     __config_definition: dict[str, dict[str, "Option"]] = defaultdict(dict)
 
     @classmethod
@@ -95,6 +96,8 @@ class Config:
         files: list[str]
         if min_c_config_file is not None:
             files = [main_cfg_file] + cfg_files_in_config_dir + local_dot_inmanta_cfg_files + [min_c_config_file]
+            cls._min_c_config_file = min_c_config_file
+
         else:
             files = [main_cfg_file] + cfg_files_in_config_dir + local_dot_inmanta_cfg_files
 

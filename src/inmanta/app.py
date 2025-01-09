@@ -1040,7 +1040,7 @@ def app() -> None:
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
     # Load the configuration
-    Config.load_config(options.config_file, options.config_dir)
+    Config.load_config(min_c_config_file=options.config_file, config_dir=options.config_dir)
 
     # Collect potential log context
     log_context = {}
@@ -1052,9 +1052,16 @@ def app() -> None:
     if env:
         log_context[LOG_CONTEXT_VAR_ENVIRONMENT] = env
 
+    LOGGER.error("before applying options:")
+
+    LOGGER.error(f"{str(log_config)=}")
     # Log config
     component = options.component if hasattr(options, "component") else None
     log_config.apply_options(options, component, log_context)
+
+    LOGGER.error("after applying options:")
+
+    LOGGER.error(f"{str(log_config)=}")
 
     logging.captureWarnings(True)
 
