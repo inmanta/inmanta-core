@@ -148,6 +148,17 @@ class BlockedStatus(StrEnum):
     NO = enum.auto()
     TRANSIENT = enum.auto()
 
+    def db_value(self: "BlockedStatus") -> "BlockedStatus":
+        """
+        Convert this blocked status to one appropriate for writing to the database.
+
+        This method exists to work around #8541 until a proper solution can be devised.
+        """
+        # TODO[#8541]: also persist TRANSIENT in database
+        if self is BlockedStatus.TRANSIENT:
+            return BlockedStatus.NO
+        return self
+
 
 @dataclass
 class ResourceState:

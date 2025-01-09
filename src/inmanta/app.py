@@ -916,32 +916,32 @@ def cmd_parser() -> argparse.ArgumentParser:
 
 
 def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
-    subparser = parser.add_subparsers(title="subcommand", dest="cmd")
-
-    subparser.add_parser(
-        "server",
-        help="Output default log file for the server, given the current configuration file and options",
-        parents=parent_parsers,
+    parser.add_argument(
+        "--component",
+        dest="config_for_component",
+        choices=["server", "scheduler", "compiler"],
+        help="The component for which the logging configuration has to be generated.",
     )
-    subparser.add_parser(
-        "scheduler",
-        help="Output default log file template for the scheduler, "
-        "given the current configuration file and options. Store in a file ending with `.tmpl`",
-        parents=parent_parsers,
-    )
-    subparser.add_parser(
-        "compiler",
-        help="Output default log file template for the compiler, given the current configuration file and options",
-        parents=parent_parsers,
+    parser.add_argument(
+        "output_file",
+        help="The file where the logging config should be saved. For the scheduler component, this file must end with a .tmpl"
+        " suffix, because a logging configuration template will be generated.",
     )
 
 
 @command(
-    "print-default-logging-config",
-    help_msg="Print the default log config for the provided component",
+    "output-default-logging-config",
+    help_msg="Write the default log config for the provided component to file",
     parser_config=default_log_config_parser,
 )
 def default_logging_config(options: argparse.Namespace) -> None:
+    if os.path.exists(options.output_file):
+        raise Exception(f"The requested output location already exists: {options.output_file}")
+    if options.config_for_component == "scheduler" and not options.output_file.endswith(".tmpl"):
+        raise Exception(
+            "The config being generated will be a template, but the given filename doesn't end with the .tmpl suffix."
+        )
+
     # Because we want to have contex vars in the files,
     #   but the file can also contain other f-string formatters, this is a bit tricky.
     # We want to be able to
@@ -969,9 +969,9 @@ def default_logging_config(options: argparse.Namespace) -> None:
         os.environ[const.ENVIRON_FORCE_TTY] = "yes"
     try:
         component_config = InmantaLoggerConfig(stream=sys.stdout, no_install=True)
-        component_config.apply_options(options, options.cmd, context)
+        component_config.apply_options(options, options.config_for_component, context)
 
-        if options.cmd == "server":
+        if options.config_for_component == "server":
             # Upgrade with extensions
             ibl = InmantaBootloader()
             ibl.start_loggers_for_extensions(component_config)
@@ -989,7 +989,8 @@ def default_logging_config(options: argparse.Namespace) -> None:
             for context_var in context_vars:
                 raw_dump = raw_dump.replace(f"{place_holder}{context_var}{place_holder}", "{" + context_var + "}")
 
-        print(raw_dump)
+        with open(options.output_file, "w") as fh:
+            fh.write(raw_dump)
     finally:
         # Revert this env var back to its original state
         if original_force_tty is None:
@@ -1054,7 +1055,7 @@ def app() -> None:
 
     # Log config
     component = options.component if hasattr(options, "component") else None
-    log_config.apply_options(options, component, log_context)
+    log_config.apply_options(options, component=component, context=log_context)
     logging.captureWarnings(True)
 
     if options.inmanta_version:

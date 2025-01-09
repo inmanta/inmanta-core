@@ -89,6 +89,7 @@ are as follows. This list should be extended when new locks (explicit or implici
 as `A -> B`, meaning A should be locked before B in any transaction that acquires a lock on both.
 - Code -> ConfigurationModel
 - Agentprocess -> Agentinstance -> Agent
+- ResourcePersistentState -> Scheduler
 """
 
 
@@ -2722,6 +2723,7 @@ class Environment(BaseDocument):
             await Resource.delete_all(environment=self.id, connection=con)
             await ConfigurationModel.delete_all(environment=self.id, connection=con)
             await ResourcePersistentState.delete_all(environment=self.id, connection=con)
+            await Scheduler.delete_all(environment=self.id, connection=con)
 
     async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
         """
@@ -4489,7 +4491,7 @@ class ResourcePersistentState(BaseDocument):
                 resource_details.attribute_hash,
                 resource_state.status is state.ComplianceStatus.UNDEFINED,
                 False,
-                *([resource_state.blocked.name] if update_blocked_state else []),
+                *([resource_state.blocked.db_value().name] if update_blocked_state else []),
             )
             for resource_id, (resource_state, resource_details) in intent.items()
         ]
@@ -5539,7 +5541,8 @@ class Resource(BaseDocument):
         last_produced_events: Optional[datetime.datetime] = None,
         last_deployed_attribute_hash: Optional[str] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
-        state: Optional[state.ResourceState] = None,
+        # TODO[#8541]: accept state.ResourceState and write blocked status as well
+        deployment_result: Optional[state.DeploymentResult] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)
@@ -5553,10 +5556,8 @@ class Resource(BaseDocument):
             "last_deployed_version": last_deployed_version,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
-        if state:
-            query_parts.append(f"deployment_result={args(state.deployment_result.name)}")
-            # TODO: split blocked status field to make raceless
-            query_parts.append(f"blocked_status={args(state.blocked.name)}")
+        if deployment_result:
+            query_parts.append(f"deployment_result={args(deployment_result.name)}")
         if not query_parts:
             return
         query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
