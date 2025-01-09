@@ -450,8 +450,9 @@ class ResourceScheduler(TaskManager):
                 # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
                 self._running = True
                 # All resources get a timer
-                self._timer_manager.update_timers(restored_state.resources.keys())
                 await self.read_version(connection=con)
+                self._timer_manager.update_timers(restored_state.resources.keys() - self._state.dirty)
+
                 if self._state.version == restored_version:
                     # no new version was present. Simply trigger a deploy for everything that's not in a known good state
                     await self.deploy(
@@ -927,7 +928,7 @@ class ResourceScheduler(TaskManager):
             # Install timers for initial up-to-date resources. They are up-to-date now,
             # but we want to make sure we periodically repair them.
             self._timer_manager.update_timers(
-                last_deploy_time.keys() | ((transitive_unblocked | resources_with_reset_requires) - self._state.dirty)
+                (last_deploy_time.keys() | transitive_unblocked | resources_with_reset_requires) - self._state.dirty
             )
 
             # ensure deploy for ALL dirty resources, not just the new ones
