@@ -84,7 +84,7 @@ For fine grained configuration, `a standard python dict config file <https://doc
 
     [logging]
     server = server_log.yml
-    scheduler = scheduler.log.tmpl
+    scheduler = scheduler_log.tmpl
     compiler = compiler.yml
 
 or via a cli option:
