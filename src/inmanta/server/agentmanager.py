@@ -1377,7 +1377,7 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
             env = os.environ.copy()
             env.update(tracing.get_context())
             return await asyncio.create_subprocess_exec(
-                sys.executable, *full_args, cwd=cwd, env=env, stdout=outhandle, stderr=errhandle
+                sys.executable, *full_args, cwd=cwd, env=env, stdout=sys.stdout, stderr=sys.stdout
             )
         finally:
             if outhandle is not None:

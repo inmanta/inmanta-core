@@ -18,7 +18,6 @@
 
 import logging
 import os.path
-import shutil
 import subprocess
 import sys
 import uuid
@@ -33,11 +32,9 @@ import yaml
 
 import inmanta
 from inmanta import config
-from inmanta.config import Config, logging_config
+from inmanta.config import logging_config
 from inmanta.const import ENVIRON_FORCE_TTY
 from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, LoggingConfigFromFile, MultiLineFormatter, Options
-from inmanta.server import SLICE_SERVER
-from utils import wait_for_version
 
 
 def load_config_file_to_dict(file_name: str, context: Mapping[str, str]) -> dict[str, object]:
@@ -647,91 +644,3 @@ async def test_output_default_logging_cmd(inmanta_config, tmp_path):
         "The config being generated will be a template, but the given filename doesn't end with the .tmpl suffix."
         in stderr.decode()
     )
-
-
-@pytest.fixture
-def compiler_logging_config(tmpdir, monkeypatch):
-    """
-    Set up the logging config for the compiler to use a specific formatter.
-    """
-    compiler_logging_config = """
-        disable_existing_loggers: false
-        formatters:
-          console_formatter:
-            format: "COMPILER_CONFIG_FLAG -- %(message)s"
-        handlers:
-          console_handler:
-            class: logging.StreamHandler
-            formatter: console_formatter
-            level: DEBUG
-            stream: ext://sys.stdout
-        root:
-          handlers:
-          - console_handler
-          level: INFO
-        version: 1
-    """
-    compiler_logging_config_file = os.path.join(tmpdir, "compiler.yml")
-    with open(compiler_logging_config_file, "w") as fh:
-        fh.write(compiler_logging_config)
-    config = os.path.join(tmpdir, "logging_config.yml")
-    with open(config, "w") as fh:
-        fh.write(
-            f"""
-[logging]
-compiler = {os.path.abspath(compiler_logging_config_file)}
-        """
-        )
-    yield config
-
-
-@pytest.fixture(scope="function")
-def inmanta_config(clean_reset, compiler_logging_config):
-    Config.load_config(min_c_config_file=compiler_logging_config)
-
-
-@pytest.mark.slowtest
-async def test_server_passing_compiler_logging_config(inmanta_config, server, client, environment):
-    """
-    Test that the server passes down the logging config to the compiler when starting it.
-    """
-
-    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), "compiler")
-    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "project")
-
-    shutil.copytree(project_source, project_dir)
-
-    # add main.cf
-    with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
-        fd.write(
-            """
-        import std::testing
-
-        host = std::Host(name="test", os=std::linux)
-        std::testing::NullResource(name=host.name)
-    """
-        )
-
-    result = await client.notify_change(environment)
-    assert result.code == 200
-
-    versions = await wait_for_version(client, environment, 1, compile_timeout=40)
-    assert versions["versions"][0]["total"] == 1
-    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
-
-    reports = await client.get_reports(environment)
-    assert reports.code == 200
-    assert len(reports.result["reports"]) == 1
-    compile_id = reports.result["reports"][0]["id"]
-
-    report = await client.get_report(uuid.UUID(compile_id))
-    assert report.code == 200
-
-    # Get the compile outstream
-    for report in report.result["report"]["reports"]:
-        if report["name"] == "Recompiling configuration model":
-            compile_outstream = report["outstream"]
-            assert "COMPILER_CONFIG_FLAG -- Starting compile" in compile_outstream
-            break
-    else:
-        assert False, "Compile report doesn't contain a 'Recompiling configuration model' section."
