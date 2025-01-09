@@ -44,7 +44,7 @@ loggers:
     propagate: true
 root:
   handlers:
-  - server_handler 
+  - server_handler
   - core_console_handler
   level: INFO
 
