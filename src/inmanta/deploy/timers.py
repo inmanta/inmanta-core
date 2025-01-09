@@ -85,12 +85,14 @@ class ResourceTimer:
         Schedule the underlying resource for execution in <countdown> seconds with
         the given reason and priority.
 
-        Should not be called if the timer is already active.
-
-        :param when: Schedule the next deploy for this resource at this datetime. If the given time is in the past, the deploy is scheduled immediately (on the IO loop).
+        :param when: Schedule the next deploy for this resource at this datetime.
+            If the given time is in the past, the deploy is scheduled immediately (on the IO loop).
         :param reason: The reason argument that will be given for the deploy request.
         :param priority: The priority argument that will be given for the deploy request.
         """
+        self.reason = reason
+        self.priority = priority
+
         if self.next_scheduled_time == when:
             # already good
             return
@@ -100,8 +102,6 @@ class ResourceTimer:
 
         # Override all values
         self.next_scheduled_time = when
-        self.reason = reason
-        self.priority = priority
 
         # convert time to ioloop mono time
         time_delta = asyncio.get_running_loop().time() - time.time()

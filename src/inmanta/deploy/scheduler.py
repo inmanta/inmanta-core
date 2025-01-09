@@ -449,6 +449,8 @@ class ResourceScheduler(TaskManager):
                 # Set running flag because we're ready to start accepting tasks.
                 # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
                 self._running = True
+                # All resources get a timer
+                self._timer_manager.update_timers(restored_state.resources.keys())
                 await self.read_version(connection=con)
                 if self._state.version == restored_version:
                     # no new version was present. Simply trigger a deploy for everything that's not in a known good state
@@ -780,6 +782,7 @@ class ResourceScheduler(TaskManager):
             version when the scheduler is started with a fresh state.
         :param last_deploy_time: last known deploy time of all resources. only intended for the very first
             version when the scheduler is started with a fresh state.
+            It must contain ALL resources as it used to start the timers
         :param reason: The reason to associate with any deploys caused by this newly released version.
         :param connection: Connection to use for db operations. Should not be in a transaction context for two reasons:
             1. This method acquires the scheduler lock, and needs to have control about how it is allowed to interleave with
@@ -897,7 +900,9 @@ class ResourceScheduler(TaskManager):
             )
             # update TRANSIENT (skipped-for-dependencies) state for resources with a dependency for which state was reset
             resources_with_reset_requires: Set[ResourceIdStr] = set(
-                itertools.chain.from_iterable(self._state.requires.provides_view() for resource in force_new)
+                itertools.chain.from_iterable(
+                    self._state.requires.provides_view().get(resource, set()) for resource in force_new
+                )
             )
             for resource in resources_with_reset_requires:
                 if (
@@ -921,7 +926,9 @@ class ResourceScheduler(TaskManager):
             self._timer_manager.remove_timers(deleted)
             # Install timers for initial up-to-date resources. They are up-to-date now,
             # but we want to make sure we periodically repair them.
-            self._timer_manager.update_timers(up_to_date_resources | (transitive_unblocked - self._state.dirty))
+            self._timer_manager.update_timers(
+                last_deploy_time.keys() | ((transitive_unblocked | resources_with_reset_requires) - self._state.dirty)
+            )
 
             # ensure deploy for ALL dirty resources, not just the new ones
             self._work.deploy_with_context(
@@ -1064,29 +1071,34 @@ class ResourceScheduler(TaskManager):
 
     async def deploy_done(self, intent: DeployIntent, result: executor.DeployResult) -> None:
         finished = datetime.datetime.now().astimezone()
-        state: Optional[ResourceState]
+        state: Optional[ResourceState] = None
         try:
-            state = await self._update_scheduler_state_for_finished_deploy(intent.details.attribute_hash, result, finished)
-        except StaleResource:
-            # The resource is no longer managed (or in rare cases it has shortly become unmanaged sometime between this version
-            # and the currently managed version, either way, the deploy that finished represents a stale intent).
-            # We do still want to report that the deploy finished for this version, even if it is stale, we simply don't report
-            # any state.
-            # new, ununtouched state for this resource id), because that still represents the most current state for this
-            # resource, even if it is independent from this deploy.
-            # The scheduler will then report that this resource id with this specific version finished deploy.
-            state = None
-        # Write deployment result to the database.
-        await self.state_update_manager.send_deploy_done(
-            attribute_hash=intent.details.attribute_hash,
-            result=result,
-            state=state,
-            started=intent.deploy_start,
-            finished=finished,
-        )
-        async with self._scheduler_lock:
-            # report to the scheduled work that we're done. Never report stale deploys.
-            self._work.finished_deploy(result.resource_id)
+            try:
+                state = await self._update_scheduler_state_for_finished_deploy(intent.details.attribute_hash, result, finished)
+            except StaleResource:
+                # The resource is no longer managed (or in rare cases it has shortly become unmanaged sometime
+                # between this version and the currently managed version, either way, the deploy that finished
+                # represents a stale intent). We do still want to report that the deploy finished for this version,
+                # even if it is stale, we simply don't report any state. new, ununtouched state for this resource
+                # id), because that still represents the most current state for this resource, even if it is
+                # independent from this deploy. The scheduler will then report that this resource id with this
+                # specific version finished deploy.
+                state = None
+            # Write deployment result to the database.
+            await self.state_update_manager.send_deploy_done(
+                attribute_hash=intent.details.attribute_hash,
+                result=result,
+                state=state,
+                started=intent.deploy_start,
+                finished=finished,
+            )
+        finally:
+            # Always do this, even if the DB is broken
+            async with self._scheduler_lock:
+                if state is not None:
+                    self._timer_manager.update_timer(intent.details.resource_id, state=state)
+                # report to the scheduled work that we're done
+                self._work.finished_deploy(result.resource_id)
 
     async def dryrun_done(self, result: executor.DryrunResult) -> None:
         await self.state_update_manager.dryrun_update(env=self.environment, dryrun_result=result)
@@ -1123,6 +1135,10 @@ class ResourceScheduler(TaskManager):
                 DeploymentResult.NEW,
             )
 
+            # The second part of the or would not be required because is implied by the first,
+            # except that we don't enforce the hash diff.
+            # We emit a warning if we observe this, but that still doesn't prevent it.
+            # While it should not happen it can
             if details.attribute_hash != attribute_hash or state.status is ComplianceStatus.UNDEFINED:
                 # We are stale but still the last deploy
                 # We can update the deployment_result (which is about last deploy)
@@ -1132,15 +1148,10 @@ class ResourceScheduler(TaskManager):
                 # because we might otherwise miss the recovery (in the sense that the next deploy wouldn't be a transition
                 # from a bad to a good state, since we're transitioning to that good state now).
 
-                # The second part of the or would not be required because is implied by the first,
-                # except that we don't enforce the hash diff.
-                # We emit a warning if we observe this, but that still doesn't prevent it.
-                # While it should not happen it can
                 state.deployment_result = deployment_result
                 state.last_deployed = finished
                 if recovered_from_failure:
                     self._send_events(details, stale_deploy=True, recovered_from_failure=True)
-                self._timer_manager.update_timer(resource, state=state)
                 return state.copy()
 
             # We are not stale
@@ -1178,10 +1189,6 @@ class ResourceScheduler(TaskManager):
 
             # propagate events
             self._send_events(details, recovered_from_failure=recovered_from_failure)
-
-            # No matter the deployment result, schedule a re-deploy for this resource unless it's blocked
-            if state.blocked is BlockedStatus.NO:
-                self._timer_manager.update_timer(resource, state=state)
 
             return state.copy()
 

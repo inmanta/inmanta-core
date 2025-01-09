@@ -264,7 +264,7 @@ class ModelState:
             # Populate resource_state
 
             compliance_status: ComplianceStatus
-            last_deployed = None if res["last_deploy"] is None else res["last_deploy"].astimezone()
+            last_deployed = res["last_deploy"]
             if res["is_orphan"]:
                 # it was marked as an orphan by the scheduler when (or sometime before) it read the version we're currently
                 # processing => exclude it from the model
