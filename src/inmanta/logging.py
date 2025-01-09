@@ -559,9 +559,6 @@ class LoggingConfigSource(abc.ABC):
                 f"but this variable is not available. The context is limited to {all_keys}"
             )
 
-    def __str__(self) -> str:
-        return self.source()
-
 
 class LoggingConfigFromFile(LoggingConfigSource):
     """
@@ -727,7 +724,6 @@ class InmantaLoggerConfig:
                 content_env_var_names[0],
             )
             return content_env_var_names[0]
-        LOGGER.error(f"_get_content_env_var_for_component {component_name=} {env_vars_set_by_user=}")
         return env_vars_set_by_user.pop()
 
     def _get_logging_config_source_for_component(self, component_name: str | None) -> LoggingConfigSource | None:
@@ -767,7 +763,6 @@ class InmantaLoggerConfig:
         :param component: The name of the component being executed.
         """
         # Check --logging-config CLI option.
-        LOGGER.error(f"{options=}")
         if options.logging_config:
             return LoggingConfigFromFile(file_name=options.logging_config)
         # Check component-specific logging config options.
@@ -792,7 +787,6 @@ class InmantaLoggerConfig:
         Used to select which config file option to use (logging.component)
         :param context: context variables to use if the config file is a template
         """
-        LOGGER.error(f"apply_options {options=}")
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
         if context is None:

@@ -1052,16 +1052,9 @@ def app() -> None:
     if env:
         log_context[LOG_CONTEXT_VAR_ENVIRONMENT] = env
 
-    LOGGER.error("before applying options:")
-
-    LOGGER.error(f"{str(log_config)=}")
     # Log config
     component = options.component if hasattr(options, "component") else None
     log_config.apply_options(options, component, log_context)
-
-    LOGGER.error("after applying options:")
-
-    LOGGER.error(f"{str(log_config)=}")
 
     logging.captureWarnings(True)
 

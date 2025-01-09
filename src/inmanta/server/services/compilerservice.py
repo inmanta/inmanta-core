@@ -460,8 +460,6 @@ class CompileRun:
                 app_cli_args.append("--config-dir")
                 app_cli_args.append(Config._config_dir)
 
-            LOGGER.error(f"{Config.get_config_options()=}")
-
             export_command = [
                 "export",
                 "-X",
@@ -521,8 +519,6 @@ class CompileRun:
             env_vars_compile.update(self.request.used_environment_variables)
 
             cmd = app_cli_args + export_command
-
-            LOGGER.error(f"{env_vars_compile=}")
 
             result: data.Report = await run_compile_stage_in_venv(
                 "Recompiling configuration model", cmd, cwd=project_dir, env=env_vars_compile
