@@ -73,7 +73,7 @@ def inmanta_config(clean_reset, compiler_logging_config) -> Iterator[ConfigParse
 
 
 @pytest.mark.slowtest
-async def test_server_passing_compiler_logging_config(inmanta_config, server, client, environment):
+async def test_server_passing_compiler_logging_config(server, client, environment):
     """
     Test that the server passes down the logging config to the compiler when starting it.
     """
