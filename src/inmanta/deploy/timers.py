@@ -20,6 +20,7 @@ import asyncio
 import contextlib
 import logging
 import time
+import typing
 from collections.abc import Collection
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
@@ -253,6 +254,8 @@ class TimerManager:
                 repair_only = state.status == ComplianceStatus.COMPLIANT
             case BlockedStatus.TRANSIENT:
                 repair_only = True
+            case _ as _never:
+                typing.assert_never(_never)
 
         # Both periodic repairs and deploys are disabled on a per-resource basis.
         if self.periodic_repair_interval is None and self.periodic_deploy_interval is None:
