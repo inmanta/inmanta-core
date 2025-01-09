@@ -562,6 +562,7 @@ class LoggingConfigSource(abc.ABC):
     def __str__(self) -> str:
         return self.source()
 
+
 class LoggingConfigFromFile(LoggingConfigSource):
     """
     A LoggingConfig present in a file.
@@ -665,8 +666,6 @@ class InmantaLoggerConfig:
 
         self.logging_config_source: LoggingConfigSource | None = None
 
-    def __str__(self) -> str:
-        return f'InmantaLoggerConfig(source={str(self.logging_config_source)})'
     @classmethod
     def get_current_instance(cls) -> "InmantaLoggerConfig":
         """

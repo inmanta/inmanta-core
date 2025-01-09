@@ -33,7 +33,7 @@ import yaml
 
 import inmanta
 from inmanta import config
-from inmanta.config import compiler_log_config, logging_config
+from inmanta.config import Config, logging_config
 from inmanta.const import ENVIRON_FORCE_TTY
 from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, LoggingConfigFromFile, MultiLineFormatter, Options
 from inmanta.server import SLICE_SERVER
@@ -618,40 +618,42 @@ async def test_print_default_logging_cmd(inmanta_config, tmp_path):
         assert normal_config_stdout == tty_config_stdout
 
 
-
-
-
 @pytest.fixture
-def compiler_logging_config():
-    logging_config = """
-            disable_existing_loggers: false
-            formatters:
-              console_formatter:
-                format: "COMPILER_CONFIG_FLAG -- %(message)s"
-            handlers:
-              console_handler:
-                class: logging.StreamHandler
-                formatter: console_formatter
-                level: DEBUG
-                stream: ext://sys.stdout
-            root:
-              handlers:
-              - console_handler
-              level: INFO
-            version: 1
-        """
-    yield logging_config
-
-@pytest.fixture
-def setup_compiler_logging_via_env_var(compiler_logging_config, tmpdir, monkeypatch):
-    monkeypatch.setenv("INMANTA_LOGGING_COMPILER_CONTENT", compiler_logging_config)
-
-@pytest.fixture
-def setup_compiler_logging(compiler_logging_config, tmpdir, monkeypatch):
-    compiler_logging_config_file = os.path.join(tmpdir, "config.yml")
+def setup_compiler_logging(tmpdir, monkeypatch):
+    """
+    Set up the logging config for the compiler to use a specific formatter.
+    """
+    compiler_logging_config = """
+        disable_existing_loggers: false
+        formatters:
+          console_formatter:
+            format: "COMPILER_CONFIG_FLAG -- %(message)s"
+        handlers:
+          console_handler:
+            class: logging.StreamHandler
+            formatter: console_formatter
+            level: DEBUG
+            stream: ext://sys.stdout
+        root:
+          handlers:
+          - console_handler
+          level: INFO
+        version: 1
+    """
+    compiler_logging_config_file = os.path.join(tmpdir, "compiler.yml")
     with open(compiler_logging_config_file, "w") as fh:
         fh.write(compiler_logging_config)
-    compiler_log_config.set(compiler_logging_config_file)
+    config = os.path.join(tmpdir, "logging_config.yml")
+    with open(config, "w") as fh:
+        fh.write(
+            f"""
+[logging]
+compiler = {os.path.abspath(compiler_logging_config_file)}
+        """
+        )
+    Config.load_config(min_c_config_file=config)
+
+
 @pytest.mark.slowtest
 async def test_server_passing_compiler_logging_config(setup_compiler_logging, server, client, environment):
     """
