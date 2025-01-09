@@ -241,7 +241,7 @@ class TimerManager:
         if resource not in self.resource_timers:
             self.resource_timers[resource] = ResourceTimer(resource, self._resource_scheduler)
 
-        repair_only = False  # consider only repair or also deploy?
+        repair_only: bool  # consider only repair or also deploy?
 
         match state.blocked:
             case BlockedStatus.YES:
