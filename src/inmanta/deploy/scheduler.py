@@ -847,6 +847,7 @@ class ResourceScheduler(TaskManager):
             )
             if resource in model.undefined and resource_state.status is not ComplianceStatus.UNDEFINED:
                 if not attribute_hash_changed:
+                    # TODO: should this be resource action log?
                     LOGGER.warning(attribute_hash_unchanged_warning_fmt, resource, "undefined")
                 became_undefined.add(resource)
             elif resource not in model.undefined and resource_state.status is ComplianceStatus.UNDEFINED:
@@ -1173,7 +1174,6 @@ class ResourceScheduler(TaskManager):
                     state.blocked = BlockedStatus.NO
 
                     # TODO: move to separate method!
-                    # TODO: is it appropriate as resource action log?
                     # TODO: consider whether we also want to log on a failed deploy
                     log_line: data.LogLine
                     bad_dependencies: Mapping[ResourceIdStr, const.ResourceState] = {
@@ -1182,7 +1182,7 @@ class ResourceScheduler(TaskManager):
                         if dependency_state != const.ResourceState.deployed
                     }
                     if bad_dependencies:
-                        # TODO: test case
+                        # TODO: test case: deploy resource that skips for undefined, then deploys. Set up with one bad dep
                         log_line = data.LogLine.log(
                             logging.WARNING,
                             (
@@ -1203,7 +1203,7 @@ class ResourceScheduler(TaskManager):
                             dependencies=", ".join(f"{r}: {state.name}" for r, state in bad_dependencies.items()),
                         )
                     else:
-                        # TODO: test case
+                        # TODO: test case: force write TRANSIENT state, then deploy resource
                         log_line = data.LogLine.log(
                             logging.WARNING,
                             (
@@ -1212,11 +1212,14 @@ class ResourceScheduler(TaskManager):
                                 " However, all dependencies are already in a deployed state. This was expected to be impossible"
                                 " and it indicates a (non-critical) bug in the inmanta resource scheduler. Please report this"
                                 " incident."
-                                " In the meantime, if you encounter any resources stuck in the skipped state, triggering"
-                                " a repair will force them to be deployed anyway, working around the issue."
+                                " In the meantime, if you encounter any resources stuck in the skipped state, trigger a repair"
+                                " as a workaround to force a deploy."
                             ),
                             resource=resource,
                         )
+                    # write to scheduler log
+                    log_line.write_to_logger(LOGGER)
+                    # write to resource action log
                     result.messages.append(log_line)
             else:
                 # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
