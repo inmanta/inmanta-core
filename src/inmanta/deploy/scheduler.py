@@ -1346,7 +1346,7 @@ class ResourceScheduler(TaskManager):
                     " assumed it was still blocked, pending a successful deploy of at least one of its requires."
                     " However, all dependencies are already in a deployed state. This was expected to be impossible"
                     " and it indicates a (non-critical) bug in the inmanta resource scheduler. Please report this"
-                    " incident."
+                    " bug."
                     " In the meantime, if you encounter any resources stuck in the skipped state, trigger a repair"
                     " as a workaround to force a deploy."
                 ),
