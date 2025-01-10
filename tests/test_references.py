@@ -96,3 +96,20 @@ def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_d
     with pytest.raises(Exception):
         # TODO: catch correct exception!
         snippetcompiler.do_export()
+
+
+def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """Test that references are rejected in expressions """
+    refs_module = os.path.join(modules_v2_dir, "refs")
+
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import refs
+        if refs::create_bool_reference_cycle(name="CWD") == true:
+        end
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+    )
+
+    with pytest.raises(Exception):
+        snippetcompiler.do_export()
