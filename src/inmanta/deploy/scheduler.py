@@ -1205,7 +1205,6 @@ class ResourceScheduler(TaskManager):
                 state.blocked = BlockedStatus.TRANSIENT
                 # Remove this resource from the dirty set when we block it
                 self._state.dirty.discard(resource)
-            # TODO: consider whether we also want to log on a failed deploy
             elif deployment_result is DeploymentResult.DEPLOYED:
                 # Remove this resource from the dirty set if it is successfully deployed
                 self._state.dirty.discard(resource)
