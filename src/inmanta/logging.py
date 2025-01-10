@@ -440,6 +440,7 @@ class LoggingConfigBuilder:
         }
 
 
+@stable_api
 def convert_inmanta_log_level(inmanta_log_level: str, cli: bool = False) -> int:
     """
     Convert the given Inmanta log level to the corresponding Python log level.
@@ -697,6 +698,7 @@ class InmantaLoggerConfig:
         self._logging_configs_extensions.append(logging_config)
 
 
+@stable_api
 class MultiLineFormatter(colorlog.ColoredFormatter):
     """
     Formatter for multi-line log records.
