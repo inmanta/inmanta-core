@@ -251,9 +251,9 @@ The Inmanta Python SDK offers several extension mechanism:
 * Resource handlers
 * Dependency managers
 
-Only the compiler and agents load code included in modules (See :doc:`/architecture`). A module can include external
-dependencies. Both the compiler and the agent will install this dependencies with ``pip install`` in an virtual
-environment dedicated to the compiler or agent. By default this is in `.env` of the project for the compiler and in
+Only the compiler and executors load code included in modules (See :doc:`/architecture`). A module can include external
+dependencies. Both the compiler and the executors will install this dependencies with ``pip install``, each in a
+dedicated virtual environment. By default this is in `.env` of the project for the compiler and in
 `/var/lib/inmanta/agent/env` for the agent.
 
 Inmanta uses a special format of requirements that was defined in python PEP440 but never fully
