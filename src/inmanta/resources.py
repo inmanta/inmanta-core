@@ -20,6 +20,7 @@ import json
 import logging
 import re
 from collections.abc import Iterable, Iterator, Sequence
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
 
 import inmanta.ast
@@ -424,7 +425,8 @@ class Resource(metaclass=ResourceMeta):
 
         :return: The cloned resource
         """
-        res = Resource.deserialize(self.serialize())
+        cloned_obj = deepcopy(self.serialize())
+        res = Resource.deserialize(cloned_obj)
         for k, v in kwargs.items():
             setattr(res, k, v)
 
