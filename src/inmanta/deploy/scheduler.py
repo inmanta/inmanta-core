@@ -38,7 +38,7 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import Discrepancy, SchedulerStatusReport
-from inmanta.deploy import timers, work
+from inmanta.deploy import timers, work, tasks
 from inmanta.deploy.persistence import ToDbUpdateManager
 from inmanta.deploy.state import (
     AgentStatus,
@@ -414,8 +414,13 @@ class ResourceScheduler(TaskManager):
         await data.Resource.reset_resource_state(self.environment)
 
     async def reload_all_timers(self) -> None:
+        # Get lock
         async with self._scheduler_lock:
-            self._timer_manager.update_timers(self._state.resources.keys() - self._state.dirty)
+            for resource, state in self._state.resource_state.items():
+                deploy = Deploy(resource=resource)
+                if deploy in self._work.agent_queues or deploy in self._work.agent_queues.in_progress or resource in self._work._waiting:
+                    continue
+                self._timer_manager.update_timer(resource, state=state)
 
     async def _initialize(self) -> None:
         """
@@ -455,7 +460,8 @@ class ResourceScheduler(TaskManager):
                 self._running = True
                 # All resources get a timer
                 await self.read_version(connection=con)
-                await self.reload_all_timers()
+                async with self._scheduler_lock:
+                    self._timer_manager.update_timers(self._state.resources.keys() - self._state.dirty)
 
                 if self._state.version == restored_version:
                     # no new version was present. Simply trigger a deploy for everything that's not in a known good state

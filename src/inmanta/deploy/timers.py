@@ -23,7 +23,7 @@ import time
 import typing
 from collections.abc import Collection
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Coroutine
 
 from inmanta import util
 from inmanta.agent import config as agent_config
@@ -180,14 +180,14 @@ class TimerManager:
             new_periodic_deploy_interval: int | None = None
         else:
             new_deploy_cron = None
-            new_periodic_deploy_interval = deploy_timer
+            new_periodic_deploy_interval = deploy_timer if deploy_timer > 0 else None
 
         if isinstance(repair_timer, str):
             new_repair_cron: str | None = repair_timer
             new_periodic_repair_interval: int | None = None
         else:
             new_repair_cron = None
-            new_periodic_repair_interval = repair_timer
+            new_periodic_repair_interval = repair_timer if repair_timer > 0 else None
 
         if not new_periodic_repair_interval and not new_periodic_deploy_interval:
             self.periodic_repair_interval = new_periodic_repair_interval
@@ -210,7 +210,7 @@ class TimerManager:
             await self._resource_scheduler.reload_all_timers()
 
     def _update_global_timer(
-        self, cron_expression: str | None, previous_value: util.ScheduledTask | None, reason: str, priority: TaskPriority
+        self, cron_expression: str | None, previous_value: util.ScheduledTask | None, action: util.TaskMethod
     ) -> util.ScheduledTask | None:
         """
         Configure the global deploy according to the given expression
@@ -236,13 +236,7 @@ class TimerManager:
                 # Not good, remove
                 self._cron_scheduler.remove(previous_value)
 
-        async def _action() -> None:
-            await self._resource_scheduler.deploy(
-                reason=reason,
-                priority=priority,
-            )
-
-        return self._cron_scheduler.add_action(_action, cron_schedule)
+        return self._cron_scheduler.add_action(action, cron_schedule)
 
     def _update_global_deploy(self, cron_expression: str | None) -> None:
         """
@@ -252,11 +246,16 @@ class TimerManager:
         :returns: the associated scheduled task.
         """
 
+        async def _action() -> None:
+            await self._resource_scheduler.deploy(
+                reason=f"Global deploy triggered because of cron expression for deploy interval: '{cron_expression}'",
+                priority=TaskPriority.INTERVAL_DEPLOY,
+            )
+
         self.global_periodic_deploy_task = self._update_global_timer(
             cron_expression,
             previous_value=self.global_periodic_deploy_task,
-            reason=f"Global deploy triggered because of cron expression for deploy interval: '{cron_expression}'",
-            priority=TaskPriority.INTERVAL_DEPLOY,
+            action=_action,
         )
 
     def _update_global_repair(self, cron_expression: str | None) -> None:
@@ -266,11 +265,17 @@ class TimerManager:
 
         :returns: the associated scheduled task.
         """
+
+        async def _action() -> None:
+            await self._resource_scheduler.repair(
+                reason=f"Global repair triggered because of cron expression for repair interval: '{cron_expression}'",
+                priority=TaskPriority.INTERVAL_REPAIR,
+            )
+
         self.global_periodic_repair_task = self._update_global_timer(
             cron_expression,
             previous_value=self.global_periodic_repair_task,
-            reason=f"Global repair triggered because of cron expression for repair interval: '{cron_expression}'",
-            priority=TaskPriority.INTERVAL_REPAIR,
+            action=_action,
         )
 
     def update_timer(self, resource: ResourceIdStr, *, state: ResourceState) -> None:
