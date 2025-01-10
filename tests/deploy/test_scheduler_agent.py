@@ -23,6 +23,7 @@ import datetime
 import hashlib
 import itertools
 import json
+import logging
 import typing
 import uuid
 from collections.abc import Awaitable, Callable, Set
@@ -265,6 +266,8 @@ class DummyStateManager(StateUpdateManager):
 
     def __init__(self):
         self.state: dict[ResourceIdStr, const.ResourceState] = {}
+        # latest deploy result for each resource
+        self.deploys: dict[ResourceIdStr, DeployResult] = {}
 
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         self.state[resource_id.resource_str()] = const.ResourceState.deploying
@@ -278,6 +281,7 @@ class DummyStateManager(StateUpdateManager):
         started: datetime.datetime,
     ) -> None:
         self.state[result.resource_id] = result.status
+        self.deploys[result.resource_id] = result
 
     def check_with_scheduler(self, scheduler: ResourceScheduler) -> None:
         """Verify that the state we collected corresponds to the state as known by the scheduler"""
@@ -2944,7 +2948,7 @@ async def test_deploy_orphaned(agent: TestAgent, make_resource_minimal) -> None:
     executor1: ManagedExecutor = agent.executor_manager.register_managed_executor("agent1")
 
     resources: Mapping[ResourceIdStr, state.ResourceDetails] = {
-        rid1: make_resource_minimal(rid1, values={"hello": "world"}, requires={})
+        rid1: make_resource_minimal(rid1, values={"hello": "world"}, requires=[])
     }
     await agent.scheduler._new_version([ModelVersion(version=1, resources=resources, requires={}, undefined=set())])
 
@@ -3016,7 +3020,7 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
     rid6 = ResourceIdStr("test::Resource[agent1,name=6]")
 
     baseline_resources: Mapping[ResourceIdStr, state.ResourceDetails] = {
-        rid: make_resource_minimal(rid, values={"hello": "world"}, requires={}) for rid in (rid1, rid2, rid3)
+        rid: make_resource_minimal(rid, values={"hello": "world"}, requires=[]) for rid in (rid1, rid2, rid3)
     }
 
     scheduler: ResourceScheduler = agent.scheduler
@@ -3046,29 +3050,29 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
         [
             model(
                 {
-                    rid1: make_resource_minimal(rid1, values={"changed": "values"}, requires={}),
+                    rid1: make_resource_minimal(rid1, values={"changed": "values"}, requires=[]),
                     rid2: all_models[-1].resources[rid2],
                     rid3: all_models[-1].resources[rid3],
-                    rid4: make_resource_minimal(rid4, values={"new": "values"}, requires={}),
+                    rid4: make_resource_minimal(rid4, values={"new": "values"}, requires=[]),
                 }
             ),
             model(
                 {
                     rid1: all_models[-1].resources[rid1],
-                    rid2: make_resource_minimal(rid2, values={"changed": "values"}, requires={}),
+                    rid2: make_resource_minimal(rid2, values={"changed": "values"}, requires=[]),
                     rid3: all_models[-1].resources[rid3],
                     rid4: all_models[-1].resources[rid4],
-                    rid5: make_resource_minimal(rid5, values={"new": "values"}, requires={}),
+                    rid5: make_resource_minimal(rid5, values={"new": "values"}, requires=[]),
                 }
             ),
             model(
                 {
                     rid1: all_models[-1].resources[rid1],
                     rid2: all_models[-1].resources[rid2],
-                    rid3: make_resource_minimal(rid3, values={"changed": "values"}, requires={}),
+                    rid3: make_resource_minimal(rid3, values={"changed": "values"}, requires=[]),
                     rid4: all_models[-1].resources[rid4],
-                    rid5: make_resource_minimal(rid5, values={"update after new": "values"}, requires={}),
-                    rid6: make_resource_minimal(rid6, values={"new": "values"}, requires={}),
+                    rid5: make_resource_minimal(rid5, values={"update after new": "values"}, requires=[]),
+                    rid6: make_resource_minimal(rid6, values={"new": "values"}, requires=[]),
                 }
             ),
         ]
@@ -3093,8 +3097,8 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
                     rid1: all_models[-1].resources[rid1],
                     rid2: all_models[-1].resources[rid2],
                     # no rid3
-                    rid4: make_resource_minimal(rid4, values={"new": "values"}, requires={}),
-                    rid5: make_resource_minimal(rid5, values={"new": "values"}, requires={}),
+                    rid4: make_resource_minimal(rid4, values={"new": "values"}, requires=[]),
+                    rid5: make_resource_minimal(rid5, values={"new": "values"}, requires=[]),
                 }
             ),
             model(
@@ -3124,3 +3128,248 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
     # - resource becomes undefined and then defined again and vice versa
     # - resource is new+undefined / updated+undefined
     # - verify requires => like resources, should simply be `== all_models[-1].requires`, same for provides
+
+
+async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog) -> None:
+    """
+    Verify the behavior of TRANSIENT resources when it comes to deploys:
+    1. should not be included in normal deploys
+    2. should be included in repairs (#8423, until #8580 is implemented)
+    3. should be included when explicitly requested by deploy_resource()
+    4. should produce appropriate warning when the newly triggered (by 2/3) deploy behaves unexpectedly
+    """
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent1,name=2]")
+    executor: ManagedExecutor = agent.executor_manager.register_managed_executor("agent1")
+
+    # set up rid1 to depend on rid2
+    resources: Mapping[ResourceIdStr, state.ResourceDetails] = {
+        rid1: make_resource_minimal(rid1, values={"hello": "world 1"}, requires=[rid2]),
+        rid2: make_resource_minimal(rid2, values={"hello": "world 2"}, requires=[]),
+    }
+    version: int = 42
+    await agent.scheduler._new_version([ModelVersion(version=version, resources=resources, requires={rid1: {rid2}}, undefined=set())])
+
+    # wait until deploy starts, then fail r2 and make r1 skip for dependencies
+    await retry_limited_fast(lambda: rid2 in executor.deploys)
+    executor.deploys[rid2].set_result(const.HandlerResourceState.failed)
+    await retry_limited_fast(lambda: rid1 in executor.deploys)
+    executor.deploys[rid1].set_result(const.HandlerResourceState.skipped_for_dependency)
+
+    await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 2)
+
+    scheduler: ResourceScheduler = agent.scheduler
+
+    assert scheduler._state.resource_state[rid2].status is ComplianceStatus.NON_COMPLIANT
+    assert scheduler._state.resource_state[rid1].status is ComplianceStatus.NON_COMPLIANT
+    assert scheduler._state.resource_state[rid2].blocked is BlockedStatus.NO
+    assert scheduler._state.resource_state[rid1].blocked is BlockedStatus.TRANSIENT
+
+    # trigger deploy: verify only r2 gets scheduled, make it return the same result as before
+    agent.executor_manager.reset_executor_counters()
+    await scheduler.deploy(reason="Test: triggering full deploy")
+    await retry_limited_fast(lambda: rid2 in executor.deploys)
+    executor.deploys[rid2].set_result(const.HandlerResourceState.failed)
+    await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert len(scheduler._work._waiting) == 0
+    assert len(scheduler._work.agent_queues.queued()) == 0
+    assert len(scheduler._work.agent_queues._in_progress) == 0
+
+    agent.executor_manager.reset_executor_counters()
+    await scheduler.repair(reason="Test: triggering repair")
+    # trigger repair: verify both resources get scheduled, make them return the same result as before
+    await retry_limited_fast(lambda: rid2 in executor.deploys)
+    executor.deploys[rid2].set_result(const.HandlerResourceState.failed)
+    await retry_limited_fast(lambda: rid1 in executor.deploys)
+    executor.deploys[rid1].set_result(const.HandlerResourceState.skipped_for_dependency)
+    await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 2)
+
+    def get_resource_action_logs(caplog) -> list[logging.LogRecord]:
+        return [
+            record
+            for record in caplog.records
+            if record.name.startswith("inmanta.resource_action")
+        ]
+
+    # verify no log is emitted if it skips again as expected
+    agent.executor_manager.reset_executor_counters()
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        await scheduler.deploy_resource(
+            rid1,
+            reason="Test: deploying r1, skipping for dependencies",
+            priority=TaskPriority.USER_DEPLOY,
+        )
+        await retry_limited_fast(lambda: rid1 in executor.deploys)
+        executor.deploys[rid1].set_result(const.HandlerResourceState.skipped_for_dependency)
+        await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
+
+        assert len(get_resource_action_logs(caplog)) == 0
+        assert len(scheduler.state_update_manager.deploys[rid1].messages) == 0
+
+    # verify log message is as expected if rid1 suddenly succeeds
+    agent.executor_manager.reset_executor_counters()
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        # trigger another deploy for rid1, this time make it succeed
+        await scheduler.deploy_resource(
+            rid1,
+            reason="Test: deploying r1",
+            priority=TaskPriority.USER_DEPLOY,
+        )
+        await retry_limited_fast(lambda: rid1 in executor.deploys)
+        executor.deploys[rid1].set_result(const.HandlerResourceState.deployed)
+
+        await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
+
+        # verify that it is logged to the scheduler log under a resource action logger
+        resource_action_logs = get_resource_action_logs(caplog)
+        assert len(resource_action_logs) == 1
+        record: logging.LogRecord = resource_action_logs[0]
+        assert record.levelno == logging.WARNING
+        assert record.name == "inmanta.resource_action.agent1"
+        expected_message: str = (
+            f"Resource {rid1} was expected to skip for dependencies but it deployed successfully."
+            " The handler for this resource raised a SkipResourceForDependencies exception in a previous execution, indicating"
+            " that it would only be able to progress once all requires reached a deployed state. Some requires"
+            f" ({rid2}: failed) are still in a non-deployed state, therefore it was assumed that a new deploy attempt would"
+            " have no effect. This indicates incorrect usage of the exception, and it will lead to resources getting stuck in"
+            " the skipped state. While this can be worked around by triggering a repair for now, that may not work in the"
+            " future. Please check your handler implementation, and make sure to raise the generic SkipResource rather than"
+            " SkipResourceForDependencies if you wish to skip a deploy for any other reason than to wait until all requires"
+            " are in a good state. Please report this incident if you believe your handler implementation is correct after all."
+        )
+        assert record.message == f"resource {rid1},v={version}: {expected_message}"
+        # verify that it is also sent to the database
+        assert len(scheduler.state_update_manager.deploys[rid1].messages) == 1
+        assert scheduler.state_update_manager.deploys[rid1].messages[0].msg == expected_message
+
+    assert scheduler._state.resource_state[rid2].status is ComplianceStatus.NON_COMPLIANT
+    assert scheduler._state.resource_state[rid1].status is ComplianceStatus.COMPLIANT
+    assert scheduler._state.resource_state[rid2].blocked is BlockedStatus.NO
+    # verify that scheduler recognized that it is no longer blocked
+    assert scheduler._state.resource_state[rid1].blocked is BlockedStatus.NO
+
+    # verify no log is emitted if it succeeds again, or for other transitions, e.g. success -> failed -> success
+    agent.executor_manager.reset_executor_counters()
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        await scheduler.deploy_resource(
+            rid1,
+            reason="Test: deploying r1 for success",
+            priority=TaskPriority.USER_DEPLOY,
+        )
+        await retry_limited_fast(lambda: rid1 in executor.deploys)
+        executor.deploys[rid1].set_result(const.HandlerResourceState.deployed)
+        await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
+
+        await scheduler.deploy_resource(
+            rid1,
+            reason="Test: deploying r1 for failure",
+            priority=TaskPriority.USER_DEPLOY,
+        )
+        await retry_limited_fast(lambda: rid1 in executor.deploys)
+        executor.deploys[rid1].set_result(const.HandlerResourceState.failed)
+        await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 2)
+
+        await scheduler.deploy_resource(
+            rid1,
+            reason="Test: deploying r1 for success",
+            priority=TaskPriority.USER_DEPLOY,
+        )
+        await retry_limited_fast(lambda: rid1 in executor.deploys)
+        executor.deploys[rid1].set_result(const.HandlerResourceState.deployed)
+        await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 3)
+
+        assert len(get_resource_action_logs(caplog)) == 0
+        assert len(scheduler.state_update_manager.deploys[rid1].messages) == 0
+
+    # verify no log message is emitted for a valid recovery
+    agent.executor_manager.reset_executor_counters()
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        # set up initial state: make r1 skip for dependencies again
+        await scheduler.deploy_resource(
+            rid1,
+            reason="Test: deploying r1 for success",
+            priority=TaskPriority.USER_DEPLOY,
+        )
+        await retry_limited_fast(lambda: rid1 in executor.deploys)
+        executor.deploys[rid1].set_result(const.HandlerResourceState.skipped_for_dependency)
+
+        await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
+
+        # verify initial state
+        assert scheduler._state.resource_state[rid2].status is ComplianceStatus.NON_COMPLIANT
+        assert scheduler._state.resource_state[rid1].status is ComplianceStatus.NON_COMPLIANT
+        assert scheduler._state.resource_state[rid2].blocked is BlockedStatus.NO
+        assert scheduler._state.resource_state[rid1].blocked is BlockedStatus.TRANSIENT
+
+        # deploy r2 successfully
+        await scheduler.deploy_resource(
+            rid2,
+            reason="Test: deploying r2 for success",
+            priority=TaskPriority.USER_DEPLOY,
+        )
+        await retry_limited_fast(lambda: rid2 in executor.deploys)
+        executor.deploys[rid2].set_result(const.HandlerResourceState.deployed)
+
+        # r1 will get a recovery event, make it succeed
+        await retry_limited_fast(lambda: rid1 in executor.deploys)
+        executor.deploys[rid1].set_result(const.HandlerResourceState.deployed)
+
+        await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 3)
+
+        # verify new state
+        assert scheduler._state.resource_state[rid2].status is ComplianceStatus.COMPLIANT
+        assert scheduler._state.resource_state[rid1].status is ComplianceStatus.COMPLIANT
+        assert scheduler._state.resource_state[rid2].blocked is BlockedStatus.NO
+        assert scheduler._state.resource_state[rid1].blocked is BlockedStatus.NO
+
+        # this is a valid recovery, verify that no log message was emitted
+        assert len(get_resource_action_logs(caplog)) == 0
+        assert len(scheduler.state_update_manager.deploys[rid1].messages) == 0
+        assert len(scheduler.state_update_manager.deploys[rid2].messages) == 0
+
+    # verify log message is as expected if r1 succeeds while in TRANSIENT state but all resources are in a good state
+    # (scheduler bug)
+    agent.executor_manager.reset_executor_counters()
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        assert scheduler._state.resource_state[rid2].status is ComplianceStatus.COMPLIANT
+        scheduler._state.resource_state[rid1].blocked = BlockedStatus.TRANSIENT
+
+        # deploy r1 successfully
+        await scheduler.deploy_resource(
+            rid1,
+            reason="Test: deploying r1",
+            priority=TaskPriority.USER_DEPLOY,
+        )
+        await retry_limited_fast(lambda: rid1 in executor.deploys)
+        executor.deploys[rid1].set_result(const.HandlerResourceState.deployed)
+
+        await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
+
+        # verify that the warning message now implies a scheduler bug rather than a handler bug
+        resource_action_logs = get_resource_action_logs(caplog)
+        assert len(resource_action_logs) == 1
+        record: logging.LogRecord = resource_action_logs[0]
+        assert record.levelno == logging.WARNING
+        assert record.name == "inmanta.resource_action.agent1"
+        expected_message: str = (
+            f"Inconsistent internal state for resource {rid1}. The inmanta resource scheduler assumed it was still blocked,"
+            " pending a successful deploy of at least one of its requires. However, all dependencies are already in a deployed"
+            " state. This was expected to be impossible and it indicates a (non-critical) bug in the inmanta resource"
+            " scheduler. Please report this incident. In the meantime, if you encounter any resources stuck in the skipped"
+            " state, trigger a repair as a workaround to force a deploy."
+        )
+        assert record.message == f"resource {rid1},v={version}: {expected_message}"
+        assert len(scheduler.state_update_manager.deploys[rid1].messages) == 1
+        assert scheduler.state_update_manager.deploys[rid1].messages[0].msg == expected_message
+
+    assert scheduler._state.resource_state[rid2].status is ComplianceStatus.COMPLIANT
+    assert scheduler._state.resource_state[rid1].status is ComplianceStatus.COMPLIANT
+    assert scheduler._state.resource_state[rid2].blocked is BlockedStatus.NO
+    # verify that scheduler recognized that it is no longer blocked
+    assert scheduler._state.resource_state[rid1].blocked is BlockedStatus.NO
