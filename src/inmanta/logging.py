@@ -496,6 +496,7 @@ class LoggingConfigBuilder:
             "keep_logger_names": keep_logger_names,
         }
 
+
 @stable_api
 def convert_inmanta_log_level(inmanta_log_level: str, cli: bool = False) -> int:
     """
