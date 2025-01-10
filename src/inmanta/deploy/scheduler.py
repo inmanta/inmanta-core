@@ -1283,7 +1283,6 @@ class ResourceScheduler(TaskManager):
             if dependency_state != const.ResourceState.deployed
         }
         if bad_dependencies:
-            # TODO: test case: deploy resource that skips for undefined, then deploys. Set up with one bad dep
             return data.LogLine.log(
                 logging.WARNING,
                 (
@@ -1304,7 +1303,6 @@ class ResourceScheduler(TaskManager):
                 dependencies=", ".join(f"{r}: {state.name}" for r, state in bad_dependencies.items()),
             )
         else:
-            # TODO: test case: force write TRANSIENT state, then deploy resource
             return data.LogLine.log(
                 logging.WARNING,
                 (
