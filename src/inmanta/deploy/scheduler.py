@@ -1174,10 +1174,13 @@ class ResourceScheduler(TaskManager):
                     state.blocked = BlockedStatus.NO
 
                     log_line: data.LogLine = self._get_transient_deployed_warning(intent)
-                    # write to scheduler log
-                    log_line.write_to_logger(LOGGER)
-                    # write to resource action log
-                    log_line.messages.append(log_line)
+                    # write to resource action (and scheduler) log
+                    log_line.write_to_logger_for_resource(
+                        agent=intent.details.id.agent_name,
+                        resource_version_string=intent.details.id.copy(version=intent.model_version).resource_version_str(),
+                    )
+                    # write to database (via send_deploy_done())
+                    result.messages.append(log_line)
             else:
                 # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
                 # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
@@ -1287,7 +1290,7 @@ class ResourceScheduler(TaskManager):
                     "Resource %(resource)s was expected to skip for dependencies but it deployed successfully."
                     " The handler for this resource raised a SkipResourceForDependencies exception in a previous"
                     " execution, indicating that it would only be able to progress once all requires reached a"
-                    " deployed state. Some requires (%(dependencies)) are still in a non-deployed state,"
+                    " deployed state. Some requires (%(dependencies)s) are still in a non-deployed state,"
                     " therefore it was assumed that a new deploy attempt would have no effect."
                     " This indicates incorrect usage of the exception, and it will lead to resources getting stuck"
                     " in the skipped state. While this can be worked around by triggering a repair for now, that"
