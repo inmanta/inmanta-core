@@ -3148,7 +3148,9 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
         rid2: make_resource_minimal(rid2, values={"hello": "world 2"}, requires=[]),
     }
     version: int = 42
-    await agent.scheduler._new_version([ModelVersion(version=version, resources=resources, requires={rid1: {rid2}}, undefined=set())])
+    await agent.scheduler._new_version(
+        [ModelVersion(version=version, resources=resources, requires={rid1: {rid2}}, undefined=set())]
+    )
 
     # wait until deploy starts, then fail r2 and make r1 skip for dependencies
     await retry_limited_fast(lambda: rid2 in executor.deploys)
@@ -3186,11 +3188,7 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 2)
 
     def get_resource_action_logs(caplog) -> list[logging.LogRecord]:
-        return [
-            record
-            for record in caplog.records
-            if record.name.startswith("inmanta.resource_action")
-        ]
+        return [record for record in caplog.records if record.name.startswith("inmanta.resource_action")]
 
     # verify no log is emitted if it skips again as expected
     agent.executor_manager.reset_executor_counters()
