@@ -249,7 +249,7 @@ class DummyTimerManager(TimerManager):
     ) -> None:
         pass
 
-    def update_timer(self, resource: ResourceIdStr, *, is_compliant: bool) -> None:
+    def update_timer(self, resource: ResourceIdStr, *, state: state.ResourceState) -> None:
         pass
 
     def stop_timer(self, resource: ResourceIdStr) -> None:
@@ -279,6 +279,7 @@ class DummyStateManager(StateUpdateManager):
         state: state.ResourceState,
         *,
         started: datetime.datetime,
+        finished: datetime.datetime,
     ) -> None:
         self.state[result.resource_id] = result.status
         self.deploys[result.resource_id] = result
@@ -933,6 +934,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         status=state.ComplianceStatus.COMPLIANT,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
+        last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
     )
     assert rid1 not in agent.scheduler._state.dirty
     # set up initial state: release two changes for r1 -> the second makes the first stale
@@ -951,6 +953,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         status=state.ComplianceStatus.HAS_UPDATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
+        last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
     )
     assert rid1 in agent.scheduler._state.dirty
 
@@ -963,6 +966,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         status=state.ComplianceStatus.HAS_UPDATE,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
+        last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
     )
     assert rid1 in agent.scheduler._state.dirty
     # verify that r2 is still blocked on r1
@@ -989,6 +993,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         status=state.ComplianceStatus.COMPLIANT,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
+        last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
     )
     assert rid1 not in agent.scheduler._state.dirty
     state_manager_check(agent)
@@ -1338,6 +1343,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
         status=state.ComplianceStatus.COMPLIANT,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=state.BlockedStatus.NO,
+        last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore
     )
     assert len(agent.scheduler._state.dirty) == 0
 
@@ -1353,6 +1359,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
         status=state.ComplianceStatus.COMPLIANT,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=state.BlockedStatus.NO,
+        last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore
     )
     assert len(agent.scheduler._state.dirty) == 0
 
@@ -1370,6 +1377,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
         status=state.ComplianceStatus.NON_COMPLIANT,
         deployment_result=state.DeploymentResult.SKIPPED,
         blocked=state.BlockedStatus.NO,
+        last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore
     )
     assert agent.scheduler._state.dirty == {rid2}
 
@@ -1528,6 +1536,7 @@ async def test_skipped_for_dependencies_with_normal_event_propagation_disabled(a
         status=state.ComplianceStatus.NON_COMPLIANT,
         deployment_result=state.DeploymentResult.FAILED,
         blocked=state.BlockedStatus.NO,
+        last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore this one
     )
 
     assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
@@ -1535,6 +1544,7 @@ async def test_skipped_for_dependencies_with_normal_event_propagation_disabled(a
         status=state.ComplianceStatus.NON_COMPLIANT,
         deployment_result=state.DeploymentResult.SKIPPED,
         blocked=state.BlockedStatus.TRANSIENT,
+        last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore this one
     )
 
     # Recover rid1 and verify that rid2 also gets scheduled
@@ -1553,12 +1563,14 @@ async def test_skipped_for_dependencies_with_normal_event_propagation_disabled(a
         status=state.ComplianceStatus.COMPLIANT,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=state.BlockedStatus.NO,
+        last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore this one
     )
 
     assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
         status=state.ComplianceStatus.COMPLIANT,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=state.BlockedStatus.NO,
+        last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore this one
     )
 
 
@@ -2655,6 +2667,7 @@ async def test_state_of_skipped_resources_for_dependencies(agent: TestAgent, mak
         status=state.ComplianceStatus.NON_COMPLIANT,
         deployment_result=state.DeploymentResult.SKIPPED,
         blocked=state.BlockedStatus.TRANSIENT,
+        last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore
     )
 
 
@@ -2973,6 +2986,7 @@ async def test_deploy_orphaned(agent: TestAgent, make_resource_minimal) -> None:
         status=state.ComplianceStatus.HAS_UPDATE,
         deployment_result=state.DeploymentResult.NEW,
         blocked=state.BlockedStatus.NO,
+        last_deployed=None,
     )
 
     # wait for and finish the second deploy
@@ -2983,6 +2997,7 @@ async def test_deploy_orphaned(agent: TestAgent, make_resource_minimal) -> None:
         status=state.ComplianceStatus.COMPLIANT,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked=state.BlockedStatus.NO,
+        last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
     )
 
 

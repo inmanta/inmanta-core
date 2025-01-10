@@ -26,7 +26,7 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
-from inmanta.server import config
+from inmanta.server import SLICE_AGENT_MANAGER, config
 from inmanta.util import parse_timestamp
 
 
@@ -274,3 +274,28 @@ async def test_agent_process_details(client, environment: str) -> None:
     result = await client.get_agent_process_details(environment, process_sid, report=True)
     assert result.code == 200
     assert result.result["data"]["state"] is None
+
+
+async def test_agent_without_instance_or_process(server, client, environment):
+    """
+    This test case reproduces a bug where the `get_agents()` endpoint returns an empty list
+    if there is no agent record for the scheduler ($__scheduler).
+    """
+    # Halt the environment to make sure we don't clean up the agent record we will create soon.
+    result = await client.halt_environment(tid=environment)
+    assert result.code == 200
+
+    # Make sure the scheduler agent record is gone.
+    await data.Agent._execute_query("DELETE FROM AGENT")
+
+    # Create agent record in db
+    env_dao = await data.Environment.get_by_id(uuid.UUID(environment))
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    agent_name = "test"
+    await agent_manager.ensure_agent_registered(env=env_dao, nodename=agent_name)
+
+    result = await client.get_agents(tid=environment)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert result.result["data"][0]["environment"] == environment
+    assert result.result["data"][0]["name"] == agent_name

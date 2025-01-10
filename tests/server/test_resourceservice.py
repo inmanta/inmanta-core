@@ -61,11 +61,15 @@ async def resource_deployer(client, environment, null_agent):
                     change=change,
                 ),
                 state=state.ResourceState(
-                    status=state.ComplianceStatus.COMPLIANT, deployment_result=deployment_result, blocked=state.BlockedStatus.NO
+                    status=state.ComplianceStatus.COMPLIANT,
+                    deployment_result=deployment_result,
+                    blocked=state.BlockedStatus.NO,
+                    last_deployed=datetime.datetime.now().astimezone(),
                 ),
                 # not completely accurate but the exact time only really matters for some specifics of event propagation
                 # so we keep the interface simple
                 started=datetime.datetime.now().astimezone(),
+                finished=datetime.datetime.now().astimezone(),
             )
 
         @classmethod
