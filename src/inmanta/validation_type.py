@@ -187,7 +187,7 @@ def validate_type(
 def _cachable_validate_type(fq_type_name: str, validation_parameters: HashKeyContainer) -> pydantic.TypeAdapter[object]:
     module_name, type_name = fq_type_name.split(".", 1)
     module = importlib.import_module(module_name)
-    requested_type: object = getattr(module, type_name)
+    requested_type: type = getattr(module, type_name)
 
     validation_type: pydantic.TypeAdapter[object] = pydantic.TypeAdapter(
         parametrize_type(requested_type, validation_parameters.validation_parameters, type_name=fq_type_name)

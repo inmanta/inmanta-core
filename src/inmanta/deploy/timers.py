@@ -163,66 +163,115 @@ class TimerManager:
     async def join(self) -> None:
         await asyncio.gather(*[timer.join() for timer in self.resource_timers.values()])
 
-    def initialize(self) -> None:
+    async def initialize(self) -> None:
         """
         Set the periodic timers for repairs and deploys. Either per-resource if the
         associated config option is passed as a positive integer, or globally if it
         is passed as a cron expression string.
-
-        Should only be called once when initializing the resource scheduler.
-        After each call to reset(), this method can be called again once.
         """
+        await self.reload_config()
+
+    async def reload_config(self) -> None:
         deploy_timer: int | str = agent_config.agent_deploy_interval.get()
         repair_timer: int | str = agent_config.agent_repair_interval.get()
 
         if isinstance(deploy_timer, str):
-            self.global_periodic_deploy_task = self._trigger_global_deploy(deploy_timer)
+            new_deploy_cron: str | None = deploy_timer
+            new_periodic_deploy_interval: int | None = None
         else:
-            self.periodic_deploy_interval = deploy_timer if deploy_timer > 0 else None
+            new_deploy_cron = None
+            new_periodic_deploy_interval = deploy_timer
 
         if isinstance(repair_timer, str):
-            self.global_periodic_repair_task = self._trigger_global_repair(repair_timer)
+            new_repair_cron: str | None = repair_timer
+            new_periodic_repair_interval: int | None = None
         else:
-            self.periodic_repair_interval = repair_timer if repair_timer > 0 else None
+            new_repair_cron = None
+            new_periodic_repair_interval = repair_timer
 
-    def _trigger_global_deploy(self, cron_expression: str) -> util.ScheduledTask:
+        if not new_periodic_repair_interval and not new_periodic_deploy_interval:
+            self.periodic_repair_interval = new_periodic_repair_interval
+            self.periodic_deploy_interval = new_periodic_deploy_interval
+            # shutdown all finegrained timers
+            for timer in self.resource_timers.values():
+                timer.cancel()
+
+        # update globals
+        self._update_global_repair(new_repair_cron)
+        self._update_global_deploy(new_deploy_cron)
+
+        # restart timers if needed
+        if (
+            new_periodic_repair_interval != self.periodic_repair_interval
+            or new_periodic_deploy_interval != self.periodic_deploy_interval
+        ):
+            self.periodic_repair_interval = new_periodic_repair_interval
+            self.periodic_deploy_interval = new_periodic_deploy_interval
+            await self._resource_scheduler.reload_all_timers()
+
+    def _update_global_timer(
+        self, cron_expression: str | None, previous_value: util.ScheduledTask | None, reason: str, priority: TaskPriority
+    ) -> util.ScheduledTask | None:
         """
-        Trigger a global deploy following a cron expression schedule.
-        This does not affect previously started cron schedules.
+        Configure the global deploy according to the given expression
+        None for disabled
+
+        :returns: the associated scheduled task.
+        """
+        if cron_expression is None:
+            # disable
+            if previous_value is not None:
+                self._cron_scheduler.remove(previous_value)
+            return None
+
+        # enable
+        cron_schedule = util.CronSchedule(cron=cron_expression)
+
+        if previous_value is not None:
+            # Already exists
+            if previous_value.schedule == cron_schedule:
+                # All good!
+                return previous_value
+            else:
+                # Not good, remove
+                self._cron_scheduler.remove(previous_value)
+
+        async def _action() -> None:
+            await self._resource_scheduler.deploy(
+                reason=reason,
+                priority=priority,
+            )
+
+        return self._cron_scheduler.add_action(_action, cron_schedule)
+
+    def _update_global_deploy(self, cron_expression: str | None) -> None:
+        """
+        Configure the global deploy according to the given expression
+        None for disabled
 
         :returns: the associated scheduled task.
         """
 
-        cron_schedule = util.CronSchedule(cron=cron_expression)
+        self.global_periodic_deploy_task = self._update_global_timer(
+            cron_expression,
+            previous_value=self.global_periodic_deploy_task,
+            reason=f"Global deploy triggered because of cron expression for deploy interval: '{cron_expression}'",
+            priority=TaskPriority.INTERVAL_DEPLOY,
+        )
 
-        async def _action() -> None:
-            await self._resource_scheduler.deploy(
-                reason=f"Global deploy triggered because of cron expression for deploy interval: '{cron_expression}'",
-                priority=TaskPriority.INTERVAL_DEPLOY,
-            )
-
-        task = self._cron_scheduler.add_action(_action, cron_schedule)
-        assert isinstance(task, util.ScheduledTask)
-        return task
-
-    def _trigger_global_repair(self, cron_expression: str) -> util.ScheduledTask:
+    def _update_global_repair(self, cron_expression: str | None) -> None:
         """
         Trigger a global repair following a cron expression schedule.
         This does not affect previously started cron schedules.
 
         :returns: the associated scheduled task.
         """
-        cron_schedule = util.CronSchedule(cron=cron_expression)
-
-        async def _action() -> None:
-            await self._resource_scheduler.repair(
-                reason=f"Global repair triggered because of cron expression for repair interval: '{cron_expression}'",
-                priority=TaskPriority.INTERVAL_REPAIR,
-            )
-
-        task = self._cron_scheduler.add_action(_action, cron_schedule)
-        assert isinstance(task, util.ScheduledTask)
-        return task
+        self.global_periodic_repair_task = self._update_global_timer(
+            cron_expression,
+            previous_value=self.global_periodic_repair_task,
+            reason=f"Global repair triggered because of cron expression for repair interval: '{cron_expression}'",
+            priority=TaskPriority.INTERVAL_REPAIR,
+        )
 
     def update_timer(self, resource: ResourceIdStr, *, state: ResourceState) -> None:
         """
@@ -242,7 +291,7 @@ class TimerManager:
 
         # Create if it is not known yet
         if resource not in self.resource_timers:
-            self.resource_timers[resource] = ResourceTimer(resource, self._resource_scheduler)
+            self.resource_timers[resource] = self._make_resource_timer(resource)
 
         repair_only: bool  # consider only repair or also deploy?
 
@@ -307,6 +356,10 @@ class TimerManager:
             else:
                 assert self.periodic_deploy_interval is not None  # mypy
                 _setup_deploy(self.periodic_deploy_interval)
+
+    def _make_resource_timer(self, resource: ResourceIdStr) -> ResourceTimer:
+        """Factor method for testing"""
+        return ResourceTimer(resource, self._resource_scheduler)
 
     def update_timers(self, resources: Collection[ResourceIdStr]) -> None:
         """

@@ -413,12 +413,16 @@ class ResourceScheduler(TaskManager):
 
         await data.Resource.reset_resource_state(self.environment)
 
+    async def reload_all_timers(self) -> None:
+        async with self._scheduler_lock:
+            self._timer_manager.update_timers(self._state.resources.keys() - self._state.dirty)
+
     async def _initialize(self) -> None:
         """
         Initialize the scheduler state and continue the deployment where we were before the server was shutdown.
         Marks scheduler as running and triggers first deploys.
         """
-        self._timer_manager.initialize()
+        await self._timer_manager.initialize()
         # do not start a transaction because:
         # 1. nothing we do here before read_version is inherently transactional: the only write is atomic, and reads do not
         #   benefit from READ COMMITTED (default) isolation level.
@@ -451,8 +455,7 @@ class ResourceScheduler(TaskManager):
                 self._running = True
                 # All resources get a timer
                 await self.read_version(connection=con)
-                async with self._scheduler_lock:
-                    self._timer_manager.update_timers(self._state.resources.keys() - self._state.dirty)
+                await self.reload_all_timers()
 
                 if self._state.version == restored_version:
                     # no new version was present. Simply trigger a deploy for everything that's not in a known good state

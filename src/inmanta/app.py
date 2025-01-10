@@ -1044,12 +1044,12 @@ def app() -> None:
     Config.load_config(options.config_file, options.config_dir)
 
     # Collect potential log context
-    log_context = {}
-    env = None
+    log_context: dict[str, str] = {}
+    env: str | None = None
     if hasattr(options, "environment"):
         env = options.environment
     if not env:
-        env = agent_config.environment.get()
+        env = str(agent_config.environment.get())
     if env:
         log_context[LOG_CONTEXT_VAR_ENVIRONMENT] = env
 
