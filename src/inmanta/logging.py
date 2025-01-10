@@ -901,6 +901,7 @@ class InmantaLoggerConfig:
         self._apply_logging_config(complete_config)
 
 
+@stable_api
 class MultiLineFormatter(colorlog.ColoredFormatter):
     """
     Formatter for multi-line log records.
