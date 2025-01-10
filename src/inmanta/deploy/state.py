@@ -402,7 +402,7 @@ class ModelState:
                 self.resource_state[resource].blocked = blocked
 
         self.resources[resource] = details
-        if not known_compliant and self.resource_state[resource].blocked is not BlockedStatus.YES:
+        if not known_compliant and self.resource_state[resource].blocked is BlockedStatus.NO:
             self.dirty.add(resource)
         else:
             self.dirty.discard(resource)
