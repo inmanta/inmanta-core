@@ -287,6 +287,8 @@ class TestScheduler(ResourceScheduler):
 
     async def read_version(
         self,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         pass
 

@@ -313,6 +313,7 @@ class TimerManager:
 
         # Both periodic repairs and deploys are disabled on a per-resource basis.
         if self.periodic_repair_interval is None and self.periodic_deploy_interval is None:
+            self.resource_timers[resource].cancel()
             return
 
         last_deployed = state.last_deployed
@@ -345,6 +346,8 @@ class TimerManager:
             # schedule a periodic repair for it if the repair setting is set on a per-resource basis
             if self.periodic_repair_interval:
                 _setup_repair(self.periodic_repair_interval)
+            else:
+                self.resource_timers[resource].cancel()
 
         else:
             # At the time of the call, the resource is in an assumed bad state:

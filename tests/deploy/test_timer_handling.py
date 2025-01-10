@@ -37,7 +37,7 @@ from inmanta.deploy.timers import ResourceTimer, TimerManager
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.types import ResourceIdStr
-from inmanta.util import IntervalSchedule, ScheduledTask, Scheduler, TaskMethod, TaskSchedule
+from inmanta.util import CronSchedule, IntervalSchedule, ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from utils import make_requires
 
 
@@ -56,12 +56,12 @@ class RecordingTimer(ResourceTimer):
         priority: TaskPriority,
     ) -> None:
         self.when = when
-        self.interval = when - datetime.datetime.now().astimezone()
         self.reason = reason
         self.priority = priority
 
     def cancel(self) -> None:
         self.when = None
+        self.interval = None
 
 
 class MockScheduler(Scheduler):
@@ -224,24 +224,75 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment)
             return False
         return True
 
-    await retry_limited_fast(done)
+    await retry_limited_fast(done, timeout=5)
+    last_deploy_time_approx = datetime.datetime.now().astimezone()
 
-    def is_approx(time: timedelta, seconds: int) -> bool:
-        return abs(time - timedelta(seconds=seconds)) < timedelta(milliseconds=1)
+    def is_approx(rid: str, seconds: int) -> None:
+        time = tm.resource_timers[rid].when
+        assert abs(time - last_deploy_time_approx - timedelta(seconds=seconds)) < timedelta(milliseconds=100)
 
+    def is_disabled(rid) -> None:
+        assert rid not in tm.resource_timers or tm.resource_timers[rid].when is None
+
+    # Repeat same patter: update config, check all timers
+
+    # All per resource
     assert tm.global_periodic_repair_task is None
     assert tm.global_periodic_deploy_task is None
-    assert is_approx(tm.resource_timers[rid1].interval, 3600)
-    assert is_approx(tm.resource_timers[rid2].interval, 60)
-    assert rid3 not in tm.resource_timers
+    is_approx(rid1, 3600)
+    is_approx(rid2, 60)
+    is_disabled(rid3)
 
+    # Updated timers
     config.agent_deploy_interval.set("600")
     config.agent_repair_interval.set("36000")
-
     await tm.reload_config()
 
     assert tm.global_periodic_repair_task is None
     assert tm.global_periodic_deploy_task is None
-    assert is_approx(tm.resource_timers[rid1].interval, 36000)
-    assert is_approx(tm.resource_timers[rid2].interval, 600)
-    assert rid3 not in tm.resource_timers
+    is_approx(rid1, 36000)
+    is_approx(rid2, 600)
+    is_disabled(rid3)
+
+    # Repair on cron job
+    config.agent_deploy_interval.set("60")
+    config.agent_repair_interval.set("* * * * *")
+    await tm.reload_config()
+
+    assert tm.global_periodic_repair_task.schedule == CronSchedule("* * * * *")
+    assert tm.global_periodic_deploy_task is None
+    is_disabled(rid1)
+    is_approx(rid2, 60)
+    is_disabled(rid3)
+
+    # Deploy on cron job
+    config.agent_deploy_interval.set("* * * * 1")
+    config.agent_repair_interval.set("360")
+    await tm.reload_config()
+
+    assert tm.global_periodic_repair_task is None
+    assert tm.global_periodic_deploy_task.schedule == CronSchedule("* * * * 1")
+    is_approx(rid1, 360)
+    is_approx(rid2, 360)
+    is_disabled(rid3)
+
+    # All on cron
+    config.agent_deploy_interval.set("* * * * 1")
+    config.agent_repair_interval.set("* * * * 2")
+    await tm.reload_config()
+    assert tm.global_periodic_repair_task.schedule == CronSchedule("* * * * 2")
+    assert tm.global_periodic_deploy_task.schedule == CronSchedule("* * * * 1")
+    is_disabled(rid1)
+    is_disabled(rid2)
+    is_disabled(rid3)
+
+    # back to start
+    config.agent_deploy_interval.set("600")
+    config.agent_repair_interval.set("36000")
+    await tm.reload_config()
+
+    assert tm.global_periodic_repair_task is None
+    assert tm.global_periodic_deploy_task is None
+    is_approx(rid1, 36000)
+    is_approx(rid2, 600)
+    is_disabled(rid3)

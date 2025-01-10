@@ -424,7 +424,7 @@ class ResourceScheduler(TaskManager):
                     or deploy in self._work.agent_queues.in_progress
                     or resource in self._work._waiting
                 ):
-                    continue
+                    self._timer_manager.stop_timer(resource)
                 self._timer_manager.update_timer(resource, state=state)
 
     async def _initialize(self) -> None:
