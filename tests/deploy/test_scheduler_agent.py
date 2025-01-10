@@ -3251,7 +3251,7 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
             " the skipped state. While this can be worked around by triggering a repair for now, that may not work in the"
             " future. Please check your handler implementation, and make sure to raise the generic SkipResource rather than"
             " SkipResourceForDependencies if you wish to skip a deploy for any other reason than to wait until all requires"
-            " are in a good state. Please report this incident if you believe your handler implementation is correct after all."
+            " are in a good state. Please contact support if you believe your handler implementation is correct after all."
         )
         assert record.message == f"resource {rid1},v={version}: {expected_message}"
         # verify that it is also sent to the database
@@ -3374,7 +3374,7 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
             f"Inconsistent internal state for resource {rid1}. The inmanta resource scheduler assumed it was still blocked,"
             " pending a successful deploy of at least one of its requires. However, all dependencies are already in a deployed"
             " state. This was expected to be impossible and it indicates a (non-critical) bug in the inmanta resource"
-            " scheduler. Please report this incident. In the meantime, if you encounter any resources stuck in the skipped"
+            " scheduler. Please report this bug. In the meantime, if you encounter any resources stuck in the skipped"
             " state, trigger a repair as a workaround to force a deploy."
         )
         assert record.message == f"resource {rid1},v={version}: {expected_message}"
