@@ -567,7 +567,7 @@ class LoggingConfigFromFile(LoggingConfigSource):
     """
 
     def __init__(self, file_name: str) -> None:
-        self.file_name = file_name
+        self.file_name = os.path.abspath(file_name)
 
     def read_logging_config(self, context: Mapping[str, str]) -> dict[str, object]:
         try:
