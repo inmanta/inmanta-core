@@ -1333,7 +1333,7 @@ class ResourceScheduler(TaskManager):
                     " Please check your handler implementation, and make sure to raise the generic SkipResource"
                     " rather than SkipResourceForDependencies if you wish to skip a deploy for any other reason"
                     " than to wait until all requires are in a good state."
-                    " Please report this incident if you believe your handler implementation is correct after all."
+                    " Please contact support if you believe your handler implementation is correct after all."
                 ),
                 resource=intent.details.resource_id,
                 dependencies=", ".join(f"{r}: {state.name}" for r, state in bad_dependencies.items()),
