@@ -38,7 +38,7 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import Discrepancy, SchedulerStatusReport
-from inmanta.deploy import tasks, timers, work
+from inmanta.deploy import timers, work
 from inmanta.deploy.persistence import ToDbUpdateManager
 from inmanta.deploy.state import (
     AgentStatus,
@@ -414,7 +414,12 @@ class ResourceScheduler(TaskManager):
 
         await data.Resource.reset_resource_state(self.environment)
 
+    async def load_timer_settings(self) -> None:
+        """Update the timer manager after an update of the timer config"""
+        await self._timer_manager.reload_config()
+
     async def reload_all_timers(self) -> None:
+        """Internal, request all timers to reload"""
         # Get lock
         async with self._scheduler_lock:
             for resource, state in self._state.resource_state.items():

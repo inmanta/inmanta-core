@@ -295,6 +295,9 @@ class TestScheduler(ResourceScheduler):
     async def reset_resource_state(self) -> None:
         pass
 
+    async def load_timer_settings(self) -> None:
+        pass
+
     async def _initialize(
         self,
     ) -> None:
@@ -345,6 +348,9 @@ class TestAgent(Agent):
         super().__init__(environment)
         self.executor_manager = DummyManager()
         self.scheduler = TestScheduler(self.scheduler.environment, self.executor_manager, self.scheduler.client)
+
+    async def load_environment_settings(self) -> None:
+        pass
 
 
 class DummyDatabaseConnection:

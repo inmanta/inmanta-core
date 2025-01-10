@@ -23,7 +23,7 @@ import time
 import typing
 from collections.abc import Collection
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Callable, Coroutine
+from typing import TYPE_CHECKING
 
 from inmanta import util
 from inmanta.agent import config as agent_config
