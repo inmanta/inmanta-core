@@ -784,7 +784,7 @@ class ResourceScheduler(TaskManager):
             version when the scheduler is started with a fresh state.
         :param last_deploy_time: last known deploy time of all resources. only intended for the very first
             version when the scheduler is started with a fresh state.
-            It must contain ALL resources as it used to start the timers
+            It must contain ALL resources as it is used to start the timers
         :param reason: The reason to associate with any deploys caused by this newly released version.
         :param connection: Connection to use for db operations. Should not be in a transaction context for two reasons:
             1. This method acquires the scheduler lock, and needs to have control about how it is allowed to interleave with
