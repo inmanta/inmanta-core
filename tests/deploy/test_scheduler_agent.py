@@ -30,7 +30,7 @@ from typing import Mapping, Optional, Sequence
 import pytest
 
 import utils
-from deploy.scheduler_mocks import FAIL_DEPLOY, DummyExecutor, ManagedExecutor, TestScheduler, TestAgent
+from deploy.scheduler_mocks import FAIL_DEPLOY, DummyExecutor, ManagedExecutor, TestAgent, TestScheduler
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent

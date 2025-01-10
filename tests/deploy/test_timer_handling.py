@@ -23,22 +23,21 @@ import json
 import uuid
 from asyncio import Event
 from datetime import timedelta
-from typing import Union, Optional
+from typing import Optional, Union
 
 import pytest
 
-from deploy.scheduler_mocks import DummyManager, TestScheduler, FAIL_DEPLOY
+from deploy.scheduler_mocks import FAIL_DEPLOY, DummyManager, TestScheduler
 from deploy.test_scheduler_agent import make_resource_minimal, retry_limited_fast
 from inmanta import const
+from inmanta.agent import config
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ModelVersion
-from inmanta.protocol.common import custom_json_encoder
-from inmanta.types import ResourceIdStr
-
 from inmanta.deploy.timers import ResourceTimer, TimerManager
 from inmanta.deploy.work import TaskPriority
-from inmanta.util import Scheduler, TaskMethod, TaskSchedule, ScheduledTask, IntervalSchedule
-from inmanta.agent import config
+from inmanta.protocol.common import custom_json_encoder
+from inmanta.types import ResourceIdStr
+from inmanta.util import IntervalSchedule, ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from utils import make_requires
 
 
@@ -63,6 +62,7 @@ class RecordingTimer(ResourceTimer):
 
     def cancel(self) -> None:
         self.when = None
+
 
 class MockScheduler(Scheduler):
 
@@ -92,7 +92,6 @@ class MockScheduler(Scheduler):
         pass
 
 
-
 class MockTimerManager(TimerManager):
 
     def __init__(self, environment: uuid.UUID) -> None:
@@ -107,6 +106,7 @@ class MockTimerManager(TimerManager):
 
 
 async def test_time_manager_basics():
+
     class MockTimer(ResourceTimer):
 
         def __init__(self):
@@ -145,9 +145,11 @@ async def test_time_manager_basics():
     assert_fired(*t5)
     assert t3[0].activated_at is None
 
+
 @pytest.fixture
 def environment() -> uuid.UUID:
     return uuid.UUID("83d604a0-691a-11ef-ae04-c8f750463317")
+
 
 @pytest.fixture
 def make_resource_minimal(environment):
@@ -219,8 +221,9 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment)
             if queue._unfinished_tasks != 0:
                 return False
         if not scheduler._work.agent_queues._agent_queues:
-           return False
+            return False
         return True
+
     await retry_limited_fast(done)
 
     def is_approx(time: timedelta, seconds: int) -> bool:
@@ -242,5 +245,3 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment)
     assert is_approx(tm.resource_timers[rid1].interval, 36000)
     assert is_approx(tm.resource_timers[rid2].interval, 600)
     assert rid3 not in tm.resource_timers
-
-

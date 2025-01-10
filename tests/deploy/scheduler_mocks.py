@@ -2,22 +2,22 @@ import asyncio
 import datetime
 import typing
 import uuid
-from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager, AbstractAsyncContextManager
-from typing import Mapping, Sequence, Callable, Coroutine, Any, Optional, AbstractSet, Never
 from collections.abc import Set
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from typing import AbstractSet, Any, Callable, Coroutine, Mapping, Never, Optional, Sequence
 from uuid import UUID
 
 import asyncpg
 from asyncpg import Connection
 
 from inmanta import const
-from inmanta.agent import executor, Agent
-from inmanta.agent.executor import ResourceDetails, DeployResult, ResourceInstallSpec, FactResult, DryrunResult
+from inmanta.agent import Agent, executor
+from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
 from inmanta.const import Change
 from inmanta.deploy import state
 from inmanta.deploy.persistence import StateUpdateManager
-from inmanta.deploy.scheduler import ResourceScheduler, ModelVersion
+from inmanta.deploy.scheduler import ModelVersion, ResourceScheduler
 from inmanta.deploy.timers import TimerManager
 from inmanta.protocol import Client
 from inmanta.resources import Id

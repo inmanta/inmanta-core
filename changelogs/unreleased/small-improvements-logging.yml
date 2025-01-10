@@ -1,0 +1,4 @@
+---
+description: Added small enhancements to the logging framework.
+change-type: patch
+destination-branches: [master]

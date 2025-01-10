@@ -644,10 +644,10 @@ def validate_logging_config_parser_config(
 
 @command(
     "validate-logging-config",
-    help_msg="This command loads a logging config file, taking into account the precedence rules for logging config files,"
-    " and produces log lines. It serves as a tool to validate whether a logging config file is syntactically correct"
-    " and behaves as expected. Optionally, a sub-command can be specified to indicate the component for which the"
-    " logging config file should be loaded.",
+    help_msg="This command loads the logging config like other CLI commands would (taking into account"
+    " the precedence rules for logging configuration) and produces log lines. It serves as a tool to validate whether"
+    " a logging config file is syntactically correct and behaves as expected. Optionally, a sub-command can be specified"
+    " to indicate the component for which the logging config file should be loaded.",
     parser_config=validate_logging_config_parser_config,
 )
 def validate_logging_config(options: argparse.Namespace) -> None:
