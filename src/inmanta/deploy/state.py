@@ -18,6 +18,7 @@
 
 import contextlib
 import dataclasses
+import datetime
 import enum
 import itertools
 import json
@@ -26,7 +27,7 @@ from collections import defaultdict
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Optional, Self
+from typing import TYPE_CHECKING, Optional, Self, cast
 
 import asyncpg
 
@@ -163,6 +164,8 @@ class BlockedStatus(StrEnum):
 class ResourceState:
     """
     State of a resource. Consists of multiple independent (mostly) state vectors that make up the final state.
+
+    :param last_deployed: when was this resource last deployed
     """
 
     # FIXME: review / finalize resource state. Based on draft design in
@@ -170,6 +173,7 @@ class ResourceState:
     status: ComplianceStatus
     deployment_result: DeploymentResult
     blocked: BlockedStatus
+    last_deployed: datetime.datetime | None
 
     def is_dirty(self) -> bool:
         """
@@ -237,6 +241,7 @@ class ModelState:
                 "deployment_result",
                 "blocked_status",
                 "last_success",
+                "last_deploy",
                 "last_produced_events",
             ],
             project_attributes=[
@@ -259,6 +264,7 @@ class ModelState:
             # Populate resource_state
 
             compliance_status: ComplianceStatus
+            last_deployed = cast(datetime.datetime, res["last_deploy"])
             if res["is_orphan"]:
                 # it was marked as an orphan by the scheduler when (or sometime before) it read the version we're currently
                 # processing => exclude it from the model
@@ -282,6 +288,7 @@ class ModelState:
                 status=compliance_status,
                 deployment_result=DeploymentResult[res["deployment_result"]],
                 blocked=BlockedStatus[res["blocked_status"]],
+                last_deployed=last_deployed,
             )
             result.resource_state[resource_id] = resource_state
 
@@ -335,6 +342,7 @@ class ModelState:
         force_new: bool = False,
         undefined: bool = False,
         known_compliant: bool = False,
+        last_deployed: datetime.datetime | None = None,
     ) -> None:
         """
         Register a change of intent for a resource. Registers the new resource details, as well as its undefined status.
@@ -350,6 +358,7 @@ class ModelState:
             with known_compliant.
         :param known_compliant: Whether this resource is known to be in a good state (compliant and last deploy was successful).
             Useful for restoring previously known state when scheduler is started. Mutually exclusive with undefined.
+        :param last_deployed: last deployed time. Only set when restoring previously known state when scheduler is started.
         """
         if undefined and known_compliant:
             raise ValueError("A resource can not be both undefined and compliant")
@@ -374,6 +383,7 @@ class ModelState:
                 status=compliance_status,
                 deployment_result=DeploymentResult.DEPLOYED if known_compliant else DeploymentResult.NEW,
                 blocked=blocked,
+                last_deployed=last_deployed,
             )
             if resource not in self.requires:
                 self.requires[resource] = set()
