@@ -17,14 +17,17 @@
 """
 
 import asyncio
+import datetime
 import logging
 import uuid
+from collections.abc import Mapping
 
 import pytest
 
 import utils
 from inmanta import config, const, data
 from inmanta.agent.agent_new import Agent
+from inmanta.deploy.state import BlockedStatus, ComplianceStatus, DeploymentResult, ResourceState
 
 
 @pytest.fixture
@@ -56,11 +59,17 @@ async def test_agent_disconnect(
     utils.log_index(caplog, "inmanta.scheduler", logging.WARNING, "Connection to server lost, stopping scheduler")
 
 
-async def test_scheduler_initialization(agent, resource_container, clienthelper, server, client, environment) -> None:
+@pytest.mark.parametrize("restore_state", (True, False))
+async def test_scheduler_initialization(
+    agent, resource_container, clienthelper, server, client, environment, restore_state: bool
+) -> None:
     """
     Ensure that when the scheduler starts, it only deploys the resources that need to be deployed,
     i.e. the resources that are not up-to-date or have outstanding events.
     """
+    if not restore_state:
+        await client.set_setting(environment, data.AUTOSTART_AGENT_RESTORE_STATE, False)
+
     resource_container.Provider.reset()
     resource_container.Provider.set(agent="agent1", key="key", value="key1")
     resource_container.Provider.set(agent="agent1", key="key", value="key2")
@@ -119,15 +128,57 @@ async def test_scheduler_initialization(agent, resource_container, clienthelper,
     assert len(result.result["data"]) == 1
     assert result.result["data"][0]["resource_version_ids"] == ["test::Resource[agent1,key=key1],v=1"]
 
+    # get deploy timestamps
+    async def get_last_deployed() -> dict[int, datetime.datetime]:
+        result: dict[str, datetime.datetime] = {}
+        for i in range(1, 4):
+            rid = f"test::Resource[agent1,key=key{i}]"
+            rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid)
+            assert rps is not None
+            result[i] = rps.last_deploy
+        return result
+
+    last_deployed: Mapping[str, datetime.datetime] = await get_last_deployed()
+
     # Pause the agent to stop the scheduler
     # We cannot call halt_environment / resume_environment as it will try to create the scheduler but will fail
     # because auto_start_agent is not set to `True`
     await data.Agent.pause(env=uuid.UUID(environment), endpoint=const.AGENT_SCHEDULER_ID, paused=True)
     result, _ = await agent.set_state(const.AGENT_SCHEDULER_ID, enabled=False)
     assert result == 200
+    # also pause the nominal agent agent1 so we can assert scheduler state after initialization but before work starts
+    result = await client.agent_action(environment, "agent1", const.AgentAction.pause.name)
+    assert result.code == 200, result.result
+
     await data.Agent.pause(env=uuid.UUID(environment), endpoint=const.AGENT_SCHEDULER_ID, paused=False)
     result, _ = await agent.set_state(const.AGENT_SCHEDULER_ID, enabled=True)
     assert result == 200
+
+    assert agent.scheduler._state.resource_state == {
+        "test::Resource[agent1,key=key1]": ResourceState(
+            status=ComplianceStatus.COMPLIANT,
+            deployment_result=DeploymentResult.DEPLOYED,
+            blocked=BlockedStatus.NO,
+            last_deployed=last_deployed[1],
+        ),
+        "test::Resource[agent1,key=key2]": ResourceState(
+            status=ComplianceStatus.NON_COMPLIANT if restore_state else ComplianceStatus.HAS_UPDATE,
+            deployment_result=DeploymentResult.FAILED if restore_state else DeploymentResult.NEW,
+            blocked=BlockedStatus.NO,
+            last_deployed=last_deployed[2],
+        ),
+        "test::Resource[agent1,key=key3]": ResourceState(
+            status=ComplianceStatus.NON_COMPLIANT if restore_state else ComplianceStatus.HAS_UPDATE,
+            deployment_result=DeploymentResult.SKIPPED if restore_state else DeploymentResult.NEW,
+            blocked=BlockedStatus.NO,  # we don't restore TRANSIENT status atm
+            last_deployed=last_deployed[3],
+        ),
+    }
+
+    # unpause agent1 -> start deploying
+    result = await client.agent_action(environment, "agent1", const.AgentAction.unpause.name)
+    assert result.code == 200, result.result
+
     await utils.retry_limited(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1", timeout=10, interval=0.05)
 
     for rid, expected_status in [
@@ -149,3 +200,9 @@ async def test_scheduler_initialization(agent, resource_container, clienthelper,
     assert len(result.result["data"]) == 3
     for i in range(3):
         assert result.result["data"][i]["resource_version_ids"] == [f"test::Resource[agent1,key=key{3 - i}],v=1"]
+
+    # verify that key2 and key3 got deployed while key1 did not because it was already in a good state
+    last_deployed_after: Mapping[str, datetime.datetime] = await get_last_deployed()
+    assert last_deployed_after[1] == last_deployed[1]
+    assert last_deployed_after[2] > last_deployed[2]
+    assert last_deployed_after[3] > last_deployed[3]
