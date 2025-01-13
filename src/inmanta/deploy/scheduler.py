@@ -68,17 +68,17 @@ class StaleResource(Exception):
 
 
 @dataclass(frozen=True)
-class ResourceIntent:
+class ResourceVersion:
     """
     Resource intent for a single resource.
     """
 
     model_version: int
-    details: ResourceDetails
+    intent: ResourceIntent
 
 
 @dataclass(frozen=True)
-class DeployIntent(ResourceIntent):
+class DeployIntent(ResourceVersion):
     """
     Deploy intent for a single resource. Includes dependency state to provide to the resource handler.
     """
@@ -302,6 +302,7 @@ class TaskRunner:
         return self.status == AgentStatus.STARTED
 
 
+# TODO: review full implementation
 class ResourceScheduler(TaskManager):
     """
     Scheduler for resource actions. Reads resource state from the database and accepts deploy, dry-run, ... requests from the

@@ -54,7 +54,7 @@ class RequiresProvidesMapping(BidirectionalManyMapping["ResourceIdStr", "Resourc
         return self.reverse_mapping()
 
 
-class ComplianceStatus(StrEnum):
+class Compliance(StrEnum):
     """
     Status of a resource's operational status with respect to its latest desired state, to the best of our knowledge.
     COMPLIANT: The operational state complies to latest resource intent as far as we know.
@@ -80,7 +80,7 @@ class ComplianceStatus(StrEnum):
 
 
 @dataclass(frozen=True)
-class ResourceDetails:
+class ResourceIntent:
     resource_id: "ResourceIdStr"
     attribute_hash: str
     attributes: Mapping[str, object] = dataclasses.field(hash=False)
@@ -92,7 +92,8 @@ class ResourceDetails:
         object.__setattr__(self, "id", resources.Id.parse_id(self.resource_id))
 
 
-class DeploymentResult(StrEnum):
+# TODO: this vs executor.DeployResult
+class DeployStatus(StrEnum):
     """
     The result of a resource's last (finished) deploy. This result may be for an older version than the latest desired state.
     See ComplianceStatus for a resource's operational status with respect to its latest desired state.
@@ -135,7 +136,7 @@ class AgentStatus(StrEnum):
     STOPPED = enum.auto()
 
 
-class BlockedStatus(StrEnum):
+class Blocked(StrEnum):
     """
     YES: The resource will retain its blocked status within this model version. For example: A resource that has unknowns
          or depends on a resource with unknowns.
@@ -144,8 +145,8 @@ class BlockedStatus(StrEnum):
         Concretely it is waiting for its dependencies to deploy successfully.
     """
 
-    YES = enum.auto()
-    NO = enum.auto()
+    BLOCKED = enum.auto()
+    FREE = enum.auto()
     TRANSIENT = enum.auto()
 
     def db_value(self: "BlockedStatus") -> "BlockedStatus":
@@ -170,9 +171,9 @@ class ResourceState:
 
     # FIXME: review / finalize resource state. Based on draft design in
     #   https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
-    status: ComplianceStatus
-    deployment_result: DeploymentResult
-    blocked: BlockedStatus
+    compliance: Compliance
+    deploy_status: DeployStatus
+    blocked: Blocked
     last_deployed: datetime.datetime | None
 
     def is_dirty(self) -> bool:
@@ -198,9 +199,9 @@ class ModelState:
     """
 
     version: int
-    resources: dict["ResourceIdStr", ResourceDetails] = dataclasses.field(default_factory=dict)
+    intent: dict["ResourceIdStr", ResourceIntent] = dataclasses.field(default_factory=dict)
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
-    resource_state: dict["ResourceIdStr", ResourceState] = dataclasses.field(default_factory=dict)
+    state: dict["ResourceIdStr", ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
     dirty: set["ResourceIdStr"] = dataclasses.field(default_factory=set)
     # types per agent keeps track of which resource types live on which agent by doing a reference count

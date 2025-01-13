@@ -75,7 +75,8 @@ class DryrunResult:
     messages: list[LogLine]
 
 
-class ResourceDetails:
+# rename 2
+class ResourceSpec:
     """
     In memory representation of the desired state of a resource
     """
