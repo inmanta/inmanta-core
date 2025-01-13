@@ -20,10 +20,19 @@ Glossary
         environment is required, but often multiple environments of the same infrastructure are
         available such as development, integration and testing.
 
-    agent
+    scheduler
+        In each environment, a resource scheduler is responsible for enforcing the desired state.
+        To this end, the scheduler reads the desired state from the database, determines which
+        resources need deploying and in which relative order, and spawns executors that will
+        load the appropriate handler code and perform the actual resource deployment.
+
+    executor
         The process that enforces the desired state described by :term:`resources<resource>` by
-        executing :term:`handlers<handler>`. Each agent is responsible for all resources that go to
-        a single device or API endpoint.
+        executing :term:`handlers<handler>`. This is a short-lived process spawned on-demand
+        by the scheduler.
+
+    agent
+        Each agent is responsible for all resources that go to a single device or API endpoint. TODO <improve this>
 
     resource
         Inmanta orchestrates and manages resources, of any abstraction level, in an infrastructure.
@@ -61,13 +70,13 @@ Glossary
 
     handler
         A handler provides the interface between a resource in the model and the resource in the
-        infrastructure. The agent loads the handler and uses it to read the current state, discover
+        infrastructure. The executor loads the handler and uses it to discover
         :term:`facts` and make changes to the real resource.
 
     desired state
         The desired state expresses the state of all resources that Inmanta manages. Expressing a
         configuration in function of desired state makes the orchestrator more robust to failures
-        compared to imperative based orchestration. An agent uses a :term:`handler` to read the
+        compared to imperative based orchestration. The :term:`scheduler` reads the
         current state of the a resource and derive from the difference between current and desired
         state the actions required to change the state of the resource. Desired state has the
         additional benefit that Inmanta can show a dry run or execution plan of what would change if
