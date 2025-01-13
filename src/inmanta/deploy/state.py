@@ -92,7 +92,6 @@ class ResourceIntent:
         object.__setattr__(self, "id", resources.Id.parse_id(self.resource_id))
 
 
-# TODO: this vs executor.DeployResult
 class DeployStatus(StrEnum):
     """
     The result of a resource's last (finished) deploy. This result may be for an older version than the latest desired state.
