@@ -574,12 +574,12 @@ class InmantaLoggerConfig:
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
 
-        self._options_applied = True
         config_builder = LoggingConfigBuilder()
         logging_config: FullLoggingConfig = config_builder.get_logging_config_from_options(
             self._stream, options, self._logging_configs_extensions
         )
         self._handlers = self._apply_logging_config(logging_config)
+        self._options_applied = True
 
     def _apply_logging_config(self, logging_config: FullLoggingConfig) -> abc.Sequence[logging.Handler]:
         """
