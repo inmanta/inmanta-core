@@ -3172,7 +3172,11 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
     assert scheduler._state.resources == all_models[-1].resources
     for rid in (rid1, rid2, rid4):
         assert scheduler._state.resource_state[rid].status is ComplianceStatus.UNDEFINED
-        assert scheduler._state.resource_state[rid].deployment_result is DeploymentResult.DEPLOYED if rid != rid4 else DeploymentResult.NEW
+        assert (
+            scheduler._state.resource_state[rid].deployment_result is DeploymentResult.DEPLOYED
+            if rid != rid4
+            else DeploymentResult.NEW
+        )
         assert scheduler._state.resource_state[rid].blocked is BlockedStatus.YES
 
     await restore_baseline_state()
