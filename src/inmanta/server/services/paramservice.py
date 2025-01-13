@@ -77,7 +77,9 @@ class ParameterService(protocol.ServerSlice):
         updated_before = datetime.datetime.now().astimezone() - datetime.timedelta(0, self._fact_renew)
         async with data.Parameter.get_connection() as connection:
             params_to_renew = await data.Parameter.get_updated_before_active_env(updated_before, connection=connection)
-            unknown_parameters = await data.UnknownParameter.get_unknowns_in_latest_released_model_versions(connection=connection)
+            unknown_parameters = await data.UnknownParameter.get_unknowns_in_latest_released_model_versions(
+                connection=connection
+            )
 
         LOGGER.debug("Renewing %d parameters", len(params_to_renew))
         for param in params_to_renew:

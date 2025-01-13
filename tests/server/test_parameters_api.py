@@ -27,8 +27,8 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
 from inmanta.const import ParameterSource
-from inmanta.server import config, SLICE_PARAM, SLICE_AGENT_MANAGER
-from inmanta.util import parse_timestamp, get_compiler_version
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_PARAM, config
+from inmanta.util import get_compiler_version, parse_timestamp
 
 
 @pytest.fixture
@@ -259,6 +259,7 @@ async def test_get_set_param(environment, client, server):
     result = await client.delete_param(tid=environment, id="key10")
     assert result.code == 200
 
+
 @pytest.mark.parametrize("no_agent", [True])
 async def test_dont_renew_old_facts(server, client, environment, clienthelper, caplog, time_machine, monkeypatch):
     """
@@ -278,21 +279,21 @@ async def test_dont_renew_old_facts(server, client, environment, clienthelper, c
     resource_id2 = "std::testing::NullResource[vm1.dev.inmanta.com,name=test2]"
     version = await clienthelper.get_version()
     resources = [
-            {
-                "id": f"{resource_id1},v={version}",
-                "name": "test1",
-                "param": "val1",
-                "purged": False,
-                "requires": [],
-            },
-            {
-                "id": f"{resource_id2},v={version}",
-                "name": "test2",
-                "param": "unknown",
-                "purged": False,
-                "requires": [],
-            },
-        ]
+        {
+            "id": f"{resource_id1},v={version}",
+            "name": "test1",
+            "param": "val1",
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "id": f"{resource_id2},v={version}",
+            "name": "test2",
+            "param": "unknown",
+            "purged": False,
+            "requires": [],
+        },
+    ]
 
     result = await client.put_version(
         tid=environment,
