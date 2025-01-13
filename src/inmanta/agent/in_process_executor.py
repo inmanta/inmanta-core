@@ -241,6 +241,9 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 resource_id=resource_details.rvid,
                 cause=e,
             )
+            msg.write_to_logger_for_resource(
+                agent=resource_details.id.agent_name, resource_version_string=resource_details.rvid, exc_info=True
+            )
             return DeployResult.undeployable(resource_details.rvid, action_id, msg)
 
         ctx = handler.HandlerContext(resource, action_id=action_id, logger=self.resource_action_logger)

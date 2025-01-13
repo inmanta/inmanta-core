@@ -260,8 +260,8 @@ class TimerManager:
 
     def _update_global_repair(self, cron_expression: str | None) -> None:
         """
-        Trigger a global repair following a cron expression schedule.
-        This does not affect previously started cron schedules.
+        Configure the global repair according to the given expression
+        None for disabled
 
         :returns: the associated scheduled task.
         """

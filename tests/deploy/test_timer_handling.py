@@ -28,7 +28,7 @@ from typing import Optional, Union
 import pytest
 
 from deploy.scheduler_mocks import FAIL_DEPLOY, DummyManager, TestScheduler
-from deploy.test_scheduler_agent import make_resource_minimal, retry_limited_fast
+from deploy.test_scheduler_agent import retry_limited_fast
 from inmanta import const
 from inmanta.agent import config
 from inmanta.deploy import state

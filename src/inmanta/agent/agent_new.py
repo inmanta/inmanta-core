@@ -20,7 +20,7 @@ import logging
 import os
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
-from typing import Any, Optional, cast
+from typing import Any, Optional
 
 import inmanta.server.config as opt
 from inmanta import config, const, data, protocol
@@ -165,12 +165,11 @@ class Agent(SessionEndpoint):
         async with data.Environment.get_connection() as connection:
             assert self.environment is not None
             environment = await data.Environment.get_by_id(self.environment, connection=connection)
-            agent_deploy_interval: str = cast(
-                str, await environment.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection)
-            )
-            agent_repair_interval: str = cast(
-                str, await environment.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection)
-            )
+            assert environment is not None
+            agent_deploy_interval = await environment.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection)
+            assert agent_deploy_interval is not None and isinstance(agent_deploy_interval, str)  # make mypy happy
+            agent_repair_interval = await environment.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection)
+            assert agent_repair_interval is not None and isinstance(agent_repair_interval, str)  # make mypy happy
             cfg.agent_repair_interval.set(agent_repair_interval)
             cfg.agent_deploy_interval.set(agent_deploy_interval)
 
@@ -249,7 +248,7 @@ class Agent(SessionEndpoint):
 
     @protocol.handle(methods_v2.notify_timer_update, env="tid")
     async def notify_timer_update(self, env: data.Environment) -> None:
-        assert env.id == self.environment
+        assert env == self.environment
         await self.load_environment_settings()
         await self.scheduler.load_timer_settings()
 

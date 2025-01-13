@@ -436,7 +436,7 @@ def trigger_get_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
     reply=False,
     enforce_auth=False,
 )
-def notify_timer_update(tid: uuid.UUID, agent: str) -> None:
+def notify_timer_update(tid: uuid.UUID) -> None:
     """
     Notify the agent of a change in the timer settings
     """
