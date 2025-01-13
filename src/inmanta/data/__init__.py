@@ -2529,7 +2529,7 @@ class Environment(BaseDocument):
             typ="bool",
             default=True,
             doc=(
-                "Restore state of the resource scheduler when the agent (re)starts to continue (close to) where it left of."
+                "Restore state of the resource scheduler when the agent (re)starts to continue (close to) where it left off."
                 " This is the recommended behavior as it results in more efficient deploy scheduling at startup."
                 " The alternative is to discard all but the most basic resource state, and to fall back to deploy increment"
                 " calculation as was the norm in older versions of the Inmanta orchestrator (<= iso7/2024)."
