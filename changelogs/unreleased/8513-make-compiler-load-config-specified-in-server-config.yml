@@ -1,0 +1,5 @@
+description: >
+  Make sure the compiler is aware of the full configuration context when started by the server.
+issue-nr: 8513
+change-type: minor
+destination-branches: [master]

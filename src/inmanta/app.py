@@ -1040,7 +1040,7 @@ def app() -> None:
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
     # Load the configuration
-    Config.load_config(options.config_file, options.config_dir)
+    Config.load_config(min_c_config_file=options.config_file, config_dir=options.config_dir)
 
     # Collect potential log context
     log_context = {}
