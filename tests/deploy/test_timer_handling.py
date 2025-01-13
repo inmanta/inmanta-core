@@ -42,7 +42,7 @@ from utils import make_requires
 
 
 class RecordingTimer(ResourceTimer):
-    # Timer that doens't really execute anything
+    # Timer that doesn't really execute anything
 
     def __init__(self, resource: ResourceIdStr):
         super().__init__(resource, None)
@@ -178,6 +178,9 @@ def make_resource_minimal(environment):
 
 
 async def test_config_update(inmanta_config, make_resource_minimal, environment):
+"""
+    Test that the TimerManager correctly responds to changes to the config for deploy and repair timers.
+"""
     config.agent_deploy_interval.set("60")
     config.agent_repair_interval.set("3600")
 
@@ -234,7 +237,7 @@ async def test_config_update(inmanta_config, make_resource_minimal, environment)
     def is_disabled(rid) -> None:
         assert rid not in tm.resource_timers or tm.resource_timers[rid].when is None
 
-    # Repeat same patter: update config, check all timers
+    # Repeat same pattern: update config, check all timers
 
     # All per resource
     assert tm.global_periodic_repair_task is None

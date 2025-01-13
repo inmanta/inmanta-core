@@ -366,7 +366,7 @@ class TimerManager:
                 _setup_deploy(self.periodic_deploy_interval)
 
     def _make_resource_timer(self, resource: ResourceIdStr) -> ResourceTimer:
-        """Factor method for testing"""
+        """Factory method for testing"""
         return ResourceTimer(resource, self._resource_scheduler)
 
     def update_timers(self, resources: Collection[ResourceIdStr]) -> None:
