@@ -1359,7 +1359,7 @@ async def test_skipped_for_dependency(resource_container, server, client, client
     ]
     await clienthelper.set_auto_deploy(True)
     await clienthelper.put_version_simple(resources, version, wait_for_released=True)
-    await clienthelper.wait_for_deployed()
+    await clienthelper.wait_for_deployed(version=version)
     scheduler = agent.scheduler
     assert scheduler._state.resource_state[rid2] == ResourceState(
         status=ComplianceStatus.NON_COMPLIANT,
@@ -1397,7 +1397,7 @@ async def test_skipped_for_dependency(resource_container, server, client, client
     ]
     await clienthelper.set_auto_deploy(True)
     await clienthelper.put_version_simple(resources, version, wait_for_released=True)
-    await clienthelper.wait_for_deployed()
+    await clienthelper.wait_for_deployed(version=version)
 
     assert scheduler._state.resource_state[rid1] == ResourceState(
         status=ComplianceStatus.NON_COMPLIANT,

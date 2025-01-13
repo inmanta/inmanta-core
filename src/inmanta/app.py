@@ -675,7 +675,6 @@ def validate_logging_config(options: argparse.Namespace) -> None:
         logging.WARNING,
         logging.ERROR,
         logging.CRITICAL,
-        logging.NOTSET,
     ]
     print(
         "Each of the log lines mentioned below will be emitted at the following log levels:"
@@ -683,7 +682,7 @@ def validate_logging_config(options: argparse.Namespace) -> None:
         file=sys.stderr,
     )
     for logger, msg in logger_and_message:
-        print(f" * Emitting log line '{msg}' at level <LEVEL> using logger '{logger.name}'", file=sys.stderr)
+        print(f" * Emitting log line '{msg} at level <LEVEL>' using logger '{logger.name}'", file=sys.stderr)
         for log_level in log_levels:
             logger.log(log_level, f"{msg} at level {logging.getLevelName(log_level)}")
 
@@ -1041,7 +1040,7 @@ def app() -> None:
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
     # Load the configuration
-    Config.load_config(options.config_file, options.config_dir)
+    Config.load_config(min_c_config_file=options.config_file, config_dir=options.config_dir)
 
     # Collect potential log context
     log_context: dict[str, str] = {}

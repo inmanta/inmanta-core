@@ -543,7 +543,9 @@ class ResourceScheduler(TaskManager):
 
         def _should_deploy(resource: ResourceIdStr) -> bool:
             if (resource_state := self._state.resource_state.get(resource)) is not None:
-                return resource_state.blocked is BlockedStatus.NO
+                # For now, we repair even resources marked as TRANSIENT, just in case our assumptions are wrong
+                # We will relax this once we have more confidence in the correct tracking of the state (#8580)
+                return resource_state.blocked is not BlockedStatus.YES
             # No state was found for this resource. Should probably not happen
             # but err on the side of caution and mark for redeploy.
             return True
@@ -598,6 +600,8 @@ class ResourceScheduler(TaskManager):
                 # The resource was removed from the model by the time this method was triggered
                 return
 
+            # When explicitly requested for a single resource, we allow deploying even deploys marked as
+            # BlockedStatus.TRANSIENT
             if self._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy
                 return
             self._timer_manager.stop_timer(resource)
@@ -1112,7 +1116,7 @@ class ResourceScheduler(TaskManager):
         try:
             state: Optional[ResourceState]
             try:
-                state = await self._update_scheduler_state_for_finished_deploy(intent.details.attribute_hash, result, finished)
+                state = await self._update_scheduler_state_for_finished_deploy(intent, result, finished)
             except StaleResource:
                 # The resource is no longer managed (or in rare cases it has shortly become unmanaged sometime
                 # between this version and the currently managed version, either way, the deploy that finished
@@ -1133,11 +1137,11 @@ class ResourceScheduler(TaskManager):
         finally:
             # Always do this, even if the DB is broken
             async with self._scheduler_lock:
+                # report to the scheduled work that we're done
+                self._work.finished_deploy(result.resource_id)
                 state = self._state.resource_state.get(intent.details.resource_id)
                 if state is not None:
                     self._timer_manager.update_timer(intent.details.resource_id, state=state)
-                # report to the scheduled work that we're done
-                self._work.finished_deploy(result.resource_id)
 
     async def dryrun_done(self, result: executor.DryrunResult) -> None:
         await self.state_update_manager.dryrun_update(env=self.environment, dryrun_result=result)
@@ -1146,10 +1150,12 @@ class ResourceScheduler(TaskManager):
         await self.state_update_manager.set_parameters(fact_result=result)
 
     async def _update_scheduler_state_for_finished_deploy(
-        self, attribute_hash: str, result: executor.DeployResult, finished: datetime.datetime
+        self, intent: DeployIntent, result: executor.DeployResult, finished: datetime.datetime
     ) -> ResourceState:
         """
         Update the state of the scheduler based on the DeploymentResult of the given resource.
+
+        May add log messages to the given deploy result object.
 
         :raise StaleResource: This update is about a resource that is no longer managed by the server.
         :return: The new state of the resource, even if no changes were made. The returned object is a static copy that
@@ -1178,7 +1184,7 @@ class ResourceScheduler(TaskManager):
             # except that we don't enforce the hash diff.
             # We emit a warning if we observe this, but that still doesn't prevent it.
             # While it should not happen it can
-            if details.attribute_hash != attribute_hash or state.status is ComplianceStatus.UNDEFINED:
+            if details.attribute_hash != intent.details.attribute_hash or state.status is ComplianceStatus.UNDEFINED:
                 # We are stale but still the last deploy
                 # We can update the deployment_result (which is about last deploy)
                 # We can't update status (which is about active state only)
@@ -1195,7 +1201,7 @@ class ResourceScheduler(TaskManager):
 
             # We are not stale
             state.status = (
-                ComplianceStatus.COMPLIANT if result.status is const.ResourceState.deployed else ComplianceStatus.NON_COMPLIANT
+                ComplianceStatus.COMPLIANT if deployment_result is DeploymentResult.DEPLOYED else ComplianceStatus.NON_COMPLIANT
             )
 
             # first update state, then send out events
@@ -1220,6 +1226,19 @@ class ResourceScheduler(TaskManager):
             elif deployment_result is DeploymentResult.DEPLOYED:
                 # Remove this resource from the dirty set if it is successfully deployed
                 self._state.dirty.discard(resource)
+                if state.blocked is BlockedStatus.TRANSIENT:
+                    # For now, we make sure to schedule even TRANSIENT resources for repair, just in case we have made
+                    # incorrect assumptions. If this happens, we mark it as unblocked and we trigger a warning.
+                    state.blocked = BlockedStatus.NO
+
+                    log_line: data.LogLine = self._get_transient_deployed_warning(intent)
+                    # write to resource action (and scheduler) log
+                    log_line.write_to_logger_for_resource(
+                        agent=intent.details.id.agent_name,
+                        resource_version_string=intent.details.id.copy(version=intent.model_version).resource_version_str(),
+                    )
+                    # write to database (via send_deploy_done())
+                    result.messages.append(log_line)
             else:
                 # In most cases it will already be marked as dirty but in rare cases the deploy that just finished might
                 # have been triggered by an event, on a previously successful deployed resource. Either way, a failure
@@ -1300,6 +1319,56 @@ class ResourceScheduler(TaskManager):
                 # force a new deploy to be scheduled because ongoing deploys can not capture the event.
                 # We desire new deploys to be scheduled, even if any are ongoing for the same intent.
                 force_deploy=True,
+            )
+
+    def _get_transient_deployed_warning(self, intent: DeployIntent) -> data.LogLine:
+        """
+        Warn the user about a resource that was marked as TRANSIENT that deployed successfully. Does not actually log
+        anything, only returns a log line object for the resource action log.
+
+        Should only be called when the resource did in fact deploy when it was expected to skip for dependencies again.
+        Inspects dependencies' state to determine the most appropriate warning message (handler bug or scheduler bug).
+
+        :param intent: The intent that was just deployed successfully.
+        """
+        bad_dependencies: Mapping[ResourceIdStr, const.ResourceState] = {
+            dependency: dependency_state
+            for dependency, dependency_state in intent.dependencies.items()
+            if dependency_state != const.ResourceState.deployed
+        }
+        if bad_dependencies:
+            return data.LogLine.log(
+                logging.WARNING,
+                (
+                    "Resource %(resource)s was expected to skip for dependencies but it deployed successfully."
+                    " The handler for this resource raised a SkipResourceForDependencies exception in a previous"
+                    " execution, indicating that it would only be able to progress once all requires reached a"
+                    " deployed state. Some requires (%(dependencies)s) are still in a non-deployed state,"
+                    " therefore it was assumed that a new deploy attempt would have no effect."
+                    " This indicates incorrect usage of the exception, and it will lead to resources getting stuck"
+                    " in the skipped state. While this can be worked around by triggering a repair for now, that"
+                    " may not work in the future."
+                    " Please check your handler implementation, and make sure to raise the generic SkipResource"
+                    " rather than SkipResourceForDependencies if you wish to skip a deploy for any other reason"
+                    " than to wait until all requires are in a good state."
+                    " Please contact support if you believe your handler implementation is correct after all."
+                ),
+                resource=intent.details.resource_id,
+                dependencies=", ".join(f"{r}: {state.name}" for r, state in bad_dependencies.items()),
+            )
+        else:
+            return data.LogLine.log(
+                logging.WARNING,
+                (
+                    "Inconsistent internal state for resource %(resource)s. The inmanta resource scheduler"
+                    " assumed it was still blocked, pending a successful deploy of at least one of its requires."
+                    " However, all dependencies are already in a deployed state. This was expected to be impossible"
+                    " and it indicates a (non-critical) bug in the inmanta resource scheduler. Please report this"
+                    " bug."
+                    " In the meantime, if you encounter any resources stuck in the skipped state, trigger a repair"
+                    " as a workaround to force a deploy."
+                ),
+                resource=intent.details.resource_id,
             )
 
     async def _get_last_non_deploying_state_for_dependencies(

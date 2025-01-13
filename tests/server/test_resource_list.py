@@ -825,6 +825,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                         last_deployed=datetime.now().astimezone(),
                     ),
                     started=start_time,
+                    finished=datetime.now().astimezone(),
                 )
 
         await asyncio.gather(*(deploy(resource) for resource in resources_in_increment_for_agent))
