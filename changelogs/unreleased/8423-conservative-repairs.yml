@@ -1,0 +1,5 @@
+description: Implemented conservative repairs for TRANSIENT resources
+issue-nr: 8423
+change-type: patch
+destination-branches:
+  - master

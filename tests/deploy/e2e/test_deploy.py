@@ -243,14 +243,22 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
         expected_status: dict[str, str]
 
     def selective_comparison(left_dict, right_dict):
-        for field in ["discrepancies", "scheduler_state"]:
+        for field in ["discrepancies"]:
             left_value = left_dict.get(field)
             right_value = right_dict.get(field)
+            assert left_value is not None and right_value is not None
+            assert left_value == right_value
 
-            if left_value is None or right_value is None:
-                return False
-            if left_value != right_value:
-                return False
+        left_state = left_dict.get("scheduler_state")
+        right_state = right_dict.get("scheduler_state")
+
+        assert left_state.keys() == right_state.keys()
+
+        for k, left_r_state in left_state.items():
+            right_r_state = right_state[k]
+            left_r_state.pop("last_deployed")
+            assert left_r_state == right_r_state
+
         return True
 
     def build_expected_state(
@@ -280,7 +288,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     result = await client.get_scheduler_status(env_id)
     assert result.code == 200
-    assert selective_comparison(result.result["data"], build_expected_state(resources, v1_expected_result).model_dump())
+    selective_comparison(result.result["data"], build_expected_state(resources, v1_expected_result).model_dump())
 
     await check_scheduler_state(resources, scheduler)
     await resource_action_consistency_check()
@@ -395,7 +403,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     result = await client.get_scheduler_status(env_id)
     assert result.code == 200
-    assert selective_comparison(result.result["data"], build_expected_state(resources, []).model_dump())
+    selective_comparison(result.result["data"], build_expected_state(resources, []).model_dump())
 
 
 async def check_server_state_vs_scheduler_state(client, environment, scheduler):
@@ -1351,17 +1359,19 @@ async def test_skipped_for_dependency(resource_container, server, client, client
     ]
     await clienthelper.set_auto_deploy(True)
     await clienthelper.put_version_simple(resources, version, wait_for_released=True)
-    await clienthelper.wait_for_deployed()
+    await clienthelper.wait_for_deployed(version=version)
     scheduler = agent.scheduler
     assert scheduler._state.resource_state[rid2] == ResourceState(
         status=ComplianceStatus.NON_COMPLIANT,
         deployment_result=DeploymentResult.SKIPPED,
         blocked=BlockedStatus.TRANSIENT,
+        last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
     )
     assert scheduler._state.resource_state[rid1] == ResourceState(
         status=ComplianceStatus.NON_COMPLIANT,
         deployment_result=DeploymentResult.SKIPPED,
         blocked=BlockedStatus.NO,
+        last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
     )
 
     version = await clienthelper.get_version()
@@ -1387,18 +1397,20 @@ async def test_skipped_for_dependency(resource_container, server, client, client
     ]
     await clienthelper.set_auto_deploy(True)
     await clienthelper.put_version_simple(resources, version, wait_for_released=True)
-    await clienthelper.wait_for_deployed()
+    await clienthelper.wait_for_deployed(version=version)
 
     assert scheduler._state.resource_state[rid1] == ResourceState(
         status=ComplianceStatus.NON_COMPLIANT,
         deployment_result=DeploymentResult.SKIPPED,
         blocked=BlockedStatus.NO,
+        last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
     )
 
     assert scheduler._state.resource_state[rid2] == ResourceState(
         status=ComplianceStatus.COMPLIANT,
         deployment_result=DeploymentResult.DEPLOYED,
         blocked=BlockedStatus.NO,
+        last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
     )
 
 
@@ -1446,11 +1458,13 @@ async def test_redeploy_after_dependency_recovered(resource_container, server, c
         status=ComplianceStatus.NON_COMPLIANT,
         deployment_result=DeploymentResult.SKIPPED,
         blocked=BlockedStatus.TRANSIENT,
+        last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
     )
     assert scheduler._state.resource_state[rid1] == ResourceState(
         status=ComplianceStatus.NON_COMPLIANT,
         deployment_result=DeploymentResult.FAILED,
         blocked=BlockedStatus.NO,
+        last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
     )
 
     # Trigger deploy without incrementing version
@@ -1461,12 +1475,14 @@ async def test_redeploy_after_dependency_recovered(resource_container, server, c
             status=ComplianceStatus.COMPLIANT,
             deployment_result=DeploymentResult.DEPLOYED,
             blocked=BlockedStatus.NO,
+            last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
         ):
             return False
         if scheduler._state.resource_state[rid2] != ResourceState(
             status=ComplianceStatus.COMPLIANT,
             deployment_result=DeploymentResult.DEPLOYED,
             blocked=BlockedStatus.NO,
+            last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
         ):
             return False
         return True

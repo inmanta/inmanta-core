@@ -1273,6 +1273,7 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     await update_manager.send_in_progress(
         action_id=uuid.uuid4(), resource_id=Id.parse_id(f"test::Resource[agent1,key=key2],v={version}")
     )
+    end_time: datetime.datetime = datetime.datetime.now().astimezone()
 
     # Set key 3 to deployed
     action_id = uuid.uuid4()
@@ -1292,8 +1293,10 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
             status=state.ComplianceStatus.COMPLIANT,
             deployment_result=state.DeploymentResult.DEPLOYED,
             blocked=state.BlockedStatus.NO,
+            last_deployed=datetime.datetime.now().astimezone(),
         ),
         started=start_time,
+        finished=end_time,
     )
 
     # Partial compile

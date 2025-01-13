@@ -593,7 +593,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
     assert returncode == 0
     assert any(f"Using logging config from file {logging_config_file}" in line for line in stderr)
     assert any(
-        "Emitting log line 'Log line from Inmanta server' at level <LEVEL> using logger 'inmanta.protocol.rest.server'" in line
+        "Emitting log line 'Log line from Inmanta server at level <LEVEL>' using logger 'inmanta.protocol.rest.server'" in line
         for line in stderr
     )
     assert any("INFO     inmanta.protocol.rest.server Log line from Inmanta server at level INFO" in line for line in stdout)
@@ -657,11 +657,11 @@ def test_validate_logging_config(tmpdir, monkeypatch):
     )
     assert any(f"Using logging config from file {logging_config_file}" in line for line in stderr)
     assert any(
-        "Emitting log line 'Log line from callback' at level <LEVEL> using logger 'inmanta_lsm.callback'" in line
+        "Emitting log line 'Log line from callback at level <LEVEL>' using logger 'inmanta_lsm.callback'" in line
         for line in stderr
     )
     assert any(
-        f"Emitting log line 'Log line for resource action log' at level <LEVEL> using logger 'inmanta.resource_action.{env_id}'"
+        f"Emitting log line 'Log line for resource action log at level <LEVEL>' using logger 'inmanta.resource_action.{env_id}'"
         in line
         for line in stderr
     )
@@ -720,7 +720,7 @@ def test_validate_logging_config(tmpdir, monkeypatch):
         )
         assert any(f"Using logging config from file {logging_config_file}" in line for line in stderr)
         assert any(
-            "Emitting log line 'Log line from Inmanta server' at level <LEVEL> using logger 'inmanta.protocol.rest.server'"
+            "Emitting log line 'Log line from Inmanta server at level <LEVEL>' using logger 'inmanta.protocol.rest.server'"
             in line
             for line in stderr
         )

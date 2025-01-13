@@ -1,4 +1,6 @@
-# Generated using: inmanta -c /etc/inmanta/inmanta.cfg --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs output-default-logging-config --component server server_lsm_log.yml
+# Generated using: inmanta -c /etc/inmanta/inmanta.cfg --log-file /var/log/inmanta/server.log --log-file-level 2 \
+#                  --timed-logs output-default-logging-config --component server server_lsm_log_container.yml
+# with the addition that it config also writes the server log to stdout.
 formatters:
   core_console_formatter:
     # Console formatter with coloring.
@@ -27,6 +29,11 @@ handlers:
     formatter: core_log_formatter
     level: INFO
     mode: a+
+  core_console_handler:
+    class: logging.StreamHandler
+    formatter: core_console_formatter
+    level: INFO
+    stream: ext://sys.stdout
   lsm_callback_handler:
     # LSM callback log
     class: logging.FileHandler
@@ -51,6 +58,7 @@ loggers:
 root:
   handlers:
   - server_handler
+  - core_console_handler
   level: INFO
 version: 1
 disable_existing_loggers: false

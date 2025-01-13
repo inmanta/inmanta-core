@@ -497,6 +497,7 @@ class LoggingConfigBuilder:
         }
 
 
+@stable_api
 def convert_inmanta_log_level(inmanta_log_level: str, cli: bool = False) -> int:
     """
     Convert the given Inmanta log level to the corresponding Python log level.
@@ -566,7 +567,7 @@ class LoggingConfigFromFile(LoggingConfigSource):
     """
 
     def __init__(self, file_name: str) -> None:
-        self.file_name = file_name
+        self.file_name = os.path.abspath(file_name)
 
     def read_logging_config(self, context: Mapping[str, str]) -> dict[str, object]:
         try:
@@ -885,65 +886,11 @@ class InmantaLoggerConfig:
         This method assume that the given config defines a single root handler.
         """
         handlers_before = list(logging.root.handlers)
+
         if not self.no_install:
             logging_config.apply_config()
         self._loaded_config = logging_config
         return [handler for handler in logging.root.handlers if handler not in handlers_before]
-
-    @stable_api
-    def set_log_level(self, inmanta_log_level: str, cli: bool = True) -> None:
-        """
-        [DEPRECATED] Set the logging level. A handler should have been created before.
-        The possible inmanta log levels and their associated python log level
-        are defined in the inmanta.logging.log_levels dictionary.
-
-        :param inmanta_log_level: The inmanta logging level
-        :param cli: True if the logs will be outputted to the CLI.
-        """
-        # ToDO: remove?
-        python_log_level = convert_inmanta_log_level(inmanta_log_level, cli)
-        for handler in self._handlers:
-            handler.setLevel(python_log_level)
-        logging.root.setLevel(python_log_level)
-
-    @stable_api
-    def set_log_formatter(self, formatter: logging.Formatter) -> None:
-        """
-        [DEPRECATED] Set the log formatter. A handler should have been created before
-
-        :param formatter: The log formatter.
-        """
-        # ToDO: remove?
-        for handler in self._handlers:
-            handler.setFormatter(formatter)
-
-    @stable_api
-    def set_logfile_location(self, location: str) -> None:
-        """
-        [DEPRECATED] Set the location of the log file. Be careful that this function will replace the current handler
-        with a new one. This means that configurations done on the previous handler will be lost.
-
-        :param location: The location of the log file.
-        """
-        # ToDO: remove?
-        file_handler = logging.handlers.WatchedFileHandler(filename=location, mode="a+")
-        for handler in self._handlers:
-            handler.close()
-            logging.root.removeHandler(handler)
-        self._handlers = [file_handler]
-        logging.root.addHandler(file_handler)
-
-    @stable_api
-    def get_handler(self) -> logging.Handler:
-        """
-        [DEPRECATED] Get the logging handler
-
-        :return: The logging handler
-        """
-        # ToDO: remove?
-        if not self._handlers:
-            raise Exception("No handlers found.")
-        return self._handlers[0]
 
     @stable_api
     def add_extension_config(self, logging_config: LoggingConfigExtension) -> None:
@@ -955,6 +902,7 @@ class InmantaLoggerConfig:
         self._apply_logging_config(complete_config)
 
 
+@stable_api
 class MultiLineFormatter(colorlog.ColoredFormatter):
     """
     Formatter for multi-line log records.
