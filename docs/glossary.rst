@@ -23,7 +23,7 @@ Glossary
     scheduler
         In each environment, a resource scheduler is responsible for enforcing the desired state.
         To this end, the scheduler reads the desired state from the database, determines which
-        resources need deploying and in which relative order, and spawns executors that will
+        resources need deploying and in which relative order, and spawns :term:`executors<executor>` that will
         load the appropriate handler code and perform the actual resource deployment.
 
     executor
