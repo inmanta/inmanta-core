@@ -2334,7 +2334,10 @@ AUTO_DEPLOY = "auto_deploy"
 AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
 AUTOSTART_AGENT_DEPLOY_SPLAY_TIME = "autostart_agent_deploy_splay_time"
 AUTOSTART_AGENT_REPAIR_INTERVAL = "autostart_agent_repair_interval"
+# TODO: is this setting still relevant?
 AUTOSTART_AGENT_REPAIR_SPLAY_TIME = "autostart_agent_repair_splay_time"
+# TODO: good name? AUTOSTART_.. outdated but consistent
+AUTOSTART_AGENT_RESTORE_STATE = "autostart_agent_restore_state"
 AUTOSTART_ON_START = "autostart_on_start"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
@@ -2521,6 +2524,20 @@ class Environment(BaseDocument):
             doc="The splay time on the repair interval of the autostarted agents."
             " See also: :inmanta.config:option:`config.agent-repair-splay-time`",
             validator=convert_int,
+            agent_restart=True,
+        ),
+        AUTOSTART_AGENT_RESTORE_STATE: Setting(
+            name=AUTOSTART_AGENT_RESTORE_STATE,
+            typ="bool",
+            default=True,
+            doc=(
+                "Restore state of the resource scheduler when the agent (re)starts to continue (close to) where it left of."
+                " This is the recommended behavior as it results in more efficient deploy and timer scheduling at startup."
+                " The alternative is to discard all but the most basic resource state, and to fall back to deploy increment"
+                " calculation as was the norm in older versions of the Inmanta orchestrator (<= iso7/2024)."
+                " We recommend to disable this setting only in the unlikely event of certain state inconsistencies in order"
+                " to start the agent with a clean slate."
+            ),
             agent_restart=True,
         ),
         AUTOSTART_ON_START: Setting(
