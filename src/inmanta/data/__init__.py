@@ -2532,7 +2532,7 @@ class Environment(BaseDocument):
             default=True,
             doc=(
                 "Restore state of the resource scheduler when the agent (re)starts to continue (close to) where it left of."
-                " This is the recommended behavior as it results in more efficient deploy and timer scheduling at startup."
+                " This is the recommended behavior as it results in more efficient deploy scheduling at startup."
                 " The alternative is to discard all but the most basic resource state, and to fall back to deploy increment"
                 " calculation as was the norm in older versions of the Inmanta orchestrator (<= iso7/2024)."
                 " We recommend to disable this setting only in the unlikely event of certain state inconsistencies in order"
@@ -6002,7 +6002,7 @@ class ConfigurationModel(BaseDocument):
         cls, environment: uuid.UUID, version: int, *, connection: Optional[Connection] = None
     ) -> tuple[set[ResourceIdStr], dict[ResourceIdStr, datetime.datetime]]:
         outset, negative, last_deployed = await cls.get_increment_and_last_deployed(environment, version, connection=connection)
-        return outset, last_deployed
+        return negative, last_deployed
 
     @classmethod
     async def get_increment(

@@ -443,8 +443,8 @@ class ResourceScheduler(TaskManager):
             )
 
             # Check if we can restore the scheduler state from a previous run
-            restored_state: Optional[ModelState] = await (
-                ModelState.create_from_db(self.environment, connection=con) if should_restore_state else None
+            restored_state: Optional[ModelState] = (
+                await ModelState.create_from_db(self.environment, connection=con) if should_restore_state else None
             )
             if restored_state is not None:
                 # Restore scheduler state like it was before the scheduler went down
