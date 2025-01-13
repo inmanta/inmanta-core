@@ -3007,7 +3007,9 @@ class UnknownParameter(BaseDocument):
         )
 
     @classmethod
-    async def get_unknowns_in_latest_released_model_versions(cls, connection: asyncpg.Connection) -> list["UnknownParameter"]:
+    async def get_unknowns_in_latest_released_model_versions(
+        cls, connection: asyncpg.Connection
+    ) -> Sequence["UnknownParameter"]:
         """
         Returns all the unknowns in the latest released model version of each non-halted environment.
         """
