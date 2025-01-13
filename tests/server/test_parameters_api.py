@@ -27,8 +27,8 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
 from inmanta.const import ParameterSource
-from inmanta.server import config
-from inmanta.util import parse_timestamp
+from inmanta.server import config, SLICE_PARAM, SLICE_AGENT_MANAGER
+from inmanta.util import parse_timestamp, get_compiler_version
 
 
 @pytest.fixture
@@ -258,3 +258,100 @@ async def test_get_set_param(environment, client, server):
 
     result = await client.delete_param(tid=environment, id="key10")
     assert result.code == 200
+
+@pytest.mark.parametrize("no_agent", [True])
+async def test_dont_renew_old_facts(server, client, environment, clienthelper, caplog, time_machine, monkeypatch):
+    """
+    Make sure that we don't renew facts that belong to a resource that is no longer present in the latest released
+    model version.
+    """
+    server_fact_renew_time = config.server_fact_renew.get()
+    parameter_slice = server.get_slice(SLICE_PARAM)
+    agent_manager_slice = server.get_slice(SLICE_AGENT_MANAGER)
+
+    async def request_parameter_mock(env_id, resource_id):
+        return 200, {}
+
+    monkeypatch.setattr(agent_manager_slice, "request_parameter", request_parameter_mock)
+
+    resource_id1 = "std::testing::NullResource[vm1.dev.inmanta.com,name=test1]"
+    resource_id2 = "std::testing::NullResource[vm1.dev.inmanta.com,name=test2]"
+    version = await clienthelper.get_version()
+    resources = [
+            {
+                "id": f"{resource_id1},v={version}",
+                "name": "test1",
+                "param": "val1",
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "id": f"{resource_id2},v={version}",
+                "name": "test2",
+                "param": "unknown",
+                "purged": False,
+                "requires": [],
+            },
+        ]
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[
+            {
+                "resource": resource_id2,
+                "parameter": "fact2",
+                "source": "fact",
+            }
+        ],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+
+    result = await client.set_param(
+        tid=environment,
+        id="fact1",
+        source=ParameterSource.fact,
+        value="val",
+        resource_id=resource_id1,
+    )
+    assert result.code == 200
+
+    # Make sure it's time to renew param1
+    time_machine.move_to(destination=datetime.timedelta(server_fact_renew_time + 1))
+    caplog.clear()
+    await parameter_slice.renew_facts()
+    # No model version has been released yet.
+    assert "Renewing 0 parameters" in caplog.text
+    assert "Requesting value for 0 unknowns" in caplog.text
+
+    result = await client.release_version(tid=environment, id=version)
+    assert result.code == 200
+
+    time_machine.move_to(destination=datetime.timedelta(server_fact_renew_time + 1))
+    caplog.clear()
+    await parameter_slice.renew_facts()
+    assert f"Requesting new parameter value for fact1 of resource {resource_id1} in env {environment}" in caplog.text
+    assert f"Requesting value for unknown parameter fact2 of resource {resource_id2} in env {environment}" in caplog.text
+
+    version = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=[],
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+    result = await client.release_version(tid=environment, id=version)
+    assert result.code == 200
+
+    time_machine.move_to(destination=datetime.timedelta(server_fact_renew_time + 1))
+    caplog.clear()
+    await parameter_slice.renew_facts()
+    # Facts don't belong to latest released version. No need to renew them.
+    assert "Renewing 0 parameters" in caplog.text
+    assert "Requesting value for 0 unknowns" in caplog.text
