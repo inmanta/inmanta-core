@@ -178,9 +178,9 @@ def make_resource_minimal(environment):
 
 
 async def test_config_update(inmanta_config, make_resource_minimal, environment):
-"""
+    """
     Test that the TimerManager correctly responds to changes to the config for deploy and repair timers.
-"""
+    """
     config.agent_deploy_interval.set("60")
     config.agent_repair_interval.set("3600")
 
