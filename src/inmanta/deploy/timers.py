@@ -243,7 +243,6 @@ class TimerManager:
         Configure the global deploy according to the given expression
         None for disabled
 
-        :returns: the associated scheduled task.
         """
 
         async def _action() -> None:
