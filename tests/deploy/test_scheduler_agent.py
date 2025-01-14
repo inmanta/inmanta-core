@@ -3182,6 +3182,8 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
     await restore_baseline_state()
 
     # Resource becomes defined
+
+    # Make sure resources are initialized as undefined
     await scheduler._new_version(
         [
             model(
@@ -3192,6 +3194,16 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
                 },
                 undefined={rid1, rid2, rid3},
             ),
+        ]
+    )
+    assert scheduler._state.resources == all_models[-1].resources
+    for rid in (rid1, rid2, rid3):
+        assert scheduler._state.resource_state[rid].status is ComplianceStatus.UNDEFINED
+        assert scheduler._state.resource_state[rid].deployment_result is DeploymentResult.DEPLOYED
+        assert scheduler._state.resource_state[rid].blocked is BlockedStatus.YES
+
+    await scheduler._new_version(
+        [
             model(
                 {
                     rid1: all_models[-1].resources[rid1],
@@ -3255,6 +3267,23 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
     await restore_baseline_state()
 
     # Resource becomes defined, undefined and then defined again
+
+    # Make sure resources are initialized as undefined
+    await scheduler._new_version(
+        [
+            model(
+                {
+                    rid1: make_resource_minimal(rid1, values={"changed": "unknown"}, requires=[]),
+                },
+                undefined={rid1},
+            ),
+        ]
+    )
+    assert scheduler._state.resources == all_models[-1].resources
+    assert scheduler._state.resource_state[rid1].status is ComplianceStatus.UNDEFINED
+    assert scheduler._state.resource_state[rid1].deployment_result is DeploymentResult.DEPLOYED
+    assert scheduler._state.resource_state[rid1].blocked is BlockedStatus.YES
+
     await scheduler._new_version(
         [
             model(
