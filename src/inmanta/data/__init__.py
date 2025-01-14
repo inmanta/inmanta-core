@@ -2898,7 +2898,9 @@ class Parameter(BaseDocument):
 
     @classmethod
     async def get_updated_before_active_env(
-        cls, updated_before: datetime.datetime, connection: asyncpg.Connection
+        cls,
+        updated_before: datetime.datetime,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list["Parameter"]:
         """
         Retrieve the list of parameters that were updated before a specified datetime for environments that are not halted

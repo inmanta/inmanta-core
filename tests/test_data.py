@@ -1986,6 +1986,26 @@ async def test_get_updated_before_active_env(init_dataclasses_and_load_schema, h
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
+    version = 1
+    cm1 = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        released=True,
+        is_suitable_for_partial_compiles=False,
+    )
+    await cm1.insert()
+
+    res = data.Resource.new(
+        environment=env.id,
+        resource_version_id=f"test::SetExpiringFact[agent1,key=key1],v={version}",
+        status=const.ResourceState.deployed,
+        attributes={"key": "key1", "purge_on_delete": True, "purged": False},
+    )
+    await res.insert()
+
     if halted:
         await env.update_fields(halted=True)
 
