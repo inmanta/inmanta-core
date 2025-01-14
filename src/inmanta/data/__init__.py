@@ -2530,7 +2530,7 @@ class Environment(BaseDocument):
             default=False,
             doc=(
                 "By default the orchestrator picks up the deployment process where it was when it restarted (or halted)."
-                " When this option is enabled, the orchestrator we restart the deployment based on the last known deployment"
+                " When this option is enabled, the orchestrator restarts the deployment based on the last known deployment"
                 " state. It is recommended to leave this disabled because in most cases it is faster (because we can skip some"
                 " redundant work) and it has more accurate state and progress reporting (because we retain more state to reason"
                 " on). Enable this in case there are issues with restoring the deployment state at restart."
