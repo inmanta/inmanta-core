@@ -65,12 +65,12 @@ class Task(abc.ABC):
         return True
 
     def get_executor_resource_details(
-        self, version: int, resource_details: "state.ResourceDetails"
+        self, version: int, resource_intent: "state.ResourceIntent"
     ) -> executor.ResourceDetails:
         return executor.ResourceDetails(
             id=self.resource,
             version=version,
-            attributes=resource_details.attributes,
+            attributes=resource_intent.attributes,
         )
 
     async def get_executor(
@@ -121,7 +121,7 @@ class Deploy(Task):
 
             # First do scheduler book keeping to establish what to do
             try:
-                intent = await task_manager.deploy_start(action_id, self.resource)
+                deploy_intent = await task_manager.deploy_start(action_id, self.resource)
             except Exception:
                 # Unrecoverable, can't reach DB
                 LOGGER.error(
@@ -131,7 +131,7 @@ class Deploy(Task):
                 )
                 return
 
-            if intent is None:
+            if deploy_intent is None:
                 # Stale resource, can simply be dropped.
                 return
 
@@ -141,12 +141,12 @@ class Deploy(Task):
             deploy_result: DeployResult
             try:
                 # Dependencies are always set when calling deploy_start
-                assert intent.dependencies is not None
+                assert deploy_intent.dependencies is not None
                 # Resolve to executor form
-                version: int = intent.model_version
-                resource_details: "state.ResourceDetails" = intent.details
+                version: int = deploy_intent.model_version
+                resource_intent: "state.ResourceIntent" = deploy_intent.intent
                 executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(
-                    version, resource_details
+                    version, resource_intent
                 )
 
                 # Get executor
@@ -177,7 +177,7 @@ class Deploy(Task):
                 # Deploy
                 try:
                     deploy_result = await my_executor.execute(
-                        action_id, gid, executor_resource_details, reason, intent.dependencies
+                        action_id, gid, executor_resource_details, reason, deploy_intent.dependencies
                     )
 
                 except Exception as e:
@@ -201,11 +201,11 @@ class Deploy(Task):
             finally:
                 # We signaled start, so we signal end
                 try:
-                    await task_manager.deploy_done(intent, deploy_result)
+                    await task_manager.deploy_done(deploy_intent, deploy_result)
                 except Exception:
                     LOGGER.error(
                         "Failed to report the end of the deployment to the server for %s",
-                        resource_details.resource_id,
+                        resource_intent.resource_id,
                         exc_info=True,
                     )
 
@@ -213,7 +213,7 @@ class Deploy(Task):
 @dataclass(frozen=True, kw_only=True)
 class DryRun(Task):
     version: int
-    resource_details: state.ResourceDetails
+    resource_intent: state.ResourceIntent
     dry_run_id: uuid.UUID
 
     def delete_with_resource(self) -> bool:
@@ -221,7 +221,7 @@ class DryRun(Task):
 
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str, reason: str | None = None) -> None:
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(
-            self.version, self.resource_details
+            self.version, self.resource_intent
         )
         # Just in case we reach the general exception
         started = datetime.datetime.now().astimezone()
@@ -271,15 +271,15 @@ class RefreshFact(Task):
 
     async def execute(self, task_manager: "scheduler.TaskManager", agent: str, reason: str | None = None) -> None:
         version: int
-        intent = await task_manager.get_resource_intent(self.resource)
-        if intent is None:
+        version_intent = await task_manager.get_resource_version_intent(self.resource)
+        if version_intent is None:
             # Stale resource, can simply be dropped.
             return
-        # FIXME, should not need resource details, only id, see related FIXME on executor side
-        version = intent.model_version
-        resource_details = intent.details
+        # FIXME, should not need resource intent, only id, see related FIXME on executor side
+        version = version_intent.model_version
+        resource_intent = version_intent.intent
 
-        executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_details)
+        executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_intent)
         try:
             my_executor = await self.get_executor(task_manager, agent, self.id.entity_type, version)
         except Exception:

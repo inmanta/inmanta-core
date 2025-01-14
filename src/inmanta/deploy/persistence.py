@@ -91,7 +91,7 @@ class StateUpdateManager(abc.ABC):
     async def update_resource_intent(
         self,
         environment: UUID,
-        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceIntent]],
         update_blocked_state: bool,
         connection: Optional[Connection] = None,
     ) -> None:
@@ -355,7 +355,7 @@ class ToDbUpdateManager(StateUpdateManager):
     async def update_resource_intent(
         self,
         environment: UUID,
-        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceIntent]],
         update_blocked_state: bool,
         connection: Optional[Connection] = None,
     ) -> None:

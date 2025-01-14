@@ -305,7 +305,7 @@ class DummyStateManager(StateUpdateManager):
     async def update_resource_intent(
         self,
         environment: UUID,
-        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceIntent]],
         update_blocked_state: bool,
         connection: Optional[Connection] = None,
     ) -> None:
@@ -459,7 +459,7 @@ def make_resource_minimal(environment):
         values: dict[str, object],
         requires: list[str],
         status: state.ComplianceStatus = state.ComplianceStatus.HAS_UPDATE,
-    ) -> state.ResourceDetails:
+    ) -> state.ResourceIntent:
         """Produce a resource that is valid to the scheduler"""
         attributes = dict(values)
         attributes["requires"] = requires
@@ -473,7 +473,7 @@ def make_resource_minimal(environment):
         m.update(character.encode("utf-8"))
         attribute_hash = m.hexdigest()
 
-        return state.ResourceDetails(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash)
+        return state.ResourceIntent(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash)
 
     return make_resource_minimal
 
@@ -566,7 +566,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         r3_value: Optional[int],
         requires: Optional[Mapping[ResourceIdStr, Sequence[ResourceIdStr]]] = None,
         r3_fail: bool = False,
-    ) -> dict[ResourceIdStr, state.ResourceDetails]:
+    ) -> dict[ResourceIdStr, state.ResourceIntent]:
         """
         Returns three resources with a single attribute, whose value is set by the value parameters. The fail parameters
         control whether the executor should fail or deploy successfully.
@@ -597,7 +597,7 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         }
 
     # first deploy
-    resources: Mapping[ResourceIdStr, state.ResourceDetails]
+    resources: Mapping[ResourceIdStr, state.ResourceIntent]
     resources = make_resources(version=1, r1_value=0, r2_value=0, r3_value=0)
     await agent.scheduler._new_version(
         [ModelVersion(version=1, resources=resources, requires=make_requires(resources), undefined=set())]
@@ -1068,7 +1068,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
         r1_send_event: bool = True,
         r2_send_event: bool = False,
         r1_fail: bool = False,
-    ) -> dict[ResourceIdStr, state.ResourceDetails]:
+    ) -> dict[ResourceIdStr, state.ResourceIntent]:
         """
         Returns three resources with a single attribute, whose value is set by the value parameters.
         Setting a resource value to None strips it from the model.
@@ -1100,7 +1100,7 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
             if value is not None
         }
 
-    resources: Mapping[ResourceIdStr, state.ResourceDetails]
+    resources: Mapping[ResourceIdStr, state.ResourceIntent]
     resources = make_resources(r1_value=0, r2_value=0, r3_value=0)
     await agent.scheduler._new_version(
         [ModelVersion(version=5, resources=resources, requires=make_requires(resources), undefined=set())]
@@ -1659,7 +1659,7 @@ async def test_receive_events(agent: TestAgent, make_resource_minimal):
         receive_value: int,
         noreceive_value: int,
         defaultreceive_value: int,
-    ) -> dict[ResourceIdStr, state.ResourceDetails]:
+    ) -> dict[ResourceIdStr, state.ResourceIntent]:
         """
         Returns five resources with a single attribute, whose value is set by the value parameters.
 
@@ -2960,7 +2960,7 @@ async def test_deploy_orphaned(agent: TestAgent, make_resource_minimal) -> None:
     rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
     executor1: ManagedExecutor = agent.executor_manager.register_managed_executor("agent1")
 
-    resources: Mapping[ResourceIdStr, state.ResourceDetails] = {
+    resources: Mapping[ResourceIdStr, state.ResourceIntent] = {
         rid1: make_resource_minimal(rid1, values={"hello": "world"}, requires=[])
     }
     await agent.scheduler._new_version([ModelVersion(version=1, resources=resources, requires={}, undefined=set())])
@@ -3034,7 +3034,7 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
     rid5 = ResourceIdStr("test::Resource[agent1,name=5]")
     rid6 = ResourceIdStr("test::Resource[agent1,name=6]")
 
-    baseline_resources: Mapping[ResourceIdStr, state.ResourceDetails] = {
+    baseline_resources: Mapping[ResourceIdStr, state.ResourceIntent] = {
         rid: make_resource_minimal(rid, values={"hello": "world"}, requires=[]) for rid in (rid1, rid2, rid3)
     }
 
@@ -3158,7 +3158,7 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
     executor: ManagedExecutor = agent.executor_manager.register_managed_executor("agent1")
 
     # set up rid1 to depend on rid2
-    resources: Mapping[ResourceIdStr, state.ResourceDetails] = {
+    resources: Mapping[ResourceIdStr, state.ResourceIntent] = {
         rid1: make_resource_minimal(rid1, values={"hello": "world 1"}, requires=[rid2]),
         rid2: make_resource_minimal(rid2, values={"hello": "world 2"}, requires=[]),
     }

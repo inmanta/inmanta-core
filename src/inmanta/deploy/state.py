@@ -80,7 +80,7 @@ class ComplianceStatus(StrEnum):
 
 
 @dataclass(frozen=True)
-class ResourceDetails:
+class ResourceIntent:
     resource_id: "ResourceIdStr"
     attribute_hash: str
     attributes: Mapping[str, object] = dataclasses.field(hash=False)
@@ -198,7 +198,7 @@ class ModelState:
     """
 
     version: int
-    resources: dict["ResourceIdStr", ResourceDetails] = dataclasses.field(default_factory=dict)
+    resources: dict["ResourceIdStr", ResourceIntent] = dataclasses.field(default_factory=dict)
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
     resource_state: dict["ResourceIdStr", ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
@@ -292,16 +292,16 @@ class ModelState:
             )
             result.resource_state[resource_id] = resource_state
 
-            # Populate resources details
-            details = ResourceDetails(
+            # Populate resources intent
+            resource_intent = ResourceIntent(
                 resource_id=resource_id,
                 attribute_hash=res["attribute_hash"],
                 attributes=json.loads(res["attributes"]),
             )
-            result.resources[resource_id] = details
+            result.resources[resource_id] = resource_intent
 
             # Populate types_per_agent
-            result.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
+            result.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type] += 1
 
             # Populate requires
             requires = {resources.Id.parse_id(req).resource_str() for req in res["requires"]}
@@ -311,7 +311,7 @@ class ModelState:
             if resource_state.blocked is BlockedStatus.NO:
                 if resource_state.is_dirty():
                     # Resource is dirty by itself.
-                    result.dirty.add(details.id.resource_str())
+                    result.dirty.add(resource_intent.id.resource_str())
                 elif res.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True):
                     # Check whether the resource should be deployed because of an outstanding event.
                     last_success = res["last_success"] or const.DATETIME_MIN_UTC
@@ -324,7 +324,7 @@ class ModelState:
                             and last_produced_events > last_success
                             and req_res.get(const.RESOURCE_ATTRIBUTE_SEND_EVENTS, False)
                         ):
-                            result.dirty.add(details.id.resource_str())
+                            result.dirty.add(resource_intent.id.resource_str())
                             break
         return result
 
@@ -337,7 +337,7 @@ class ModelState:
 
     def update_resource(
         self,
-        details: ResourceDetails,
+        resource_intent: ResourceIntent,
         *,
         force_new: bool = False,
         undefined: bool = False,
@@ -345,7 +345,7 @@ class ModelState:
         last_deployed: datetime.datetime | None = None,
     ) -> None:
         """
-        Register a change of intent for a resource. Registers the new resource details, as well as its undefined status.
+        Register a change of intent for a resource. Registers the new resource intent, as well as its undefined status.
         Does not touch or take into account requires-provides. To update these, call update_requires().
 
         Sets blocked status for undefined resources, but not vice versa because this depends on transitive properties, which
@@ -363,7 +363,7 @@ class ModelState:
         if undefined and known_compliant:
             raise ValueError("A resource can not be both undefined and compliant")
 
-        resource: ResourceIdStr = details.resource_id
+        resource: ResourceIdStr = resource_intent.resource_id
         compliance_status: ComplianceStatus = (
             ComplianceStatus.COMPLIANT
             if known_compliant
@@ -372,10 +372,10 @@ class ModelState:
         # Latest requires are not set yet, transitve blocked status are handled in update_transitive_state
         blocked: BlockedStatus = BlockedStatus.YES if undefined else BlockedStatus.NO
 
-        already_known: bool = details.resource_id in self.resources
+        already_known: bool = resource_intent.resource_id in self.resources
         if force_new and already_known:
             # register this as a new resource, even if we happen to know one with the same id
-            self.drop(details.resource_id)
+            self.drop(resource_intent.resource_id)
 
         if not already_known or force_new:
             # we don't know the resource yet (/ anymore) => create it
@@ -387,7 +387,7 @@ class ModelState:
             )
             if resource not in self.requires:
                 self.requires[resource] = set()
-            self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
+            self.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type] += 1
         else:
             # we already know the resource => update relevant fields
             self.resource_state[resource].status = compliance_status
@@ -401,7 +401,7 @@ class ModelState:
             if self.resource_state[resource].blocked is not BlockedStatus.YES:
                 self.resource_state[resource].blocked = blocked
 
-        self.resources[resource] = details
+        self.resources[resource] = resource_intent
         if not known_compliant and self.resource_state[resource].blocked is BlockedStatus.NO:
             self.dirty.add(resource)
         else:
@@ -428,7 +428,7 @@ class ModelState:
         """
         Completely remove a resource from the resource state.
         """
-        details: ResourceDetails = self.resources.pop(resource)
+        resource_intent: ResourceIntent = self.resources.pop(resource)
         del self.resource_state[resource]
         # stand-alone resources may not be in requires
         with contextlib.suppress(KeyError):
@@ -437,9 +437,9 @@ class ModelState:
         with contextlib.suppress(KeyError):
             del self.requires.reverse_mapping()[resource]
 
-        self.types_per_agent[details.id.agent_name][details.id.entity_type] -= 1
-        if self.types_per_agent[details.id.agent_name][details.id.entity_type] == 0:
-            del self.types_per_agent[details.id.agent_name][details.id.entity_type]
+        self.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type] -= 1
+        if self.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type] == 0:
+            del self.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type]
         self.dirty.discard(resource)
 
     def should_skip_for_dependencies(self, resource: "ResourceIdStr") -> bool:

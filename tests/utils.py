@@ -53,7 +53,7 @@ from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
-from inmanta.deploy.state import ResourceDetails
+from inmanta.deploy.state import ResourceIntent
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client, SessionEndpoint, methods
 from inmanta.server.bootloader import InmantaBootloader
@@ -990,7 +990,7 @@ class NullAgent(SessionEndpoint):
         return 200, {}
 
 
-def make_requires(resources: Mapping[ResourceIdStr, ResourceDetails]) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
+def make_requires(resources: Mapping[ResourceIdStr, ResourceIntent]) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
     """Convert resources from the scheduler input format to its requires format"""
     return {k: {req for req in resource.attributes.get("requires", [])} for k, resource in resources.items()}
 
