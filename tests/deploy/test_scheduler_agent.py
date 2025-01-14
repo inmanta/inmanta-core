@@ -366,6 +366,9 @@ class TestScheduler(ResourceScheduler):
     async def should_runner_be_running(self, endpoint: str) -> bool:
         return True
 
+    async def all_paused_agents(self) -> list[str]:
+        return []
+
     async def _get_single_model_version_from_db(
         self,
         *,

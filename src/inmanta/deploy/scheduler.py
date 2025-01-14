@@ -545,7 +545,7 @@ class ResourceScheduler(TaskManager):
         if not self._running:
             return
 
-        paused_agent = [agent.name for agent in await data.Agent.get_list(environment=self.environment, paused=True)]
+        paused_agent = await self.all_paused_agents()
 
         model: ModelVersion = await self._get_single_model_version_from_db(version=version)
         for resource, details in model.resources.items():
@@ -1027,6 +1027,9 @@ class ResourceScheduler(TaskManager):
         await data.Agent.insert_if_not_exist(environment=self.environment, endpoint=endpoint)
         current_agent = await data.Agent.get(env=self.environment, endpoint=endpoint)
         return not current_agent.paused
+
+    async def all_paused_agents(self) -> list[str]:
+        return [agent.name for agent in await data.Agent.get_list(environment=self.environment, paused=True)]
 
     async def refresh_agent_state_from_db(self, name: str) -> None:
         """
