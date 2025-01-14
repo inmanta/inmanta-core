@@ -303,18 +303,6 @@ class ToDbUpdateManager(StateUpdateManager):
         )
 
         async with data.Resource.get_connection() as connection:
-            if dryrun_result.resource_unavailable:
-                await self._write_resource_action(
-                    env,
-                    dryrun_result.rvid,
-                    const.ResourceAction.dryrun,
-                    uuid.uuid4(),
-                    const.ResourceState.unavailable,
-                    dryrun_result.started + datetime.timedelta(milliseconds=1),
-                    dryrun_result.finished + datetime.timedelta(milliseconds=1),
-                    dryrun_result.messages,
-                    connection=connection,
-                )
             await self._write_resource_action(
                 env,
                 dryrun_result.rvid,
@@ -326,6 +314,21 @@ class ToDbUpdateManager(StateUpdateManager):
                 dryrun_result.messages,
                 connection=connection,
             )
+
+            if dryrun_result.resource_unavailable:
+                await self._write_resource_action(
+                    env,
+                    dryrun_result.rvid,
+                    const.ResourceAction.dryrun,
+                    uuid.uuid4(),
+                    const.ResourceState.unavailable,
+                    # Small hack so that when we return the logs ordered by started time,
+                    # we don't get inconsistencies in the ordering by having 2 logs with the same started time.
+                    dryrun_result.started + datetime.timedelta(milliseconds=1),
+                    dryrun_result.finished + datetime.timedelta(milliseconds=1),
+                    dryrun_result.messages,
+                    connection=connection,
+                )
 
     async def _write_resource_action(
         self,
