@@ -3055,7 +3055,7 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
             assert scheduler._state.resource_state[rid].deployment_result is DeploymentResult.DEPLOYED
             assert scheduler._state.resource_state[rid].blocked is BlockedStatus.NO
         assert len(scheduler._state.dirty) == 0
-        # Make sure that _new_version() calls done by the test case do not get deployed.
+        # Make sure that _new_version() calls done by the test case do not get deployed to prevent races on state assertions.
         await agent.stop_working()
 
     await restore_baseline_state()
