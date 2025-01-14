@@ -1032,7 +1032,7 @@ def assert_resource_persistent_state(
     is_orphan: bool,
     deployment_result: state.DeploymentResult,
     blocked_status: state.BlockedStatus,
-    expected_compliance_status: Optional[state.ComplianceStatus],
+    expected_compliance_status: Optional[state.Compliance],
 ) -> None:
     """
     Assert that the given ResourcePersistentState record has the given content.

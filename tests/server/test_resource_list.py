@@ -798,15 +798,15 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
             else:
                 if "sub=2]" in rid:
                     status = const.HandlerResourceState.failed
-                    compliance_status = state.ComplianceStatus.NON_COMPLIANT
+                    compliance_status = state.Compliance.NON_COMPLIANT
                     deployment_result = DeploymentResult.FAILED
                 elif "sub=3]" in rid:
                     status = const.HandlerResourceState.skipped
-                    compliance_status = state.ComplianceStatus.NON_COMPLIANT
+                    compliance_status = state.Compliance.NON_COMPLIANT
                     deployment_result = DeploymentResult.SKIPPED
                 else:
                     status = const.HandlerResourceState.deployed
-                    compliance_status = state.ComplianceStatus.COMPLIANT
+                    compliance_status = state.Compliance.COMPLIANT
                     deployment_result = DeploymentResult.DEPLOYED
                 await to_db_update_manager.send_deploy_done(
                     attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resource),

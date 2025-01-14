@@ -43,7 +43,7 @@ from inmanta.deploy.persistence import ToDbUpdateManager
 from inmanta.deploy.state import (
     AgentStatus,
     BlockedStatus,
-    ComplianceStatus,
+    Compliance,
     DeploymentResult,
     ModelState,
     ResourceIntent,
@@ -758,7 +758,7 @@ class ResourceScheduler(TaskManager):
                     undefined.discard(resource)
                     is_undefined = False
                 if resource not in intent_changes and is_undefined != (
-                    self._state.resource_state[resource].status is ComplianceStatus.UNDEFINED
+                    self._state.resource_state[resource].status is Compliance.UNDEFINED
                 ):
                     # resource's defined status changed
                     intent_changes[resource] = ResourceIntentChange.UPDATED
@@ -869,11 +869,11 @@ class ResourceScheduler(TaskManager):
                 "The resource with id %s has become %s, but the hash has not changed."
                 " This may lead to unexpected deploy behavior"
             )
-            if resource in model.undefined and resource_state.status is not ComplianceStatus.UNDEFINED:
+            if resource in model.undefined and resource_state.status is not Compliance.UNDEFINED:
                 if not attribute_hash_changed:
                     LOGGER.warning(attribute_hash_unchanged_warning_fmt, resource, "undefined")
                 became_undefined.add(resource)
-            elif resource not in model.undefined and resource_state.status is ComplianceStatus.UNDEFINED:
+            elif resource not in model.undefined and resource_state.status is Compliance.UNDEFINED:
                 if not attribute_hash_changed:
                     LOGGER.warning(attribute_hash_unchanged_warning_fmt, resource, "defined")
                 became_defined.add(resource)
@@ -1166,7 +1166,7 @@ class ResourceScheduler(TaskManager):
             # except that we don't enforce the hash diff.
             # We emit a warning if we observe this, but that still doesn't prevent it.
             # While it should not happen it can
-            if resource_intent.attribute_hash != deploy_intent.intent.attribute_hash or state.status is ComplianceStatus.UNDEFINED:
+            if resource_intent.attribute_hash != deploy_intent.intent.attribute_hash or state.status is Compliance.UNDEFINED:
                 # We are stale but still the last deploy
                 # We can update the deployment_result (which is about last deploy)
                 # We can't update status (which is about active state only)
@@ -1183,7 +1183,7 @@ class ResourceScheduler(TaskManager):
 
             # We are not stale
             state.status = (
-                ComplianceStatus.COMPLIANT if deployment_result is DeploymentResult.DEPLOYED else ComplianceStatus.NON_COMPLIANT
+                Compliance.COMPLIANT if deployment_result is DeploymentResult.DEPLOYED else Compliance.NON_COMPLIANT
             )
 
             # first update state, then send out events
@@ -1370,11 +1370,11 @@ class ResourceScheduler(TaskManager):
         for dep_id in dependencies:
             resource_state_object: ResourceState = self._state.resource_state[dep_id]
             match resource_state_object:
-                case ResourceState(status=ComplianceStatus.UNDEFINED):
+                case ResourceState(status=Compliance.UNDEFINED):
                     dependencies_state[dep_id] = const.ResourceState.undefined
                 case ResourceState(blocked=BlockedStatus.YES):
                     dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
-                case ResourceState(status=ComplianceStatus.HAS_UPDATE):
+                case ResourceState(status=Compliance.HAS_UPDATE):
                     dependencies_state[dep_id] = const.ResourceState.available
                 case ResourceState(deployment_result=DeploymentResult.SKIPPED):
                     dependencies_state[dep_id] = const.ResourceState.skipped
@@ -1408,18 +1408,18 @@ class ResourceScheduler(TaskManager):
             :return: A dict mapping each resource to the discrepancies related to it (if any)
             """
             state_translation_table: dict[
-                const.ResourceState, Tuple[DeploymentResult | None, BlockedStatus | None, ComplianceStatus | None]
+                const.ResourceState, Tuple[DeploymentResult | None, BlockedStatus | None, Compliance | None]
             ] = {
                 # A table to translate the old states into the new states
                 # None means don't care, mostly used for values we can't derive from the old state
-                const.ResourceState.unavailable: (None, BlockedStatus.NO, ComplianceStatus.NON_COMPLIANT),
+                const.ResourceState.unavailable: (None, BlockedStatus.NO, Compliance.NON_COMPLIANT),
                 const.ResourceState.skipped: (DeploymentResult.SKIPPED, None, None),
                 const.ResourceState.dry: (None, None, None),  # don't care
                 const.ResourceState.deployed: (DeploymentResult.DEPLOYED, BlockedStatus.NO, None),
                 const.ResourceState.failed: (DeploymentResult.FAILED, BlockedStatus.NO, None),
                 const.ResourceState.deploying: (None, BlockedStatus.NO, None),
-                const.ResourceState.available: (None, BlockedStatus.NO, ComplianceStatus.HAS_UPDATE),
-                const.ResourceState.undefined: (None, BlockedStatus.YES, ComplianceStatus.UNDEFINED),
+                const.ResourceState.available: (None, BlockedStatus.NO, Compliance.HAS_UPDATE),
+                const.ResourceState.undefined: (None, BlockedStatus.YES, Compliance.UNDEFINED),
                 const.ResourceState.skipped_for_undefined: (None, BlockedStatus.YES, None),
             }
 

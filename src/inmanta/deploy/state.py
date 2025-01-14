@@ -54,7 +54,7 @@ class RequiresProvidesMapping(BidirectionalManyMapping["ResourceIdStr", "Resourc
         return self.reverse_mapping()
 
 
-class ComplianceStatus(StrEnum):
+class Compliance(StrEnum):
     """
     Status of a resource's operational status with respect to its latest desired state, to the best of our knowledge.
     COMPLIANT: The operational state complies to latest resource intent as far as we know.
@@ -76,7 +76,7 @@ class ComplianceStatus(StrEnum):
         """
         Return True iff the status indicates the resource is not up-to-date and is ready to be deployed.
         """
-        return self in [ComplianceStatus.HAS_UPDATE, ComplianceStatus.NON_COMPLIANT]
+        return self in [Compliance.HAS_UPDATE, Compliance.NON_COMPLIANT]
 
 
 @dataclass(frozen=True)
@@ -95,7 +95,7 @@ class ResourceIntent:
 class DeploymentResult(StrEnum):
     """
     The result of a resource's last (finished) deploy. This result may be for an older version than the latest desired state.
-    See ComplianceStatus for a resource's operational status with respect to its latest desired state.
+    See Compliance for a resource's operational status with respect to its latest desired state.
 
     NEW: Resource has never been deployed before.
     DEPLOYED: Last resource deployment was successful.
@@ -170,7 +170,7 @@ class ResourceState:
 
     # FIXME: review / finalize resource state. Based on draft design in
     #   https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
-    status: ComplianceStatus
+    status: Compliance
     deployment_result: DeploymentResult
     blocked: BlockedStatus
     last_deployed: datetime.datetime | None
@@ -263,7 +263,7 @@ class ModelState:
         for resource_id, res in by_resource_id.items():
             # Populate resource_state
 
-            compliance_status: ComplianceStatus
+            compliance_status: Compliance
             last_deployed = cast(datetime.datetime, res["last_deploy"])
             if res["is_orphan"]:
                 # it was marked as an orphan by the scheduler when (or sometime before) it read the version we're currently
@@ -272,17 +272,17 @@ class ModelState:
             elif res["is_undefined"]:
                 # it was marked as undefined by the scheduler when it read the version we're currently processing
                 # (scheduler is only writer)
-                compliance_status = ComplianceStatus.UNDEFINED
+                compliance_status = Compliance.UNDEFINED
             elif (
                 DeploymentResult[res["deployment_result"]] is DeploymentResult.NEW
                 or res["last_deployed_attribute_hash"] is None
                 or res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]
             ):
-                compliance_status = ComplianceStatus.HAS_UPDATE
+                compliance_status = Compliance.HAS_UPDATE
             elif DeploymentResult[res["deployment_result"]] is DeploymentResult.DEPLOYED:
-                compliance_status = ComplianceStatus.COMPLIANT
+                compliance_status = Compliance.COMPLIANT
             else:
-                compliance_status = ComplianceStatus.NON_COMPLIANT
+                compliance_status = Compliance.NON_COMPLIANT
 
             resource_state = ResourceState(
                 status=compliance_status,
@@ -364,10 +364,10 @@ class ModelState:
             raise ValueError("A resource can not be both undefined and compliant")
 
         resource: ResourceIdStr = resource_intent.resource_id
-        compliance_status: ComplianceStatus = (
-            ComplianceStatus.COMPLIANT
+        compliance_status: Compliance = (
+            Compliance.COMPLIANT
             if known_compliant
-            else ComplianceStatus.UNDEFINED if undefined else ComplianceStatus.HAS_UPDATE
+            else Compliance.UNDEFINED if undefined else Compliance.HAS_UPDATE
         )
         # Latest requires are not set yet, transitve blocked status are handled in update_transitive_state
         blocked: BlockedStatus = BlockedStatus.YES if undefined else BlockedStatus.NO
@@ -644,7 +644,7 @@ class ModelState:
                 # The resource is already unblocked.
                 return False
 
-            if my_state.status is ComplianceStatus.UNDEFINED:
+            if my_state.status is Compliance.UNDEFINED:
                 # The resource is undefined.
                 # Root blocker
                 is_blocked.add(resource)
@@ -700,5 +700,5 @@ class ModelState:
         """
         my_state = self.resource_state[resource]
         my_state.blocked = BlockedStatus.NO
-        if my_state.status in [ComplianceStatus.HAS_UPDATE, ComplianceStatus.NON_COMPLIANT]:
+        if my_state.status in [Compliance.HAS_UPDATE, Compliance.NON_COMPLIANT]:
             self.dirty.add(resource)

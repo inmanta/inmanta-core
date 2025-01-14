@@ -26,7 +26,7 @@ import pytest
 import inmanta.types
 from inmanta.data import Environment, ResourcePersistentState, Scheduler
 from inmanta.deploy import state
-from inmanta.deploy.state import ComplianceStatus
+from inmanta.deploy.state import Compliance
 from utils import assert_resource_persistent_state
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
@@ -56,7 +56,7 @@ async def test_add_new_resource_status_column(
         is_orphan=False,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked_status=state.BlockedStatus.NO,
-        expected_compliance_status=ComplianceStatus.COMPLIANT,
+        expected_compliance_status=Compliance.COMPLIANT,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Fail[agent1,key=key2]")],
@@ -64,7 +64,7 @@ async def test_add_new_resource_status_column(
         is_orphan=False,
         deployment_result=state.DeploymentResult.FAILED,
         blocked_status=state.BlockedStatus.NO,
-        expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
+        expected_compliance_status=Compliance.NON_COMPLIANT,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key3]")],
@@ -72,7 +72,7 @@ async def test_add_new_resource_status_column(
         is_orphan=False,
         deployment_result=state.DeploymentResult.SKIPPED,
         blocked_status=state.BlockedStatus.NO,
-        expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
+        expected_compliance_status=Compliance.NON_COMPLIANT,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key4]")],
@@ -80,7 +80,7 @@ async def test_add_new_resource_status_column(
         is_orphan=False,
         deployment_result=state.DeploymentResult.NEW,
         blocked_status=state.BlockedStatus.YES,
-        expected_compliance_status=ComplianceStatus.UNDEFINED,
+        expected_compliance_status=Compliance.UNDEFINED,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key5]")],
@@ -88,7 +88,7 @@ async def test_add_new_resource_status_column(
         is_orphan=False,
         deployment_result=state.DeploymentResult.NEW,
         blocked_status=state.BlockedStatus.YES,
-        expected_compliance_status=ComplianceStatus.NON_COMPLIANT,
+        expected_compliance_status=Compliance.NON_COMPLIANT,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key6]")],
@@ -106,7 +106,7 @@ async def test_add_new_resource_status_column(
         is_orphan=False,
         deployment_result=state.DeploymentResult.DEPLOYED,
         blocked_status=state.BlockedStatus.NO,
-        expected_compliance_status=ComplianceStatus.COMPLIANT,
+        expected_compliance_status=Compliance.COMPLIANT,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key8]")],
@@ -114,5 +114,5 @@ async def test_add_new_resource_status_column(
         is_orphan=False,
         deployment_result=state.DeploymentResult.NEW,
         blocked_status=state.BlockedStatus.NO,
-        expected_compliance_status=ComplianceStatus.HAS_UPDATE,
+        expected_compliance_status=Compliance.HAS_UPDATE,
     )

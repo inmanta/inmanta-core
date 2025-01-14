@@ -4406,7 +4406,7 @@ class ResourceAction(BaseDocument):
 
 class ResourcePersistentState(BaseDocument):
     """
-    To avoid write contention, the `ComplianceStatus` is split up in different fields that are written from different code
+    To avoid write contention, the `Compliance` is split up in different fields that are written from different code
     paths. See get_compliance_status() for the associated logic.
     """
 
@@ -4491,7 +4491,7 @@ class ResourcePersistentState(BaseDocument):
                 environment,
                 resource_id,
                 resource_details.attribute_hash,
-                resource_state.status is state.ComplianceStatus.UNDEFINED,
+                resource_state.status is state.Compliance.UNDEFINED,
                 False,
                 *([resource_state.blocked.db_value().name] if update_blocked_state else []),
             )
@@ -4578,22 +4578,22 @@ class ResourcePersistentState(BaseDocument):
             connection=connection,
         )
 
-    def get_compliance_status(self) -> Optional[state.ComplianceStatus]:
+    def get_compliance_status(self) -> Optional[state.Compliance]:
         """
-        Return the ComplianceStatus associated with this resource_persistent_state. Returns None for orphaned resources.
+        Return the Compliance associated with this resource_persistent_state. Returns None for orphaned resources.
         """
         if self.is_orphan:
             return None
         elif self.is_undefined:
-            return state.ComplianceStatus.UNDEFINED
+            return state.Compliance.UNDEFINED
         elif (
             self.last_deployed_attribute_hash is None or self.current_intent_attribute_hash != self.last_deployed_attribute_hash
         ):
-            return state.ComplianceStatus.HAS_UPDATE
+            return state.Compliance.HAS_UPDATE
         elif self.deployment_result is state.DeploymentResult.DEPLOYED:
-            return state.ComplianceStatus.COMPLIANT
+            return state.Compliance.COMPLIANT
         else:
-            return state.ComplianceStatus.NON_COMPLIANT
+            return state.Compliance.NON_COMPLIANT
 
 
 @stable_api

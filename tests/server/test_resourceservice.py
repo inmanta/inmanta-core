@@ -61,7 +61,7 @@ async def resource_deployer(client, environment, null_agent):
                     change=change,
                 ),
                 state=state.ResourceState(
-                    status=state.ComplianceStatus.COMPLIANT,
+                    status=state.Compliance.COMPLIANT,
                     deployment_result=deployment_result,
                     blocked=state.BlockedStatus.NO,
                     last_deployed=datetime.datetime.now().astimezone(),

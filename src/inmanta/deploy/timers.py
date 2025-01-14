@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 
 from inmanta import util
 from inmanta.agent import config as agent_config
-from inmanta.deploy.state import BlockedStatus, ComplianceStatus, ResourceState
+from inmanta.deploy.state import BlockedStatus, Compliance, ResourceState
 from inmanta.deploy.work import TaskPriority
 from inmanta.types import ResourceIdStr
 
@@ -251,7 +251,7 @@ class TimerManager:
                 self.resource_timers[resource].cancel()
                 return
             case BlockedStatus.NO:
-                repair_only = state.status == ComplianceStatus.COMPLIANT
+                repair_only = state.status == Compliance.COMPLIANT
             case BlockedStatus.TRANSIENT:
                 repair_only = True
             case _ as _never:
