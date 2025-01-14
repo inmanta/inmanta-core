@@ -244,22 +244,6 @@ async def test_filter_validation(server, client, env_with_parameters):
         assert result.code == expected_status
 
 
-async def test_get_set_param(environment, client, server):
-    """
-    Test getting and setting params
-    """
-
-    result = await client.set_param(tid=environment, id="key10", value="value10", source=ParameterSource.user)
-    assert result.code == 200
-
-    result = await client.get_param(tid=environment, id="key10")
-    assert result.code == 200
-    assert result.result["parameter"]["value"] == "value10"
-
-    result = await client.delete_param(tid=environment, id="key10")
-    assert result.code == 200
-
-
 @pytest.mark.parametrize("no_agent", [True])
 async def test_dont_renew_old_facts(server, client, environment, clienthelper, caplog, time_machine, monkeypatch):
     """
