@@ -302,27 +302,30 @@ class ToDbUpdateManager(StateUpdateManager):
             changes=dryrun_result.changes,
         )
 
-        if dryrun_result.resource_unavailable:
+        async with data.Resource.get_connection() as connection:
+            if dryrun_result.resource_unavailable:
+                await self._write_resource_action(
+                    env,
+                    dryrun_result.rvid,
+                    const.ResourceAction.dryrun,
+                    uuid.uuid4(),
+                    const.ResourceState.unavailable,
+                    dryrun_result.started + datetime.timedelta(milliseconds=1),
+                    dryrun_result.finished + datetime.timedelta(milliseconds=1),
+                    dryrun_result.messages,
+                    connection=connection,
+                )
             await self._write_resource_action(
                 env,
                 dryrun_result.rvid,
                 const.ResourceAction.dryrun,
                 uuid.uuid4(),
-                const.ResourceState.unavailable,
+                const.ResourceState.dry,
                 dryrun_result.started,
                 dryrun_result.finished,
                 dryrun_result.messages,
+                connection=connection,
             )
-        await self._write_resource_action(
-            env,
-            dryrun_result.rvid,
-            const.ResourceAction.dryrun,
-            uuid.uuid4(),
-            const.ResourceState.dry,
-            dryrun_result.started,
-            dryrun_result.finished,
-            dryrun_result.messages,
-        )
 
     async def _write_resource_action(
         self,
@@ -334,6 +337,7 @@ class ToDbUpdateManager(StateUpdateManager):
         started: datetime.datetime,
         finished: datetime.datetime,
         messages: list[LogLine],
+        connection: Optional[Connection] = None,
     ) -> None:
         id = Id.parse_id(resource)
 
@@ -348,7 +352,8 @@ class ToDbUpdateManager(StateUpdateManager):
             status=status,
             messages=[msg.to_dict() for msg in messages],
         )
-        await resource_action.insert()
+        async with data.Resource.get_connection(connection=connection) as con:
+            await resource_action.insert(connection=con)
 
     async def set_parameters(self, fact_result: executor.FactResult) -> None:
         if fact_result.success:
