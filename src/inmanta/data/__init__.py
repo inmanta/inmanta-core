@@ -4491,7 +4491,7 @@ class ResourcePersistentState(BaseDocument):
                 environment,
                 resource_id,
                 resource_details.attribute_hash,
-                resource_state.status is state.Compliance.UNDEFINED,
+                resource_state.compliance is state.Compliance.UNDEFINED,
                 False,
                 *([resource_state.blocked.db_value().name] if update_blocked_state else []),
             )

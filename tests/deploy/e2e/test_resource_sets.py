@@ -1290,7 +1290,7 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
             change=const.Change.nochange,
         ),
         state=state.ResourceState(
-            status=state.Compliance.COMPLIANT,
+            compliance=state.Compliance.COMPLIANT,
             last_deploy_result=state.DeployResult.DEPLOYED,
             blocked=state.Blocked.NOT_BLOCKED,
             last_deployed=datetime.datetime.now().astimezone(),

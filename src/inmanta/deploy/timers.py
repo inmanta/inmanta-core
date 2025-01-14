@@ -251,7 +251,7 @@ class TimerManager:
                 self.resource_timers[resource].cancel()
                 return
             case Blocked.NOT_BLOCKED:
-                repair_only = state.status == Compliance.COMPLIANT
+                repair_only = state.compliance == Compliance.COMPLIANT
             case Blocked.TEMPORARILY_BLOCKED:
                 repair_only = True
             case _ as _never:

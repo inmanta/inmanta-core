@@ -170,7 +170,7 @@ class ResourceState:
 
     # FIXME: review / finalize resource state. Based on draft design in
     #   https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
-    status: Compliance
+    compliance: Compliance
     last_deploy_result: DeployResult
     blocked: Blocked
     last_deployed: datetime.datetime | None
@@ -179,7 +179,7 @@ class ResourceState:
         """
         Return True iff the status indicates the resource is not up-to-date and is ready to be deployed.
         """
-        return self.status.is_dirty()
+        return self.compliance.is_dirty()
 
     def copy(self: Self) -> Self:
         """
@@ -285,7 +285,7 @@ class ModelState:
                 compliance_status = Compliance.NON_COMPLIANT
 
             resource_state = ResourceState(
-                status=compliance_status,
+                compliance=compliance_status,
                 last_deploy_result=DeployResult[res["last_deploy_result"]],
                 blocked=Blocked[res["blocked"]],
                 last_deployed=last_deployed,
@@ -380,7 +380,7 @@ class ModelState:
         if not already_known or force_new:
             # we don't know the resource yet (/ anymore) => create it
             self.resource_state[resource] = ResourceState(
-                status=compliance_status,
+                compliance=compliance_status,
                 last_deploy_result=DeployResult.DEPLOYED if known_compliant else DeployResult.NEW,
                 blocked=blocked,
                 last_deployed=last_deployed,
@@ -390,7 +390,7 @@ class ModelState:
             self.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type] += 1
         else:
             # we already know the resource => update relevant fields
-            self.resource_state[resource].status = compliance_status
+            self.resource_state[resource].compliance = compliance_status
             # update deployment result only if we know it's compliant. Otherwise it is kept, representing latest result
             if known_compliant:
                 self.resource_state[resource].last_deploy_result = DeployResult.DEPLOYED
@@ -644,7 +644,7 @@ class ModelState:
                 # The resource is already unblocked.
                 return False
 
-            if my_state.status is Compliance.UNDEFINED:
+            if my_state.compliance is Compliance.UNDEFINED:
                 # The resource is undefined.
                 # Root blocker
                 is_blocked.add(resource)
@@ -700,5 +700,5 @@ class ModelState:
         """
         my_state = self.resource_state[resource]
         my_state.blocked = Blocked.NOT_BLOCKED
-        if my_state.status in [Compliance.HAS_UPDATE, Compliance.NON_COMPLIANT]:
+        if my_state.compliance in [Compliance.HAS_UPDATE, Compliance.NON_COMPLIANT]:
             self.dirty.add(resource)

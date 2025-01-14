@@ -437,7 +437,7 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
                 change=change,
             ),
             state=state.ResourceState(
-                status=state.Compliance.COMPLIANT,
+                compliance=state.Compliance.COMPLIANT,
                 last_deploy_result=state.DeployResult.DEPLOYED,
                 blocked=state.Blocked.NOT_BLOCKED,
                 last_deployed=datetime.now().astimezone(),

@@ -758,7 +758,7 @@ class ResourceScheduler(TaskManager):
                     undefined.discard(resource)
                     is_undefined = False
                 if resource not in intent_changes and is_undefined != (
-                    self._state.resource_state[resource].status is Compliance.UNDEFINED
+                    self._state.resource_state[resource].compliance is Compliance.UNDEFINED
                 ):
                     # resource's defined status changed
                     intent_changes[resource] = ResourceIntentChange.UPDATED
@@ -869,11 +869,11 @@ class ResourceScheduler(TaskManager):
                 "The resource with id %s has become %s, but the hash has not changed."
                 " This may lead to unexpected deploy behavior"
             )
-            if resource in model.undefined and resource_state.status is not Compliance.UNDEFINED:
+            if resource in model.undefined and resource_state.compliance is not Compliance.UNDEFINED:
                 if not attribute_hash_changed:
                     LOGGER.warning(attribute_hash_unchanged_warning_fmt, resource, "undefined")
                 became_undefined.add(resource)
-            elif resource not in model.undefined and resource_state.status is Compliance.UNDEFINED:
+            elif resource not in model.undefined and resource_state.compliance is Compliance.UNDEFINED:
                 if not attribute_hash_changed:
                     LOGGER.warning(attribute_hash_unchanged_warning_fmt, resource, "defined")
                 became_defined.add(resource)
@@ -1166,10 +1166,10 @@ class ResourceScheduler(TaskManager):
             # except that we don't enforce the hash diff.
             # We emit a warning if we observe this, but that still doesn't prevent it.
             # While it should not happen it can
-            if resource_intent.attribute_hash != deploy_intent.intent.attribute_hash or state.status is Compliance.UNDEFINED:
+            if resource_intent.attribute_hash != deploy_intent.intent.attribute_hash or state.compliance is Compliance.UNDEFINED:
                 # We are stale but still the last deploy
                 # We can update the last_deploy_result (which is about last deploy)
-                # We can't update status (which is about active state only)
+                # We can't update compliance (which is about active state only)
                 # None of the event propagation or other update happen either for the same reason
                 # except for the event to notify dependents of failure recovery (to unblock skipped for dependencies)
                 # because we might otherwise miss the recovery (in the sense that the next deploy wouldn't be a transition
@@ -1182,7 +1182,7 @@ class ResourceScheduler(TaskManager):
                 return state.copy()
 
             # We are not stale
-            state.status = (
+            state.compliance = (
                 Compliance.COMPLIANT if deploy_result is DeployResult.DEPLOYED else Compliance.NON_COMPLIANT
             )
 
@@ -1370,11 +1370,11 @@ class ResourceScheduler(TaskManager):
         for dep_id in dependencies:
             resource_state_object: ResourceState = self._state.resource_state[dep_id]
             match resource_state_object:
-                case ResourceState(status=Compliance.UNDEFINED):
+                case ResourceState(compliance=Compliance.UNDEFINED):
                     dependencies_state[dep_id] = const.ResourceState.undefined
                 case ResourceState(blocked=Blocked.BLOCKED):
                     dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
-                case ResourceState(status=Compliance.HAS_UPDATE):
+                case ResourceState(compliance=Compliance.HAS_UPDATE):
                     dependencies_state[dep_id] = const.ResourceState.available
                 case ResourceState(last_deploy_result=DeployResult.SKIPPED):
                     dependencies_state[dep_id] = const.ResourceState.skipped
@@ -1486,13 +1486,13 @@ class ResourceScheduler(TaskManager):
                             )
                         )
                 if db_compliance_status:
-                    if scheduler_resource_state.status != db_compliance_status:
+                    if scheduler_resource_state.compliance != db_compliance_status:
                         resource_discrepancies.append(
                             Discrepancy(
                                 rid=rid,
                                 field="compliance_status",
                                 expected=db_compliance_status,
-                                actual=scheduler_resource_state.status,
+                                actual=scheduler_resource_state.compliance,
                             )
                         )
 

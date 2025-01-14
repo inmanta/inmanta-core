@@ -234,9 +234,9 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     await clienthelper.wait_for_deployed(version=1)
 
-    deployed_resource_expected_status = {"blocked": "not_blocked", "last_deploy_result": "deployed", "status": "compliant"}
-    failed_resource_expected_status = {"blocked": "not_blocked", "last_deploy_result": "failed", "status": "non_compliant"}
-    skipped_resource_expected_status = {"blocked": "temporarily_blocked", "last_deploy_result": "skipped", "status": "non_compliant"}
+    deployed_resource_expected_status = {"blocked": "not_blocked", "last_deploy_result": "deployed", "compliance": "compliant"}
+    failed_resource_expected_status = {"blocked": "not_blocked", "last_deploy_result": "failed", "compliance": "non_compliant"}
+    skipped_resource_expected_status = {"blocked": "temporarily_blocked", "last_deploy_result": "skipped", "compliance": "non_compliant"}
 
     class ExpectedResourceStatus(NamedTuple):
         rid: str
@@ -1362,13 +1362,13 @@ async def test_skipped_for_dependency(resource_container, server, client, client
     await clienthelper.wait_for_deployed(version=version)
     scheduler = agent.scheduler
     assert scheduler._state.resource_state[rid2] == ResourceState(
-        status=Compliance.NON_COMPLIANT,
+        compliance=Compliance.NON_COMPLIANT,
         last_deploy_result=DeployResult.SKIPPED,
         blocked=Blocked.TEMPORARILY_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
     )
     assert scheduler._state.resource_state[rid1] == ResourceState(
-        status=Compliance.NON_COMPLIANT,
+        compliance=Compliance.NON_COMPLIANT,
         last_deploy_result=DeployResult.SKIPPED,
         blocked=Blocked.NOT_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
@@ -1400,14 +1400,14 @@ async def test_skipped_for_dependency(resource_container, server, client, client
 
     async def wait_for_resource_state() -> bool:
         if scheduler._state.resource_state[rid1] != ResourceState(
-            status=Compliance.NON_COMPLIANT,
+            compliance=Compliance.NON_COMPLIANT,
             last_deploy_result=DeployResult.SKIPPED,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
         ):
             return False
         if scheduler._state.resource_state[rid2] != ResourceState(
-            status=Compliance.COMPLIANT,
+            compliance=Compliance.COMPLIANT,
             last_deploy_result=DeployResult.DEPLOYED,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
@@ -1461,13 +1461,13 @@ async def test_redeploy_after_dependency_recovered(resource_container, server, c
     await clienthelper.wait_for_deployed()
     scheduler = agent.scheduler
     assert scheduler._state.resource_state[rid2] == ResourceState(
-        status=Compliance.NON_COMPLIANT,
+        compliance=Compliance.NON_COMPLIANT,
         last_deploy_result=DeployResult.SKIPPED,
         blocked=Blocked.TEMPORARILY_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
     )
     assert scheduler._state.resource_state[rid1] == ResourceState(
-        status=Compliance.NON_COMPLIANT,
+        compliance=Compliance.NON_COMPLIANT,
         last_deploy_result=DeployResult.FAILED,
         blocked=Blocked.NOT_BLOCKED,
         last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
@@ -1478,14 +1478,14 @@ async def test_redeploy_after_dependency_recovered(resource_container, server, c
 
     async def wait_for_resource_state() -> bool:
         if scheduler._state.resource_state[rid1] != ResourceState(
-            status=Compliance.COMPLIANT,
+            compliance=Compliance.COMPLIANT,
             last_deploy_result=DeployResult.DEPLOYED,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
         ):
             return False
         if scheduler._state.resource_state[rid2] != ResourceState(
-            status=Compliance.COMPLIANT,
+            compliance=Compliance.COMPLIANT,
             last_deploy_result=DeployResult.DEPLOYED,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
