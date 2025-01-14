@@ -60,6 +60,8 @@ async def test_environment_settings(client, server, environment_default):
     assert "settings" in result.result
     assert "metadata" in result.result
     assert "auto_deploy" in result.result["metadata"]
+    # Removed setting
+    assert "autostart_agent_deploy_splay_time" not in result.result
 
     check_only_contains_default_setting(result.result["settings"])
 
@@ -108,19 +110,6 @@ async def test_environment_settings(client, server, environment_default):
     assert "settings" in result.result
 
     check_only_contains_default_setting(result.result["settings"])
-
-    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value=20)
-    assert result.code == 200
-
-    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value="30")
-    assert result.code == 200
-
-    result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
-    assert result.code == 200
-    assert result.result["value"] == 30
-
-    result = await client.delete_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
-    assert result.code == 200
 
 
 async def test_environment_settings_v2(client_v2, server, environment_default):
