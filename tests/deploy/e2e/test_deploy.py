@@ -1397,21 +1397,27 @@ async def test_skipped_for_dependency(resource_container, server, client, client
     ]
     await clienthelper.set_auto_deploy(True)
     await clienthelper.put_version_simple(resources, version, wait_for_released=True)
-    await clienthelper.wait_for_deployed(version=version)
 
-    assert scheduler._state.resource_state[rid1] == ResourceState(
-        status=ComplianceStatus.NON_COMPLIANT,
-        deployment_result=DeploymentResult.SKIPPED,
-        blocked=BlockedStatus.NO,
-        last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
-    )
+    async def wait_for_resource_state() -> bool:
+        if scheduler._state.resource_state[rid1] != ResourceState(
+            status=ComplianceStatus.NON_COMPLIANT,
+            deployment_result=DeploymentResult.SKIPPED,
+            blocked=BlockedStatus.NO,
+            last_deployed=scheduler._state.resource_state[rid1].last_deployed,  # ignore
+        ):
+            return False
+        if scheduler._state.resource_state[rid2] != ResourceState(
+            status=ComplianceStatus.COMPLIANT,
+            deployment_result=DeploymentResult.DEPLOYED,
+            blocked=BlockedStatus.NO,
+            last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
+        ):
+            return False
+        return True
 
-    assert scheduler._state.resource_state[rid2] == ResourceState(
-        status=ComplianceStatus.COMPLIANT,
-        deployment_result=DeploymentResult.DEPLOYED,
-        blocked=BlockedStatus.NO,
-        last_deployed=scheduler._state.resource_state[rid2].last_deployed,  # ignore
-    )
+    # We can't rely on clienthelper.wait_for_deployed() here to wait until the re-deployment has finished,
+    # because that method waits only until all resources reach a deployed state, not necessarily until the scheduler is stable
+    await retry_limited(wait_for_resource_state, timeout=10)
 
 
 async def test_redeploy_after_dependency_recovered(resource_container, server, client, clienthelper, environment, agent):
@@ -1488,7 +1494,7 @@ async def test_redeploy_after_dependency_recovered(resource_container, server, c
         return True
 
     # We can't rely on clienthelper.wait_for_deployed() here to wait until the re-deployment has finished,
-    # because that method assumes we are deploying a version that hasn't been deployed yet.
+    # because that method assumes we are deploying a version that hasn't been deployed before.
     await retry_limited(wait_for_resource_state, timeout=10)
 
     # Assert that no new version was created
