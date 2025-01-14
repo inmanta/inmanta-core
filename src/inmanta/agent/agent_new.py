@@ -203,6 +203,8 @@ class Agent(SessionEndpoint):
     async def run_dryrun(self, env: uuid.UUID, dry_run_id: uuid.UUID, agent: str, version: int) -> Apireturn:
         """
         Run a dryrun of the given version
+
+        Paused agents are silently ignored
         """
         assert env == self.environment
         assert agent == AGENT_SCHEDULER_ID
