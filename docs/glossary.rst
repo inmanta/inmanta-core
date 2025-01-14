@@ -30,8 +30,7 @@ Glossary
         actions, e.g. dry-run) by directing those executors to execute appropriate handler operations.
 
     executor
-        A process spawned on-demand by the :term:`resource scheduler<resource scheduler>` that hosts handler code for
-        one logical agent. Different model versions may have different executor processes for a given agent.
+        A process spawned on-demand by the :term:`resource scheduler<resource scheduler>` that hosts handler code.
         The resource scheduler instructs the executor to execute deploys (and other resource actions, e.g. dry-run).
 
     agent
