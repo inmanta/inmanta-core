@@ -238,8 +238,8 @@ class ModelState:
                 "is_undefined",
                 "current_intent_attribute_hash",
                 "last_deployed_attribute_hash",
-                "deployment_result",
-                "blocked_status",
+                "last_deploy_result",
+                "blocked",
                 "last_success",
                 "last_deploy",
                 "last_produced_events",
@@ -274,20 +274,20 @@ class ModelState:
                 # (scheduler is only writer)
                 compliance_status = Compliance.UNDEFINED
             elif (
-                DeployResult[res["deployment_result"]] is DeployResult.NEW
+                DeployResult[res["last_deploy_result"]] is DeployResult.NEW
                 or res["last_deployed_attribute_hash"] is None
                 or res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]
             ):
                 compliance_status = Compliance.HAS_UPDATE
-            elif DeployResult[res["deployment_result"]] is DeployResult.DEPLOYED:
+            elif DeployResult[res["last_deploy_result"]] is DeployResult.DEPLOYED:
                 compliance_status = Compliance.COMPLIANT
             else:
                 compliance_status = Compliance.NON_COMPLIANT
 
             resource_state = ResourceState(
                 status=compliance_status,
-                last_deploy_result=DeployResult[res["deployment_result"]],
-                blocked=Blocked[res["blocked_status"]],
+                last_deploy_result=DeployResult[res["last_deploy_result"]],
+                blocked=Blocked[res["blocked"]],
                 last_deployed=last_deployed,
             )
             result.resource_state[resource_id] = resource_state

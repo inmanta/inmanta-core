@@ -1030,9 +1030,9 @@ def assert_resource_persistent_state(
     resource_persistent_state: data.ResourcePersistentState,
     is_undefined: bool,
     is_orphan: bool,
-    deployment_result: state.DeployResult,
-    blocked_status: state.Blocked,
-    expected_compliance_status: Optional[state.Compliance],
+    last_deploy_result: state.DeployResult,
+    blocked: state.Blocked,
+    expected_compliance: Optional[state.Compliance],
 ) -> None:
     """
     Assert that the given ResourcePersistentState record has the given content.
@@ -1044,12 +1044,12 @@ def assert_resource_persistent_state(
         resource_persistent_state.is_orphan == is_orphan
     ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.is_orphan} != {is_orphan})"
     assert (
-        resource_persistent_state.deployment_result is deployment_result
-    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.deployment_result} != {deployment_result})"
+        resource_persistent_state.last_deploy_result is last_deploy_result
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.last_deploy_result} != {last_deploy_result})"
     assert (
-        resource_persistent_state.blocked_status is blocked_status
-    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.blocked_status} != {blocked_status})"
-    assert resource_persistent_state.get_compliance_status() is expected_compliance_status, (
+        resource_persistent_state.blocked is blocked
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.blocked} != {blocked})"
+    assert resource_persistent_state.get_compliance_status() is expected_compliance, (
         f"{resource_persistent_state.resource_id}"
-        f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance_status})"
+        f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance})"
     )

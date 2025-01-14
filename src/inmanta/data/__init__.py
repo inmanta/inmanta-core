@@ -4446,10 +4446,10 @@ class ResourcePersistentState(BaseDocument):
     # Written when a new version is processed by the scheduler
     is_orphan: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
-    deployment_result: state.DeployResult
+    last_deploy_result: state.DeployResult
     # Written both when processing a new version and at deploy time. As such, this should be updated
     # under the scheduler lock to prevent race conditions with the deploy time updates.
-    blocked_status: state.Blocked
+    blocked: state.Blocked
 
     # Written at deploy time (Exception for initial record creation  -> no race condition possible with deploy path)
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
@@ -4484,7 +4484,7 @@ class ResourcePersistentState(BaseDocument):
         when the intent of a resource, as processed by the scheduler, changes. This method must not be called
         for orphaned resources. The update_orphan_state() method should be used for that.
 
-        :param update_blocked_state: True iff this method should update the blocked_status column in the database.
+        :param update_blocked_state: True iff this method should update the blocked column in the database.
         """
         values = [
             (
@@ -4505,7 +4505,7 @@ class ResourcePersistentState(BaseDocument):
                         current_intent_attribute_hash=$3,
                         is_undefined=$4,
                         is_orphan=$5
-                        {", blocked_status=$6" if update_blocked_state else ""}
+                        {", blocked=$6" if update_blocked_state else ""}
                     WHERE environment=$1 AND resource_id=$2
                 """,
                 values,
@@ -4546,8 +4546,8 @@ class ResourcePersistentState(BaseDocument):
                 current_intent_attribute_hash,
                 is_undefined,
                 is_orphan,
-                deployment_result,
-                blocked_status
+                last_deploy_result,
+                blocked
             )
             SELECT
                 r.environment,
@@ -4563,8 +4563,8 @@ class ResourcePersistentState(BaseDocument):
                     WHEN
                         r.status = 'undefined'::public.resourcestate
                         OR r.status = 'skipped_for_undefined'::public.resourcestate
-                    THEN 'YES'
-                    ELSE 'NO'
+                    THEN 'BLOCKED'
+                    ELSE 'NOT_BLOCKED'
                 END
             FROM {Resource.table_name()} AS r
             WHERE r.environment=$1 AND r.model=$2 AND NOT EXISTS(
@@ -4590,7 +4590,7 @@ class ResourcePersistentState(BaseDocument):
             self.last_deployed_attribute_hash is None or self.current_intent_attribute_hash != self.last_deployed_attribute_hash
         ):
             return state.Compliance.HAS_UPDATE
-        elif self.deployment_result is state.DeployResult.DEPLOYED:
+        elif self.last_deploy_result is state.DeployResult.DEPLOYED:
             return state.Compliance.COMPLIANT
         else:
             return state.Compliance.NON_COMPLIANT
@@ -5544,7 +5544,7 @@ class Resource(BaseDocument):
         last_deployed_attribute_hash: Optional[str] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         # TODO[#8541]: accept state.ResourceState and write blocked status as well
-        deployment_result: Optional[state.DeployResult] = None,
+        last_deploy_result: Optional[state.DeployResult] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)
@@ -5558,8 +5558,8 @@ class Resource(BaseDocument):
             "last_deployed_version": last_deployed_version,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
-        if deployment_result:
-            query_parts.append(f"deployment_result={args(deployment_result.name)}")
+        if last_deploy_result:
+            query_parts.append(f"last_deploy_result={args(last_deploy_result.name)}")
         if not query_parts:
             return
         query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"

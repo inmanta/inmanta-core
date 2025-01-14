@@ -54,65 +54,65 @@ async def test_add_new_resource_status_column(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key1]")],
         is_undefined=False,
         is_orphan=False,
-        deployment_result=state.DeployResult.DEPLOYED,
-        blocked_status=state.Blocked.NOT_BLOCKED,
-        expected_compliance_status=Compliance.COMPLIANT,
+        last_deploy_result=state.DeployResult.DEPLOYED,
+        blocked=state.Blocked.NOT_BLOCKED,
+        expected_compliance=Compliance.COMPLIANT,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Fail[agent1,key=key2]")],
         is_undefined=False,
         is_orphan=False,
-        deployment_result=state.DeployResult.FAILED,
-        blocked_status=state.Blocked.NOT_BLOCKED,
-        expected_compliance_status=Compliance.NON_COMPLIANT,
+        last_deploy_result=state.DeployResult.FAILED,
+        blocked=state.Blocked.NOT_BLOCKED,
+        expected_compliance=Compliance.NON_COMPLIANT,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key3]")],
         is_undefined=False,
         is_orphan=False,
-        deployment_result=state.DeployResult.SKIPPED,
-        blocked_status=state.Blocked.NOT_BLOCKED,
-        expected_compliance_status=Compliance.NON_COMPLIANT,
+        last_deploy_result=state.DeployResult.SKIPPED,
+        blocked=state.Blocked.NOT_BLOCKED,
+        expected_compliance=Compliance.NON_COMPLIANT,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key4]")],
         is_undefined=True,
         is_orphan=False,
-        deployment_result=state.DeployResult.NEW,
-        blocked_status=state.Blocked.BLOCKED,
-        expected_compliance_status=Compliance.UNDEFINED,
+        last_deploy_result=state.DeployResult.NEW,
+        blocked=state.Blocked.BLOCKED,
+        expected_compliance=Compliance.UNDEFINED,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key5]")],
         is_undefined=False,
         is_orphan=False,
-        deployment_result=state.DeployResult.NEW,
-        blocked_status=state.Blocked.BLOCKED,
-        expected_compliance_status=Compliance.NON_COMPLIANT,
+        last_deploy_result=state.DeployResult.NEW,
+        blocked=state.Blocked.BLOCKED,
+        expected_compliance=Compliance.NON_COMPLIANT,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key6]")],
         is_undefined=False,
         is_orphan=True,
-        # The deployment_result field is not accurate, because it's an orphan. Tracking this accurately
+        # The last_deploy_result field is not accurate, because it's an orphan. Tracking this accurately
         # would require an expensive query in the database migration script.
-        deployment_result=state.DeployResult.NEW,
-        blocked_status=state.Blocked.NOT_BLOCKED,
-        expected_compliance_status=None,
+        last_deploy_result=state.DeployResult.NEW,
+        blocked=state.Blocked.NOT_BLOCKED,
+        expected_compliance=None,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key7]")],
         is_undefined=False,
         is_orphan=False,
-        deployment_result=state.DeployResult.DEPLOYED,
-        blocked_status=state.Blocked.NOT_BLOCKED,
-        expected_compliance_status=Compliance.COMPLIANT,
+        last_deploy_result=state.DeployResult.DEPLOYED,
+        blocked=state.Blocked.NOT_BLOCKED,
+        expected_compliance=Compliance.COMPLIANT,
     )
     assert_resource_persistent_state(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key8]")],
         is_undefined=False,
         is_orphan=False,
-        deployment_result=state.DeployResult.NEW,
-        blocked_status=state.Blocked.NOT_BLOCKED,
-        expected_compliance_status=Compliance.HAS_UPDATE,
+        last_deploy_result=state.DeployResult.NEW,
+        blocked=state.Blocked.NOT_BLOCKED,
+        expected_compliance=Compliance.HAS_UPDATE,
     )
