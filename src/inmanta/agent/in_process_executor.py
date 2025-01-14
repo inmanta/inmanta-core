@@ -139,6 +139,17 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         provider.set_cache(self._cache)
         return provider
 
+    def _log_deserialization_error(self, resource_id: ResourceVersionIdStr, cause: Exception) -> data.LogLine:
+        msg = data.LogLine.log(
+            level=const.LogLevel.ERROR,
+            msg="Unable to deserialize %(resource_id)s: %(cause)s",
+            resource_id=resource_id,
+            cause=cause,
+            timestamp=datetime.datetime.now().astimezone(),
+        )
+        msg.write_to_logger(self.resource_action_logger)
+        return msg
+
     async def _execute(
         self,
         resource: Resource,
@@ -210,12 +221,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         try:
             resource: Resource = Resource.deserialize(resource_details.attributes)
         except Exception as e:
-            msg = data.LogLine.log(
-                level=const.LogLevel.ERROR,
-                msg="Unable to deserialize %(resource_id)s: %(cause)s",
-                resource_id=resource_details.rvid,
-                cause=e,
-            )
+            msg = self._log_deserialization_error(resource_details.rvid, e)
             return DeployResult.undeployable(resource_details.rvid, action_id, msg)
 
         ctx = handler.HandlerContext(resource, action_id=action_id, logger=self.resource_action_logger)
@@ -263,13 +269,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 try:
                     resource_obj: Resource = Resource.deserialize(resource.attributes)
                 except Exception as e:
-                    msg = data.LogLine.log(
-                        level=const.LogLevel.ERROR,
-                        msg="Unable to deserialize %(resource_id)s: %(cause)s",
-                        resource_id=resource.rvid,
-                        cause=e,
-                        timestamp=datetime.datetime.now().astimezone(),
-                    )
+                    msg = self._log_deserialization_error(resource.rvid, e)
                     return DryrunResult(
                         rvid=resource.rvid,
                         dryrun_id=dry_run_id,
@@ -374,13 +374,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             try:
                 resource_obj: Resource = Resource.deserialize(resource.attributes)
             except Exception as e:
-                msg = data.LogLine.log(
-                    level=const.LogLevel.ERROR,
-                    msg="Unable to deserialize %(resource_id)s: %(cause)s",
-                    resource_id=resource.rvid,
-                    cause=e,
-                    timestamp=datetime.datetime.now().astimezone(),
-                )
+                msg = self._log_deserialization_error(resource.rvid, e)
                 return FactResult(
                     resource_id=resource.rvid,
                     action_id=None,
