@@ -1030,7 +1030,7 @@ def assert_resource_persistent_state(
     resource_persistent_state: data.ResourcePersistentState,
     is_undefined: bool,
     is_orphan: bool,
-    deployment_result: state.DeploymentResult,
+    deployment_result: state.DeployResult,
     blocked_status: state.BlockedStatus,
     expected_compliance_status: Optional[state.Compliance],
 ) -> None:

@@ -92,7 +92,7 @@ class ResourceIntent:
         object.__setattr__(self, "id", resources.Id.parse_id(self.resource_id))
 
 
-class DeploymentResult(StrEnum):
+class DeployResult(StrEnum):
     """
     The result of a resource's last (finished) deploy. This result may be for an older version than the latest desired state.
     See Compliance for a resource's operational status with respect to its latest desired state.
@@ -109,14 +109,14 @@ class DeploymentResult(StrEnum):
     SKIPPED = enum.auto()
 
     @classmethod
-    def from_handler_resource_state(cls, handler_resource_state: const.HandlerResourceState) -> "DeploymentResult":
+    def from_handler_resource_state(cls, handler_resource_state: const.HandlerResourceState) -> "DeployResult":
         match handler_resource_state:
             case const.HandlerResourceState.deployed:
-                return DeploymentResult.DEPLOYED
+                return DeployResult.DEPLOYED
             case const.HandlerResourceState.skipped | const.HandlerResourceState.skipped_for_dependency:
-                return DeploymentResult.SKIPPED
+                return DeployResult.SKIPPED
             case const.HandlerResourceState.failed | const.HandlerResourceState.unavailable:
-                return DeploymentResult.FAILED
+                return DeployResult.FAILED
             case _ as resource_state:
                 raise Exception(f"Unexpected handler_resource_state {resource_state.name}")
 
@@ -171,7 +171,7 @@ class ResourceState:
     # FIXME: review / finalize resource state. Based on draft design in
     #   https://docs.google.com/presentation/d/1F3bFNy2BZtzZgAxQ3Vbvdw7BWI9dq0ty5c3EoLAtUUY/edit#slide=id.g292b508a90d_0_5
     status: Compliance
-    last_deployment_result: DeploymentResult
+    last_deploy_result: DeployResult
     blocked: BlockedStatus
     last_deployed: datetime.datetime | None
 
@@ -274,19 +274,19 @@ class ModelState:
                 # (scheduler is only writer)
                 compliance_status = Compliance.UNDEFINED
             elif (
-                DeploymentResult[res["deployment_result"]] is DeploymentResult.NEW
+                DeployResult[res["deployment_result"]] is DeployResult.NEW
                 or res["last_deployed_attribute_hash"] is None
                 or res["current_intent_attribute_hash"] != res["last_deployed_attribute_hash"]
             ):
                 compliance_status = Compliance.HAS_UPDATE
-            elif DeploymentResult[res["deployment_result"]] is DeploymentResult.DEPLOYED:
+            elif DeployResult[res["deployment_result"]] is DeployResult.DEPLOYED:
                 compliance_status = Compliance.COMPLIANT
             else:
                 compliance_status = Compliance.NON_COMPLIANT
 
             resource_state = ResourceState(
                 status=compliance_status,
-                last_deployment_result=DeploymentResult[res["deployment_result"]],
+                last_deploy_result=DeployResult[res["deployment_result"]],
                 blocked=BlockedStatus[res["blocked_status"]],
                 last_deployed=last_deployed,
             )
@@ -381,7 +381,7 @@ class ModelState:
             # we don't know the resource yet (/ anymore) => create it
             self.resource_state[resource] = ResourceState(
                 status=compliance_status,
-                last_deployment_result=DeploymentResult.DEPLOYED if known_compliant else DeploymentResult.NEW,
+                last_deploy_result=DeployResult.DEPLOYED if known_compliant else DeployResult.NEW,
                 blocked=blocked,
                 last_deployed=last_deployed,
             )
@@ -393,7 +393,7 @@ class ModelState:
             self.resource_state[resource].status = compliance_status
             # update deployment result only if we know it's compliant. Otherwise it is kept, representing latest result
             if known_compliant:
-                self.resource_state[resource].last_deployment_result = DeploymentResult.DEPLOYED
+                self.resource_state[resource].last_deploy_result = DeployResult.DEPLOYED
             # Override blocked status except if it was marked as blocked before. We can't unset it yet because a resource might
             # still be transitively blocked, which we'll deal with later, see note in docstring.
             # We do however override TRANSIENT because we want to give it another chance when it gets an update
@@ -454,7 +454,7 @@ class ModelState:
             # Determine based on latest deploy result rather than compliance status, because compliance status is unstable
             # (e.g. HAS_UPDATE).
             # Make sure to not skip on NEW (never deployed) resources, because they will not generate a discovery event.
-            self.resource_state[dep_id].last_deployment_result not in (DeploymentResult.DEPLOYED, DeploymentResult.NEW)
+            self.resource_state[dep_id].last_deploy_result not in (DeployResult.DEPLOYED, DeployResult.NEW)
             for dep_id in dependencies
         )
 

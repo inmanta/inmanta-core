@@ -44,7 +44,7 @@ from inmanta.deploy.state import (
     AgentStatus,
     BlockedStatus,
     Compliance,
-    DeploymentResult,
+    DeployResult,
     ModelState,
     ResourceIntent,
     ResourceState,
@@ -1135,7 +1135,7 @@ class ResourceScheduler(TaskManager):
         self, deploy_intent: DeployIntent, result: executor.DeployReport, finished: datetime.datetime
     ) -> ResourceState:
         """
-        Update the state of the scheduler based on the DeploymentResult of the given resource.
+        Update the state of the scheduler based on the DeployResult of the given resource.
 
         May add log messages to the given deploy result object.
 
@@ -1144,7 +1144,7 @@ class ResourceScheduler(TaskManager):
             represents the state at the end of the deploy, and can therefore safely be returned out of the scheduler lock.
         """
         resource: ResourceIdStr = result.resource_id
-        deployment_result: DeploymentResult = DeploymentResult.from_handler_resource_state(result.resource_state)
+        deploy_result: DeployResult = DeployResult.from_handler_resource_state(result.resource_state)
 
         async with self._scheduler_lock:
             # refresh resource intent for latest model state
@@ -1157,9 +1157,9 @@ class ResourceScheduler(TaskManager):
 
             state: ResourceState = self._state.resource_state[resource]
 
-            recovered_from_failure: bool = deployment_result is DeploymentResult.DEPLOYED and state.last_deployment_result not in (
-                DeploymentResult.DEPLOYED,
-                DeploymentResult.NEW,
+            recovered_from_failure: bool = deploy_result is DeployResult.DEPLOYED and state.last_deploy_result not in (
+                DeployResult.DEPLOYED,
+                DeployResult.NEW,
             )
 
             # The second part of the or would not be required because is implied by the first,
@@ -1168,14 +1168,14 @@ class ResourceScheduler(TaskManager):
             # While it should not happen it can
             if resource_intent.attribute_hash != deploy_intent.intent.attribute_hash or state.status is Compliance.UNDEFINED:
                 # We are stale but still the last deploy
-                # We can update the last_deployment_result (which is about last deploy)
+                # We can update the last_deploy_result (which is about last deploy)
                 # We can't update status (which is about active state only)
                 # None of the event propagation or other update happen either for the same reason
                 # except for the event to notify dependents of failure recovery (to unblock skipped for dependencies)
                 # because we might otherwise miss the recovery (in the sense that the next deploy wouldn't be a transition
                 # from a bad to a good state, since we're transitioning to that good state now).
 
-                state.last_deployment_result = deployment_result
+                state.last_deploy_result = deploy_result
                 state.last_deployed = finished
                 if recovered_from_failure:
                     self._send_events(resource_intent, stale_deploy=True, recovered_from_failure=True)
@@ -1183,12 +1183,12 @@ class ResourceScheduler(TaskManager):
 
             # We are not stale
             state.status = (
-                Compliance.COMPLIANT if deployment_result is DeploymentResult.DEPLOYED else Compliance.NON_COMPLIANT
+                Compliance.COMPLIANT if deploy_result is DeployResult.DEPLOYED else Compliance.NON_COMPLIANT
             )
 
             # first update state, then send out events
             self._deploying_latest.remove(resource)
-            state.last_deployment_result = deployment_result
+            state.last_deploy_result = deploy_result
             state.last_deployed = finished
 
             # Check if we need to mark a resource as transiently blocked
@@ -1205,7 +1205,7 @@ class ResourceScheduler(TaskManager):
                 state.blocked = BlockedStatus.TRANSIENT
                 # Remove this resource from the dirty set when we block it
                 self._state.dirty.discard(resource)
-            elif deployment_result is DeploymentResult.DEPLOYED:
+            elif deploy_result is DeployResult.DEPLOYED:
                 # Remove this resource from the dirty set if it is successfully deployed
                 self._state.dirty.discard(resource)
                 if state.blocked is BlockedStatus.TRANSIENT:
@@ -1376,11 +1376,11 @@ class ResourceScheduler(TaskManager):
                     dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
                 case ResourceState(status=Compliance.HAS_UPDATE):
                     dependencies_state[dep_id] = const.ResourceState.available
-                case ResourceState(last_deployment_result=DeploymentResult.SKIPPED):
+                case ResourceState(last_deploy_result=DeployResult.SKIPPED):
                     dependencies_state[dep_id] = const.ResourceState.skipped
-                case ResourceState(last_deployment_result=DeploymentResult.DEPLOYED):
+                case ResourceState(last_deploy_result=DeployResult.DEPLOYED):
                     dependencies_state[dep_id] = const.ResourceState.deployed
-                case ResourceState(last_deployment_result=DeploymentResult.FAILED):
+                case ResourceState(last_deploy_result=DeployResult.FAILED):
                     dependencies_state[dep_id] = const.ResourceState.failed
                 case _:
                     raise Exception(f"Failed to parse the resource state for {dep_id}: {resource_state_object}")
@@ -1408,15 +1408,15 @@ class ResourceScheduler(TaskManager):
             :return: A dict mapping each resource to the discrepancies related to it (if any)
             """
             state_translation_table: dict[
-                const.ResourceState, Tuple[DeploymentResult | None, BlockedStatus | None, Compliance | None]
+                const.ResourceState, Tuple[DeployResult | None, BlockedStatus | None, Compliance | None]
             ] = {
                 # A table to translate the old states into the new states
                 # None means don't care, mostly used for values we can't derive from the old state
                 const.ResourceState.unavailable: (None, BlockedStatus.NO, Compliance.NON_COMPLIANT),
-                const.ResourceState.skipped: (DeploymentResult.SKIPPED, None, None),
+                const.ResourceState.skipped: (DeployResult.SKIPPED, None, None),
                 const.ResourceState.dry: (None, None, None),  # don't care
-                const.ResourceState.deployed: (DeploymentResult.DEPLOYED, BlockedStatus.NO, None),
-                const.ResourceState.failed: (DeploymentResult.FAILED, BlockedStatus.NO, None),
+                const.ResourceState.deployed: (DeployResult.DEPLOYED, BlockedStatus.NO, None),
+                const.ResourceState.failed: (DeployResult.FAILED, BlockedStatus.NO, None),
                 const.ResourceState.deploying: (None, BlockedStatus.NO, None),
                 const.ResourceState.available: (None, BlockedStatus.NO, Compliance.HAS_UPDATE),
                 const.ResourceState.undefined: (None, BlockedStatus.YES, Compliance.UNDEFINED),
@@ -1466,13 +1466,13 @@ class ResourceScheduler(TaskManager):
 
                 scheduler_resource_state: ResourceState = self._state.resource_state[rid]
                 if db_deploy_result:
-                    if scheduler_resource_state.last_deployment_result != db_deploy_result:
+                    if scheduler_resource_state.last_deploy_result != db_deploy_result:
                         resource_discrepancies.append(
                             Discrepancy(
                                 rid=rid,
-                                field="last_deployment_result",
+                                field="last_deploy_result",
                                 expected=db_deploy_result,
-                                actual=scheduler_resource_state.last_deployment_result,
+                                actual=scheduler_resource_state.last_deploy_result,
                             )
                         )
                 if db_blocked_status:

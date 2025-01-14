@@ -39,7 +39,7 @@ from inmanta.agent.executor import DeployReport
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource
 from inmanta.deploy import persistence, state
-from inmanta.deploy.state import DeploymentResult
+from inmanta.deploy.state import DeployResult
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
@@ -799,15 +799,15 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 if "sub=2]" in rid:
                     status = const.HandlerResourceState.failed
                     compliance_status = state.Compliance.NON_COMPLIANT
-                    deployment_result = DeploymentResult.FAILED
+                    deployment_result = DeployResult.FAILED
                 elif "sub=3]" in rid:
                     status = const.HandlerResourceState.skipped
                     compliance_status = state.Compliance.NON_COMPLIANT
-                    deployment_result = DeploymentResult.SKIPPED
+                    deployment_result = DeployResult.SKIPPED
                 else:
                     status = const.HandlerResourceState.deployed
                     compliance_status = state.Compliance.COMPLIANT
-                    deployment_result = DeploymentResult.DEPLOYED
+                    deployment_result = DeployResult.DEPLOYED
                 await to_db_update_manager.send_deploy_done(
                     attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resource),
                     result=DeployReport(
@@ -820,7 +820,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                     ),
                     state=state.ResourceState(
                         status=compliance_status,
-                        last_deployment_result=deployment_result,
+                        last_deploy_result=deployment_result,
                         blocked=state.BlockedStatus.NO,
                         last_deployed=datetime.now().astimezone(),
                     ),

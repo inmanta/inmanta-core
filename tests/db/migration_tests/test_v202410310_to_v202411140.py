@@ -54,7 +54,7 @@ async def test_add_new_resource_status_column(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key1]")],
         is_undefined=False,
         is_orphan=False,
-        deployment_result=state.DeploymentResult.DEPLOYED,
+        deployment_result=state.DeployResult.DEPLOYED,
         blocked_status=state.BlockedStatus.NO,
         expected_compliance_status=Compliance.COMPLIANT,
     )
@@ -62,7 +62,7 @@ async def test_add_new_resource_status_column(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Fail[agent1,key=key2]")],
         is_undefined=False,
         is_orphan=False,
-        deployment_result=state.DeploymentResult.FAILED,
+        deployment_result=state.DeployResult.FAILED,
         blocked_status=state.BlockedStatus.NO,
         expected_compliance_status=Compliance.NON_COMPLIANT,
     )
@@ -70,7 +70,7 @@ async def test_add_new_resource_status_column(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key3]")],
         is_undefined=False,
         is_orphan=False,
-        deployment_result=state.DeploymentResult.SKIPPED,
+        deployment_result=state.DeployResult.SKIPPED,
         blocked_status=state.BlockedStatus.NO,
         expected_compliance_status=Compliance.NON_COMPLIANT,
     )
@@ -78,7 +78,7 @@ async def test_add_new_resource_status_column(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key4]")],
         is_undefined=True,
         is_orphan=False,
-        deployment_result=state.DeploymentResult.NEW,
+        deployment_result=state.DeployResult.NEW,
         blocked_status=state.BlockedStatus.YES,
         expected_compliance_status=Compliance.UNDEFINED,
     )
@@ -86,7 +86,7 @@ async def test_add_new_resource_status_column(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key5]")],
         is_undefined=False,
         is_orphan=False,
-        deployment_result=state.DeploymentResult.NEW,
+        deployment_result=state.DeployResult.NEW,
         blocked_status=state.BlockedStatus.YES,
         expected_compliance_status=Compliance.NON_COMPLIANT,
     )
@@ -96,7 +96,7 @@ async def test_add_new_resource_status_column(
         is_orphan=True,
         # The deployment_result field is not accurate, because it's an orphan. Tracking this accurately
         # would require an expensive query in the database migration script.
-        deployment_result=state.DeploymentResult.NEW,
+        deployment_result=state.DeployResult.NEW,
         blocked_status=state.BlockedStatus.NO,
         expected_compliance_status=None,
     )
@@ -104,7 +104,7 @@ async def test_add_new_resource_status_column(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key7]")],
         is_undefined=False,
         is_orphan=False,
-        deployment_result=state.DeploymentResult.DEPLOYED,
+        deployment_result=state.DeployResult.DEPLOYED,
         blocked_status=state.BlockedStatus.NO,
         expected_compliance_status=Compliance.COMPLIANT,
     )
@@ -112,7 +112,7 @@ async def test_add_new_resource_status_column(
         resource_state_by_resource_id[inmanta.types.ResourceIdStr("test::Resource[agent1,key=key8]")],
         is_undefined=False,
         is_orphan=False,
-        deployment_result=state.DeploymentResult.NEW,
+        deployment_result=state.DeployResult.NEW,
         blocked_status=state.BlockedStatus.NO,
         expected_compliance_status=Compliance.HAS_UPDATE,
     )

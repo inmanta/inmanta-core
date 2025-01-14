@@ -4446,7 +4446,7 @@ class ResourcePersistentState(BaseDocument):
     # Written when a new version is processed by the scheduler
     is_orphan: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
-    deployment_result: state.DeploymentResult
+    deployment_result: state.DeployResult
     # Written both when processing a new version and at deploy time. As such, this should be updated
     # under the scheduler lock to prevent race conditions with the deploy time updates.
     blocked_status: state.BlockedStatus
@@ -4590,7 +4590,7 @@ class ResourcePersistentState(BaseDocument):
             self.last_deployed_attribute_hash is None or self.current_intent_attribute_hash != self.last_deployed_attribute_hash
         ):
             return state.Compliance.HAS_UPDATE
-        elif self.deployment_result is state.DeploymentResult.DEPLOYED:
+        elif self.deployment_result is state.DeployResult.DEPLOYED:
             return state.Compliance.COMPLIANT
         else:
             return state.Compliance.NON_COMPLIANT
@@ -5544,7 +5544,7 @@ class Resource(BaseDocument):
         last_deployed_attribute_hash: Optional[str] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         # TODO[#8541]: accept state.ResourceState and write blocked status as well
-        deployment_result: Optional[state.DeploymentResult] = None,
+        deployment_result: Optional[state.DeployResult] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)

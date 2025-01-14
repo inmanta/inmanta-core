@@ -606,7 +606,7 @@ async def test_move_to_available_state(server, environment, client, clienthelper
             ),
             state=state.ResourceState(
                 status=state.Compliance.COMPLIANT,
-                last_deployment_result=state.DeploymentResult.DEPLOYED,
+                last_deploy_result=state.DeployResult.DEPLOYED,
                 blocked=state.BlockedStatus.NO,
                 last_deployed=datetime.datetime.now().astimezone(),
             ),
