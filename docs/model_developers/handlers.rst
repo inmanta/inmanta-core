@@ -22,7 +22,7 @@ A South Bound integration always consists of three parts:
 * In the *compiler*, a model is constructed that consists of entities. The entities can be related to each other.
 * The *exporter* will search for all :term:`entities<entity>` that can be directly deployed by a :term:`handler<handler>`. These are the :term:`resources<resource>`. Resources are self-contained and can not refer to any other entity or resource.
 * The :term:`resources<resource>` will be sent to the server in json serialized form.
-* The :term:`scheduler` will spawn :term:`executors<executor>` that will load the :term:`handler<handler>` code in order to enforce the :term:`desired state` on the managed infrastructure.
+* The :term:`resource scheduler` will spawn :term:`executors<executor>` that will load the :term:`handler<handler>` code in order to enforce the :term:`desired state` on the managed infrastructure.
 
 
 Resource
