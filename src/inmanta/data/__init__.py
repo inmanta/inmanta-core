@@ -4449,7 +4449,7 @@ class ResourcePersistentState(BaseDocument):
     deployment_result: state.DeployResult
     # Written both when processing a new version and at deploy time. As such, this should be updated
     # under the scheduler lock to prevent race conditions with the deploy time updates.
-    blocked_status: state.BlockedStatus
+    blocked_status: state.Blocked
 
     # Written at deploy time (Exception for initial record creation  -> no race condition possible with deploy path)
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available

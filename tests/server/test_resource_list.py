@@ -821,7 +821,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                     state=state.ResourceState(
                         status=compliance_status,
                         last_deploy_result=deployment_result,
-                        blocked=state.BlockedStatus.NO,
+                        blocked=state.Blocked.NOT_BLOCKED,
                         last_deployed=datetime.now().astimezone(),
                     ),
                     started=start_time,

@@ -42,7 +42,7 @@ from inmanta.deploy import timers, work
 from inmanta.deploy.persistence import ToDbUpdateManager
 from inmanta.deploy.state import (
     AgentStatus,
-    BlockedStatus,
+    Blocked,
     Compliance,
     DeployResult,
     ModelState,
@@ -525,9 +525,9 @@ class ResourceScheduler(TaskManager):
 
         def _should_deploy(resource: ResourceIdStr) -> bool:
             if (resource_state := self._state.resource_state.get(resource)) is not None:
-                # For now, we repair even resources marked as TRANSIENT, just in case our assumptions are wrong
+                # For now, we repair even resources marked as TEMPORARILY_BLOCKED, just in case our assumptions are wrong
                 # We will relax this once we have more confidence in the correct tracking of the state (#8580)
-                return resource_state.blocked is not BlockedStatus.YES
+                return resource_state.blocked is not Blocked.BLOCKED
             # No state was found for this resource. Should probably not happen
             # but err on the side of caution and mark for redeploy.
             return True
@@ -583,8 +583,8 @@ class ResourceScheduler(TaskManager):
                 return
 
             # When explicitly requested for a single resource, we allow deploying even deploys marked as
-            # BlockedStatus.TRANSIENT
-            if self._state.resource_state[resource].blocked is BlockedStatus.YES:  # Can't deploy
+            # Blocked.TEMPORARILY_BLOCKED
+            if self._state.resource_state[resource].blocked is Blocked.BLOCKED:  # Can't deploy
                 return
             self._timer_manager.stop_timer(resource)
             self._work.deploy_with_context(
@@ -922,7 +922,7 @@ class ResourceScheduler(TaskManager):
                 verify_blocked=added_requires.keys(),
                 verify_unblocked=became_defined | dropped_requires.keys(),
             )
-            # update TRANSIENT (skipped-for-dependencies) state for resources with a dependency for which state was reset
+            # update TEMPORARILY_BLOCKED (skipped-for-dependencies) state for resources with a dependency for which state was reset
             resources_with_reset_requires: Set[ResourceIdStr] = set(
                 itertools.chain.from_iterable(
                     self._state.requires.provides_view().get(resource, set()) for resource in force_new
@@ -930,12 +930,12 @@ class ResourceScheduler(TaskManager):
             )
             for resource in resources_with_reset_requires:
                 if (
-                    # it is currently TRANSIENT blocked
-                    self._state.resource_state[resource].blocked is BlockedStatus.TRANSIENT
+                    # it is currently TEMPORARILY_BLOCKED blocked
+                    self._state.resource_state[resource].blocked is Blocked.TEMPORARILY_BLOCKED
                     # it shouldn't be any longer
                     and not self._state.should_skip_for_dependencies(resource)
                 ):
-                    self._state.resource_state[resource].blocked = BlockedStatus.NO
+                    self._state.resource_state[resource].blocked = Blocked.NOT_BLOCKED
 
             # Update set of in-progress deploys that became unmanaged
             self._deploying_unmanaged.update(self._deploying_latest & (new | deleted))
@@ -1076,7 +1076,7 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             # fetch resource intent under lock
             resource_intent = self._get_resource_intent(resource)
-            if resource_intent is None or self._state.resource_state[resource].blocked is BlockedStatus.YES:
+            if resource_intent is None or self._state.resource_state[resource].blocked is Blocked.BLOCKED:
                 # We are trying to deploy a stale resource.
                 return None
             dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
@@ -1191,29 +1191,29 @@ class ResourceScheduler(TaskManager):
             state.last_deploy_result = deploy_result
             state.last_deployed = finished
 
-            # Check if we need to mark a resource as transiently blocked
-            # We only do that if it is not already blocked (BlockedStatus.YES)
+            # Check if we need to mark a resource as temporarily blocked
+            # We only do that if it is not already blocked (Blocked.BLOCKED)
             # We might already be unblocked if a dependency succeeded on another agent, e.g. while waiting for the lock
             # so HandlerResourceState.skipped_for_dependency might be outdated, we have an inconsistency between the
             # state of the dependencies and the exception that was raised by the handler.
-            # If all dependencies are compliant we don't want to transiently block this resource.
+            # If all dependencies are compliant we don't want to temporarily block this resource.
             if (
-                state.blocked is not BlockedStatus.YES
+                state.blocked is not Blocked.BLOCKED
                 and result.resource_state is const.HandlerResourceState.skipped_for_dependency
                 and self._state.should_skip_for_dependencies(resource)
             ):
-                state.blocked = BlockedStatus.TRANSIENT
+                state.blocked = Blocked.TEMPORARILY_BLOCKED
                 # Remove this resource from the dirty set when we block it
                 self._state.dirty.discard(resource)
             elif deploy_result is DeployResult.DEPLOYED:
                 # Remove this resource from the dirty set if it is successfully deployed
                 self._state.dirty.discard(resource)
-                if state.blocked is BlockedStatus.TRANSIENT:
-                    # For now, we make sure to schedule even TRANSIENT resources for repair, just in case we have made
+                if state.blocked is Blocked.TEMPORARILY_BLOCKED:
+                    # For now, we make sure to schedule even TEMPORARILY_BLOCKED resources for repair, just in case we have made
                     # incorrect assumptions. If this happens, we mark it as unblocked and we trigger a warning.
-                    state.blocked = BlockedStatus.NO
+                    state.blocked = Blocked.NOT_BLOCKED
 
-                    log_line: data.LogLine = self._get_transient_deployed_warning(deploy_intent)
+                    log_line: data.LogLine = self._get_temporarily_blocked_warning(deploy_intent)
                     # write to resource action (and scheduler) log
                     log_line.write_to_logger_for_resource(
                         agent=deploy_intent.intent.id.agent_name,
@@ -1264,7 +1264,7 @@ class ResourceScheduler(TaskManager):
                 dependent
                 for dependent in provides
                 if (dependent_intent := self._state.resources.get(dependent, None)) is not None
-                if self._state.resource_state[dependent].blocked is BlockedStatus.NO
+                if self._state.resource_state[dependent].blocked is Blocked.NOT_BLOCKED
                 # default to True for backward compatibility, i.e. not all resources have the field
                 if dependent_intent.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
             }
@@ -1273,13 +1273,13 @@ class ResourceScheduler(TaskManager):
             recovery_listeners = set()
         else:
             recovery_listeners = {
-                dependent for dependent in provides if self._state.resource_state[dependent].blocked is BlockedStatus.TRANSIENT
+                dependent for dependent in provides if self._state.resource_state[dependent].blocked is Blocked.TEMPORARILY_BLOCKED
             }
             # These resources might be able to progress now -> unblock them in addition to sending the event
             self._state.dirty.update(recovery_listeners)
             for skipped_dependent in recovery_listeners:
                 # TODO[#8541]: persist in database
-                self._state.resource_state[skipped_dependent].blocked = BlockedStatus.NO
+                self._state.resource_state[skipped_dependent].blocked = Blocked.NOT_BLOCKED
 
         all_listeners: Set[ResourceIdStr] = event_listeners | recovery_listeners
         if all_listeners:
@@ -1303,9 +1303,9 @@ class ResourceScheduler(TaskManager):
                 force_deploy=True,
             )
 
-    def _get_transient_deployed_warning(self, deploy_intent: DeployIntent) -> data.LogLine:
+    def _get_temporarily_blocked_warning(self, deploy_intent: DeployIntent) -> data.LogLine:
         """
-        Warn the user about a resource that was marked as TRANSIENT that deployed successfully. Does not actually log
+        Warn the user about a resource that was marked as TEMPORARILY_BLOCKED that deployed successfully. Does not actually log
         anything, only returns a log line object for the resource action log.
 
         Should only be called when the resource did in fact deploy when it was expected to skip for dependencies again.
@@ -1372,7 +1372,7 @@ class ResourceScheduler(TaskManager):
             match resource_state_object:
                 case ResourceState(status=Compliance.UNDEFINED):
                     dependencies_state[dep_id] = const.ResourceState.undefined
-                case ResourceState(blocked=BlockedStatus.YES):
+                case ResourceState(blocked=Blocked.BLOCKED):
                     dependencies_state[dep_id] = const.ResourceState.skipped_for_undefined
                 case ResourceState(status=Compliance.HAS_UPDATE):
                     dependencies_state[dep_id] = const.ResourceState.available
@@ -1408,19 +1408,19 @@ class ResourceScheduler(TaskManager):
             :return: A dict mapping each resource to the discrepancies related to it (if any)
             """
             state_translation_table: dict[
-                const.ResourceState, Tuple[DeployResult | None, BlockedStatus | None, Compliance | None]
+                const.ResourceState, Tuple[DeployResult | None, Blocked | None, Compliance | None]
             ] = {
                 # A table to translate the old states into the new states
                 # None means don't care, mostly used for values we can't derive from the old state
-                const.ResourceState.unavailable: (None, BlockedStatus.NO, Compliance.NON_COMPLIANT),
+                const.ResourceState.unavailable: (None, Blocked.NOT_BLOCKED, Compliance.NON_COMPLIANT),
                 const.ResourceState.skipped: (DeployResult.SKIPPED, None, None),
                 const.ResourceState.dry: (None, None, None),  # don't care
-                const.ResourceState.deployed: (DeployResult.DEPLOYED, BlockedStatus.NO, None),
-                const.ResourceState.failed: (DeployResult.FAILED, BlockedStatus.NO, None),
-                const.ResourceState.deploying: (None, BlockedStatus.NO, None),
-                const.ResourceState.available: (None, BlockedStatus.NO, Compliance.HAS_UPDATE),
-                const.ResourceState.undefined: (None, BlockedStatus.YES, Compliance.UNDEFINED),
-                const.ResourceState.skipped_for_undefined: (None, BlockedStatus.YES, None),
+                const.ResourceState.deployed: (DeployResult.DEPLOYED, Blocked.NOT_BLOCKED, None),
+                const.ResourceState.failed: (DeployResult.FAILED, Blocked.NOT_BLOCKED, None),
+                const.ResourceState.deploying: (None, Blocked.NOT_BLOCKED, None),
+                const.ResourceState.available: (None, Blocked.NOT_BLOCKED, Compliance.HAS_UPDATE),
+                const.ResourceState.undefined: (None, Blocked.BLOCKED, Compliance.UNDEFINED),
+                const.ResourceState.skipped_for_undefined: (None, Blocked.BLOCKED, None),
             }
 
             discrepancy_map: dict[ResourceIdStr, list[Discrepancy]] = {}

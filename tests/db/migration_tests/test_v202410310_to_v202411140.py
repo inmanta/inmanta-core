@@ -55,7 +55,7 @@ async def test_add_new_resource_status_column(
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeployResult.DEPLOYED,
-        blocked_status=state.BlockedStatus.NO,
+        blocked_status=state.Blocked.NOT_BLOCKED,
         expected_compliance_status=Compliance.COMPLIANT,
     )
     assert_resource_persistent_state(
@@ -63,7 +63,7 @@ async def test_add_new_resource_status_column(
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeployResult.FAILED,
-        blocked_status=state.BlockedStatus.NO,
+        blocked_status=state.Blocked.NOT_BLOCKED,
         expected_compliance_status=Compliance.NON_COMPLIANT,
     )
     assert_resource_persistent_state(
@@ -71,7 +71,7 @@ async def test_add_new_resource_status_column(
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeployResult.SKIPPED,
-        blocked_status=state.BlockedStatus.NO,
+        blocked_status=state.Blocked.NOT_BLOCKED,
         expected_compliance_status=Compliance.NON_COMPLIANT,
     )
     assert_resource_persistent_state(
@@ -79,7 +79,7 @@ async def test_add_new_resource_status_column(
         is_undefined=True,
         is_orphan=False,
         deployment_result=state.DeployResult.NEW,
-        blocked_status=state.BlockedStatus.YES,
+        blocked_status=state.Blocked.BLOCKED,
         expected_compliance_status=Compliance.UNDEFINED,
     )
     assert_resource_persistent_state(
@@ -87,7 +87,7 @@ async def test_add_new_resource_status_column(
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeployResult.NEW,
-        blocked_status=state.BlockedStatus.YES,
+        blocked_status=state.Blocked.BLOCKED,
         expected_compliance_status=Compliance.NON_COMPLIANT,
     )
     assert_resource_persistent_state(
@@ -97,7 +97,7 @@ async def test_add_new_resource_status_column(
         # The deployment_result field is not accurate, because it's an orphan. Tracking this accurately
         # would require an expensive query in the database migration script.
         deployment_result=state.DeployResult.NEW,
-        blocked_status=state.BlockedStatus.NO,
+        blocked_status=state.Blocked.NOT_BLOCKED,
         expected_compliance_status=None,
     )
     assert_resource_persistent_state(
@@ -105,7 +105,7 @@ async def test_add_new_resource_status_column(
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeployResult.DEPLOYED,
-        blocked_status=state.BlockedStatus.NO,
+        blocked_status=state.Blocked.NOT_BLOCKED,
         expected_compliance_status=Compliance.COMPLIANT,
     )
     assert_resource_persistent_state(
@@ -113,6 +113,6 @@ async def test_add_new_resource_status_column(
         is_undefined=False,
         is_orphan=False,
         deployment_result=state.DeployResult.NEW,
-        blocked_status=state.BlockedStatus.NO,
+        blocked_status=state.Blocked.NOT_BLOCKED,
         expected_compliance_status=Compliance.HAS_UPDATE,
     )
