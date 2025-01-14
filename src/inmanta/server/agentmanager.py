@@ -1477,6 +1477,11 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
         if not (assert_no_start_scheduler or no_start_scheduler):
             await self._ensure_scheduler(env.id)
 
+    async def notify_agent_deploy_timer_update(self, env: data.Environment) -> None:
+        agent_client = self._agent_manager.get_agent_client(tid=env.id, endpoint=AGENT_SCHEDULER_ID, live_agent_only=False)
+        if agent_client:
+            self.add_background_task(agent_client.notify_timer_update(env.id))
+
 
 # For testing only
 # Assert the scheduler will not be started (i.e. agent mock setup is correct)

@@ -2491,7 +2491,7 @@ class Environment(BaseDocument):
             " or as a cron-like expression. Set this to 0 to disable the automatic scheduling of deploy runs."
             " When specified as an integer, it must be smaller than the repair interval",
             validator=validate_cron_or_int,
-            agent_restart=True,
+            agent_restart=False,
         ),
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: Setting(
             name=AUTOSTART_AGENT_DEPLOY_SPLAY_TIME,
@@ -2500,7 +2500,7 @@ class Environment(BaseDocument):
             doc="The splay time on the deployment interval of the autostarted agents."
             " See also: :inmanta.config:option:`config.agent-deploy-splay-time`",
             validator=convert_int,
-            agent_restart=True,
+            agent_restart=False,
         ),
         AUTOSTART_AGENT_REPAIR_INTERVAL: Setting(
             name=AUTOSTART_AGENT_REPAIR_INTERVAL,
@@ -2512,7 +2512,7 @@ class Environment(BaseDocument):
                 " When specified as an integer, it must be larger than the deploy interval"
             ),
             validator=validate_cron_or_int,
-            agent_restart=True,
+            agent_restart=False,
         ),
         AUTOSTART_AGENT_REPAIR_SPLAY_TIME: Setting(
             name=AUTOSTART_AGENT_REPAIR_SPLAY_TIME,
@@ -2521,7 +2521,7 @@ class Environment(BaseDocument):
             doc="The splay time on the repair interval of the autostarted agents."
             " See also: :inmanta.config:option:`config.agent-repair-splay-time`",
             validator=convert_int,
-            agent_restart=True,
+            agent_restart=False,
         ),
         AUTOSTART_ON_START: Setting(
             name=AUTOSTART_ON_START,

@@ -1138,26 +1138,6 @@ async def test_exception_occurs_while_processing_session_action(server, environm
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
 
-async def test_restart_on_environment_setting(server, client, environment, caplog):
-    with caplog.at_level(logging.DEBUG):
-        response = await client.environment_settings_set(tid=environment, id="autostart_agent_deploy_interval", value=300)
-        assert response.code == 200
-
-        def check_log_contains(caplog, loggerpart, level, msg):
-            for record in caplog.get_records("call"):
-                logger_name, log_level, message = record.name, record.levelno, record.message
-                if msg in message and loggerpart in logger_name and level == log_level:
-                    return True
-            return False
-
-        await retry_limited(
-            lambda: check_log_contains(
-                caplog, "inmanta.server.agentmanager", logging.DEBUG, "Restarting Scheduler in environment"
-            ),
-            10,
-        )
-
-
 async def test_error_handling_agent_fork(server, environment, monkeypatch):
     """
     Verifies resolution of issue: inmanta/inmanta-core#2777
