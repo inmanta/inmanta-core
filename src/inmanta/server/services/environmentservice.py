@@ -35,7 +35,14 @@ import asyncpg
 from asyncpg import StringDataRightTruncationError
 
 from inmanta import config, data
-from inmanta.data import Setting, model
+from inmanta.data import (
+    AUTOSTART_AGENT_DEPLOY_INTERVAL,
+    AUTOSTART_AGENT_DEPLOY_SPLAY_TIME,
+    AUTOSTART_AGENT_REPAIR_INTERVAL,
+    AUTOSTART_AGENT_REPAIR_SPLAY_TIME,
+    Setting,
+    model,
+)
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
@@ -165,6 +172,14 @@ class EnvironmentService(protocol.ServerSlice):
         if setting.agent_restart:
             LOGGER.info("Environment setting %s changed. Restarting agents.", key)
             self.add_background_task(self.autostarted_agent_manager.restart_agents(env))
+
+        if key in [
+            AUTOSTART_AGENT_DEPLOY_INTERVAL,
+            AUTOSTART_AGENT_DEPLOY_SPLAY_TIME,
+            AUTOSTART_AGENT_REPAIR_INTERVAL,
+            AUTOSTART_AGENT_REPAIR_SPLAY_TIME,
+        ]:
+            await self.autostarted_agent_manager.notify_agent_deploy_timer_update(env)
 
         self.add_background_task(self._enable_schedules(env, setting))
 
