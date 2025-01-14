@@ -20,19 +20,26 @@ Glossary
         environment is required, but often multiple environments of the same infrastructure are
         available such as development, integration and testing.
 
-    scheduler
-        In each environment, a resource scheduler is responsible for enforcing the desired state.
-        To this end, the scheduler reads the desired state from the database, determines which
-        resources need deploying and in which relative order, and spawns :term:`executors<executor>` that will
-        load the appropriate handler code and perform the actual resource deployment.
+    resource scheduler
+        In each environment, this component manages the deployment of resources. It keeps track of
+        resources' state and intent, schedules them for deploy / repair when appropriate, and maintains
+        resource order as defined by the requires-provides relations.
+
+        It groups the resources by their announced :term:`agent<agent>`, spawns :term:`executor<executor>` processes to
+        host the handler code for each of those agents, and it works through its scheduled deploys (and other resource
+        actions, e.g. dry-run) by directing those executors to execute appropriate handler operations.
 
     executor
-        The process that enforces the desired state described by :term:`resources<resource>` by
-        executing :term:`handlers<handler>`. This is a short-lived process spawned on-demand
-        by the scheduler.
+        A process spawned on-demand by the :term:`resource scheduler<resource scheduler>` that hosts handler code for
+        one logical agent. Different model versions may have different executor processes for a given agent.
+        The resource scheduler instructs the executor to execute deploys (and other resource actions, e.g. dry-run).
 
     agent
-        Each agent is responsible for all resources that go to a single device or API endpoint. TODO <improve this>
+        The logical component, identified by a name, that knows how to deploy a class of resources. The
+        :term:`resource scheduler<resource scheduler>` ensures that deploy actions on a given agent are always
+        sequential. It is a grouping (and concurrency control) mechanism for related resources (i.e. resources
+        that go to a single device or API endpoint). Each logical agent has its own :term:`executor<executor>`
+        process(es) on which to run handler code.
 
     resource
         Inmanta orchestrates and manages resources, of any abstraction level, in an infrastructure.
