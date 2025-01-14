@@ -27,8 +27,8 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
 from inmanta.const import ParameterSource
-from inmanta.server import config, SLICE_AGENT_MANAGER, SLICE_PARAM, config
-from inmanta.util import parse_timestamp, get_compiler_version
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_PARAM, config
+from inmanta.util import get_compiler_version, parse_timestamp
 
 
 @pytest.fixture
@@ -146,7 +146,7 @@ async def test_parameters_paging(server, client, order_by_column, order, env_wit
     assert result.result["links"].get("next") is not None
     assert result.result["links"].get("prev") is None
 
-    port = get_bind_port()
+    port = config.get_bind_port()
     base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
