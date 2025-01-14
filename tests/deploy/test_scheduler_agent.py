@@ -109,7 +109,6 @@ def make_resource_minimal(environment):
         rid: ResourceIdStr,
         values: dict[str, object],
         requires: list[str],
-        status: state.ComplianceStatus = state.ComplianceStatus.HAS_UPDATE,
     ) -> state.ResourceDetails:
         """Produce a resource that is valid to the scheduler"""
         attributes = dict(values)
@@ -2430,7 +2429,6 @@ async def test_deploy_blocked_state(agent: TestAgent, make_resource_minimal) -> 
                 rid,
                 values={"value": version},
                 requires=requires,
-                status=const.ResourceState.undefined if rid in undef else const.ResourceState.deployed,
             )
             for rid, requires in zip(rids, rx_requires)
         }
@@ -2660,7 +2658,7 @@ async def test_deploy_orphaned(agent: TestAgent, make_resource_minimal) -> None:
 
 async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_minimal) -> None:
     """
-    Verify the behavior or _new_version (without inspecting task behavior) when multiple versions are processed
+    Verify the behavior of _new_version (without inspecting task behavior) when multiple versions are processed
     in one go (e.g. when the scheduler has been paused or when versions come in fast after one another).
     """
 
@@ -2699,9 +2697,10 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
 
     async def restore_baseline_state() -> None:
         """
-        Re-release basline model, wait for stable state (all executions done, all resources compliant),
+        Re-release baseline model, wait for stable state (all executions done, all resources compliant),
         then assert expected baseline state.
         """
+        await agent.start_working()
         await scheduler._new_version([model(baseline_resources)])
         await retry_limited_fast(lambda: scheduler._work.agent_queues._agent_queues["agent1"]._unfinished_tasks == 0)
         assert scheduler._state.resources == baseline_resources
@@ -2713,6 +2712,8 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
             assert scheduler._state.resource_state[rid].deployment_result is DeploymentResult.DEPLOYED
             assert scheduler._state.resource_state[rid].blocked is BlockedStatus.NO
         assert len(scheduler._state.dirty) == 0
+        # Make sure that _new_version() calls done by the test case do not get deployed to prevent races on state assertions.
+        await agent.stop_working()
 
     await restore_baseline_state()
 
@@ -2794,12 +2795,228 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
     assert scheduler._state.resource_state[rid5].deployment_result is DeploymentResult.NEW
     assert scheduler._state.resource_state[rid5].blocked is BlockedStatus.NO
 
-    # TODO: add more scenarios
-    # - resource becomes undefined (in first, second, or last version)
-    # - resource becomes defined (in first, second, or last version)
-    # - resource becomes undefined and then defined again and vice versa
-    # - resource is new+undefined / updated+undefined
-    # - verify requires => like resources, should simply be `== all_models[-1].requires`, same for provides
+    await restore_baseline_state()
+
+    # Resource becomes undefined
+    await scheduler._new_version(
+        [
+            model(
+                {
+                    rid1: all_models[-1].resources[rid1],
+                    rid2: all_models[-1].resources[rid2],
+                    rid4: make_resource_minimal(rid4, values={"new": "unknown"}, requires=[]),
+                },
+                undefined={rid4},
+            ),
+            model(
+                {
+                    rid1: make_resource_minimal(rid1, values={"changed": "unknown"}, requires=[]),
+                    rid2: all_models[-1].resources[rid2],
+                    rid4: make_resource_minimal(rid4, values={"new": "unknown"}, requires=[]),
+                },
+                undefined={rid1, rid4},
+            ),
+            model(
+                {
+                    rid1: make_resource_minimal(rid1, values={"changed": "unknown"}, requires=[]),
+                    rid2: make_resource_minimal(rid2, values={"changed": "unknown"}, requires=[]),
+                    rid4: make_resource_minimal(rid4, values={"new": "unknown"}, requires=[]),
+                },
+                undefined={rid1, rid2, rid4},
+            ),
+        ]
+    )
+    assert scheduler._state.resources == all_models[-1].resources
+    for rid in (rid1, rid2, rid4):
+        assert scheduler._state.resource_state[rid].status is ComplianceStatus.UNDEFINED
+        assert (
+            scheduler._state.resource_state[rid].deployment_result is DeploymentResult.DEPLOYED
+            if rid != rid4
+            else DeploymentResult.NEW
+        )
+        assert scheduler._state.resource_state[rid].blocked is BlockedStatus.YES
+
+    await restore_baseline_state()
+
+    # Resource becomes defined
+
+    # Make sure resources are initialized as undefined
+    await scheduler._new_version(
+        [
+            model(
+                {
+                    rid1: make_resource_minimal(rid1, values={"changed": "unknown"}, requires=[]),
+                    rid2: make_resource_minimal(rid2, values={"changed": "unknown"}, requires=[]),
+                    rid3: make_resource_minimal(rid3, values={"changed": "unknown"}, requires=[]),
+                },
+                undefined={rid1, rid2, rid3},
+            ),
+        ]
+    )
+    assert scheduler._state.resources == all_models[-1].resources
+    for rid in (rid1, rid2, rid3):
+        assert scheduler._state.resource_state[rid].status is ComplianceStatus.UNDEFINED
+        assert scheduler._state.resource_state[rid].deployment_result is DeploymentResult.DEPLOYED
+        assert scheduler._state.resource_state[rid].blocked is BlockedStatus.YES
+
+    await scheduler._new_version(
+        [
+            model(
+                {
+                    rid1: all_models[-1].resources[rid1],
+                    rid2: make_resource_minimal(rid2, values={"changed": "unknown"}, requires=[]),
+                    rid3: make_resource_minimal(rid3, values={"changed": "unknown"}, requires=[]),
+                },
+                undefined={rid2, rid3},
+            ),
+            model(
+                {
+                    rid1: all_models[-1].resources[rid1],
+                    rid2: all_models[-1].resources[rid2],
+                    rid3: make_resource_minimal(rid3, values={"changed": "unknown"}, requires=[]),
+                },
+                undefined={rid3},
+            ),
+            model(
+                {
+                    rid1: all_models[-1].resources[rid1],
+                    rid2: all_models[-1].resources[rid2],
+                    rid3: all_models[-1].resources[rid3],
+                },
+            ),
+        ]
+    )
+    assert scheduler._state.resources == all_models[-1].resources
+    for rid in (rid1, rid2, rid3):
+        assert scheduler._state.resource_state[rid].status is ComplianceStatus.HAS_UPDATE
+        assert scheduler._state.resource_state[rid].deployment_result is DeploymentResult.DEPLOYED
+        assert scheduler._state.resource_state[rid].blocked is BlockedStatus.NO
+
+    await restore_baseline_state()
+
+    # Resource becomes undefined, defined and then undefined again
+    await scheduler._new_version(
+        [
+            model(
+                {
+                    rid1: make_resource_minimal(rid1, values={"changed": "unknown"}, requires=[]),
+                },
+                undefined={rid1},
+            ),
+            model(
+                {
+                    rid1: all_models[-1].resources[rid1],
+                },
+            ),
+            model(
+                {
+                    rid1: make_resource_minimal(rid1, values={"changed": "unknown"}, requires=[]),
+                },
+                undefined={rid1},
+            ),
+        ]
+    )
+    assert scheduler._state.resources == all_models[-1].resources
+    assert scheduler._state.resource_state[rid1].status is ComplianceStatus.UNDEFINED
+    assert scheduler._state.resource_state[rid1].deployment_result is DeploymentResult.DEPLOYED
+    assert scheduler._state.resource_state[rid1].blocked is BlockedStatus.YES
+
+    await restore_baseline_state()
+
+    # Resource becomes defined, undefined and then defined again
+
+    # Make sure resources are initialized as undefined
+    await scheduler._new_version(
+        [
+            model(
+                {
+                    rid1: make_resource_minimal(rid1, values={"changed": "unknown"}, requires=[]),
+                },
+                undefined={rid1},
+            ),
+        ]
+    )
+    assert scheduler._state.resources == all_models[-1].resources
+    assert scheduler._state.resource_state[rid1].status is ComplianceStatus.UNDEFINED
+    assert scheduler._state.resource_state[rid1].deployment_result is DeploymentResult.DEPLOYED
+    assert scheduler._state.resource_state[rid1].blocked is BlockedStatus.YES
+
+    await scheduler._new_version(
+        [
+            model(
+                {
+                    rid1: all_models[-1].resources[rid1],
+                },
+            ),
+            model(
+                {
+                    rid1: make_resource_minimal(rid1, values={"changed": "unknown"}, requires=[]),
+                },
+                undefined={rid1},
+            ),
+            model(
+                {
+                    rid1: all_models[-1].resources[rid1],
+                },
+            ),
+        ]
+    )
+    assert scheduler._state.resources == all_models[-1].resources
+    assert scheduler._state.resource_state[rid1].status is ComplianceStatus.HAS_UPDATE
+    assert scheduler._state.resource_state[rid1].deployment_result is DeploymentResult.DEPLOYED
+    assert scheduler._state.resource_state[rid1].blocked is BlockedStatus.NO
+
+    await restore_baseline_state()
+
+    # Verify updates of requires
+    await scheduler._new_version(
+        [
+            model(
+                {
+                    rid1: make_resource_minimal(rid1, values={"changed": "value"}, requires=[rid2]),
+                    rid2: make_resource_minimal(rid2, values={"changed": "value"}, requires=[rid3]),
+                    rid3: make_resource_minimal(rid3, values={"changed": "value"}, requires=[]),
+                },
+                requires={
+                    rid1: {rid2},
+                    rid2: {rid3},
+                    rid3: set(),
+                },
+            ),
+            model(
+                {
+                    rid1: make_resource_minimal(rid1, values={"changed": "value"}, requires=[rid2]),
+                    rid2: make_resource_minimal(rid2, values={"changed": "value"}, requires=[]),
+                    rid3: make_resource_minimal(rid3, values={"changed": "value"}, requires=[rid2]),
+                },
+                requires={
+                    rid1: {rid2},
+                    rid2: set(),
+                    rid3: {rid2},
+                },
+            ),
+            model(
+                {
+                    rid1: make_resource_minimal(rid1, values={"changed": "value"}, requires=[]),
+                    rid2: make_resource_minimal(rid2, values={"changed": "value"}, requires=[rid1]),
+                    rid3: make_resource_minimal(rid3, values={"changed": "value"}, requires=[rid2]),
+                },
+                requires={
+                    rid1: set(),
+                    rid2: {rid1},
+                    rid3: {rid2},
+                },
+            ),
+        ]
+    )
+    assert scheduler._state.resources == all_models[-1].resources
+    for rid in (rid1, rid2, rid3):
+        assert scheduler._state.resource_state[rid].status is ComplianceStatus.HAS_UPDATE
+        assert scheduler._state.resource_state[rid].deployment_result is DeploymentResult.DEPLOYED
+        assert scheduler._state.resource_state[rid].blocked is BlockedStatus.NO
+    assert scheduler._state.requires[rid1] == set()
+    assert scheduler._state.requires[rid2] == {rid1}
+    assert scheduler._state.requires[rid3] == {rid2}
 
 
 async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog) -> None:
