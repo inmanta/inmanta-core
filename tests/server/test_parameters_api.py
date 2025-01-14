@@ -275,21 +275,19 @@ async def test_dont_renew_old_facts(server, client, environment, clienthelper, c
 
     monkeypatch.setattr(agent_manager_slice, "request_parameter", request_parameter_mock)
 
-    resource_id1 = "std::testing::NullResource[vm1.dev.inmanta.com,name=test1]"
-    resource_id2 = "std::testing::NullResource[vm1.dev.inmanta.com,name=test2]"
+    resource_id1 = "std::testing::NullResource[vm1.dev.inmanta.com,name=fact1]"
+    resource_id2 = "std::testing::NullResource[vm1.dev.inmanta.com,name=fact2]"
     version = await clienthelper.get_version()
     resources = [
         {
             "id": f"{resource_id1},v={version}",
-            "name": "test1",
-            "param": "val1",
+            "name": "fact1",
             "purged": False,
             "requires": [],
         },
         {
             "id": f"{resource_id2},v={version}",
-            "name": "test2",
-            "param": "unknown",
+            "name": "fact2",
             "purged": False,
             "requires": [],
         },
