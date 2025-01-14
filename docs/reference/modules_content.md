@@ -44,7 +44,7 @@ product suites or directly licensed.
 | openstack          | Support for Openstack resources                                                                               |
 | rest               | Support for doing REST based calls                                                                            |
 | systemd            | Support for managing services on systemd based Linux systems                                                  |
-| tibit              | Support for xPON services on Tibit OLTs using MCMS                                                            |
+| tibit              | Support for xPON services on Ciena (Tibit) OLTs using MCMS                                                    |
 | transportpce       | Support for Optical Services through OpendayLight transportpce                                                |
 | vcenter            | Support for managing resources on vCenter and ESXi directly (virtal machines, DVS, vSwitch, ...)              |
 | vyos               | Support for managing vyos resources through SSH and CLI                                                       |

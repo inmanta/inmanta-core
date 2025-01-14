@@ -17,7 +17,7 @@ The Inmanta server and the Inmanta agent, started via systemd, will read their c
 
 The configuration options specified in the ``/etc/inmanta/inmanta.d/`` directory override the configuration options specified in
 ``/etc/inmanta/inmanta.cfg``. If the directory ``/etc/inmanta/inmanta.d/`` contains two files with the same configuration option, the
-conflict is resolved using the alphabetical order of the filenames. Filenames which appear later in the alfabetical order
+conflict is resolved using the alphabetical order of the filenames. Filenames which appear later in the alphabetical order
 override the configuration options from their predecessors in that order.
 
 After having read the configuration files, inmanta will read environment variables.
