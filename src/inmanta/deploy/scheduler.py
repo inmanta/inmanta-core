@@ -414,12 +414,33 @@ class ResourceScheduler(TaskManager):
 
         await data.Resource.reset_resource_state(self.environment)
 
+    async def load_timer_settings(self) -> None:
+        """Update the timer manager after an update of the timer config"""
+        await self._timer_manager.reload_config()
+
+    async def reload_all_timers(self) -> None:
+        """
+        Internal, request all timers to reload. For all known resources,
+        either updates or stops its associated timer, depending on its state.
+        """
+        # Get lock
+        async with self._scheduler_lock:
+            for resource, state in self._state.resource_state.items():
+                deploy = Deploy(resource=resource)
+                if (
+                    deploy in self._work.agent_queues
+                    or deploy in self._work.agent_queues.in_progress
+                    or resource in self._work._waiting
+                ):
+                    self._timer_manager.stop_timer(resource)
+                self._timer_manager.update_timer(resource, state=state)
+
     async def _initialize(self) -> None:
         """
         Initialize the scheduler state and continue the deployment where we were before the server was shutdown.
         Marks scheduler as running and triggers first deploys.
         """
-        self._timer_manager.initialize()
+        await self._timer_manager.initialize()
         # do not start a transaction because:
         # 1. nothing we do here before read_version is inherently transactional: the only write is atomic, and reads do not
         #   benefit from READ COMMITTED (default) isolation level.

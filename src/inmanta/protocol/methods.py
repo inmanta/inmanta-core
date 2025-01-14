@@ -64,7 +64,7 @@ async def convert_resource_version_id(rvid: inmanta.types.ResourceVersionIdStr, 
 ENV_OPTS: dict[str, ArgOption] = {
     "tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=convert_environment)
 }
-AGENT_ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=add_env)}
+AGENT_ENV_OPTS: dict[str, ArgOption] = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=add_env)}
 RVID_OPTS = {"rvid": ArgOption(getter=convert_resource_version_id)}
 
 
