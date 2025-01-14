@@ -1049,8 +1049,8 @@ class ResourceScheduler(TaskManager):
         current_agent = await data.Agent.get(env=self.environment, endpoint=endpoint)
         return not current_agent.paused
 
-    async def all_paused_agents(self) -> list[str]:
-        return [agent.name for agent in await data.Agent.get_list(environment=self.environment, paused=True)]
+    async def all_paused_agents(self) -> set[str]:
+        return {agent.name for agent in await data.Agent.get_list(environment=self.environment, paused=True)}
 
     async def refresh_agent_state_from_db(self, name: str) -> None:
         """

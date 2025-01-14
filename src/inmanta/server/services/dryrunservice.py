@@ -90,7 +90,7 @@ class DyrunService(protocol.ServerSlice):
         else:
             raise Conflict("Could not start the scheduler")
 
-        paused_agent = [agent.name for agent in await data.Agent.get_list(environment=env.id, paused=True)]
+        paused_agent = {agent.name for agent in await data.Agent.get_list(environment=env.id, paused=True)}
 
         # Mark the resources in an undeployable state as done
         async with self.dryrun_lock:
