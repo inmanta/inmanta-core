@@ -323,7 +323,6 @@ class ToDbUpdateManager(StateUpdateManager):
         started: datetime.datetime,
         finished: datetime.datetime,
         messages: list[LogLine],
-        connection: Optional[Connection] = None,
     ) -> None:
         id = Id.parse_id(resource)
 
@@ -338,8 +337,7 @@ class ToDbUpdateManager(StateUpdateManager):
             status=status,
             messages=[msg.to_dict() for msg in messages],
         )
-        async with data.Resource.get_connection(connection=connection) as con:
-            await resource_action.insert(connection=con)
+        await resource_action.insert()
 
     async def set_parameters(self, fact_result: executor.FactResult) -> None:
         if fact_result.success:
