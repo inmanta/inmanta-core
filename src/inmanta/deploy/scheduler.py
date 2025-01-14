@@ -438,8 +438,8 @@ class ResourceScheduler(TaskManager):
 
             environment: Optional[data.Environment] = await data.Environment.get_by_id(self.environment, connection=con)
             assert environment is not None
-            should_restore_state: bool = typing.cast(
-                bool, await environment.get(data.AUTOSTART_AGENT_RESTORE_STATE, connection=con)
+            should_restore_state: bool = not typing.cast(
+                bool, await environment.get(data.RESET_DEPLOY_PROGRESS_ON_START, connection=con)
             )
 
             # Check if we can restore the scheduler state from a previous run

@@ -2335,7 +2335,7 @@ AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
 AUTOSTART_AGENT_DEPLOY_SPLAY_TIME = "autostart_agent_deploy_splay_time"
 AUTOSTART_AGENT_REPAIR_INTERVAL = "autostart_agent_repair_interval"
 AUTOSTART_AGENT_REPAIR_SPLAY_TIME = "autostart_agent_repair_splay_time"
-AUTOSTART_AGENT_RESTORE_STATE = "autostart_agent_restore_state"
+RESET_DEPLOY_PROGRESS_ON_START = "reset_deploy_progress_on_start"
 AUTOSTART_ON_START = "autostart_on_start"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
@@ -2524,17 +2524,16 @@ class Environment(BaseDocument):
             validator=convert_int,
             agent_restart=True,
         ),
-        AUTOSTART_AGENT_RESTORE_STATE: Setting(
-            name=AUTOSTART_AGENT_RESTORE_STATE,
+        RESET_DEPLOY_PROGRESS_ON_START: Setting(
+            name=RESET_DEPLOY_PROGRESS_ON_START,
             typ="bool",
-            default=True,
+            default=False,
             doc=(
-                "Restore state of the resource scheduler when the agent (re)starts to continue (close to) where it left off."
-                " This is the recommended behavior as it results in more efficient deploy scheduling at startup."
-                " The alternative is to discard all but the most basic resource state, and to fall back to deploy increment"
-                " calculation as was the norm in older versions of the Inmanta orchestrator (<= iso7/2024)."
-                " We recommend to disable this setting only in the unlikely event of certain state inconsistencies in order"
-                " to start the agent with a clean slate."
+                "By default the orchestrator picks up the deployment process where it was when it restarted (or halted)."
+                " When this option is enabled, the orchestrator we restart the deployment based on the last known deployment"
+                " state. It is recommended to leave this disabled because in most cases it is faster (because we can skip some"
+                " redundant work) and it has more accurate state and progress reporting (because we retain more state to reason"
+                " on). Enable this in case there are issues with restoring the deployment state at restart."
             ),
             agent_restart=True,
         ),

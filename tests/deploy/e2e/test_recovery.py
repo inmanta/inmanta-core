@@ -59,16 +59,16 @@ async def test_agent_disconnect(
     utils.log_index(caplog, "inmanta.scheduler", logging.WARNING, "Connection to server lost, stopping scheduler")
 
 
-@pytest.mark.parametrize("restore_state", (True, False))
+@pytest.mark.parametrize("reset_state", (True, False))
 async def test_scheduler_initialization(
-    agent, resource_container, clienthelper, server, client, environment, restore_state: bool
+    agent, resource_container, clienthelper, server, client, environment, reset_state: bool
 ) -> None:
     """
     Ensure that when the scheduler starts, it only deploys the resources that need to be deployed,
     i.e. the resources that are not up-to-date or have outstanding events.
     """
-    if not restore_state:
-        await client.set_setting(environment, data.AUTOSTART_AGENT_RESTORE_STATE, False)
+    if reset_state:
+        await client.set_setting(environment, data.RESET_DEPLOY_PROGRESS_ON_START, True)
 
     resource_container.Provider.reset()
     resource_container.Provider.set(agent="agent1", key="key", value="key1")
@@ -162,14 +162,14 @@ async def test_scheduler_initialization(
             last_deployed=last_deployed[1],
         ),
         "test::Resource[agent1,key=key2]": ResourceState(
-            status=ComplianceStatus.NON_COMPLIANT if restore_state else ComplianceStatus.HAS_UPDATE,
-            deployment_result=DeploymentResult.FAILED if restore_state else DeploymentResult.NEW,
+            status=ComplianceStatus.NON_COMPLIANT if not reset_state else ComplianceStatus.HAS_UPDATE,
+            deployment_result=DeploymentResult.FAILED if not reset_state else DeploymentResult.NEW,
             blocked=BlockedStatus.NO,
             last_deployed=last_deployed[2],
         ),
         "test::Resource[agent1,key=key3]": ResourceState(
-            status=ComplianceStatus.NON_COMPLIANT if restore_state else ComplianceStatus.HAS_UPDATE,
-            deployment_result=DeploymentResult.SKIPPED if restore_state else DeploymentResult.NEW,
+            status=ComplianceStatus.NON_COMPLIANT if not reset_state else ComplianceStatus.HAS_UPDATE,
+            deployment_result=DeploymentResult.SKIPPED if not reset_state else DeploymentResult.NEW,
             blocked=BlockedStatus.NO,  # we don't restore TRANSIENT status atm
             last_deployed=last_deployed[3],
         ),
