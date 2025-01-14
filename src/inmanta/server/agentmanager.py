@@ -858,12 +858,16 @@ class AgentManager(ServerSlice, SessionListener):
         :raises BadRequest: Limit, start and end can not be set together
         :raises BadRequest: Limit parameter can not exceed 1000
         """
+        if env is None:
+            return 404, {"message": "The given environment id does not exist!"}
         new_agent_endpoint = await self.get_agents(env, limit, start, end, start, end)
 
         def mangle_format(agent: model.Agent) -> dict[str, object]:
             native = agent.model_dump()
-            native["primary"] = None
+            native["primary"] = ""
             native["state"] = agent.status
+            if native["last_failover"] is None:
+                native["last_failover"] = ""
             return native
 
         return 200, {

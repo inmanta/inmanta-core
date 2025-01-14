@@ -446,46 +446,19 @@ async def test_api(init_dataclasses_and_load_schema):
     assert result == 404
 
     code, all_agents = await am.list_agents(None)
-    assert code == 200
-    shouldbe = {
-        "agents": [
-            {"name": "agent1", "paused": True, "last_failover": "", "primary": "", "environment": env.id, "state": "paused"},
-            {
-                "name": "agent1",
-                "paused": False,
-                "last_failover": expiration,
-                "primary": "",
-                "environment": env5.id,
-                "state": "down",
-            },
-            {"name": "agent2", "paused": False, "last_failover": UNKWN, "primary": UNKWN, "environment": env.id, "state": "up"},
-            {"name": "agent3", "paused": False, "last_failover": UNKWN, "primary": UNKWN, "environment": env.id, "state": "up"},
-            {"name": "agent1", "paused": True, "last_failover": "", "primary": "", "environment": env4.id, "state": "paused"},
-            {
-                "name": "agent2",
-                "paused": False,
-                "last_failover": UNKWN,
-                "primary": UNKWN,
-                "environment": env4.id,
-                "state": "up",
-            },
-            {"name": "agent3", "paused": False, "last_failover": "", "primary": "", "environment": env4.id, "state": "down"},
-            {"name": "agent4", "paused": False, "last_failover": "", "primary": "", "environment": env2.id, "state": "down"},
-        ]
-    }
-    assert_equal_ish(shouldbe, all_agents, sortby=["environment", "name"])
+    assert code == 404
 
     start = "agent2"
-    code, all_agents = await am.list_agents(env=None, start=start)
+    code, all_agents = await am.list_agents(env=env, start=start)
     assert code == 200
-    assert len(all_agents["agents"]) == 3
+    assert len(all_agents["agents"]) == 1
     for a in all_agents["agents"]:
         assert a["name"] > start, f"List of agent should not contain a name (={a['name']}) before or equal to start (={start})"
 
     end = "agent2"
-    code, all_agents = await am.list_agents(env=None, end=end)
+    code, all_agents = await am.list_agents(env=env, end=end)
     assert code == 200
-    assert len(all_agents["agents"]) == 3
+    assert len(all_agents["agents"]) == 1
     for a in all_agents["agents"]:
         assert a["name"] < end, f"List of agent should not contain a name (={a['name']}) after or equal to end (={end})"
 

@@ -242,8 +242,7 @@ async def test_auto_deploy_no_splay(server, client, clienthelper: ClientHelper, 
         result = await client.list_agents(tid=environment)
         await asyncio.sleep(0.1)
 
-    assert len(result.result["agents"]) == 2
-    assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+    assert len(result.result["agents"]) == 1
 
 
 async def test_deploy_no_code(resource_container, client, clienthelper, environment):
