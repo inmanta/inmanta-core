@@ -331,7 +331,7 @@ class TestScheduler(ResourceScheduler):
         return True
 
     async def all_paused_agents(self) -> set[str]:
-        return {}
+        return set()
 
     async def _get_single_model_version_from_db(
         self,
