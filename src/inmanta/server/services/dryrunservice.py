@@ -90,7 +90,7 @@ class DyrunService(protocol.ServerSlice):
         else:
             raise Conflict("Could not start the scheduler")
 
-        paused_agent = {agent.name for agent in await data.Agent.get_list(environment=env.id, paused=True)}
+        paused_agents = {agent.name for agent in await data.Agent.get_list(environment=env.id, paused=True)}
 
         # Mark the resources in an undeployable state as done
         async with self.dryrun_lock:
@@ -115,7 +115,7 @@ class DyrunService(protocol.ServerSlice):
                 for res in rvs
                 if res.resource_version_id not in undeployable_version_ids
                 and res.resource_version_id not in skip_undeployable_version_ids
-                and res.agent in paused_agent
+                and res.agent in paused_agents
             ]
             await self._save_resources_without_changes_to_dryrun(
                 dryrun_id=dryrun.id, resources=resources_with_agents_down, diff_status=ResourceDiffStatus.agent_down
