@@ -279,7 +279,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         started=started,
                         finished=datetime.datetime.now().astimezone(),
                         messages=[msg],
-                        resource_unavailable=True,
+                        resource_state=const.ResourceState.unavailable,
                     )
                 assert resource_obj is not None
                 ctx = handler.HandlerContext(resource_obj, True, logger=self.resource_action_logger)
@@ -386,7 +386,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                     messages=[msg],
                     success=False,
                     error_msg=f"Unable to deserialize resource {resource.id}",
-                    resource_unavailable=True,
+                    resource_state=const.ResourceState.unavailable,
                 )
             assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj, logger=self.resource_action_logger)

@@ -302,33 +302,16 @@ class ToDbUpdateManager(StateUpdateManager):
             changes=dryrun_result.changes,
         )
 
-        async with data.Resource.get_connection() as connection:
-            await self._write_resource_action(
-                env,
-                dryrun_result.rvid,
-                const.ResourceAction.dryrun,
-                uuid.uuid4(),
-                const.ResourceState.dry,
-                dryrun_result.started,
-                dryrun_result.finished,
-                dryrun_result.messages,
-                connection=connection,
-            )
-
-            if dryrun_result.resource_unavailable:
-                await self._write_resource_action(
-                    env,
-                    dryrun_result.rvid,
-                    const.ResourceAction.dryrun,
-                    uuid.uuid4(),
-                    const.ResourceState.unavailable,
-                    # Small hack so that when we return the logs ordered by started time,
-                    # we don't get inconsistencies in the ordering by having 2 logs with the same started time.
-                    dryrun_result.started + datetime.timedelta(milliseconds=1),
-                    dryrun_result.finished + datetime.timedelta(milliseconds=1),
-                    dryrun_result.messages,
-                    connection=connection,
-                )
+        await self._write_resource_action(
+            env,
+            dryrun_result.rvid,
+            const.ResourceAction.dryrun,
+            uuid.uuid4(),
+            dryrun_result.resource_state or const.ResourceState.dry,
+            dryrun_result.started,
+            dryrun_result.finished,
+            dryrun_result.messages,
+        )
 
     async def _write_resource_action(
         self,
@@ -369,7 +352,7 @@ class ToDbUpdateManager(StateUpdateManager):
             started=fact_result.started,
             finished=fact_result.finished,
             messages=fact_result.messages,
-            status=const.ResourceState.unavailable if fact_result.resource_unavailable else None,
+            status=fact_result.resource_state,
         )
 
     async def update_resource_intent(
