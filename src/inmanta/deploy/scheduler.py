@@ -419,7 +419,7 @@ class ResourceScheduler(TaskManager):
         await self._timer_manager.reload_config()
 
     async def reload_all_timers(self) -> None:
-        """Internal, request all timers to reload"""
+        """Internal, request all timers to reload. For all known resources, either updates or stops its associated timer, depending on its state."""
         # Get lock
         async with self._scheduler_lock:
             for resource, state in self._state.resource_state.items():
