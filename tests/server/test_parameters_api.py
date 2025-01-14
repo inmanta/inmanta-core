@@ -244,7 +244,6 @@ async def test_filter_validation(server, client, env_with_parameters):
         assert result.code == expected_status
 
 
-@pytest.mark.parametrize("no_agent", [True])
 async def test_dont_renew_old_facts(server, client, environment, clienthelper, caplog, time_machine, monkeypatch):
     """
     Make sure that we don't renew facts that belong to a resource that is no longer present in the latest released
