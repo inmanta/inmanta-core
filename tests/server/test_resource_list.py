@@ -35,7 +35,7 @@ import inmanta.util
 import util.performance
 import utils
 from inmanta import const, data, resources, util
-from inmanta.agent.executor import DeployResult
+from inmanta.agent.executor import DeployReport
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource
 from inmanta.deploy import persistence, state
@@ -810,7 +810,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                     deployment_result = DeploymentResult.DEPLOYED
                 await to_db_update_manager.send_deploy_done(
                     attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resource),
-                    result=DeployResult(
+                    result=DeployReport(
                         rvid=rvid,
                         action_id=actionid,
                         resource_state=status,

@@ -596,7 +596,7 @@ async def test_move_to_available_state(server, environment, client, clienthelper
             attribute_hash=util.make_attribute_hash(
                 resource_id=ResourceIdStr(f"test::Resource[agent1,key=test{i}]"), attributes=resources_v1[0]
             ),
-            result=executor.DeployResult(
+            result=executor.DeployReport(
                 rvid=rvid,
                 action_id=action_id,
                 resource_state=const.HandlerResourceState.deployed,

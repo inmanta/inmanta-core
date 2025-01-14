@@ -65,7 +65,7 @@ class StateUpdateManager(abc.ABC):
     async def send_deploy_done(
         self,
         attribute_hash: str,
-        result: executor.DeployResult,
+        result: executor.DeployReport,
         state: Optional[state.ResourceState],
         *,
         started: datetime.datetime,
@@ -80,11 +80,11 @@ class StateUpdateManager(abc.ABC):
         """
 
     @abc.abstractmethod
-    async def dryrun_update(self, env: UUID, dryrun_result: executor.DryrunResult) -> None:
+    async def dryrun_update(self, env: UUID, dryrun_result: executor.DryrunReport) -> None:
         pass
 
     @abc.abstractmethod
-    async def set_parameters(self, fact_result: executor.FactResult) -> None:
+    async def set_parameters(self, fact_result: executor.GetFactReport) -> None:
         pass
 
     @abc.abstractmethod
@@ -169,7 +169,7 @@ class ToDbUpdateManager(StateUpdateManager):
     async def send_deploy_done(
         self,
         attribute_hash: str,
-        result: executor.DeployResult,
+        result: executor.DeployReport,
         state: Optional[state.ResourceState],
         *,
         started: datetime.datetime,
@@ -294,7 +294,7 @@ class ToDbUpdateManager(StateUpdateManager):
                         environment=self.environment, resource_id=resource.resource_id, connection=connection
                     )
 
-    async def dryrun_update(self, env: UUID, dryrun_result: executor.DryrunResult) -> None:
+    async def dryrun_update(self, env: UUID, dryrun_result: executor.DryrunReport) -> None:
         await self.client.dryrun_update(
             tid=env,
             id=dryrun_result.dryrun_id,
@@ -339,7 +339,7 @@ class ToDbUpdateManager(StateUpdateManager):
         )
         await resource_action.insert()
 
-    async def set_parameters(self, fact_result: executor.FactResult) -> None:
+    async def set_parameters(self, fact_result: executor.GetFactReport) -> None:
         await self.client.set_parameters(tid=self.environment, parameters=fact_result.parameters)
         await self._write_resource_action(
             env=self.environment,

@@ -24,7 +24,7 @@ from copy import deepcopy
 
 from inmanta import const
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, FailedResources, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, FailedResources, ResourceDetails, ResourceInstallSpec
 from inmanta.types import ResourceIdStr
 
 
@@ -41,7 +41,7 @@ class WriteBarierExecutor(executor.Executor):
         resource_details: ResourceDetails,
         reason: str,
         requires: Mapping[ResourceIdStr, const.ResourceState],
-    ) -> DeployResult:
+    ) -> DeployReport:
         return await self.delegate.execute(
             action_id,
             gid,
@@ -54,10 +54,10 @@ class WriteBarierExecutor(executor.Executor):
         self,
         resource: ResourceDetails,
         dry_run_id: uuid.UUID,
-    ) -> DryrunResult:
+    ) -> DryrunReport:
         return await self.delegate.dry_run(deepcopy(resource), dry_run_id)
 
-    async def get_facts(self, resource: ResourceDetails) -> FactResult:
+    async def get_facts(self, resource: ResourceDetails) -> GetFactReport:
         return await self.delegate.get_facts(deepcopy(resource))
 
     async def join(self) -> None:

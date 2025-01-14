@@ -1323,7 +1323,7 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
         if method_to_use == "send_deploy_done":
             await update_manager.send_deploy_done(
                 attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes_r1),
-                result=executor.DeployResult(
+                result=executor.DeployReport(
                     rvid=rvid_r1_v1,
                     action_id=action_id,
                     resource_state=const.HandlerResourceState.deployed,
@@ -1412,7 +1412,7 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
     with pytest.raises(ValueError):
         await update_manager.send_deploy_done(
             attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes_r1),
-            result=executor.DeployResult(
+            result=executor.DeployReport(
                 rvid=rvid_r1_v1,
                 action_id=action_id,
                 resource_state=const.HandlerResourceState.deployed,
@@ -1452,7 +1452,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
     with pytest.raises(ValueError) as exec_info:
         await update_manager.send_deploy_done(
             attribute_hash="",
-            result=executor.DeployResult(
+            result=executor.DeployReport(
                 rvid=rvid_r1_v1,
                 action_id=uuid.uuid4(),
                 resource_state=const.HandlerResourceState.deployed,
@@ -1483,7 +1483,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
     with pytest.raises(ValueError) as exec_info:
         await update_manager.send_deploy_done(
             attribute_hash="",
-            result=executor.DeployResult(
+            result=executor.DeployReport(
                 rvid=rvid_r1_v1,
                 action_id=uuid.uuid4(),
                 resource_state=const.HandlerResourceState.deployed,

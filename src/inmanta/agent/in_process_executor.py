@@ -28,7 +28,7 @@ import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, FailedResources, ResourceDetails
+from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, FailedResources, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
 from inmanta.data.model import AttributeStateChange
@@ -231,7 +231,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         resource_details: ResourceDetails,
         reason: str,
         requires: Mapping[ResourceIdStr, const.ResourceState],
-    ) -> DeployResult:
+    ) -> DeployReport:
         try:
             resource: Resource = Resource.deserialize(resource_details.attributes)
         except Exception as e:
@@ -241,7 +241,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 resource_id=resource_details.rvid,
                 cause=e,
             )
-            return DeployResult.undeployable(resource_details.rvid, action_id, msg)
+            return DeployReport.undeployable(resource_details.rvid, action_id, msg)
 
         ctx = handler.HandlerContext(resource, action_id=action_id, logger=self.resource_action_logger)
 
@@ -269,13 +269,13 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             if set_fact_response.code != 200:
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-        return DeployResult.from_ctx(resource_details.rvid, ctx)
+        return DeployReport.from_ctx(resource_details.rvid, ctx)
 
     async def dry_run(
         self,
         resource: ResourceDetails,
         dry_run_id: uuid.UUID,
-    ) -> DryrunResult:
+    ) -> DryrunReport:
         """
         Perform a dryrun for the given resources
 
@@ -288,7 +288,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 try:
                     resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
                 except Exception:
-                    return DryrunResult(
+                    return DryrunReport(
                         rvid=resource.rvid,
                         dryrun_id=dry_run_id,
                         changes={"handler": AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")},
@@ -300,7 +300,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 ctx = handler.HandlerContext(resource_obj, True, logger=self.resource_action_logger)
                 provider = None
 
-                dryrun_result: Optional[DryrunResult] = None
+                dryrun_result: Optional[DryrunReport] = None
                 resource_id: ResourceVersionIdStr = resource.rvid
 
                 try:
@@ -314,7 +314,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                             resource_id=resource_id,
                             exception=str(e),
                         )
-                        dryrun_result = DryrunResult(
+                        dryrun_result = DryrunReport(
                             rvid=resource_id,
                             dryrun_id=dry_run_id,
                             changes={"handler": AttributeStateChange(current="FAILED", desired="Unable to find a handler")},
@@ -333,7 +333,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                                 changes = {}
                             if ctx.status == const.ResourceState.failed:
                                 changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
-                            dryrun_result = DryrunResult(
+                            dryrun_result = DryrunReport(
                                 rvid=resource_id,
                                 dryrun_id=dry_run_id,
                                 changes=changes,
@@ -351,7 +351,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                             if changes is None:
                                 changes = {}
                             changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
-                            dryrun_result = DryrunResult(
+                            dryrun_result = DryrunReport(
                                 rvid=resource_id,
                                 dryrun_id=dry_run_id,
                                 changes=changes,
@@ -366,7 +366,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         resource_id=resource.rvid,
                         exception=str(e),
                     )
-                    dryrun_result = DryrunResult(
+                    dryrun_result = DryrunReport(
                         rvid=resource_id,
                         dryrun_id=dry_run_id,
                         changes={"handler": AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")},
@@ -380,7 +380,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                     assert dryrun_result is not None, "Dryrun result cannot be None"
                     return dryrun_result
 
-    async def get_facts(self, resource: ResourceDetails) -> FactResult:
+    async def get_facts(self, resource: ResourceDetails) -> GetFactReport:
         """
         Get facts for a given resource
         :param resource: The resource for which to get facts.
@@ -391,7 +391,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             try:
                 resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.getfact)
             except Exception:
-                return FactResult(
+                return GetFactReport(
                     resource_id=resource.rvid,
                     action_id=None,
                     parameters=[],
@@ -423,7 +423,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         # Add facts set via the set_fact() method of the HandlerContext
                         parameters.extend(ctx.facts)
 
-                    return FactResult(
+                    return GetFactReport(
                         resource_id=resource.rvid,
                         action_id=ctx.action_id,
                         parameters=parameters,
@@ -436,7 +436,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 except Exception:
                     error_msg = "Unable to retrieve facts for resource %s" % resource.id
                     self.resource_action_logger.exception(error_msg)
-                    return FactResult(
+                    return GetFactReport(
                         resource_id=resource.rvid,
                         action_id=ctx.action_id,
                         parameters=[],
@@ -450,7 +450,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         except Exception:
             error_msg = "Unable to find a handler for %s" % resource.id
             self.resource_action_logger.exception(error_msg)
-            return FactResult(
+            return GetFactReport(
                 resource_id=resource.rvid,
                 action_id=None,
                 parameters=[],

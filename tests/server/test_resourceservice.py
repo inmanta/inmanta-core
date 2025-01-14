@@ -52,7 +52,7 @@ async def resource_deployer(client, environment, null_agent):
         ) -> None:
             await update_manager.send_deploy_done(
                 attribute_hash=attribute_hash,
-                result=executor.DeployResult(
+                result=executor.DeployReport(
                     rvid=rvid,
                     action_id=action_id,
                     resource_state=status,

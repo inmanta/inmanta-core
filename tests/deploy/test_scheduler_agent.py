@@ -40,7 +40,7 @@ import utils
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ResourceDetails, ResourceInstallSpec
 from inmanta.config import Config
 from inmanta.const import Change
 from inmanta.deploy import state, tasks
@@ -103,7 +103,7 @@ class DummyExecutor(executor.Executor):
         resource_details: ResourceDetails,
         reason: str,
         requires: Mapping[ResourceIdStr, const.HandlerResourceState],
-    ) -> DeployResult:
+    ) -> DeployReport:
         assert reason
         # Actual reason or test reason
         # The actual reasons are of the form `action because of reason`
@@ -114,7 +114,7 @@ class DummyExecutor(executor.Executor):
             if resource_details.attributes.get(FAIL_DEPLOY, False) is True
             else const.HandlerResourceState.deployed
         )
-        return DeployResult(
+        return DeployReport(
             resource_details.rvid,
             action_id,
             resource_state=result,
@@ -170,7 +170,7 @@ class ManagedExecutor(DummyExecutor):
         resource_details: ResourceDetails,
         reason: str,
         requires: dict[ResourceIdStr, const.HandlerResourceState],
-    ) -> DeployResult:
+    ) -> DeployReport:
         assert resource_details.rid not in self._deploys
         self._deploys[resource_details.rid] = asyncio.get_running_loop().create_future()
         # wait until the test case sets desired resource state
@@ -178,7 +178,7 @@ class ManagedExecutor(DummyExecutor):
         del self._deploys[resource_details.rid]
         self.execute_count += 1
 
-        return DeployResult(
+        return DeployReport(
             resource_details.rvid,
             action_id,
             resource_state=const.HandlerResourceState(result),
@@ -267,7 +267,7 @@ class DummyStateManager(StateUpdateManager):
     def __init__(self):
         self.state: dict[ResourceIdStr, const.ResourceState] = {}
         # latest deploy result for each resource
-        self.deploys: dict[ResourceIdStr, DeployResult] = {}
+        self.deploys: dict[ResourceIdStr, DeployReport] = {}
 
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         self.state[resource_id.resource_str()] = const.ResourceState.deploying
@@ -275,7 +275,7 @@ class DummyStateManager(StateUpdateManager):
     async def send_deploy_done(
         self,
         attribute_hash: str,
-        result: DeployResult,
+        result: DeployReport,
         state: state.ResourceState,
         *,
         started: datetime.datetime,
@@ -296,10 +296,10 @@ class DummyStateManager(StateUpdateManager):
             if status:
                 assert scheduler._state.resource_state[resource].status == status
 
-    def set_parameters(self, fact_result: FactResult) -> None:
+    def set_parameters(self, fact_result: GetFactReport) -> None:
         pass
 
-    async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
+    async def dryrun_update(self, env: UUID, dryrun_result: DryrunReport) -> None:
         self.state[Id.parse_id(dryrun_result.rvid).resource_str()] = const.ResourceState.dry
 
     async def update_resource_intent(

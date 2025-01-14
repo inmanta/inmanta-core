@@ -28,7 +28,7 @@ import pyformance
 
 from inmanta import data, resources
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployResult
+from inmanta.agent.executor import DeployReport
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
 from inmanta.types import ResourceIdStr, ResourceType
@@ -138,7 +138,7 @@ class Deploy(Task):
             # From this point on, we HAVE to call deploy_done to make sure we are not stuck in deploying
             # We collect state here to report back in the finally block.
             # This try-finally block ensures we report at the end of the task.
-            deploy_result: DeployResult
+            deploy_result: DeployReport
             try:
                 # Dependencies are always set when calling deploy_start
                 assert deploy_intent.dependencies is not None
@@ -170,7 +170,7 @@ class Deploy(Task):
                     )
                     # Not attached to ctx, needs to be flushed to logger explicitly
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
-                    deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
+                    deploy_result = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
                     return
 
                 assert reason is not None  # Should always be set for deploy
@@ -196,7 +196,7 @@ class Deploy(Task):
                     )
                     # Not attached to ctx, needs to be flushed to logger explicitly
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
-                    deploy_result = DeployResult.undeployable(executor_resource_details.rvid, action_id, log_line)
+                    deploy_result = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
 
             finally:
                 # We signaled start, so we signal end
@@ -235,7 +235,7 @@ class DryRun(Task):
                 executor_resource_details.rvid,
                 exc_info=True,
             )
-            dryrun_result = executor.DryrunResult(
+            dryrun_result = executor.DryrunReport(
                 rvid=executor_resource_details.rvid,
                 dryrun_id=self.dry_run_id,
                 changes={
@@ -256,7 +256,7 @@ class DryRun(Task):
                     executor_resource_details.rvid,
                     exc_info=True,
                 )
-                dryrun_result = executor.DryrunResult(
+                dryrun_result = executor.DryrunReport(
                     rvid=executor_resource_details.rvid,
                     dryrun_id=self.dry_run_id,
                     changes={"handler": AttributeStateChange(current="FAILED", desired="Resource is in an undeployable state")},

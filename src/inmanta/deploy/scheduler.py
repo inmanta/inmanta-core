@@ -208,7 +208,7 @@ class TaskManager(abc.ABC):
         """
 
     @abstractmethod
-    async def deploy_done(self, deploy_intent: DeployIntent, result: executor.DeployResult) -> None:
+    async def deploy_done(self, deploy_intent: DeployIntent, result: executor.DeployReport) -> None:
         """
         Register the end of deployment for the given resource: update the resource state based on the deployment result
         and inform its dependencies that deployment is finished. Depending on how fresh the intent is (compared to what is
@@ -217,17 +217,17 @@ class TaskManager(abc.ABC):
         Acquires appropriate locks
 
         :param deploy_intent: The resource's deploy intent as returned by deploy_start().
-        :param result: The DeployResult object describing the result of the deployment.
+        :param result: The DeployReport object describing the result of the deployment.
         """
 
     @abstractmethod
-    async def dryrun_done(self, result: executor.DryrunResult) -> None:
+    async def dryrun_done(self, result: executor.DryrunReport) -> None:
         """
         Report the result of a dry-run.
         """
 
     @abstractmethod
-    async def fact_refresh_done(self, result: executor.FactResult) -> None:
+    async def fact_refresh_done(self, result: executor.GetFactReport) -> None:
         """
         Report the result of a fact refresh.
         """
@@ -1093,7 +1093,7 @@ class ResourceScheduler(TaskManager):
             )
             return deploy_intent
 
-    async def deploy_done(self, deploy_intent: DeployIntent, result: executor.DeployResult) -> None:
+    async def deploy_done(self, deploy_intent: DeployIntent, result: executor.DeployReport) -> None:
         finished = datetime.datetime.now().astimezone()
         try:
             state: Optional[ResourceState]
@@ -1125,14 +1125,14 @@ class ResourceScheduler(TaskManager):
                 if state is not None:
                     self._timer_manager.update_timer(deploy_intent.intent.resource_id, state=state)
 
-    async def dryrun_done(self, result: executor.DryrunResult) -> None:
+    async def dryrun_done(self, result: executor.DryrunReport) -> None:
         await self.state_update_manager.dryrun_update(env=self.environment, dryrun_result=result)
 
-    async def fact_refresh_done(self, result: executor.FactResult) -> None:
+    async def fact_refresh_done(self, result: executor.GetFactReport) -> None:
         await self.state_update_manager.set_parameters(fact_result=result)
 
     async def _update_scheduler_state_for_finished_deploy(
-        self, deploy_intent: DeployIntent, result: executor.DeployResult, finished: datetime.datetime
+        self, deploy_intent: DeployIntent, result: executor.DeployReport, finished: datetime.datetime
     ) -> ResourceState:
         """
         Update the state of the scheduler based on the DeploymentResult of the given resource.

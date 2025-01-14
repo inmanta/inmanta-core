@@ -1281,7 +1281,7 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     await update_manager.send_in_progress(action_id=action_id, resource_id=Id.parse_id(rvid3))
     await update_manager.send_deploy_done(
         attribute_hash=util.make_attribute_hash(ResourceIdStr("test::Resource[agent1,key=key3]"), attributes=resources[2]),
-        result=executor.DeployResult(
+        result=executor.DeployReport(
             rvid=rvid3,
             action_id=action_id,
             resource_state=const.HandlerResourceState.deployed,
