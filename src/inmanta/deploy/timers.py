@@ -318,7 +318,7 @@ class TimerManager:
             otherwise it would be in the queue
         """
         for resource in resources:
-            self.update_timer(resource, state=self._resource_scheduler._state.resource_state[resource])
+            self.update_timer(resource, state=self._resource_scheduler._state.state[resource])
 
     def stop_timer(self, resource: ResourceIdStr) -> None:
         """
