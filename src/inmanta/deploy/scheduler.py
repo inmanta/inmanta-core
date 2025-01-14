@@ -566,7 +566,7 @@ class ResourceScheduler(TaskManager):
         if not self._running:
             return
 
-        paused_agent = await self.all_paused_agents()
+        paused_agents = await self.all_paused_agents()
 
         model: ModelVersion = await self._get_single_model_version_from_db(version=version)
         for resource, details in model.resources.items():
