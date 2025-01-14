@@ -795,6 +795,11 @@ class InmantaLoggerConfig:
 
         try:
             self.logging_config_source = self._get_logging_config_source(options, component)
+            if options.log_file or options.log_file_level:
+                LOGGER.warning(
+                    "log_file and log_file_level options were ignored. Using logging config from %s",
+                    self.logging_config_source.source(),
+                )
         except NoLoggingConfigFound:
             # No logging config was defined by the user. Compose the logging config from the old CLI options.
             self._apply_logging_config_from_options(options, component, context)
