@@ -1,0 +1,8 @@
+---
+description: Removed the `inmanta deploy` command.
+issue-nr: 8612
+issue-repo: inmanta-core
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: "{{description}}"
