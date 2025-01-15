@@ -27,7 +27,6 @@ from inmanta.config import Config
 from utils import get_resource, log_contains, log_doesnt_contain, resource_action_consistency_check, retry_limited
 
 
-@pytest.mark.skip("Broken")
 async def test_deploy_trigger(server, client, clienthelper, resource_container, environment, caplog, agent):
     """
     Test deployment of empty model

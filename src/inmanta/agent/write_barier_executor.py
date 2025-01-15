@@ -17,6 +17,7 @@
 """
 
 import concurrent
+import logging
 import typing
 import uuid
 from collections.abc import Mapping
@@ -87,6 +88,7 @@ class WriteBarierExecutorManager(executor.ExecutorManager[WriteBarierExecutor]):
         return [WriteBarierExecutor(e) for e in await self.delegate.stop_for_agent(agent_name)]
 
     async def start(self) -> None:
+        logging.getLogger("test").info("Worker started")
         await self.delegate.start()
 
     async def stop(self) -> None:

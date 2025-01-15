@@ -112,6 +112,7 @@ class Agent(SessionEndpoint):
 
     async def start_working(self) -> None:
         """Start working, once we have a session"""
+
         if self.working:
             return
         self.working = True
