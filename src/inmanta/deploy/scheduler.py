@@ -524,7 +524,7 @@ class ResourceScheduler(TaskManager):
         """
 
         def _should_deploy(resource: ResourceIdStr) -> bool:
-            if (resource_state := self._state.state.get(resource)) is not None:
+            if (resource_state := self._state.resource_state.get(resource)) is not None:
                 # For now, we repair even resources marked as TEMPORARILY_BLOCKED, just in case our assumptions are wrong
                 # We will relax this once we have more confidence in the correct tracking of the state (#8580)
                 return resource_state.blocked is not Blocked.BLOCKED
@@ -578,13 +578,13 @@ class ResourceScheduler(TaskManager):
         task will be scheduled with the provided reason.
         """
         async with self._scheduler_lock:
-            if resource not in self._state.state:
+            if resource not in self._state.resource_state:
                 # The resource was removed from the model by the time this method was triggered
                 return
 
             # When explicitly requested for a single resource, we allow deploying even deploys marked as
             # Blocked.TEMPORARILY_BLOCKED
-            if self._state.state[resource].blocked is Blocked.BLOCKED:  # Can't deploy
+            if self._state.resource_state[resource].blocked is Blocked.BLOCKED:  # Can't deploy
                 return
             self._timer_manager.stop_timer(resource)
             self._work.deploy_with_context(
@@ -758,7 +758,7 @@ class ResourceScheduler(TaskManager):
                     undefined.discard(resource)
                     is_undefined = False
                 if resource not in intent_changes and is_undefined != (
-                    self._state.state[resource].compliance is Compliance.UNDEFINED
+                    self._state.resource_state[resource].compliance is Compliance.UNDEFINED
                 ):
                     # resource's defined status changed
                     intent_changes[resource] = ResourceIntentChange.UPDATED
@@ -857,7 +857,7 @@ class ResourceScheduler(TaskManager):
                     updated.add(resource)
                 case _ as _never:
                     typing.assert_never(_never)
-            resource_state: Optional[ResourceState] = self._state.state.get(resource)
+            resource_state: Optional[ResourceState] = self._state.resource_state.get(resource)
             if resource_state is None:
                 if resource in model.undefined:
                     became_undefined.add(resource)
@@ -931,11 +931,11 @@ class ResourceScheduler(TaskManager):
             for resource in resources_with_reset_requires:
                 if (
                     # it is currently TEMPORARILY_BLOCKED blocked
-                    self._state.state[resource].blocked is Blocked.TEMPORARILY_BLOCKED
+                    self._state.resource_state[resource].blocked is Blocked.TEMPORARILY_BLOCKED
                     # it shouldn't be any longer
                     and not self._state.should_skip_for_dependencies(resource)
                 ):
-                    self._state.state[resource].blocked = Blocked.NOT_BLOCKED
+                    self._state.resource_state[resource].blocked = Blocked.NOT_BLOCKED
 
             # Update set of in-progress deploys that became unmanaged
             self._deploying_unmanaged.update(self._deploying_latest & (new | deleted))
@@ -983,7 +983,7 @@ class ResourceScheduler(TaskManager):
             await self.state_update_manager.update_resource_intent(
                 self.environment,
                 intent={
-                    rid: (self._state.state[rid], self._state.intent[rid])
+                    rid: (self._state.resource_state[rid], self._state.intent[rid])
                     for rid in new | updated | resources_with_updated_blocked_state
                 },
                 update_blocked_state=True,
@@ -1076,7 +1076,7 @@ class ResourceScheduler(TaskManager):
         async with self._scheduler_lock:
             # fetch resource intent under lock
             resource_intent = self._get_resource_intent(resource)
-            if resource_intent is None or self._state.state[resource].blocked is Blocked.BLOCKED:
+            if resource_intent is None or self._state.resource_state[resource].blocked is Blocked.BLOCKED:
                 # We are trying to deploy a stale resource.
                 return None
             dependencies = await self._get_last_non_deploying_state_for_dependencies(resource=resource)
@@ -1121,7 +1121,7 @@ class ResourceScheduler(TaskManager):
             async with self._scheduler_lock:
                 # report to the scheduled work that we're done
                 self._work.finished_deploy(result.resource_id)
-                state = self._state.state.get(deploy_intent.intent.resource_id)
+                state = self._state.resource_state.get(deploy_intent.intent.resource_id)
                 if state is not None:
                     self._timer_manager.update_timer(deploy_intent.intent.resource_id, state=state)
 
@@ -1155,7 +1155,7 @@ class ResourceScheduler(TaskManager):
                 self._deploying_unmanaged.discard(resource)
                 raise StaleResource()
 
-            state: ResourceState = self._state.state[resource]
+            state: ResourceState = self._state.resource_state[resource]
 
             recovered_from_failure: bool = deploy_result is DeployResult.DEPLOYED and state.last_deploy_result not in (
                 DeployResult.DEPLOYED,
@@ -1264,7 +1264,7 @@ class ResourceScheduler(TaskManager):
                 dependent
                 for dependent in provides
                 if (dependent_intent := self._state.intent.get(dependent, None)) is not None
-                if self._state.state[dependent].blocked is Blocked.NOT_BLOCKED
+                if self._state.resource_state[dependent].blocked is Blocked.NOT_BLOCKED
                 # default to True for backward compatibility, i.e. not all resources have the field
                 if dependent_intent.attributes.get(const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS, True)
             }
@@ -1273,13 +1273,13 @@ class ResourceScheduler(TaskManager):
             recovery_listeners = set()
         else:
             recovery_listeners = {
-                dependent for dependent in provides if self._state.state[dependent].blocked is Blocked.TEMPORARILY_BLOCKED
+                dependent for dependent in provides if self._state.resource_state[dependent].blocked is Blocked.TEMPORARILY_BLOCKED
             }
             # These resources might be able to progress now -> unblock them in addition to sending the event
             self._state.dirty.update(recovery_listeners)
             for skipped_dependent in recovery_listeners:
                 # TODO[#8541]: persist in database
-                self._state.state[skipped_dependent].blocked = Blocked.NOT_BLOCKED
+                self._state.resource_state[skipped_dependent].blocked = Blocked.NOT_BLOCKED
 
         all_listeners: Set[ResourceIdStr] = event_listeners | recovery_listeners
         if all_listeners:
@@ -1368,7 +1368,7 @@ class ResourceScheduler(TaskManager):
         dependencies: Set[ResourceIdStr] = requires_view.get(resource, set())
         dependencies_state = {}
         for dep_id in dependencies:
-            resource_state_object: ResourceState = self._state.state[dep_id]
+            resource_state_object: ResourceState = self._state.resource_state[dep_id]
             match resource_state_object:
                 case ResourceState(compliance=Compliance.UNDEFINED):
                     dependencies_state[dep_id] = const.ResourceState.undefined
@@ -1426,7 +1426,7 @@ class ResourceScheduler(TaskManager):
             discrepancy_map: dict[ResourceIdStr, list[Discrepancy]] = {}
 
             # Resources only present in the DB but missing from the scheduler
-            only_in_db = resource_states_in_db.keys() - self._state.state.keys()
+            only_in_db = resource_states_in_db.keys() - self._state.resource_state.keys()
             for rid in only_in_db:
                 discrepancy_map[rid] = [
                     Discrepancy(
@@ -1441,7 +1441,7 @@ class ResourceScheduler(TaskManager):
                 ]
 
             # Resources only present in the scheduler but missing from the DB
-            only_in_scheduler = self._state.state.keys() - resource_states_in_db.keys()
+            only_in_scheduler = self._state.resource_state.keys() - resource_states_in_db.keys()
             for rid in only_in_scheduler:
                 discrepancy_map[rid] = [
                     Discrepancy(
@@ -1458,13 +1458,13 @@ class ResourceScheduler(TaskManager):
             # Keep track of the number of iterations to regularly pass control back to the io loop
             i: int = 0
             # For resources in both the DB and the scheduler, check for discrepancies in state
-            for rid in resource_states_in_db.keys() & self._state.state.keys():
+            for rid in resource_states_in_db.keys() & self._state.resource_state.keys():
                 resource_discrepancies: list[Discrepancy] = []
 
                 db_resource_status = resource_states_in_db[rid]
                 db_deploy_result, db_blocked_status, db_compliance_status = state_translation_table[db_resource_status]
 
-                scheduler_resource_state: ResourceState = self._state.state[rid]
+                scheduler_resource_state: ResourceState = self._state.resource_state[rid]
                 if db_deploy_result:
                     if scheduler_resource_state.last_deploy_result != db_deploy_result:
                         resource_discrepancies.append(
@@ -1549,7 +1549,7 @@ class ResourceScheduler(TaskManager):
 
             discrepancy_map = await _build_discrepancy_map(resource_states_in_db=resource_states_in_db)
             return SchedulerStatusReport(
-                scheduler_state=self._state.state,
+                scheduler_state=self._state.resource_state,
                 db_state=latest_model.resources,
                 resource_states=resource_states_in_db,
                 discrepancies=discrepancy_map,

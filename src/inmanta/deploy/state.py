@@ -200,7 +200,7 @@ class ModelState:
     version: int
     intent: dict["ResourceIdStr", ResourceIntent] = dataclasses.field(default_factory=dict)
     requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
-    state: dict["ResourceIdStr", ResourceState] = dataclasses.field(default_factory=dict)
+    resource_state: dict["ResourceIdStr", ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
     dirty: set["ResourceIdStr"] = dataclasses.field(default_factory=set)
     # types per agent keeps track of which resource types live on which agent by doing a reference count
@@ -290,7 +290,7 @@ class ModelState:
                 blocked=Blocked[res["blocked"]],
                 last_deployed=last_deployed,
             )
-            result.state[resource_id] = resource_state
+            result.resource_state[resource_id] = resource_state
 
             # Populate resources intent
             resource_intent = ResourceIntent(
@@ -332,7 +332,7 @@ class ModelState:
         self.version = 0
         self.intent.clear()
         self.requires.clear()
-        self.state.clear()
+        self.resource_state.clear()
         self.types_per_agent.clear()
 
     def update_resource(
@@ -379,7 +379,7 @@ class ModelState:
 
         if not already_known or force_new:
             # we don't know the resource yet (/ anymore) => create it
-            self.state[resource] = ResourceState(
+            self.resource_state[resource] = ResourceState(
                 compliance=compliance_status,
                 last_deploy_result=DeployResult.DEPLOYED if known_compliant else DeployResult.NEW,
                 blocked=blocked,
@@ -390,19 +390,19 @@ class ModelState:
             self.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type] += 1
         else:
             # we already know the resource => update relevant fields
-            self.state[resource].compliance = compliance_status
+            self.resource_state[resource].compliance = compliance_status
             # update deployment result only if we know it's compliant. Otherwise it is kept, representing latest result
             if known_compliant:
-                self.state[resource].last_deploy_result = DeployResult.DEPLOYED
+                self.resource_state[resource].last_deploy_result = DeployResult.DEPLOYED
             # Override blocked status except if it was marked as blocked before. We can't unset it yet because a resource might
             # still be transitively blocked, which we'll deal with later, see note in docstring.
             # We do however override TEMPORARILY_BLOCKED because we want to give it another chance when it gets an update
             # (in part to progress the resource state away from available).
-            if self.state[resource].blocked is not Blocked.BLOCKED:
-                self.state[resource].blocked = blocked
+            if self.resource_state[resource].blocked is not Blocked.BLOCKED:
+                self.resource_state[resource].blocked = blocked
 
         self.intent[resource] = resource_intent
-        if not known_compliant and self.state[resource].blocked is Blocked.NOT_BLOCKED:
+        if not known_compliant and self.resource_state[resource].blocked is Blocked.NOT_BLOCKED:
             self.dirty.add(resource)
         else:
             self.dirty.discard(resource)
@@ -413,7 +413,7 @@ class ModelState:
 
         When updating requires, also call update_transitive_state to ensure temporirly_blocked state is also updated
         """
-        check_dependencies: bool = self.state[resource].blocked is Blocked.TEMPORARILY_BLOCKED and bool(
+        check_dependencies: bool = self.resource_state[resource].blocked is Blocked.TEMPORARILY_BLOCKED and bool(
             self.requires[resource] - requires
         )
         self.requires[resource] = requires
@@ -421,7 +421,7 @@ class ModelState:
         # we check to see if the resource can now be unblocked
         # i.e. all of its dependencies are now compliant with the desired state.
         if check_dependencies and not self.should_skip_for_dependencies(resource):
-            self.state[resource].blocked = Blocked.NOT_BLOCKED
+            self.resource_state[resource].blocked = Blocked.NOT_BLOCKED
             self.dirty.add(resource)
 
     def drop(self, resource: "ResourceIdStr") -> None:
@@ -429,7 +429,7 @@ class ModelState:
         Completely remove a resource from the resource state.
         """
         resource_intent: ResourceIntent = self.intent.pop(resource)
-        del self.state[resource]
+        del self.resource_state[resource]
         # stand-alone resources may not be in requires
         with contextlib.suppress(KeyError):
             del self.requires[resource]
@@ -454,7 +454,7 @@ class ModelState:
             # Determine based on latest deploy result rather than compliance status, because compliance status is unstable
             # (e.g. HAS_UPDATE).
             # Make sure to not skip on NEW (never deployed) resources, because they will not generate a discovery event.
-            self.state[dep_id].last_deploy_result not in (DeployResult.DEPLOYED, DeployResult.NEW)
+            self.resource_state[dep_id].last_deploy_result not in (DeployResult.DEPLOYED, DeployResult.NEW)
             for dep_id in dependencies
         )
 
@@ -532,7 +532,7 @@ class ModelState:
             # directly down the provides relation from an undefined: definitely blocked,
             # will not be unblocked by stage 4
             is_blocked.add(resource_id)
-            if self.state[resource_id].blocked is Blocked.BLOCKED:
+            if self.resource_state[resource_id].blocked is Blocked.BLOCKED:
                 # Resource is already blocked. All provides will be blocked as well.
                 continue
             else:
@@ -565,7 +565,7 @@ class ModelState:
                 # Is blocked for a know root
                 return False
 
-            my_state = self.state[resource]
+            my_state = self.resource_state[resource]
             if my_state.blocked is Blocked.BLOCKED:
                 # The resource is already blocked.
                 return False
@@ -576,7 +576,7 @@ class ModelState:
             if resource in known_blockers_cache:
                 # First check the blocked status of the cached known blocker for improved performance.
                 known_blocker: ResourceIdStr = known_blockers_cache[resource]
-                if self.state[known_blocker].blocked is Blocked.BLOCKED:
+                if self.resource_state[known_blocker].blocked is Blocked.BLOCKED:
                     blocked_dependency = known_blocker
                 else:
                     # Cache is out of date. Clear cache item.
@@ -585,7 +585,7 @@ class ModelState:
             if blocked_dependency is None:
                 # Perform more expensive call by traversing all requirements of resource.
                 blocked_dependency = next(
-                    (r for r in self.requires.get(resource, set()) if self.state[r].blocked is Blocked.BLOCKED), None
+                    (r for r in self.requires.get(resource, set()) if self.resource_state[r].blocked is Blocked.BLOCKED), None
                 )
                 if blocked_dependency is not None:
                     # cache the resource that is blocking us
@@ -618,7 +618,7 @@ class ModelState:
             for to_be_blocked in provides_view.get(already_blocked, set()):
                 if is_hard_block:
                     is_blocked.add(to_be_blocked)
-                my_state = self.state[to_be_blocked]
+                my_state = self.resource_state[to_be_blocked]
                 if my_state.blocked is not Blocked.BLOCKED:
                     continue
                 else:
@@ -639,7 +639,7 @@ class ModelState:
                 # Is blocked for a know root
                 return False
 
-            my_state = self.state[resource]
+            my_state = self.resource_state[resource]
             if my_state.blocked is not Blocked.BLOCKED:
                 # The resource is already unblocked.
                 return False
@@ -653,7 +653,7 @@ class ModelState:
             if resource in known_blockers_cache:
                 # First check the blocked status of the cached known blocker for improved performance.
                 known_blocker: "ResourceIdStr" = known_blockers_cache[resource]
-                if self.state[known_blocker].blocked is Blocked.BLOCKED:
+                if self.resource_state[known_blocker].blocked is Blocked.BLOCKED:
                     return False
                 else:
                     # Cache is out of date. Clear cache item.
@@ -661,7 +661,7 @@ class ModelState:
 
             # Perform more expensive call by traversing all requirements of resource.
             blocked_dependency: "ResourceIdStr" | None = next(
-                (r for r in self.requires.get(resource, set()) if self.state[r].blocked is Blocked.BLOCKED), None
+                (r for r in self.requires.get(resource, set()) if self.resource_state[r].blocked is Blocked.BLOCKED), None
             )
             if blocked_dependency:
                 # Resource is blocked, because a dependency is blocked.
@@ -689,7 +689,7 @@ class ModelState:
         Only used internally, see update_transitive_state
         """
 
-        self.state[resource].blocked = Blocked.BLOCKED
+        self.resource_state[resource].blocked = Blocked.BLOCKED
         self.dirty.discard(resource)
 
     def _unblock_resource(self, resource: "ResourceIdStr") -> None:
@@ -698,7 +698,7 @@ class ModelState:
 
         Only used internally, see update_transitive_state
         """
-        my_state = self.state[resource]
+        my_state = self.resource_state[resource]
         my_state.blocked = Blocked.NOT_BLOCKED
         if my_state.compliance in [Compliance.HAS_UPDATE, Compliance.NON_COMPLIANT]:
             self.dirty.add(resource)

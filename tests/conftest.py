@@ -874,7 +874,7 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
         if not DISABLE_STATE_CHECK:
             for agent in agents:
                 await agent.stop_working()
-                the_state = copy.deepcopy(dict(agent.scheduler._state.state))
+                the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
                 for r, state in the_state.items():
                     if state.blocked is inmanta.deploy.state.Blocked.TEMPORARILY_BLOCKED:
                         # TODO[#8541]: also persist TEMPORARILY_BLOCKED in database
@@ -882,7 +882,7 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
                     print(r, state)
                 monkeypatch.setattr(agent.scheduler._work.agent_queues, "_new_agent_notify", lambda x: x)
                 await agent.start_working()
-                new_state = copy.deepcopy(dict(agent.scheduler._state.state))
+                new_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
                 assert the_state == new_state
 
         await asyncio.gather(*[agent.stop() for agent in agents])

@@ -290,11 +290,11 @@ class DummyStateManager(StateUpdateManager):
         for resource, cstate in self.state.items():
             deploy_result, blocked, status = state_translation_table[cstate]
             if deploy_result:
-                assert scheduler._state.state[resource].last_deploy_result == deploy_result
+                assert scheduler._state.resource_state[resource].last_deploy_result == deploy_result
             if blocked:
-                assert scheduler._state.state[resource].blocked == blocked
+                assert scheduler._state.resource_state[resource].blocked == blocked
             if status:
-                assert scheduler._state.state[resource].compliance == status
+                assert scheduler._state.resource_state[resource].compliance == status
 
     def set_parameters(self, fact_result: GetFactReport) -> None:
         pass
@@ -930,11 +930,11 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     agent.executor_manager.reset_executor_counters()
 
     # assert pre resource state
-    assert agent.scheduler._state.state[rid1] == state.ResourceState(
+    assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         compliance=state.Compliance.COMPLIANT,
         last_deploy_result=state.DeployResult.DEPLOYED,
         blocked=Blocked.NOT_BLOCKED,
-        last_deployed=agent.scheduler._state.state[rid1].last_deployed,  # ignore
+        last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
     )
     assert rid1 not in agent.scheduler._state.dirty
     # set up initial state: release two changes for r1 -> the second makes the first stale
@@ -949,11 +949,11 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
         [ModelVersion(version=18, resources=resources, requires=make_requires(resources), undefined=set())]
     )
     # assert resource state after releasing changes
-    assert agent.scheduler._state.state[rid1] == state.ResourceState(
+    assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         compliance=state.Compliance.HAS_UPDATE,
         last_deploy_result=state.DeployResult.DEPLOYED,
         blocked=Blocked.NOT_BLOCKED,
-        last_deployed=agent.scheduler._state.state[rid1].last_deployed,  # ignore
+        last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
     )
     assert rid1 in agent.scheduler._state.dirty
 
@@ -962,11 +962,11 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
     # verify that state remained the same
-    assert agent.scheduler._state.state[rid1] == state.ResourceState(
+    assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         compliance=state.Compliance.HAS_UPDATE,
         last_deploy_result=state.DeployResult.DEPLOYED,
         blocked=Blocked.NOT_BLOCKED,
-        last_deployed=agent.scheduler._state.state[rid1].last_deployed,  # ignore
+        last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
     )
     assert rid1 in agent.scheduler._state.dirty
     # verify that r2 is still blocked on r1
@@ -989,11 +989,11 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
     assert len(agent.scheduler._work._waiting) == 0
     assert len(agent.scheduler._work.agent_queues.queued()) == 0
     assert len(agent.scheduler._work.agent_queues._in_progress) == 0
-    assert agent.scheduler._state.state[rid1] == state.ResourceState(
+    assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         compliance=state.Compliance.COMPLIANT,
         last_deploy_result=state.DeployResult.DEPLOYED,
         blocked=Blocked.NOT_BLOCKED,
-        last_deployed=agent.scheduler._state.state[rid1].last_deployed,  # ignore
+        last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
     )
     assert rid1 not in agent.scheduler._state.dirty
     state_manager_check(agent)
@@ -1339,11 +1339,11 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert agent.executor_manager.executors["agent1"].execute_count == 0
     assert agent.executor_manager.executors["agent2"].execute_count == 1
     assert agent.executor_manager.executors["agent3"].execute_count == 0
-    assert agent.scheduler._state.state[rid2] == state.ResourceState(
+    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
         compliance=state.Compliance.COMPLIANT,
         last_deploy_result=state.DeployResult.DEPLOYED,
         blocked=state.Blocked.NOT_BLOCKED,
-        last_deployed=agent.scheduler._state.state[rid2].last_deployed,  # ignore
+        last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore
     )
     assert len(agent.scheduler._state.dirty) == 0
 
@@ -1355,11 +1355,11 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     await retry_limited_fast(lambda: rid2 in executor2.deploys)
 
     # verify that r2 is still in an assumed good state, even though we're deploying it
-    assert agent.scheduler._state.state[rid2] == state.ResourceState(
+    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
         compliance=state.Compliance.COMPLIANT,
         last_deploy_result=state.DeployResult.DEPLOYED,
         blocked=state.Blocked.NOT_BLOCKED,
-        last_deployed=agent.scheduler._state.state[rid2].last_deployed,  # ignore
+        last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore
     )
     assert len(agent.scheduler._state.dirty) == 0
 
@@ -1372,12 +1372,12 @@ async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal)
     assert agent.executor_manager.executors["agent2"].execute_count == 2
     assert agent.executor_manager.executors["agent3"].execute_count == 0
     # verify that r2 is considered dirty now, as it is skipped
-    assert agent.scheduler._state.state[rid2] == state.ResourceState(
+    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
         # We are skipped, so not compliant
         compliance=state.Compliance.NON_COMPLIANT,
         last_deploy_result=state.DeployResult.SKIPPED,
         blocked=state.Blocked.NOT_BLOCKED,
-        last_deployed=agent.scheduler._state.state[rid2].last_deployed,  # ignore
+        last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore
     )
     assert agent.scheduler._state.dirty == {rid2}
 
@@ -1532,19 +1532,19 @@ async def test_skipped_for_dependencies_with_normal_event_propagation_disabled(a
     assert len(agent.scheduler._work._waiting) == 0
     assert len(agent.scheduler._work.agent_queues.queued()) == 0
 
-    assert agent.scheduler._state.state[rid1] == state.ResourceState(
+    assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         compliance=state.Compliance.NON_COMPLIANT,
         last_deploy_result=state.DeployResult.FAILED,
         blocked=state.Blocked.NOT_BLOCKED,
-        last_deployed=agent.scheduler._state.state[rid1].last_deployed,  # ignore this one
+        last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore this one
     )
 
-    assert agent.scheduler._state.state[rid2] == state.ResourceState(
+    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
         # We are skipped, so not compliant
         compliance=state.Compliance.NON_COMPLIANT,
         last_deploy_result=state.DeployResult.SKIPPED,
         blocked=state.Blocked.TEMPORARILY_BLOCKED,
-        last_deployed=agent.scheduler._state.state[rid2].last_deployed,  # ignore this one
+        last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore this one
     )
 
     # Recover rid1 and verify that rid2 also gets scheduled
@@ -1559,18 +1559,18 @@ async def test_skipped_for_dependencies_with_normal_event_propagation_disabled(a
     assert len(agent.scheduler._work._waiting) == 0
     assert len(agent.scheduler._work.agent_queues.queued()) == 0
 
-    assert agent.scheduler._state.state[rid1] == state.ResourceState(
+    assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         compliance=state.Compliance.COMPLIANT,
         last_deploy_result=state.DeployResult.DEPLOYED,
         blocked=state.Blocked.NOT_BLOCKED,
-        last_deployed=agent.scheduler._state.state[rid1].last_deployed,  # ignore this one
+        last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore this one
     )
 
-    assert agent.scheduler._state.state[rid2] == state.ResourceState(
+    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
         compliance=state.Compliance.COMPLIANT,
         last_deploy_result=state.DeployResult.DEPLOYED,
         blocked=state.Blocked.NOT_BLOCKED,
-        last_deployed=agent.scheduler._state.state[rid2].last_deployed,  # ignore this one
+        last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore this one
     )
 
 
@@ -1637,7 +1637,7 @@ async def test_skipped_for_dependencies_recover_with_multiple_dependencies(agent
         [ModelVersion(version=2, resources=resources, requires=make_requires(resources), undefined=set())]
     )
     # Verify that rid3 got unblocked now
-    assert agent.scheduler._state.state[rid3].blocked is Blocked.NOT_BLOCKED
+    assert agent.scheduler._state.resource_state[rid3].blocked is Blocked.NOT_BLOCKED
 
 
 async def test_receive_events(agent: TestAgent, make_resource_minimal):
@@ -1851,9 +1851,9 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         :param blocked_status: The Blocked to assert.
         :param attribute_hash: The hash of the attributes of the resource.
         """
-        assert agent.scheduler._state.state[resource].compliance is status
-        assert agent.scheduler._state.state[resource].last_deploy_result is deployment_result
-        assert agent.scheduler._state.state[resource].blocked is blocked_status
+        assert agent.scheduler._state.resource_state[resource].compliance is status
+        assert agent.scheduler._state.resource_state[resource].last_deploy_result is deployment_result
+        assert agent.scheduler._state.resource_state[resource].blocked is blocked_status
         assert agent.scheduler._state.intent[resource].attribute_hash == attribute_hash
 
     # rid4 is undefined due to an unknown
@@ -2631,7 +2631,7 @@ async def test_repair_does_not_trigger_for_blocked_resources(agent: TestAgent, m
     agent.executor_manager.reset_executor_counters()
 
     # mark r1 as blocked and trigger a repair
-    agent.scheduler._state.state[rid1].blocked = Blocked.BLOCKED
+    agent.scheduler._state.resource_state[rid1].blocked = Blocked.BLOCKED
 
     await agent.scheduler.repair(reason="Test triggered global repair")
     await retry_limited_fast(fun=utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
@@ -2662,12 +2662,12 @@ async def test_state_of_skipped_resources_for_dependencies(agent: TestAgent, mak
     executor2.deploys[rid2].set_result(const.HandlerResourceState.skipped_for_dependency)
     await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent2")
 
-    assert agent.scheduler._state.state[rid2] == state.ResourceState(
+    assert agent.scheduler._state.resource_state[rid2] == state.ResourceState(
         # We are skipped, so not compliant
         compliance=state.Compliance.NON_COMPLIANT,
         last_deploy_result=state.DeployResult.SKIPPED,
         blocked=state.Blocked.TEMPORARILY_BLOCKED,
-        last_deployed=agent.scheduler._state.state[rid2].last_deployed,  # ignore
+        last_deployed=agent.scheduler._state.resource_state[rid2].last_deployed,  # ignore
     )
 
 
@@ -2791,29 +2791,29 @@ async def test_deploy_blocked_state(agent: TestAgent, make_resource_minimal) -> 
         await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
 
     def is_deployed(rid: ResourceIdStr):
-        assert agent.scheduler._state.state[rid].last_deploy_result == DeployResult.DEPLOYED
-        assert agent.scheduler._state.state[rid].compliance == Compliance.COMPLIANT
-        assert agent.scheduler._state.state[rid].blocked == Blocked.NOT_BLOCKED
+        assert agent.scheduler._state.resource_state[rid].last_deploy_result == DeployResult.DEPLOYED
+        assert agent.scheduler._state.resource_state[rid].compliance == Compliance.COMPLIANT
+        assert agent.scheduler._state.resource_state[rid].blocked == Blocked.NOT_BLOCKED
 
     def is_blocked(rid: ResourceIdStr):
-        assert agent.scheduler._state.state[rid].last_deploy_result == DeployResult.DEPLOYED, rid
-        assert agent.scheduler._state.state[rid].compliance == Compliance.HAS_UPDATE, rid
-        assert agent.scheduler._state.state[rid].blocked == Blocked.BLOCKED, rid
+        assert agent.scheduler._state.resource_state[rid].last_deploy_result == DeployResult.DEPLOYED, rid
+        assert agent.scheduler._state.resource_state[rid].compliance == Compliance.HAS_UPDATE, rid
+        assert agent.scheduler._state.resource_state[rid].blocked == Blocked.BLOCKED, rid
 
     def is_undefined(rid: ResourceIdStr):
-        assert agent.scheduler._state.state[rid].last_deploy_result == DeployResult.DEPLOYED
-        assert agent.scheduler._state.state[rid].compliance == Compliance.UNDEFINED
-        assert agent.scheduler._state.state[rid].blocked == Blocked.BLOCKED
+        assert agent.scheduler._state.resource_state[rid].last_deploy_result == DeployResult.DEPLOYED
+        assert agent.scheduler._state.resource_state[rid].compliance == Compliance.UNDEFINED
+        assert agent.scheduler._state.resource_state[rid].blocked == Blocked.BLOCKED
 
     def is_new_undefined(rid: ResourceIdStr):
-        assert agent.scheduler._state.state[rid].last_deploy_result == DeployResult.NEW
-        assert agent.scheduler._state.state[rid].compliance == Compliance.UNDEFINED
-        assert agent.scheduler._state.state[rid].blocked == Blocked.BLOCKED
+        assert agent.scheduler._state.resource_state[rid].last_deploy_result == DeployResult.NEW
+        assert agent.scheduler._state.resource_state[rid].compliance == Compliance.UNDEFINED
+        assert agent.scheduler._state.resource_state[rid].blocked == Blocked.BLOCKED
 
     def is_new_blocked(rid: ResourceIdStr):
-        assert agent.scheduler._state.state[rid].last_deploy_result == DeployResult.NEW
-        assert agent.scheduler._state.state[rid].compliance == Compliance.HAS_UPDATE
-        assert agent.scheduler._state.state[rid].blocked == Blocked.BLOCKED
+        assert agent.scheduler._state.resource_state[rid].last_deploy_result == DeployResult.NEW
+        assert agent.scheduler._state.resource_state[rid].compliance == Compliance.HAS_UPDATE
+        assert agent.scheduler._state.resource_state[rid].blocked == Blocked.BLOCKED
 
     # Chain of 3
     # 3 -> 1 -> 2
@@ -2950,7 +2950,7 @@ async def test_deploy_blocked_state(agent: TestAgent, make_resource_minimal) -> 
     for rid in range(5):
         is_deployed(f"test::Resource[agent1,name={rid + 1}]")
     for rid in range(5, 14):
-        assert f"test::Resource[agent1,name={rid + 1}]" not in agent.scheduler._state.state
+        assert f"test::Resource[agent1,name={rid + 1}]" not in agent.scheduler._state.resource_state
 
 
 async def test_deploy_orphaned(agent: TestAgent, make_resource_minimal) -> None:
@@ -2982,7 +2982,7 @@ async def test_deploy_orphaned(agent: TestAgent, make_resource_minimal) -> None:
 
     # verify that the the resource is still considered undeployed, because it is considered new, i.e.
     # not the same as the one that just finished deploying
-    assert agent.scheduler._state.state[rid1] == state.ResourceState(
+    assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         compliance=state.Compliance.HAS_UPDATE,
         last_deploy_result=state.DeployResult.NEW,
         blocked=state.Blocked.NOT_BLOCKED,
@@ -2993,11 +2993,11 @@ async def test_deploy_orphaned(agent: TestAgent, make_resource_minimal) -> None:
     await retry_limited_fast(lambda: rid1 in executor1.deploys)
     executor1.deploys[rid1].set_result(const.HandlerResourceState.deployed)
     await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 2)
-    assert agent.scheduler._state.state[rid1] == state.ResourceState(
+    assert agent.scheduler._state.resource_state[rid1] == state.ResourceState(
         compliance=state.Compliance.COMPLIANT,
         last_deploy_result=state.DeployResult.DEPLOYED,
         blocked=state.Blocked.NOT_BLOCKED,
-        last_deployed=agent.scheduler._state.state[rid1].last_deployed,  # ignore
+        last_deployed=agent.scheduler._state.resource_state[rid1].last_deployed,  # ignore
     )
 
 
@@ -3048,13 +3048,13 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
         await scheduler._new_version([model(baseline_resources)])
         await retry_limited_fast(lambda: scheduler._work.agent_queues._agent_queues["agent1"]._unfinished_tasks == 0)
         assert scheduler._state.intent == baseline_resources
-        assert len(scheduler._state.state) == 3
+        assert len(scheduler._state.resource_state) == 3
         for rid in (rid1, rid2, rid3):
             assert len(scheduler._state.requires[rid]) == 0
             assert len(scheduler._state.requires.provides_view().get(rid, set())) == 0
-            assert scheduler._state.state[rid].compliance is Compliance.COMPLIANT
-            assert scheduler._state.state[rid].last_deploy_result is DeployResult.DEPLOYED
-            assert scheduler._state.state[rid].blocked is Blocked.NOT_BLOCKED
+            assert scheduler._state.resource_state[rid].compliance is Compliance.COMPLIANT
+            assert scheduler._state.resource_state[rid].last_deploy_result is DeployResult.DEPLOYED
+            assert scheduler._state.resource_state[rid].blocked is Blocked.NOT_BLOCKED
         assert len(scheduler._state.dirty) == 0
 
     await restore_baseline_state()
@@ -3094,13 +3094,13 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
     )
     assert scheduler._state.intent == all_models[-1].resources
     for rid in (rid1, rid2, rid3):
-        assert scheduler._state.state[rid].compliance is Compliance.HAS_UPDATE
-        assert scheduler._state.state[rid].last_deploy_result is DeployResult.DEPLOYED
-        assert scheduler._state.state[rid].blocked is Blocked.NOT_BLOCKED
+        assert scheduler._state.resource_state[rid].compliance is Compliance.HAS_UPDATE
+        assert scheduler._state.resource_state[rid].last_deploy_result is DeployResult.DEPLOYED
+        assert scheduler._state.resource_state[rid].blocked is Blocked.NOT_BLOCKED
     for rid in (rid4, rid5, rid6):
-        assert scheduler._state.state[rid].compliance is Compliance.HAS_UPDATE
-        assert scheduler._state.state[rid].last_deploy_result is DeployResult.NEW
-        assert scheduler._state.state[rid].blocked is Blocked.NOT_BLOCKED
+        assert scheduler._state.resource_state[rid].compliance is Compliance.HAS_UPDATE
+        assert scheduler._state.resource_state[rid].last_deploy_result is DeployResult.NEW
+        assert scheduler._state.resource_state[rid].blocked is Blocked.NOT_BLOCKED
 
     await restore_baseline_state()
 
@@ -3133,9 +3133,9 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
         ]
     )
     assert scheduler._state.intent == all_models[-1].resources
-    assert scheduler._state.state[rid5].compliance is Compliance.HAS_UPDATE
-    assert scheduler._state.state[rid5].last_deploy_result is DeployResult.NEW
-    assert scheduler._state.state[rid5].blocked is Blocked.NOT_BLOCKED
+    assert scheduler._state.resource_state[rid5].compliance is Compliance.HAS_UPDATE
+    assert scheduler._state.resource_state[rid5].last_deploy_result is DeployResult.NEW
+    assert scheduler._state.resource_state[rid5].blocked is Blocked.NOT_BLOCKED
 
     # TODO: add more scenarios
     # - resource becomes undefined (in first, second, or last version)
@@ -3177,10 +3177,10 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
 
     scheduler: ResourceScheduler = agent.scheduler
 
-    assert scheduler._state.state[rid2].compliance is Compliance.NON_COMPLIANT
-    assert scheduler._state.state[rid1].compliance is Compliance.NON_COMPLIANT
-    assert scheduler._state.state[rid2].blocked is Blocked.NOT_BLOCKED
-    assert scheduler._state.state[rid1].blocked is Blocked.TEMPORARILY_BLOCKED
+    assert scheduler._state.resource_state[rid2].compliance is Compliance.NON_COMPLIANT
+    assert scheduler._state.resource_state[rid1].compliance is Compliance.NON_COMPLIANT
+    assert scheduler._state.resource_state[rid2].blocked is Blocked.NOT_BLOCKED
+    assert scheduler._state.resource_state[rid1].blocked is Blocked.TEMPORARILY_BLOCKED
 
     # trigger deploy: verify only r2 gets scheduled, make it return the same result as before
     agent.executor_manager.reset_executor_counters()
@@ -3258,11 +3258,11 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
         assert len(scheduler.state_update_manager.deploys[rid1].messages) == 1
         assert scheduler.state_update_manager.deploys[rid1].messages[0].msg == expected_message
 
-    assert scheduler._state.state[rid2].compliance is Compliance.NON_COMPLIANT
-    assert scheduler._state.state[rid1].compliance is Compliance.COMPLIANT
-    assert scheduler._state.state[rid2].blocked is Blocked.NOT_BLOCKED
+    assert scheduler._state.resource_state[rid2].compliance is Compliance.NON_COMPLIANT
+    assert scheduler._state.resource_state[rid1].compliance is Compliance.COMPLIANT
+    assert scheduler._state.resource_state[rid2].blocked is Blocked.NOT_BLOCKED
     # verify that scheduler recognized that it is no longer blocked
-    assert scheduler._state.state[rid1].blocked is Blocked.NOT_BLOCKED
+    assert scheduler._state.resource_state[rid1].blocked is Blocked.NOT_BLOCKED
 
     # verify no log is emitted if it succeeds again, or for other transitions, e.g. success -> failed -> success
     agent.executor_manager.reset_executor_counters()
@@ -3314,10 +3314,10 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
         await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 1)
 
         # verify initial state
-        assert scheduler._state.state[rid2].compliance is Compliance.NON_COMPLIANT
-        assert scheduler._state.state[rid1].compliance is Compliance.NON_COMPLIANT
-        assert scheduler._state.state[rid2].blocked is Blocked.NOT_BLOCKED
-        assert scheduler._state.state[rid1].blocked is Blocked.TEMPORARILY_BLOCKED
+        assert scheduler._state.resource_state[rid2].compliance is Compliance.NON_COMPLIANT
+        assert scheduler._state.resource_state[rid1].compliance is Compliance.NON_COMPLIANT
+        assert scheduler._state.resource_state[rid2].blocked is Blocked.NOT_BLOCKED
+        assert scheduler._state.resource_state[rid1].blocked is Blocked.TEMPORARILY_BLOCKED
 
         # deploy r2 successfully
         await scheduler.deploy_resource(
@@ -3335,10 +3335,10 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
         await retry_limited_fast(lambda: agent.executor_manager.executors["agent1"].execute_count == 3)
 
         # verify new state
-        assert scheduler._state.state[rid2].compliance is Compliance.COMPLIANT
-        assert scheduler._state.state[rid1].compliance is Compliance.COMPLIANT
-        assert scheduler._state.state[rid2].blocked is Blocked.NOT_BLOCKED
-        assert scheduler._state.state[rid1].blocked is Blocked.NOT_BLOCKED
+        assert scheduler._state.resource_state[rid2].compliance is Compliance.COMPLIANT
+        assert scheduler._state.resource_state[rid1].compliance is Compliance.COMPLIANT
+        assert scheduler._state.resource_state[rid2].blocked is Blocked.NOT_BLOCKED
+        assert scheduler._state.resource_state[rid1].blocked is Blocked.NOT_BLOCKED
 
         # this is a valid recovery, verify that no log message was emitted
         assert len(get_resource_action_logs(caplog)) == 0
@@ -3350,8 +3350,8 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
     agent.executor_manager.reset_executor_counters()
     caplog.clear()
     with caplog.at_level(logging.WARNING):
-        assert scheduler._state.state[rid2].compliance is Compliance.COMPLIANT
-        scheduler._state.state[rid1].blocked = Blocked.TEMPORARILY_BLOCKED
+        assert scheduler._state.resource_state[rid2].compliance is Compliance.COMPLIANT
+        scheduler._state.resource_state[rid1].blocked = Blocked.TEMPORARILY_BLOCKED
 
         # deploy r1 successfully
         await scheduler.deploy_resource(
@@ -3381,8 +3381,8 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
         assert len(scheduler.state_update_manager.deploys[rid1].messages) == 1
         assert scheduler.state_update_manager.deploys[rid1].messages[0].msg == expected_message
 
-    assert scheduler._state.state[rid2].compliance is Compliance.COMPLIANT
-    assert scheduler._state.state[rid1].compliance is Compliance.COMPLIANT
-    assert scheduler._state.state[rid2].blocked is Blocked.NOT_BLOCKED
+    assert scheduler._state.resource_state[rid2].compliance is Compliance.COMPLIANT
+    assert scheduler._state.resource_state[rid1].compliance is Compliance.COMPLIANT
+    assert scheduler._state.resource_state[rid2].blocked is Blocked.NOT_BLOCKED
     # verify that scheduler recognized that it is no longer blocked
-    assert scheduler._state.state[rid1].blocked is Blocked.NOT_BLOCKED
+    assert scheduler._state.resource_state[rid1].blocked is Blocked.NOT_BLOCKED
