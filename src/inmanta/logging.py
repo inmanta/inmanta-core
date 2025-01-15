@@ -278,6 +278,9 @@ class Options(Namespace):
                     if a bigger number is provided, 4 will be used. Refer to log_file_level for the explanation of each level.
                     default is 1 (WARNING)
     :param timed: if true,  adds the time to the formatter in the log lines.
+    :param keep_logger_names: Display the log messages using the name of the logger that created the log message,
+                              instead of the component of the compiler that was executing while the log record was created
+                              or the name of the module that created the log message.
     :param logging_config: Path to the dict-based logging config file.
     """
 
@@ -788,6 +791,20 @@ class InmantaLoggerConfig:
         Used to select which config file option to use (logging.component)
         :param context: context variables to use if the config file is a template
         """
+
+        def user_defined_options() -> Optional[str]:
+            """
+            Returns a string with the options (excluding "--verbose" and "--logging-config") that were set by the user
+            """
+            option_to_cli = {
+                "log_file": "--log-file",
+                "log_file_level": "--log-file-level",
+                "timed": "--timed-logs",
+                "keep_logger_names": "--keep-logger-names",
+            }
+            ignored_options = [f"{value} {getattr(options, key)}" for key, value in option_to_cli.items() if key in options]
+            return ", ".join(ignored_options) if ignored_options else None
+
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
         if context is None:
@@ -805,6 +822,13 @@ class InmantaLoggerConfig:
             # Take into account the verbosity flag on the CLI.
             if options.verbose != 0:
                 self.force_cli(convert_inmanta_log_level(str(options.verbose), cli=True))
+            ignored_options = user_defined_options()
+            if ignored_options:
+                LOGGER.warning(
+                    "%s options were ignored. Using logging config from %s",
+                    ignored_options,
+                    self.logging_config_source.source(),
+                )
 
         self._options_applied = options
         self._component = component

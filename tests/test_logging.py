@@ -178,6 +178,24 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
         # Reset stream buffer
         stream.truncate()
 
+    def get_output_and_clear() -> str:
+        value = stream.getvalue()
+        stream.seek(0)
+        stream.truncate(0)
+        return value
+
+    def options_to_output(options: dict) -> str:
+        option_to_cli = {
+            "log_file": "--log-file",
+            "log_file_level": "--log-file-level",
+            "timed": "--timed-logs",
+            "keep_logger_names": "--keep-logger-names",
+        }
+        return ", ".join([f"{option_to_cli[key]} {value}" for key, value in options.items()])
+
+    # Log file to pass in the options.
+    # This config option will be overridden by the other config in this test case.
+    old_log_file = os.path.join(tmpdir, "old_log_file.txt")
     path_logging_config_file1 = os.path.join(tmpdir, "logging_config1.yml")
     path_logging_config_file2 = os.path.join(tmpdir, "logging_config2.yml")
     path_logging_config_file3 = os.path.join(tmpdir, "logging_config3.yml")
@@ -185,52 +203,103 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
     # Set --logging-config option on CLI only
     write_logging_config_file(path=path_logging_config_file1, formatter="AAA %(message)s")
     # Also assert that the other config options are ignored when logging_config is set.
-    setup_logging_config(cli_options=Options(logging_config=path_logging_config_file1, verbose=1), file_option_value=None)
+    options1 = {"log_file": old_log_file, "log_file_level": "4", "keep_logger_names": False}
+    setup_logging_config(
+        cli_options=Options(logging_config=path_logging_config_file1, **options1),
+        file_option_value=None,
+    )
     logger.info("test")
-    assert "AAA test" in stream.getvalue()
+    output = get_output_and_clear()
+    assert "AAA test" in output
+    assert (
+        f"{options_to_output(options1)} options were ignored. Using logging config from file {path_logging_config_file1}"
+        in output
+    )
 
     # Set logging_config option in cfg file only
     write_logging_config_file(path=path_logging_config_file1, formatter="BBB %(message)s")
-    setup_logging_config(cli_options=Options(), file_option_value=path_logging_config_file1)
+    options2 = {"keep_logger_names": False}
+    setup_logging_config(
+        cli_options=Options(**options2),
+        file_option_value=path_logging_config_file1,
+    )
     logger.info("test")
-    assert "BBB test" in stream.getvalue()
+    output = get_output_and_clear()
+    assert "BBB test" in output
+    assert (
+        f"{options_to_output(options2)} options were ignored. Using logging config from file {path_logging_config_file1}"
+        in output
+    )
 
     # Set the logging-config config option both on CLI and cfg file. CLI option takes precedence.
     write_logging_config_file(path=path_logging_config_file1, formatter="CCC %(message)s")
     write_logging_config_file(path=path_logging_config_file2, formatter="DDD %(message)s")
     setup_logging_config(
-        cli_options=Options(logging_config=path_logging_config_file1),
+        cli_options=Options(logging_config=path_logging_config_file1, **options2),
         file_option_value=path_logging_config_file2,
     )
     logger.info("test")
-    assert "CCC test" in stream.getvalue()
+    output = get_output_and_clear()
+    assert "CCC test" in output
+    assert (
+        f"{options_to_output(options2)} options were ignored. Using logging config from file {path_logging_config_file1}"
+        in output
+    )
 
     # Set the logging-config config option in the cfg config file and using the environment variable.
     # The environment variable takes precedence.
     write_logging_config_file(path=path_logging_config_file1, formatter="EEE %(message)s")
     write_logging_config_file(path=path_logging_config_file2, formatter="FFF %(message)s")
+    options3 = {"timed": True, "keep_logger_names": False}
     with monkeypatch.context() as m:
         m.setenv("INMANTA_CONFIG_LOGGING_CONFIG", path_logging_config_file1)
         setup_logging_config(
-            cli_options=Options(),
+            cli_options=Options(**options3),
             file_option_value=path_logging_config_file2,
         )
         logger.info("test")
-        assert "EEE test" in stream.getvalue()
+        output = get_output_and_clear()
+        assert "EEE test" in output
+        assert (
+            f"{options_to_output(options3)} options were ignored. Using logging config from file {path_logging_config_file1}"
+            in output
+        )
 
     # Set the logging-config config option on the CLI, in the cfg config file and using the environment variable.
     # The CLI option takes precedence.
     write_logging_config_file(path=path_logging_config_file1, formatter="GGG %(message)s")
     write_logging_config_file(path=path_logging_config_file2, formatter="HHH %(message)s")
     write_logging_config_file(path=path_logging_config_file3, formatter="III %(message)s")
+    options4 = {"log_file": old_log_file, **options3}
     with monkeypatch.context() as m:
         m.setenv("INMANTA_CONFIG_LOGGING_CONFIG", path_logging_config_file1)
         setup_logging_config(
-            cli_options=Options(logging_config=path_logging_config_file2),
+            cli_options=Options(logging_config=path_logging_config_file2, **options4),
             file_option_value=path_logging_config_file3,
         )
         logger.info("test")
-        assert "HHH test" in stream.getvalue()
+        output = get_output_and_clear()
+        assert "HHH test" in output
+        assert (
+            f"{options_to_output(options3)} options were ignored. Using logging config from file {path_logging_config_file2}"
+            in output
+        )
+
+    # After all of these logs, we assert that the log file passed to the options (old_log_file)
+    # Was ignored and nothing was written to it.
+    assert not os.path.exists(old_log_file)
+
+    # If given no other options, we can still use the old logging cli options
+    setup_logging_config(
+        cli_options=Options(**options1),
+    )
+    logger.info("test")
+    # Assert that the file gets created
+    assert os.path.exists(old_log_file)
+    with open(old_log_file, "r") as file:
+        content = file.read()
+        assert "test" in content
+        assert "WARNING" not in content
 
 
 def test_log_file_or_template(tmp_path):
