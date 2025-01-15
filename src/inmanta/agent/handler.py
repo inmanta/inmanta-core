@@ -109,6 +109,36 @@ class InvalidOperation(Exception):
     """
 
 
+@typing.overload
+def cache(
+    func: None = None,
+    ignore: list[str] = [],
+    timeout: Optional[int] = None,
+    for_version: Optional[bool] = None,
+    cache_none: bool = True,
+    cacheNone: Optional[bool] = None,  # noqa: N803
+    call_on_delete: Optional[Callable[[Any], None]] = None,
+    evict_after_creation: float = 0.0,
+    evict_after_last_access: float = 0.0,
+) -> Callable[[T_FUNC], T_FUNC]:
+    ...
+
+
+@typing.overload
+def cache(
+    func: T_FUNC,
+    ignore: list[str] = [],
+    timeout: Optional[int] = None,
+    for_version: Optional[bool] = None,
+    cache_none: bool = True,
+    cacheNone: Optional[bool] = None,  # noqa: N803
+    call_on_delete: Optional[Callable[[Any], None]] = None,
+    evict_after_creation: float = 0.0,
+    evict_after_last_access: float = 0.0,
+) -> T_FUNC:
+    ...
+
+
 @stable_api
 def cache(
     func: Optional[T_FUNC] = None,
