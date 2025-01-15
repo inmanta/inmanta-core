@@ -184,6 +184,15 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
         stream.truncate(0)
         return value
 
+    def options_to_output(options: dict) -> str:
+        option_to_cli = {
+            "log_file": "--log-file",
+            "log_file_level": "--log-file-level",
+            "timed": "--timed-logs",
+            "keep_logger_names": "--keep-logger-names",
+        }
+        return ", ".join([f"{option_to_cli[key]} {value}" for key, value in options.items()])
+
     # Log file to pass in the options.
     # This config option will be overridden by the other config in this test case.
     old_log_file = os.path.join(tmpdir, "old_log_file.txt")
@@ -202,7 +211,10 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
     logger.info("test")
     output = get_output_and_clear()
     assert "AAA test" in output
-    assert f"{options1} options were ignored. Using logging config from file {path_logging_config_file1}" in output
+    assert (
+        f"{options_to_output(options1)} options were ignored. Using logging config from file {path_logging_config_file1}"
+        in output
+    )
 
     # Set logging_config option in cfg file only
     write_logging_config_file(path=path_logging_config_file1, formatter="BBB %(message)s")
@@ -214,7 +226,10 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
     logger.info("test")
     output = get_output_and_clear()
     assert "BBB test" in output
-    assert f"{options2} options were ignored. Using logging config from file {path_logging_config_file1}" in output
+    assert (
+        f"{options_to_output(options2)} options were ignored. Using logging config from file {path_logging_config_file1}"
+        in output
+    )
 
     # Set the logging-config config option both on CLI and cfg file. CLI option takes precedence.
     write_logging_config_file(path=path_logging_config_file1, formatter="CCC %(message)s")
@@ -226,7 +241,10 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
     logger.info("test")
     output = get_output_and_clear()
     assert "CCC test" in output
-    assert f"{options2} options were ignored. Using logging config from file {path_logging_config_file1}" in output
+    assert (
+        f"{options_to_output(options2)} options were ignored. Using logging config from file {path_logging_config_file1}"
+        in output
+    )
 
     # Set the logging-config config option in the cfg config file and using the environment variable.
     # The environment variable takes precedence.
@@ -242,7 +260,10 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
         logger.info("test")
         output = get_output_and_clear()
         assert "EEE test" in output
-        assert f"{options3} options were ignored. Using logging config from file {path_logging_config_file1}" in output
+        assert (
+            f"{options_to_output(options3)} options were ignored. Using logging config from file {path_logging_config_file1}"
+            in output
+        )
 
     # Set the logging-config config option on the CLI, in the cfg config file and using the environment variable.
     # The CLI option takes precedence.
@@ -259,7 +280,10 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
         logger.info("test")
         output = get_output_and_clear()
         assert "HHH test" in output
-        assert f"{options3} options were ignored. Using logging config from file {path_logging_config_file2}" in output
+        assert (
+            f"{options_to_output(options3)} options were ignored. Using logging config from file {path_logging_config_file2}"
+            in output
+        )
 
     # After all of these logs, we assert that the log file passed to the options (old_log_file)
     # Was ignored and nothing was written to it.
