@@ -1208,7 +1208,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         # filter agents
         allagents = await data.ConfigurationModel.get_agents(env.id, version_id)
-        agents_to_call: Sequence[None | str] = []  # None means all
+        agents_to_call: Sequence[str] = []
 
         if agents is not None:
             # select specific agents
