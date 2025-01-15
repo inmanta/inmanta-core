@@ -780,7 +780,6 @@ src/inmanta/protocol/rest/client.py:0: error: Function is missing a return type 
 src/inmanta/protocol/rest/client.py:0: error: Argument "result" to "Result" has incompatible type "str"; expected "dict[str, Any] | None"  [arg-type]
 src/inmanta/protocol/rest/client.py:0: error: Argument "result" to "Result" has incompatible type "str"; expected "dict[str, Any] | None"  [arg-type]
 src/inmanta/protocol/rest/client.py:0: error: Argument "result" to "Result" has incompatible type "bytes"; expected "dict[str, Any] | None"  [arg-type]
-src/inmanta/plugins.py:0: error: Missing type parameters for generic type "Callable"  [type-arg]
 src/inmanta/plugins.py:0: error: Missing type parameters for generic type "ResultVariable"  [type-arg]
 src/inmanta/plugins.py:0: error: Argument 1 to "add_function" of "PluginMeta" has incompatible type "PluginMeta"; expected "type[Plugin]"  [arg-type]
 src/inmanta/plugins.py:0: error: "type[Plugin]" has no attribute "__fq_plugin_name__"  [attr-defined]

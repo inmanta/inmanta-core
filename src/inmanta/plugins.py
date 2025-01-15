@@ -52,7 +52,7 @@ from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
 T = TypeVar("T")
-T_FUNC = TypeVar("T_FUNC", bound=Callable)
+T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
 if TYPE_CHECKING:
     from inmanta.ast.statements import DynamicStatement
