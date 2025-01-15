@@ -120,8 +120,7 @@ def cache(
     call_on_delete: Optional[Callable[[Any], None]] = None,
     evict_after_creation: float = 0.0,
     evict_after_last_access: float = 0.0,
-) -> Callable[[T_FUNC], T_FUNC]:
-    ...
+) -> Callable[[T_FUNC], T_FUNC]: ...
 
 
 @typing.overload
@@ -135,8 +134,7 @@ def cache(
     call_on_delete: Optional[Callable[[Any], None]] = None,
     evict_after_creation: float = 0.0,
     evict_after_last_access: float = 0.0,
-) -> T_FUNC:
-    ...
+) -> T_FUNC: ...
 
 
 @stable_api

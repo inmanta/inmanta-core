@@ -840,7 +840,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
     def type_string(self) -> str:
         return self.get_full_name()
-    
+
 
 @typing.overload
 def plugin(
@@ -848,8 +848,7 @@ def plugin(
     commands: Optional[list[str]] = None,
     emits_statements: bool = False,
     allow_unknown: bool = False,
-) -> Callable[[T_FUNC], T_FUNC]:
-    ...
+) -> Callable[[T_FUNC], T_FUNC]: ...
 
 
 @typing.overload
@@ -858,8 +857,7 @@ def plugin(
     commands: Optional[list[str]] = None,
     emits_statements: bool = False,
     allow_unknown: bool = False,
-) -> T_FUNC:
-    ...
+) -> T_FUNC: ...
 
 
 @stable_api
