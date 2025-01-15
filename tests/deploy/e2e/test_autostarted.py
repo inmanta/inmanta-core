@@ -1151,17 +1151,13 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
     assert result.result["versions"][0]["total"] == 3
 
     # Let's check the agent table and check that all agents are presents and not paused
-    await assert_is_paused(
-        client, environment, {"agent1": False, "agent2": False, "agent3": False}
-    )
+    await assert_is_paused(client, environment, {"agent1": False, "agent2": False, "agent3": False})
 
     await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
     assert result.code == 200
 
     # Let's check the agent table and check that all agents are presents and paused
-    await assert_is_paused(
-        client, environment, {"agent1": True, "agent2": True, "agent3": True}
-    )
+    await assert_is_paused(client, environment, {"agent1": True, "agent2": True, "agent3": True})
     result = await client.get_agents(environment)
     assert result.code == 200
     actual_data = result.result["data"]
@@ -1210,9 +1206,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
     assert result.code == 200
 
     # Let's check the agent table and check that all agents are presents and not paused
-    await assert_is_paused(
-        client, environment, {"agent1": False, "agent2": False, "agent3": False}
-    )
+    await assert_is_paused(client, environment, {"agent1": False, "agent2": False, "agent3": False})
 
     result = await client.get_agents(environment)
     assert result.code == 200
