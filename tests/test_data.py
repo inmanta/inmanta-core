@@ -40,6 +40,7 @@ from inmanta.resources import Id
 from inmanta.types import ResourceVersionIdStr
 
 
+
 async def test_connect_too_small_connection_pool(postgres_db, database_name: str, create_db_schema: bool = False):
     pool: Pool = await data.connect(
         postgres_db.host,
@@ -3040,6 +3041,9 @@ async def test_get_current_resource_state(server, environment, client, clienthel
     result = await client.release_version(tid=environment, id=version1)
     assert result.code == 200
 
+    await clienthelper.wait_for_released(version1)
+    await utils.wait_until_deployment_finishes(client, environment, version1)
+
     state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
         env=environment,
         rid="std::testing::NullResource[agent1,name=test1]",
@@ -3072,6 +3076,9 @@ async def test_get_current_resource_state(server, environment, client, clienthel
 
     result = await client.release_version(tid=environment, id=version2)
     assert result.code == 200
+
+    await clienthelper.wait_for_released(version2)
+    await utils.wait_until_deployment_finishes(client, environment, version2)
 
     state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
         env=environment,
