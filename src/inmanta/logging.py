@@ -803,7 +803,7 @@ class InmantaLoggerConfig:
                 "keep_logger_names": "--keep-logger-names",
             }
             ignored_options = [
-                f"{value} {options.__getattribute__(key)}" for key, value in option_to_cli.items() if key in options
+                f"{value} {getattr(options, key)}" for key, value in option_to_cli.items() if key in options
             ]
             if len(ignored_options) != 0:
                 return ", ".join(ignored_options)
