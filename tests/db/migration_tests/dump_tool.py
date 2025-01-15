@@ -144,9 +144,7 @@ async def test_dump_db(
 
     shutil.copytree(project_source, project_dir)
 
-    check_result(await client.set_setting(env_id_1, "autostart_agent_deploy_splay_time", 0))
     check_result(await client.set_setting(env_id_1, "autostart_agent_deploy_interval", "0"))
-    check_result(await client.set_setting(env_id_1, "autostart_agent_repair_splay_time", 0))
     check_result(await client.set_setting(env_id_1, "autostart_agent_repair_interval", "600"))
     check_result(await client.set_setting(env_id_1, "auto_deploy", False))
 
@@ -159,7 +157,7 @@ async def test_dump_db(
         await client.release_version(env_id_1, v1, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
     )
 
-    await wait_until_deployment_finishes(client, env_id_1, 20)
+    await wait_until_deployment_finishes(client, env_id_1, timeout=20)
 
     check_result(await client.notify_change(id=env_id_1, update=False))
 
@@ -180,7 +178,7 @@ async def test_dump_db(
         )
     )
 
-    await wait_until_deployment_finishes(client, env_id_1, 20)
+    await wait_until_deployment_finishes(client, env_id_1, timeout=20)
 
     # a version that is release, but not deployed
     check_result(await client.notify_change(id=env_id_1, update=False))
@@ -233,9 +231,7 @@ async def test_dump_db(
     env_id_3 = result.result["environment"]["id"]
     await agent_factory(env_id_3)
 
-    check_result(await client.set_setting(env_id_3, "autostart_agent_deploy_splay_time", 0))
     check_result(await client.set_setting(env_id_3, "autostart_agent_deploy_interval", "0"))
-    check_result(await client.set_setting(env_id_3, "autostart_agent_repair_splay_time", 0))
     check_result(await client.set_setting(env_id_3, "autostart_agent_repair_interval", "600"))
     check_result(await client.set_setting(env_id_3, "auto_deploy", False))
 

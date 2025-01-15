@@ -20,7 +20,7 @@ import datetime
 import pickle
 import uuid
 
-from inmanta.agent.executor import DeployResult, DryrunResult
+from inmanta.agent.executor import DeployReport, DryrunReport
 from inmanta.const import Change, HandlerResourceState
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange
@@ -35,7 +35,7 @@ def test_risky_objects():
 
         pass
 
-    dryrun = DryrunResult(
+    dryrun = DryrunReport(
         "std::Test[a1,k=v],v=3",
         uuid.uuid4(),
         {"a": AttributeStateChange(current="a", desired=EvilString("B"))},
@@ -45,12 +45,12 @@ def test_risky_objects():
     )
     out = pickle.loads(pickle.dumps(dryrun))
 
-    assert isinstance(out, DryrunResult)
+    assert isinstance(out, DryrunReport)
     assert isinstance(out.changes["a"], AttributeStateChange)
     assert isinstance(out.changes["a"].desired, str)
     assert isinstance(out.messages[0], LogLine)
 
-    deploy = DeployResult(
+    deploy = DeployReport(
         "std::Test[a1,k=v],v=3",
         uuid.uuid4(),
         HandlerResourceState.deployed,
@@ -60,7 +60,7 @@ def test_risky_objects():
     )
 
     deploy_out = pickle.loads(pickle.dumps(deploy))
-    assert isinstance(deploy_out, DeployResult)
+    assert isinstance(deploy_out, DeployReport)
     assert isinstance(deploy_out.changes["a"], AttributeStateChange)
     assert isinstance(deploy_out.changes["a"].desired, str)
     assert isinstance(deploy_out.messages[0], LogLine)
