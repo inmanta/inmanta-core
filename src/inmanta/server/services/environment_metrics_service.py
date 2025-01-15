@@ -39,6 +39,7 @@ from inmanta.data import (
     Resource,
     Setting,
 )
+from inmanta import const
 from inmanta.data.model import EnvironmentMetricsResult
 from inmanta.protocol import methods_v2
 from inmanta.protocol.decorators import handle
@@ -520,12 +521,21 @@ WITH agent_counts AS (
     SELECT
         environment,
         CASE
-            WHEN paused THEN 'paused'
-            WHEN id_primary IS NOT NULL THEN 'up'
-            ELSE 'down'
+            WHEN a.paused
+                THEN 'paused'
+            WHEN EXISTS(
+                SELECT 1
+                FROM {Agent.table_name()} AS a_inner
+                WHERE a_inner.environment=a.environment
+                    AND a_inner.name=$1
+                    AND a_inner.id_primary IS NOT NULL
+            )
+                THEN 'up'
+                ELSE 'down'
         END AS status,
         COUNT(*)
     FROM {Agent.table_name()} AS a
+    WHERE a.name!=$1
     GROUP BY environment, status
 )
 -- inject zeroes for missing values in the environment - status matrix
@@ -537,7 +547,7 @@ LEFT JOIN agent_counts AS a
 ORDER BY environment, s.status
         """
         metric_values: list[MetricValue] = []
-        result: Sequence[asyncpg.Record] = await connection.fetch(query)
+        result: Sequence[asyncpg.Record] = await connection.fetch(query, const.AGENT_SCHEDULER_ID)
         for record in result:
             assert isinstance(record["count"], int)
             assert isinstance(record["environment"], uuid.UUID)
