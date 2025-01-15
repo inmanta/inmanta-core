@@ -802,11 +802,8 @@ class InmantaLoggerConfig:
                 "timed": "--timed-logs",
                 "keep_logger_names": "--keep-logger-names",
             }
-            ignored_options = [
-                f"{value} {getattr(options, key)}" for key, value in option_to_cli.items() if key in options
-            ]
-            if len(ignored_options) != 0:
-                return ", ".join(ignored_options)
+            ignored_options = [f"{value} {getattr(options, key)}" for key, value in option_to_cli.items() if key in options]
+            return ", ".join(ignored_options) if ignored_options else None
 
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
