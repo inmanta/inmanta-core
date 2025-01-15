@@ -650,7 +650,6 @@ async def test_resource_count_empty_datapoint(client, server):
     assert all(hasattr(res, "category") and res.category != "__None__" and res.count == 0 for res in result_gauge)
 
 
-@pytest.mark.skip("To be fixed with agent view")
 async def test_agent_count_metric(clienthelper, client, server):
     project = data.Project(name="test")
     await project.insert()
@@ -673,7 +672,7 @@ async def test_agent_count_metric(clienthelper, client, server):
     agent3 = data.Agent(environment=env2.id, name="agent3", paused=True)
     await agent3.insert()
 
-    agents = await data.Agent.get_list()
+    agents = [a for a in await data.Agent.get_list() if a.name != const.AGENT_SCHEDULER_ID]
     assert len(agents) == 3
 
     # Add dummy resources that use some (but not all) of the agents
