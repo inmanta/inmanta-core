@@ -449,8 +449,16 @@ class ResourceScheduler(TaskManager):
                 connection=con,
             )
 
+            environment: Optional[data.Environment] = await data.Environment.get_by_id(self.environment, connection=con)
+            assert environment is not None
+            should_restore_state: bool = not typing.cast(
+                bool, await environment.get(data.RESET_DEPLOY_PROGRESS_ON_START, connection=con)
+            )
+
             # Check if we can restore the scheduler state from a previous run
-            restored_state: Optional[ModelState] = await ModelState.create_from_db(self.environment, connection=con)
+            restored_state: Optional[ModelState] = (
+                await ModelState.create_from_db(self.environment, connection=con) if should_restore_state else None
+            )
             if restored_state is not None:
                 # Restore scheduler state like it was before the scheduler went down
                 self._state = restored_state

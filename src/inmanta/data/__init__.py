@@ -2333,6 +2333,7 @@ TYPE_MAP = {
 AUTO_DEPLOY = "auto_deploy"
 AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
 AUTOSTART_AGENT_REPAIR_INTERVAL = "autostart_agent_repair_interval"
+RESET_DEPLOY_PROGRESS_ON_START = "reset_deploy_progress_on_start"
 AUTOSTART_ON_START = "autostart_on_start"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
@@ -2502,6 +2503,19 @@ class Environment(BaseDocument):
             ),
             validator=validate_cron_or_int,
             agent_restart=False,
+        ),
+        RESET_DEPLOY_PROGRESS_ON_START: Setting(
+            name=RESET_DEPLOY_PROGRESS_ON_START,
+            typ="bool",
+            default=False,
+            doc=(
+                "By default the orchestrator picks up the deployment process where it was when it restarted (or halted)."
+                " When this option is enabled, the orchestrator restarts the deployment based on the last known deployment"
+                " state. It is recommended to leave this disabled because in most cases it is faster (because we can skip some"
+                " redundant work) and it has more accurate state and progress reporting (because we retain more state to reason"
+                " on). Enable this in case there are issues with restoring the deployment state at restart."
+            ),
+            agent_restart=True,
         ),
         AUTOSTART_ON_START: Setting(
             name=AUTOSTART_ON_START,
@@ -5999,7 +6013,7 @@ class ConfigurationModel(BaseDocument):
         cls, environment: uuid.UUID, version: int, *, connection: Optional[Connection] = None
     ) -> tuple[set[ResourceIdStr], dict[ResourceIdStr, datetime.datetime]]:
         outset, negative, last_deployed = await cls.get_increment_and_last_deployed(environment, version, connection=connection)
-        return outset, last_deployed
+        return negative, last_deployed
 
     @classmethod
     async def get_increment(
