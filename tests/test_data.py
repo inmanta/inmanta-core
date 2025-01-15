@@ -40,7 +40,6 @@ from inmanta.resources import Id
 from inmanta.types import ResourceVersionIdStr
 
 
-
 async def test_connect_too_small_connection_pool(postgres_db, database_name: str, create_db_schema: bool = False):
     pool: Pool = await data.connect(
         postgres_db.host,
