@@ -1408,7 +1408,7 @@ class ResourceScheduler(TaskManager):
             :return: A dict mapping each resource to the discrepancies related to it (if any)
             """
             state_translation_table: dict[
-                const.ResourceState, Tuple[DeployResult | None, Blocked | None, Compliance | None]
+                const.ResourceState, tuple[DeployResult | None, Blocked | None, Compliance | None]
             ] = {
                 # A table to translate the old states into the new states
                 # None means don't care, mostly used for values we can't derive from the old state
