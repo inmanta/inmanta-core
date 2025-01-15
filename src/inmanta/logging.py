@@ -396,7 +396,7 @@ class LoggingConfigBuilder:
 
         # Shared config
         if log_file_cli_option:
-            assert options.log_file_level is not None  # make mypy happy, always set in options.set_defaults()
+            assert options.log_file_level is not None  # make mypy happy, always set in set_defaults_for_options()
             log_level = convert_inmanta_log_level(options.log_file_level)
             handler_root_logger = f"{component}_handler" if component is not None else "root_handler"
             handlers[handler_root_logger] = {
