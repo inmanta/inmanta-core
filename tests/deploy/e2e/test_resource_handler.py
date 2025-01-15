@@ -108,7 +108,7 @@ async def test_logging_error(resource_container, environment, client, agent, cli
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment, version=version)
     result = await client.resource_details(tid=environment, rid=rid_1)
     assert result.code == 200
     assert result.result["data"]["status"] == "failed"
