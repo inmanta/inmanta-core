@@ -53,7 +53,7 @@ class resource:  # noqa: N801
 
     :param name: The name of the entity in the configuration model it creates a resource from. For example
         :inmanta:entity:`std::testing::NullResource`
-    :param id_attribute: The attribute of `this` resource that uniquely identifies a resource on a nominal agent.
+    :param id_attribute: The attribute of `this` resource that uniquely identifies a resource on a logical agent.
         This attribute can be mapped.
     :param agent: This string indicates how the agent of this resource is determined. This string points to an attribute,
         but it can navigate relations (this value cannot be mapped). For example, the agent argument could be ``host.name``.

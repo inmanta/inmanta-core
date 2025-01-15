@@ -82,7 +82,7 @@ Glossary
     desired state
         The desired state expresses the state of all resources that Inmanta manages. Expressing a
         configuration in function of desired state makes the orchestrator more robust to failures
-        compared to imperative based orchestration. The :term:`scheduler` reads the
+        compared to imperative based orchestration. The :term:`resource scheduler` reads the
         current state of the a resource and derive from the difference between current and desired
         state the actions required to change the state of the resource. Desired state has the
         additional benefit that Inmanta can show a dry run or execution plan of what would change if

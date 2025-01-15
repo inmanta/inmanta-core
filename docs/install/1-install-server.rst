@@ -376,34 +376,14 @@ Replace <password> in the above-mentioned snippet with the password of the inman
 connect to the local server and uses the database inmanta. See the :inmanta.config:group:`database` section in the
 config file for other options.
 
-.. _configure_server_step_5:
-
-Step 6: Set the server address
-------------------------------
-
-When virtual machines are started by this server that install the inmanta agent, the correct
-:inmanta.config:option:`server.server-address` needs to be
-configured. This address is used to create the correct boot script for the virtual machine.
-
-Set this value to the hostname or IP address that other systems use to connect to the server
-in the configuration file stored at ``/etc/inmanta/inmanta.d/server.cfg``.
-
-.. code-block:: text
-
-  [server]
-  server-address=<server-ip-address-or-hostname>
-
-.. note:: If you deploy configuration models that modify resolver configuration it is recommended to use the IP address instead
-  of the hostname.
-
 
 .. _configure_server_step_6:
 
-Step 7: Configure ssh of the inmanta user
+Step 6: Configure ssh of the inmanta user
 -----------------------------------------
 
 The inmanta user that runs the server needs a working ssh client. This client is required to checkout git repositories over
-ssh and if the remote agent is used.
+ssh.
 
 1. Provide the inmanta user with one or more private keys:
 
@@ -433,11 +413,10 @@ ssh and if the remote agent is used.
 
     sudo chown inmanta:inmanta /var/lib/inmanta/.ssh/config
 
-3. Add the public key to any git repositories and save it to include in configuration models that require remote agents.
-4. Test if you can login into a machine that has the public key and make sure ssh does not show you any prompts to store
+3. Test if you can login into a machine that has the public key and make sure ssh does not show you any prompts to store
    the host key.
 
-Step 8: Configure the server bind address
+Step 7: Configure the server bind address
 -----------------------------------------
 
 By default the server only listens on localhost, port 8888.
@@ -451,7 +430,7 @@ options in the ``/etc/inmanta/inmanta.d/server.cfg`` file.
   bind-address=<server-bind-address>
   bind-port=<server-bind-port>
 
-Step 9: Enable the required Inmanta extensions
+Step 8: Enable the required Inmanta extensions
 ----------------------------------------------
 
 Make sure that the required Inmanta extensions are enabled. This is done by adding a configuration file with the following content to ``/etc/inmanta/inmanta.d/extensions.cfg``.
@@ -473,7 +452,7 @@ Make sure that the required Inmanta extensions are enabled. This is done by addi
 This file is also installed by the RPM.
 
 
-Step 10: Start the Inmanta server
+Step 9: Start the Inmanta server
 ---------------------------------
 
 Start the Inmanta server and make sure it is started at boot.
@@ -485,13 +464,13 @@ Start the Inmanta server and make sure it is started at boot.
 
 The web-console is now available on the port and host configured in step 8.
 
-Optional Step 11: Setup influxdb for collection of performance metrics
+Optional Step 10: Setup influxdb for collection of performance metrics
 ----------------------------------------------------------------------
 
 Follow the instructions in :ref:`metering-setup` to send performance metrics to influxdb.
 This is only recommended for production deployments.
 
-Optional Step 12: Configure logging
+Optional Step 11: Configure logging
 -----------------------------------
 
 Logging can be configured by following the instructions in :ref:`administrators_doc_logging`.
