@@ -195,7 +195,7 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods.trigger, env="tid", agent="id")
     async def trigger_update(self, env: uuid.UUID, agent: None | str, incremental_deploy: bool) -> Apireturn:
         """
-        Trigger an update
+        Trigger an update for a specific agent, or for ALL agents in the environment when <agent> param is None.
         """
         if agent == const.AGENT_SCHEDULER_ID:
             agent = None
