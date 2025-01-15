@@ -198,7 +198,8 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
     # Set logging_config option in cfg file only
     write_logging_config_file(path=path_logging_config_file1, formatter="BBB %(message)s")
     setup_logging_config(
-        cli_options=Options(log_file=old_log_file, log_file_level="4"), file_option_value=path_logging_config_file1
+        cli_options=Options(log_file=old_log_file, log_file_level="4", timed_logs=True),
+        file_option_value=path_logging_config_file1,
     )
     logger.info("test")
     assert "BBB test" in stream.getvalue()
@@ -207,7 +208,7 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
     write_logging_config_file(path=path_logging_config_file1, formatter="CCC %(message)s")
     write_logging_config_file(path=path_logging_config_file2, formatter="DDD %(message)s")
     setup_logging_config(
-        cli_options=Options(logging_config=path_logging_config_file1, log_file=old_log_file, log_file_level="4"),
+        cli_options=Options(logging_config=path_logging_config_file1, keep_logger_names=False),
         file_option_value=path_logging_config_file2,
     )
     logger.info("test")

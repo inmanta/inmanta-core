@@ -278,15 +278,24 @@ class Options(Namespace):
                     if a bigger number is provided, 4 will be used. Refer to log_file_level for the explanation of each level.
                     default is 1 (WARNING)
     :param timed: if true,  adds the time to the formatter in the log lines.
+    :param keep_logger_names: Display the log messages using the name of the logger that created the log message,
+                              instead of the component of the compiler that was executing while the log record was created
+                              or the name of the module that created the log message.
     :param logging_config: Path to the dict-based logging config file.
     """
 
     log_file: Optional[str] = None
-    log_file_level: str = "INFO"
+    log_file_level: Optional[str] = None
     verbose: int = 1
-    timed: bool = False
-    keep_logger_names: bool = False
+    timed: Optional[bool] = None
+    keep_logger_names: Optional[bool] = None
     logging_config: Optional[str] = None
+
+    def user_defined_values(self) -> dict[str, bool]:
+        """
+        Returns a dictionary with the fields (excluding "verbose") that were set by the user
+        """
+        return {key: value for key, value in self.__dict__.items() if key != "verbose" and value is not None}
 
 
 class LoggingConfigBuilderExtension(abc.ABC):
@@ -340,6 +349,15 @@ class LoggingConfigBuilder:
         )
         return logging_config_core
 
+    def set_defaults_for_options(self, options: Options) -> Options:
+        """
+        Sets the default value of fields that were not set by the user and have a default value
+        """
+        options.log_file_level = options.log_file_level if options.log_file_level is not None else "INFO"
+        options.timed = options.timed if options.timed is not None else False
+        options.keep_logger_names = options.keep_logger_names if options.keep_logger_names is not None else False
+        return options
+
     def get_logging_config_from_options(
         self,
         stream: TextIO,
@@ -361,6 +379,8 @@ class LoggingConfigBuilder:
         handler_root_logger: str
         log_level: int
 
+        # Set the default values for fields that were not set by the user
+        options = self.set_defaults_for_options(options)
         log_file_cli_option = options.log_file
 
         short_names = False
@@ -382,6 +402,7 @@ class LoggingConfigBuilder:
 
         # Shared config
         if log_file_cli_option:
+            assert options.log_file_level is not None  # make mypy happy, always set in options.set_defaults()
             log_level = convert_inmanta_log_level(options.log_file_level)
             handler_root_logger = f"{component}_handler" if component is not None else "root_handler"
             handlers[handler_root_logger] = {
@@ -795,9 +816,11 @@ class InmantaLoggerConfig:
 
         try:
             self.logging_config_source = self._get_logging_config_source(options, component)
-            if options.log_file or options.log_file_level:
+            ignored_options = options.user_defined_values()
+            if ignored_options:
                 LOGGER.warning(
-                    "log_file and log_file_level options were ignored. Using logging config from %s",
+                    "%s options were ignored. Using logging config from %s",
+                    ignored_options,
                     self.logging_config_source.source(),
                 )
         except NoLoggingConfigFound:
