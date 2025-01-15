@@ -844,7 +844,7 @@ class AgentManager(ServerSlice, SessionListener):
     @handle(methods.list_agents, env="tid")
     async def list_agents(
         self,
-        env: Optional[data.Environment],
+        env: data.Environment,
         start: Optional[str] = None,
         end: Optional[str] = None,
         limit: Optional[int] = None,
@@ -858,30 +858,20 @@ class AgentManager(ServerSlice, SessionListener):
         :raises BadRequest: Limit, start and end can not be set together
         :raises BadRequest: Limit parameter can not exceed 1000
         """
-        query = {}
-        if env is not None:
-            query["environment"] = env.id
+        if env is None:
+            return 404, {"message": "The given environment id does not exist!"}
+        new_agent_endpoint = await self.get_agents(env, limit, start, end, start, end)
 
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"Limit parameter can not exceed {APILIMIT}, got {limit}.")
-
-        ags = await data.Agent.get_list_paged(
-            page_by_column="name",
-            order_by_column="name",
-            order="ASC NULLS LAST",
-            limit=limit,
-            start=start,
-            end=end,
-            no_obj=False,
-            lock=None,
-            connection=None,
-            **query,
-        )
+        def mangle_format(agent: model.Agent) -> dict[str, object]:
+            native = agent.model_dump()
+            native["primary"] = ""
+            native["state"] = agent.status
+            if native["last_failover"] is None:
+                native["last_failover"] = ""
+            return native
 
         return 200, {
-            "agents": [a.to_dict() for a in ags],
+            "agents": [mangle_format(a) for a in new_agent_endpoint._response],
             "servertime": datetime.now().astimezone(),
         }
 

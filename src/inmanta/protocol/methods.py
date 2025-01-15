@@ -950,6 +950,8 @@ def list_agents(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] 
     """
     List all agent for an environment
 
+    [DEPRECATED] use the V2 `get_agents` or `/agents` endpoint instead
+
     :param tid: The environment the agents are defined in
     :param start: Optional. Agent after start (sorted by name in ASC)
     :param end: Optional. Agent before end (sorted by name in ASC)
