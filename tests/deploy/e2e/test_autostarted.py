@@ -128,7 +128,7 @@ async def setup_environment_with_agent(client, project_name):
     assert result.code == 200
 
     # check deploy
-    await clienthelper.wait_for_deployed()
+    await clienthelper.wait_for_deployed(version=version)
     result = await client.get_version(env_id, version)
     assert result.code == 200
     assert result.result["model"]["released"]

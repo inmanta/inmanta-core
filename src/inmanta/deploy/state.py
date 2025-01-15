@@ -24,18 +24,16 @@ import itertools
 import json
 import uuid
 from collections import defaultdict
-from collections.abc import Mapping, Set
+from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Optional, Self, cast
+from typing import Optional, Self, cast
 
 import asyncpg
 
 from inmanta import const, resources
+from inmanta.types import ResourceIdStr, ResourceType
 from inmanta.util.collections import BidirectionalManyMapping
-
-if TYPE_CHECKING:
-    from inmanta.types import ResourceIdStr, ResourceType
 
 
 class RequiresProvidesMapping(BidirectionalManyMapping["ResourceIdStr", "ResourceIdStr"]):
@@ -203,6 +201,8 @@ class ModelState:
     resource_state: dict["ResourceIdStr", ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
     dirty: set["ResourceIdStr"] = dataclasses.field(default_factory=set)
+    # group resources by agent to allow efficient triggering of a deploy for a single agent
+    resources_by_agent: dict[str, set["ResourceIdStr"]] = dataclasses.field(default_factory=lambda: defaultdict(set))
     # types per agent keeps track of which resource types live on which agent by doing a reference count
     # the dict is agent_name -> resource_type -> resource_count
     types_per_agent: dict[str, dict["ResourceType", int]] = dataclasses.field(
@@ -229,27 +229,29 @@ class ModelState:
             return None
 
         result = ModelState(version=last_processed_model_version)
-        resource_records = await data.Resource.get_resources_for_version_raw_with_persistent_state(
-            environment=environment,
-            version=last_processed_model_version,
-            projection=["resource_id", "attributes", "attribute_hash"],
-            projection_persistent=[
-                "is_orphan",
-                "is_undefined",
-                "current_intent_attribute_hash",
-                "last_deployed_attribute_hash",
-                "last_deploy_result",
-                "blocked",
-                "last_success",
-                "last_deploy",
-                "last_produced_events",
-            ],
-            project_attributes=[
-                "requires",
-                const.RESOURCE_ATTRIBUTE_SEND_EVENTS,
-                const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS,
-            ],
-            connection=connection,
+        resource_records: Sequence[Mapping[str, object]] = (
+            await data.Resource.get_resources_for_version_raw_with_persistent_state(
+                environment=environment,
+                version=last_processed_model_version,
+                projection=["resource_id", "attributes", "attribute_hash"],
+                projection_persistent=[
+                    "is_orphan",
+                    "is_undefined",
+                    "current_intent_attribute_hash",
+                    "last_deployed_attribute_hash",
+                    "last_deploy_result",
+                    "blocked",
+                    "last_success",
+                    "last_deploy",
+                    "last_produced_events",
+                ],
+                project_attributes=[
+                    "requires",
+                    const.RESOURCE_ATTRIBUTE_SEND_EVENTS,
+                    const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS,
+                ],
+                connection=connection,
+            )
         )
         if not resource_records:
             configuration_model: Optional[data.ConfigurationModel] = await data.ConfigurationModel.get_one(
@@ -259,7 +261,9 @@ class ModelState:
                 # the version does not exist at all (anymore)
                 return None
             # otherwise it's simply an empty version => continue with normal flow
-        by_resource_id = {r["resource_id"]: r for r in resource_records}
+        by_resource_id: Mapping[ResourceIdStr, Mapping[str, object]] = {
+            ResourceIdStr(cast(str, r["resource_id"])): r for r in resource_records
+        }
         for resource_id, res in by_resource_id.items():
             # Populate state
 
@@ -302,6 +306,7 @@ class ModelState:
 
             # Populate types_per_agent
             result.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type] += 1
+            result.resources_by_agent[resource_intent.id.agent_name].add(resource_id)
 
             # Populate requires
             requires = {resources.Id.parse_id(req).resource_str() for req in res["requires"]}
@@ -333,7 +338,7 @@ class ModelState:
         self.intent.clear()
         self.requires.clear()
         self.resource_state.clear()
-        self.types_per_agent.clear()
+        self.resources_by_agent.clear()
         self.dirty = set()
 
     def update_resource(
@@ -387,6 +392,7 @@ class ModelState:
             if resource not in self.requires:
                 self.requires[resource] = set()
             self.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type] += 1
+            self.resources_by_agent[resource_intent.id.agent_name].add(resource)
         else:
             # we already know the resource => update relevant fields
             self.resource_state[resource].compliance = compliance_status
@@ -439,6 +445,9 @@ class ModelState:
         self.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type] -= 1
         if self.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type] == 0:
             del self.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type]
+        self.resources_by_agent[resource_intent.id.agent_name].discard(resource)
+        if not self.resources_by_agent[resource_intent.id.agent_name]:
+            del self.resources_by_agent[resource_intent.id.agent_name]
         self.dirty.discard(resource)
 
     def should_skip_for_dependencies(self, resource: "ResourceIdStr") -> bool:

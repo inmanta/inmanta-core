@@ -18,6 +18,7 @@
     This file is intended to contain test that use the agent/scheduler combination in isolation: no server, no executor
 """
 
+import datetime
 import hashlib
 import itertools
 import json
@@ -61,6 +62,16 @@ async def retry_limited_fast(
     performance by polling frequently and setting a low timeout.
     """
     await util.retry_limited(fun, timeout=timeout, interval=interval, *args, **kwargs)
+
+
+async def wait_until_done(agent: TestAgent) -> None:
+    await retry_limited_fast(
+        lambda: (
+            len(agent.scheduler._work._waiting) == 0
+            and len(agent.scheduler._work.agent_queues.queued()) == 0
+            and all(queue._unfinished_tasks == 0 for queue in agent.scheduler._work.agent_queues._agent_queues.values())
+        )
+    )
 
 
 def state_manager_check(agent: "TestAgent"):
@@ -698,6 +709,119 @@ async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> 
 
     for r, tbr in agent.scheduler._work.agent_queues._tasks_by_resource.items():
         assert not tbr
+
+
+async def test_deploy_single_agent(agent: TestAgent, make_resource_minimal) -> None:
+    """
+    Verify the behavior of deploy and repair for a single agent.
+    """
+    r1_success = ResourceIdStr("test::Resource[agent1,name=1]")
+    r1_fail = ResourceIdStr("test::Resource[agent1,name=2]")
+    r2_success = ResourceIdStr("test::Resource[agent2,name=1]")
+    r2_fail = ResourceIdStr("test::Resource[agent2,name=2]")
+
+    resources: Mapping[ResourceIdStr, state.ResourceDetails] = {
+        r1_success: make_resource_minimal(r1_success, values={FAIL_DEPLOY: False}, requires=[]),
+        r1_fail: make_resource_minimal(r1_fail, values={FAIL_DEPLOY: True}, requires=[]),
+        r2_success: make_resource_minimal(r2_success, values={FAIL_DEPLOY: False}, requires=[]),
+        r2_fail: make_resource_minimal(r2_fail, values={FAIL_DEPLOY: True}, requires=[]),
+    }
+    version: int = 1
+    await agent.scheduler._new_version([ModelVersion(version=version, resources=resources, requires={}, undefined=set())])
+
+    await wait_until_done(agent)
+    assert agent.executor_manager.executors["agent1"].execute_count == 2
+    assert agent.executor_manager.executors["agent2"].execute_count == 2
+    assert agent.scheduler._state.resource_state[r1_success].compliance is Compliance.COMPLIANT
+    assert agent.scheduler._state.resource_state[r1_fail].compliance is Compliance.NON_COMPLIANT
+    assert agent.scheduler._state.resource_state[r2_success].compliance is Compliance.COMPLIANT
+    assert agent.scheduler._state.resource_state[r2_fail].compliance is Compliance.NON_COMPLIANT
+
+    before_trigger: datetime.datetime
+
+    # call deploy for all agents
+    agent.executor_manager.reset_executor_counters()
+    before_trigger = datetime.datetime.now().astimezone()
+    await agent.scheduler.deploy(reason="Test deploy")
+    await wait_until_done(agent)
+
+    # only non-compliant should redeploy
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
+    assert agent.scheduler._state.resource_state[r1_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r1_fail].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r2_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_fail].last_deployed > before_trigger
+
+    # call repair for all agents
+    agent.executor_manager.reset_executor_counters()
+    before_trigger = datetime.datetime.now().astimezone()
+    await agent.scheduler.repair(reason="Test repair")
+    await wait_until_done(agent)
+
+    # everything should redeploy
+    assert agent.executor_manager.executors["agent1"].execute_count == 2
+    assert agent.executor_manager.executors["agent2"].execute_count == 2
+    assert agent.scheduler._state.resource_state[r1_success].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r1_fail].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r2_success].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r2_fail].last_deployed > before_trigger
+
+    # call deploy for agent1
+    agent.executor_manager.reset_executor_counters()
+    before_trigger = datetime.datetime.now().astimezone()
+    await agent.scheduler.deploy(agent="agent1", reason="Test deploy for agent1")
+    await wait_until_done(agent)
+
+    # only non-compliant on agent1 should redeploy
+    assert agent.executor_manager.executors["agent1"].execute_count == 1
+    assert agent.executor_manager.executors["agent2"].execute_count == 0
+    assert agent.scheduler._state.resource_state[r1_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r1_fail].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r2_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_fail].last_deployed < before_trigger
+
+    # call deploy for agent2
+    agent.executor_manager.reset_executor_counters()
+    before_trigger = datetime.datetime.now().astimezone()
+    await agent.scheduler.deploy(agent="agent2", reason="Test deploy for agent2")
+    await wait_until_done(agent)
+
+    # only non-compliant on agent2 should redeploy
+    assert agent.executor_manager.executors["agent1"].execute_count == 0
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
+    assert agent.scheduler._state.resource_state[r1_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r1_fail].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_fail].last_deployed > before_trigger
+
+    # call repair for agent1
+    agent.executor_manager.reset_executor_counters()
+    before_trigger = datetime.datetime.now().astimezone()
+    await agent.scheduler.repair(agent="agent1", reason="Test repair for agent1")
+    await wait_until_done(agent)
+
+    # all resources on agent1 should redeploy
+    assert agent.executor_manager.executors["agent1"].execute_count == 2
+    assert agent.executor_manager.executors["agent2"].execute_count == 0
+    assert agent.scheduler._state.resource_state[r1_success].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r1_fail].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r2_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_fail].last_deployed < before_trigger
+
+    # call repair for agent2
+    agent.executor_manager.reset_executor_counters()
+    before_trigger = datetime.datetime.now().astimezone()
+    await agent.scheduler.repair(agent="agent2", reason="Test repair for agent2")
+    await wait_until_done(agent)
+
+    # all resources on agent2 should redeploy
+    assert agent.executor_manager.executors["agent1"].execute_count == 0
+    assert agent.executor_manager.executors["agent2"].execute_count == 2
+    assert agent.scheduler._state.resource_state[r1_success].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r1_fail].last_deployed < before_trigger
+    assert agent.scheduler._state.resource_state[r2_success].last_deployed > before_trigger
+    assert agent.scheduler._state.resource_state[r2_fail].last_deployed > before_trigger
 
 
 async def test_deploy_event_propagation(agent: TestAgent, make_resource_minimal):
@@ -1489,7 +1613,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
 
     def assert_resource_state(
         resource: ResourceIdStr,
-        status: state.Compliance,
+        compliance: state.Compliance,
         deploy_result: state.DeployResult,
         blocked_status: state.Blocked,
         attribute_hash: str,
@@ -1499,12 +1623,12 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
         If not, this method raises an AssertionError.
 
         :param resource: The resource of which the above-mentioned parameters have to be asserted.
-        :param status: The Compliance to assert.
+        :param compliance: The Compliance to assert.
         :param deploy_result: The DeployResult to assert.
         :param blocked_status: The Blocked to assert.
         :param attribute_hash: The hash of the attributes of the resource.
         """
-        assert agent.scheduler._state.resource_state[resource].compliance is status
+        assert agent.scheduler._state.resource_state[resource].compliance is compliance
         assert agent.scheduler._state.resource_state[resource].last_deploy_result is deploy_result
         assert agent.scheduler._state.resource_state[resource].blocked is blocked_status
         assert agent.scheduler._state.intent[resource].attribute_hash == attribute_hash
