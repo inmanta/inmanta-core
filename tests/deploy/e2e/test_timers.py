@@ -74,9 +74,6 @@ async def test_notification_mechanism(agent, environment, clienthelper, client, 
         time = tm.resource_timers[rid].next_scheduled_time
         assert abs(time - last_deploy_time_approx - timedelta(seconds=seconds)) < timedelta(milliseconds=200)
 
-    def is_disabled(rid) -> None:
-        assert rid not in tm.resource_timers or tm.resource_timers[rid].when is None
-
     # All per resource
     assert tm.global_periodic_repair_task is None
     assert tm.global_periodic_deploy_task is None
