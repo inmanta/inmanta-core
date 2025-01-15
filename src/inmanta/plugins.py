@@ -52,7 +52,7 @@ from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
 T = TypeVar("T")
-T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
+T_FUNC = TypeVar("T_FUNC", bound=Callable)
 
 if TYPE_CHECKING:
     from inmanta.ast.statements import DynamicStatement
@@ -883,12 +883,12 @@ def plugin(
         commands: Optional[list[str]] = None,
         emits_statements: bool = False,
         allow_unknown: bool = False,
-    ) -> Callable:
+    ) -> Callable[[T_FUNC], T_FUNC]:
         """
         Function to curry the name of the function
         """
 
-        def call(fnc):
+        def call(fnc: T_FUNC) -> T_FUNC:
             """
             Create class to register the function and return the function itself
             """
@@ -911,7 +911,7 @@ def plugin(
 
             fq_plugin_name = "::".join(ns_parts[1:])
 
-            dictionary = {}
+            dictionary: dict[str, object] = {}
             dictionary["__module__"] = fnc.__module__
 
             dictionary["__function_name__"] = name
@@ -922,7 +922,7 @@ def plugin(
             dictionary["__function__"] = fnc
 
             bases = (Plugin,)
-            fnc.__plugin__ = PluginMeta.__new__(PluginMeta, name, bases, dictionary)
+            fnc.__plugin__ = PluginMeta.__new__(PluginMeta, name, bases, dictionary)  # type: ignore[attr-defined]
             return fnc
 
         return call
