@@ -285,10 +285,10 @@ class Options(Namespace):
     """
 
     log_file: Optional[str] = None
-    log_file_level: Optional[str] = None
+    log_file_level: str = "INFO"
     verbose: int = 1
-    timed: Optional[bool] = None
-    keep_logger_names: Optional[bool] = None
+    timed: bool = False
+    keep_logger_names: bool = False
     logging_config: Optional[str] = None
 
 
@@ -343,15 +343,6 @@ class LoggingConfigBuilder:
         )
         return logging_config_core
 
-    def set_defaults_for_options(self, options: Options) -> Options:
-        """
-        Sets the default value of fields that were not set by the user and have a default value
-        """
-        options.log_file_level = options.log_file_level if options.log_file_level is not None else "INFO"
-        options.timed = options.timed if options.timed is not None else False
-        options.keep_logger_names = options.keep_logger_names if options.keep_logger_names is not None else False
-        return options
-
     def get_logging_config_from_options(
         self,
         stream: TextIO,
@@ -373,8 +364,6 @@ class LoggingConfigBuilder:
         handler_root_logger: str
         log_level: int
 
-        # Set the default values for fields that were not set by the user
-        options = self.set_defaults_for_options(options)
         log_file_cli_option = options.log_file
 
         short_names = False
@@ -396,7 +385,6 @@ class LoggingConfigBuilder:
 
         # Shared config
         if log_file_cli_option:
-            assert options.log_file_level is not None  # make mypy happy, always set in set_defaults_for_options()
             log_level = convert_inmanta_log_level(options.log_file_level)
             handler_root_logger = f"{component}_handler" if component is not None else "root_handler"
             handlers[handler_root_logger] = {
@@ -809,7 +797,7 @@ class InmantaLoggerConfig:
             Returns a dictionary with the options (excluding "verbose" and "logging_config") that were set by the user
             """
             ignore_keys = ["verbose", "logging_config"]
-            return {key: value for key, value in options.__dict__.items() if key not in ignore_keys and value is not None}
+            return {key: value for key, value in options.__dict__.items() if key not in ignore_keys and key in options}
 
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
