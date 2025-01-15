@@ -39,6 +39,7 @@ async def test_add_new_resource_status_column(
     postgresql_client: asyncpg.Connection,
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
 ) -> None:
+    # after the migration script for which this test case was originally created, v202501140 was added on top of it.
     await migrate_db_from()
 
     envs = await Environment.get_list()
