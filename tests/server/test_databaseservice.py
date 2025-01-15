@@ -16,13 +16,12 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import logging
 
 import pytest
 from asyncpg import Connection
 
-from inmanta import const, data
+from inmanta import data
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server import config as opt
 from inmanta.server.services import databaseservice
