@@ -3042,7 +3042,7 @@ async def test_get_current_resource_state(server, environment, client, clienthel
     assert result.code == 200
 
     await clienthelper.wait_for_released(version1)
-    await utils.wait_until_deployment_finishes(client, environment, version1)
+    await utils.wait_until_deployment_finishes(client, environment, version=version1)
 
     state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
         env=environment,
@@ -3078,7 +3078,7 @@ async def test_get_current_resource_state(server, environment, client, clienthel
     assert result.code == 200
 
     await clienthelper.wait_for_released(version2)
-    await utils.wait_until_deployment_finishes(client, environment, version2)
+    await utils.wait_until_deployment_finishes(client, environment, version=version2)
 
     state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
         env=environment,
