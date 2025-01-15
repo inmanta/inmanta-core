@@ -52,6 +52,7 @@ from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
 T = TypeVar("T")
+T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
 if TYPE_CHECKING:
     from inmanta.ast.statements import DynamicStatement
@@ -839,15 +840,35 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
     def type_string(self) -> str:
         return self.get_full_name()
+    
+
+@typing.overload
+def plugin(
+    function: str | None = None,
+    commands: Optional[list[str]] = None,
+    emits_statements: bool = False,
+    allow_unknown: bool = False,
+) -> Callable[[T_FUNC], T_FUNC]:
+    ...
+
+
+@typing.overload
+def plugin(
+    function: T_FUNC,
+    commands: Optional[list[str]] = None,
+    emits_statements: bool = False,
+    allow_unknown: bool = False,
+) -> T_FUNC:
+    ...
 
 
 @stable_api
 def plugin(
-    function: Optional[Callable] = None,
+    function: T_FUNC | str | None = None,
     commands: Optional[list[str]] = None,
     emits_statements: bool = False,
     allow_unknown: bool = False,
-) -> Callable:
+) -> T_FUNC | Callable[[T_FUNC], T_FUNC]:
     """
     Python decorator to register functions with inmanta as plugin
 
