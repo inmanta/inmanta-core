@@ -26,6 +26,7 @@ async def update(connection: Connection) -> None:
     * Add columns to the resource_persistent_state table required to be able to recover the scheduler
       state on a restart of the server.
     """
+    # final changes are made on top of these in v202501140.py
     schema = """
         -- Create and populate the scheduler table.
         CREATE TABLE public.scheduler (

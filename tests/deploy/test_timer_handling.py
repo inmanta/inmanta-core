@@ -125,25 +125,27 @@ async def test_time_manager_basics():
         call_in = timedelta(milliseconds=delta)
         call_at = start_time + call_in
         t.set_timer(call_at, "I say so", TaskPriority.DRYRUN)
-        return t, call_at
+        return t, call_at if delta >= 0 else start_time
 
-    t1 = set_time(5)
-    t2 = set_time(5)
-    t3 = set_time(15)
-    t4 = set_time(15)
+    t1 = set_time(30)
+    t2 = set_time(30)
+    t3 = set_time(100)
+    t4 = set_time(100)
     t3[0].cancel()
-    t5 = set_time(10)
+    t5 = set_time(80)
+    t6 = set_time(-10_000)
 
     await t4[0].activation_lock.wait()
 
     def assert_fired(timer: MockTimer, at: datetime.datetime) -> None:
-        assert timedelta(milliseconds=-1) < (timer.activated_at - at) < timedelta(milliseconds=1)
+        assert timedelta(milliseconds=0) < (timer.activated_at - at) < timedelta(milliseconds=5)
 
     assert_fired(*t1)
     assert_fired(*t2)
     assert_fired(*t4)
     assert_fired(*t5)
     assert t3[0].activated_at is None
+    assert_fired(*t6)
 
 
 @pytest.fixture
@@ -157,8 +159,7 @@ def make_resource_minimal(environment):
         rid: ResourceIdStr,
         values: dict[str, object],
         requires: list[str],
-        status: state.ComplianceStatus = state.ComplianceStatus.HAS_UPDATE,
-    ) -> state.ResourceDetails:
+    ) -> state.ResourceIntent:
         """Produce a resource that is valid to the scheduler"""
         attributes = dict(values)
         attributes["requires"] = requires
@@ -172,7 +173,7 @@ def make_resource_minimal(environment):
         m.update(character.encode("utf-8"))
         attribute_hash = m.hexdigest()
 
-        return state.ResourceDetails(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash)
+        return state.ResourceIntent(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash)
 
     return make_resource_minimal
 
