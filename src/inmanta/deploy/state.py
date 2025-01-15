@@ -24,18 +24,16 @@ import itertools
 import json
 import uuid
 from collections import defaultdict
-from collections.abc import Mapping, Set
+from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Optional, Self, cast
+from typing import Optional, Self, cast
 
 import asyncpg
 
 from inmanta import const, resources
+from inmanta.types import ResourceIdStr, ResourceType
 from inmanta.util.collections import BidirectionalManyMapping
-
-if TYPE_CHECKING:
-    from inmanta.types import ResourceIdStr, ResourceType
 
 
 class RequiresProvidesMapping(BidirectionalManyMapping["ResourceIdStr", "ResourceIdStr"]):
@@ -231,27 +229,29 @@ class ModelState:
             return None
 
         result = ModelState(version=last_processed_model_version)
-        resource_records = await data.Resource.get_resources_for_version_raw_with_persistent_state(
-            environment=environment,
-            version=last_processed_model_version,
-            projection=["resource_id", "attributes", "attribute_hash"],
-            projection_persistent=[
-                "is_orphan",
-                "is_undefined",
-                "current_intent_attribute_hash",
-                "last_deployed_attribute_hash",
-                "last_deploy_result",
-                "blocked",
-                "last_success",
-                "last_deploy",
-                "last_produced_events",
-            ],
-            project_attributes=[
-                "requires",
-                const.RESOURCE_ATTRIBUTE_SEND_EVENTS,
-                const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS,
-            ],
-            connection=connection,
+        resource_records: Sequence[Mapping[str, object]] = (
+            await data.Resource.get_resources_for_version_raw_with_persistent_state(
+                environment=environment,
+                version=last_processed_model_version,
+                projection=["resource_id", "attributes", "attribute_hash"],
+                projection_persistent=[
+                    "is_orphan",
+                    "is_undefined",
+                    "current_intent_attribute_hash",
+                    "last_deployed_attribute_hash",
+                    "last_deploy_result",
+                    "blocked",
+                    "last_success",
+                    "last_deploy",
+                    "last_produced_events",
+                ],
+                project_attributes=[
+                    "requires",
+                    const.RESOURCE_ATTRIBUTE_SEND_EVENTS,
+                    const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS,
+                ],
+                connection=connection,
+            )
         )
         if not resource_records:
             configuration_model: Optional[data.ConfigurationModel] = await data.ConfigurationModel.get_one(
@@ -261,7 +261,9 @@ class ModelState:
                 # the version does not exist at all (anymore)
                 return None
             # otherwise it's simply an empty version => continue with normal flow
-        by_resource_id = {r["resource_id"]: r for r in resource_records}
+        by_resource_id: Mapping[ResourceIdStr, Mapping[str, object]] = {
+            ResourceIdStr(cast(str, r["resource_id"])): r for r in resource_records
+        }
         for resource_id, res in by_resource_id.items():
             # Populate state
 
