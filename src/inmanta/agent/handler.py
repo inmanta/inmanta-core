@@ -52,7 +52,7 @@ T = TypeVar("T")
 TDiscovery = TypeVar("TDiscovery", bound=resources.DiscoveryResource)
 # The type of elements produced by the resource discovery process.
 TDiscovered = TypeVar("TDiscovered", bound=BaseModel)
-T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
+T_FUNC = TypeVar("T_FUNC", bound=Callable[..., object])
 TResource = TypeVar("TResource", bound=resources.Resource)
 
 
