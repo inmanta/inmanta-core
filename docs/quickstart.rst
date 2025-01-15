@@ -21,7 +21,7 @@ In this guide we start simple and manage a 3-node CLOS network with a spine and 
 Prerequisites
 _________________________
 
-**Python version 3.11**, ``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
+**Python version 3.12**, ``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
 
 1. `Install Docker <https://docs.docker.com/install/>`_.
 2. `Install Containerlab <https://containerlab.dev/install/>`_.
@@ -511,7 +511,7 @@ _______________________________
 
 The provided configuration models can be easily modified to reflect your desired configuration. Be it a change in IP addresses or adding new devices to the model. All you need to do is to create a new or modify the existing configuration model, say ``interfaces.cf`` to introduce your desired changes.
 
-For instance, let's change the IP address of interface ``ethernet-1/1.0`` to `100.0.0.1/24` in the `interfaces.cf` configuration file:
+For instance, let's change the IP address of interface ``ethernet-1/1.0`` to ``100.0.0.1/24`` in the ``interfaces.cf`` configuration file:
 
 
 .. code-block:: inmanta

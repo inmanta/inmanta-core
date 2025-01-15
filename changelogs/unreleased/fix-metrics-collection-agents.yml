@@ -1,0 +1,6 @@
+---
+description: Make sure we don't collect Agent metrics for the scheduler.
+issue-nr: 8612
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master]

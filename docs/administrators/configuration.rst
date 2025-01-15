@@ -6,10 +6,10 @@ Configuration
 .. note::
     The documentation of the configuration options themselves can be found in the :ref:`Inmanta configuration reference<config_reference>`.
 
-Inmanta server and Inmanta agent
---------------------------------
+Inmanta server
+--------------
 
-The Inmanta server and the Inmanta agent, started via systemd, will read their configuration from the following locations:
+The Inmanta server, started via systemd, and its sub-components, will read their configuration from the following locations:
 
 1. ``/etc/inmanta/inmanta.cfg``
 2. ``/etc/inmanta/inmanta.d/*.cfg``
