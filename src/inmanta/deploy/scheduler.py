@@ -565,7 +565,7 @@ class ResourceScheduler(TaskManager):
             if resource in model.undefined:
                 continue
 
-            if details.id.agent_name in paused_agents:
+            if resource_intent.id.agent_name in paused_agents:
                 # Paused agents are handled on the calling side
                 continue
 

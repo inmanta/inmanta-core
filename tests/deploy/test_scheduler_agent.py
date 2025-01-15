@@ -1490,7 +1490,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     def assert_resource_state(
         resource: ResourceIdStr,
         status: state.Compliance,
-        deployment_result: state.DeployResult,
+        deploy_result: state.DeployResult,
         blocked_status: state.Blocked,
         attribute_hash: str,
     ) -> None:
@@ -1500,12 +1500,12 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
 
         :param resource: The resource of which the above-mentioned parameters have to be asserted.
         :param status: The Compliance to assert.
-        :param deployment_result: The DeployResult to assert.
+        :param deploy_result: The DeployResult to assert.
         :param blocked_status: The Blocked to assert.
         :param attribute_hash: The hash of the attributes of the resource.
         """
         assert agent.scheduler._state.resource_state[resource].compliance is status
-        assert agent.scheduler._state.resource_state[resource].last_deploy_result is deployment_result
+        assert agent.scheduler._state.resource_state[resource].last_deploy_result is deploy_result
         assert agent.scheduler._state.resource_state[resource].blocked is blocked_status
         assert agent.scheduler._state.intent[resource].attribute_hash == attribute_hash
 
@@ -2826,15 +2826,15 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
             ),
         ]
     )
-    assert scheduler._state.resources == all_models[-1].resources
+    assert scheduler._state.intent == all_models[-1].resources
     for rid in (rid1, rid2, rid4):
-        assert scheduler._state.resource_state[rid].status is ComplianceStatus.UNDEFINED
+        assert scheduler._state.resource_state[rid].compliance is Compliance.UNDEFINED
         assert (
-            scheduler._state.resource_state[rid].deployment_result is DeploymentResult.DEPLOYED
+            scheduler._state.resource_state[rid].last_deploy_result is DeployResult.DEPLOYED
             if rid != rid4
-            else DeploymentResult.NEW
+            else DeployResult.NEW
         )
-        assert scheduler._state.resource_state[rid].blocked is BlockedStatus.YES
+        assert scheduler._state.resource_state[rid].blocked is Blocked.BLOCKED
 
     await restore_baseline_state()
 
@@ -2853,11 +2853,11 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
             ),
         ]
     )
-    assert scheduler._state.resources == all_models[-1].resources
+    assert scheduler._state.intent == all_models[-1].resources
     for rid in (rid1, rid2, rid3):
-        assert scheduler._state.resource_state[rid].status is ComplianceStatus.UNDEFINED
-        assert scheduler._state.resource_state[rid].deployment_result is DeploymentResult.DEPLOYED
-        assert scheduler._state.resource_state[rid].blocked is BlockedStatus.YES
+        assert scheduler._state.resource_state[rid].compliance is Compliance.UNDEFINED
+        assert scheduler._state.resource_state[rid].last_deploy_result is DeployResult.DEPLOYED
+        assert scheduler._state.resource_state[rid].blocked is Blocked.BLOCKED
 
     await scheduler._new_version(
         [
@@ -2886,11 +2886,11 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
             ),
         ]
     )
-    assert scheduler._state.resources == all_models[-1].resources
+    assert scheduler._state.intent == all_models[-1].resources
     for rid in (rid1, rid2, rid3):
-        assert scheduler._state.resource_state[rid].status is ComplianceStatus.HAS_UPDATE
-        assert scheduler._state.resource_state[rid].deployment_result is DeploymentResult.DEPLOYED
-        assert scheduler._state.resource_state[rid].blocked is BlockedStatus.NO
+        assert scheduler._state.resource_state[rid].compliance is Compliance.HAS_UPDATE
+        assert scheduler._state.resource_state[rid].last_deploy_result is DeployResult.DEPLOYED
+        assert scheduler._state.resource_state[rid].blocked is Blocked.NOT_BLOCKED
 
     await restore_baseline_state()
 
@@ -2916,10 +2916,10 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
             ),
         ]
     )
-    assert scheduler._state.resources == all_models[-1].resources
-    assert scheduler._state.resource_state[rid1].status is ComplianceStatus.UNDEFINED
-    assert scheduler._state.resource_state[rid1].deployment_result is DeploymentResult.DEPLOYED
-    assert scheduler._state.resource_state[rid1].blocked is BlockedStatus.YES
+    assert scheduler._state.intent == all_models[-1].resources
+    assert scheduler._state.resource_state[rid1].compliance is Compliance.UNDEFINED
+    assert scheduler._state.resource_state[rid1].last_deploy_result is DeployResult.DEPLOYED
+    assert scheduler._state.resource_state[rid1].blocked is Blocked.BLOCKED
 
     await restore_baseline_state()
 
@@ -2936,10 +2936,10 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
             ),
         ]
     )
-    assert scheduler._state.resources == all_models[-1].resources
-    assert scheduler._state.resource_state[rid1].status is ComplianceStatus.UNDEFINED
-    assert scheduler._state.resource_state[rid1].deployment_result is DeploymentResult.DEPLOYED
-    assert scheduler._state.resource_state[rid1].blocked is BlockedStatus.YES
+    assert scheduler._state.intent == all_models[-1].resources
+    assert scheduler._state.resource_state[rid1].compliance is Compliance.UNDEFINED
+    assert scheduler._state.resource_state[rid1].last_deploy_result is DeployResult.DEPLOYED
+    assert scheduler._state.resource_state[rid1].blocked is Blocked.BLOCKED
 
     await scheduler._new_version(
         [
@@ -2961,10 +2961,10 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
             ),
         ]
     )
-    assert scheduler._state.resources == all_models[-1].resources
-    assert scheduler._state.resource_state[rid1].status is ComplianceStatus.HAS_UPDATE
-    assert scheduler._state.resource_state[rid1].deployment_result is DeploymentResult.DEPLOYED
-    assert scheduler._state.resource_state[rid1].blocked is BlockedStatus.NO
+    assert scheduler._state.intent == all_models[-1].resources
+    assert scheduler._state.resource_state[rid1].compliance is Compliance.HAS_UPDATE
+    assert scheduler._state.resource_state[rid1].last_deploy_result is DeployResult.DEPLOYED
+    assert scheduler._state.resource_state[rid1].blocked is Blocked.NOT_BLOCKED
 
     await restore_baseline_state()
 
@@ -3009,11 +3009,11 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
             ),
         ]
     )
-    assert scheduler._state.resources == all_models[-1].resources
+    assert scheduler._state.intent == all_models[-1].resources
     for rid in (rid1, rid2, rid3):
-        assert scheduler._state.resource_state[rid].status is ComplianceStatus.HAS_UPDATE
-        assert scheduler._state.resource_state[rid].deployment_result is DeploymentResult.DEPLOYED
-        assert scheduler._state.resource_state[rid].blocked is BlockedStatus.NO
+        assert scheduler._state.resource_state[rid].compliance is Compliance.HAS_UPDATE
+        assert scheduler._state.resource_state[rid].last_deploy_result is DeployResult.DEPLOYED
+        assert scheduler._state.resource_state[rid].blocked is Blocked.NOT_BLOCKED
     assert scheduler._state.requires[rid1] == set()
     assert scheduler._state.requires[rid2] == {rid1}
     assert scheduler._state.requires[rid3] == {rid2}
