@@ -22,13 +22,12 @@ import pytest
 
 from inmanta import protocol
 from inmanta.data.model import BaseModel
-from inmanta.postgresproc import PostgresProc
 from inmanta.protocol import exceptions
 from inmanta.server.protocol import LocalClient, Server, ServerSlice, common
 from utils import configure
 
 
-async def test_local_client(unused_tcp_port: int, postgres_db: PostgresProc, database_name: str, async_finalizer) -> None:
+async def test_local_client(unused_tcp_port: int, postgres_db, database_name: str, async_finalizer) -> None:
     """Test the local client"""
     configure(unused_tcp_port, database_name, postgres_db.port)
 
