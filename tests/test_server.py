@@ -546,7 +546,7 @@ async def test_get_resource_on_invalid_resource_id(server, client, environment) 
     assert f"{invalid_resource_version_id} is not a valid resource version id" in result.result["message"]
 
 
-@pytest.mark.skip("Need to not autostart to work")
+@pytest.mark.parametrize("no_agent", [True])
 async def test_clear_environment(client, server, clienthelper, environment):
     """
     Test clearing out an environment

@@ -28,7 +28,6 @@ from inmanta import deploy_project
 
 
 @pytest.mark.parametrize("default_main_file", [True, False])
-@pytest.mark.skip("Broken for now")
 def test_deploy(snippetcompiler, tmpdir, postgres_db, default_main_file: bool, capsys):
     """
     Test the deploy command. The default_main_file parameter checks that the deploy command accepts
