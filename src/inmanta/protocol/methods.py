@@ -999,7 +999,8 @@ def set_state(agent: Optional[str], enabled: bool):
 )
 def trigger(tid: uuid.UUID, id: None | str, incremental_deploy: bool):
     """
-    Request an agent to reload resources
+    When the <id> parameter is set: request this specific agent to reload resources.
+    Otherwise, request ALL agents in the environment to reload resources.
 
     :param tid: The environment this agent is defined in
     :param id: The name of the agent
