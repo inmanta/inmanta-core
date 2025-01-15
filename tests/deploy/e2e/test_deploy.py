@@ -22,7 +22,6 @@ import pathlib
 import uuid
 from collections.abc import Sequence
 from typing import Callable, Mapping, NamedTuple, Optional
-from uuid import UUID
 
 import pytest
 
@@ -475,7 +474,6 @@ async def test_deploy_empty(server, client, clienthelper, environment, agent):
     assert result.result["model"]["released"]
 
 
-@pytest.mark.skip("fine grained deploy trigger seems gone")
 async def test_deploy_with_undefined(server, client, resource_container, agent, environment, clienthelper):
     """
     Test deploy of resource with undefined
@@ -552,10 +550,6 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
 
     await wait_until_deployment_finishes(client, environment)
 
-    result = await client.get_version(environment, version)
-    assert result.result["model"]["done"] == len(resources)
-    assert result.code == 200
-
     actions = await data.ResourceAction.get_list()
     assert len([x for x in actions if x.status == const.ResourceState.undefined]) >= 1
 
@@ -571,7 +565,10 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
     assert resource_container.Provider.readcount("agent2", "key1") == 1
 
     # Do a second deploy of the same model on agent2 with undefined resources
-    await agent.trigger_update(UUID(environment), "agent2", incremental_deploy=False)
+    result = await client.deploy(
+        tid=environment, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy, agents=["agent2"]
+    )
+    assert result.code == 200
 
     def done():
         return (

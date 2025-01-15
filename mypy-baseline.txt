@@ -932,8 +932,6 @@ src/inmanta/app.py:0: error: Argument "aliases" to "add_parser" of "_SubParsersA
 src/inmanta/app.py:0: error: "object" not callable  [operator]
 src/inmanta/app.py:0: error: Argument 1 to "apply_options" of "InmantaLoggerConfig" has incompatible type "Namespace"; expected "Options"  [arg-type]
 src/inmanta/app.py:0: error: Argument 1 to "apply_options" of "InmantaLoggerConfig" has incompatible type "Namespace"; expected "Options"  [arg-type]
-src/inmanta/deploy_project.py:0: error: Missing type parameters for generic type "Popen"  [type-arg]
-src/inmanta/deploy_project.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/compiler/help/explainer.py:0: error: Missing return statement  [return]
 src/inmanta/compiler/help/explainer.py:0: error: Item "None" of "Reference | None" has no attribute "pretty_print"  [union-attr]
 src/inmanta/compiler/help/explainer.py:0: error: Item "None" of "RelationAttribute | None" has no attribute "get_name"  [union-attr]

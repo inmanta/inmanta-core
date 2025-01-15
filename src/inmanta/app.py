@@ -376,25 +376,6 @@ def project(options: argparse.Namespace) -> None:
     tool.execute(options.cmd, options)
 
 
-def deploy_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
-    parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
-    parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
-
-
-@command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
-def deploy(options: argparse.Namespace) -> None:
-    module.Project.get(options.main_file)
-    from inmanta import deploy_project
-
-    run = deploy_project.Deploy(options)
-    try:
-        if not run.setup():
-            raise Exception("Failed to setup an embedded Inmanta orchestrator.")
-        run.run()
-    finally:
-        run.stop()
-
-
 def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     """
     Configure the compiler of the export function
