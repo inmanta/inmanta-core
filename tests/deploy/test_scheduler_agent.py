@@ -226,9 +226,7 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         pass
 
 
-state_translation_table: dict[
-    const.ResourceState, tuple[state.DeployResult, state.Blocked, state.Compliance]
-] = {
+state_translation_table: dict[const.ResourceState, tuple[state.DeployResult, state.Blocked, state.Compliance]] = {
     # A table to translate the old states into the new states
     # None means don't care, mostly used for values we can't derive from the old state
     const.ResourceState.unavailable: (None, state.Blocked.NOT_BLOCKED, state.Compliance.NON_COMPLIANT),
@@ -1576,8 +1574,8 @@ async def test_skipped_for_dependencies_with_normal_event_propagation_disabled(a
 
 async def test_skipped_for_dependencies_recover_with_multiple_dependencies(agent: TestAgent, make_resource_minimal):
     """
-    Verify that a resource is lifted out of the TEMPORARILY_BLOCKED state as soon as there are no known bad dependencies anymore.
-    This in contrast to an faulty implementation where it would only be lifted when all dependencies are known good.
+    Verify that a resource is lifted out of the TEMPORARILY_BLOCKED state as soon as there are no known bad dependencies
+    anymore. This in contrast to an faulty implementation where it would only be lifted when all dependencies are known good.
     """
 
     rid1 = ResourceIdStr("test::Resource[agent1,name=1]")

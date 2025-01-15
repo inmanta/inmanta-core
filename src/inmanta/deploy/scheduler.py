@@ -29,7 +29,7 @@ from abc import abstractmethod
 from collections.abc import Collection, Mapping, Sequence, Set
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Self, Tuple
+from typing import Optional, Self
 
 import asyncpg
 
@@ -40,15 +40,7 @@ from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import Discrepancy, SchedulerStatusReport
 from inmanta.deploy import timers, work
 from inmanta.deploy.persistence import ToDbUpdateManager
-from inmanta.deploy.state import (
-    AgentStatus,
-    Blocked,
-    Compliance,
-    DeployResult,
-    ModelState,
-    ResourceIntent,
-    ResourceState,
-)
+from inmanta.deploy.state import AgentStatus, Blocked, Compliance, DeployResult, ModelState, ResourceIntent, ResourceState
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
@@ -922,7 +914,8 @@ class ResourceScheduler(TaskManager):
                 verify_blocked=added_requires.keys(),
                 verify_unblocked=became_defined | dropped_requires.keys(),
             )
-            # update TEMPORARILY_BLOCKED (skipped-for-dependencies) state for resources with a dependency for which state was reset
+            # update TEMPORARILY_BLOCKED (skipped-for-dependencies) state
+            # for resources with a dependency for which state was reset
             resources_with_reset_requires: Set[ResourceIdStr] = set(
                 itertools.chain.from_iterable(
                     self._state.requires.provides_view().get(resource, set()) for resource in force_new
@@ -1166,7 +1159,10 @@ class ResourceScheduler(TaskManager):
             # except that we don't enforce the hash diff.
             # We emit a warning if we observe this, but that still doesn't prevent it.
             # While it should not happen it can
-            if resource_intent.attribute_hash != deploy_intent.intent.attribute_hash or state.compliance is Compliance.UNDEFINED:
+            if (
+                resource_intent.attribute_hash != deploy_intent.intent.attribute_hash
+                or state.compliance is Compliance.UNDEFINED
+            ):
                 # We are stale but still the last deploy
                 # We can update the last_deploy_result (which is about last deploy)
                 # We can't update compliance (which is about active state only)
@@ -1182,9 +1178,7 @@ class ResourceScheduler(TaskManager):
                 return state.copy()
 
             # We are not stale
-            state.compliance = (
-                Compliance.COMPLIANT if deploy_result is DeployResult.DEPLOYED else Compliance.NON_COMPLIANT
-            )
+            state.compliance = Compliance.COMPLIANT if deploy_result is DeployResult.DEPLOYED else Compliance.NON_COMPLIANT
 
             # first update state, then send out events
             self._deploying_latest.remove(resource)
@@ -1217,7 +1211,9 @@ class ResourceScheduler(TaskManager):
                     # write to resource action (and scheduler) log
                     log_line.write_to_logger_for_resource(
                         agent=deploy_intent.intent.id.agent_name,
-                        resource_version_string=deploy_intent.intent.id.copy(version=deploy_intent.model_version).resource_version_str(),
+                        resource_version_string=deploy_intent.intent.id.copy(
+                            version=deploy_intent.model_version
+                        ).resource_version_str(),
                     )
                     # write to database (via send_deploy_done())
                     result.messages.append(log_line)
@@ -1273,7 +1269,9 @@ class ResourceScheduler(TaskManager):
             recovery_listeners = set()
         else:
             recovery_listeners = {
-                dependent for dependent in provides if self._state.resource_state[dependent].blocked is Blocked.TEMPORARILY_BLOCKED
+                dependent
+                for dependent in provides
+                if self._state.resource_state[dependent].blocked is Blocked.TEMPORARILY_BLOCKED
             }
             # These resources might be able to progress now -> unblock them in addition to sending the event
             self._state.dirty.update(recovery_listeners)

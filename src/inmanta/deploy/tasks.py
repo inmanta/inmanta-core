@@ -64,9 +64,7 @@ class Task(abc.ABC):
     def delete_with_resource(self) -> bool:
         return True
 
-    def get_executor_resource_details(
-        self, version: int, resource_intent: "state.ResourceIntent"
-    ) -> executor.ResourceDetails:
+    def get_executor_resource_details(self, version: int, resource_intent: "state.ResourceIntent") -> executor.ResourceDetails:
         return executor.ResourceDetails(
             id=self.resource,
             version=version,

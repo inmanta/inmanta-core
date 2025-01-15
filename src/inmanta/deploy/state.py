@@ -365,9 +365,7 @@ class ModelState:
 
         resource: ResourceIdStr = resource_intent.resource_id
         compliance_status: Compliance = (
-            Compliance.COMPLIANT
-            if known_compliant
-            else Compliance.UNDEFINED if undefined else Compliance.HAS_UPDATE
+            Compliance.COMPLIANT if known_compliant else Compliance.UNDEFINED if undefined else Compliance.HAS_UPDATE
         )
         # Latest requires are not set yet, transitve blocked status are handled in update_transitive_state
         blocked: Blocked = Blocked.BLOCKED if undefined else Blocked.NOT_BLOCKED

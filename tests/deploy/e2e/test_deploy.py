@@ -236,7 +236,11 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
 
     deployed_resource_expected_status = {"blocked": "not_blocked", "last_deploy_result": "deployed", "compliance": "compliant"}
     failed_resource_expected_status = {"blocked": "not_blocked", "last_deploy_result": "failed", "compliance": "non_compliant"}
-    skipped_resource_expected_status = {"blocked": "temporarily_blocked", "last_deploy_result": "skipped", "compliance": "non_compliant"}
+    skipped_resource_expected_status = {
+        "blocked": "temporarily_blocked",
+        "last_deploy_result": "skipped",
+        "compliance": "non_compliant",
+    }
 
     class ExpectedResourceStatus(NamedTuple):
         rid: str
@@ -1016,9 +1020,7 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
         is_orphan=False,
         last_deploy_result=DeployResult.SKIPPED if dep_state.name in {"skip", "fail"} else DeployResult.DEPLOYED,
         blocked=Blocked.TEMPORARILY_BLOCKED.db_value() if dep_state.name in {"skip", "fail"} else Blocked.NOT_BLOCKED,
-        expected_compliance=(
-            Compliance.NON_COMPLIANT if dep_state.name in {"skip", "fail"} else Compliance.COMPLIANT
-        ),
+        expected_compliance=(Compliance.NON_COMPLIANT if dep_state.name in {"skip", "fail"} else Compliance.COMPLIANT),
     )
 
 
