@@ -200,7 +200,7 @@ class TaskManager(abc.ABC):
         """
 
     @abstractmethod
-    async def deploy_done(self, deploy_intent: DeployIntent, result: executor.DeployReport) -> None:
+    async def deploy_done(self, deploy_intent: DeployIntent, report: executor.DeployReport) -> None:
         """
         Register the end of deployment for the given resource: update the resource state based on the deployment result
         and inform its dependencies that deployment is finished. Depending on how fresh the intent is (compared to what is
@@ -209,17 +209,17 @@ class TaskManager(abc.ABC):
         Acquires appropriate locks
 
         :param deploy_intent: The resource's deploy intent as returned by deploy_start().
-        :param result: The DeployReport object describing the result of the deployment.
+        :param report: The DeployReport object describing the result of the deployment.
         """
 
     @abstractmethod
-    async def dryrun_done(self, result: executor.DryrunReport) -> None:
+    async def dryrun_done(self, report: executor.DryrunReport) -> None:
         """
         Report the result of a dry-run.
         """
 
     @abstractmethod
-    async def fact_refresh_done(self, result: executor.GetFactReport) -> None:
+    async def fact_refresh_done(self, report: executor.GetFactReport) -> None:
         """
         Report the result of a fact refresh.
         """
@@ -1118,12 +1118,12 @@ class ResourceScheduler(TaskManager):
             )
             return deploy_intent
 
-    async def deploy_done(self, deploy_intent: DeployIntent, result: executor.DeployReport) -> None:
+    async def deploy_done(self, deploy_intent: DeployIntent, report: executor.DeployReport) -> None:
         finished = datetime.datetime.now().astimezone()
         try:
             state: Optional[ResourceState]
             try:
-                state = await self._update_scheduler_state_for_finished_deploy(deploy_intent, result, finished)
+                state = await self._update_scheduler_state_for_finished_deploy(deploy_intent, report, finished)
             except StaleResource:
                 # The resource is no longer managed (or in rare cases it has shortly become unmanaged sometime
                 # between this version and the currently managed version, either way, the deploy that finished
@@ -1136,7 +1136,7 @@ class ResourceScheduler(TaskManager):
             # Write deployment result to the database.
             await self.state_update_manager.send_deploy_done(
                 attribute_hash=deploy_intent.intent.attribute_hash,
-                result=result,
+                result=report,
                 state=state,
                 started=deploy_intent.deploy_start,
                 finished=finished,
@@ -1145,16 +1145,16 @@ class ResourceScheduler(TaskManager):
             # Always do this, even if the DB is broken
             async with self._scheduler_lock:
                 # report to the scheduled work that we're done
-                self._work.finished_deploy(result.resource_id)
+                self._work.finished_deploy(report.resource_id)
                 state = self._state.resource_state.get(deploy_intent.intent.resource_id)
                 if state is not None:
                     self._timer_manager.update_timer(deploy_intent.intent.resource_id, state=state)
 
-    async def dryrun_done(self, result: executor.DryrunReport) -> None:
-        await self.state_update_manager.dryrun_update(env=self.environment, dryrun_result=result)
+    async def dryrun_done(self, report: executor.DryrunReport) -> None:
+        await self.state_update_manager.dryrun_update(env=self.environment, dryrun_result=report)
 
-    async def fact_refresh_done(self, result: executor.GetFactReport) -> None:
-        await self.state_update_manager.set_parameters(fact_result=result)
+    async def fact_refresh_done(self, report: executor.GetFactReport) -> None:
+        await self.state_update_manager.set_parameters(fact_result=report)
 
     async def _update_scheduler_state_for_finished_deploy(
         self, deploy_intent: DeployIntent, result: executor.DeployReport, finished: datetime.datetime

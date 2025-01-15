@@ -136,7 +136,7 @@ class Deploy(Task):
             # From this point on, we HAVE to call deploy_done to make sure we are not stuck in deploying
             # We collect state here to report back in the finally block.
             # This try-finally block ensures we report at the end of the task.
-            deploy_result: DeployReport
+            deploy_report: DeployReport
             try:
                 # Dependencies are always set when calling deploy_start
                 assert deploy_intent.dependencies is not None
@@ -168,13 +168,13 @@ class Deploy(Task):
                     )
                     # Not attached to ctx, needs to be flushed to logger explicitly
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
-                    deploy_result = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
+                    deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
                     return
 
                 assert reason is not None  # Should always be set for deploy
                 # Deploy
                 try:
-                    deploy_result = await my_executor.execute(
+                    deploy_report = await my_executor.execute(
                         action_id, gid, executor_resource_details, reason, deploy_intent.dependencies
                     )
 
@@ -194,12 +194,12 @@ class Deploy(Task):
                     )
                     # Not attached to ctx, needs to be flushed to logger explicitly
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
-                    deploy_result = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
+                    deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
 
             finally:
                 # We signaled start, so we signal end
                 try:
-                    await task_manager.deploy_done(deploy_intent, deploy_result)
+                    await task_manager.deploy_done(deploy_intent, deploy_report)
                 except Exception:
                     LOGGER.error(
                         "Failed to report the end of the deployment to the server for %s",
@@ -233,7 +233,7 @@ class DryRun(Task):
                 executor_resource_details.rvid,
                 exc_info=True,
             )
-            dryrun_result = executor.DryrunReport(
+            dryrun_report = executor.DryrunReport(
                 rvid=executor_resource_details.rvid,
                 dryrun_id=self.dry_run_id,
                 changes={
@@ -247,14 +247,14 @@ class DryRun(Task):
             )
         else:
             try:
-                dryrun_result = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
+                dryrun_report = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
             except Exception:
                 logger_for_agent(agent).error(
                     "Skipping dryrun for resource %s because it is in undeployable state",
                     executor_resource_details.rvid,
                     exc_info=True,
                 )
-                dryrun_result = executor.DryrunReport(
+                dryrun_report = executor.DryrunReport(
                     rvid=executor_resource_details.rvid,
                     dryrun_id=self.dry_run_id,
                     changes={"handler": AttributeStateChange(current="FAILED", desired="Resource is in an undeployable state")},
@@ -262,7 +262,7 @@ class DryRun(Task):
                     finished=datetime.datetime.now().astimezone(),
                     messages=[],
                 )
-        await task_manager.dryrun_done(dryrun_result)
+        await task_manager.dryrun_done(dryrun_report)
 
 
 class RefreshFact(Task):
@@ -287,5 +287,5 @@ class RefreshFact(Task):
             )
             return
 
-        fact_result = await my_executor.get_facts(executor_resource_details)
-        await task_manager.fact_refresh_done(fact_result)
+        get_fact_report = await my_executor.get_facts(executor_resource_details)
+        await task_manager.fact_refresh_done(get_fact_report)
