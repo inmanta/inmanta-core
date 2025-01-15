@@ -291,12 +291,6 @@ class Options(Namespace):
     keep_logger_names: Optional[bool] = None
     logging_config: Optional[str] = None
 
-    def user_defined_values(self) -> dict[str, bool]:
-        """
-        Returns a dictionary with the fields (excluding "verbose") that were set by the user
-        """
-        return {key: value for key, value in self.__dict__.items() if key != "verbose" and value is not None}
-
 
 class LoggingConfigBuilderExtension(abc.ABC):
 
@@ -809,6 +803,14 @@ class InmantaLoggerConfig:
         Used to select which config file option to use (logging.component)
         :param context: context variables to use if the config file is a template
         """
+
+        def user_defined_options() -> dict[str, bool]:
+            """
+            Returns a dictionary with the options (excluding "verbose" and "logging_config") that were set by the user
+            """
+            ignore_keys = ["verbose", "logging_config"]
+            return {key: value for key, value in options.__dict__.items() if key not in ignore_keys and value is not None}
+
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
         if context is None:
@@ -816,13 +818,6 @@ class InmantaLoggerConfig:
 
         try:
             self.logging_config_source = self._get_logging_config_source(options, component)
-            ignored_options = options.user_defined_values()
-            if ignored_options:
-                LOGGER.warning(
-                    "%s options were ignored. Using logging config from %s",
-                    ignored_options,
-                    self.logging_config_source.source(),
-                )
         except NoLoggingConfigFound:
             # No logging config was defined by the user. Compose the logging config from the old CLI options.
             self._apply_logging_config_from_options(options, component, context)
@@ -833,6 +828,13 @@ class InmantaLoggerConfig:
             # Take into account the verbosity flag on the CLI.
             if options.verbose != 0:
                 self.force_cli(convert_inmanta_log_level(str(options.verbose), cli=True))
+            ignored_options = user_defined_options()
+            if ignored_options:
+                LOGGER.warning(
+                    "%s options were ignored. Using logging config from %s",
+                    ignored_options,
+                    self.logging_config_source.source(),
+                )
 
         self._options_applied = options
         self._component = component
