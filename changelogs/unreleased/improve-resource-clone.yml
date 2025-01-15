@@ -1,0 +1,4 @@
+description: Improve cloning of resource
+change-type: patch
+destination-branches: [master]
+
