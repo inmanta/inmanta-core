@@ -1,5 +1,5 @@
 """
-    Copyright 2024 Inmanta
+    Copyright 2025 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -16,22 +16,4 @@
     Contact: code@inmanta.com
 """
 
-import os
-import re
-from collections import abc
-
-import asyncpg
-import pytest
-
-file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
-part = file_name_regex.match(__name__)[1]
-
-
-@pytest.mark.parametrize("no_agent", [True])
-@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
-async def test_add_new_resource_status_column(
-    postgresql_client: asyncpg.Connection,
-    migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
-) -> None:
-    # only test that the migration script succeeds. Actual migration is covered by migration test for v202411140
-    await migrate_db_from()
+# Actual migration is covered by migration test for v202411140
