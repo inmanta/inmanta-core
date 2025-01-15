@@ -562,7 +562,7 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
 
     # Do a second deploy of the same model on agent2 with undefined resources
     result = await client.deploy(
-        tid=environment, agent_trigger_method=const.AgentTriggerMethod.push_incremental_deploy, agents=["agent2"]
+        tid=environment, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy, agents=["agent2"]
     )
     assert result.code == 200
 
