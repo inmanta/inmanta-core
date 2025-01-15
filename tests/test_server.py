@@ -843,12 +843,11 @@ async def test_bootloader_connect_running_db(server_config, postgres_db, caplog,
     log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
 
 
-@pytest.mark.skip("Broken")
-async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, agent):
+async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, null_agent):
     """
     Test querying resource actions via the API
     """
-    aclient = agent._client
+    aclient = null_agent._client
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)

@@ -1117,6 +1117,7 @@ src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible types in assignment (expression has type "set[str | None]", variable has type "set[str]")  [assignment]
 src/inmanta/server/services/orchestrationservice.py:0: error: Incompatible return value type (got "ReturnValueWithMeta[Sequence[DesiredStateVersion]]", expected "ReturnValue[list[DesiredStateVersion]]")  [return-value]
 src/inmanta/server/agentmanager.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
+src/inmanta/server/agentmanager.py:0: error: Item "None" of "Sequence[Agent] | None" has no attribute "__iter__" (not iterable)  [union-attr]
 src/inmanta/server/agentmanager.py:0: error: Value of type variable "AnyStr" of "abspath" cannot be "str | None"  [type-var]
 src/inmanta/server/services/paramservice.py:0: error: Unsupported operand types for + ("None" and "timedelta")  [operator]
 src/inmanta/server/services/paramservice.py:0: note: Left operand is of type "datetime | None"

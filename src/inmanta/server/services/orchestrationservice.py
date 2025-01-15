@@ -809,9 +809,11 @@ class OrchestrationService(protocol.ServerSlice):
 
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
-            await self.agentmanager_service.ensure_agent_registered(
-                env, nodename=const.AGENT_SCHEDULER_ID, connection=connection
-            )
+            all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
+            all_agents.add(const.AGENT_SCHEDULER_ID)
+
+            for agent in all_agents:
+                await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.

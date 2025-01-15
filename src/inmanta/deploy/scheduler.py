@@ -565,10 +565,18 @@ class ResourceScheduler(TaskManager):
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         if not self._running:
             return
+
+        paused_agents = await self.all_paused_agents()
+
         model: ModelVersion = await self._get_single_model_version_from_db(version=version)
         for resource, details in model.resources.items():
             if resource in model.undefined:
                 continue
+
+            if details.id.agent_name in paused_agents:
+                # Paused agents are handled on the calling side
+                continue
+
             self._work.agent_queues.queue_put_nowait(
                 DryRun(
                     resource=details.resource_id,
@@ -1040,6 +1048,9 @@ class ResourceScheduler(TaskManager):
         await data.Agent.insert_if_not_exist(environment=self.environment, endpoint=endpoint)
         current_agent = await data.Agent.get(env=self.environment, endpoint=endpoint)
         return not current_agent.paused
+
+    async def all_paused_agents(self) -> set[str]:
+        return {agent.name for agent in await data.Agent.get_list(environment=self.environment, paused=True)}
 
     async def refresh_agent_state_from_db(self, name: str) -> None:
         """
