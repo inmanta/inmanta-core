@@ -796,8 +796,6 @@ class InmantaLoggerConfig:
             """
             Returns a string with the options (excluding "--verbose" and "--logging-config") that were set by the user
             """
-            ignore_keys = ["verbose", "logging_config"]
-
             option_to_cli = {
                 "log_file": "--log-file",
                 "log_file_level": "--log-file-level",
@@ -805,9 +803,7 @@ class InmantaLoggerConfig:
                 "keep_logger_names": "--keep-logger-names",
             }
             ignored_options = [
-                f"{option_to_cli[key]} {value}"
-                for key, value in options.__dict__.items()
-                if key not in ignore_keys and key in options
+                f"{value} {options.__getattribute__(key)}" for key, value in option_to_cli.items() if key in options
             ]
             if len(ignored_options) != 0:
                 return ", ".join(ignored_options)

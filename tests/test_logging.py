@@ -270,11 +270,11 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
     write_logging_config_file(path=path_logging_config_file1, formatter="GGG %(message)s")
     write_logging_config_file(path=path_logging_config_file2, formatter="HHH %(message)s")
     write_logging_config_file(path=path_logging_config_file3, formatter="III %(message)s")
-    options3["log_file"] = old_log_file
+    options4 = {"log_file": old_log_file, **options3}
     with monkeypatch.context() as m:
         m.setenv("INMANTA_CONFIG_LOGGING_CONFIG", path_logging_config_file1)
         setup_logging_config(
-            cli_options=Options(logging_config=path_logging_config_file2, **options3),
+            cli_options=Options(logging_config=path_logging_config_file2, **options4),
             file_option_value=path_logging_config_file3,
         )
         logger.info("test")
