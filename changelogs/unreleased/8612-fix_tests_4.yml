@@ -1,0 +1,4 @@
+description: fix test_agent_stop_deploying_when_paused
+issue-nr: 8612
+change-type: patch
+destination-branches: [master]
