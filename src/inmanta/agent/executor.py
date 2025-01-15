@@ -73,6 +73,7 @@ class DryrunReport:
     started: datetime.datetime
     finished: datetime.datetime
     messages: list[LogLine]
+    resource_state: Optional[const.ResourceState] = None
 
 
 class ResourceDetails:
@@ -480,6 +481,7 @@ class GetFactReport:
     parameters: list[dict[str, Any]]
     messages: list[LogLine]
     error_msg: Optional[str] = None
+    resource_state: Optional[const.ResourceState] = None
 
 
 @dataclass

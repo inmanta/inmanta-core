@@ -105,7 +105,6 @@ async def setup_environment_with_agent(client, project_name):
     env = await data.Environment.get_by_id(uuid.UUID(env_id))
 
     await env.set(data.AUTO_DEPLOY, True)
-    await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
     await env.set(data.AUTOSTART_ON_START, True)
 
     clienthelper = ClientHelper(client, env_id)
@@ -129,12 +128,11 @@ async def setup_environment_with_agent(client, project_name):
     assert result.code == 200
 
     # check deploy
-    await wait_until_deployment_finishes(client, env_id)
+    await clienthelper.wait_for_deployed()
     result = await client.get_version(env_id, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
-    assert result.result["model"]["result"] == "failed"
 
     result = await client.list_agents(tid=env_id)
     assert result.code == 200
@@ -149,7 +147,7 @@ async def setup_environment_with_agent(client, project_name):
     return project_id, env_id
 
 
-def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> list[psutil.Process]:
+def _get_inmanta_scheduler_child_processes(parent_process: psutil.Process) -> list[psutil.Process]:
     def try_get_cmd(p: psutil.Process) -> str:
         try:
             return p.cmdline()
@@ -158,11 +156,13 @@ def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> list[p
             """If a child process is gone, p.cmdline() raises an exception"""
             return ""
 
-    return [p for p in parent_process.children(recursive=True) if "inmanta.app" in try_get_cmd(p) and "agent" in try_get_cmd(p)]
+    return [
+        p for p in parent_process.children(recursive=True) if "inmanta.app" in try_get_cmd(p) and "scheduler" in try_get_cmd(p)
+    ]
 
 
 def ps_diff_inmanta_agent_processes(original: list[psutil.Process], current_process: psutil.Process, diff: int = 0) -> None:
-    current = _get_inmanta_agent_child_processes(current_process)
+    current = _get_inmanta_scheduler_child_processes(current_process)
 
     def is_terminated(proc):
         try:
@@ -241,8 +241,7 @@ async def test_auto_deploy_no_splay(server, client, clienthelper: ClientHelper, 
         result = await client.list_agents(tid=environment)
         await asyncio.sleep(0.1)
 
-    assert len(result.result["agents"]) == 2
-    assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+    assert len(result.result["agents"]) == 1
 
 
 async def test_deploy_no_code(resource_container, client, clienthelper, environment):
@@ -293,11 +292,9 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     await retry_limited(log_any, 1)
 
 
-@pytest.mark.skip("Test when agent pause PR is in with proper helper functions")
-async def test_stop_autostarted_agents_on_environment_removal(server, client, resource_container):
+async def test_stop_autostarted_agents_on_environment_removal(server, client):
     current_process = psutil.Process()
-    inmanta_agent_child_processes: list[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
-    resource_container.Provider.reset()
+    inmanta_agent_child_processes: list[psutil.Process] = _get_inmanta_scheduler_child_processes(current_process)
     (project_id, env_id) = await setup_environment_with_agent(client, "proj")
 
     # One autostarted agent should running as a subprocess
@@ -320,7 +317,6 @@ async def test_autostart_clear_agent_venv_on_delete(
     resource_container.Provider.reset()
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTO_DEPLOY, True)
-    await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
     await env.set(data.AUTOSTART_ON_START, True)
 
     version = await clienthelper.get_version()

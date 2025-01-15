@@ -410,7 +410,7 @@ async def get_done_count(
 
 
 async def wait_until_deployment_finishes(
-    client: Client, environment: str, version: int = -1, timeout: int = 10, wait_for_n: int | None = None
+    client: Client, environment: str, *, version: int = -1, timeout: int = 10, wait_for_n: int | None = None
 ) -> None:
     async def done() -> bool:
 
@@ -516,7 +516,7 @@ class ClientHelper:
         return lookup[version]
 
     async def wait_for_deployed(self, version: int = -1, timeout=10) -> None:
-        await wait_until_deployment_finishes(self.client, str(self.environment), version, timeout)
+        await wait_until_deployment_finishes(self.client, str(self.environment), version=version, timeout=timeout)
 
     async def wait_full_success(self) -> None:
         await wait_full_success(self.client, self.environment)
@@ -927,7 +927,7 @@ async def _deploy_resources(client, environment, resources, version: int, push, 
     result = await client.release_version(environment, version, push, agent_trigger_method)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment, version=version)
 
     result = await client.get_version(environment, version)
     assert result.code == 200

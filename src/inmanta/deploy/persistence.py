@@ -307,7 +307,7 @@ class ToDbUpdateManager(StateUpdateManager):
             dryrun_result.rvid,
             const.ResourceAction.dryrun,
             uuid.uuid4(),
-            const.ResourceState.dry,
+            dryrun_result.resource_state or const.ResourceState.dry,
             dryrun_result.started,
             dryrun_result.finished,
             dryrun_result.messages,
@@ -340,7 +340,9 @@ class ToDbUpdateManager(StateUpdateManager):
         await resource_action.insert()
 
     async def set_parameters(self, fact_result: executor.GetFactReport) -> None:
-        await self.client.set_parameters(tid=self.environment, parameters=fact_result.parameters)
+        # TODO: fact_result -> fact_report
+        if fact_result.success:
+            await self.client.set_parameters(tid=self.environment, parameters=fact_result.parameters)
         await self._write_resource_action(
             env=self.environment,
             resource=fact_result.resource_id,
@@ -349,7 +351,7 @@ class ToDbUpdateManager(StateUpdateManager):
             started=fact_result.started,
             finished=fact_result.finished,
             messages=fact_result.messages,
-            status=None,
+            status=fact_result.resource_state,
         )
 
     async def update_resource_intent(

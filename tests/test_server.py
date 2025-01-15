@@ -715,8 +715,6 @@ async def test_invalid_sid(server, client, environment):
 async def test_get_param(server, client, environment, tz_aware_timestamp: bool):
     config.Config.set("server", "tz-aware-timestamps", str(tz_aware_timestamp).lower())
 
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
-    assert result.code == 200
     metadata = {"key1": "val1", "key2": "val2"}
 
     await client.set_param(environment, "param", ParameterSource.user, "val", "", metadata, False)
@@ -845,12 +843,11 @@ async def test_bootloader_connect_running_db(server_config, postgres_db, caplog,
     log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
 
 
-@pytest.mark.skip("Broken")
-async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, agent):
+async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, null_agent):
     """
     Test querying resource actions via the API
     """
-    aclient = agent._client
+    aclient = null_agent._client
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)

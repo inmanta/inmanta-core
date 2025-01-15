@@ -203,9 +203,7 @@ host=localhost
 
         env_id: str = result.result["environment"]["id"]
 
-        self._check_result(self._client.set_setting(env_id, "autostart_agent_deploy_splay_time", 0))
         self._check_result(self._client.set_setting(env_id, "autostart_agent_deploy_interval", 0))
-        self._check_result(self._client.set_setting(env_id, "autostart_agent_repair_splay_time", 0))
         self._check_result(self._client.set_setting(env_id, "autostart_agent_repair_interval", 600))
 
         return env_id

@@ -334,6 +334,7 @@ class ModelState:
         self.requires.clear()
         self.resource_state.clear()
         self.types_per_agent.clear()
+        self.dirty = set()
 
     def update_resource(
         self,

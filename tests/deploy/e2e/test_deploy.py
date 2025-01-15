@@ -710,10 +710,7 @@ async def test_unknown_parameters(
         log_contains(caplog, "inmanta.server.services.paramservice", logging.DEBUG, msg)
 
     else:
-        msg = (
-            "Not Requesting value for unknown parameter length of resource test::Resource[agent1,key=key] "
-            f"in env {environment} as the env is halted"
-        )
+        msg = "Requesting value for 0 unknowns"
         log_contains(caplog, "inmanta.server.services.paramservice", logging.DEBUG, msg)
 
 
@@ -1152,7 +1149,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         result = await client.get_version(env_id, version)
         assert result.code == 200
 
-        await wait_until_deployment_finishes(client, env_id, version)
+        await wait_until_deployment_finishes(client, env_id, version=version)
 
     resource_container.Provider.set_fail("agent1", "key2", 1)
     version = await clienthelper.get_version()
