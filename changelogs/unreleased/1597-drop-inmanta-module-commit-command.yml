@@ -1,6 +1,6 @@
 description: >
-  Remove deprecated ``inmanta module commit`` command.
-  Please use the ``inmanta module release`` command instead to perform
+  Remove deprecated `inmanta module commit` command.
+  Please use the `inmanta module release` command instead to perform
   a release for a module.
 issue-nr: 1597
 issue-repo: irt
