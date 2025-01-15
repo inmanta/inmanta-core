@@ -561,7 +561,9 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
     assert resource_container.Provider.readcount("agent2", "key1") == 1
 
     # Do a second deploy of the same model on agent2 with undefined resources
-    result = await client.deploy(tid=environment, agent_trigger_method=const.AgentTriggerMethod.push_incremental_deploy)
+    result = await client.deploy(
+        tid=environment, agent_trigger_method=const.AgentTriggerMethod.push_incremental_deploy, agents=["agent2"]
+    )
     assert result.code == 200
 
     def done():
