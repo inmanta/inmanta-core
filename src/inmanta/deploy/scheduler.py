@@ -527,24 +527,44 @@ class ResourceScheduler(TaskManager):
             connection=connection,
         )
 
-    async def deploy(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_DEPLOY) -> None:
+    async def deploy(
+        self,
+        *,
+        reason: str,
+        priority: TaskPriority = TaskPriority.USER_DEPLOY,
+        agent: Optional[str] = None,
+    ) -> None:
         """
         Trigger a deploy
+
+        :param agent: If given, deploy resources only for this agent. Otherwise deploy for all agents.
         """
         if not self._running:
             return
         async with self._scheduler_lock:
-            self._timer_manager.stop_timers(self._state.dirty)
+            to_deploy: Set[ResourceIdStr] = (
+                self._state.dirty if agent is None
+                else self._state.dirty & self._state.resources_by_agent.get(agent, set())
+            )
+            self._timer_manager.stop_timers(to_deploy)
             self._work.deploy_with_context(
-                self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
+                to_deploy, reason=reason, priority=priority, deploying=self._deploying_latest
             )
 
-    async def repair(self, *, reason: str, priority: TaskPriority = TaskPriority.USER_REPAIR) -> None:
+    async def repair(
+        self,
+        *,
+        reason: str,
+        priority: TaskPriority = TaskPriority.USER_REPAIR,
+        agent: Optional[str] = None,
+    ) -> None:
         """
         Trigger a repair, i.e. mark all unblocked resources as dirty, then trigger a deploy.
+
+        :param agent: If given, repair resources only for this agent. Otherwise repair for all agents.
         """
 
-        def _should_deploy(resource: ResourceIdStr) -> bool:
+        def should_deploy_resource(resource: ResourceIdStr) -> bool:
             if (resource_state := self._state.resource_state.get(resource)) is not None:
                 # For now, we repair even resources marked as TRANSIENT, just in case our assumptions are wrong
                 # We will relax this once we have more confidence in the correct tracking of the state (#8580)
@@ -556,10 +576,15 @@ class ResourceScheduler(TaskManager):
         if not self._running:
             return
         async with self._scheduler_lock:
-            self._state.dirty.update(resource for resource in self._state.resources.keys() if _should_deploy(resource))
-            self._timer_manager.stop_timers(self._state.dirty)
+            in_scope: Set[ResourceIdStr] = (
+                self._state.resources.keys() if agent is None else self._state.resources_by_agent.get(agent, set())
+            )
+
+            to_deploy: Set[ResourceIdStr] = {resource for resource in in_scope if should_deploy_resource(resource)}
+            self._state.dirty.update(to_deploy)
+            self._timer_manager.stop_timers(to_deploy)
             self._work.deploy_with_context(
-                self._state.dirty, reason=reason, priority=priority, deploying=self._deploying_latest
+                to_deploy, reason=reason, priority=priority, deploying=self._deploying_latest
             )
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:

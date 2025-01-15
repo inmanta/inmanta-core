@@ -203,6 +203,10 @@ class ModelState:
     resource_state: dict["ResourceIdStr", ResourceState] = dataclasses.field(default_factory=dict)
     # resources with a known or assumed difference between intent and actual state
     dirty: set["ResourceIdStr"] = dataclasses.field(default_factory=set)
+    # group resources by agent to allow efficient triggering of a deploy for a single agent
+    resources_by_agent: dict[str, set["ResourceIdStr"]] = dataclasses.field(
+        default_factory=lambda: defaultdict(set)
+    )
     # types per agent keeps track of which resource types live on which agent by doing a reference count
     # the dict is agent_name -> resource_type -> resource_count
     types_per_agent: dict[str, dict["ResourceType", int]] = dataclasses.field(
@@ -302,6 +306,7 @@ class ModelState:
 
             # Populate types_per_agent
             result.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
+            result.resources_by_agent[details.id.agent_name].add(resource_id)
 
             # Populate requires
             requires = {resources.Id.parse_id(req).resource_str() for req in res["requires"]}
@@ -333,7 +338,7 @@ class ModelState:
         self.resources.clear()
         self.requires.clear()
         self.resource_state.clear()
-        self.types_per_agent.clear()
+        self.resources_by_agent.clear()
         self.dirty = set()
 
     def update_resource(
@@ -389,6 +394,7 @@ class ModelState:
             if resource not in self.requires:
                 self.requires[resource] = set()
             self.types_per_agent[details.id.agent_name][details.id.entity_type] += 1
+            self.resources_by_agent[details.id.agent_name].add(resource)
         else:
             # we already know the resource => update relevant fields
             self.resource_state[resource].status = compliance_status
@@ -441,6 +447,9 @@ class ModelState:
         self.types_per_agent[details.id.agent_name][details.id.entity_type] -= 1
         if self.types_per_agent[details.id.agent_name][details.id.entity_type] == 0:
             del self.types_per_agent[details.id.agent_name][details.id.entity_type]
+        self.resources_by_agent[details.id.agent_name].discard(resource)
+        if not self.resources_by_agent[details.id.agent_name]:
+            del self.resources_by_agent[details.id.agent_name]
         self.dirty.discard(resource)
 
     def should_skip_for_dependencies(self, resource: "ResourceIdStr") -> bool:
