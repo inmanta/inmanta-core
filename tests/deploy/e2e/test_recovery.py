@@ -27,7 +27,7 @@ import pytest
 import utils
 from inmanta import config, const, data
 from inmanta.agent.agent_new import Agent
-from inmanta.deploy.state import BlockedStatus, ComplianceStatus, DeploymentResult, ResourceState
+from inmanta.deploy.state import Blocked, Compliance, DeployResult, ResourceState
 
 
 @pytest.fixture
@@ -156,21 +156,21 @@ async def test_scheduler_initialization(
 
     assert agent.scheduler._state.resource_state == {
         "test::Resource[agent1,key=key1]": ResourceState(
-            status=ComplianceStatus.COMPLIANT,
-            deployment_result=DeploymentResult.DEPLOYED,
-            blocked=BlockedStatus.NO,
+            compliance=Compliance.COMPLIANT,
+            last_deploy_result=DeployResult.DEPLOYED,
+            blocked=Blocked.NOT_BLOCKED,
             last_deployed=last_deployed[1],
         ),
         "test::Resource[agent1,key=key2]": ResourceState(
-            status=ComplianceStatus.NON_COMPLIANT if not reset_state else ComplianceStatus.HAS_UPDATE,
-            deployment_result=DeploymentResult.FAILED if not reset_state else DeploymentResult.NEW,
-            blocked=BlockedStatus.NO,
+            compliance=Compliance.NON_COMPLIANT if not reset_state else Compliance.HAS_UPDATE,
+            last_deploy_result=DeployResult.FAILED if not reset_state else DeployResult.NEW,
+            blocked=Blocked.NOT_BLOCKED,
             last_deployed=last_deployed[2],
         ),
         "test::Resource[agent1,key=key3]": ResourceState(
-            status=ComplianceStatus.NON_COMPLIANT if not reset_state else ComplianceStatus.HAS_UPDATE,
-            deployment_result=DeploymentResult.SKIPPED if not reset_state else DeploymentResult.NEW,
-            blocked=BlockedStatus.NO,  # we don't restore TRANSIENT status atm
+            compliance=Compliance.NON_COMPLIANT if not reset_state else Compliance.HAS_UPDATE,
+            last_deploy_result=DeployResult.SKIPPED if not reset_state else DeployResult.NEW,
+            blocked=Blocked.NOT_BLOCKED,  # we don't restore TRANSIENT status atm
             last_deployed=last_deployed[3],
         ),
     }
