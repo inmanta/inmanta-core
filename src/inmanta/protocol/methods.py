@@ -989,7 +989,7 @@ def set_state(agent: Optional[str], enabled: bool):
 
 
 @method(
-    path="/agentstate/<id>",
+    path="/deploy",
     operation="POST",
     server_agent=True,
     enforce_auth=False,
@@ -997,7 +997,7 @@ def set_state(agent: Optional[str], enabled: bool):
     arg_options=AGENT_ENV_OPTS,
     client_types=[],
 )
-def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
+def trigger(tid: uuid.UUID, id: None | str, incremental_deploy: bool):
     """
     Request an agent to reload resources
 

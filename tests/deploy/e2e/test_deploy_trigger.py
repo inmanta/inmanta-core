@@ -24,6 +24,7 @@ import pytest
 
 from inmanta import const
 from inmanta.config import Config
+from inmanta.const import AgentAction
 from utils import get_resource, log_contains, log_doesnt_contain, resource_action_consistency_check, retry_limited
 
 
@@ -48,15 +49,35 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
 
     await clienthelper.wait_for_deployed(version)
 
-    async def verify(result, a1=0, code=200, warnings=["Could not reach agents named [agent2,agent3]"], agents=["agent1"]):
+    # Pause agent3
+    result = await client.agent_action(tid=environment, name="agent3", action=AgentAction.pause.name)
+    assert result.code == 200
+
+    async def verify(result, a1=0, code=200, warnings=[], agents=None):
         assert result.code == code
 
         def is_deployed():
             return resource_container.Provider.readcount("agent1", "key1") == a1
 
         await retry_limited(is_deployed, 1)
-        log_contains(caplog, "agent", logging.INFO, f"Agent agent1 got a trigger to update in environment {environment}")
-        log_doesnt_contain(caplog, "agent", logging.INFO, f"Agent agent5 got a trigger to update in environment {environment}")
+        if not agents:
+            log_contains(
+                caplog,
+                "inmanta.scheduler",
+                logging.INFO,
+                f"All agents got a trigger to run repair in environment {environment}",
+            )
+            agents = ["agent1", "agent2", "agent3"]  # this also includes paused agents
+        else:
+            log_contains(
+                caplog,
+                "inmanta.scheduler",
+                logging.INFO,
+                f"Agent agent1 got a trigger to run repair in environment {environment}",
+            )
+        log_doesnt_contain(
+            caplog, "inmanta.scheduler", logging.INFO, f"Agent agent5 got a trigger to run repair in environment {environment}"
+        )
 
         assert result.result["agents"] == agents
         if warnings:
@@ -74,29 +95,23 @@ async def test_deploy_trigger(server, client, clienthelper, resource_container, 
 
     # normal
     result = await client.deploy(environment)
-    await verify(result, a1=1)
+    await verify(result, a1=2)
 
     # only agent1
     result = await client.deploy(environment, agents=["agent1"])
-    await verify(result, a1=2, warnings=None)
+    await verify(result, agents=["agent1"], a1=3)
 
     # only agent5 (not in model)
     result = await client.deploy(environment, agents=["agent5"])
-    await verify_failed(
-        result, 404, "No agent could be reached", warnings=[f"Model version {version} does not contain agents named [agent5]"]
-    )
-
-    # only agent2 (not alive)
-    result = await client.deploy(environment, agents=["agent2"])
-    await verify_failed(result, 404, "No agent could be reached", warnings=["Could not reach agents named [agent2]"])
+    await verify_failed(result, 404, "No agent could be reached", warnings=[])
 
     # All of it
     result = await client.deploy(environment, agents=["agent1", "agent2", "agent5"])
     await verify(
         result,
-        a1=3,
-        agents=["agent1"],
-        warnings=["Could not reach agents named [agent2]", f"Model version {version} does not contain agents named [agent5]"],
+        a1=4,
+        agents=["agent1", "agent2"],
+        warnings=["Model version 1 does not contain agents named [agent5]"],
     )
 
 

@@ -727,9 +727,7 @@ async def test_deploy_single_agent(agent: TestAgent, make_resource_minimal) -> N
         r2_fail: make_resource_minimal(r2_fail, values={FAIL_DEPLOY: True}, requires=[]),
     }
     version: int = 1
-    await agent.scheduler._new_version(
-        [ModelVersion(version=version, resources=resources, requires={}, undefined=set())]
-    )
+    await agent.scheduler._new_version([ModelVersion(version=version, resources=resources, requires={}, undefined=set())])
 
     await wait_until_done(agent)
     assert agent.executor_manager.executors["agent1"].execute_count == 2

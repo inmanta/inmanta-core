@@ -204,9 +204,7 @@ class ModelState:
     # resources with a known or assumed difference between intent and actual state
     dirty: set["ResourceIdStr"] = dataclasses.field(default_factory=set)
     # group resources by agent to allow efficient triggering of a deploy for a single agent
-    resources_by_agent: dict[str, set["ResourceIdStr"]] = dataclasses.field(
-        default_factory=lambda: defaultdict(set)
-    )
+    resources_by_agent: dict[str, set["ResourceIdStr"]] = dataclasses.field(default_factory=lambda: defaultdict(set))
     # types per agent keeps track of which resource types live on which agent by doing a reference count
     # the dict is agent_name -> resource_type -> resource_count
     types_per_agent: dict[str, dict["ResourceType", int]] = dataclasses.field(

@@ -543,13 +543,10 @@ class ResourceScheduler(TaskManager):
             return
         async with self._scheduler_lock:
             to_deploy: Set[ResourceIdStr] = (
-                self._state.dirty if agent is None
-                else self._state.dirty & self._state.resources_by_agent.get(agent, set())
+                self._state.dirty if agent is None else self._state.dirty & self._state.resources_by_agent.get(agent, set())
             )
             self._timer_manager.stop_timers(to_deploy)
-            self._work.deploy_with_context(
-                to_deploy, reason=reason, priority=priority, deploying=self._deploying_latest
-            )
+            self._work.deploy_with_context(to_deploy, reason=reason, priority=priority, deploying=self._deploying_latest)
 
     async def repair(
         self,
@@ -583,9 +580,7 @@ class ResourceScheduler(TaskManager):
             to_deploy: Set[ResourceIdStr] = {resource for resource in in_scope if should_deploy_resource(resource)}
             self._state.dirty.update(to_deploy)
             self._timer_manager.stop_timers(to_deploy)
-            self._work.deploy_with_context(
-                to_deploy, reason=reason, priority=priority, deploying=self._deploying_latest
-            )
+            self._work.deploy_with_context(to_deploy, reason=reason, priority=priority, deploying=self._deploying_latest)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
         if not self._running:
