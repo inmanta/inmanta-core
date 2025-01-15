@@ -3048,7 +3048,7 @@ async def test_get_current_resource_state(server, environment, client, clienthel
         env=environment,
         rid="std::testing::NullResource[agent1,name=test1]",
     )
-    assert state is const.ResourceState.available
+    assert state is const.ResourceState.unavailable  # executor fails to load handler code because we never pushed any code
 
     # Create version 2 with undefined resource. Don't release the version yet.
     version2 = await clienthelper.get_version()
@@ -3072,7 +3072,7 @@ async def test_get_current_resource_state(server, environment, client, clienthel
         env=environment,
         rid="std::testing::NullResource[agent1,name=test1]",
     )
-    assert state is const.ResourceState.available
+    assert state is const.ResourceState.unavailable
 
     result = await client.release_version(tid=environment, id=version2)
     assert result.code == 200
