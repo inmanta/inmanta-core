@@ -28,6 +28,7 @@ from typing import Optional, Union
 
 import asyncpg
 
+from inmanta import const
 from inmanta.data import (
     ENVIRONMENT_METRICS_RETENTION,
     Agent,
@@ -39,7 +40,6 @@ from inmanta.data import (
     Resource,
     Setting,
 )
-from inmanta import const
 from inmanta.data.model import EnvironmentMetricsResult
 from inmanta.protocol import methods_v2
 from inmanta.protocol.decorators import handle
