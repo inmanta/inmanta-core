@@ -596,7 +596,7 @@ async def test_move_to_available_state(server, environment, client, clienthelper
             attribute_hash=util.make_attribute_hash(
                 resource_id=ResourceIdStr(f"test::Resource[agent1,key=test{i}]"), attributes=resources_v1[0]
             ),
-            result=executor.DeployResult(
+            result=executor.DeployReport(
                 rvid=rvid,
                 action_id=action_id,
                 resource_state=const.HandlerResourceState.deployed,
@@ -605,9 +605,9 @@ async def test_move_to_available_state(server, environment, client, clienthelper
                 change=None,
             ),
             state=state.ResourceState(
-                status=state.ComplianceStatus.COMPLIANT,
-                deployment_result=state.DeploymentResult.DEPLOYED,
-                blocked=state.BlockedStatus.NO,
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
                 last_deployed=datetime.datetime.now().astimezone(),
             ),
             started=start_time,

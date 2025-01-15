@@ -715,8 +715,6 @@ async def test_invalid_sid(server, client, environment):
 async def test_get_param(server, client, environment, tz_aware_timestamp: bool):
     config.Config.set("server", "tz-aware-timestamps", str(tz_aware_timestamp).lower())
 
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
-    assert result.code == 200
     metadata = {"key1": "val1", "key2": "val2"}
 
     await client.set_param(environment, "param", ParameterSource.user, "val", "", metadata, False)
@@ -845,12 +843,11 @@ async def test_bootloader_connect_running_db(server_config, postgres_db, caplog,
     log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
 
 
-@pytest.mark.skip("Broken")
-async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, agent):
+async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, null_agent):
     """
     Test querying resource actions via the API
     """
-    aclient = agent._client
+    aclient = null_agent._client
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -1323,7 +1320,7 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
         if method_to_use == "send_deploy_done":
             await update_manager.send_deploy_done(
                 attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes_r1),
-                result=executor.DeployResult(
+                result=executor.DeployReport(
                     rvid=rvid_r1_v1,
                     action_id=action_id,
                     resource_state=const.HandlerResourceState.deployed,
@@ -1332,9 +1329,9 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
                     change=const.Change.purged,
                 ),
                 state=state.ResourceState(
-                    status=state.ComplianceStatus.COMPLIANT,
-                    deployment_result=state.DeploymentResult.DEPLOYED,
-                    blocked=state.BlockedStatus.NO,
+                    compliance=state.Compliance.COMPLIANT,
+                    last_deploy_result=state.DeployResult.DEPLOYED,
+                    blocked=state.Blocked.NOT_BLOCKED,
                     last_deployed=now,
                 ),
                 started=now,
@@ -1412,7 +1409,7 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
     with pytest.raises(ValueError):
         await update_manager.send_deploy_done(
             attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes_r1),
-            result=executor.DeployResult(
+            result=executor.DeployReport(
                 rvid=rvid_r1_v1,
                 action_id=action_id,
                 resource_state=const.HandlerResourceState.deployed,
@@ -1421,9 +1418,9 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
                 change=const.Change.created,
             ),
             state=state.ResourceState(
-                status=state.ComplianceStatus.COMPLIANT,
-                deployment_result=state.DeploymentResult.DEPLOYED,
-                blocked=state.BlockedStatus.NO,
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
                 last_deployed=datetime.now().astimezone(),
             ),
             started=datetime.now().astimezone(),
@@ -1452,7 +1449,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
     with pytest.raises(ValueError) as exec_info:
         await update_manager.send_deploy_done(
             attribute_hash="",
-            result=executor.DeployResult(
+            result=executor.DeployReport(
                 rvid=rvid_r1_v1,
                 action_id=uuid.uuid4(),
                 resource_state=const.HandlerResourceState.deployed,
@@ -1461,9 +1458,9 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
                 change=const.Change.nochange,
             ),
             state=state.ResourceState(
-                status=state.ComplianceStatus.COMPLIANT,
-                deployment_result=state.DeploymentResult.DEPLOYED,
-                blocked=state.BlockedStatus.NO,
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
                 last_deployed=datetime.now().astimezone(),
             ),
             started=datetime.now().astimezone(),
@@ -1483,7 +1480,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
     with pytest.raises(ValueError) as exec_info:
         await update_manager.send_deploy_done(
             attribute_hash="",
-            result=executor.DeployResult(
+            result=executor.DeployReport(
                 rvid=rvid_r1_v1,
                 action_id=uuid.uuid4(),
                 resource_state=const.HandlerResourceState.deployed,
@@ -1492,9 +1489,9 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
                 change=const.Change.nochange,
             ),
             state=state.ResourceState(
-                status=state.ComplianceStatus.COMPLIANT,
-                deployment_result=state.DeploymentResult.DEPLOYED,
-                blocked=state.BlockedStatus.NO,
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
                 last_deployed=datetime.now().astimezone(),
             ),
             started=datetime.now().astimezone(),

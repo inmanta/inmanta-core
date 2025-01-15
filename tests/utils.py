@@ -53,7 +53,7 @@ from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
-from inmanta.deploy.state import ResourceDetails
+from inmanta.deploy.state import ResourceIntent
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client, SessionEndpoint, methods
 from inmanta.server.bootloader import InmantaBootloader
@@ -410,7 +410,7 @@ async def get_done_count(
 
 
 async def wait_until_deployment_finishes(
-    client: Client, environment: str, version: int = -1, timeout: int = 10, wait_for_n: int | None = None
+    client: Client, environment: str, *, version: int = -1, timeout: int = 10, wait_for_n: int | None = None
 ) -> None:
     async def done() -> bool:
 
@@ -516,7 +516,7 @@ class ClientHelper:
         return lookup[version]
 
     async def wait_for_deployed(self, version: int = -1, timeout=10) -> None:
-        await wait_until_deployment_finishes(self.client, str(self.environment), version, timeout)
+        await wait_until_deployment_finishes(self.client, str(self.environment), version=version, timeout=timeout)
 
     async def wait_full_success(self) -> None:
         await wait_full_success(self.client, self.environment)
@@ -927,7 +927,7 @@ async def _deploy_resources(client, environment, resources, version: int, push, 
     result = await client.release_version(environment, version, push, agent_trigger_method)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment, version=version)
 
     result = await client.get_version(environment, version)
     assert result.code == 200
@@ -990,7 +990,7 @@ class NullAgent(SessionEndpoint):
         return 200, {}
 
 
-def make_requires(resources: Mapping[ResourceIdStr, ResourceDetails]) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
+def make_requires(resources: Mapping[ResourceIdStr, ResourceIntent]) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
     """Convert resources from the scheduler input format to its requires format"""
     return {k: {req for req in resource.attributes.get("requires", [])} for k, resource in resources.items()}
 
@@ -1030,9 +1030,9 @@ def assert_resource_persistent_state(
     resource_persistent_state: data.ResourcePersistentState,
     is_undefined: bool,
     is_orphan: bool,
-    deployment_result: state.DeploymentResult,
-    blocked_status: state.BlockedStatus,
-    expected_compliance_status: Optional[state.ComplianceStatus],
+    last_deploy_result: state.DeployResult,
+    blocked: state.Blocked,
+    expected_compliance: Optional[state.Compliance],
 ) -> None:
     """
     Assert that the given ResourcePersistentState record has the given content.
@@ -1044,12 +1044,12 @@ def assert_resource_persistent_state(
         resource_persistent_state.is_orphan == is_orphan
     ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.is_orphan} != {is_orphan})"
     assert (
-        resource_persistent_state.deployment_result is deployment_result
-    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.deployment_result} != {deployment_result})"
+        resource_persistent_state.last_deploy_result is last_deploy_result
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.last_deploy_result} != {last_deploy_result})"
     assert (
-        resource_persistent_state.blocked_status is blocked_status
-    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.blocked_status} != {blocked_status})"
-    assert resource_persistent_state.get_compliance_status() is expected_compliance_status, (
+        resource_persistent_state.blocked is blocked
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.blocked} != {blocked})"
+    assert resource_persistent_state.get_compliance_status() is expected_compliance, (
         f"{resource_persistent_state.resource_id}"
-        f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance_status})"
+        f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance})"
     )

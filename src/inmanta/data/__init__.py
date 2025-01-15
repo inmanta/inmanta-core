@@ -2332,9 +2332,7 @@ TYPE_MAP = {
 
 AUTO_DEPLOY = "auto_deploy"
 AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
-AUTOSTART_AGENT_DEPLOY_SPLAY_TIME = "autostart_agent_deploy_splay_time"
 AUTOSTART_AGENT_REPAIR_INTERVAL = "autostart_agent_repair_interval"
-AUTOSTART_AGENT_REPAIR_SPLAY_TIME = "autostart_agent_repair_splay_time"
 RESET_DEPLOY_PROGRESS_ON_START = "reset_deploy_progress_on_start"
 AUTOSTART_ON_START = "autostart_on_start"
 AGENT_AUTH = "agent_auth"
@@ -2492,16 +2490,7 @@ class Environment(BaseDocument):
             " or as a cron-like expression. Set this to 0 to disable the automatic scheduling of deploy runs."
             " When specified as an integer, it must be smaller than the repair interval",
             validator=validate_cron_or_int,
-            agent_restart=True,
-        ),
-        AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: Setting(
-            name=AUTOSTART_AGENT_DEPLOY_SPLAY_TIME,
-            typ="int",
-            default=10,
-            doc="The splay time on the deployment interval of the autostarted agents."
-            " See also: :inmanta.config:option:`config.agent-deploy-splay-time`",
-            validator=convert_int,
-            agent_restart=True,
+            agent_restart=False,
         ),
         AUTOSTART_AGENT_REPAIR_INTERVAL: Setting(
             name=AUTOSTART_AGENT_REPAIR_INTERVAL,
@@ -2513,16 +2502,7 @@ class Environment(BaseDocument):
                 " When specified as an integer, it must be larger than the deploy interval"
             ),
             validator=validate_cron_or_int,
-            agent_restart=True,
-        ),
-        AUTOSTART_AGENT_REPAIR_SPLAY_TIME: Setting(
-            name=AUTOSTART_AGENT_REPAIR_SPLAY_TIME,
-            typ="int",
-            default=600,
-            doc="The splay time on the repair interval of the autostarted agents."
-            " See also: :inmanta.config:option:`config.agent-repair-splay-time`",
-            validator=convert_int,
-            agent_restart=True,
+            agent_restart=False,
         ),
         RESET_DEPLOY_PROGRESS_ON_START: Setting(
             name=RESET_DEPLOY_PROGRESS_ON_START,
@@ -2911,25 +2891,39 @@ class Parameter(BaseDocument):
     expires: bool
 
     @classmethod
-    async def get_updated_before_active_env(cls, updated_before: datetime.datetime) -> list["Parameter"]:
+    async def get_updated_before_active_env(
+        cls,
+        updated_before: datetime.datetime,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> list["Parameter"]:
         """
         Retrieve the list of parameters that were updated before a specified datetime for environments that are not halted
-
         """
         query = f"""
-        WITH non_halted_envs AS (
-            SELECT id FROM public.environment WHERE NOT halted
-        )
-        SELECT * FROM {cls.table_name()}
-        WHERE environment IN (
-            SELECT id FROM non_halted_envs
-        )
-        AND updated < $1
-        AND expires = true;
+        SELECT p.*
+        FROM {cls.table_name()} AS p INNER JOIN {Environment.table_name()} AS e ON p.environment=e.id
+        WHERE NOT e.halted
+            AND p.updated < $1
+            AND p.expires
+            AND (
+                -- If it's a fact, it needs to belong to the latest released version.
+                p.resource_id IS NULL
+                OR p.resource_id = ''
+                OR EXISTS(
+                    SELECT 1
+                    FROM {Resource.table_name()} AS r
+                    WHERE r.environment=p.environment
+                        AND r.model=(
+                            SELECT max(c.version)
+                            FROM {ConfigurationModel.table_name()} AS c
+                            WHERE c.environment=p.environment AND c.released
+                        )
+                        AND r.resource_id=p.resource_id
+                )
+            );
         """
         values = [cls._get_value(updated_before)]
-        result = await cls.select_query(query, values)
-        return result
+        return await cls.select_query(query, values, connection=connection)
 
     @classmethod
     async def list_parameters(cls, env_id: uuid.UUID, **metadata_constraints: str) -> list["Parameter"]:
@@ -3007,6 +3001,26 @@ class UnknownParameter(BaseDocument):
             metadata=self.metadata,
             resolved=self.resolved,
         )
+
+    @classmethod
+    async def get_unknowns_in_latest_released_model_versions(
+        cls, connection: asyncpg.Connection
+    ) -> Sequence["UnknownParameter"]:
+        """
+        Returns all the unknowns in the latest released model version of each non-halted environment.
+        """
+        query = f"""
+        SELECT u.*
+        FROM {cls.table_name()} AS u INNER JOIN {Environment.table_name()} AS e ON u.environment=e.id
+        WHERE NOT e.halted
+            AND u.version=(
+                SELECT max(c.version)
+                FROM {ConfigurationModel.table_name()} AS c
+                WHERE c.environment=e.id AND c.released
+            )
+            AND NOT u.resolved;
+        """
+        return await cls.select_query(query, values=[], connection=connection)
 
     @classmethod
     async def get_unknowns_to_copy_in_partial_compile(
@@ -4420,7 +4434,7 @@ class ResourceAction(BaseDocument):
 
 class ResourcePersistentState(BaseDocument):
     """
-    To avoid write contention, the `ComplianceStatus` is split up in different fields that are written from different code
+    To avoid write contention, the `Compliance` is split up in different fields that are written from different code
     paths. See get_compliance_status() for the associated logic.
     """
 
@@ -4460,10 +4474,10 @@ class ResourcePersistentState(BaseDocument):
     # Written when a new version is processed by the scheduler
     is_orphan: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
-    deployment_result: state.DeploymentResult
+    last_deploy_result: state.DeployResult
     # Written both when processing a new version and at deploy time. As such, this should be updated
     # under the scheduler lock to prevent race conditions with the deploy time updates.
-    blocked_status: state.BlockedStatus
+    blocked: state.Blocked
 
     # Written at deploy time (Exception for initial record creation  -> no race condition possible with deploy path)
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
@@ -4489,7 +4503,7 @@ class ResourcePersistentState(BaseDocument):
     async def update_resource_intent(
         cls,
         environment: uuid.UUID,
-        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceIntent]],
         update_blocked_state: bool,
         connection: Optional[Connection] = None,
     ) -> None:
@@ -4498,14 +4512,14 @@ class ResourcePersistentState(BaseDocument):
         when the intent of a resource, as processed by the scheduler, changes. This method must not be called
         for orphaned resources. The update_orphan_state() method should be used for that.
 
-        :param update_blocked_state: True iff this method should update the blocked_status column in the database.
+        :param update_blocked_state: True iff this method should update the blocked column in the database.
         """
         values = [
             (
                 environment,
                 resource_id,
                 resource_details.attribute_hash,
-                resource_state.status is state.ComplianceStatus.UNDEFINED,
+                resource_state.compliance is state.Compliance.UNDEFINED,
                 False,
                 *([resource_state.blocked.db_value().name] if update_blocked_state else []),
             )
@@ -4519,7 +4533,7 @@ class ResourcePersistentState(BaseDocument):
                         current_intent_attribute_hash=$3,
                         is_undefined=$4,
                         is_orphan=$5
-                        {", blocked_status=$6" if update_blocked_state else ""}
+                        {", blocked=$6" if update_blocked_state else ""}
                     WHERE environment=$1 AND resource_id=$2
                 """,
                 values,
@@ -4560,8 +4574,8 @@ class ResourcePersistentState(BaseDocument):
                 current_intent_attribute_hash,
                 is_undefined,
                 is_orphan,
-                deployment_result,
-                blocked_status
+                last_deploy_result,
+                blocked
             )
             SELECT
                 r.environment,
@@ -4577,8 +4591,8 @@ class ResourcePersistentState(BaseDocument):
                     WHEN
                         r.status = 'undefined'::public.resourcestate
                         OR r.status = 'skipped_for_undefined'::public.resourcestate
-                    THEN 'YES'
-                    ELSE 'NO'
+                    THEN 'BLOCKED'
+                    ELSE 'NOT_BLOCKED'
                 END
             FROM {Resource.table_name()} AS r
             WHERE r.environment=$1 AND r.model=$2 AND NOT EXISTS(
@@ -4592,22 +4606,22 @@ class ResourcePersistentState(BaseDocument):
             connection=connection,
         )
 
-    def get_compliance_status(self) -> Optional[state.ComplianceStatus]:
+    def get_compliance_status(self) -> Optional[state.Compliance]:
         """
-        Return the ComplianceStatus associated with this resource_persistent_state. Returns None for orphaned resources.
+        Return the Compliance associated with this resource_persistent_state. Returns None for orphaned resources.
         """
         if self.is_orphan:
             return None
         elif self.is_undefined:
-            return state.ComplianceStatus.UNDEFINED
+            return state.Compliance.UNDEFINED
         elif (
             self.last_deployed_attribute_hash is None or self.current_intent_attribute_hash != self.last_deployed_attribute_hash
         ):
-            return state.ComplianceStatus.HAS_UPDATE
-        elif self.deployment_result is state.DeploymentResult.DEPLOYED:
-            return state.ComplianceStatus.COMPLIANT
+            return state.Compliance.HAS_UPDATE
+        elif self.last_deploy_result is state.DeployResult.DEPLOYED:
+            return state.Compliance.COMPLIANT
         else:
-            return state.ComplianceStatus.NON_COMPLIANT
+            return state.Compliance.NON_COMPLIANT
 
 
 @stable_api
@@ -5558,7 +5572,7 @@ class Resource(BaseDocument):
         last_deployed_attribute_hash: Optional[str] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         # TODO[#8541]: accept state.ResourceState and write blocked status as well
-        deployment_result: Optional[state.DeploymentResult] = None,
+        last_deploy_result: Optional[state.DeployResult] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)
@@ -5572,8 +5586,8 @@ class Resource(BaseDocument):
             "last_deployed_version": last_deployed_version,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
-        if deployment_result:
-            query_parts.append(f"deployment_result={args(deployment_result.name)}")
+        if last_deploy_result:
+            query_parts.append(f"last_deploy_result={args(last_deploy_result.name)}")
         if not query_parts:
             return
         query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
