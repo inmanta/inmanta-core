@@ -27,7 +27,7 @@ from . import common
 FuncT = TypeVar("FuncT", bound=HandlerType)
 
 
-class handle:  # noqa: N801
+class handle:
     """
     Decorator for subclasses of an endpoint to handle protocol methods
 
