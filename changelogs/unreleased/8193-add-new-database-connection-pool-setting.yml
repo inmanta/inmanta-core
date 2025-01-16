@@ -4,7 +4,7 @@ change-type: major
 destination-branches: [master]
 sections:
   upgrade-note: |
-    Previously, a single database connection pool configured
+    Previously, a single database connection pool was configured
     via the {inmanta.config:option}`database.connection_pool_max_size` and {inmanta.config:option}`database.connection_pool_min_size` options.
     Now, the new resource scheduler uses an additional database connection pool per environment.
     Please review the following connection pool options and make sure they fit your
