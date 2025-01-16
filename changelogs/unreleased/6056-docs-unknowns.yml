@@ -5,4 +5,5 @@ sections:
 issue-nr: 6056
 destination-branches:
   - master
-  - iso6
+  - iso8
+  - iso7
