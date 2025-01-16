@@ -1006,5 +1006,7 @@ it might remain in the result, or it might be filtered out, depending on whether
 
     # an unknown can even represent more than one unknown value
     b = my_unknown == 0 ? [1, 2] : [3, 4]  # b = unknown -> when it becomes known it will be either [1, 2] or [3, 4]
+    # or none at all
+    c = [x for x in l if x > 1000]  # c = [unknown, unknown] -> would become [] if the env var values are <= 1000
 
-    c = std::len(l)  # c = unknown (l contains unknowns, so its length is also unknown)
+    d = std::len(l)  # d = unknown (l contains unknowns, so its length is also unknown)
