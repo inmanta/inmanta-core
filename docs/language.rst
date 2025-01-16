@@ -930,7 +930,7 @@ Unknowns
 ========
 
 Wherever the configuration model interacts with the outside world (e.g. to fetch external values) :term:`unknown` values
-may be present. These unknowns are propagated through the model to finally end up in the resources that require these unknown
+may be present. These unknowns represent values we don't know yet, such as the IP address of a machine that hasn't been created yet. Because the compiler can handle unknowns, developers can write models as if all information is present up front, even when this is not the case. These unknowns are propagated through the model to finally end up in the resources that require these unknowns.
 values. This section describes how unknown values flow through the model, and perhaps equally importantly, where they do not
 flow at all.
 
@@ -954,7 +954,7 @@ The model below presents some examples of how an unknown propagates.
     a = my_unknown  # a is unknown
     b = [1, 2, my_unknown, 3]  # b is a list with 1 unknown element
     c = my_unknown is defined  # we can not know if c is null, so c is also unknown
-    d = true or my_unknown  # trivial, value of my_unknown is irrelevant -> d is true
+    d = true or my_unknown  # value of my_unknown is irrelevant -> d is true
     e = my_unknown or true  # lazy boolean operator can not compute result without knowing the value -> e is unknown
     f = (e == my_unknown)  # both e and my_unknown are unknown but they aren't necessarily the same value -> f is unknown
 
