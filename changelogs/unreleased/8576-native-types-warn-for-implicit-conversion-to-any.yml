@@ -1,0 +1,4 @@
+description: Add warning when implicitly casting python type to `Any` in plugin code.
+issue-nr: 8576
+change-type: patch
+destination-branches: master
