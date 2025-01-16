@@ -29,6 +29,7 @@ from inmanta.server.protocol import LocalClient, Server, ServerSlice, common
 
 async def test_local_client(server_config, async_finalizer) -> None:
     """Test the local client"""
+
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<name>", operation="POST", client_types=["api"])
         def test_method(name: str, project: str) -> str:  # NOQA
@@ -55,6 +56,7 @@ async def test_return_types(server_config, async_finalizer):
     """
     Test the use and validation of methods that use common.ReturnValue
     """
+
     class Project(BaseModel):
         id: uuid.UUID
         name: str
