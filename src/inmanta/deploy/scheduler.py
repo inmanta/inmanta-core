@@ -231,7 +231,7 @@ class TaskRunner:
         self.status = AgentStatus.STOPPED
         self._scheduler = scheduler
         self._task: typing.Optional[asyncio.Task[None]] = None
-        self._notify_task: typing.Optional[asyncio.Task[None]] = None
+        self._notify_tasks: dict[uuid.UUID, asyncio.Task[None]] = {}
 
     async def start(self) -> None:
         self.status = AgentStatus.STARTED
@@ -242,18 +242,25 @@ class TaskRunner:
 
     async def stop(self) -> None:
         self.status = AgentStatus.STOPPING
+        for task in self._notify_tasks.values():
+            if not task.done():
+                task.cancel()
 
     async def join(self) -> None:
         assert not self.is_running(), "Joining worker that is not stopped"
         if self._task is None or self._task.done():
             return
         await self._task
+        await asyncio.gather(*list(self._notify_tasks.values()), return_exceptions=True)
 
-    async def notify(self) -> None:
+    async def notify(self, task_id: uuid.UUID | None = None) -> None:
         """
         Method to notify the runner that something has changed in the DB. This method will fetch the new information
         regarding the environment and the information related to the runner (agent). Depending on the desired state of the
         agent, it will either stop / start the agent or do nothing
+
+        :param task_id: Is not None if this task was started using the `notify_sync()` method. It's used to clean up the
+                        reference to the associated asyncio.Task object in `self._notify_tasks`. This value is None otherwise.
         """
         should_be_running = await self._scheduler.should_be_running() and await self._scheduler.should_runner_be_running(
             endpoint=self.endpoint
@@ -267,12 +274,17 @@ class TaskRunner:
             case AgentStatus.STOPPING if should_be_running:
                 self.status = AgentStatus.STARTED
 
+        if task_id:
+            del self._notify_tasks[task_id]
+
     def notify_sync(self) -> None:
         """
         Method to notify the runner that something has changed in the DB in a synchronous manner.
         """
         # We save it to be sure that the task will not be GC
-        self._notify_task = asyncio.create_task(self.notify())
+        task_id = uuid.uuid4()
+        task = asyncio.create_task(self.notify(task_id))
+        self._notify_tasks[task_id] = task
 
     async def _run(self) -> None:
         """Main loop for one agent. It will first fetch or create its actual state from the DB to make sure that it's
