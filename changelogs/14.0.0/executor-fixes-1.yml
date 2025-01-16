@@ -1,0 +1,3 @@
+description: Fix escaping of pip commands
+change-type: patch
+destination-branches: [master]

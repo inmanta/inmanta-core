@@ -23,6 +23,7 @@ from typing import Dict, List, Optional, Union
 
 from inmanta import warnings
 from inmanta.ast import export
+from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
@@ -39,7 +40,6 @@ if TYPE_CHECKING:
     from inmanta.ast.type import NamedType, Type  # noqa: F401
     from inmanta.compiler import Compiler
     from inmanta.execute.runtime import DelayedResultVariable, ExecutionContext, Instance, ResultVariable  # noqa: F401
-    from inmanta.plugins import PluginException
 
 
 class TypeDeprecationWarning(InmantaWarning):
@@ -264,21 +264,35 @@ class TypeReferenceAnchor(Anchor):
         return AnchorTarget(location=location, docstring=docstring)
 
 
-class AttributeReferenceAnchor(Anchor):
-    def __init__(self, range: Range, namespace: "Namespace", type: LocatableString, attribute: str) -> None:
-        Anchor.__init__(self, range=range)
-        self.namespace = namespace
+class TypeAnchor(Anchor):
+    """Reference to a resolved type"""
+
+    def __init__(self, reference: LocatableString, type: "Type") -> None:
+        """
+        :param reference: the location we are referencing from
+        :param type: the type that is being referenced
+        """
+        Anchor.__init__(self, range=reference.get_location())
         self.type = type
+        self.type.get_location()
+
+    def resolve(self) -> Optional[AnchorTarget]:
+        t = self.type
+        location = t.get_location()
+        docstring = t.comment if isinstance(t, WithComment) else None
+        if not location:
+            return None
+        return AnchorTarget(location=location, docstring=docstring)
+
+
+class AttributeAnchor(Anchor):
+    def __init__(self, range: Range, attribute: "Attribute") -> None:
+        Anchor.__init__(self, range=range)
         self.attribute = attribute
 
     def resolve(self) -> Optional[AnchorTarget]:
-        instancetype = self.namespace.get_type(self.type)
-        # type check impossible atm due to import loop
-        # assert isinstance(instancetype, Entity)
-        entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
-        assert entity_attribute is not None
-        location = entity_attribute.get_location()
-        docstring = instancetype.comment if isinstance(instancetype, WithComment) else None
+        location = self.attribute.get_location()
+        docstring = self.attribute.comment if isinstance(self.attribute, WithComment) else None
         if not location:
             return None
         return AnchorTarget(location=location, docstring=docstring)
@@ -364,7 +378,7 @@ class Namespace(Namespaced):
 
     def lookup_namespace(self, name: str) -> Import:
         if name not in self.visible_namespaces:
-            raise NotFoundException(None, name, f"Namespace {name} not found. Try importing it with `import {name}`")
+            raise NotFoundException(None, name, f"Namespace {name} not found.\nTry importing it with `import {name}`")
         return self.visible_namespaces[name]
 
     def lookup(self, name: str) -> "Union[Type, ResultVariable]":
@@ -385,7 +399,7 @@ class Namespace(Namespaced):
                 else:
                     raise TypeNotFoundException(typ, ns)
             else:
-                raise TypeNotFoundException(typ, self)
+                raise MissingImportException(typ, self, parts, str(self.location.file))
         elif name in self.primitives:
             if name == "number":
                 warnings.warn(TypeDeprecationWarning("Type 'number' is deprecated, use 'float' or 'int' instead"))
@@ -396,6 +410,7 @@ class Namespace(Namespaced):
                 if name in cns.defines_types:
                     return cns.defines_types[name]
                 cns = cns.get_parent()
+
             raise TypeNotFoundException(typ, self)
 
     def get_name(self) -> str:
@@ -683,6 +698,22 @@ class TypeNotFoundException(RuntimeException):
         return 20
 
 
+class MissingImportException(TypeNotFoundException):
+    """Exception raised when a referenced type's module is missing from the namespace"""
+
+    def __init__(
+        self, type: LocatableString, ns: Namespace, parts: Optional[list[str]] = None, file: Optional[str] = None
+    ) -> None:
+        suggest_importing: str = ""
+        suggest_file = ""
+        if file:
+            suggest_file = f" in {file}"
+        if parts:
+            suggest_importing = f".\nTry importing the module with `import {parts[0]}`{suggest_file}"
+        super().__init__(type, ns)
+        self.msg += suggest_importing
+
+
 class AmbiguousTypeException(TypeNotFoundException):
     """Exception raised when a type is referenced that does not exist"""
 
@@ -798,7 +829,7 @@ class OptionalValueException(RuntimeException):
 
     def __init__(self, instance: "Instance", attribute: "Attribute") -> None:
         RuntimeException.__init__(
-            self, instance, f"Optional variable accessed that has no value (attribute `{attribute}` of `{instance}`)"
+            self, None, f"Optional variable accessed that has no value (attribute `{attribute}` of `{instance}`)"
         )
         self.instance = instance
         self.attribute = attribute
@@ -965,3 +996,50 @@ class MultiException(CompilerException):
             out += "\n" + part
 
         return out
+
+
+class UnsetException(RuntimeException):
+    """
+    This exception is thrown when an attribute is accessed that was not yet
+    available (i.e. it has not been frozen yet).
+    """
+
+    def __init__(self, msg: str, instance: Optional["Instance"] = None, attribute: Optional["Attribute"] = None) -> None:
+        RuntimeException.__init__(self, None, msg)
+        self.instance: Optional["Instance"] = instance
+        self.attribute: Optional["Attribute"] = attribute
+        self.msg = msg
+
+    def get_result_variable(self) -> Optional["Instance"]:
+        return self.instance
+
+
+class UnknownException(Exception):
+    """
+    This exception is thrown when code tries to access a value that is
+    unknown and cannot be determined during this evaluation. The code
+    receiving this exception is responsible for invalidating any results
+    depending on this value by return an instance of Unknown as well.
+    """
+
+    def __init__(self, unknown: Unknown):
+        super().__init__()
+        self.unknown = unknown
+
+
+class AttributeNotFound(NotFoundException, AttributeError):
+    """
+    Exception used for backwards compatibility with try-except blocks around some_proxy.some_attr.
+    This previously raised `NotFoundException` which is currently deprecated in this context.
+    Its new behavior is to raise an AttributeError for compatibility with Python's builtin `hasattr`.
+    """
+
+
+@stable_api
+class PluginException(Exception):
+    """
+    Base class for custom exceptions raised from a plugin.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.message = message

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import configparser
 import logging
 import os
@@ -24,9 +25,9 @@ import subprocess
 
 import py
 import pytest
-from pkg_resources import Requirement
 from pytest import MonkeyPatch
 
+import inmanta.util
 import toml
 from inmanta import moduletool
 from inmanta.command import CLIException
@@ -113,7 +114,7 @@ def test_issue_3159_conversion_std_module_add_self_to_dependencies(tmpdir):
     parser = configparser.ConfigParser()
     parser.read(setup_cfg_file)
     assert parser.has_option("options", "install_requires")
-    install_requires = [Requirement.parse(r) for r in parser.get("options", "install_requires").split("\n") if r]
+    install_requires = inmanta.util.parse_requirements(parser.get("options", "install_requires").split("\n"))
     pkg_names = [r.name for r in install_requires]
     assert "inmanta-module-std" not in pkg_names
 
@@ -284,3 +285,11 @@ def test_module_conversion_build_tags(tmpdir: py.path.local, modules_dir: str, f
     metadata: ModuleV2Metadata = ModuleV2.from_path(new_mod_dir).metadata
     assert metadata.version == base
     assert metadata.version_tag == tag
+
+    config = metadata.to_config()
+    assert "metadata" in config
+    assert "name" in config["metadata"]
+    assert config["metadata"]["name"] == "inmanta-module-mytaggedmodule"
+    assert "version" in config["metadata"]
+    assert config["metadata"]["version"] == base
+    assert "version_tag" not in config["metadata"]

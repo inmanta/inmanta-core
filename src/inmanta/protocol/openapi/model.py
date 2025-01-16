@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 """
 Based on the OpenAPI 3.0.2 Specification:
 https://github.com/OAI/OpenAPI-Specification/blob/master/versions/3.0.2.md
@@ -100,7 +101,7 @@ class Schema(BaseModel):
 
     def resolve(self, ref_prefix: str, known_schemas: dict[str, "Schema"]) -> "Schema":
         """
-        Returns this object or the one this object is refering to.
+        Returns this object or the one this object is referring to.
 
         :param ref_prefix: The prefix this object ref should have if it is only a reference
         :param known_schemas: A dict of known schemas, the keys are the reference diminished from their prefix
@@ -120,7 +121,7 @@ class Schema(BaseModel):
         self, ref_prefix: str, known_schemas: dict[str, "Schema"], update: dict[str, Any], deep: bool = True
     ) -> "Schema":
         """
-        Returns this object of the one this object is refering to, and resolve all the nested schema it contains.
+        Returns this object of the one this object is referring to, and resolve all the nested schema it contains.
 
         :param ref_prefix: The prefix this object ref should have if it is only a reference
         :param known_schemas: A dict of known schemas, the keys are the reference diminished from their prefix

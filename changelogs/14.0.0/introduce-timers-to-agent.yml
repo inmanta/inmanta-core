@@ -1,0 +1,3 @@
+description: Introduce repair and redeploy timers to the new agent
+change-type: minor
+destination-branches: [master]

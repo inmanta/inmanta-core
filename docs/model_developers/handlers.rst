@@ -22,7 +22,7 @@ A South Bound integration always consists of three parts:
 * In the *compiler*, a model is constructed that consists of entities. The entities can be related to each other.
 * The *exporter* will search for all :term:`entities<entity>` that can be directly deployed by a :term:`handler<handler>`. These are the :term:`resources<resource>`. Resources are self-contained and can not refer to any other entity or resource.
 * The :term:`resources<resource>` will be sent to the server in json serialized form.
-* The :term:`agent` will present the :term:`resources<resource>` to a :term:`handler<handler>` in order to have the :term:`desired state` enforced on the managed infrastructure.
+* The :term:`resource scheduler` will spawn :term:`executors<executor>` that will load the :term:`handler<handler>` code in order to enforce the :term:`desired state` on the managed infrastructure.
 
 
 Resource
@@ -42,11 +42,14 @@ This mapping is done by adding a static method to the resource class with ``get_
 name. This static method has two arguments: a reference to the exporter and the instance of the
 entity it is serializing.
 
+..
+    This uses std::File, which is to be removed, but it re-constructs it, so that is OK
 
 .. code-block:: python
     :linenos:
 
     from inmanta.resources import resource, Resource
+
 
     @resource("std::File", agent="host.name", id_attribute="path")
     class File(Resource):
@@ -61,6 +64,7 @@ entity it is serializing.
         @staticmethod
         def get_permissions(_, obj):
             return int(x.mode)
+
 
 
 Classes decorated with :func:`@resource<inmanta.resources.resource>` do not have to inherit directly from
@@ -94,6 +98,95 @@ Each Handler should override 4 methods of the CRUDHandler:
 
 The context (See :class:`~inmanta.agent.handler.HandlerContext`) passed to most methods is used to
 report results, changes and logs to the handler and the server.
+
+
+.. _Using facts:
+
+Using facts
+"""""""""""
+
+Facts are properties of the environment whose values are not managed by the orchestrator.
+Facts are either used as input in a model, e.g. a virtual machine provider provides an ip and the model then uses this
+ip to run a service, or used for reporting purposes.
+
+Retrieving a fact in the model is done with the `std::getfact() <../reference/modules/std.html#std.getfact>`_
+function.
+
+Example taken from the `openstack Inmanta module <https://github.com/inmanta/openstack>`_:
+
+.. code-block:: inmanta
+    :linenos:
+
+    implementation fipAddr for FloatingIP:
+        self.address = std::getfact(self, "ip_address")
+    end
+
+Facts can be pushed or pulled through the handler.
+
+---------
+
+
+Pushing a fact is done in the handler with the :meth:`~inmanta.agent.handler.HandlerContext.set_fact`
+method during resource deployment (in ``read_resource`` and/or ``create_resource``). e.g.:
+
+.. code-block:: python
+    :linenos:
+
+    @provider("openstack::FloatingIP", name="openstack")
+    class FloatingIPHandler(OpenStackHandler):
+        def read_resource(
+            self, ctx: handler.HandlerContext, resource: FloatingIP
+        ) -> None: ...
+
+        def create_resource(
+            self, ctx: handler.HandlerContext, resource: FloatingIP
+        ) -> None:
+            ...
+            # Setting fact manually
+            for key, value in ...:
+                ctx.set_fact(fact_id=key, value=value, expires=True)
+
+
+
+By default, facts expire when they have not been refreshed or updated for a certain time, controlled by the
+:inmanta.config:option:`server.fact-expire` config option. Querying for an expired fact will force the
+agent to refresh it first.
+
+When reporting a fact, setting the ``expires`` parameter to ``False`` will ensure that this fact never expires. This
+is useful to take some load off the agent when working with facts whose values never change. On the other hand, when
+working with facts whose values are subject to change, setting the ``expires`` parameter to ``True`` will ensure
+they are periodically refreshed.
+
+---------
+
+Facts are automatically pulled periodically (this time interval is controlled by the
+:inmanta.config:option:`server.fact-renew` config option) when they are about to expire or if a model requested them
+and they were not present. The server periodically asks the agent to call into the
+handler's :meth:`~inmanta.agent.handler.CRUDHandler.facts` method. e.g.:
+
+
+.. code-block:: python
+    :linenos:
+
+    @provider("openstack::FloatingIP", name="openstack")
+    class FloatingIPHandler(OpenStackHandler):
+        ...
+
+        def facts(self, ctx, resource):
+            port_id = self.get_port_id(resource.port)
+            fip = self._neutron.list_floatingips(port_id=port_id)["floatingips"]
+            if len(fip) > 0:
+                ctx.set_fact("ip_address", fip[0]["floating_ip_address"])
+
+
+
+.. warning::
+    If you ever push a fact that does expire, make sure it is also returned by the handler's ``facts()`` method.
+    If you omit to do so, when the fact eventually expires, the agent will keep on trying to refresh it unsuccessfully.
+
+.. note::
+    Facts should not be used for things that change rapidly (e.g. cpu usage),
+    as they are not intended to refresh very quickly.
 
 Built-in Handler utilities
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -140,45 +233,58 @@ Caching
 The agent maintains a cache, that is kept over handler invocations. It can, for example, be used to
 cache a connection, so that multiple resources on the same device can share a connection.
 
-The cache can be invalidated either based on a timeout or on version. A timeout based cache is kept
-for a specific time. A version based cache is used for all resource in a specific version.
-The cache will be dropped when the deployment for this version is ready.
+
 
 The cache can be used through the :py:func:`@cache<inmanta.agent.handler.cache>` decorator. Any
 method annotated with this annotation will be cached, similar to the way
 `lru_cache <https://docs.python.org/3/library/functools.html#functools.lru_cache>`_ works. The arguments to
 the method will form the cache key, the return value will be cached. When the method is called a
 second time with the same arguments, it will not be executed again, but the cached result is
-returned instead. To exclude specific arguments from the cache key, use the `ignore` parameter.
+returned instead. To exclude specific arguments from the cache key, use the ``ignore`` parameter.
+
+Cache entries will be dropped from the cache when they become stale. Use the following parameters to set the retention policy:
+  * ``evict_after_creation``: mark entries as stale after this amount of time (in seconds) has elapsed since they entered the cache.
+  * ``evict_after_last_access``: mark entries as stale after this amount of time (in seconds) has elapsed since they were last accessed (60 by default).
+
+
+.. note::
+
+    If both ``evict_after_creation=True`` and ``evict_after_last_access=True`` are set,
+    the entry will become stale when the shortest of the two timers is up.
 
 
 For example, to cache the connection to a specific device for 120 seconds:
 
 .. code-block:: python
 
-    @cache(timeout=120, ignore=["ctx"])
+    @cache(ignore=["ctx"], evict_after_creation=120)
     def get_client_connection(self, ctx, device_id):
-       # ...
-       return connection
+        # ...
+        return connection
 
-To do the same, but additionally also expire the cache when the next version is deployed, the method must have a parameter called `version`.
-`for_version` is True by default, so when a version parameter is present, the cache is version bound by default.
 
-.. code-block:: python
-
-    @cache(timeout=120, ignore=["ctx"], for_version=True)
-    def get_client_connection(self, ctx, device_id, version):
-       # ...
-       return connection
-
-To also ensure the connection is properly closed, an `on_delete` function can be attached. This
-function is called when the cache is expired. It gets the cached item as argument.
-
+Setting ``evict_after_last_access=60`` (or omitting the parameter) will evict
+the connection from the cache 60s after it was last read from the cache.
 
 .. code-block:: python
 
-    @cache(timeout=120, ignore=["ctx"], for_version=True,
-       call_on_delete=lambda connection:connection.close())
+    @cache(ignore=["ctx"])
     def get_client_connection(self, ctx, device_id, version):
-       # ...
-       return connection
+        # ...
+        return connection
+
+To also ensure the connection is properly closed, an ``on_delete`` function can be passed
+via the ``call_on_delete`` parameter. This function is called when the cache entry is removed
+from the cache. It gets the cached item as argument.
+
+
+.. code-block:: python
+
+    @cache(
+        ignore=["ctx"],
+        evict_after_last_access=60,
+        call_on_delete=lambda connection: connection.close(),
+    )
+    def get_client_connection(self, ctx, device_id, version):
+        # ...
+        return connection

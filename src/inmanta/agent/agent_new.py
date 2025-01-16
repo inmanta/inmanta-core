@@ -1,0 +1,310 @@
+"""
+    Copyright 2024 Inmanta
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
+
+import logging
+import os
+import uuid
+from concurrent.futures.thread import ThreadPoolExecutor
+from typing import Any, Optional
+
+import inmanta.server.config as opt
+from inmanta import config, const, data, protocol
+from inmanta.agent import config as cfg
+from inmanta.agent import executor, forking_executor
+from inmanta.agent.reporting import collect_report
+from inmanta.const import AGENT_SCHEDULER_ID
+from inmanta.data.model import DataBaseReport, SchedulerStatusReport
+from inmanta.deploy import scheduler
+from inmanta.protocol import SessionEndpoint, methods, methods_v2
+from inmanta.server.services.databaseservice import DatabaseMonitor
+from inmanta.types import Apireturn
+from inmanta.util import ensure_directory_exist, join_threadpools
+
+LOGGER = logging.getLogger("inmanta.scheduler")
+
+
+class Agent(SessionEndpoint):
+    """
+    This is the new scheduler, adapted to the agent protocol
+
+    It serves a single endpoint that allows communications with the scheduler
+    """
+
+    def __init__(
+        self,
+        environment: Optional[uuid.UUID] = None,
+    ):
+        """
+        :param environment: environment id
+        """
+        super().__init__(name="agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
+
+        self.thread_pool = ThreadPoolExecutor(1, thread_name_prefix="mainpool")
+        self._storage = self.check_storage()
+
+        if environment is None:
+            environment = cfg.environment.get()
+            if environment is None:
+                raise Exception("The agent requires an environment to be set.")
+        self.set_environment(environment)
+
+        assert self._env_id is not None
+
+        self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
+        self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self._client)
+        self.working = False
+
+    async def start(self) -> None:
+        # Make mypy happy
+        assert data.Resource._connection_pool is not None
+        self._db_monitor = DatabaseMonitor(
+            data.Resource._connection_pool,
+            opt.db_name.get(),
+            opt.db_host.get(),
+        )
+        self._db_monitor.start()
+
+        await super().start()
+
+    def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
+        assert self._env_id is not None
+        return forking_executor.MPManager(
+            self.thread_pool,
+            self.sessionid,
+            self._env_id,
+            config.log_dir.get(),
+            self._storage["executors"],
+            LOGGER.level,
+            cli_log=False,
+        )
+
+    async def stop(self) -> None:
+        if self.working:
+            await self.stop_working()
+        if self._db_monitor:
+            await self._db_monitor.stop()
+        threadpools_to_join = [self.thread_pool]
+        await self.executor_manager.join(threadpools_to_join, const.SHUTDOWN_GRACE_IOLOOP * 0.9)
+        self.thread_pool.shutdown(wait=False)
+        await join_threadpools(threadpools_to_join)
+        await super().stop()
+
+    async def start_connected(self) -> None:
+        """
+        Setup our single endpoint
+        """
+        await self.add_end_point_name(AGENT_SCHEDULER_ID)
+
+    async def start_working(self) -> None:
+        """Start working, once we have a session"""
+
+        if self.working:
+            return
+        self.working = True
+        await self.load_environment_settings()
+        await self.executor_manager.start()
+        await self.scheduler.start()
+        LOGGER.info("Scheduler started for environment %s", self.environment)
+
+    async def stop_working(self, timeout: float = 0.0) -> None:
+        """Stop working, connection lost"""
+        if not self.working:
+            return
+        self.working = False
+        await self.scheduler.stop()
+        await self.executor_manager.stop()
+        await self.executor_manager.join([], timeout=timeout)
+        await self.scheduler.join()
+        LOGGER.info("Scheduler stopped for environment %s", self.environment)
+
+    @protocol.handle(methods.set_state)
+    async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
+        if agent == AGENT_SCHEDULER_ID:
+            if enabled:
+                if self.working != enabled:
+                    await self.start_working()
+                else:
+                    # Special case that the server considers us disconnected, but the Scheduler thinks we are still connected.
+                    # In that case, the Scheduler may have missed some event, therefore, we need to refresh everything
+                    # (Scheduler side) to make sure we are up to date when the server considers that the Scheduler
+                    # is back online
+                    await self.scheduler.read_version()
+                    await self.scheduler.refresh_all_agent_states_from_db()
+            else:
+                # We want the request to not end in a 500 error:
+                # if the scheduler is being shut down, it cannot respond to the request
+                await self.stop_working(timeout=const.EXECUTOR_GRACE_HARD)
+
+            return 200, "Scheduler has been notified!"
+        else:
+            if agent is None:
+                await self.scheduler.refresh_all_agent_states_from_db()
+                return 200, "All agents have been notified!"
+            else:
+                await self.scheduler.refresh_agent_state_from_db(name=agent)
+                return 200, f"Agent `{agent}` has been notified!"
+
+    async def load_environment_settings(self) -> None:
+        """
+        Load environment settings into local settings
+        """
+        async with data.Environment.get_connection() as connection:
+            assert self.environment is not None
+            environment = await data.Environment.get_by_id(self.environment, connection=connection)
+            assert environment is not None
+            agent_deploy_interval = await environment.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection)
+            assert agent_deploy_interval is not None and isinstance(agent_deploy_interval, str)  # make mypy happy
+            agent_repair_interval = await environment.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection)
+            assert agent_repair_interval is not None and isinstance(agent_repair_interval, str)  # make mypy happy
+            cfg.agent_repair_interval.set(agent_repair_interval)
+            cfg.agent_deploy_interval.set(agent_deploy_interval)
+
+    async def on_reconnect(self) -> None:
+        result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)
+        if result.code == 200 and result.result is not None:
+            state = result.result
+            if "enabled" in state and isinstance(state["enabled"], bool):
+                if state["enabled"]:
+                    await self.start_working()
+                else:
+                    assert not self.working
+            else:
+                LOGGER.warning("Server reported invalid state %s" % (repr(state)))
+        else:
+            LOGGER.warning("could not get state from the server")
+
+    async def on_disconnect(self) -> None:
+        LOGGER.warning("Connection to server lost, stopping scheduler in environment %s", self.environment)
+        await self.stop_working()
+
+    @protocol.handle(methods.trigger, env="tid", agent="id")
+    async def trigger_update(self, env: uuid.UUID, agent: None | str, incremental_deploy: bool) -> Apireturn:
+        """
+        Trigger an update for a specific agent, or for ALL agents in the environment when <agent> param is None.
+        """
+        if agent == const.AGENT_SCHEDULER_ID:
+            agent = None
+
+        if agent is None:
+            agent_id = "All agents"
+        else:
+            agent_id = f"Agent {agent}"
+
+        if incremental_deploy:
+            LOGGER.info("%s got a trigger to run deploy in environment %s", agent_id, env)
+            await self.scheduler.deploy(reason="Deploy was triggered because user has requested a deploy", agent=agent)
+        else:
+            LOGGER.info("%s got a trigger to run repair in environment %s", agent_id, env)
+            await self.scheduler.repair(reason="Deploy was triggered because user has requested a repair", agent=agent)
+        return 200
+
+    @protocol.handle(methods.trigger_read_version, env="tid", agent="id")
+    async def read_version(self, env: uuid.UUID) -> Apireturn:
+        """
+        Send a notification to the scheduler that a new version has been released
+        """
+        assert env == self.environment
+        await self.scheduler.read_version()
+        return 200
+
+    @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
+    async def run_dryrun(self, env: uuid.UUID, dry_run_id: uuid.UUID, agent: str, version: int) -> Apireturn:
+        """
+        Run a dryrun of the given version
+
+        Paused agents are silently ignored
+        """
+        assert env == self.environment
+        assert agent == AGENT_SCHEDULER_ID
+        LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s", agent, dry_run_id, version, env)
+
+        await self.scheduler.dryrun(dry_run_id, version)
+        return 200
+
+    @protocol.handle(methods.get_parameter, env="tid")
+    async def get_facts(self, env: uuid.UUID, agent: str, resource: dict[str, Any]) -> Apireturn:
+        # FIXME: this api is very inefficient: it sends the entire resource, we only need the id now
+        assert env == self.environment
+        assert agent == AGENT_SCHEDULER_ID
+        LOGGER.info("Agent %s got a trigger to run get_facts for resource %s in environment %s", agent, resource.get("id"), env)
+        await self.scheduler.get_facts(resource)
+        return 200
+
+    @protocol.handle(methods.get_status)
+    async def get_status(self) -> Apireturn:
+        return 200, collect_report(self)
+
+    @protocol.handle(methods_v2.trigger_get_status, env="tid")
+    async def get_scheduler_resource_state(self, env: data.Environment) -> SchedulerStatusReport:
+        assert env.id == self.environment
+        report = await self.scheduler.get_resource_state()
+        return report
+
+    @protocol.handle(methods_v2.notify_timer_update, env="tid")
+    async def notify_timer_update(self, env: data.Environment) -> None:
+        assert env == self.environment
+        await self.load_environment_settings()
+        await self.scheduler.load_timer_settings()
+
+    @protocol.handle(methods_v2.get_db_status)
+    async def get_db_status(self) -> DataBaseReport:
+        if self._db_monitor is None:
+            return DataBaseReport(
+                connected=False,
+                database="",
+                host="",
+                max_pool=0,
+                open_connections=0,
+                free_connections=0,
+                pool_exhaustion_count=0,
+            )
+        return await self._db_monitor.get_status()
+
+    def check_storage(self) -> dict[str, str]:
+        """
+        Check if the server storage is configured and ready to use. Ultimately, this is
+        what the layout on disk will look like:
+
+            /var/lib/inmanta/
+                ├─ server
+                    ├─ env_uuid
+                        ├─ executors/
+                        │   ├─ venvs/
+                        │   │   ├─ venv_blueprint_hash_1/
+                        │   │   ├─ venv_blueprint_hash_2/
+                        │   │   ├─ ...
+                        │   │
+                        │   ├─ code/
+                        │       ├─ executor_blueprint_hash_1/
+                        │       ├─ executor_blueprint_hash_2/
+                        │       ├─ ...
+                        │
+                        ├─ compiler/
+                        │
+                        ├─ scheduler.cfg
+
+        """
+
+        state_dir = cfg.state_dir.get()
+        if not os.path.exists(state_dir):
+            os.mkdir(state_dir)
+
+        dir_map = {
+            "executors": ensure_directory_exist(state_dir, "executors"),
+        }
+        return dir_map

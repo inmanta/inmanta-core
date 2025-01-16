@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+
+import logging
 from uuid import UUID
 
 import pytest
@@ -22,6 +24,7 @@ import pytest
 from inmanta import data
 from inmanta.data import Environment, Setting, convert_boolean
 from inmanta.util import get_compiler_version
+from utils import log_contains
 
 
 def get_environment_setting_default(setting: str) -> object:
@@ -57,6 +60,8 @@ async def test_environment_settings(client, server, environment_default):
     assert "settings" in result.result
     assert "metadata" in result.result
     assert "auto_deploy" in result.result["metadata"]
+    # Removed setting
+    assert "autostart_agent_deploy_splay_time" not in result.result
 
     check_only_contains_default_setting(result.result["settings"])
 
@@ -105,44 +110,6 @@ async def test_environment_settings(client, server, environment_default):
     assert "settings" in result.result
 
     check_only_contains_default_setting(result.result["settings"])
-
-    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value=20)
-    assert result.code == 200
-
-    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value="30")
-    assert result.code == 200
-
-    result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
-    assert result.code == 200
-    assert result.result["value"] == 30
-
-    result = await client.delete_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
-    assert result.code == 200
-
-    agent_map = {"internal": "", "agent1": "", "agent2": "localhost", "agent3": "user@agent3"}
-    result = await client.set_setting(
-        tid=environment_default,
-        id=data.AUTOSTART_AGENT_MAP,
-        value=agent_map,
-    )
-    assert result.code == 200
-
-    # Internal agent is missing
-    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP, value={"agent1": ""})
-    assert result.code == 400
-    assert "The internal agent must be present in the autostart_agent_map" in result.result["message"]
-    # Assert agent_map didn't change
-    result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP)
-    assert result.code == 200
-    assert result.result["value"] == agent_map
-
-    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP, value="")
-    assert result.code == 400
-    assert "Agent map should be a dict" in result.result["message"]
-    # Assert agent_map didn't change
-    result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP)
-    assert result.code == 200
-    assert result.result["value"] == agent_map
 
 
 async def test_environment_settings_v2(client_v2, server, environment_default):
@@ -209,6 +176,7 @@ async def test_delete_protected_environment(server, client):
     await assert_env_deletion(env_id, deletion_succeeds=True)
 
 
+@pytest.mark.parametrize("no_agent", [True])
 async def test_clear_protected_environment(server, client):
     result = await client.create_project("env-test")
     assert result.code == 200
@@ -340,3 +308,27 @@ async def test_get_setting_no_longer_exist(server, client, environment):
     result = await client.list_settings(tid=environment)
     assert result.code == 200
     assert "new_setting" in result.result["settings"].keys()
+
+
+async def test_halt_env_before_deletion(environment, server, client, caplog):
+    """
+    Verify env will be halted before it is deleted.
+    """
+    with caplog.at_level(logging.INFO):
+        result = await client.environment_delete(environment)
+        assert result.code == 200
+
+    log_contains(caplog, "inmanta.server.services.environmentservice", logging.INFO, f"Halting Environment {environment}")
+
+
+async def test_resume_marked_for_delete(environment, server, client, caplog):
+    """
+    Cannot resume environment that is marked for deletion
+    """
+
+    env1 = await data.Environment.get_by_id(environment)
+    await env1.mark_for_deletion()
+
+    result = await client.resume_environment(environment)
+    assert result.code == 400
+    assert result.result["message"] == "Invalid request: Cannot resume an environment that is marked for deletion."

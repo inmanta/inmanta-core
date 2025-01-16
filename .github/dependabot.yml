@@ -10,6 +10,7 @@ updates:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
   ignore:
+    # #6668
     - dependency-name: "pytest-inmanta-extensions"
       # pytest-inmanta-extensions version is tied to inmanta-core's version with an f-string
       # dependabot crashes on trying to bump it
@@ -18,7 +19,7 @@ updates:
       update-types: ["version-update:semver-major"]
     - dependency-name: "execnet"
       update-types: ["version-update:semver-major"]
-- target-branch: iso6
+- target-branch: iso7
   package-ecosystem: pip
   directory: "/"
   schedule:

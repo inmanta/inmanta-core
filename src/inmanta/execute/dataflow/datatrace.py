@@ -234,9 +234,11 @@ class DataTraceRenderer:
                         for resp_loc in sorted(
                             (
                                 (
-                                    assignment.responsible.pretty_print()
-                                    if isinstance(assignment.responsible, Statement)
-                                    else str(assignment.responsible),
+                                    (
+                                        assignment.responsible.pretty_print()
+                                        if isinstance(assignment.responsible, Statement)
+                                        else str(assignment.responsible)
+                                    ),
                                     str(assignment.responsible.get_location()),
                                 )
                                 for assignment in equivalence.interal_assignments()

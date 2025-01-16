@@ -1,0 +1,6 @@
+description: The agent splay environment settings have been removed.
+issue-nr: 8619
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: "{{description}} Due to per-resource repair and deploy timers, splaying is no longer required"

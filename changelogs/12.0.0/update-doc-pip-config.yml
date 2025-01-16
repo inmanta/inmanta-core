@@ -1,0 +1,5 @@
+description: Update the pip config in the docs of lsm quickstart
+change-type: patch
+destination-branches:
+  - master
+  - iso7

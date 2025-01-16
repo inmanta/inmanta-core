@@ -1,0 +1,5 @@
+description: Fixed lexing of matching keyword
+change-type: patch
+destination-branches:
+  - master
+  - iso7

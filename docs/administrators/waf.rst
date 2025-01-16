@@ -18,52 +18,52 @@ to set this up with Apache HTTPD, but similar rules could also be applied to NGI
 
     3a. The easiest setup is to proxy all traffic directly to the orchestrator:
 
-        .. code-block:: apacheconf
+    .. code-block:: apacheconf
 
-            # Proxy all requests to the orchestrator
-            <Location /console>
-                ProxyPass http://localhost:8888/
+        # Proxy all requests to the orchestrator
+        <Location /console>
+            ProxyPass http://localhost:8888/
 
-                Allow from all
-                # Or limit access to certain users or prefixes
-                # Allow from 10.x.x.x/24
-            </Location>
+            Allow from all
+            # Or limit access to certain users or prefixes
+            # Allow from 10.x.x.x/24
+        </Location>
 
     3b. Only proxy the calls that the orchestrator has endpoints for. Everything else will be handled by the reverse proxy:
 
-        .. code-block:: apacheconf
+    .. code-block:: apacheconf
 
-            # Web Console is a static single page application (SPA)
-            <Location /console>
-                ProxyPass http://localhost:8888/console
+        # Web Console is a static single page application (SPA)
+        <Location /console>
+            ProxyPass http://localhost:8888/console
 
-                # Limit the possible methods to only get the content
-                AllowMethods GET HEAD OPTIONS
+            # Limit the possible methods to only get the content
+            AllowMethods GET HEAD OPTIONS
 
-                Allow from all
-                # Or limit access
-                # Allow from 10.x.x.x/24
-            </Location>
+            Allow from all
+            # Or limit access
+            # Allow from 10.x.x.x/24
+        </Location>
 
-            # Generic API: used by agents, web-console, integrations, ...
-            # Unless detailed error reports are requested, this API should not be made available to
-            # any portals or tools
-            <Location /api>
-                ProxyPass http://localhost:8888/api
+        # Generic API: used by agents, web-console, integrations, ...
+        # Unless detailed error reports are requested, this API should not be made available to
+        # any portals or tools
+        <Location /api>
+            ProxyPass http://localhost:8888/api
 
-                Allow from all
-                # Or limit access
-                # Allow from 10.x.x.x/24
-            </Location>
+            Allow from all
+            # Or limit access
+            # Allow from 10.x.x.x/24
+        </Location>
 
-            # LSM API: the northbound API called by tools such as customer portals
-            <Location /lsm>
-                ProxyPass http://localhost:8888/lsm
+        # LSM API: the northbound API called by tools such as customer portals
+        <Location /lsm>
+            ProxyPass http://localhost:8888/lsm
 
-                Allow from all
-                # Or limit access
-                # Allow from 10.x.x.x/24
-            </Location>
+            Allow from all
+            # Or limit access
+            # Allow from 10.x.x.x/24
+        </Location>
 
 
 When only exposing the LSM API even more specific proxy rules can be used. In the next section we provide example rules to restrict this with mod_security.
@@ -126,19 +126,19 @@ This ruleset has been tested to be compatible with the OWASP core rule set. Howe
 When the northbound API is only used for calls to LSM to manage service instances, mod_security can be used to restrict access even more. The following rules ensure that only calls for service "network" are allowed and callback management. The rules are set up in such a way that additional urls can be easily added to the ruleset:
 
 
-    .. code-block:: apacheconf
+.. code-block:: apacheconf
 
-        # Only allow certain paths required for the "customer portal" to function:
-        SecAction \
-        "id:300001,\
-            phase:1,\
-            nolog,\
-            pass,\
-            t:none,\
-            setvar:'tx.allowed_urls=|/lsm/v1/service_inventory/network| |/lsm/v1/callbacks'"
+    # Only allow certain paths required for the "customer portal" to function:
+    SecAction \
+    "id:300001,\
+        phase:1,\
+        nolog,\
+        pass,\
+        t:none,\
+        setvar:'tx.allowed_urls=|/lsm/v1/service_inventory/network| |/lsm/v1/callbacks'"
 
-        SecRule REQUEST_URI "!@withIN %{tx.allowed_urls}" \
-            "id:300002,phase:1,t:lowercase,deny,status:404"
+    SecRule REQUEST_URI "!@withIN %{tx.allowed_urls}" \
+        "id:300002,phase:1,t:lowercase,deny,status:404"
 
 
 When the OWASP core ruleset is enabled and particularly when JSON decoding is enabled, mod_security will also scan for SQL and XSS attacks. Especially the latter can be useful if a customer portal uses the API directly and the service model has free form attributes that can hold any content. In that case it may be useful to also use mod_security to protect against for example stored XSS attacks.

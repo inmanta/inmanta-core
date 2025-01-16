@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import enum
 import gzip
 import importlib
@@ -35,22 +36,19 @@ from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, TypeVar, Uni
 from urllib import parse
 
 import docstring_parser
-import jwt
 import pydantic
 import typing_inspect
 from pydantic import ValidationError
 from pydantic.main import create_model
 from tornado import web
 
-from inmanta import config as inmanta_config
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
+from inmanta.protocol import auth
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
-
-from . import exceptions
 
 if TYPE_CHECKING:
     from .endpoints import CallTarget
@@ -67,6 +65,21 @@ OCTET_STREAM_CONTENT = "application/octet-stream"
 ZIP_CONTENT = "application/zip"
 UTF8_CHARSET = "charset=UTF-8"
 HTML_CONTENT_WITH_UTF8_CHARSET = f"{HTML_CONTENT}; {UTF8_CHARSET}"
+
+
+class CallContext:
+    """A context variable that provides more information about the current call context"""
+
+    request_headers: dict[str, str]
+    auth_token: Optional[auth.claim_type]
+    auth_username: Optional[str]
+
+    def __init__(
+        self, request_headers: dict[str, str], auth_token: Optional[auth.claim_type], auth_username: Optional[str]
+    ) -> None:
+        self.request_headers = request_headers
+        self.auth_token = auth_token
+        self.auth_username = auth_username
 
 
 class ArgOption:
@@ -153,10 +166,10 @@ class Request:
         return req
 
 
-T = TypeVar("T", bound=Union[None, ArgumentTypes])
+T_co = TypeVar("T_co", bound=Union[None, ArgumentTypes], covariant=True)
 
 
-class ReturnValue(Generic[T]):
+class ReturnValue(Generic[T_co]):
     """
     An object that handlers can return to provide a response to a method call.
     """
@@ -165,7 +178,7 @@ class ReturnValue(Generic[T]):
         self,
         status_code: int = 200,
         headers: MutableMapping[str, str] = {},
-        response: Optional[T] = None,
+        response: Optional[T_co] = None,
         content_type: str = JSON_CONTENT,
         links: Optional[dict[str, str]] = None,
     ) -> None:
@@ -405,6 +418,8 @@ class MethodProperties:
         if validate_sid is None:
             validate_sid = agent_server and not api
 
+        assert not (enforce_auth and server_agent), "Can not authenticate the return channel"
+
         self._path = UrlPath(path)
         self.path = path
         self._operation = operation
@@ -425,6 +440,7 @@ class MethodProperties:
         self.function = function
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
+        self._return_type: Optional[type] = None
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
@@ -445,6 +461,12 @@ class MethodProperties:
     @property
     def enforce_auth(self) -> bool:
         return self._enforce_auth
+
+    @property
+    def return_type(self) -> type:
+        if self._return_type is None:
+            raise InvalidMethodDefinition("Only typed methods have a return type")
+        return self._return_type
 
     def validate_arguments(self, values: dict[str, Any]) -> dict[str, Any]:
         """
@@ -536,9 +558,9 @@ class MethodProperties:
                 f"A key/value argument is only allowed when `varkw` is set to true in method {self.function}."
             )
 
-        self._validate_return_type(type_hints["return"], strict=self.strict_typing)
+        self._return_type = self._validate_return_type(type_hints["return"], strict=self.strict_typing)
 
-    def _validate_return_type(self, arg_type: type, *, strict: bool = True) -> None:
+    def _validate_return_type(self, arg_type: type, *, strict: bool = True) -> type:
         """Validate the return type"""
         # Note: we cannot call issubclass on a generic type!
         arg = "return type"
@@ -552,9 +574,9 @@ class MethodProperties:
                 return False
 
         if is_return_value_type(arg_type):
-            self._validate_type_arg(
-                arg, typing_inspect.get_args(arg_type, evaluate=True)[0], strict=strict, allow_none_type=True
-            )
+            return_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+            self._validate_type_arg(arg, return_type, strict=strict, allow_none_type=True)
+            return return_type
 
         elif (
             not typing_inspect.is_generic_type(arg_type)
@@ -565,6 +587,7 @@ class MethodProperties:
 
         else:
             self._validate_type_arg(arg, arg_type, allow_none_type=True, strict=strict)
+            return arg_type
 
     def _validate_type_arg(
         self, arg: str, arg_type: type, *, strict: bool = True, allow_none_type: bool = False, in_url: bool = False
@@ -577,7 +600,6 @@ class MethodProperties:
         :param allow_none_type: If true, allow `None` as the type for this argument
         :param in_url: This argument is passed in the URL
         """
-
         if typing_inspect.is_new_type(arg_type):
             return self._validate_type_arg(
                 arg,
@@ -599,11 +621,7 @@ class MethodProperties:
                 self._validate_type_arg(arg, sub_arg, strict=strict, allow_none_type=allow_none_type, in_url=in_url)
 
                 if typing_inspect.is_generic_type(sub_arg):
-                    # there is a difference between python 3.6 and >=3.7
-                    if hasattr(sub_arg, "__name__"):
-                        cnt[sub_arg.__name__] += 1
-                    else:
-                        cnt[sub_arg._name] += 1
+                    cnt[sub_arg.__name__] += 1
 
             for name, n in cnt.items():
                 if n > 1:
@@ -663,6 +681,8 @@ class MethodProperties:
         elif allow_none_type and types.issubclass(arg_type, type(None)):
             # A check for optional arguments
             pass
+        elif issubclass(arg_type, CallContext):
+            raise InvalidMethodDefinition("CallContext should only be defined in the handler, not the method.")
         else:
             valid_types = ", ".join([x.__name__ for x in VALID_SIMPLE_ARG_TYPES])
             raise InvalidMethodDefinition(
@@ -986,77 +1006,6 @@ def shorten(msg: str, max_len: int = 10) -> str:
     if len(msg) < max_len:
         return msg
     return msg[0 : max_len - 3] + "..."
-
-
-def encode_token(
-    client_types: list[str], environment: Optional[str] = None, idempotent: bool = False, expire: Optional[float] = None
-) -> str:
-    cfg = inmanta_config.AuthJWTConfig.get_sign_config()
-    if cfg is None:
-        raise Exception("No JWT signing configuration available.")
-
-    for ct in client_types:
-        if ct not in cfg.client_types:
-            raise Exception(
-                f"The signing config does not support the requested client type {ct}. Only {cfg.client_types} are allowed."
-            )
-
-    payload: dict[str, Any] = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}
-
-    if not idempotent:
-        payload["iat"] = int(time.time())
-
-        if cfg.expire > 0:
-            payload["exp"] = int(time.time() + cfg.expire)
-        elif expire is not None:
-            payload["exp"] = int(time.time() + expire)
-
-    if environment is not None:
-        payload[const.INMANTA_URN + "env"] = environment
-
-    return jwt.encode(payload, cfg.key, cfg.algo)
-
-
-def decode_token(token: str) -> dict[str, str]:
-    try:
-        # First decode the token without verification
-        header = jwt.get_unverified_header(token)
-        payload = jwt.decode(token, options={"verify_signature": False})
-    except Exception:
-        raise exceptions.Forbidden("Unable to decode provided JWT bearer token.")
-
-    if "iss" not in payload:
-        raise exceptions.Forbidden("Issuer is required in token to validate.")
-
-    cfg = inmanta_config.AuthJWTConfig.get_issuer(payload["iss"])
-    if cfg is None:
-        raise exceptions.Forbidden("Unknown issuer for token")
-
-    alg = header["alg"].lower()
-    if alg == "hs256":
-        key = cfg.key
-    elif alg == "rs256":
-        if "kid" not in header:
-            raise exceptions.Forbidden("A kid is required for RS256")
-        kid = header["kid"]
-        if kid not in cfg.keys:
-            raise exceptions.Forbidden(
-                "The kid provided in the token does not match a known key. Check the jwks_uri or try "
-                "restarting the server to load any new keys."
-            )
-
-        key = cfg.keys[kid]
-    else:
-        raise exceptions.Forbidden("Algorithm %s is not supported." % alg)
-
-    try:
-        payload = dict(jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo]))
-        ct_key = const.INMANTA_URN + "ct"
-        payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
-    except Exception as e:
-        raise exceptions.Forbidden(*e.args)
-
-    return payload
 
 
 @stable_api

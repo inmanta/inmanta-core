@@ -33,9 +33,9 @@ from inmanta.ast import (
 )
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast.type import Float, NamedType, Type
+from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, dataflow
-from inmanta.execute.util import AnyType
+from inmanta.execute.util import AnyType, NoneValue
 
 try:
     from typing import TYPE_CHECKING
@@ -238,7 +238,11 @@ class Entity(NamedType, WithComment):
         if attribute.name not in self._attributes:
             self._attributes[attribute.name] = attribute
         else:
-            raise DuplicateException(self._attributes[attribute.name], attribute, "attribute already exists")
+            raise DuplicateException(
+                self._attributes[attribute.name],
+                attribute,
+                "attribute '%s' already exists on entity '%s'" % (attribute.name, self.name),
+            )
 
     def get_attribute(self, name: str) -> Optional["Attribute"]:
         """
@@ -429,12 +433,24 @@ class Entity(NamedType, WithComment):
                 stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params)
             )
 
+        def coerce(t: Type, v: object) -> object:
+            """
+            Coerce float-typed values to float (e.g. 1 -> 1.0)
+            """
+            match t:
+                case Float():
+                    return t.cast(v)
+                case NullableType(element_type=Float() as float):
+                    return v if isinstance(v, NoneValue) else float.cast(v)
+                case _:
+                    return v
+
         key = ", ".join(
             [
                 "%s=%s"
                 % (
                     k,
-                    repr(self.get_attribute(k).type.cast(v) if isinstance(self.get_attribute(k).type, Float) else v),
+                    repr(coerce(self.get_attribute(k).type, v)),
                 )
                 for k, v in sorted(params, key=lambda x: x[0])
             ]
@@ -524,6 +540,9 @@ class Implementation(NamedType):
     def normalize(self) -> None:
         try:
             self.statements.normalize()
+        except RuntimeException as e:
+            e.set_statement(self, False)
+            raise
         except CompilerException as e:
             e.set_location(self.location)
             raise

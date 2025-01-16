@@ -1,0 +1,3 @@
+description: Fix `stop_for_agent` of MPManager -> was stopping of all agents instead of the one provided
+change-type: patch
+destination-branches: [master]

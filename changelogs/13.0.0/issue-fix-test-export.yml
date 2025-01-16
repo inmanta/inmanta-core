@@ -1,0 +1,5 @@
+description: >
+  Fix potential race condition in test_export by making sure the test resource will not be deployed, so
+  it can be checked in the `deployed` state.
+change-type: patch
+destination-branches: [master, iso7]

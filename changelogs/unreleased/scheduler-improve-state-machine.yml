@@ -1,0 +1,4 @@
+description: Fix bug in state machine where 'skipped' becomes 'available'
+change-type: patch
+destination-branches: [master]
+

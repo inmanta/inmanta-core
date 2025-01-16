@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+
+import inmanta.types
 from utils import get_resource
 
 """
@@ -32,8 +34,6 @@ import asyncpg
 import pytest
 
 from inmanta import const, data
-from inmanta.data import model
-from inmanta.protocol.common import Result
 
 
 def slowdown_queries(
@@ -84,102 +84,6 @@ def slowdown_queries(
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_done", "resource_action_update"])
-async def test_4889_deadlock_delete_resource_action_update(
-    monkeypatch, server, client, environment: str, agent, endpoint_to_use: str
-) -> None:
-    """
-    Verify that no deadlock exists between the delete of a version and the deploy_done/resource_action_update (background task)
-    on that same version.
-    """
-    env_id: uuid.UUID = uuid.UUID(environment)
-
-    version: int = 1
-    await data.ConfigurationModel(
-        environment=env_id,
-        version=version,
-        date=datetime.datetime.now().astimezone(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    ).insert()
-
-    resource = model.ResourceVersionIdStr(f"std::File[agent1,path=/etc/file1],v={version}")
-    await data.Resource.new(
-        environment=env_id,
-        status=const.ResourceState.available,
-        resource_version_id=resource,
-        attributes={"purge_on_delete": False, "purged": True, "requires": []},
-    ).insert()
-
-    # Add parameter for resource
-    parameter_id = "test_param"
-    result = await client.set_param(
-        tid=env_id,
-        id=parameter_id,
-        source=const.ParameterSource.user,
-        value="val",
-        resource_id="std::File[agent1,path=/etc/file1]",
-    )
-    assert result.code == 200
-
-    action_id = uuid.uuid4()
-    result = await agent._client.resource_deploy_start(tid=env_id, rvid=resource, action_id=action_id)
-    assert result.code == 200, result.result
-
-    # artificially slow down queries to increase deadlock probability
-    slowdown_queries(monkeypatch, cls=data.ResourceAction, query_funcs=["set_and_save"], delay=2)
-
-    # request delete
-    async def delete() -> Result:
-        # Make sure insert starts first so it can acquire its first lock.
-        await asyncio.sleep(1)
-        return await client.delete_version(tid=environment, id=version)
-
-    # request deploy_done
-    now: datetime.datetime = datetime.datetime.now()
-    deploy_done: abc.Awaitable[Result]
-    if endpoint_to_use == "resource_deploy_done":
-        deploy_done = agent._client.resource_deploy_done(
-            tid=env_id,
-            rvid=resource,
-            action_id=action_id,
-            status=const.ResourceState.deployed,
-            messages=[
-                model.LogLine(level=const.LogLevel.DEBUG, msg="message", kwargs={"keyword": 123, "none": None}, timestamp=now),
-                model.LogLine(level=const.LogLevel.INFO, msg="test", kwargs={}, timestamp=now),
-            ],
-            changes={"attr1": model.AttributeStateChange(current=None, desired="test")},
-            change=const.Change.purged,
-        )
-    elif endpoint_to_use == "resource_action_update":
-        deploy_done = agent._client.resource_action_update(
-            tid=env_id,
-            resource_ids=[resource],
-            action_id=action_id,
-            action=const.ResourceAction.deploy,
-            started=None,
-            finished=now,
-            status=const.ResourceState.deployed,
-            messages=[
-                data.LogLine.log(level=const.LogLevel.DEBUG, msg="message", timestamp=now, keyword=123, none=None),
-                data.LogLine.log(level=const.LogLevel.INFO, msg="test", timestamp=now),
-            ],
-            changes={resource: {"attr1": model.AttributeStateChange(current=None, desired="test")}},
-            change=const.Change.purged,
-            send_events=True,
-        )
-    else:
-        raise ValueError("Unknown value for endpoint_to_use parameter")
-
-    # wait for both concurrent requests
-    results: abc.Sequence[Result] = await asyncio.gather(deploy_done, delete())
-    assert all(result.code == 200 for result in results), "\n".join(
-        str(result.result) for result in results if result.code != 200
-    )
-
-
-@pytest.mark.slowtest
 async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environment: str) -> None:
     """
     Verify that no deadlock exists between the delete of a version and the insert of a ResourceAction for that same version.
@@ -197,7 +101,7 @@ async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environm
     )
     await confmodel.insert()
 
-    resource = model.ResourceVersionIdStr(f"mymod::myresource[myagent,id=1],v={version}")
+    resource = inmanta.types.ResourceVersionIdStr(f"mymod::myresource[myagent,id=1],v={version}")
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.available,
@@ -231,7 +135,10 @@ async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environm
 
 
 @pytest.mark.slowtest
-async def test_release_version_concurrently(monkeypatch, server, client, environment: str, clienthelper) -> None:
+@pytest.mark.parametrize("no_agent", [True])
+async def test_release_version_concurrently(
+    monkeypatch, server, client, environment: str, clienthelper, no_agent: bool
+) -> None:
     version1 = await clienthelper.get_version()
     resource1 = get_resource(version1, key="test1")
     await clienthelper.put_version_simple(resources=[resource1], version=version1)

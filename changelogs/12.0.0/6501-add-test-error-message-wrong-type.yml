@@ -1,0 +1,4 @@
+description: Make sure the type_string is used in error messages when using a wrong type.
+issue-nr: 6501
+change-type: patch
+destination-branches: [master, iso7, iso6]

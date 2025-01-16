@@ -1,0 +1,5 @@
+description: Add compatibility page.
+issue-nr: 7428
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso7, iso6]

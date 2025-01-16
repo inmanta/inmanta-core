@@ -31,7 +31,7 @@ import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     AmbiguousTypeException,
-    AttributeReferenceAnchor,
+    AttributeAnchor,
     DuplicateException,
     InvalidCompilerState,
     Locatable,
@@ -41,8 +41,8 @@ from inmanta.ast import (
     NotFoundException,
     Range,
     RuntimeException,
+    TypeAnchor,
     TypeNotFoundException,
-    TypeReferenceAnchor,
     TypingException,
 )
 from inmanta.ast.attribute import Attribute, RelationAttribute
@@ -143,7 +143,6 @@ class SubConstructor(RequiresEmitStatement):
         try:
             inmanta_type.Bool().validate(condition)
         except RuntimeException as e:
-            e.set_statement(self.implements)
             e.msg = (
                 "Invalid value `%s`: the condition for a conditional implementation can only be a boolean expression"
                 % condition
@@ -253,7 +252,12 @@ class For(RequiresEmitStatement):
         var = self.base.execute(requires, resolver, queue)
 
         if not isinstance(var, (list, Unknown)):
-            raise TypingException(self, "A for loop can only be applied to lists and relations")
+            msg = "A for loop can only be applied to lists and relations."
+            if isinstance(self.base, Reference):
+                msg += " Hint: '%s' resolves to '%s'." % (self.base, str(var))
+            else:
+                msg += " Hint: '%s' is not a list." % str(var)
+            raise TypingException(self, msg)
 
         # we're done here: base's execute has reported results to helper
         return None
@@ -697,7 +701,7 @@ class ConditionalExpression(ExpressionStatement):
         # Schedule execution to resume when the condition can be executed
         resumer: RawResumer = ConditionalExpressionResumer(self, result, lhs=lhs)
         self.copy_location(resumer)
-        RawUnit(queue, resolver, self.condition.requires_emit(resolver, queue), resumer)
+        RawUnit(queue, resolver, self.condition.requires_emit(resolver, queue), resumer, override_exception_location=False)
 
         # Wait for the result variable to be populated
         requires[self] = result
@@ -717,7 +721,8 @@ class ConditionalExpression(ExpressionStatement):
             return Unknown(self)
         if not isinstance(condition_value, bool):
             raise RuntimeException(
-                self, "Invalid value `%s`: the condition for a conditional expression must be a boolean expression"
+                self,
+                "Invalid value `%s`: the condition for a conditional expression must be a boolean expression" % condition_value,
             )
         return (self.if_expression if condition_value else self.else_expression).execute_direct(requires)
 
@@ -754,7 +759,9 @@ class ConditionalExpressionResumer(RawResumer):
                 return
             if not isinstance(condition_value, bool):
                 raise RuntimeException(
-                    self, "Invalid value `%s`: the condition for a conditional expression must be a boolean expression"
+                    self.expression,
+                    "Invalid value `%s`: the condition for a conditional expression must be a boolean expression"
+                    % condition_value,
                 )
             self.condition_value = condition_value
 
@@ -876,13 +883,15 @@ class Constructor(ExpressionStatement):
             v.normalize(
                 lhs_attribute=AttributeAssignmentLHS(self._self_ref, k, type_hint) if k not in index_attributes else None
             )
-            self.anchors.extend(v.anchors)
+            self.anchors.extend(v.get_anchors())
+            self.anchors.append(AttributeAnchor(self.__attribute_locations[k].get_location(), attr))
+
         for wrapped_kwargs in self.wrapped_kwargs:
             wrapped_kwargs.normalize()
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.type = self._resolve_type(lhs_attribute)
-        self.anchors.append(TypeReferenceAnchor(self.type.namespace, self.class_type))
+        self.anchors.append(TypeAnchor(self.class_type, self.type))
         inindex: abc.MutableSet[str] = set()
 
         all_attributes = dict(self.type.get_default_values())
@@ -1186,8 +1195,6 @@ class Constructor(ExpressionStatement):
         if name not in self.__attributes:
             self.__attributes[name] = value
             self.__attribute_locations[name] = lname
-            self.anchors.append(AttributeReferenceAnchor(lname.get_location(), lname.namespace, self.class_type, name))
-            self.anchors.extend(value.get_anchors())
         else:
             raise RuntimeException(self, f"The attribute {name} in the constructor call of {self.class_type} is already set.")
 

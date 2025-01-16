@@ -1,0 +1,8 @@
+---
+description: Fix bug where undefined and skipped_for_undefined resources are not correctly merged by the put_partial endpoint.
+issue-nr: 7416
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso7, iso6]
+sections:
+  bugfix: "{{description}}"

@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-
 import pytest
 
 from compiler.dataflow.conftest import DataflowTestHelper, get_dataflow_node
@@ -64,10 +63,10 @@ end
 
 
 
-implement C using std::none
-implement V using std::none
-implement U using std::none
-implement X using std::none
+implement C using none
+implement V using none
+implement U using none
+implement X using none
 
 
 c = C()
@@ -79,20 +78,27 @@ u.v = V(n = 42, i = c.i)
 x.n = u.v.n
 
 %s
+
+implementation none for std::Entity:
+end
         """
         % (
-            """
+            (
+                """
 c.i = cc.i
 cc = C(i = c.i)
             """
-            if attribute_equivalence
-            else "",
-            """
+                if attribute_equivalence
+                else ""
+            ),
+            (
+                """
 c.i = i
 i = c.i
             """
-            if variable_equivalence
-            else "",
+                if variable_equivalence
+                else ""
+            ),
         ),
         MultiException,
     )
@@ -120,7 +126,7 @@ entity A:
     int n
 end
 
-implement A using std::none
+implement A using none
 
 
 x = A()
@@ -131,6 +137,8 @@ z = A()
 x.n = y.n
 y.n = x.n
 x.n = z.n
+
+implementation none for std::Entity: end
 """,
         MultiException,
     )
@@ -161,7 +169,7 @@ entity A:
     int n
 end
 
-implement A using std::none
+implement A using none
 
 
 x = A()
@@ -174,6 +182,9 @@ x.n = n
 
 n = m
 m = n
+
+implementation none for std::Entity:
+end
 """,
         MultiException,
     )

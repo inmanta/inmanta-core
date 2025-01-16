@@ -1,0 +1,6 @@
+description: Added upper bound to setuptools dependency
+change-type: patch
+# changelog messages were already merged in previous PR
+destination-branches:
+  - master
+  - iso7

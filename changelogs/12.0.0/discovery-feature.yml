@@ -1,0 +1,5 @@
+description: Introduce discovery feature
+change-type: patch
+destination-branches:
+  - master
+  - iso7

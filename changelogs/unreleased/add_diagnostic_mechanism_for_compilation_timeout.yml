@@ -1,0 +1,3 @@
+description: Add a diagnostic mechanism in case of compilation timeouts
+change-type: patch
+destination-branches: [master]

@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump setuptools from 69.0.3 to 69.1.0
+destination-branches:
+- master
+- iso7
+sections: {}

@@ -19,8 +19,9 @@
 import logging
 from collections import abc
 from itertools import chain
-from typing import Optional
+from typing import Mapping, Optional, Sequence
 
+import inmanta.ast
 import inmanta.ast.type as InmantaType
 import inmanta.execute.dataflow as dataflow
 from inmanta import plugins
@@ -32,12 +33,13 @@ from inmanta.ast import (
     Namespace,
     RuntimeException,
     TypeReferenceAnchor,
+    UnknownException,
+    UnsetException,
     WrappingRuntimeException,
 )
 from inmanta.ast.statements import AttributeAssignmentLHS, ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.proxy import UnknownException, UnsetException
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, VariableABC, Waiter
 from inmanta.execute.util import NoneValue, Unknown
 
@@ -83,8 +85,8 @@ class FunctionCall(ReferenceStatement):
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
-        self.anchors = [TypeReferenceAnchor(self.namespace, self.name)]
         func = self.namespace.get_type(self.name)
+        self.anchors = [TypeReferenceAnchor(self.namespace, self.name)]
         if isinstance(func, InmantaType.Primitive):
             self.function = Cast(self, func)
         elif isinstance(func, plugins.Plugin):
@@ -92,7 +94,7 @@ class FunctionCall(ReferenceStatement):
         else:
             raise RuntimeException(self, "Can not call '%s', can only call plugin or primitive type cast" % self.name)
 
-    def requires_emit(self, resolver, queue):
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC[object]]:
         requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         # add lazy vars
@@ -101,7 +103,7 @@ class FunctionCall(ReferenceStatement):
         requires[self] = temp
         return requires
 
-    def _resolve(self, requires, resolver, queue):
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
@@ -114,10 +116,10 @@ class FunctionCall(ReferenceStatement):
                 kwargs[k] = v
         return self.function.call_direct(arguments, kwargs)
 
-    def resume(self, requires, resolver, queue, result):
-        """
-        Evaluate this statement.
-        """
+    def execute_args(
+        self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler
+    ) -> tuple[list[object], dict[str, object]]:
+        """Execute the argument expessions and return a tuple of args-kwargs"""
         arguments = [a.execute(requires, resolver, queue) for a in self.arguments]
         kwargs = {k: v.execute(requires, resolver, queue) for k, v in self.kwargs.items()}
         for wrapped_kwarg_expr in self.wrapped_kwargs:
@@ -125,6 +127,19 @@ class FunctionCall(ReferenceStatement):
                 if k in kwargs:
                     raise RuntimeException(self, "Keyword argument %s repeated in function call" % k)
                 kwargs[k] = v
+        return arguments, kwargs
+
+    def execute_call(
+        self,
+        arguments: list[object],
+        kwargs: dict[str, object],
+        resolver: Resolver,
+        queue: QueueScheduler,
+        result: ResultVariable,
+    ) -> None:
+        """
+        Evaluate this statement, using the output of execute_args
+        """
         self.function.call_in_context(arguments, kwargs, resolver, queue, result)
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
@@ -159,13 +174,15 @@ class Function:
     def __init__(self, ast_node: FunctionCall) -> None:
         self.ast_node: FunctionCall = ast_node
 
-    def call_direct(self, args, kwargs) -> object:
+    def call_direct(self, args: list[object], kwargs: dict[str, object]) -> object:
         """
         Call this function and return the result.
         """
         raise NotImplementedError()
 
-    def call_in_context(self, args, kwargs, resolver: Resolver, queue: QueueScheduler, result: ResultVariable) -> None:
+    def call_in_context(
+        self, args: list[object], kwargs: dict[str, object], resolver: Resolver, queue: QueueScheduler, result: ResultVariable
+    ) -> None:
         """
         Call this function in the supplied context and store the result in the supplied ResultVariable.
         """
@@ -215,7 +232,7 @@ class PluginFunction(Function):
                 raise WrappingRuntimeException(
                     self.ast_node, "Exception in direct execution for plugin %s" % self.ast_node.name, e
                 )
-            except plugins.PluginException as e:
+            except inmanta.ast.PluginException as e:
                 raise ExplicitPluginException(
                     self.ast_node, "PluginException in direct execution for plugin %s" % self.ast_node.name, e
                 )
@@ -223,8 +240,14 @@ class PluginFunction(Function):
                 raise ExternalException(self.ast_node, "Exception in direct execution for plugin %s" % self.ast_node.name, e)
 
     def call_in_context(
-        self, args: list[object], kwargs: dict[str, object], resolver: Resolver, queue: QueueScheduler, result: ResultVariable
+        self,
+        args: Sequence[object],
+        kwargs: Mapping[str, object],
+        resolver: Resolver,
+        queue: QueueScheduler,
+        result: ResultVariable,
     ) -> None:
+
         no_unknows = self.plugin.check_args(args, kwargs)
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
@@ -232,7 +255,10 @@ class PluginFunction(Function):
             return
 
         if self.plugin._context != -1:
-            args.insert(self.plugin._context, plugins.Context(resolver, queue, self.ast_node, self.plugin, result))
+            # Don't mutate the arguments!
+            new_args = list(args)
+            new_args.insert(self.plugin._context, plugins.Context(resolver, queue, self.ast_node, self.plugin, result))
+            args = new_args
 
         if self.plugin.opts["emits_statements"]:
             self.plugin(*args, **kwargs)
@@ -255,16 +281,23 @@ class PluginFunction(Function):
                 raise e
             except RuntimeException as e:
                 raise WrappingRuntimeException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
-            except plugins.PluginException as e:
+            except inmanta.ast.PluginException as e:
                 raise ExplicitPluginException(self.ast_node, "PluginException in plugin %s" % self.ast_node.name, e)
             except Exception as e:
                 raise ExternalException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
 
 
 class FunctionUnit(Waiter):
-    __slots__ = ("result", "base_requires", "function", "resolver")
+    __slots__ = ("result", "base_requires", "function", "resolver", "args", "kwargs")
 
-    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall) -> None:
+    def __init__(
+        self,
+        queue_scheduler: QueueScheduler,
+        resolver: Resolver,
+        result: ResultVariable[object],
+        requires: dict[object, VariableABC[object]],
+        function: FunctionCall,
+    ) -> None:
         Waiter.__init__(self, queue_scheduler)
         self.result = result
         # requires is used to track all required RV's
@@ -277,15 +310,33 @@ class FunctionUnit(Waiter):
         for r in requires.values():
             self.waitfor(r)
         self.ready(self)
+        # resolved args and kwargs
+        self.args: Optional[list[object]] = None
+        self.kwargs: Optional[dict[str, object]] = None
 
     def execute(self) -> None:
-        requires = {k: v.get_value() for (k, v) in self.base_requires.items()}
+        # Execution in two stages to prevent re-execution of argument expressions
+        if self.args is None:
+            # stage one: arguments
+            # execute once and cache results
+            requires = {k: v.get_value() for (k, v) in self.base_requires.items()}
+            try:
+                self.args, self.kwargs = self.function.execute_args(requires, self.resolver, self.queue)
+            except RuntimeException as e:
+                e.set_statement(self.function)
+                raise e
+
         try:
-            self.function.resume(requires, self.resolver, self.queue, self.result)
+            assert self.args is not None  # Mypy
+            assert self.kwargs is not None  # Mypy
+            self.function.execute_call(self.args, self.kwargs, self.resolver, self.queue, self.result)
             self.done = True
+            # prevent memory leaks
+            self.args = None
+            self.kwargs = None
         except RuntimeException as e:
             e.set_statement(self.function)
             raise e
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return repr(self.function)

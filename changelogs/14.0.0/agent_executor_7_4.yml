@@ -1,0 +1,3 @@
+description: Interrupt sleep for shutdown
+change-type: patch
+destination-branches: [master]

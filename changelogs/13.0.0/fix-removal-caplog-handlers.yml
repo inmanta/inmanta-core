@@ -1,0 +1,4 @@
+---
+description: "Fix issue where the caplog handlers were removed by the `clean_reset` fixture."
+change-type: patch
+destination-branches: [master, iso7]

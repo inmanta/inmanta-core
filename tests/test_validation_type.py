@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import contextlib
 import uuid
 from typing import Optional
@@ -22,7 +23,8 @@ from typing import Optional
 import pydantic
 import pytest
 
-from inmanta.validation_type import regex_string, validate_type
+from inmanta import compiler
+from inmanta.validation_type import HashKeyContainer, _cachable_validate_type, regex_string, validate_type
 
 
 @pytest.mark.parametrize(
@@ -71,3 +73,45 @@ def test_type_validation(attr_type: str, value: str, validation_parameters: dict
 def test_regex_string(regex: str, value: object, is_valid: bool) -> None:
     with contextlib.nullcontext() if is_valid else pytest.raises(pydantic.ValidationError):
         pydantic.TypeAdapter(regex_string(regex)).validate_python(value)
+
+
+def test_cache(snippetcompiler):
+    # Verify we use the cache
+    _cachable_validate_type.cache_clear()
+    snippetcompiler.setup_for_snippet(
+        """
+        import std
+
+        entity Tester:
+          std::alfanum testfield
+          std::any_http_url testfield3
+        end
+
+        implement Tester using std::none
+        """
+        + """
+        Tester(testfield="A", testfield3="http://example.com/x")
+        """
+        * 20
+    )
+
+    compiler.do_compile()
+    # For each field: One miss, 19 hits
+    assert _cachable_validate_type.cache_info().hits == 19 * 2
+    assert _cachable_validate_type.cache_info().misses == 2
+
+
+@pytest.mark.parametrize(
+    "attr_type,validation_parameters,schema",
+    [
+        ("pydantic.constr", {"regex": "^test.*$"}, {"pattern": "^test.*$", "type": "string"}),
+        (
+            "pydantic.constr",
+            {"regex": "^test.*$", "max_length": 10},
+            {"maxLength": 10, "pattern": "^test.*$", "type": "string"},
+        ),
+    ],
+)
+def test_schema(attr_type: str, validation_parameters: dict[str, object], schema: dict[str, str | int]) -> None:
+    type_validator = _cachable_validate_type(attr_type, HashKeyContainer(validation_parameters))
+    assert type_validator.json_schema() == schema

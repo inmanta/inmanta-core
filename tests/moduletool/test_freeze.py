@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import os
 import shutil
 import subprocess
@@ -31,42 +32,42 @@ from test_app_cli import app
 
 @pytest.mark.slowtest
 def test_freeze_basic(git_modules_dir: str, modules_repo: str, tmpdir):
-    install_project(git_modules_dir, "projectA", tmpdir)
+    install_project(git_modules_dir, "projecta", tmpdir)
     modtool = ModuleTool()
-    cmod = modtool.get_module("modC")
-    assert cmod.get_freeze("modC", recursive=False, mode="==") == {"std": "== 3.2", "modE": "== 3.2", "modF": "== 3.2"}
-    assert cmod.get_freeze("modC", recursive=True, mode="==") == {
-        "std": "== 3.2",
-        "modE": "== 3.2",
-        "modF": "== 3.2",
-        "modH": "== 3.2",
-        "modJ": "== 3.2",
+    cmod = modtool.get_module("modc")
+    assert cmod.get_freeze("modc", recursive=False, mode="==") == {"std": "== 3.2.0", "mode": "== 3.2.0", "modf": "== 3.2.0"}
+    assert cmod.get_freeze("modc", recursive=True, mode="==") == {
+        "std": "== 3.2.0",
+        "mode": "== 3.2.0",
+        "modf": "== 3.2.0",
+        "modh": "== 3.2.0",
+        "modj": "== 3.2.0",
     }
 
-    assert cmod.get_freeze("modC::a", recursive=False, mode="==") == {"std": "== 3.2", "modI": "== 3.2"}
+    assert cmod.get_freeze("modc::a", recursive=False, mode="==") == {"std": "== 3.2.0", "modi": "== 3.2.0"}
 
 
 @pytest.mark.slowtest
 def test_project_freeze_basic(git_modules_dir: str, modules_repo: str, tmpdir):
-    install_project(git_modules_dir, "projectA", tmpdir)
+    install_project(git_modules_dir, "projecta", tmpdir)
     modtool = ModuleTool()
     proj = modtool.get_project()
     assert proj.get_freeze(recursive=False, mode="==") == {
-        "std": "== 3.2",
-        "modB": "== 3.2",
-        "modC": "== 3.2",
-        "modD": "== 3.2",
+        "std": "== 3.2.0",
+        "modb": "== 3.2.0",
+        "modc": "== 3.2.0",
+        "modd": "== 3.2.0",
     }
     assert proj.get_freeze(recursive=True, mode="==") == {
-        "std": "== 3.2",
-        "modB": "== 3.2",
-        "modC": "== 3.2",
-        "modD": "== 3.2",
-        "modE": "== 3.2",
-        "modF": "== 3.2",
-        "modG": "== 3.2",
-        "modH": "== 3.2",
-        "modJ": "== 3.2",
+        "std": "== 3.2.0",
+        "modb": "== 3.2.0",
+        "modc": "== 3.2.0",
+        "modd": "== 3.2.0",
+        "mode": "== 3.2.0",
+        "modf": "== 3.2.0",
+        "modg": "== 3.2.0",
+        "modh": "== 3.2.0",
+        "modj": "== 3.2.0",
     }
 
 
@@ -84,7 +85,7 @@ def test_project_freeze_bad(git_modules_dir: str, modules_repo: str, tmpdir):
 
 @pytest.mark.slowtest
 def test_project_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
-    coroot = install_project(git_modules_dir, "projectA", tmpdir)
+    coroot = install_project(git_modules_dir, "projecta", tmpdir)
 
     app(["project", "freeze", "-o", "-"])
 
@@ -94,17 +95,17 @@ def test_project_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir)
     assert len(err) == 0, err
     assert (
         out
-        == """name: projectA
+        == """name: projecta
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
 downloadpath: libs
 repo: %s
 requires:
-- modB ~= 3.2
-- modC ~= 3.2
-- modD ~= 3.2
-- std ~= 3.2
+- modb ~= 3.2.0
+- modc ~= 3.2.0
+- modd ~= 3.2.0
+- std ~= 3.2.0
 """
         % modules_repo
     )
@@ -112,7 +113,7 @@ requires:
 
 @pytest.mark.slowtest
 def test_project_freeze_disk(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
-    coroot = install_project(git_modules_dir, "projectA", tmpdir)
+    coroot = install_project(git_modules_dir, "projecta", tmpdir)
 
     app(["project", "freeze"])
 
@@ -124,17 +125,17 @@ def test_project_freeze_disk(git_modules_dir: str, modules_repo: str, capsys, tm
     with open(os.path.join(coroot, "project.yml"), encoding="utf-8") as fh:
         assert (
             fh.read()
-            == """name: projectA
+            == """name: projecta
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
 downloadpath: libs
 repo: %s
 requires:
-- modB ~= 3.2
-- modC ~= 3.2
-- modD ~= 3.2
-- std ~= 3.2
+- modb ~= 3.2.0
+- modc ~= 3.2.0
+- modd ~= 3.2.0
+- std ~= 3.2.0
 """
             % modules_repo
         )
@@ -142,7 +143,7 @@ requires:
 
 @pytest.mark.slowtest
 def test_project_freeze_odd_opperator(git_modules_dir: str, modules_repo: str, tmpdir):
-    coroot = install_project(git_modules_dir, "projectA", tmpdir)
+    coroot = install_project(git_modules_dir, "projecta", tmpdir)
 
     # Start a new subprocess, because inmanta-cli executes sys.exit() when an invalid argument is used.
     process = subprocess.Popen(
@@ -164,10 +165,10 @@ def test_project_freeze_odd_opperator(git_modules_dir: str, modules_repo: str, t
 def test_project_options_in_config(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
     coroot = install_project(
         git_modules_dir,
-        "projectA",
+        "projecta",
         tmpdir,
         config_content=f"""
-name: projectA
+name: projecta
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
@@ -187,7 +188,7 @@ freeze_operator: ==
 
         with open("project.yml", encoding="utf-8") as fh:
             assert fh.read() == (
-                """name: projectA
+                """name: projecta
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
@@ -196,15 +197,15 @@ repo: %s
 freeze_recursive: true
 freeze_operator: ==
 requires:
-- modB == 3.2
-- modC == 3.2
-- modD == 3.2
-- modE == 3.2
-- modF == 3.2
-- modG == 3.2
-- modH == 3.2
-- modJ == 3.2
-- std == 3.2
+- modb == 3.2.0
+- modc == 3.2.0
+- modd == 3.2.0
+- mode == 3.2.0
+- modf == 3.2.0
+- modg == 3.2.0
+- modh == 3.2.0
+- modj == 3.2.0
+- std == 3.2.0
 """
                 % modules_repo
             )
@@ -217,7 +218,7 @@ requires:
 
 @pytest.mark.slowtest
 def test_module_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
-    coroot = install_project(git_modules_dir, "projectA", tmpdir)
+    coroot = install_project(git_modules_dir, "projecta", tmpdir)
 
     def verify():
         out, err = capsys.readouterr()
@@ -225,24 +226,24 @@ def test_module_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
         assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
         assert len(err) == 0, err
         assert out == (
-            """name: modC
+            """name: modc
 license: Apache 2.0
-version: '3.2'
+version: 3.2.0
 requires:
-- modE ~= 3.2
-- modF ~= 3.2
-- modI ~= 3.2
-- std ~= 3.2
+- mode ~= 3.2.0
+- modf ~= 3.2.0
+- modi ~= 3.2.0
+- std ~= 3.2.0
 """
         )
 
-    app(["module", "-m", "modC", "freeze", "-o", "-"])
+    app(["module", "-m", "modc", "freeze", "-o", "-"])
     verify()
 
 
 @pytest.mark.slowtest
 def test_module_freeze_self_disk(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
-    coroot = install_project(git_modules_dir, "projectA", tmpdir)
+    coroot = install_project(git_modules_dir, "projecta", tmpdir)
 
     def verify():
         out, err = capsys.readouterr()
@@ -250,25 +251,25 @@ def test_module_freeze_self_disk(git_modules_dir: str, modules_repo: str, capsys
         assert len(err) == 0, err
         assert len(out) == 0, out
 
-        modpath = os.path.join(coroot, "libs/modC/module.yml")
+        modpath = os.path.join(coroot, "libs/modc/module.yml")
         assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
         assert os.path.getsize(modpath) != 0
 
         with open(modpath, encoding="utf-8") as fh:
             outf = fh.read()
             assert outf == (
-                """name: modC
+                """name: modc
 license: Apache 2.0
-version: '3.2'
+version: 3.2.0
 requires:
-- modE ~= 3.2
-- modF ~= 3.2
-- modI ~= 3.2
-- std ~= 3.2
+- mode ~= 3.2.0
+- modf ~= 3.2.0
+- modi ~= 3.2.0
+- std ~= 3.2.0
 """
             )
 
-    modp = os.path.join(coroot, "libs/modC")
+    modp = os.path.join(coroot, "libs/modc")
     app(["project", "install"])
     os.chdir(modp)
     app(["module", "freeze"])

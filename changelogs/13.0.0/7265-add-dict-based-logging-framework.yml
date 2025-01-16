@@ -1,0 +1,6 @@
+---
+description: Migrate Inmanta logging framework to Python's dictConfig based logging framework.
+issue-nr: 7265
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso7]

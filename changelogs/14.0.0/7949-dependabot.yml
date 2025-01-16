@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump sphinx-substitution-extensions from 2024.2.25 to 2024.8.6
+destination-branches:
+- master
+sections: {}

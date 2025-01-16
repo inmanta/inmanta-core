@@ -1,0 +1,6 @@
+description: Added support for forking agent executor
+issue-nr: 7524
+change-type: major
+destination-branches: [master]
+sections:
+  feature: "{{description}}"

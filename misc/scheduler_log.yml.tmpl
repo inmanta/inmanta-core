@@ -1,0 +1,57 @@
+# Generated using: inmanta -c /etc/inmanta/inmanta.cfg --log-file-level DEBUG --timed-logs output-default-logging-config --component scheduler scheduler_log.yml.tmpl
+formatters:
+  core_console_formatter:
+    # Console formatter with coloring
+    (): inmanta.logging.MultiLineFormatter
+    fmt: '%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s'
+    # Don't shorten logger names by default
+    keep_logger_names: true
+    log_colors:
+      CRITICAL: red
+      DEBUG: cyan
+      ERROR: red
+      INFO: green
+      WARNING: yellow
+    no_color: false
+    reset: true
+  # Normal formatter
+  core_log_formatter:
+    format: '%(asctime)s %(levelname)-8s %(name)-10s %(message)s'
+handlers:
+  scheduler_handler:
+    # Root handler for the scheduler
+    class: logging.handlers.WatchedFileHandler
+    filename: /var/log/inmanta/agent-{environment}.log
+    formatter: core_log_formatter
+    level: DEBUG
+    mode: a+
+  scheduler_resource_action_handler:
+    # log only the resource actions as reported by the executors, live
+    class: logging.handlers.WatchedFileHandler
+    filename: /var/log/inmanta/resource-actions-{environment}.log
+    formatter: core_log_formatter
+    level: DEBUG
+  core_tornado_debug_log_handler:
+    # Special handler that captures tornado max_clients limit reached messages and turns them into warnings
+    # As these may cause instability
+    class: inmanta.logging.TornadoDebugLogHandler
+    level: DEBUG
+loggers:
+  inmanta.resource_action:
+    # parent for all resource action logs
+    # name is inmanta.resource_action.[agentname] for all agents
+    handlers:
+    - scheduler_resource_action_handler
+    level: DEBUG
+    propagate: true
+  tornado.general:
+    handlers:
+    - core_tornado_debug_log_handler
+    level: DEBUG
+    propagate: true
+root:
+  handlers:
+  - scheduler_handler
+  level: DEBUG
+version: 1
+disable_existing_loggers: false

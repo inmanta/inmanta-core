@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump importlib-metadata from 7.2.0 to 7.2.1
+destination-branches:
+- master
+sections: {}

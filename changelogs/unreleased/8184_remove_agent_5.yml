@@ -1,0 +1,4 @@
+description: Add back import for inmanta.agent.Agent
+change-type: patch
+destination-branches: [master]
+

@@ -1,0 +1,6 @@
+description: Fixed race condition where newly started agent may take 22 seconds to respond
+issue-nr: 7831
+change-type: patch
+destination-branches: [master, iso7]
+sections:
+  bugfix: "{{description}}"

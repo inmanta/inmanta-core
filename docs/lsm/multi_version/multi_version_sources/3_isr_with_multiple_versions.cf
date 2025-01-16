@@ -1,0 +1,85 @@
+import lsm
+import lsm::fsm
+
+entity Service extends lsm::ServiceEntity:
+    string name
+end
+
+index Service(instance_id)
+implement Service using parents
+
+entity ChildService extends Service:
+    string description
+end
+
+implement ChildService using parents
+
+entity DifferentService extends lsm::ServiceEntity:
+    string diff_name
+    int original_version
+end
+
+index DifferentService(instance_id)
+implement DifferentService using parents
+
+entity RefService extends lsm::ServiceEntity:
+    string ref_name
+end
+
+implement RefService using parents
+
+RefService.ref [1] lsm::__service__, lsm::__rw__ DifferentService
+
+
+child_service_binding = lsm::ServiceBinding(
+    service_entity_name="child_service",
+    default_version=2,
+    versions=[
+        lsm::ServiceBindingVersion(
+            service_entity="__config__::Service",
+            lifecycle=lsm::fsm::simple,
+            version=0
+        ),
+        lsm::ServiceBindingVersion(
+            service_entity="__config__::ChildService",
+            lifecycle=lsm::fsm::simple,
+            version=1
+        ),
+        lsm::ServiceBindingVersion(
+            service_entity="__config__::DifferentService",
+            lifecycle=lsm::fsm::simple,
+            version=2
+        ),
+    ]
+)
+
+main_service_binding = lsm::ServiceBinding(
+    service_entity_name="main_service",
+    default_version=0,
+    versions=[
+        lsm::ServiceBindingVersion(
+            service_entity="__config__::RefService",
+            lifecycle=lsm::fsm::simple,
+            version=0,
+        )
+    ]
+)
+
+
+for instance in lsm::all(child_service_binding):
+    DifferentService(
+        instance_id=instance["id"],
+        diff_name=instance["service_entity_version"] > 1 ? instance["attributes"]["diff_name"] :  instance["attributes"]["name"],
+        original_version=instance["service_entity_version"] > 1 ? instance["attributes"]["original_version"] : instance["service_entity_version"],
+        entity_binding=lsm::get_service_binding_version(child_service_binding, 1),
+    )
+end
+
+for instance in lsm::all(main_service_binding):
+    RefService(
+        instance_id=instance["id"],
+        ref_name=instance["attributes"]["ref_name"],
+        ref=DifferentService[instance_id=instance["attributes"]["ref"]],
+        entity_binding=lsm::get_service_binding_version(main_service_binding, 0)
+    )
+end

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import inspect
 from collections import abc
 from itertools import chain
@@ -67,7 +68,7 @@ def test_slots_rt():
     ns = Namespace("root", None)
     rs = Resolver(ns)
     e = Entity("xx", ns)
-    qs = QueueScheduler(None, [], [], {}, set())
+    qs = QueueScheduler(None, [], [], {})
     r = RelationAttribute(e, None, "xx", Location("", 1))
     i = Instance(e, rs, qs)
     sa = SetAttribute(Reference("a"), "a", Literal("a"))

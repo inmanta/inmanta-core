@@ -1,0 +1,3 @@
+description: Attempt to fix testcase shutdown on forking executor
+change-type: patch
+destination-branches: [master]

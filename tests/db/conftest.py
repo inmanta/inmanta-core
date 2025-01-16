@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import uuid
 from collections import abc
 

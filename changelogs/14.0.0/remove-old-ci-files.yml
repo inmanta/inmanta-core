@@ -1,0 +1,4 @@
+---
+description: "Remove .ci files that are no longer used."
+change-type: patch
+destination-branches: [master, iso7]

@@ -1,0 +1,6 @@
+description: Introduced a new configuration option `database.wait_time` for the Inmanta server, enabling it to wait for the database to become available before starting. Users can specify the maximum time (in seconds) the server should wait for the database to be up. A value of 0 means the server will not wait, while a negative value indicates the server will wait indefinitely.
+issue-nr: 6994
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  feature: "{{description}}"

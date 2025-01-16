@@ -1,0 +1,5 @@
+description: Improve performance of cross agent dependency resolution - bugfix - 2
+change-type: patch
+destination-branches: [master, iso7]
+sections:
+  minor-improvement: "Improved error message when http request have oversized headers"

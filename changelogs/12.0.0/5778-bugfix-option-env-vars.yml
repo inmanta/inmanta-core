@@ -1,0 +1,7 @@
+description: Made config.Option behave like config.Config
+change-type: patch
+sections:
+  bugfix: Fixed bug where certain config options could not be set through environment variables
+destination-branches:
+  - master
+  - iso7

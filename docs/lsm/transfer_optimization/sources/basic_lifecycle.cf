@@ -1,0 +1,145 @@
+import lsm
+import lsm::fsm
+import std::testing
+
+start = lsm::State(
+    name="start",
+    export_resources=false,
+    validate_self="candidate",
+)
+creating = lsm::State(
+    name="creating",
+    export_resources=true,
+    validate_self="active",
+    validate_others="active",
+)
+up = lsm::State(
+    name="up",
+    label="success",
+    export_resources=true,
+    validate_self="active",
+    validate_others="active",
+)
+failed = lsm::State(
+    name="failed",
+    label="danger",
+    export_resources=true,
+    validate_self="active",
+    validate_others="active",
+)
+rejected = lsm::State(
+    name="rejected",
+    label="danger",
+    export_resources=false,
+    deleted=true,
+)
+deleting = lsm::State(
+    name="deleting",
+    export_resources=true,
+    validate_self="active",
+    validate_others="active",
+    purge_resources=true,
+)
+terminated = lsm::State(
+    name="terminated",
+    export_resources=false,
+    deleted=true,
+)
+
+basic_lifecycle = lsm::LifecycleStateMachine(
+    name="testing::basic_lifecycle",
+    initial_state=start,
+    transfers=[
+        lsm::StateTransfer(
+            source=start,
+            target=creating,
+            error=rejected,
+            validate=true,
+            auto=true,
+            target_operation="promote",
+            error_same_desired_state=true,
+        ),
+        lsm::StateTransfer(
+            source=creating,
+            target=up,
+            error=creating,
+            resource_based=true,
+            target_same_desired_state=true,
+            error_same_desired_state=true,
+        ),
+        lsm::StateTransfer(
+            source=up,
+            target=up,
+            error=failed,
+            resource_based=true,
+            target_same_desired_state=true,
+            error_same_desired_state=true,
+        ),
+        lsm::StateTransfer(
+            source=failed,
+            target=up,
+            error=failed,
+            resource_based=true,
+            target_same_desired_state=true,
+            error_same_desired_state=true,
+        ),
+        lsm::StateTransfer(
+            source=up,
+            target=deleting,
+            on_delete=true,
+        ),
+        lsm::StateTransfer(
+            source=deleting,
+            target=terminated,
+            error=deleting,
+            resource_based=true,
+            error_same_desired_state=true,
+        ),
+    ]
+)
+
+entity InterfaceIPAssignment extends lsm::ServiceEntity:
+    """
+        Interface details.
+
+        :attr service_id: A unique ID for this service.
+
+        :attr router_ip: The IP address of the SR linux router that should be configured.
+        :attr router_name: The name of the SR linux router that should be configured.
+        :attr interface_name: The name of the interface of the router that should be configured.
+        :attr address: The IP-address to assign to the given interface.
+    """
+    string service_id
+
+    string router_ip
+    string router_name
+    string interface_name
+
+    string address
+    lsm::attribute_modifier address__modifier="rw+"
+
+end
+
+index InterfaceIPAssignment(service_id)
+
+implementation interface_config for InterfaceIPAssignment:
+    """ Add a dummy resource to the interface ip assignment to represent actual configuration """
+    self.resources += std::testing::NullResource(name=self.address)
+    self.owned_resources += self.resources # We own all our resources and nothing else
+end
+
+implement InterfaceIPAssignment using parents, interface_config
+
+binding = lsm::ServiceEntityBindingV2(
+    service_entity="__config__::InterfaceIPAssignment",
+    lifecycle=basic_lifecycle,
+    service_entity_name="ip_assignment",
+)
+
+for instance in lsm::all(binding):
+    InterfaceIPAssignment(
+        instance_id=instance["id"],
+        entity_binding=binding,
+        **instance["attributes"],
+    )
+end

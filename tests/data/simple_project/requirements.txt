@@ -1,0 +1,3 @@
+inmanta-module-fs
+inmanta-module-std
+inmanta-module-mitogen

@@ -1,0 +1,6 @@
+description: Add dedicated set_fact and set_parameter endpoints
+issue-nr: 7068
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  minor-improvement: "{{description}}"

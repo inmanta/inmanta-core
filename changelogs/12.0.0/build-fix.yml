@@ -1,0 +1,5 @@
+description: Fixed compatibility with latest build release
+change-type: patch
+destination-branches:
+  - master
+  - iso7

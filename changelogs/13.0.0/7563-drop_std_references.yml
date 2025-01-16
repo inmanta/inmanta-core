@@ -1,0 +1,6 @@
+description: "Remove references to `std::*` resources from the documentation"
+issue-nr: 7563
+change-type: patch
+destination-branches: [master, iso7]
+sections:
+  minor-improvement: "{{description}}"

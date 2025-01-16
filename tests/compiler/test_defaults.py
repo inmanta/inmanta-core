@@ -19,19 +19,29 @@
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import DuplicateException, TypingException
-from inmanta.execute.proxy import UnsetException
+from inmanta.ast import DuplicateException, TypingException, UnsetException
 
 
 def test_issue_127_default_overrides(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-f1=std::ConfigFile(host=std::Host(name="jos",os=std::linux), path="/tmp/test", owner="wouter", content="blabla")
+import std::testing
+
+entity NullResourceBis extends std::testing::NullResource:
+    string agentname ="agentbis"
+end
+
+implementation a for NullResourceBis:
+end
+
+implement NullResourceBis using a
+
+f1=NullResourceBis(name="test", agentname="agent")
         """
     )
     (types, _) = compiler.do_compile()
-    instances = types["std::File"].get_all_instances()
-    assert instances[0].get_attribute("owner").get_value() == "wouter"
+    instances = types["__config__::NullResourceBis"].get_all_instances()
+    assert instances[0].get_attribute("agentname").get_value() == "agent"
 
 
 def test_issue_135_duplo_relations(snippetcompiler):
@@ -64,9 +74,12 @@ entity Test2 extends Test1:
 end
 entity Test3 extends Test2:
 end
-implement Test3 using std::none
+implement Test3 using none
 
 Test3()
+
+implementation none for std::Entity:
+end
 """
     )
     (types, _) = compiler.do_compile()
@@ -82,16 +95,18 @@ def test_275_default_override(snippetcompiler):
     entity A:
         bool at = true
     end
-    implement A using std::none
+    implement A using none
 
     entity B extends A:
         bool at = false
     end
-    implement B using std::none
+    implement B using none
 
     a = A()
     b = B()
 
+    implementation none for std::Entity:
+    end
     """
     )
 
@@ -110,25 +125,28 @@ def test_275_default_diamond(snippetcompiler):
     entity A:
         bool at = true
     end
-    implement A using std::none
+    implement A using none
 
     entity B:
         bool at = false
     end
-    implement B using std::none
+    implement B using none
 
     entity C extends A,B:
     end
-    implement C using std::none
+    implement C using none
 
     entity D extends B,A:
     end
-    implement D using std::none
+    implement D using none
 
     a = A()
     b = B()
     c = C()
     d = D()
+
+    implementation none for std::Entity:
+    end
     """
     )
 
@@ -169,15 +187,18 @@ def test_default_remove(snippetcompiler):
     entity A:
         bool at = true
     end
-    implement A using std::none
+    implement A using none
 
     entity B extends A:
         bool at = undef
     end
-    implement B using std::none
+    implement B using none
 
     a = A()
     b = B()
+
+    implementation none for std::Entity:
+    end
     """
     )
     with pytest.raises(UnsetException):
@@ -204,11 +225,14 @@ entity Test:
     string[]? t = [1, "str"]
 end
 
-implement Test using std::none
+implement Test using none
 
 Test(t = ["str"])
+
+implementation none for std::Entity:
+end
         """,
-        "Invalid value '1', expected String (reported in string[]? t = List() ({dir}/main.cf:3:15))",
+        "Invalid value '1', expected string (reported in string[]? t = List() ({dir}/main.cf:3:15))",
     )
 
 
@@ -219,9 +243,12 @@ entity Test:
     int? t = [1, 2]
 end
 
-implement Test using std::none
+implement Test using none
 
 Test(t = 12)
+
+implementation none for std::Entity:
+end
         """,
         "Invalid value '[1, 2]', expected int (reported in int? t = List() ({dir}/main.cf:3:10))",
     )
@@ -236,9 +263,12 @@ entity Test:
     digit t = 12
 end
 
-implement Test using std::none
+implement Test using none
 
 Test(t = 8)
+
+implementation none for std::Entity:
+end
         """,
         "Invalid value 12, does not match constraint `((self > 0) and (self < 10))`"
         " (reported in digit t = 12 ({dir}/main.cf:5:11))",
@@ -263,6 +293,7 @@ entity Test:
     std::date d = "2020-01-22"
 end
         """,
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -276,4 +307,5 @@ end
         """,
         "Invalid value 'nodatevalue', does not match constraint `std::validate_type('datetime.date',self)`"
         " (reported in std::date d = 'nodatevalue' ({dir}/main.cf:3:15))",
+        autostd=True,
     )

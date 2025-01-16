@@ -24,16 +24,7 @@ from typing import Callable
 from typing import List as PythonList
 from typing import Optional
 
-from inmanta.ast import (
-    DuplicateException,
-    Locatable,
-    LocatableString,
-    Named,
-    Namespace,
-    NotFoundException,
-    RuntimeException,
-    TypeNotFoundException,
-)
+from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException
 from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.stable_api import stable_api
 
@@ -44,41 +35,6 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement
-
-
-class BasicResolver:
-    def __init__(self, types):
-        self.types = types
-
-    def get_type(self, namespace, name):
-        if not isinstance(name, str):
-            raise Exception("Should Not Occur, bad AST construction")
-        if "::" in name:
-            if name in self.types:
-                return self.types[name]
-            else:
-                raise TypeNotFoundException(name, namespace)
-        elif name in TYPES:
-            return self.types[name]
-        else:
-            cns = namespace
-            while cns is not None:
-                full_name = f"{cns.get_full_name()}::{name}"
-                if full_name in self.types:
-                    return self.types[full_name]
-                cns = cns.get_parent()
-                raise TypeNotFoundException(name, namespace)
-
-
-class NameSpacedResolver:
-    def __init__(self, ns):
-        self.ns = ns
-
-    def get_type(self, name):
-        return self.ns.get_type(name)
-
-    def get_resolver_for(self, namespace: Namespace):
-        return NameSpacedResolver(namespace)
 
 
 @stable_api
@@ -140,6 +96,15 @@ class Type(Locatable):
         """
         return base_type
 
+    def __eq__(self, other: object) -> bool:
+        if type(self) != Type:  # noqa: E721
+            # Not for children
+            return NotImplemented
+        return type(self) == type(other)  # noqa: E721
+
+    def __hash__(self) -> int:
+        return hash(type(self))
+
 
 class NamedType(Type, Named):
     def get_double_defined_exception(self, other: "NamedType") -> "DuplicateException":
@@ -148,6 +113,14 @@ class NamedType(Type, Named):
 
     def type_string(self) -> str:
         return self.get_full_name()
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NamedType):
+            return False
+        return self.get_full_name() == other.get_full_name()
+
+    def __hash__(self) -> int:
+        return hash(self.get_full_name())
 
 
 @stable_api
@@ -355,7 +328,7 @@ class Bool(Primitive):
             return True
         if isinstance(value, bool):
             return True
-        raise RuntimeException(None, "Invalid value '%s', expected Bool" % value)
+        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
     def cast(self, value: Optional[object]) -> object:
         return super().cast(value if not isinstance(value, NoneValue) else None)
@@ -391,7 +364,7 @@ class String(Primitive):
         if isinstance(value, AnyType):
             return True
         if not isinstance(value, str):
-            raise RuntimeException(None, "Invalid value '%s', expected String" % value)
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
         return True
 
@@ -414,14 +387,18 @@ class String(Primitive):
     def get_location(self) -> None:
         return None
 
+    def __eq__(self, other: object) -> bool:
+        return type(self) == type(other)  # noqa: E721
+
 
 @stable_api
 class List(Type):
     """
     Instances of this class represent a list type containing any types of values.
+    This class refers to the list type used in plugin annotations. For the list type in the Inmanta DSL, see `LiteralList`.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         Type.__init__(self)
 
     def validate(self, value: Optional[object]) -> bool:
@@ -436,11 +413,18 @@ class List(Type):
 
         return True
 
+    def type_string(self) -> str:
+        # This is not a type in the model, but it is used in plugin annotations, which are also part of the DSL.
+        return "list"
+
     def type_string_internal(self) -> str:
         return "List"
 
     def get_location(self) -> None:
         return None
+
+    def __eq__(self, other: object) -> bool:
+        return type(self) == type(other)  # noqa: E721
 
 
 @stable_api
@@ -540,7 +524,7 @@ class Dict(Type):
             return True
 
         if not isinstance(value, dict):
-            raise RuntimeException(None, "Invalid value '%s', expected dict" % value)
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
         return True
 
@@ -582,6 +566,11 @@ class TypedDict(Dict):
 
     def get_location(self) -> None:
         return None
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, TypedDict):
+            return NotImplemented
+        return self.element_type == other.element_type
 
 
 @stable_api
@@ -661,7 +650,7 @@ class ConstraintType(NamedType):
         assert self.expression is not None
         self.expression.normalize()
 
-    def set_constraint(self, expression) -> None:
+    def set_constraint(self, expression: "ExpressionStatement") -> None:
         """
         Set the constraint for this type. This baseclass for constraint
         types requires the constraint to be set as a regex that can be
@@ -670,7 +659,7 @@ class ConstraintType(NamedType):
         self.expression = expression
         self._constraint = create_function(self, expression)
 
-    def get_constraint(self):
+    def get_constraint(self) -> "ExpressionStatement | None":
         """
         Get the string representation of the constraint
         """
@@ -762,7 +751,7 @@ def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Type:
     # quickfix issue #1774
     allowed_element_type: Type = Type()
     if locatable_type.value == "list":
-        return TypedList(allowed_element_type)
+        return List()
     if locatable_type.value == "dict":
         return TypedDict(allowed_element_type)
 

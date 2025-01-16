@@ -1,0 +1,6 @@
+description: Fixed broken git-based install test
+change-type: patch
+destination-branches:
+  - master
+  - iso7
+  - iso6

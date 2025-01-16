@@ -1,0 +1,3 @@
+description: "Improve embedded entities addition and removal tracking documentation"
+change-type: patch
+destination-branches: [master, iso7]

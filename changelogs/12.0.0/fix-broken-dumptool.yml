@@ -1,0 +1,3 @@
+description: Fix broken dump_tool.
+change-type: patch
+destination-branches: [master, iso7]

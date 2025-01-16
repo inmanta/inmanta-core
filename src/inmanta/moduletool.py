@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import argparse
 import configparser
 import datetime
@@ -29,7 +30,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 import zipfile
 from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import abc
@@ -37,18 +37,18 @@ from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
-from typing import TYPE_CHECKING, Any, Optional
+from typing import IO, Any, Literal, Optional
 
 import click
 import more_itertools
 import texttable
 import yaml
 from cookiecutter.main import cookiecutter
-from pkg_resources import Requirement, parse_version
 
 import build
 import inmanta
 import inmanta.warnings
+import packaging.requirements
 import toml
 from build.env import DefaultIsolatedEnv
 from inmanta import const, env
@@ -69,17 +69,13 @@ from inmanta.module import (
     ModuleNotFoundException,
     ModuleV1,
     ModuleV2,
+    ModuleV2Metadata,
     ModuleV2Source,
     Project,
     gitprovider,
 )
 from inmanta.stable_api import stable_api
 from packaging.version import Version
-
-if TYPE_CHECKING:
-    from packaging.requirements import InvalidRequirement
-else:
-    from pkg_resources.extern.packaging.requirements import InvalidRequirement
 
 LOGGER = logging.getLogger(__name__)
 
@@ -161,66 +157,14 @@ class ModuleLikeTool:
             project.load()
         return project
 
-    def determine_new_version(self, old_version, version, major, minor, patch, dev):
-        """
-        Only used by the `inmanta module commit` command.
-        """
-        was_dev = old_version.is_prerelease
-
-        if was_dev:
-            if major or minor or patch:
-                LOGGER.warning("when releasing a dev version, options --major, --minor and --patch are ignored")
-
-            # determine new version
-            if version is not None:
-                baseversion = version
-            else:
-                baseversion = old_version.base_version
-
-            if not dev:
-                outversion = baseversion
-            else:
-                outversion = "%s.dev%d" % (baseversion, time.time())
-        else:
-            opts = [x for x in [major, minor, patch] if x]
-            if version is not None:
-                if len(opts) > 0:
-                    LOGGER.warn("when using the --version option, --major, --minor and --patch are ignored")
-                outversion = version
-            else:
-                if len(opts) == 0:
-                    LOGGER.error("One of the following options is required: --major, --minor or --patch")
-                    return None
-                elif len(opts) > 1:
-                    LOGGER.error("You can use only one of the following options: --major, --minor or --patch")
-                    return None
-
-                # We do not support revision for deprecated methods
-                revision = False
-                change_type: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
-                if change_type:
-                    outversion = str(VersionOperation.bump_version(change_type, old_version, version_tag=""))
-                else:
-                    outversion = str(VersionOperation.set_version_tag(old_version, version_tag=""))
-
-            if dev:
-                outversion = "%s.dev%d" % (outversion, time.time())
-
-        outversion = parse_version(outversion)
-        if outversion <= old_version:
-            LOGGER.error(f"new versions ({outversion}) is not larger then old version ({old_version}), aborting")
-            return None
-
-        return outversion
-
 
 @total_ordering
 @enum.unique
 class ChangeType(enum.Enum):
-    MAJOR: str = "major"
-    MINOR: str = "minor"
-    PATCH: str = "patch"
-    REVISION: str = "revision"
+    MAJOR = "major"
+    MINOR = "minor"
+    PATCH = "patch"
+    REVISION = "revision"
 
     def __lt__(self, other: "ChangeType") -> bool:
         order: list[ChangeType] = [ChangeType.REVISION, ChangeType.PATCH, ChangeType.MINOR, ChangeType.MAJOR]
@@ -417,20 +361,21 @@ compatible with the dependencies specified by the updated modules.
 
         close = False
 
+        outfile_fd: IO[str]
         if outfile is None:
-            outfile = open(project.get_metadata_file_path(), "w", encoding="UTF-8")
+            outfile_fd = open(project.get_metadata_file_path(), "w", encoding="UTF-8")
             close = True
         elif outfile == "-":
-            outfile = sys.stdout
+            outfile_fd = sys.stdout
         else:
-            outfile = open(outfile, "w", encoding="UTF-8")
+            outfile_fd = open(outfile, "w", encoding="UTF-8")
             close = True
 
         try:
-            outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
+            outfile_fd.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
         finally:
             if close:
-                outfile.close()
+                outfile_fd.close()
 
     def init(self, output_dir: str, name: str, default: bool) -> None:
         os.makedirs(output_dir, exist_ok=True)
@@ -472,7 +417,7 @@ compatible with the dependencies specified by the updated modules.
         def do_update(specs: Mapping[str, Sequence[InmantaModuleRequirement]], modules: list[str]) -> None:
             v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
 
-            v2_python_specs: list[Requirement] = [
+            v2_python_specs: list[inmanta.util.CanonicalRequirement] = [
                 module_spec.get_python_package_requirement()
                 for module, module_specs in specs.items()
                 for module_spec in module_specs
@@ -484,7 +429,7 @@ compatible with the dependencies specified by the updated modules.
                 # Because for pip not every valid -r is a valid -c
                 current_requires = my_project.get_strict_python_requirements_as_list()
                 env.process_env.install_for_config(
-                    v2_python_specs + [Requirement.parse(r) for r in current_requires],
+                    v2_python_specs + inmanta.util.parse_requirements(current_requires),
                     my_project.metadata.pip,
                     upgrade=True,
                 )
@@ -555,9 +500,6 @@ class ModuleTool(ModuleLikeTool):
     A tool to manage configuration modules
     """
 
-    def __init__(self) -> None:
-        self._mod_handled_list = set()
-
     @classmethod
     def modules_parser_config(cls, parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
         parser.add_argument("-m", "--module", help="Module to apply this command to", nargs="?", default=None)
@@ -589,13 +531,6 @@ class ModuleTool(ModuleLikeTool):
             help="List all modules used in this project in a table",
             parents=parent_parsers,
         )
-
-        do = subparser.add_parser(
-            "do",
-            help="Execute a command on all loaded modules",
-            parents=parent_parsers,
-        )
-        do.add_argument("command", metavar="command", help="the command to execute")
 
         install: ArgumentParser = subparser.add_parser(
             "install",
@@ -629,25 +564,6 @@ class ModuleTool(ModuleLikeTool):
             help="Verify dependencies and frozen module versions",
             parents=parent_parsers,
         )
-
-        commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
-        commit.add_argument("-m", "--message", help="Commit message", required=True)
-        commit.add_argument("-r", "--release", dest="dev", help="make a release", action="store_false")
-        commit.add_argument("--major", dest="major", help="make a major release", action="store_true")
-        commit.add_argument("--minor", dest="minor", help="make a major release", action="store_true")
-        commit.add_argument("--patch", dest="patch", help="make a major release", action="store_true")
-        commit.add_argument("-v", "--version", help="Version to use on tag")
-        commit.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
-        commit.add_argument(
-            "-t",
-            "--tag",
-            dest="tag",
-            help="Create a tag for the commit."
-            "Tags are not created for dev releases by default, if you want to tag it, specify this flag explicitly",
-            action="store_true",
-        )
-        commit.add_argument("-n", "--no-tag", dest="tag", help="Don't create a tag for the commit", action="store_false")
-        commit.set_defaults(tag=False)
 
         create = subparser.add_parser(
             "create",
@@ -807,7 +723,7 @@ When a development release is done using the \--dev option, this command:
             raise CLIException("Current working directory doesn't contain an Inmanta module or project", exitcode=1)
         try:
             module_requirement = InmantaModuleRequirement.parse(module_req)
-        except InvalidRequirement:
+        except packaging.requirements.InvalidRequirement:
             raise CLIException(f"'{module_req}' is not a valid requirement", exitcode=1)
         if not override and module_like.has_module_requirement(module_requirement.key):
             raise CLIException(
@@ -831,10 +747,10 @@ When a development release is done using the \--dev option, this command:
         """
         Convert a V1 module to a V2 module in place
         """
-        module = self.get_module(module)
-        if not isinstance(module, ModuleV1):
-            raise ModuleVersionException(f"Expected a v1 module, but found v{module.GENERATION.value} module")
-        ModuleConverter(module).convert_in_place()
+        mod = self.get_module(module)
+        if not isinstance(mod, ModuleV1):
+            raise ModuleVersionException(f"Expected a v1 module, but found v{mod.GENERATION.value} module")
+        ModuleConverter(mod).convert_in_place()
 
     def build(
         self, path: Optional[str] = None, output_dir: Optional[str] = None, dev_build: bool = False, byte_code: bool = False
@@ -952,16 +868,6 @@ version: 0.0.1dev0"""
 
         LOGGER.info("Module successfully created.")
 
-    def do(self, command: str, module: str) -> None:
-        for mod in self.get_modules(module):
-            if not isinstance(mod, ModuleV1):
-                LOGGER.warning("Skipping module %s: v2 modules do not support this operation.", mod.name)
-                continue
-            try:
-                mod.execute_command(command)
-            except Exception as e:
-                print(e)
-
     def list(self) -> None:
         """
         List all modules in a table
@@ -1005,7 +911,7 @@ version: 0.0.1dev0"""
                 matches = version == reqv
                 editable = True
             else:
-                reqv = ",".join(req.version_spec_str() for req in specs[name] if req.specs) or "*"
+                reqv = ",".join(str(req.specifier) for req in specs[name] if len(req.specifier) > 0) or "*"
                 matches = all(version in req for req in specs[name])
                 editable = mod.is_editable()
 
@@ -1058,45 +964,6 @@ version: 0.0.1dev0"""
         """
         self.get_project(load=True)
 
-    def commit(
-        self,
-        message: str,
-        module: Optional[str] = None,
-        version: Optional[str] = None,
-        dev: bool = False,
-        major: bool = False,
-        minor: bool = False,
-        patch: bool = False,
-        commit_all: bool = False,
-        tag: bool = False,
-    ) -> None:
-        """
-        Commit all current changes.
-        """
-        inmanta.warnings.warn(
-            CommandDeprecationWarning(
-                "The `inmanta module commit` command has been deprecated in favor of `inmanta module release`."
-            )
-        )
-        # find module
-        module = self.get_module(module)
-        if not isinstance(module, ModuleV1):
-            raise CLIException(f"{module.name} is a v2 module and does not support this operation.", exitcode=1)
-        # get version
-        old_version = parse_version(str(module.version))
-
-        outversion = self.determine_new_version(old_version, version, major, minor, patch, dev)
-
-        if outversion is None:
-            return
-
-        module.rewrite_version(str(outversion))
-        # commit
-        gitprovider.commit(module._path, message, commit_all, [module.get_metadata_file_path()])
-        # tag
-        if not dev or tag:
-            gitprovider.tag(module._path, str(outversion))
-
     def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: str, module: Optional[str] = None) -> None:
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
@@ -1131,7 +998,7 @@ version: 0.0.1dev0"""
         newconfig["requires"] = requires
 
         close = False
-        out_fd = None
+        out_fd: IO[str]
         if outfile is None:
             out_fd = open(module_obj.get_metadata_file_path(), "w", encoding="UTF-8")
             close = True
@@ -1242,7 +1109,20 @@ version: 0.0.1dev0"""
         changelog_message: Optional[str] = None,
     ) -> None:
         """
-        Execute the release command.
+        Execute the release command. Expects an Inmanta module to live in the current working directory.
+
+        :param dev: Set to True to perform a dev release that will bump the version to the next appropriate dev version
+            (Using the revision/patch/minor/major semver flag if set).
+            Set to False to perform a stable release that will tag the version and perform a dev release right after
+            to ensure the module is ready for further development.
+        :param message: Optional commit message
+        :param revision: Set this flag to indicate a revision release
+        :param patch: Set this flag to indicate a patch release
+        :param minor: Set this flag to indicate a minor release
+        :param major: Set this flag to indicate a major release
+        :param commit_all: Commit changes to ALL tracked files before releasing.
+        :param changelog_message: Message to add to the changelog file. A changelog file will be created
+            at the root of the module if it doesn't exist.
         """
 
         # Validate patch, minor, major
@@ -1266,14 +1146,15 @@ version: 0.0.1dev0"""
         stable_releases: list[Version] = gitprovider.get_version_tags(module_dir, only_return_stable_versions=True)
 
         path_changelog_file = os.path.join(module_dir, const.MODULE_CHANGELOG_FILE)
-        changelog: Optional[ModuleChangelog] = (
-            ModuleChangelog(path_changelog_file) if os.path.exists(path_changelog_file) else None
-        )
+        changelog: Optional[Changelog] = Changelog(path_changelog_file) if os.path.exists(path_changelog_file) else None
 
         requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
         if not requested_version_bump and dev:
             # Dev always bumps
-            requested_version_bump = ChangeType.PATCH
+            if isinstance(module.metadata, ModuleV2Metadata) and module.metadata.four_digit_version:
+                requested_version_bump = ChangeType.REVISION
+            else:
+                requested_version_bump = ChangeType.PATCH
 
         if requested_version_bump:
             new_version: Version = self._get_dev_version_with_minimal_distance_to_previous_stable_release(
@@ -1284,7 +1165,7 @@ version: 0.0.1dev0"""
             new_version = current_version
 
         if not changelog and changelog_message:
-            changelog = ModuleChangelog.create_changelog_file(path_changelog_file, new_version, changelog_message)
+            changelog = Changelog.create_changelog_file(path_changelog_file, new_version, changelog_message)
         elif changelog:
             if current_version.is_devrelease:
                 # Update the existing dev version to the new dev version
@@ -1324,12 +1205,15 @@ version: 0.0.1dev0"""
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
             print(f"Tag created successfully: {release_tag}")
             # bump to the next dev version
-            self.release(dev=True, message="Bump version to next development version", patch=True)
+            if isinstance(module.metadata, ModuleV2Metadata) and module.metadata.four_digit_version:
+                self.release(dev=True, message="Bump version to next development version", revision=True)
+            else:
+                self.release(dev=True, message="Bump version to next development version", patch=True)
 
 
-class ModuleChangelog:
+class Changelog:
     """
-    This class represent the changelog file in an Inmanta module.
+    This class represent a changelog file e.g. in an Inmanta module or an Inmanta python package.
 
     The expected format of the changelog is the following:
 
@@ -1353,7 +1237,7 @@ class ModuleChangelog:
         self.path_changelog_file = os.path.abspath(path_changelog_file)
 
     @classmethod
-    def create_changelog_file(cls, path: str, version: Version, changelog_message: str) -> "ModuleChangelog":
+    def create_changelog_file(cls, path: str, version: Version, changelog_message: str) -> "Changelog":
         """
         Create a new changelog file at the given path. Add a section for the given version and write the given
         changelog message to it.
@@ -1496,6 +1380,9 @@ class ModuleChangelog:
                     "Failed to add changelog entry to section for version %s.",
                     str(version.base_version),
                 )
+
+
+ModuleChangelog = Changelog  # For backwards compatibility after class rename
 
 
 class ModuleBuildFailedError(Exception):
@@ -1740,7 +1627,27 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         """
         Copy all files that have to be packaged into the Python package of the module
         """
-        python_pkg_dir = os.path.join(build_path, "inmanta_plugins", self._module.name)
+        python_pkg_dir: str = os.path.join(build_path, "inmanta_plugins", self._module.name)
+        dir_path_bundling_description_mapping = {
+            ("model", "the inmanta model files"),
+            ("files", "inmanta files for managed machines"),
+            ("templates", "inmanta templates that will be used to generate configuration files"),
+        }
+        for problematic_dir, bundling_description in dir_path_bundling_description_mapping:
+            if os.path.exists(os.path.join(python_pkg_dir, problematic_dir)):
+                raise ModuleBuildFailedError(
+                    msg="There is already a `%s` directory in %s. "
+                    "The `inmanta_plugins.%s.%s` package is reserved for bundling %s. "
+                    "Please use a different name for this Python package."
+                    % (
+                        problematic_dir,
+                        os.path.join(self._module.path, "inmanta_plugins", self._module.name),
+                        self._module.name,
+                        problematic_dir,
+                        bundling_description,
+                    )
+                )
+
         for dir_name in ["model", "files", "templates"]:
             fq_dir_name = os.path.join(build_path, dir_name)
             if os.path.exists(fq_dir_name):
@@ -1766,7 +1673,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         """
         try:
             with self._get_isolated_env_builder() as env:
-                distribution = "wheel"
+                distribution: Literal["wheel"] = "wheel"
                 builder = build.ProjectBuilder(source_dir=build_path, python_executable=env.python_executable)
                 env.install(builder.build_system_requires)
                 env.install(builder.get_requires_for_build(distribution=distribution))
@@ -1924,7 +1831,7 @@ graft inmanta_plugins/{self._module.name}/templates
 
         # add requirements
         module_requirements: list[InmantaModuleRequirement] = [
-            req for req in self._module.get_all_requires() if req.project_name != self._module.name
+            req for req in self._module.get_all_requires() if req.name != self._module.name
         ]
         python_requirements: list[str] = self._module.get_strict_python_requirements_as_list()
         if module_requirements or python_requirements:

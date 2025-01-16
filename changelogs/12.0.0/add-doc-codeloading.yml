@@ -1,0 +1,6 @@
+description: Add some comments to the code loading
+change-type: patch
+destination-branches:
+  - master
+  - iso7
+  - iso6

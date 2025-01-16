@@ -1,0 +1,3 @@
+description: Fix broken links in docs
+change-type: patch
+destination-branches: [master, iso7]

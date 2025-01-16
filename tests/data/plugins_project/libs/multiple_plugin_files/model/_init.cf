@@ -1,0 +1,17 @@
+entity NullResourceBis extends ManagedResource, PurgeableResource:
+    """
+        A resource that does nothing, for use in tests and examples
+
+        :attr name: the name of this resource
+        :attr agentname: the name of the agent to deploy this resource on
+        :attr fail: when true, this resource will always fail on both dryrun and deploy
+    """
+    string name = "null"
+    string agentname = "internal"
+    bool send_event = true
+    bool fail = false
+end
+
+index NullResourceBis(agentname, name)
+
+implement NullResourceBis using std::none

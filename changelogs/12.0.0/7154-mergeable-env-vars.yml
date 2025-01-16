@@ -1,0 +1,7 @@
+description: Added the ability to have mergeable environment variables to the compiler service
+issue-nr: 7154
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  minor-improvement: "{{description}}"
+

@@ -1,0 +1,3 @@
+description: Integrate agent executor manager into multi-processing
+change-type: minor
+destination-branches: [master]

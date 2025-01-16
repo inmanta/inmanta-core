@@ -1,10 +1,15 @@
+.. _configuration_framework:
+
 Configuration
 ===================
 
-Inmanta server and Inmanta agent
---------------------------------
+.. note::
+    The documentation of the configuration options themselves can be found in the :ref:`Inmanta configuration reference<config_reference>`.
 
-The Inmanta server and the Inmanta agent, started via systemd, will read their configuration from the following locations:
+Inmanta server
+--------------
+
+The Inmanta server, started via systemd, and its sub-components, will read their configuration from the following locations:
 
 1. ``/etc/inmanta/inmanta.cfg``
 2. ``/etc/inmanta/inmanta.d/*.cfg``
@@ -12,7 +17,7 @@ The Inmanta server and the Inmanta agent, started via systemd, will read their c
 
 The configuration options specified in the ``/etc/inmanta/inmanta.d/`` directory override the configuration options specified in
 ``/etc/inmanta/inmanta.cfg``. If the directory ``/etc/inmanta/inmanta.d/`` contains two files with the same configuration option, the
-conflict is resolved using the alfabetical order of the filesnames. Filenames which appear later in the alfabetical order
+conflict is resolved using the alphabetical order of the filenames. Filenames which appear later in the alphabetical order
 override the configuration options from their predecessors in that order.
 
 After having read the configuration files, inmanta will read environment variables.
@@ -42,7 +47,7 @@ executed.
 
 Configuration files which are ranked lower in the above-mentioned list override the configuration options specified by their
 predecessors. If the directory ``/etc/inmanta/inmanta.d/`` contains two files with the same configuration option, the conflict is
-resolved using the alfabetical order of the filenames. Filenames which appear later in the alfabetical order override the
+resolved using the alphabetical order of the filenames. Filenames which appear later in the alphabetical order override the
 configuration options from their predecessors in that order.
 
 The number 2 (``/etc/inmanta/inmanta.d/*.cfg``) in the above-mentioned list can be overridden using the ``--config-dir``

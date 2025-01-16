@@ -64,6 +64,16 @@ Imports can also define an alias, to shorten long names::
 
 
 
+Comments
+========
+The Inmanta language uses ``#`` to define comments. Everything after the ``#`` symbol is treated as a comment.
+
+.. code-block:: inmanta
+
+    # This is a comment
+    import test::services # This is also a comment
+
+
 Variables
 ==========
 
@@ -120,6 +130,32 @@ Literal values can be assigned to variables
     import ip::services
     sshservice = ip::services::ssh
 
+
+Arithmetic operations
+=====================
+
+The following arithmetic operations are supported:
+
+ * Addition (``+``)
+ * Substraction (``-``)
+ * Multiplication (``*``)
+ * Division (``/``)
+ * Exponentiation (``**``)
+ * Modulo (``%``)
+
+Example:
+
+.. code-block:: inmanta
+
+    var = 3 + 5
+    var = 10 - 2
+    var = 4 * 2
+    var = int(16 / 2)
+    var = 2 ** 3
+    var = 18 % 10
+
+Note that the result of the division operation is cast to the type ``int``. This is done because a division always
+results in a value of type ``float``.
 
 
 Primitive types
@@ -302,6 +338,15 @@ included in:
 
     # Output when displayed:
     # Welcome to serv1.example.org
+
+String concatenation
+####################
+
+Strings can be concatenated with the ``+`` operator.
+
+.. code-block:: inmanta
+
+    hello_world = "hello " + "world"
 
 
 .. _lang-conditions:
@@ -514,7 +559,7 @@ any values to the relation attribute.
     f2 = File(host=h1, path="/opt/2")
     f3 = File(host=h1, path="/opt/3")
 
-    // h1.files equals [f1, f2, f3]
+    # h1.files equals [f1, f2, f3]
 
     FileSet.files [0:] -- File.set [1]
 
@@ -522,11 +567,11 @@ any values to the relation attribute.
     s1.files = [f1,f2]
     s1.files = f3
 
-    // s1.files equals [f1, f2, f3]
+    # s1.files equals [f1, f2, f3]
 
     s1.files = f3
-    // adding a value twice does not affect the relation,
-    // s1.files still equals [f1, f2, f3]
+    # adding a value twice does not affect the relation,
+    # s1.files still equals [f1, f2, f3]
 
 In addition, attributes can be assigned in a constructor using keyword arguments by using ``**dct`` where ``dct`` is a dictionary that contains
 attribute names as keys and the desired values as values. For example:
@@ -550,7 +595,7 @@ It is also possible to add elements to a relation with the ``+=`` operator:
     h1.files += f2
     h1.files += f3
 
-    // h1.files equals [f1, f2, f3]
+    # h1.files equals [f1, f2, f3]
 
 
 .. note::
@@ -612,24 +657,38 @@ Refinements
 Entities define what should be deployed. Entities can either be deployed directly (such as files and packages) or they can be
 refined. Refinement expands an abstract entity into one or more more concrete entities.
 
-For example, :inmanta:entity:`apache::Server` is refined as follows
+For example, ``InterfaceIPAssignment`` is refined as follows
+
+..
+    based on https://github.com/inmanta/examples/blob/master/lsm-srlinux/main.cf
 
 .. code-block:: inmanta
 
-    implementation apacheServerDEB for Server:
-        pkg = std::Package(host=host, name="apache2-mpm-worker", state="installed")
-        pkg2 = std::Package(host=host, name="apache2", state="installed")
-        svc = std::Service(host=host, name="apache2", state="running", onboot=true, reload=true, requires=[pkg, pkg2])
-        svc.requires = self.requires
+    import nokia_srlinux
+    import nokia_srlinux::interface as srinterface
+    import nokia_srlinux::interface::subinterface as srsubinterface
+    import nokia_srlinux::interface::subinterface::ipv4 as sripv4
 
-        # put an empty index.html in the default documentroot so health checks do not fail
-        index_html = std::ConfigFile(host=host, path="/var/www/html/index.html", content="",
-                                 requires=pkg)
-        self.user = "www-data"
-        self.group = "www-data"
+    implement InterfaceIPAssignment using interfaceIPAssignment when self.device.type == 'srlinux'
+
+    implementation interfaceIPAssignment for InterfaceIPAssignment:
+        interface = nokia_srlinux::Interface(
+            device=self.device,
+            name=self.interface_name,
+            resource=resource,
+            mtu=9000,
+            subinterface=srinterface::Subinterface(
+                x_index=0,
+                ipv4=srsubinterface::Ipv4(
+                    address=sripv4::Address(
+                        ip_prefix=self.address,
+                    ),
+                ),
+            ),
+        )
     end
 
-    implement Server using apacheServerDEB when std::familyof(host.os, "ubuntu")
+
 
 For each entity one or more refinements can be defined with the ``implementation`` statement.
 Implementation are connected to entities using the ``implement`` statement.

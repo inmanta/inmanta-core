@@ -106,10 +106,13 @@ def test_dataflow_model_attribute_assignment_responsible(dataflow_test_helper: D
 entity Test:
     int n
 end
-implement Test using std::none
+implement Test using none
 
 x = Test()
 x.n = 42
+
+implementation none for std::Entity:
+end
         """
     )
     graph: DataflowGraph = dataflow_test_helper.get_graph()
@@ -206,12 +209,15 @@ def test_dataflow_model_assignment_from_attribute(dataflow_test_helper: Dataflow
 entity A:
     int n
 end
-implement A using std::none
+implement A using none
 
 n = 42
 x = A(%s)
 
 nn = x.n
+
+implementation none for std::Entity:
+end
         """
         % ("n = n" if attr_init else ""),
         None if attr_init else RuntimeException,
@@ -234,12 +240,15 @@ def test_dataflow_model_assignment_outside_constructor(dataflow_test_helper: Dat
 entity A:
     int n
 end
-implement A using std::none
+implement A using none
 
 n = 42
 
 x = A()
 x.n = n
+
+implementation none for std::Entity:
+end
         """,
     )
     dataflow_test_helper.verify_graphstring(
@@ -278,13 +287,16 @@ A.other [0:1] -- B
 entity B:
 end
 
-implement A using std::none
-implement B using std::none
+implement A using none
+implement B using none
 
 x = A(n = 4)
 x.other = B()
 
 y = A(n = 4)
+
+implementation none for std::Entity:
+end
         """,
     )
 

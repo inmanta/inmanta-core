@@ -20,20 +20,7 @@ import logging
 import warnings
 from typing import Optional
 
-from inmanta.config import (
-    Config,
-    Option,
-    is_bool,
-    is_float,
-    is_int,
-    is_list,
-    is_map,
-    is_str,
-    is_str_opt,
-    is_time,
-    log_dir,
-    state_dir,
-)
+from inmanta.config import Config, Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time
 
 LOGGER = logging.getLogger(__name__)
 
@@ -43,28 +30,78 @@ LOGGER = logging.getLogger(__name__)
 # Database
 #############################
 
+db_wait_time = Option(
+    "database",
+    "wait_time",
+    0,
+    "For how long the server should wait for the DB to be up before starting. "
+    "If set to 0, the server won't wait for the DB. "
+    "If set to a negative value, the server will wait forever.",
+    is_time,
+)
 db_host = Option("database", "host", "localhost", "Hostname or IP of the postgresql server", is_str)
 db_port = Option("database", "port", 5432, "The port of the postgresql server", is_int)
 db_name = Option("database", "name", "inmanta", "The name of the database on the postgresql server", is_str)
 db_username = Option("database", "username", "postgres", "The username to access the database in the PostgreSQL server", is_str)
 db_password = Option("database", "password", None, "The password that belong to the database user", is_str)
+
 db_connection_pool_min_size = Option(
-    "database", "connection_pool_min_size", 10, "Number of connections the pool will be initialized with", is_int
+    "database",
+    "connection_pool_min_size",
+    10,
+    "[DEPRECATED, USE :inmanta.config:option:`server.db_connection_pool_min_size` INSTEAD] Number of connections the database connection pool will be initialized with",
+    is_int,
 )
 db_connection_pool_max_size = Option(
-    "database", "connection_pool_max_size", 10, "Max number of connections in the pool", is_int
-)
-db_connection_timeout = Option("database", "connection_timeout", 60, "Connection timeout in seconds", is_float)
-
-#############################
-# server_rest_transport
-#############################
-transport_port = Option(
-    "server_rest_transport",
-    "port",
-    8888,
-    "[DEPRECATED USE :inmanta.config:option:`server.bind-port`] The port on which the server listens for connections",
+    "database",
+    "connection_pool_max_size",
+    70,
+    "[DEPRECATED, USE :inmanta.config:option:`server.db_connection_pool_max_size` INSTEAD] Max number of connections in the database connection pool",
     is_int,
+)
+db_connection_timeout = Option(
+    "database",
+    "connection_timeout",
+    60.0,
+    "[DEPRECATED, USE :inmanta.config:option:`server.db_connection_timeout` INSTEAD] Connection timeout in seconds when the server communicates with the database",
+    is_float,
+)
+
+
+def default_db_pool_min_size() -> int:
+    """:inmanta.config:option:`database.connection-pool-min-size` / 2"""
+    return int(db_connection_pool_min_size.get() / 2)
+
+
+def default_db_pool_max_size() -> int:
+    """:inmanta.config:option:`database.connection-pool-max-size` / 2"""
+    return int(db_connection_pool_max_size.get() / 2)
+
+
+server_db_connection_pool_min_size = Option(
+    section="server",
+    name="db_connection_pool_min_size",
+    default=default_db_pool_min_size,
+    documentation="Number of connections the server's database connection pool will be initialized with.",
+    validator=is_int,
+    predecessor_option=db_connection_pool_min_size,
+)
+server_db_connection_pool_max_size = Option(
+    section="server",
+    name="db_connection_pool_max_size",
+    default=default_db_pool_max_size,
+    documentation="Max number of connections in the server's database connection pool.",
+    validator=is_int,
+    predecessor_option=db_connection_pool_max_size,
+)
+
+server_db_connection_timeout = Option(
+    section="server",
+    name="db_connection_timeout",
+    default=60.0,
+    documentation="Connection timeout in seconds when the server communicates with the database.",
+    validator=is_float,
+    predecessor_option=db_connection_timeout,
 )
 
 #############################
@@ -88,36 +125,16 @@ server_bind_address = Option(
     "server",
     "bind-address",
     "127.0.0.1",
-    "A list of addresses on which the server will listen for connections. If this option is set, the "
-    ":inmanta.config:option:`server_rest_transport.port` option is ignored.",
+    "A list of addresses on which the server will listen for connections.",
     is_list,
 )
 server_bind_port = Option(
     "server",
     "bind-port",
     8888,
-    "The port on which the server will listen for connections. If this option is set, the "
-    ":inmanta.config:option:`server_rest_transport.port` option is ignored.",
+    "The port on which the server will listen for connections.",
     is_int,
 )
-
-
-def get_bind_port() -> int:
-    if Config.is_set("server", "bind-port") or Config.is_set("server", "bind-address"):
-        # Use new bind-port option
-        if Config.is_set("server_rest_transport", "port"):
-            warnings.warn(
-                "Ignoring the server_rest_transport.port config option since the new config options "
-                "server.bind-port/server.bind-address are used.",
-            )
-        return server_bind_port.get()
-    else:
-        # Fallback to old option
-        warnings.warn(
-            "The server_rest_transport.port config option is deprecated in favour of the server.bind-port option.",
-            category=DeprecationWarning,
-        )
-        return Config.get("server_rest_transport", "port", 8888)
 
 
 server_tz_aware_timestamps = Option(
@@ -131,7 +148,10 @@ server_tz_aware_timestamps = Option(
 )
 
 server_enable_auth = Option("server", "auth", False, "Enable authentication on the server API", is_bool)
-server_auth_method = Option("server", "auth_method", None, "The authentication method to use: oidc or database", is_str_opt)
+server_auth_method = Option("server", "auth_method", "oidc", "The authentication method to use: oidc, database or jwt", is_str)
+server_additional_auth_header = Option(
+    "server", "auth_additional_header", None, "An additional header to look for authentication tokens", is_str_opt
+)
 
 server_ssl_key = Option(
     "server", "ssl_key_file", None, "Server private key to use for this server Leave blank to disable SSL", is_str_opt
@@ -153,14 +173,14 @@ server_ssl_ca_cert = Option(
     "server",
     "ssl_ca_cert_file",
     None,
-    "The CA cert file required to validate the server ssl cert. This setting is used by the server"
+    "The CA cert file required to validate the server ssl cert. This setting is used by the server "
     "to correctly configure the compiler and agents that the server starts itself. If not set and "
     "SSL is enabled, the server cert should be verifiable with the CAs installed in the OS.",
     is_str_opt,
 )
 
 server_fact_expire = Option(
-    "server", "fact-expire", 3600, "After how many seconds will discovered facts/parameters expire", is_time
+    "server", "fact-expire", 3600, "After how many seconds will discovered facts/parameters expire.", is_time
 )
 
 
@@ -192,15 +212,6 @@ server_fact_renew = Option(
 
 server_fact_resource_block = Option(
     "server", "fact-resource-block", 60, "Minimal time between subsequent requests for the same fact", is_time
-)
-
-server_autrecompile_wait = Option(
-    "server",
-    "auto-recompile-wait",
-    10,
-    """DEPRECATED: The number of seconds to wait before the server may attempt to do a new recompile.
-                                     Recompiles are triggered after facts updates for example.""",
-    is_time,
 )
 
 server_purge_version_interval = Option(
@@ -248,7 +259,7 @@ server_purge_resource_action_logs_interval = Option(
     "server", "purge-resource-action-logs-interval", 3600, "The number of seconds between resource-action log purging", is_time
 )
 
-server_resource_action_log_prefix = Option(
+server_resource_action_log_prefix: Option[str] = Option(
     "server",
     "resource_action_log_prefix",
     "resource-actions-",
@@ -256,10 +267,10 @@ server_resource_action_log_prefix = Option(
     is_str,
 )
 
-server_enabled_extensions = Option(
+server_enabled_extensions: Option[list[str]] = Option(
     "server",
     "enabled_extensions",
-    "",
+    list,
     "A list of extensions the server must load. Core is always loaded."
     "If an extension listed in this list is not available, the server will refuse to start.",
     is_list,
@@ -275,9 +286,9 @@ server_access_control_allow_origin = Option(
 )
 
 
-def default_hangtime() -> str:
+def default_hangtime() -> int:
     """:inmanta.config:option:`server.agent-timeout` *3/4"""
-    return str(int(agent_timeout.get() * 3 / 4))
+    return int(agent_timeout.get() * 3 / 4)
 
 
 agent_hangtime = Option(

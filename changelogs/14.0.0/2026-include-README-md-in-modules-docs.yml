@@ -1,0 +1,13 @@
+description: >
+  Include the documentation of modules composing a product into the
+  documentation of the product when they contain a README.md file.
+change-type: patch
+issue-nr: 2026
+issue-repo: irt
+destination-branches:
+- master
+- iso7
+- iso6
+sections:
+  minor-improvement: "{{description}}"
+

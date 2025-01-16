@@ -1,0 +1,5 @@
+change-type: patch
+description: Fix core build failure
+destination-branches:
+- master
+sections: {}

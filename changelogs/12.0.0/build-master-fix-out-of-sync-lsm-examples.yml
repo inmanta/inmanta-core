@@ -1,0 +1,3 @@
+description: Fix out of sync lsm examples from the documentation.
+change-type: patch
+destination-branches: [master, iso7]

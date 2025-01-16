@@ -1,0 +1,4 @@
+description: Remove code reloading from the agent.
+issue-nr: 8185
+change-type: patch
+destination-branches: [master]

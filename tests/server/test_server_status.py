@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 
 from inmanta import data
@@ -22,7 +23,7 @@ from inmanta.server.server import Server
 from inmanta.server.services.compilerservice import CompilerService
 
 
-async def test_server_status(server, client):
+async def test_server_status(server, client, agent, environment):
     result = await client.get_server_status()
 
     assert result.code == 200
@@ -37,8 +38,16 @@ async def test_server_status(server, client):
     assert len([x for x in status["slices"] if x["name"] == "core.database"]) == 1
     assert db_status[0]["status"]["connected"] is True
 
+    scheduler_status = [x for x in status["slices"] if x["name"] == "core.scheduler_manager"]
+    assert len(scheduler_status) == 1
+
+    scheduler_stats = scheduler_status[0]["status"]
+    assert scheduler_stats["total"]["connected"] is True
+    # test environment is called dev
+    assert scheduler_stats["dev"]["connected"] is True
+
     assert "features" in status
-    assert len(status["features"]) == 0
+    assert len(status["features"]) > 0
 
 
 async def test_server_status_database_unreachable(server, client):

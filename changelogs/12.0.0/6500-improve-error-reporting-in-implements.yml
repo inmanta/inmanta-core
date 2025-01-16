@@ -1,0 +1,7 @@
+description: "Improve error reporting on name error lookup within an ``implement`` statement."
+change-type: patch
+issue-nr: 6500
+destination-branches:
+  - master
+  - iso7
+  - iso6

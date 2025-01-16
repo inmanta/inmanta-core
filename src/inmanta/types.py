@@ -15,13 +15,14 @@
 
     Contact: code@inmanta.com
 """
+
 # This file defines named type definition for the Inmanta code base
 
 import builtins
 import uuid
 from collections.abc import Coroutine, Mapping, Sequence
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, NewType, Optional, Union
 
 import pydantic
 import typing_inspect
@@ -45,7 +46,7 @@ def issubclass(sub: type, super: Union[type, tuple[type, ...]]) -> bool:
     return builtins.issubclass(sub, super)
 
 
-PrimitiveTypes = Union[uuid.UUID, bool, int, float, datetime, str]
+PrimitiveTypes = Optional[uuid.UUID | bool | int | float | datetime | str]
 SimpleTypes = Union["BaseModel", PrimitiveTypes]
 
 JsonType = dict[str, Any]
@@ -60,3 +61,19 @@ MethodType = Callable[..., MethodReturn]
 Apireturn = Union[int, ReturnTupple, "ReturnValue[ReturnTypes]", "ReturnValue[None]", ReturnTypes]
 Warnings = Optional[list[str]]
 HandlerType = Callable[..., Coroutine[Any, Any, Apireturn]]
+
+
+ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API
+"""
+    The resource id with the version included.
+"""
+
+ResourceIdStr = NewType("ResourceIdStr", str)  # Part of the stable API
+"""
+    The resource id without the version
+"""
+
+ResourceType = NewType("ResourceType", str)
+"""
+    The type of the resource
+"""

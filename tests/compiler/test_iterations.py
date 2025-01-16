@@ -29,6 +29,8 @@ def test_max_iterations(snippetcompiler, monkeypatch):
         snippetcompiler.setup_for_snippet(
             """
     import std
+    import std::testing
+
 
     entity Hg:
     end
@@ -45,7 +47,8 @@ def test_max_iterations(snippetcompiler, monkeypatch):
 
 
     for i in hg.hosts:
-        std::ConfigFile(host=i, path="/fx", content="")
+        std::testing::NullResource(name=i.name)
+
     end
     """
         )

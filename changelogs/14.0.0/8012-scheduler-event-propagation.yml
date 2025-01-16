@@ -1,0 +1,7 @@
+description: Implemented event propagation for the new scheduler
+issue-nr: 8012
+sections:
+  feature: "Added a 'receive_events' attribute to resources. It allows you to control which resources get events from their dependencies, i.e. wether or not they need to be redeployed after a dependency deploys. See the `std::Resource` documentation for more details."
+change-type: patch
+destination-branches:
+  - master

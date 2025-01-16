@@ -20,10 +20,25 @@ Glossary
         environment is required, but often multiple environments of the same infrastructure are
         available such as development, integration and testing.
 
+    resource scheduler
+        In each environment, this component manages the deployment of resources. It keeps track of
+        resources' state and intent, schedules them for deploy / repair when appropriate, and maintains
+        resource order as defined by the requires-provides relations.
+
+        It groups the resources by their announced :term:`agent<agent>`, spawns :term:`executor<executor>` processes to
+        host the handler code for each of those agents, and it works through its scheduled deploys (and other resource
+        actions, e.g. dry-run) by directing those executors to execute appropriate handler operations.
+
+    executor
+        A process spawned on-demand by the :term:`resource scheduler<resource scheduler>` that hosts handler code.
+        The resource scheduler instructs the executor to execute deploys (and other resource actions, e.g. dry-run).
+
     agent
-        The process that enforces the desired state described by :term:`resources<resource>` by
-        executing :term:`handlers<handler>`. Each agent is responsible for all resources that go to
-        a single device or API endpoint.
+        The logical component, identified by a name, that knows how to deploy a class of resources. The
+        :term:`resource scheduler<resource scheduler>` ensures that deploy actions on a given agent are always
+        sequential. It is a grouping (and concurrency control) mechanism for related resources (i.e. resources
+        that go to a single device or API endpoint). Each logical agent has its own :term:`executor<executor>`
+        process(es) on which to run handler code.
 
     resource
         Inmanta orchestrates and manages resources, of any abstraction level, in an infrastructure.
@@ -32,24 +47,24 @@ Glossary
 
         A resource has attributes that express the desired value of a property of the resource it
         represents in the infrastructure. For example the
-        :inmanta:attribute:`mode<std::File.mode>` attribute of the the :inmanta:entity:`std::File`
-        resource. This attribute indicates the desired permissions of a UNIX file.
+        :inmanta:attribute:`memory_mb<vcenter::VirtualMachine.memory_mb>` attribute of the :inmanta:entity:`vcenter::VirtualMachine`
+        resource. This attribute indicates the memory size of a virtual machine.
 
         A resource needs to have a unique identifier in an environment. This identifier needs to be
         derived from attributes of the resource. This ensures that the orchestrator can (co-)manage
         existing resources and allows quick recovery of the orchestrator in failure conditions. This
         unique identifier consists of multiple fields. For example,
-        ``std::File[vm1,path="/etc/motd"]`` This id contains the type of the resource, the name of
+        ``vcenter::VirtualMachineFromTemplate[lab,name=srv_test]`` This id contains the type of the resource, the name of
         the :term:`agent` and the unique id with its value for this resource. The resource designer
         determines how this id is derived.
 
         The fields in the id are:
 
-        * The first field is the type of the resource. For example: ``std::File``
+        * The first field is the type of the resource. For example: ``vcenter::VirtualMachineFromTemplate``
         * The second field is the name of the agent that manages/groups the resource. For example:
-          the name of the machine on  which the file is defined ``vm1``
+          the name of the vcenter cluster on which the virtual machine is defined ``lab``
         * The third field is the identifying attribute and the value of this attribute. For example:
-          the ``path`` of the file uniquely identifies a file on a machine.
+          the ``name`` of the virtual machine uniquely identifies a virtual machine on a vcenter cluster.
 
     module
         A :term:`configuration model` consists of multiple configuration modules. A module provides
@@ -61,13 +76,13 @@ Glossary
 
     handler
         A handler provides the interface between a resource in the model and the resource in the
-        infrastructure. The agent loads the handler and uses it to read the current state, discover
+        infrastructure. The executor loads the handler and uses it to discover
         :term:`facts` and make changes to the real resource.
 
     desired state
         The desired state expresses the state of all resources that Inmanta manages. Expressing a
         configuration in function of desired state makes the orchestrator more robust to failures
-        compared to imperative based orchestration. An agent uses a :term:`handler` to read the
+        compared to imperative based orchestration. The :term:`resource scheduler` reads the
         current state of the a resource and derive from the difference between current and desired
         state the actions required to change the state of the resource. Desired state has the
         additional benefit that Inmanta can show a dry run or execution plan of what would change if
@@ -125,7 +140,7 @@ Glossary
         A resource in an infrastructure may have multiple properties that are not managed by Inmanta
         but their value is required as input in the configuration or for reporting purposes.
         :term:`handlers<handler>` take care of extracting these facts and reporting them back to the
-        server.
+        server. More information in the :ref:`using facts<Using facts>` section.
 
     infrastructure
         This is what Inmanta manages. This could be virtual machines with resources in these virtual

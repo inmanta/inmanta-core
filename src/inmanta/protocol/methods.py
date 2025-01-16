@@ -22,6 +22,7 @@ import datetime
 import uuid
 from typing import Any, Literal, Optional, Union
 
+import inmanta.types
 from inmanta import const, data, resources
 from inmanta.const import ResourceState
 from inmanta.data import model
@@ -53,7 +54,7 @@ async def ignore_env(obj: Any, metadata: dict) -> Any:
     return obj
 
 
-async def convert_resource_version_id(rvid: model.ResourceVersionIdStr, metadata: dict) -> "resources.Id":
+async def convert_resource_version_id(rvid: inmanta.types.ResourceVersionIdStr, metadata: dict) -> "resources.Id":
     try:
         return resources.Id.parse_resource_version_id(rvid)
     except Exception:
@@ -63,7 +64,7 @@ async def convert_resource_version_id(rvid: model.ResourceVersionIdStr, metadata
 ENV_OPTS: dict[str, ArgOption] = {
     "tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=convert_environment)
 }
-AGENT_ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=add_env)}
+AGENT_ENV_OPTS: dict[str, ArgOption] = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=add_env)}
 RVID_OPTS = {"rvid": ArgOption(getter=convert_resource_version_id)}
 
 
@@ -289,6 +290,7 @@ def clear_environment(id: uuid.UUID):
     This method deletes various components associated with the specified environment from the database,
     including agents, compile data, parameters, notifications, code, resources, and configuration models.
     However, it retains the entry in the Environment table itself and settings are kept.
+    The environment will be temporarily halted during the decommissioning process.
 
     :param id: The id of the environment to be cleared.
 
@@ -421,7 +423,6 @@ def get_resource(
     tid: uuid.UUID,
     id: str,
     logs: Optional[bool] = None,
-    status: Optional[bool] = None,
     log_action: Optional[const.ResourceAction] = None,
     log_limit: int = 0,
 ):
@@ -438,23 +439,6 @@ def get_resource(
                       To retrieve more entries, use  /api/v2/resource_actions
                       (:func:`~inmanta.protocol.methods_v2.get_resource_actions`)
                       If None, a default limit (set to 1000) is applied.
-    """
-
-
-@method(path="/resource", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
-def get_resources_for_agent(
-    tid: uuid.UUID, agent: str, sid: Optional[uuid.UUID] = None, version: Optional[int] = None, incremental_deploy: bool = False
-):
-    """
-    Return the most recent state for the resources associated with agent, or the version requested
-
-    :param tid: The environment ID this resource belongs to.
-    :param agent: The agent name.
-    :param sid: Optional. Session id of the agent (transparently added by agent client).
-    :param version: Optional. The version to retrieve. If none, the latest available version is returned. With a specific
-                    version that version is returned, even if it has not been released yet.
-    :param incremental_deploy: Optional. Indicates whether the server should only return the resources that changed since the
-                               previous deployment.
     """
 
 
@@ -541,11 +525,11 @@ def put_version(
     tid: uuid.UUID,
     version: int,
     resources: list,
-    resource_state: dict[model.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
+    resource_state: dict[inmanta.types.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
     unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
     version_info: Optional[dict] = None,
     compiler_version: Optional[str] = None,
-    resource_sets: dict[model.ResourceIdStr, Optional[str]] = {},
+    resource_sets: dict[inmanta.types.ResourceIdStr, Optional[str]] = {},
     pip_config: Optional[PipConfig] = None,
 ):
     """
@@ -577,11 +561,10 @@ def release_version(
 
     :param tid: The id of the environment
     :param id: The version of the CM to deploy
-    :param push: Notify all agents to deploy the version
-    :param agent_trigger_method: Optional. Indicates whether the agents should perform a full or an incremental deploy when
-                                push is true.
+    :param push: [DEPRECATED] This argument is ignored.
+    :param agent_trigger_method: [DEPRECATED]: This argument is ignored.
 
-     :return: Returns the following status codes:
+    :return: Returns the following status codes:
             200: The version is released
             404: The requested version does not exist
             409: The requested version was already released
@@ -651,7 +634,15 @@ def dryrun_update(tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
 # Method for requesting a dryrun from an agent
 
 
-@method(path="/agent_dryrun/<id>", operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[])
+@method(
+    path="/agent_dryrun/<id>",
+    operation="POST",
+    server_agent=True,
+    timeout=5,
+    arg_options=AGENT_ENV_OPTS,
+    client_types=[],
+    enforce_auth=False,
+)
 def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
     """
     Do a dryrun on an agent
@@ -724,10 +715,12 @@ def get_param(tid: uuid.UUID, id: str, resource_id: Optional[str] = None):
     :param resource_id: Optional. scope the parameter to resource (fact),
                         if the resource id should not contain a version, the latest version is used
     :return: Returns the following status codes:
-            200: The parameter content is returned
-            404: The parameter is not found and unable to find it because its resource is not known to the server
-            410: The parameter has expired
-            503: The parameter is not found but its value is requested from an agent
+
+        - 200: The parameter content is returned
+        - 404: The parameter is not found and unable to find it because its resource is not known to the server
+        - 410: The parameter has expired
+        - 503: The parameter is not found but its value is requested from an agent
+
     """
 
 
@@ -745,10 +738,12 @@ def set_param(
     resource_id: Optional[str] = None,
     metadata: dict = {},
     recompile: bool = False,
+    expires: Optional[bool] = None,
 ):
     """
     Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
     Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
+    [DEPRECATED] Please use the new endpoints `/facts/<name>` and `/parameters/<name>` instead.
 
     :param tid: The id of the environment
     :param id: The name of the parameter
@@ -757,6 +752,9 @@ def set_param(
     :param resource_id: Optional. Scope the parameter to resource (fact)
     :param metadata: Optional. Metadata about the parameter
     :param recompile: Optional. Whether to trigger a recompile
+    :param expires: When setting a new parameter/fact: if set to None, then a sensible default will be provided (i.e. False
+        for parameter and True for fact). When updating a parameter or fact, a None value will leave the existing value
+        unchanged.
     """
 
 
@@ -804,10 +802,12 @@ def set_parameters(tid: uuid.UUID, parameters: list):
 
     :param tid: The id of the environment
     :param parameters: A list of dicts with the following keys:
+
         - id The name of the parameter
         - source The source of the parameter. Valid values are defined in the ParameterSource enum (see: inmanta/const.py)
         - value The value of the parameter
         - resource_id Optionally, scope the parameter to resource (fact)
+        - expires Defaults to true. Set to false to create a never expiring fact
         - metadata metadata about the parameter
     """
 
@@ -815,25 +815,27 @@ def set_parameters(tid: uuid.UUID, parameters: list):
 # Get parameters from the agent
 
 
-@method(path="/agent_parameter", operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[])
+@method(
+    path="/agent_parameter",
+    operation="POST",
+    server_agent=True,
+    timeout=5,
+    arg_options=AGENT_ENV_OPTS,
+    client_types=[],
+    reply=False,
+    enforce_auth=False,
+)
 def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
     """
     Get all parameters/facts known by the agents for the given resource
 
+    This method will not actually return them.
+    This call wil register the request with the agent and return,
+    The agent will push the parameters back to the server when they are available.
+
     :param tid: The environment
     :param agent: The agent to get the parameters from
     :param resource: The resource to query the parameters from
-    """
-
-
-@method(path="/code/<id>", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
-def get_code(tid: uuid.UUID, id: int, resource: str):
-    """
-    Retrieve the source code associated with a specific version of a configuration model for a given resource in an environment.
-
-    :param tid: The id of the environment to which the code belongs.
-    :param id: The version number of the configuration model.
-    :param resource: The identifier of the resource. This should be a resource ID, not a resource version ID.
     """
 
 
@@ -845,7 +847,7 @@ def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
     :param tid: The id of the environment to which the code belongs.
     :param id: The version number of the configuration model.
     :param resources: A dictionary where each key is a string representing a resource type.
-                  For each resource type, the value is a dictionary. This nested dictionary's keys are file names,
+                  For each resource type, the value is a dictionary. This nested dictionary's keys are file hashes,
                   and each key maps to a tuple. This tuple contains three elements: the file name, the module name,
                   and a list of requirements.
 
@@ -948,6 +950,8 @@ def list_agents(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] 
     """
     List all agent for an environment
 
+    [DEPRECATED] use the V2 `get_agents` or `/agents` endpoint instead
+
     :param tid: The environment the agents are defined in
     :param start: Optional. Agent after start (sorted by name in ASC)
     :param end: Optional. Agent before end (sorted by name in ASC)
@@ -962,7 +966,7 @@ def list_agents(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] 
 # Reporting by the agent to the server
 
 
-@method(path="/status", operation="GET", server_agent=True, timeout=5, client_types=[])
+@method(path="/status", operation="GET", server_agent=True, enforce_auth=False, timeout=5, client_types=[])
 def get_status():
     """
     A call from the server to the agent to report its status to the server
@@ -974,20 +978,29 @@ def get_status():
 # Methods to allow the server to set the agents state
 
 
-@method(path="/agentstate", operation="POST", server_agent=True, timeout=5, client_types=[])
-def set_state(agent: str, enabled: bool):
+@method(path="/agentstate", operation="POST", server_agent=True, enforce_auth=False, timeout=5, client_types=[])
+def set_state(agent: Optional[str], enabled: bool):
     """
     Set the state of the agent.
 
-    :param agent: The name of the agent.
+    :param agent: The name of the agent if it's provided. None represents all agents
     :param enabled: A boolean value indicating whether the agent should be paused (enabled=False) or unpaused (enabled=True).
     """
 
 
-@method(path="/agentstate/<id>", operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[])
-def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
+@method(
+    path="/deploy",
+    operation="POST",
+    server_agent=True,
+    enforce_auth=False,
+    timeout=5,
+    arg_options=AGENT_ENV_OPTS,
+    client_types=[],
+)
+def trigger(tid: uuid.UUID, id: None | str, incremental_deploy: bool):
     """
-    Request an agent to reload resources
+    When the <id> parameter is set: request this specific agent to reload resources.
+    Otherwise, request ALL agents in the environment to reload resources.
 
     :param tid: The environment this agent is defined in
     :param id: The name of the agent
@@ -995,25 +1008,20 @@ def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
     """
 
 
-# Methods to send event to the server
-
-
-@method(
-    path="/event/<id>", operation="PUT", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[], reply=False
+@typedmethod(
+    path="/scheduler/",
+    operation="POST",
+    server_agent=True,
+    enforce_auth=False,
+    timeout=5,
+    arg_options=AGENT_ENV_OPTS,
+    client_types=[],
 )
-def resource_event(
-    tid: uuid.UUID, id: str, resource: str, send_events: bool, state: const.ResourceState, change: const.Change, changes={}
-):
+def trigger_read_version(tid: uuid.UUID) -> int:
     """
-    Tell an agent a resource it waits for has been updated
+    Notify the scheduler that a new version has been released
 
     :param tid: The environment this agent is defined in
-    :param id: The name of the agent
-    :param resource: The resource ID of the resource being updated
-    :param send_events: [DEPRECATED] The value of this field is not used anymore.
-    :param state: State the resource acquired (deployed, skipped, canceled)
-    :param change: The change that was made to the resource
-    :param changes: Optional. The changes made to the resource
     """
 
 

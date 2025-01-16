@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 from typing import cast
 
@@ -69,6 +70,7 @@ class CodeService(protocol.ServerSlice):
                 ):
                     raise BadRequest("The values in the source map should be of the form (filename, module, [requirements])")
 
+        # list of file hashes
         allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.keys()]
 
         val = await self.file_slice.stat_file_internal(allrefs)
@@ -96,25 +98,6 @@ class CodeService(protocol.ServerSlice):
 
         return 200
 
-    @handle(methods.get_code, code_id="id", env="tid")
-    async def get_code(self, env: data.Environment, code_id: int, resource: str) -> Apireturn:
-        code = await data.Code.get_version(environment=env.id, version=code_id, resource=resource)
-        if code is None:
-            raise NotFound(f"The version of the code does not exist. {resource}, {code_id}")
-
-        sources = {}
-        if code.source_refs is not None:
-            for code_hash, (file_name, module, req) in code.source_refs.items():
-                try:
-                    content = await self.file_slice.get_file_internal(code_hash)
-                    sources[code_hash] = (file_name, module, content.decode(), req)
-                except UnicodeDecodeError:
-                    raise BadRequest(
-                        f"The source file {file_name}({hash}) is not correctly encoded," f" use the v2 endpoint to retrieve it"
-                    )
-
-        return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": sources}
-
     @handle(methods_v2.get_source_code, env="tid")
     async def get_source_code(self, env: data.Environment, version: int, resource_type: str) -> list[model.Source]:
         code = await data.Code.get_version(environment=env.id, version=version, resource=resource_type)
@@ -122,6 +105,8 @@ class CodeService(protocol.ServerSlice):
             raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
 
         sources = []
+
+        # Get all module code pertaining to this env/version/resource
         if code.source_refs is not None:
             for code_hash, (file_name, module, requires) in code.source_refs.items():
                 sources.append(

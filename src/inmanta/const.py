@@ -26,7 +26,7 @@ from inmanta.stable_api import stable_api
 
 class ResourceState(str, Enum):
     unavailable = "unavailable"  # This state is set by the agent when no handler is available for the resource
-    skipped = "skipped"  #
+    skipped = "skipped"
     dry = "dry"
     deployed = "deployed"
     failed = "failed"
@@ -35,6 +35,24 @@ class ResourceState(str, Enum):
     cancelled = "cancelled"  # When a new version is pushed, in progress deploys are cancelled
     undefined = "undefined"  # The state of this resource is unknown at this moment in the orchestration process
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
+
+
+class HandlerResourceState(str, Enum):
+    """
+    The resource states that the resource handler may report via the HandlerContext (with the set_resource_state method)
+    when it performs a resource action.
+    """
+
+    # A resource indicates it wants to skip its deployment.
+    skipped = "skipped"
+    deployed = "deployed"
+    failed = "failed"
+    dry = "dry"
+    # A resource indicates it wants to skip its deployment, because one of its dependencies wasn't deployed
+    # and that it should only be redeployed once its dependencies are deployed successfully. Resources with this
+    # HandlerResourceState will get the TEMPORARILY_BLOCKED blocked status.
+    skipped_for_dependency = "skipped_for_dependency"
+    unavailable = "unavailable"
 
 
 class NonDeployingResourceState(str, Enum):
@@ -245,12 +263,15 @@ ENVIRON_FORCE_TTY = "FORCE_TTY"
 
 LOG_LEVEL_TRACE = 3
 
-NAME_RESOURCE_ACTION_LOGGER = "resource_action_logger"
+NAME_RESOURCE_ACTION_LOGGER = "inmanta.resource_action"
 
 # Time we give the server/agent to shutdown gracefully, before we force stop the ioloop
 SHUTDOWN_GRACE_IOLOOP = 10
 # Time we give the server/agent to shutdown gracefully, before we execute sys.exit(3)
 SHUTDOWN_GRACE_HARD = 15
+# Time we give the executor to shutdown gracefully, before we execute sys.exit(3)
+EXECUTOR_GRACE_HARD = 3
+
 # Hard shutdown exit code
 EXIT_HARD = 3
 # Startup failed exit code
@@ -340,3 +361,41 @@ MODULE_CHANGELOG_FILE = "CHANGELOG.md"
 DATETIME_MIN_UTC = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
 
 MODULE_PKG_NAME_PREFIX = "inmanta-module-"
+
+TRACEPARENT = "traceparent"
+
+# Resource sets marked for deletion during a partial export can be passed via this env
+# variable as a space separated list of set ids.
+INMANTA_REMOVED_SET_ID = "INMANTA_REMOVED_RESOURCE_SET_ID"
+
+
+# File present in the root of a virtual environment of an executor.
+# This file is created after the venv is correctly created and touched at regular intervals while it's actively used.
+# It's used to determine whether a venv is only partially created (due to a server crash for example) or to determine when the
+# venv was last used.
+INMANTA_VENV_STATUS_FILENAME = ".inmanta_venv_status"
+
+
+# File present in the root of the state dir to indicate the version of disk layout that this orchestrator uses.
+INMANTA_DISK_LAYOUT_VERSION = ".inmanta_disk_layout_version"
+# If no file is present, create it with this version
+DEFAULT_INMANTA_DISK_LAYOUT_VERSION = 2
+
+
+# ID to represent the new scheduler as an agent
+AGENT_SCHEDULER_ID = "$__scheduler"
+
+
+# resource attributes for event propagation
+RESOURCE_ATTRIBUTE_SEND_EVENTS = "send_event"
+RESOURCE_ATTRIBUTE_RECEIVE_EVENTS = "receive_events"
+
+
+# Per component log variables
+LOG_CONTEXT_VAR_ENVIRONMENT = "environment"
+
+ALL_LOG_CONTEXT_VARS = [LOG_CONTEXT_VAR_ENVIRONMENT]
+
+
+# Logger namespace
+LOGGER_NAME_EXECUTOR = "inmanta.executor"

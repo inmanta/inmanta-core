@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import logging
 import os
@@ -25,11 +26,11 @@ import click
 import pytest
 
 from inmanta import const
-from inmanta.module import InvalidModuleException, Module, UntrackedFilesMode
+from inmanta.module import Module, UntrackedFilesMode
 from inmanta.moduletool import ModuleTool, gitprovider
 from packaging.version import Version
 from test_app_cli import app
-from utils import log_contains, module_from_template, v1_module_from_template
+from utils import module_from_template, v1_module_from_template
 
 
 def get_commit_message_x_commits_ago(path: str, nb_previous_commit: int = 0) -> str:
@@ -48,6 +49,8 @@ def get_commit_message_x_commits_ago(path: str, nb_previous_commit: int = 0) -> 
 @pytest.mark.parametrize_any("v1_module", [True, False])
 @pytest.mark.parametrize_any("changelog_file_exists", [True, False])
 @pytest.mark.parametrize_any("previous_stable_version_exists", [True, False])
+@pytest.mark.parametrize_any("four_digit_version", [True, False])
+@pytest.mark.parametrize_any("four_digits_before_release", [True, False])
 def test_release_stable_version(
     tmpdir,
     modules_dir: str,
@@ -56,9 +59,12 @@ def test_release_stable_version(
     v1_module: bool,
     changelog_file_exists: bool,
     previous_stable_version_exists: bool,
+    four_digit_version: bool,
+    four_digits_before_release: bool,
 ) -> None:
     """
     Test normal scenario where `inmanta module release` is used to release a stable version of a module.
+    four_digit_version only works for v2 modules
     """
 
     def get_changelog_content(after_release: bool) -> str:
@@ -66,10 +72,10 @@ def test_release_stable_version(
             return f"""
 # Changelog
 
-## v1.2.4 - ?
+## {"v1.2.3.1" if four_digit_version and not v1_module else "v1.2.4"} - ?
 
 
-## v1.2.3 - {datetime.date.today().isoformat()}
+## {"v1.2.3.0" if four_digits_before_release else "v1.2.3"} - {datetime.date.today().isoformat()}
 
 - Release
 
@@ -78,10 +84,10 @@ def test_release_stable_version(
 - Release
             """.strip()
         else:
-            return """
+            return f"""
 # Changelog
 
-## v1.2.3 - ?
+## {"v1.2.3.0" if four_digits_before_release else "v1.2.3"} - ?
 
 - Release
 
@@ -96,15 +102,16 @@ def test_release_stable_version(
         v1_module_from_template(
             source_dir=os.path.join(modules_dir, "minimalv1module"),
             dest_dir=path_module,
-            new_version=Version("1.2.3.dev0"),
+            new_version=Version("v1.2.3.0.dev0" if four_digits_before_release else "v1.2.3.dev0"),
             new_name=module_name,
         )
     else:
         module_from_template(
             source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
             dest_dir=path_module,
-            new_version=Version("1.2.3.dev0"),
+            new_version=Version("v1.2.3.0.dev0" if four_digits_before_release else "v1.2.3.dev0"),
             new_name=module_name,
+            four_digit_version=four_digit_version,
         )
     gitprovider.git_init(repo=path_module)
     path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
@@ -139,8 +146,7 @@ def test_release_stable_version(
     assert gitprovider.get_version_tags(repo=path_module) == expected_tags
     # Verify version
     mod = Module.from_path(path_module)
-    assert mod.version == Version("1.2.4.dev0")
-    # Verify changelog file
+    assert mod.version == Version("1.2.3.1.dev0") if four_digit_version and not v1_module else Version("1.2.4.dev0")
     if changelog_file_exists:
         with open(path_changelog_file, encoding="utf-8") as fh:
             assert fh.read() == get_changelog_content(after_release=True)
@@ -570,19 +576,6 @@ def test_not_a_git_repository(tmpdir, modules_dir: str, monkeypatch) -> None:
     with pytest.raises(click.ClickException) as exc_info:
         module_tool.release(dev=False, message="Commit changes")
     assert f"Directory {path_module} is not a git repository" in exc_info.value.message
-
-
-def test_module_commit_deprecation(caplog, tmpdir, monkeypatch) -> None:
-    monkeypatch.chdir(str(tmpdir))
-    with pytest.raises(InvalidModuleException):
-        ModuleTool().commit("message")
-    log_contains(
-        caplog,
-        "inmanta.warnings",
-        logging.WARNING,
-        "The `inmanta module commit` command has been deprecated in favor of `inmanta module release`.",
-        test_phase="call",
-    )
 
 
 def test_failed_to_set_release_date(tmpdir, modules_dir: str, monkeypatch, caplog) -> None:

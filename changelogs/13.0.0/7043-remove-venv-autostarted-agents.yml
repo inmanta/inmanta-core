@@ -1,0 +1,8 @@
+---
+description: Remove the venv of an auto-started agent when its environment is deleted or cleared or when its project is deleted.
+issue-nr: 7043
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso7, iso6]
+sections:
+  minor-improvement: "{{description}}"

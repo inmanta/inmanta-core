@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import contextlib
 import textwrap
 
@@ -33,8 +34,8 @@ def test_relations_implicit_inverse_simple(snippetcompiler) -> None:
         """
         entity A: end
         entity B: end
-        implement A using std::none
-        implement B using std::none
+        implement A using none
+        implement B using none
 
         A.b [0:1] -- B.a [1]
 
@@ -49,6 +50,8 @@ def test_relations_implicit_inverse_simple(snippetcompiler) -> None:
         assert = true
         assert = a1.b.a == a1
         assert = a2.b.a == a2
+
+        implementation none for std::Entity: end
         """
     )
     compiler.do_compile()
@@ -64,8 +67,8 @@ def test_relations_implicit_inverse_composite_index(snippetcompiler) -> None:
         entity B:
             int id
         end
-        implement A using std::none
-        implement B using std::none
+        implement A using none
+        implement B using none
 
         A.b [0:1] -- B.a [1]
 
@@ -80,6 +83,8 @@ def test_relations_implicit_inverse_composite_index(snippetcompiler) -> None:
         assert = true
         assert = a1.b.a == a1
         assert = a2.b.a == a2
+
+        implementation none for std::Entity: end
         """
     )
     compiler.do_compile()
@@ -96,8 +101,8 @@ def test_relations_implicit_inverse_composite_rhs(snippetcompiler) -> None:
         entity B:
             int id = 0
         end
-        implement A using std::none
-        implement B using std::none
+        implement A using none
+        implement B using none
 
         A.b [0:] -- B.a [1]
 
@@ -113,6 +118,8 @@ def test_relations_implicit_inverse_composite_rhs(snippetcompiler) -> None:
         assert = true
         assert = a1.b == [B[id=0, a=a1], B[id=1, a=a1]]
         assert = a2.b == [B[id=30, a=a2], B[id=40, a=a2], B[id=50, a=a2]]
+
+        implementation none for std::Entity: end
         """
     )
     compiler.do_compile()
@@ -131,8 +138,8 @@ def test_relations_implicit_inverse_left_index(snippetcompiler, double_index: bo
         """
         entity A: end
         entity B: end
-        implement A using std::none
-        implement B using std::none
+        implement A using none
+        implement B using none
 
         A.b [1] -- B.a [1]
 
@@ -140,6 +147,8 @@ def test_relations_implicit_inverse_left_index(snippetcompiler, double_index: bo
         %s
 
         A(b=B())
+
+        implementation none for std::Entity: end
         """
         % ("index B(a)" if double_index else "")
     )
@@ -164,10 +173,10 @@ def test_relation_implicit_inverse_deeply_nested_constructors(snippetcompiler) -
         entity B: end
         entity C: end
         entity D: end
-        implement A using std::none
-        implement B using std::none
-        implement C using std::none
-        implement D using std::none
+        implement A using none
+        implement B using none
+        implement C using none
+        implement D using none
 
         A.b [1] -- B.a [1]
         B.c [1] -- C.b [1]
@@ -183,6 +192,8 @@ def test_relation_implicit_inverse_deeply_nested_constructors(snippetcompiler) -
         assert = a.b.a == a
         assert = a.b.c.b == a.b
         assert = a.b.c.d.c == a.b.c
+
+        implementation none for std::Entity: end
         """
     )
     compiler.do_compile()
@@ -203,8 +214,8 @@ def test_relation_implicit_inverse_nested_constructors_same_entity(snippetcompil
         LHS.right [0:1] -- RHS.left [1]
         index RHS(left)
 
-        implement LHS using std::none
-        implement RHS using std::none
+        implement LHS using none
+        implement RHS using none
 
         x1 = LHS(
             right=RHS(    # x2: inverse relation x2.left should be set to x1
@@ -220,6 +231,8 @@ def test_relation_implicit_inverse_nested_constructors_same_entity(snippetcompil
         assert = x1.right.right.right.left == x1.right.right
         assert = x1 != x1.right
         assert = x1.right != x1.right.right
+
+        implementation none for std::Entity: end
         """
     )
     compiler.do_compile()
@@ -233,8 +246,8 @@ def test_relation_implicit_inverse_kwargs_conflict(snippetcompiler) -> None:
         """
         entity A: end
         entity B: end
-        implement A using std::none
-        implement B using std::none
+        implement A using none
+        implement B using none
 
         A.b [0:1] -- B.a [1]
 
@@ -246,6 +259,9 @@ def test_relation_implicit_inverse_kwargs_conflict(snippetcompiler) -> None:
 
         assert = true
         assert = a1.b.a == a1
+
+        implementation none for std::Entity:
+        end
         """,
         textwrap.dedent(
             """
@@ -274,13 +290,16 @@ def test_relation_implicit_inverse_on_plain_attribute(snippetcompiler) -> None:
             int b
         end
         entity B: end
-        implement A using std::none
-        implement B using std::none
+        implement A using none
+        implement B using none
 
         B.a [1] -- A
         index B(a)
 
         A(b=B())
+
+        implementation none for std::Entity:
+        end
         """,
         "Can not assign a value of type B to a variable of type int (reported in Construct(B) ({dir}/main.cf:12))",
     )
@@ -296,15 +315,18 @@ def test_relation_implicit_inverse_on_different_entity_type(snippetcompiler) -> 
         entity A: end
         entity B: end
         entity C: end
-        implement A using std::none
-        implement B using std::none
-        implement C using std::none
+        implement A using none
+        implement B using none
+        implement C using none
 
         A.b [0:1] -- C.a [1]
         B.a [1] -- A
         index B(a)
 
         A(b=B())
+
+        implementation none for std::Entity:
+        end
         """,
         "Can not assign a value of type __config__::B to a variable "
         "of type __config__::C (reported in Construct(B) ({dir}/main.cf:13))",
@@ -322,8 +344,8 @@ def test_relation_implicit_inverse_inheritance(snippetcompiler) -> None:
         entity BABC: end
         entity ChildA extends AABC: end
         entity ChildB extends BABC: end
-        implement ChildA using std::none
-        implement ChildB using std::none
+        implement ChildA using none
+        implement ChildB using none
 
         # relation and index on ABC
         AABC.b [0:1] -- BABC.a [1]
@@ -339,6 +361,9 @@ def test_relation_implicit_inverse_inheritance(snippetcompiler) -> None:
         assert = true
         assert = a1.b.a == a1
         assert = a2.b.a == a2
+
+        implementation none for std::Entity:
+        end
         """
     )
     compiler.do_compile()

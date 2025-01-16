@@ -21,10 +21,9 @@ from typing import Optional
 import pytest
 
 from compiler.dataflow.conftest import DataflowTestHelper
-from inmanta.ast import AttributeException, CompilerException, DoubleSetException, NotFoundException
+from inmanta.ast import AttributeException, CompilerException, DoubleSetException, NotFoundException, UnsetException
 from inmanta.execute.dataflow import VariableNodeReference
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
-from inmanta.execute.proxy import UnsetException
 
 
 @pytest.mark.parametrize(
@@ -144,13 +143,15 @@ EQUIVALENT TO {{x, y, z}} DUE TO STATEMENTS:
 entity A:
     int n
 end
-implement A using std::none
+implement A using none
 
 t = A()
 
 x = y
 y = t.n
 t.n = x
+
+implementation none for std::Entity: end
             """,
             """
 x
@@ -266,7 +267,7 @@ end
 
 index A(n)
 
-implement A using std::none
+implement A using none
 
 
 x = A(n = 42)
@@ -276,6 +277,8 @@ x.m = 0
 y.m = 1
 
 x_m = x.m
+
+implementation none for std::Entity: end
             """,
             """
 x_m

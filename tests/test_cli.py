@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import os
 import uuid
@@ -172,8 +173,8 @@ async def test_agent(server, client, environment, cli):
     assert result.exit_code == 0
 
 
-@pytest.mark.parametrize("push_method", [([]), (["-p"]), (["-p", "--full"])])
-async def test_version(server, client, clienthelper, environment, cli, push_method):
+@pytest.mark.parametrize("auto_start_agent", [True])  # Allow autostart
+async def test_version(server, client, clienthelper, environment, cli):
     version = str(await clienthelper.get_version())
     resources = [
         {
@@ -215,15 +216,15 @@ async def test_version(server, client, clienthelper, environment, cli, push_meth
     result = await cli.run("version", "list", "-e", environment)
     assert result.exit_code == 0
     assert version in result.output
-    assert "pending" in result.output
+    assert "candidate" in result.output
 
-    result = await cli.run("version", "release", "-e", environment, version, *push_method)
+    result = await cli.run("version", "release", "-e", environment, version)
     assert result.exit_code == 0
     assert version in result.output
 
     result = await client.get_version(environment, version)
     assert result.code == 200
-    assert result.result["model"]["result"] == "deploying"
+    assert result.result["model"]["released"]
 
     result = await cli.run("version", "report", "-e", environment, "-i", version)
     assert result.exit_code == 0
@@ -354,10 +355,11 @@ async def test_pause_agent(server, cli):
         assert result.exit_code != 0
 
 
-async def test_list_actionlog(server, environment, client, cli, agent, clienthelper):
+async def test_list_actionlog(server, environment, client, cli, null_agent, clienthelper):
     """
     Test the `inmanta-cli action-log list` command.
     """
+    await clienthelper.set_auto_deploy(auto=True)
 
     def assert_nr_records_in_output_table(output: str, nr_records: int) -> None:
         lines = [line.strip() for line in output.split("\n") if line.strip() and line.strip().startswith("|")]
@@ -370,9 +372,9 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
 
     resource1 = get_resource(version, key="test1")
     resource2 = get_resource(version, key="test2")
-    await clienthelper.put_version_simple(resources=[resource1, resource2], version=version)
+    await clienthelper.put_version_simple(resources=[resource1, resource2], version=version, wait_for_released=True)
 
-    result = await agent._client.resource_action_update(
+    result = await null_agent._client.resource_action_update(
         tid=environment,
         resource_ids=[resource1["id"]],
         action_id=uuid.uuid4(),
@@ -399,8 +401,8 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
         change=Change.nochange,
         send_events=False,
     )
-    assert result.code == 200
-    result = await agent._client.resource_action_update(
+    assert result.code == 200, result.result
+    result = await null_agent._client.resource_action_update(
         tid=environment,
         resource_ids=[resource2["id"]],
         action_id=uuid.uuid4(),
@@ -444,18 +446,20 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
     assert "Invalid value for '--rvid': test" in result.stderr
 
 
-async def test_show_messages_actionlog(server, environment, client, cli, agent, clienthelper):
+async def test_show_messages_actionlog(server, environment, client, cli, null_agent, clienthelper):
     """
     Test the `inmanta-cli action-log show-messages` command.
     """
+    await clienthelper.set_auto_deploy(auto=True)
+
     result = await client.reserve_version(tid=environment)
     assert result.code == 200
     version = result.result["data"]
 
     resource1 = get_resource(version, key="test1")
-    await clienthelper.put_version_simple(resources=[resource1], version=version)
+    await clienthelper.put_version_simple(resources=[resource1], version=version, wait_for_released=True)
 
-    result = await agent._client.resource_action_update(
+    result = await null_agent._client.resource_action_update(
         tid=environment,
         resource_ids=[resource1["id"]],
         action_id=uuid.uuid4(),
@@ -495,3 +499,19 @@ async def test_show_messages_actionlog(server, environment, client, cli, agent, 
     assert result.exit_code == 0
     assert "DEBUG Started deployment" in result.output
     assert "INFO Deployed successfully" in result.output
+
+
+async def test_monitor(server, environment, client, cli, agent, clienthelper, resource_container):
+    """
+    Test the `inmanta-cli monitor` command.
+    """
+    result = await client.reserve_version(tid=environment)
+    assert result.code == 200
+    version = result.result["data"]
+
+    resource1 = get_resource(version, key="test1")
+    await clienthelper.set_auto_deploy()
+    await clienthelper.put_version_simple(resources=[resource1], version=version, wait_for_released=True)
+
+    result = await cli.run("monitor", "-e", environment)
+    assert result.exit_code == 0

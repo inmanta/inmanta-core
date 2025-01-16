@@ -1,0 +1,4 @@
+description: Integrate scheduler with executor
+issue-nr: 8010
+change-type: minor
+destination-branches: [master]

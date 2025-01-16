@@ -15,10 +15,12 @@
 
     Contact: code@inmanta.com
 """
-from abc import abstractmethod
-from collections.abc import Hashable, Sequence
-from typing import TYPE_CHECKING, Deque, Generic, List, Literal, Optional, TypeVar, Union, cast
 
+from abc import abstractmethod
+from collections.abc import Hashable, Sequence, Set
+from typing import TYPE_CHECKING, Deque, Generic, List, Literal, NewType, Optional, TypeVar, Union, cast
+
+import inmanta.ast
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
 from inmanta import ast
 from inmanta.ast import (
@@ -34,7 +36,7 @@ from inmanta.ast import (
     RuntimeException,
 )
 from inmanta.ast.type import Type
-from inmanta.execute import dataflow, proxy
+from inmanta.execute import dataflow
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.tracking import Tracker
 from inmanta.execute.util import NoneValue, Unknown
@@ -294,7 +296,7 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
 
     def get_value(self) -> T:
         if not self.hasValue:
-            raise proxy.UnsetException("Value not available", self)
+            raise inmanta.ast.UnsetException("Value not available", self)
 
         return self.value
 
@@ -853,6 +855,15 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
         return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
 
 
+WaiterSet = NewType("WaiterSet", Set["Waiter"])
+"""
+Set-like object with deterministic iteration order (maintains insert order).
+
+Declared as NewType rather than an implementation of MutableSet for performance reasons (one order of magnitude).
+Constructor is responsible for upholding the type's semantics.
+"""
+
+
 class QueueScheduler:
     """
     Object representing the compiler to the AST nodes. It provides access to the queueing mechanism and the type system.
@@ -860,7 +871,7 @@ class QueueScheduler:
     MUTABLE!
     """
 
-    __slots__ = ("compiler", "runqueue", "waitqueue", "types", "allwaiters")
+    __slots__ = ("compiler", "runqueue", "waitqueue", "types", "_allwaiters")
 
     def __init__(
         self,
@@ -868,13 +879,17 @@ class QueueScheduler:
         runqueue: "Deque[Waiter]",
         waitqueue: "PrioritisedDelayedResultVariableQueue",
         types: dict[str, Type],
-        allwaiters: "set[Waiter]",
     ) -> None:
         self.compiler = compiler
         self.runqueue = runqueue
         self.waitqueue = waitqueue
         self.types = types
-        self.allwaiters = allwaiters
+        # store internally as dict rather than set to achieve deterministic iteration order
+        self._allwaiters: dict[Waiter, None] = {}
+
+    @property
+    def allwaiters(self) -> WaiterSet:
+        return WaiterSet(self._allwaiters.keys())
 
     def add_running(self, item: "Waiter") -> None:
         self.runqueue.append(item)
@@ -889,10 +904,10 @@ class QueueScheduler:
         return self.types
 
     def add_to_all(self, item: "Waiter") -> None:
-        self.allwaiters.add(item)
+        self._allwaiters[item] = None
 
     def remove_from_all(self, item: "Waiter") -> None:
-        self.allwaiters.remove(item)
+        del self._allwaiters[item]
 
     def get_tracker(self) -> Optional[Tracker]:
         return None
@@ -1015,8 +1030,7 @@ class ExecutionUnit(Waiter):
         try:
             self._unsafe_execute()
         except RuntimeException as e:
-            e.set_statement(self.owner)
-            e.location = self.owner.location
+            e.set_statement(self.owner, False)
             raise e
 
     def __repr__(self) -> str:
@@ -1348,7 +1362,7 @@ class Instance(ExecutionContext):
                         # list for n-ary relations
                         length = 0 if v.value is None else len(v.value)
                         excns.append(
-                            proxy.UnsetException(
+                            inmanta.ast.UnsetException(
                                 "The object %s is not complete: attribute %s (%s) requires %d values but only %d are set"
                                 % (self, k, attr.location, low, length),
                                 self,
@@ -1357,7 +1371,7 @@ class Instance(ExecutionContext):
                         )
                     else:
                         excns.append(
-                            proxy.UnsetException(
+                            inmanta.ast.UnsetException(
                                 f"The object {self} is not complete: attribute {k} ({attr.location}) is not set",
                                 self,
                                 attr,

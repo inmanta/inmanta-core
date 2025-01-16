@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import functools
 import logging
 import re
@@ -27,7 +28,7 @@ from typing import Optional, Union
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
 
-from inmanta.ast import LocatableString, Location, Namespace, Range
+from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
 from inmanta.ast.statements import ExpressionStatement, Literal, Statement
@@ -71,12 +72,16 @@ precedence = (
     # e.g. prefer one statement `x = 1 not in []` over two statements `x = 1` and `not in []`
     ("nonassoc", "LOW"),
     ("nonassoc", "MATCHING"),
+    ("nonassoc", "REGEX"),
     ("right", ","),
     ("nonassoc", ":"),
     ("nonassoc", "?"),
     ("left", "OR"),
     ("left", "AND"),
     ("left", "CMP_OP"),
+    ("left", "PLUS_OP", "MINUS_OP"),
+    ("left", "*", "DIVISION_OP", "%"),
+    ("left", "DOUBLE_STAR"),
     ("nonassoc", "NOT"),
     ("left", "IN"),
     ("left", "CID", "ID"),
@@ -587,6 +592,13 @@ def p_typedef_1(p: YaccProduction) -> None:
     attach_lnr(p, 2)
 
 
+def p_typedef_regex(p: YaccProduction) -> None:
+    """typedef_inner : TYPEDEF ID AS ns_ref REGEX"""
+    assert namespace
+    p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[5])
+    attach_lnr(p, 2)
+
+
 def p_typedef_cls(p: YaccProduction) -> None:
     """typedef_inner : TYPEDEF CID AS constructor"""
     raise ParserException(p[2].location, str(p[2]), "The use of default constructors is no longer supported")
@@ -616,7 +628,8 @@ def p_expression(p: YaccProduction) -> None:
     | map_def
     | map_lookup empty
     | index_lookup
-    | conditional_expression"""
+    | conditional_expression
+    | arithmetic_expression"""
     p[0] = p[1]
 
 
@@ -659,6 +672,21 @@ def p_boolean_expression_is_defined_short(p: YaccProduction) -> None:
     """boolean_expression : ID IS DEFINED"""
     p[0] = IsDefined(None, p[1])
     attach_lnr(p)
+
+
+def p_arithmetic_expression(p: YaccProduction) -> None:
+    """arithmetic_expression : expression PLUS_OP expression
+    | expression MINUS_OP expression
+    | expression DIVISION_OP expression
+    | expression '*' expression
+    | expression '%' expression
+    | expression DOUBLE_STAR expression
+    """
+    operator = Operator.get_operator_class(str(p[2]))
+    if operator is None:
+        raise ParserException(p[1].location, str(p[2]), f"Invalid operator {str(p[2])}")
+    p[0] = operator(p[1], p[3])
+    attach_lnr(p, 2)
 
 
 def p_boolean_expression_is_defined_map_lookup(p: YaccProduction) -> None:
@@ -713,7 +741,15 @@ def p_function_call_err_dot(p: YaccProduction) -> None:
 
 def p_list_def(p: YaccProduction) -> None:
     "list_def : '[' operand_list ']'"
-    p[0] = CreateList(p[2])
+    node = CreateList(p[2])
+    try:
+        node = Literal(node.as_constant())
+    except RuntimeException:
+        # Can't shortcut
+        pass
+
+    p[0] = node
+
     attach_lnr(p, 1)
 
 
@@ -815,7 +851,16 @@ def p_pair_list_empty(p: YaccProduction) -> None:
 
 def p_map_def(p: YaccProduction) -> None:
     "map_def : '{' pair_list '}'"
+
+    # the constructor does duplicate check
     p[0] = CreateDict(p[2])
+    try:
+        # if we can, shortcut to a constant
+        p[0] = Literal({k: v.as_constant() for k, v in p[2]})
+    except RuntimeException:
+        # Can't shortcut
+        pass
+
     attach_lnr(p, 1)
 
 
@@ -885,7 +930,11 @@ def p_constant_fstring(p: YaccProduction) -> None:
     formatter = string.Formatter()
 
     # formatter.parse returns an iterable of tuple (literal_text, field_name, format_spec, conversion)
-    parsed: Iterable[tuple[str, Optional[str], Optional[str], Optional[str]]] = formatter.parse(str(p[1]))
+    parsed: abc.Sequence[tuple[str, Optional[str], Optional[str], Optional[str]]]
+    try:
+        parsed = list(formatter.parse(str(p[1])))
+    except ValueError as e:
+        raise ParserException(p[1].location, str(p[1]), f"Invalid f-string: {e}")
 
     start_lnr = p[1].location.lnr
     start_char_pos = p[1].location.start_char + 2  # FSTRING tokens begin with `f"` or `f'` of length 2
@@ -1080,8 +1129,8 @@ def p_constants_collect(p: YaccProduction) -> None:
 
 
 def p_wrapped_kwargs(p: YaccProduction) -> None:
-    "wrapped_kwargs : '*' '*' operand"
-    p[0] = WrappedKwargs(p[3])
+    "wrapped_kwargs : DOUBLE_STAR operand"
+    p[0] = WrappedKwargs(p[2])
     attach_lnr(p, 1)
 
 

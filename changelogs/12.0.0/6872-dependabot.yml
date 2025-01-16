@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump pip from 23.3.1 to 23.3.2
+destination-branches:
+- master
+- iso7
+sections: {}

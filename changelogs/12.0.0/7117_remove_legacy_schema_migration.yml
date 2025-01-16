@@ -1,0 +1,6 @@
+description: Remove support for legacy schema migration (< ISO4 )
+issue-nr: 7117
+change-type: patch
+destination-branches: [master, iso7]
+sections:
+  minor-improvement: "{{description}}"

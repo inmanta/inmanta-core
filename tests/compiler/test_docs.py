@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import inmanta.compiler as compiler
 
 
@@ -69,7 +70,9 @@ end
 
 A(ne="aa", uc="")
 
-implement A using std::none
+implement A using none
+implementation none for std::Entity:
+end
 """
     )
     (types, _) = compiler.do_compile()

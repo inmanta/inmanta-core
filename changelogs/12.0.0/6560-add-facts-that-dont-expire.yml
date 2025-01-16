@@ -1,0 +1,7 @@
+description: Add facts that don't expire.
+issue-nr: 6560
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  feature: "{{description}}"
+

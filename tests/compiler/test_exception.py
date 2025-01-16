@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import os
 import re
 import textwrap
@@ -49,8 +50,11 @@ host = Host(name="x")
 
 Repo(host=host,name="epel")
 
-implement Host using std::none
-implement Repo using std::none when host.os.name=="os"
+implement Host using none
+implement Repo using none when host.os.name=="os"
+
+implementation none for std::Entity:
+end
 """,
         """Reported 2 errors
 error 0:
@@ -83,11 +87,17 @@ def test_direct_execute_error(snippetcompiler):
             zz aa = "A"
         end
 
-        implement A using std::none
+        implement A using none
 
         A()
+
+        implementation none for std::Entity:
+        end
         """,
-        "The statement Format({{{{a}}}}) can not be executed in this context (reported in Format({{{{a}}}}) ({dir}/main.cf:4))",
+        (
+            "The statement Format('{{{{a}}}}') can not be executed in this context"
+            " (reported in Format('{{{{a}}}}') ({dir}/main.cf:4))"
+        ),
     )
 
 
@@ -146,7 +156,7 @@ entity A:
     int n
 end
 
-implement A using std::none
+implement A using none
 
 x = A()
 y = A()
@@ -156,6 +166,9 @@ y.n = nn
 
 nn = mm
 mm = nn
+
+implementation none for std::Entity:
+end
         """,
     )
     Config.set("compiler", "datatrace_enable", "true")
@@ -203,9 +216,12 @@ end
 C.ac [0:] -- A
 C.bs [0:] -- B
 
-implement A using std::none
-implement B using std::none
-implement C using std::none
+implement A using none
+implement B using none
+implement C using none
+
+implementation none for std::Entity:
+end
         """,
         """Could not set attribute `bs` on instance `__config__::C (instantiated at {dir}/main.cf:2)` (reported in c1.bs = c1.ac ({dir}/main.cf:3))
 caused by:
@@ -231,9 +247,12 @@ end
 C.ac [0:] -- A
 C.bs [0:] -- B
 
-implement A using std::none
-implement B using std::none
-implement C using std::none
+implement A using none
+implement B using none
+implement C using none
+
+implementation none for std::Entity:
+end
         """,
         """Could not set attribute `bs` on instance `__config__::C (instantiated at {dir}/main.cf:2)` (reported in Construct(C) ({dir}/main.cf:2))
 caused by:
@@ -266,7 +285,7 @@ entity ManyFields:
     string c
 end
 
-implement ManyFields using std::none
+implement ManyFields using none
 
 ManyFields(
     a = "A",
@@ -274,6 +293,9 @@ ManyFields(
     c = "C",
     d = "D",
 )
+
+implementation none for std::Entity:
+end
 """,
         """no attribute d on type __config__::ManyFields (reported in d ({dir}/main.cf:14:5))""",  # noqa: E501
     )
@@ -317,7 +339,7 @@ def test_reference_nonexisting_namespace(snippetcompiler, namespace: str) -> Non
     with pytest.raises(
         NotFoundException,
         match=re.escape(
-            f"Namespace {namespace} not found. Try importing it with `import {namespace}`"
+            f"Namespace {namespace} not found.\nTry importing it with `import {namespace}`"
             f" (reported in {namespace}::x ({snippetcompiler.project_dir}/main.cf:3:1))"
         ),
     ):

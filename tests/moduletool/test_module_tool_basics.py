@@ -15,14 +15,12 @@
 
     Contact: code@inmanta.com
 """
+
 import argparse
-import asyncio
 import logging
 import os
-import re
 import shutil
 import subprocess
-import sys
 import warnings
 from collections.abc import Iterator
 from typing import Optional
@@ -30,10 +28,8 @@ from typing import Optional
 import py
 import pytest
 import yaml
-from pkg_resources import parse_version
 
 from inmanta import module
-from inmanta.command import CLIException
 from inmanta.module import (
     InmantaModuleRequirement,
     InvalidMetadata,
@@ -55,44 +51,6 @@ def tmp_working_dir(tmpdir: py.path.local) -> Iterator[py.path.local]:
     os.chdir(str(tmpdir))
     yield tmpdir
     os.chdir(cwd)
-
-
-def test_versioning():
-    mt = ModuleTool()
-
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, False, False, True, False)
-    assert str(newversion) == "1.2.4"
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, False, True, False, False)
-    assert str(newversion) == "1.3.0"
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, False, False, False)
-    assert str(newversion) == "2.0.0"
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, True, False, False)
-    assert newversion is None
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, False, True, False)
-    assert newversion is None
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, True, True, False)
-    assert newversion is None
-    newversion = mt.determine_new_version(parse_version("1.2.3.dev025"), None, False, False, True, False)
-    assert str(newversion) == "1.2.3"
-    newversion = mt.determine_new_version(parse_version("1.2.3.dev025"), None, False, False, False, False)
-    assert str(newversion) == "1.2.3"
-
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, False, False, True, True)
-    assert re.search("1.2.4.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, False, True, False, True)
-    assert re.search("1.3.0.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, False, False, True)
-    assert re.search("2.0.0.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, True, False, True)
-    assert newversion is None
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, False, True, True)
-    assert newversion is None
-    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, True, True, True)
-    assert newversion is None
-    newversion = mt.determine_new_version(parse_version("1.2.3.dev025"), None, False, False, True, True)
-    assert re.search("1.2.3.dev[0-9]+", str(newversion))
-    newversion = mt.determine_new_version(parse_version("1.2.3.dev025"), None, False, False, False, True)
-    assert re.search("1.2.3.dev[0-9]+", str(newversion))
 
 
 def test_get_module_v1(tmp_working_dir: py.path.local):
@@ -274,20 +232,20 @@ ignore = H405,H404,H302,H306,H301,H101,H801,E402,W503,E252,E203
 
 
 def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
-    mod9 = make_module_simple(modules_repo, "mod9", [("mod10", None)])
-    add_file(mod9, "signal", "present", "third commit", version="3.3")
-    add_file(mod9, "model/b.cf", "import mod9", "fourth commit", version="4.0")
+    mod9 = make_module_simple(modules_repo, "mod9", [("mod10", None)], version="3.2.0")
+    add_file(mod9, "signal", "present", "third commit", minor=True)
+    add_file(mod9, "model/b.cf", "import mod9", "fourth commit", major=True)
 
-    mod10 = make_module_simple(modules_repo, "mod10", [])
-    add_file(mod10, "signal", "present", "a commit", version="3.3")
+    mod10 = make_module_simple(modules_repo, "mod10", [], version="3.2.0")
+    add_file(mod10, "signal", "present", "a commit", minor=True)  # 3.3.0 (Good version)
     # syntax error
-    add_file(mod10, "model/_init.cf", "SomeInvalidThings", "a commit", version="3.5")
+    add_file(mod10, "model/_init.cf", "SomeInvalidThings", "a commit", minor=True)  # 3.4.0 (Bad version)
     # fix it
-    add_file(mod10, "model/_init.cf", "", "a commit", version="3.6")
-    add_file(mod10, "secondsignal", "import mod9", "b commit", version="4.0")
-    add_file(mod10, "badsignal", "import mod9", "c commit", version="5.0")
+    add_file(mod10, "model/_init.cf", "", "a commit", minor=True)  # 3.5.0 (Good version)
+    add_file(mod10, "secondsignal", "import mod9", "b commit", major=True)  # 4.0.0
+    add_file(mod10, "badsignal", "import mod9", "c commit", major=True)  # 5.0.0
 
-    p9 = makeproject(modules_repo, "proj9", [("mod9", "==3.3"), ("mod10", "==3.3")], ["mod9"])
+    p9 = makeproject(modules_repo, "proj9", [("mod9", "==3.3.0"), ("mod10", "==3.3.0")], ["mod9"])
     commitmodule(p9, "first commit")
 
     # setup project
@@ -302,7 +260,7 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     with open(projectyml, encoding="utf-8") as fh:
         pyml = yaml.safe_load(fh)
 
-    pyml["requires"] = ["mod10 == 3.5"]
+    pyml["requires"] = ["mod10 == 3.4.0"]
 
     with open(projectyml, "w", encoding="utf-8") as fh:
         yaml.dump(pyml, fh)
@@ -311,11 +269,11 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     Project._project = None
 
     with pytest.raises(ParserException):
-        # mod 10 is updated to a version that contains a syntax error
+        # mod 10 is updated to version 3.4.0 that contains a syntax error
         app(["project", "update"])
 
     # unfreeze deps to allow update
-    pyml["requires"] = ["mod10 == 4.0"]
+    pyml["requires"] = ["mod10 == 4.0.0"]
 
     with open(projectyml, "w", encoding="utf-8") as fh:
         yaml.dump(pyml, fh)
@@ -342,50 +300,29 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     assert os.path.exists(os.path.join(m9dir, "model", "b.cf"))
     m10dir = os.path.join(proj, "libs", "mod10")
     assert os.path.exists(os.path.join(m10dir, "secondsignal"))
-    # should not be latest version
+    # should not be latest version (i.e. doesn't contain changes added in 5.0.0)
     assert not os.path.exists(os.path.join(m10dir, "badsignal"))
 
 
 @pytest.fixture(scope="function")
 def module_without_tags(modules_repo):
-    mod_no_tag = make_module_simple(modules_repo, "mod-no-tag")
+    mod_no_tag = make_module_simple(modules_repo, "mod-no-tag", version="4.0.0")
     yield mod_no_tag
     shutil.rmtree(mod_no_tag)
 
 
 @pytest.mark.parametrize(
-    "dev, tag, version_tag_in_output",
-    [(True, True, True), (True, False, False), (False, True, True), (False, False, True)],
+    "dev",
+    [False, True],
 )
-def test_commit_no_tags(git_modules_dir, module_without_tags, dev, tag, version_tag_in_output):
-    add_file(module_without_tags, "dummyfile", "Content", "Commit without tags", version="5.0", dev=dev, tag=tag)
+def test_commit_no_tags(git_modules_dir, module_without_tags, dev):
+    version_tag_in_output = not dev
+    add_file(module_without_tags, "dummyfile", "Content", "Commit without tags", major=True, dev=dev)
     output = subprocess.check_output(["git", "tag", "-l"], cwd=module_without_tags, stderr=subprocess.STDOUT)
-    assert ("5.0" in str(output)) is version_tag_in_output
-
-
-async def test_version_argument(modules_repo):
-    make_module_simple(modules_repo, "mod-version", [], "1.2")
-    module_path = os.path.join(modules_repo, "mod-version")
-
-    mod = module.ModuleV1(None, module_path)
-    assert mod.version == version.Version("1.2")
-
-    args = [sys.executable, "-m", "inmanta.app", "module", "commit", "-m", "msg", "-v", "1.3.1", "-r"]
-    process = await asyncio.subprocess.create_subprocess_exec(
-        *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=module_path
-    )
-    try:
-        await asyncio.wait_for(process.communicate(), timeout=30)
-    except asyncio.TimeoutError as e:
-        process.kill()
-        await process.communicate()
-        raise e
-
-    # Make sure exitcode is zero
-    assert process.returncode == 0
-
-    # Verify changes
-    assert mod._get_metadata_from_disk().version == "1.3.1"
+    # Base version:
+    assert "4.0.0" in str(output)
+    # Check we only tag v5 when performing stable release
+    assert ("5.0.0" in str(output)) is version_tag_in_output
 
 
 class InmantaModule:
@@ -656,14 +593,7 @@ import minimalv2module
             assert "Skipping module minimalv2module: v2 modules do not support this operation." in caplog.messages
 
     verify_v2_message("status")
-    verify_v2_message("do", argparse.Namespace(module=None, command="echo hello"))
-    cwd = os.getcwd()
-    try:
-        os.chdir(os.path.join(modules_v2_dir, "minimalv2module"))
-        with pytest.raises(CLIException, match="minimalv2module is a v2 module and does not support this operation."):
-            ModuleTool().execute("commit", argparse.Namespace(message="message"))
-    finally:
-        os.chdir(cwd)
+
     verify_v2_message("push")
 
 

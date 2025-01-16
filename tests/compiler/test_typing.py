@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import re
 
 import pytest
@@ -37,10 +38,13 @@ end
 
 Test.one [0:1] -- Test
 
-implement Test using std::none when self.one.two is defined
+implement Test using none when self.one.two is defined
 
 a = Test(two="b")
 a.one = a
+
+implementation none for Test:
+end
 """
     )
     compiler.do_compile()
@@ -66,8 +70,11 @@ def test_536_number_cast(snippetcompiler):
 entity Network:
     number segmentation_id
 end
-implement Network using std::none
+implement Network using none
 net1 = Network(segmentation_id="10")
+
+implementation none for Network:
+end
 """
     )
     with pytest.raises(AttributeException):
@@ -81,11 +88,14 @@ entity Test:
     int i = 0
 end
 
-implement Test using std::none
+implement Test using none
 
 Test(i = 42)
 Test(i = -42)
 Test()
+
+implementation none for Test:
+end
         """,
     )
     compiler.do_compile()
@@ -445,8 +455,11 @@ def test_int_attribute_with_float(snippetcompiler, float_val):
     entity Int:
         int i
     end
-    implement Int using std::none
+    implement Int using none
     i = Int(i={float_val}) # => not an int
+
+implementation none for Int:
+end
     """
     snippetcompiler.setup_for_error(
         snippet,
@@ -465,8 +478,10 @@ def test_assign_float_to_int(snippetcompiler):
     entity Test:
         int i = 0
     end
-    implement Test using std::none
+    implement Test using none
     Test(i = 42.1)
+    implementation none for Test:
+    end
         """,
         "Could not set attribute `i` on instance `__config__::Test (instantiated at {dir}/main.cf:6)` "
         "(reported in Construct(Test) ({dir}/main.cf:6))\n"
@@ -481,8 +496,11 @@ def test_assign_int_to_float(snippetcompiler):
     entity Test:
         float i = 0.0
     end
-    implement Test using std::none
+    implement Test using none
     x = Test(i = 42.0)
+
+    implementation none for Test:
+    end
     """,
     )
     (_, scopes) = compiler.do_compile()
@@ -499,7 +517,7 @@ def test_float_type(snippetcompiler):
     entity Test:
         float i = 0.0
     end
-    implement Test using std::none
+    implement Test using none
     Test(i = 42.0)
     Test(i = -42.0)
     Test()
@@ -515,6 +533,9 @@ def test_float_type(snippetcompiler):
     z = 1.0
     u = float(false)
     u = 0.0
+
+    implementation none for Test:
+    end
     """,
     )
     (_, scopes) = compiler.do_compile()
@@ -533,28 +554,13 @@ def test_float_type(snippetcompiler):
     assert Number().validate(u)
 
 
-def test_lookup_on_float_with_int(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-entity A:
-    float x
-end
-implement A using std::none
-index A(x)
-a = A(x=1.0)
-y = A[x=1]
-a = y
-        """,
-    )
-    compiler.do_compile()
-
-
 def test_print_float(snippetcompiler, capsys):
     snippetcompiler.setup_for_snippet(
         """
 std::print(float(1.234))
 std::print(float(1.0))
         """,
+        ministd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -567,6 +573,7 @@ def test_print_number(snippetcompiler, capsys):
         """
 std::print(number(1.234))
         """,
+        ministd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -629,5 +636,43 @@ test = test_674::test_error_float()
             "caused by:\n"
             "  Invalid value '1', expected float (reported in "
             "test_674::test_error_float() ({dir}/main.cf:4))"
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "type, value",
+    [
+        ("int", "hello"),
+        ("float", "hello"),
+        ("number", "hello"),
+        ("string", 5),
+        ("bool", "hello"),
+        ("list", "hello"),
+        ("dict", "hello"),
+    ],
+)
+def test_type_error_message(snippetcompiler, caplog, type, value):
+    snippetcompiler.setup_for_error(
+        f"""
+entity Test:
+    {type} test
+end
+
+implement Test using none
+
+x = Test()
+x.test = {repr(value)}
+
+implementation none for Test:
+end
+        """,
+        (
+            "Could not set attribute `test` on instance `__config__::Test (instantiated "
+            f"at {{dir}}/main.cf:8)` (reported in x.test = {repr(value)} "
+            "({dir}/main.cf:9))\n"
+            "caused by:\n"
+            f"  Invalid value '{value}', expected {type} (reported in x.test = {repr(value)} "
+            "({dir}/main.cf:9))"
         ),
     )

@@ -1,0 +1,8 @@
+---
+description: Add support to configure the logging framework using a configuration file.
+issue-nr: 7271
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  feature: "{{description}}"

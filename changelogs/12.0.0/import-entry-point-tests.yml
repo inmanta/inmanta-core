@@ -1,0 +1,5 @@
+description: Added missing import entry point tests
+change-type: patch
+destination-branches:
+  - master
+  - iso7

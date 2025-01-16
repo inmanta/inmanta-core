@@ -1,0 +1,6 @@
+---
+description: Change the doc of embedded entities as the lower bound arity can now be 0 or 1.
+issue-nr: 1639
+issue-repo: lsm
+change-type: patch
+destination-branches: [master, iso7, iso6]

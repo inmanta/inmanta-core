@@ -1,0 +1,69 @@
+import std::testing
+import lsm
+import lsm::fsm
+import fs
+import mitogen
+
+entity File extends lsm::ServiceEntity:
+    """
+        Top-level service representing a file on a file system.
+
+        :attr path: Unique path to this file
+    """
+    string path
+end
+
+index File(path)
+File.lines [0:] lsm::__rwplus__ Line._file [1]
+
+entity Line extends lsm::EmbeddedEntity:
+    """
+        Embedded entity representing a single line in a file.
+
+        :attr line_no: The line number
+        :attr content: Content of this line
+    """
+    int line_no
+    string content = ""
+    lsm::attribute_modifier content__modifier="rw+"
+
+end
+
+index Line(_file, line_no)
+
+binding = lsm::ServiceEntityBindingV2(
+    service_entity="__config__::File",
+    lifecycle=lsm::fsm::simple,
+    service_entity_name="file",
+)
+
+for instance in lsm::all(binding, include_purged_embedded_entities=false):
+    file = File(
+        instance_id=instance["id"],
+        entity_binding=binding,
+        path=instance["attributes"]["path"],
+    )
+    for line in instance["attributes"]["lines"]:
+        file.lines += Line(**line)
+    end
+end
+
+mitogen_local=mitogen::Local()
+
+implementation file for File:
+    self.resources += std::testing::NullResource(name=self.path)
+    self.resources += fs::File(
+        path=self.path,
+        host=std::Host(
+            via=mitogen_local, name="internal", os=std::linux,
+        ),
+        mode=777,
+        owner="inmanta",
+        group="inmanta",
+        content = string([string(l.content) for l in std::key_sort(self.lines, 'line_no')]),
+    )
+end
+
+implement File using parents
+implement File using file
+implement Line using parents

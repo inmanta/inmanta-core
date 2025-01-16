@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import abc
 import logging
 import math
@@ -27,6 +28,7 @@ from typing import Optional, Union
 
 import asyncpg
 
+from inmanta import const
 from inmanta.data import (
     ENVIRONMENT_METRICS_RETENTION,
     Agent,
@@ -47,9 +49,6 @@ from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRAN
 LOGGER = logging.getLogger(__name__)
 
 COLLECTION_INTERVAL_IN_SEC = 60
-# This variable can be updated by the test suite to disable all actions done by the server on the metric-related database
-# tables.
-DISABLE_ENV_METRICS_SERVICE = False
 
 # The category fields needs a default value in the DB as it is part of the PRIMARY KEY and can therefore not be NULL.
 DEFAULT_CATEGORY = "__None__"
@@ -195,12 +194,11 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         self.register_metric_collector(CompileWaitingTimeMetricsCollector())
         self.register_metric_collector(AgentCountMetricsCollector())
         self.register_metric_collector(CompileTimeMetricsCollector())
-        if not DISABLE_ENV_METRICS_SERVICE:
-            self.schedule(
-                self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=COLLECTION_INTERVAL_IN_SEC, cancel_on_stop=True
-            )
-            # Cleanup metrics once per hour
-            self.schedule(self._cleanup_old_metrics, interval=3600, initial_delay=0, cancel_on_stop=True)
+        self.schedule(
+            self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=COLLECTION_INTERVAL_IN_SEC, cancel_on_stop=True
+        )
+        # Cleanup metrics once per hour
+        self.schedule(self._cleanup_old_metrics, interval=3600, initial_delay=0, cancel_on_stop=True)
 
     async def _cleanup_old_metrics(self) -> None:
         """
@@ -523,12 +521,21 @@ WITH agent_counts AS (
     SELECT
         environment,
         CASE
-            WHEN paused THEN 'paused'
-            WHEN id_primary IS NOT NULL THEN 'up'
-            ELSE 'down'
+            WHEN a.paused
+                THEN 'paused'
+            WHEN EXISTS(
+                SELECT 1
+                FROM {Agent.table_name()} AS a_inner
+                WHERE a_inner.environment=a.environment
+                    AND a_inner.name=$1
+                    AND a_inner.id_primary IS NOT NULL
+            )
+                THEN 'up'
+                ELSE 'down'
         END AS status,
         COUNT(*)
     FROM {Agent.table_name()} AS a
+    WHERE a.name!=$1
     GROUP BY environment, status
 )
 -- inject zeroes for missing values in the environment - status matrix
@@ -540,7 +547,7 @@ LEFT JOIN agent_counts AS a
 ORDER BY environment, s.status
         """
         metric_values: list[MetricValue] = []
-        result: Sequence[asyncpg.Record] = await connection.fetch(query)
+        result: Sequence[asyncpg.Record] = await connection.fetch(query, const.AGENT_SCHEDULER_ID)
         for record in result:
             assert isinstance(record["count"], int)
             assert isinstance(record["environment"], uuid.UUID)

@@ -1,0 +1,5 @@
+description: Remove built-in execnet IO and provider selection
+change-type: major
+destination-branches: [master]
+sections:
+  feature: "Removed built-in io in favor of the more flexible mitogen module."

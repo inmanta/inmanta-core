@@ -20,6 +20,14 @@ Constants
     :members:
     :undoc-members:
 
+.. only:: iso
+
+    .. data:: inmanta_lsm.const.LSM_ENV_VARS
+        :annotation: : Sequence[str]
+
+        This sequence contains all environment variables passed to the compiler by inmanta-lsm
+
+
 
 .. _compiler-exceptions:
 
@@ -81,6 +89,9 @@ Handlers
 .. autoclass:: inmanta.agent.handler.SkipResource
     :show-inheritance:
     :members:
+.. autoclass:: inmanta.agent.handler.SkipResourceForDependencies
+    :show-inheritance:
+    :members:
 .. autoclass:: inmanta.agent.handler.ResourcePurged
     :members:
 .. autoclass:: inmanta.agent.handler.HandlerContext
@@ -91,10 +102,6 @@ Handlers
     :private-members:
 
 .. autoclass:: inmanta.agent.handler.CRUDHandler
-    :members:
-    :inherited-members:
-    :undoc-members:
-.. autoclass:: inmanta.agent.io.local.LocalIO
     :members:
     :inherited-members:
     :undoc-members:
@@ -320,10 +327,6 @@ Data
 
 .. autoclass:: inmanta.data.model.BaseModel
     :show-inheritance:
-
-    .. autoclass:: inmanta.data.model::BaseModel.Config
-        :members:
-        :undoc-members:
 
 .. autodata:: inmanta.data.model.ResourceIdStr
 

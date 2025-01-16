@@ -1,0 +1,3 @@
+description: Fix deprecation warning for io in constructor
+change-type: minor
+destination-branches: [master]

@@ -198,7 +198,7 @@ entity A:
     int n
 end
 
-implement A using std::none
+implement A using none
 
 
 x = A(n = 42)
@@ -209,6 +209,9 @@ y.l = 1
 
 
 u = A(l = y.l, m = x.m, n = 2)
+
+implementation none for std::Entity:
+end
         """,
         """
 digraph {{
@@ -278,8 +281,8 @@ end
 entity B:
 end
 
-implement A using std::none
-implement B using std::none
+implement A using none
+implement B using none
 
 A.b [0:] -- B.a [0:]
 
@@ -287,6 +290,9 @@ a = A()
 b = B()
 
 a.b = b
+
+implementation none for std::Entity:
+end
         """,
         """
 digraph {{
@@ -399,13 +405,17 @@ end
 
 index A(n)
 
-implement A using std::none
+implement A using none
 
 
 x = A(n = 42)
 y = A(n = 42)
 
 x.m = 0
+
+
+implementation none for std::Entity:
+end
         """,
         """
 digraph {{

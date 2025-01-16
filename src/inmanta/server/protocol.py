@@ -15,22 +15,25 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
+import importlib.metadata
 import logging
+import re
 import socket
 import time
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import timedelta
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import TYPE_CHECKING, Callable, Mapping, Optional, Union
 
-import importlib_metadata
 from tornado import gen, queues, routing, web
 
 import inmanta.protocol.endpoints
+from inmanta import tracing
 from inmanta.data.model import ExtensionStatus
-from inmanta.protocol import Client, common, endpoints, handle, methods
+from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
@@ -80,19 +83,21 @@ class ReturnClient(Client):
     async def _call(
         self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
     ) -> common.Result:
-        call_spec = method_properties.build_call(args, kwargs)
-        expect_reply = method_properties.reply
-        try:
-            if method_properties.timeout:
-                return_value = await self.session.put_call(
-                    call_spec, timeout=method_properties.timeout, expect_reply=expect_reply
-                )
-            else:
-                return_value = await self.session.put_call(call_spec, expect_reply=expect_reply)
-        except asyncio.CancelledError:
-            return common.Result(code=500, result={"message": "Call timed out"})
+        with tracing.span(f"return_rpc.{method_properties.function.__name__}"):
+            call_spec = method_properties.build_call(args, kwargs)
+            call_spec.headers.update(tracing.get_context())
+            expect_reply = method_properties.reply
+            try:
+                if method_properties.timeout:
+                    return_value = await self.session.put_call(
+                        call_spec, timeout=method_properties.timeout, expect_reply=expect_reply
+                    )
+                else:
+                    return_value = await self.session.put_call(call_spec, expect_reply=expect_reply)
+            except asyncio.CancelledError:
+                return common.Result(code=500, result={"message": "Call timed out"})
 
-        return common.Result(code=return_value["code"], result=return_value["result"])
+            return common.Result(code=return_value["code"], result=return_value["result"])
 
 
 # Server Side
@@ -212,7 +217,7 @@ class Server(endpoints.Endpoint):
             await endpoint.stop()
 
 
-class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
+class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | None]):
     """
     Base class for server extensions offering zero or more api endpoints
 
@@ -375,9 +380,9 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         # workaround for #2586
         package_name = "inmanta-core" if source_package_name == "inmanta" else source_package_name
         try:
-            distribution = importlib_metadata.distribution(package_name)
+            distribution = importlib.metadata.distribution(package_name)
             return ExtensionStatus(name=ext_name, package=ext_name, version=distribution.version)
-        except importlib_metadata.PackageNotFoundError:
+        except importlib.metadata.PackageNotFoundError:
             LOGGER.info(
                 "Package %s of slice %s is not packaged in a distribution. Unable to determine its extension.",
                 package_name,
@@ -394,7 +399,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
                 result[ext_status.name] = ext_status
         return list(result.values())
 
-    async def get_status(self) -> dict[str, ArgumentTypes]:
+    async def get_status(self) -> Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]:
         """
         Get the status of this slice.
         """
@@ -615,7 +620,7 @@ class TransportSlice(ServerSlice):
         await super().stop()
         await self.server._transport.join()
 
-    async def get_status(self) -> dict[str, ArgumentTypes]:
+    async def get_status(self) -> Mapping[str, ArgumentTypes]:
         def format_socket(sock: socket.socket) -> str:
             sname = sock.getsockname()
             return f"{sname[0]}:{sname[1]}"
@@ -662,7 +667,7 @@ class SessionManager(ServerSlice):
         # Listeners
         self.listeners: list[SessionListener] = []
 
-    async def get_status(self) -> dict[str, ArgumentTypes]:
+    async def get_status(self) -> Mapping[str, ArgumentTypes]:
         return {"hangtime": self.hangtime, "interval": self.interval, "sessions": len(self._sessions)}
 
     def add_listener(self, listener: SessionListener) -> None:
@@ -760,3 +765,38 @@ class SessionManager(ServerSlice):
         except Exception:
             LOGGER.warning(f"could not deliver agent reply with sid={sid} and reply_id={reply_id}", exc_info=True)
             return 500
+
+
+class LocalClient(TypedClient):
+    """A client that calls methods async on the server in the same process"""
+
+    def __init__(self, name: str, server: Server) -> None:
+        super().__init__(name, with_rest_client=False)
+        self._server = server
+        self._op_mapping: dict[str, dict[str, common.UrlMethod]] = {}
+        for slice in server.get_slices().values():
+            self._op_mapping.update(slice.get_op_mapping())
+
+    def _get_op_mapping(self, url: str, method: str) -> common.UrlMethod:
+        """Get the op mapping for the provided url and method"""
+        methods = {}
+        if url not in self._op_mapping:
+            for key, mapping in self._op_mapping.items():
+                if re.match(key, url):
+                    methods = mapping
+                    break
+        else:
+            methods = self._op_mapping[url]
+
+        if method in methods:
+            return methods[method]
+
+        raise Exception(f"No handler defined for {method} {url}")
+
+    async def _call(
+        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
+    ) -> common.Result:
+        spec = method_properties.build_call(args, kwargs)
+        method_config = self._get_op_mapping(spec.url, spec.method)
+        response = await self._server._transport._execute_call(method_config, spec.body, spec.headers)
+        return self._process_response(method_properties, common.Result(code=response.status_code, result=response.body))

@@ -1,0 +1,8 @@
+---
+description: Don't refresh facts that no longer exist in the latest released model version.
+issue-nr: 8456
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso7]
+sections:
+  bugfix: "{{description}}"

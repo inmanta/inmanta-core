@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import contextlib
 import dataclasses
@@ -22,33 +23,46 @@ import datetime
 import enum
 import functools
 import hashlib
+import importlib.metadata
 import inspect
 import itertools
+import json
 import logging
 import os
+import pathlib
 import socket
 import threading
 import time
+import typing
 import uuid
 import warnings
 from abc import ABC, abstractmethod
-from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather
+from asyncio import CancelledError, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Coroutine, Iterator
+from collections.abc import Coroutine, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import BinaryIO, Callable, Optional, TypeVar, Union
+from typing import TYPE_CHECKING, BinaryIO, Callable, Generic, Mapping, Optional, Sequence, TypeVar, Union
 
 import asyncpg
+import click
+import pydantic
 from tornado import gen
 
+import packaging
+import packaging.requirements
+import packaging.utils
+import pydantic_core
 from crontab import CronTab
 from inmanta import COMPILER_VERSION, const
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
-from pydantic_core import Url
+from packaging.utils import NormalizedName
+
+if TYPE_CHECKING:
+    from inmanta.data.model import ResourceId
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -75,6 +89,43 @@ def ensure_directory_exist(directory: str, *subdirs: str) -> str:
 
 def is_sub_dict(subdct: dict[PrimitiveTypes, PrimitiveTypes], dct: dict[PrimitiveTypes, PrimitiveTypes]) -> bool:
     return not any(True for k, v in subdct.items() if k not in dct or dct[k] != v)
+
+
+def strtobool(val: str) -> bool:
+    """Convert a string representation of truth to True or False.
+
+    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values
+    are 'n', 'no', 'f', 'false', 'off', and '0'.  Raises ValueError if
+    'val' is anything else.
+
+    This function is based on a function in the Python distutils package. Is is subject
+    to the following license:
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to
+    deal in the Software without restriction, including without limitation the
+    rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+    sell copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in
+    all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+    IN THE SOFTWARE.
+    """
+    val = val.lower()
+    if val in ("y", "yes", "t", "true", "on", "1"):
+        return True
+    elif val in ("n", "no", "f", "false", "off", "0"):
+        return False
+    else:
+        raise ValueError("invalid truth value %r" % (val,))
 
 
 def hash_file(content: bytes) -> str:
@@ -113,26 +164,32 @@ def is_call_ok(result: Union[int, tuple[int, JsonType]]) -> bool:
 
 
 def ensure_future_and_handle_exception(
-    logger: Logger, msg: str, action: Awaitable[T], notify_done_callback: Callable[[asyncio.Task[T]], None]
-) -> asyncio.Task[T]:
+    logger: Logger, msg: str, action: Coroutine[object, None, T], notify_done_callback: Callable[[Task[T]], None]
+) -> Task[T]:
     """Fire off a coroutine from the ioloop thread and log exceptions to the logger with the message"""
-    future = ensure_future(action)
+    future: Task[T] = ensure_future(action)
 
-    def handler(future):
+    def handler(task: Task[T]) -> None:
         try:
-            exc = future.exception()
+            exc = task.exception()
             if exc is not None:
                 logger.exception(msg, exc_info=exc)
         except CancelledError:
             pass
         finally:
-            notify_done_callback(future)
+            notify_done_callback(task)
 
     future.add_done_callback(handler)
     return future
 
 
-TaskMethod = Callable[[], Awaitable[object]]
+# In this module we use Coroutine[object, None, T] instead of Awaitable[T]. The reason for this is:
+# - We use the methods here to background coroutines, which generates tasks.
+# - Future is a subclass of Awaitable
+# - ensure_future which is used in a number of methods here, returns Task unless you pass it a future.
+# By only allowing Coroutines, we can make the typing more strict and only consider tasks.
+
+TaskMethod = Callable[[], Coroutine[object, None, object]]
 
 
 @stable_api
@@ -260,6 +317,12 @@ class Scheduler:
         """
         Add task that is currently executing to `self._executing_tasks`.
         """
+        # requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
+        # # types per agent keeps track of which resource types live on which agent by doing a reference count
+        # # the dict is agent_name -> resource_type -> resource_count
+        # types_per_agent: dict[str, dict["ResourceType", int]] = dataclasses.field(
+        #     default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
+        # )
         if action in self._executing_tasks and self._executing_tasks[action]:
             LOGGER.warning("Multiple instances of background task %s are executing simultaneously", action.__name__)
         self._executing_tasks[action].append(task)
@@ -288,7 +351,7 @@ class Scheduler:
         schedule: Union[TaskSchedule, int],  # int for backward compatibility,
         cancel_on_stop: bool = True,
         quiet_mode: bool = False,
-    ) -> ScheduledTask:
+    ) -> Optional[ScheduledTask]:
         """
         Add a new action
 
@@ -302,7 +365,7 @@ class Scheduler:
 
         if self._stopped:
             LOGGER.warning("Scheduling action '%s', while scheduler is stopped", action.__name__)
-            return
+            return None
 
         schedule_typed: TaskSchedule
         if isinstance(schedule, int):
@@ -319,7 +382,7 @@ class Scheduler:
 
         def action_function() -> None:
             if not quiet_mode:
-                LOGGER.info("Calling %s", action)
+                LOGGER.info("Calling %s", action.__name__)
             if task_spec in self._scheduled:
                 try:
                     task = ensure_future_and_handle_exception(
@@ -478,7 +541,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     if isinstance(o, JSONSerializable):
         return o.json_serialization_step()
 
-    if isinstance(o, (uuid.UUID, Url)):
+    if isinstance(o, (uuid.UUID, pydantic.AnyUrl, pydantic_core.Url)):
         return str(o)
 
     if isinstance(o, datetime.datetime):
@@ -506,12 +569,12 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     raise TypeError(repr(o) + " is not JSON serializable")
 
 
-def add_future(future: Union[Future, Coroutine]) -> Task:
+def add_future(future: Coroutine[object, None, T]) -> Task[T]:
     """
     Add a future to the ioloop to be handled, but do not require the result.
     """
 
-    def handle_result(f: Task) -> None:
+    def handle_result(f: Task[T]) -> None:
         try:
             f.result()
         except Exception as e:
@@ -565,7 +628,7 @@ class StoppedException(Exception):
     """This exception is raised when a background task is added to the taskhandler when it is shutting down."""
 
 
-class TaskHandler:
+class TaskHandler(Generic[T]):
     """
     This class provides a method to add a background task based on a coroutine. When the coroutine ends, any exceptions
     are reported. If stop is invoked, all background tasks are cancelled.
@@ -573,8 +636,8 @@ class TaskHandler:
 
     def __init__(self) -> None:
         super().__init__()
-        self._background_tasks: set[Task] = set()
-        self._await_tasks: set[Task] = set()
+        self._background_tasks: set[Task[T]] = set()
+        self._await_tasks: set[Task[T]] = set()
         self._stopped = False
 
     def is_stopped(self) -> bool:
@@ -583,7 +646,7 @@ class TaskHandler:
     def is_running(self) -> bool:
         return not self._stopped
 
-    def add_background_task(self, future: Union[Future, Coroutine], cancel_on_stop: bool = True) -> Task:
+    def add_background_task(self, future: Coroutine[object, None, T], cancel_on_stop: bool = True) -> Task[T]:
         """Add a background task to the event loop. When stop is called, the task is cancelled.
 
         :param future: The future or coroutine to run as background task.
@@ -593,9 +656,9 @@ class TaskHandler:
             LOGGER.warning("Not adding background task because we are stopping.")
             raise StoppedException("A background tasks are not added to the event loop while stopping")
 
-        task = ensure_future(future)
+        task: Task[T] = ensure_future(future)
 
-        def handle_result(task: Task) -> None:
+        def handle_result(task: Task[T]) -> None:
             try:
                 task.result()
             except CancelledError:
@@ -732,6 +795,17 @@ class nullcontext(contextlib.nullcontext[T], contextlib.AbstractAsyncContextMana
         pass
 
 
+class FinallySet(contextlib.AbstractAsyncContextManager[asyncio.Event]):
+    def __init__(self, event: asyncio.Event) -> None:
+        self.event = event
+
+    async def __aenter__(self) -> asyncio.Event:
+        return self.event
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        self.event.set()
+
+
 async def join_threadpools(threadpools: list[ThreadPoolExecutor]) -> None:
     """
     Asynchronously join a set of threadpools
@@ -787,6 +861,7 @@ class ExhaustedPoolWatcher:
 
     def __init__(self, pool: asyncpg.pool.Pool) -> None:
         self._exhausted_pool_events_count: int = 0
+        self._last_report: int = 0
         self._pool: asyncpg.pool.Pool = pool
 
     def report_and_reset(self, logger: logging.Logger) -> None:
@@ -794,17 +869,146 @@ class ExhaustedPoolWatcher:
         Log how many exhausted pool events were recorded since the last time the counter
         was reset, if any, and reset the counter.
         """
-        if self._exhausted_pool_events_count > 0:
-            logger.warning("Database pool was exhausted %d times in the past 24h.", self._exhausted_pool_events_count)
-            self._reset_counter()
+        since_last = self._exhausted_pool_events_count - self._last_report
+        if since_last > 0:
+            logger.warning("Database pool was exhausted %d times in the past 24h.", since_last)
+            self._last_report = self._exhausted_pool_events_count
 
     def check_for_pool_exhaustion(self) -> None:
         """
         Checks if the database pool is exhausted
         """
-        pool_exhausted: bool = self._pool.get_size() == self._pool.get_max_size() and self._pool.get_idle_size() == 0
+        pool_exhausted: bool = (self._pool.get_size() == self._pool.get_max_size()) and self._pool.get_idle_size() == 0
         if pool_exhausted:
             self._exhausted_pool_events_count += 1
 
-    def _reset_counter(self) -> None:
-        self._exhausted_pool_events_count = 0
+
+def remove_comment_part_from_specifier(to_clean: str) -> str:
+    """
+    Remove the comment part of a requirement specifier
+
+    :param to_clean: The requirement specifier to clean
+    :return: A cleaned requirement specifier
+    """
+    # Refer to PEP 508. A requirement could contain a hashtag
+    to_clean = to_clean.strip()
+    drop_comment, _, _ = to_clean.partition(" #")
+    # We make sure whitespaces are not counted in the length of this string, e.g. "        #"
+    drop_comment = drop_comment.strip()
+    return drop_comment
+
+
+if typing.TYPE_CHECKING:
+
+    class CanonicalRequirement(packaging.requirements.Requirement):
+        name: NormalizedName
+
+        def __init__(self, requirement: packaging.requirements.Requirement) -> None:
+            raise Exception("Typing dummy, should never be seen")
+
+else:
+    CanonicalRequirement = typing.NewType("CanonicalRequirement", packaging.requirements.Requirement)
+    """
+    A CanonicalRequirement is a packaging.requirements.Requirement except that the name of this Requirement is canonicalized,
+    which allows us to compare names without dealing afterwards with the format of these requirements.
+    """
+
+
+def parse_requirement(requirement: str) -> CanonicalRequirement:
+    """
+    Parse the given requirement string into a requirement object with a canonicalized name, meaning that we are sure that
+    every CanonicalRequirement will follow the same convention regarding the name. This will allow us compare requirements.
+    This function supposes to receive an actual requirement.
+
+    :param requirement: The requirement's name
+    :return: A new requirement instance
+    """
+    # We canonicalize the name of the requirement to be able to compare requirements and check if the requirement is
+    # already installed
+    # The following line could cause issue because we are not supposed to modify fields of an existing instance
+    # The version of packaging is constrained to ensure this can not cause problems in production.
+    requirement_instance = packaging.requirements.Requirement(requirement_string=requirement)
+    requirement_instance.name = packaging.utils.canonicalize_name(requirement_instance.name)
+    canonical_requirement_instance = CanonicalRequirement(requirement_instance)
+    return canonical_requirement_instance
+
+
+def parse_requirements(requirements: Sequence[str]) -> list[CanonicalRequirement]:
+    """
+    Parse the given requirements (sequence of strings) into requirement objects with a canonicalized name, meaning that we
+    are sure that every CanonicalRequirement will follow the same convention regarding the name. This will allow us compare
+    requirements. This function supposes to receive actual requirements. Commented strings will not be handled and result in
+    a ValueError
+
+    :param requirements: The names of the different requirements
+    :return: list[CanonicalRequirement]
+    """
+    return [parse_requirement(requirement=e) for e in requirements]
+
+
+def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequirement]:
+    """
+    Parse the given requirements (line by line) from a file into requirement objects with a canonicalized name, meaning that we
+    are sure that every CanonicalRequirement will follow the same convention regarding the name. This will allow us compare
+    requirements.
+
+    :param file_path: The path to the read the requirements from
+    :return: list[CanonicalRequirement]
+    """
+    if not file_path.exists():
+        raise RuntimeError(f"The provided path does not exist: `{file_path}`!")
+
+    with open(file_path) as f:
+        file_contents: list[str] = f.readlines()
+        requirements = [
+            parse_requirement(remove_comment_part_from_specifier(line))
+            for line in file_contents
+            if (stripped := line.lstrip()) and not stripped.startswith("#")  # preprocessing
+        ]
+
+    return requirements
+
+
+# Retaken from the `click-plugins` repo which is now unmaintained
+def click_group_with_plugins(plugins: Iterable[importlib.metadata.EntryPoint]) -> Callable[[click.Group], click.Group]:
+    """
+    A decorator to register external CLI commands to an instance of `click.Group()`.
+
+    :param plugins: An iterable producing one `pkg_resources.EntryPoint()` per iteration
+    :return: The provided click group with the new commands
+    """
+
+    def decorator(group: click.Group) -> click.Group:
+        for entry_point in plugins:
+            try:
+                group.add_command(entry_point.load())
+            except Exception as e:
+                # Catch this so a busted plugin doesn't take down the CLI.
+                # Handled by registering a dummy command that does nothing
+                # other than explain the error.
+                def print_error(error: Exception) -> None:
+                    click.echo(f"Error: could not load this plugin for the following reason: {error}")
+
+                new_print_error = functools.partial(print_error, e)
+                group.add_command(click.Command(name=entry_point.name, callback=new_print_error))
+
+        return group
+
+    return decorator
+
+
+def make_attribute_hash(resource_id: "ResourceId", attributes: Mapping[str, object]) -> str:
+    """
+    This method returns the attribute hash for the attributes of the given resource.
+    """
+    from inmanta.protocol.common import custom_json_encoder
+
+    character = json.dumps(
+        {k: v for k, v in attributes.items() if k not in ["requires", "provides", "version"]},
+        default=custom_json_encoder,
+        sort_keys=True,  # sort the keys for stable hashes when using dicts, see #5306
+    )
+    m = hashlib.md5()
+    m.update(resource_id.encode("utf-8"))
+    m.update(character.encode("utf-8"))
+    return m.hexdigest()

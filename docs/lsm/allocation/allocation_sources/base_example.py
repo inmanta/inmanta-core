@@ -5,6 +5,7 @@
     :contact: code@inmanta.com
     :license: Inmanta EULA
 """
+
 import inmanta_plugins.lsm.allocation as lsm
 
 lsm.AllocationSpec(

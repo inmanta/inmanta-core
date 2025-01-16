@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 import os
@@ -78,12 +79,12 @@ def setup_config(tmpdir, postgres_db, database_name):
 
 
 async def test_user_setup(tmpdir, server_pre_start, postgres_db, database_name, hard_clean_db, hard_clean_db_post):
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
     # we need the server to start so that all the migrations scripts are applied, but the server needs
     # to be shut down afterwards, otherwise the call to get_connection_pool() will result in an exception saying
     # that the connection pool is already set in the database layer.
     await ibl.start()
-    await ibl.stop(timeout=15)
+    await ibl.stop(timeout=20)
 
     setup_config(tmpdir, postgres_db, database_name)
     cli = CLI_user_setup()
@@ -111,12 +112,12 @@ async def test_user_setup_empty_username(
     tmpdir, server_pre_start, postgres_db, database_name, hard_clean_db, hard_clean_db_post
 ):
     """test that if no username is provided to the user setup tool, the username will default to admin"""
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
     # we need the server to start so that all the migrations scripts are applied, but the server needs
     # to be shut down afterwards, otherwise the call to get_connection_pool() will result in an exception saying
     # that the connection pool is already set in the database layer.
     await ibl.start()
-    await ibl.stop(timeout=15)
+    await ibl.stop(timeout=20)
 
     setup_config(tmpdir, postgres_db, database_name)
     cli = CLI_user_setup()

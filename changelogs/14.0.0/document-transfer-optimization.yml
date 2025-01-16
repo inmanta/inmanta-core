@@ -1,0 +1,6 @@
+---
+description: Add documentation regarding the transfer optimization feature.
+issue-nr: 1794
+issue-repo: inmanta-lsm
+change-type: minor
+destination-branches: [master, iso7]

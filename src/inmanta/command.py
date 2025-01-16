@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-
 import argparse
 from collections import abc
 from typing import Callable, Optional
@@ -54,9 +53,12 @@ class Commander:
         require_project: bool = False,
         aliases: list[str] = [],
         add_verbose_flag: bool = True,
+        component: str | None = None,
     ) -> None:
         """
         Add a new export function
+
+        :param component: the component name for which to initialize logging
         """
         if name in cls.__command_functions:
             raise Exception("Command %s already registered" % name)
@@ -68,6 +70,7 @@ class Commander:
             "require_project": require_project,
             "aliases": aliases,
             "add_verbose_flag": add_verbose_flag,
+            "component": component,
         }
 
     config = None
@@ -75,7 +78,7 @@ class Commander:
     @classmethod
     def reset(cls) -> None:
         """
-        Return a list of commands
+        Resets the list of commands
         """
         cls.__command_functions = {}
 
@@ -102,6 +105,7 @@ class command:  # noqa: N801
         require_project: bool = False,
         aliases: list[str] = [],
         add_verbose_flag: bool = True,
+        component: str | None = None,
     ) -> None:
         self.name = name
         self.help = help_msg
@@ -109,12 +113,20 @@ class command:  # noqa: N801
         self.parser_config = parser_config
         self.aliases = aliases
         self.add_verbose_flag = add_verbose_flag
+        self.component = component
 
     def __call__(self, function: FunctionType) -> FunctionType:
         """
         The wrapping
         """
         Commander.add(
-            self.name, function, self.help, self.parser_config, self.require_project, self.aliases, self.add_verbose_flag
+            self.name,
+            function,
+            self.help,
+            self.parser_config,
+            self.require_project,
+            self.aliases,
+            self.add_verbose_flag,
+            self.component,
         )
         return function

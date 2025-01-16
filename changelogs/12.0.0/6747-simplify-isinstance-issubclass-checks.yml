@@ -1,0 +1,6 @@
+---
+description: simplify isinstance and issubclass checks in data layer
+issue-nr: 6747
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso7, iso6]

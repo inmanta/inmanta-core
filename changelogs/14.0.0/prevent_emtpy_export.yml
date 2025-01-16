@@ -1,0 +1,5 @@
+description: Don't export a new version if the compile fails, even if there are Unknown parameters
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  bugfix: "{{description}}"

@@ -1,6 +1,5 @@
 import lsm
 import lsm::fsm
-import ip
 
 entity ServiceX extends lsm::ServiceEntity:
     """
@@ -22,7 +21,7 @@ entity SubService extends lsm::EmbeddedEntity:
         :attr ip: The IP address of the service
     """
     string name
-    ip::ip ip
+    std::ipv4_address ip
     string[]? __lsm_key_attributes = ["name"]
 end
 

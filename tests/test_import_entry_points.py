@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 """
     These tests make sure that for each module mentioned in the compiler API docs, using it as an entry point for importing
     does not result in an import loop (see #2341 and #2342).
@@ -31,7 +32,7 @@ import pytest
 @pytest.fixture(scope="session")
 def import_entry_point() -> Iterator[Callable[[str], Optional[int]]]:
     """
-    Yields a function that imports a module in a seperate Python process and returns the exit code.
+    Yields a function that imports a module in a separate Python process and returns the exit code.
     """
     context = multiprocessing.get_context("spawn")
 
@@ -60,7 +61,6 @@ def test_import_resources(import_entry_point) -> None:
 
 def test_import_handlers(import_entry_point) -> None:
     assert import_entry_point("inmanta.agent.handler") == 0
-    assert import_entry_point("inmanta.agent.io.local") == 0
 
 
 def test_import_export(import_entry_point) -> None:
@@ -99,6 +99,8 @@ def test_import_module(import_entry_point) -> None:
 
 def test_import_protocol(import_entry_point) -> None:
     assert import_entry_point("inmanta.protocol") == 0
+    assert import_entry_point("inmanta.protocol.auth") == 0
+    assert import_entry_point("inmanta.protocol.common") == 0
     assert import_entry_point("inmanta.protocol.exceptions") == 0
 
 
@@ -122,6 +124,7 @@ def test_import_compiler(import_entry_point: Callable[[str], Optional[int]]) -> 
     assert import_entry_point("inmanta.compiler") == 0
 
 
+@pytest.mark.slow
 def test_import_server(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.server.extensions") == 0
     assert import_entry_point("inmanta.server.bootloader") == 0
@@ -129,3 +132,25 @@ def test_import_server(import_entry_point: Callable[[str], Optional[int]]) -> No
 
 def test_import_validation_type(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.validation_type") == 0
+
+
+@pytest.mark.slow
+def test_import_server_services(import_entry_point: Callable[[str], Optional[int]]) -> None:
+    assert import_entry_point("inmanta.server.compilerservice") == 0
+    assert import_entry_point("inmanta.server.services.databaseservice") == 0
+    assert import_entry_point("inmanta.server.services.environmentservice") == 0
+    assert import_entry_point("inmanta.server.services.environment_metrics_service") == 0
+    assert import_entry_point("inmanta.server.services.orchestrationservice") == 0
+    assert import_entry_point("inmanta.server.services.projectservice") == 0
+    assert import_entry_point("inmanta.server.services.resourceservice") == 0
+
+
+@pytest.mark.slow
+def test_import_scheduler(import_entry_point: Callable[[str], Optional[int]]) -> None:
+    assert import_entry_point("inmanta.deploy.scheduler") == 0
+    assert import_entry_point("inmanta.deploy.state") == 0
+
+
+@pytest.mark.slow
+def test_import_aget(import_entry_point: Callable[[str], Optional[int]]) -> None:
+    assert import_entry_point("inmanta.agent.agent") == 0

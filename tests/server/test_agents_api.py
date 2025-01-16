@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import json
 import uuid
@@ -24,30 +25,33 @@ from typing import Optional
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
+import inmanta.const
 from inmanta import data
-from inmanta.agent import reporting
-from inmanta.server import SLICE_AGENT_MANAGER
-from inmanta.server.config import get_bind_port
+from inmanta.server import SLICE_AGENT_MANAGER, config
 from inmanta.util import parse_timestamp
 
 
 @pytest.fixture
+@pytest.mark.parametrize("no_agent", [True])
 async def env_with_agents(client, environment: str) -> None:
+
     env_uuid = uuid.UUID(environment)
+
+    # create scheduler
+    process_sid = uuid.uuid4()
+    await data.AgentProcess(hostname="localhost", environment=env_uuid, sid=process_sid).insert()
+    id_primary = uuid.uuid4()
+    await data.AgentInstance(id=id_primary, process=process_sid, name="scheduler-instance", tid=env_uuid).insert()
+    scheduler_agent = await data.Agent.get_one(environment=env_uuid, name=inmanta.const.AGENT_SCHEDULER_ID)
+    await scheduler_agent.update(id_primary=id_primary, last_failover=(datetime.datetime.now() - datetime.timedelta(minutes=5)))
 
     async def create_agent(
         name: str,
         paused: bool = False,
         last_failover: Optional[datetime.datetime] = None,
         unpause_on_resume: Optional[bool] = None,
-        with_process: bool = False,
     ):
         id_primary = None
-        if with_process:
-            process_sid = uuid.uuid4()
-            await data.AgentProcess(hostname=f"localhost-{name}", environment=env_uuid, sid=process_sid).insert()
-            id_primary = uuid.uuid4()
-            await data.AgentInstance(id=id_primary, process=process_sid, name=f"{name}-instance", tid=env_uuid).insert()
         await data.Agent(
             environment=env_uuid,
             name=name,
@@ -57,17 +61,15 @@ async def env_with_agents(client, environment: str) -> None:
             unpause_on_resume=unpause_on_resume,
         ).insert()
 
-    await create_agent(name="first_agent")  # down
-    await create_agent(name="agent_with_instance1", with_process=True)  # up
-    await create_agent(name="agent_with_instance2", with_process=True)  # up
-    await create_agent(name="agent_with_instance3", with_process=True)  # up
+    await create_agent(name="first_agent")  # up
+    await create_agent(name="agent_with_instance1")  # up
+    await create_agent(name="agent_with_instance2")  # up
+    await create_agent(name="agent_with_instance3")  # up
     await create_agent(name="paused_agent", paused=True)  # paused
-    await create_agent(name="paused_agent_with_instance", paused=True, with_process=True)  # paused
-    await create_agent(name="unpause_on_resume", unpause_on_resume=True)  # down
-    await create_agent(
-        name="failover1", with_process=True, last_failover=(datetime.datetime.now() - datetime.timedelta(minutes=1))
-    )  # up
-    await create_agent(name="failover2", with_process=True, last_failover=datetime.datetime.now())  # up
+    await create_agent(name="paused_agent_with_instance", paused=True)  # paused
+    await create_agent(name="unpause_on_resume", unpause_on_resume=True)  # up
+    await create_agent(name="failover1", last_failover=(datetime.datetime.now() - datetime.timedelta(minutes=1)))  # up
+    await create_agent(name="failover2", last_failover=datetime.datetime.now())  # up
 
 
 async def test_agent_list_filters(client, environment: str, env_with_agents: None) -> None:
@@ -78,14 +80,12 @@ async def test_agent_list_filters(client, environment: str, env_with_agents: Non
     # Test status filters
     result = await client.get_agents(environment, filter={"status": "down"})
     assert result.code == 200
-    assert len(result.result["data"]) == 2
-    assert all([agent["status"] == "down" for agent in result.result["data"]])
+    assert len(result.result["data"]) == 0
 
     result = await client.get_agents(environment, filter={"status": "up"})
     assert result.code == 200
-    assert len(result.result["data"]) == 5
+    assert len(result.result["data"]) == 7
     assert all([agent["status"] == "up" for agent in result.result["data"]])
-    assert "localhost" in result.result["data"][0]["process_name"]
 
     result = await client.get_agents(environment, filter={"status": "paused"})
     assert result.code == 200
@@ -94,7 +94,7 @@ async def test_agent_list_filters(client, environment: str, env_with_agents: Non
 
     result = await client.get_agents(environment, filter={"status": ["paused", "up"]})
     assert result.code == 200
-    assert len(result.result["data"]) == 7
+    assert len(result.result["data"]) == 9
     assert all([agent["status"] == "paused" or agent["status"] == "up" for agent in result.result["data"]])
 
     result = await client.get_agents(environment, filter={"name": "with_instance"})
@@ -102,14 +102,9 @@ async def test_agent_list_filters(client, environment: str, env_with_agents: Non
     assert len(result.result["data"]) == 4
     assert all(["with_instance" in agent["name"] for agent in result.result["data"]])
 
-    result = await client.get_agents(environment, filter={"process_name": "failover"})
-    assert result.code == 200
-    assert len(result.result["data"]) == 2
-    assert all(["failover" in agent["name"] for agent in result.result["data"]])
-
     result = await client.get_agents(environment, filter={"name": "agent", "status": "down"})
     assert result.code == 200
-    assert len(result.result["data"]) == 1
+    assert len(result.result["data"]) == 0
 
 
 def agent_names(agents: list[dict[str, str]]) -> list[str]:
@@ -121,10 +116,10 @@ def agent_names(agents: list[dict[str, str]]) -> list[str]:
 async def test_agents_paging(server, client, env_with_agents: None, environment: str, order_by_column: str, order: str) -> None:
     result = await client.get_agents(
         environment,
-        filter={"status": ["paused", "up"]},
+        filter={"status": ["up", "paused"]},
     )
     assert result.code == 200
-    assert len(result.result["data"]) == 7
+    assert len(result.result["data"]) == 9
     all_agents = result.result["data"]
     for agent in all_agents:
         if not agent["process_name"]:
@@ -140,18 +135,18 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
         environment,
         limit=2,
         sort=f"{order_by_column}.{order}",
-        filter={"status": ["paused", "up"]},
+        filter={"status": ["up", "paused"]},
     )
     assert result.code == 200
     assert len(result.result["data"]) == 2
 
     assert agent_names(result.result["data"]) == all_agent_names_in_expected_order[:2]
 
-    assert result.result["metadata"] == {"total": 7, "before": 0, "after": 5, "page_size": 2}
+    assert result.result["metadata"] == {"total": 9, "before": 0, "after": 7, "page_size": 2}
     assert result.result["links"].get("next") is not None
     assert result.result["links"].get("prev") is None
 
-    port = get_bind_port()
+    port = config.server_bind_port.get()
     base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
@@ -169,7 +164,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     assert agent_names(response["data"]) == all_agent_names_in_expected_order[2:4]
     assert response["links"].get("prev") is not None
     assert response["links"].get("next") is not None
-    assert response["metadata"] == {"total": 7, "before": 2, "after": 3, "page_size": 2}
+    assert response["metadata"] == {"total": 9, "before": 2, "after": 5, "page_size": 2}
 
     # Test link for next page
     url = f"""{base_url}{response["links"]["next"]}"""
@@ -185,7 +180,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     assert next_page_agent_names == all_agent_names_in_expected_order[4:6]
     assert response["links"].get("prev") is not None
     assert response["links"].get("next") is not None
-    assert response["metadata"] == {"total": 7, "before": 4, "after": 1, "page_size": 2}
+    assert response["metadata"] == {"total": 9, "before": 4, "after": 3, "page_size": 2}
 
     # Test link for previous page
     url = f"""{base_url}{response["links"]["prev"]}"""
@@ -201,19 +196,40 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     assert prev_page_agent_names == all_agent_names_in_expected_order[2:4]
     assert response["links"].get("prev") is not None
     assert response["links"].get("next") is not None
-    assert response["metadata"] == {"total": 7, "before": 2, "after": 3, "page_size": 2}
+    assert response["metadata"] == {"total": 9, "before": 2, "after": 5, "page_size": 2}
 
     result = await client.get_agents(
         environment,
         limit=100,
         sort=f"{order_by_column}.{order}",
-        filter={"status": ["paused", "up"]},
+        filter={"status": ["up", "paused"]},
     )
     assert result.code == 200
-    assert len(result.result["data"]) == 7
+    assert len(result.result["data"]) == 9
     assert agent_names(result.result["data"]) == all_agent_names_in_expected_order
 
-    assert result.result["metadata"] == {"total": 7, "before": 0, "after": 0, "page_size": 100}
+    assert result.result["metadata"] == {"total": 9, "before": 0, "after": 0, "page_size": 100}
+
+    if order_by_column != "last_failover" or order != "ASC":
+        return
+
+    # verify that paging beyond the last page returns correct counts and links
+    result = await client.get_agents(
+        environment,
+        limit=1,
+        start="zz",
+        first_id="zzzz",
+        sort="name.asc",
+        filter={"status": ["paused"]},
+    )
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
+    assert result.result["links"] == {
+        "first": "/api/v2/agents?limit=1&sort=name.asc&filter.status=paused",
+        "prev": "/api/v2/agents?limit=1&sort=name.asc&filter.status=paused&end=zz&last_id=zzzz",
+        "self": "/api/v2/agents?limit=1&sort=name.asc&filter.status=paused&first_id=zzzz&start=zz",
+    }
+    assert result.result["metadata"] == {"total": 2, "before": 2, "after": 0, "page_size": 1}
 
 
 async def test_sorting_validation(client, environment: str, env_with_agents: None) -> None:
@@ -260,19 +276,26 @@ async def test_agent_process_details(client, environment: str) -> None:
     assert result.result["data"]["state"] is None
 
 
-async def test_agent_process_details_with_report(server, client, environment: str, agent) -> None:
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await agentmanager.ensure_agent_registered(env=env, nodename="agent1")
-    result = await client.get_agents(
-        environment,
-    )
+async def test_agent_without_instance_or_process(server, client, environment):
+    """
+    This test case reproduces a bug where the `get_agents()` endpoint returns an empty list
+    if there is no agent record for the scheduler ($__scheduler).
+    """
+    # Halt the environment to make sure we don't clean up the agent record we will create soon.
+    result = await client.halt_environment(tid=environment)
     assert result.code == 200
-    process_id = result.result["data"][0]["process_id"]
 
-    result = await client.get_agent_process_details(environment, process_id, report=True)
+    # Make sure the scheduler agent record is gone.
+    await data.Agent._execute_query("DELETE FROM AGENT")
+
+    # Create agent record in db
+    env_dao = await data.Environment.get_by_id(uuid.UUID(environment))
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    agent_name = "test"
+    await agent_manager.ensure_agent_registered(env=env_dao, nodename=agent_name)
+
+    result = await client.get_agents(tid=environment)
     assert result.code == 200
-    status = result.result["data"]["state"]
-    assert status is not None
-    for name in reporting.reports.keys():
-        assert name in status and status[name] != "ERROR"
+    assert len(result.result["data"]) == 1
+    assert result.result["data"][0]["environment"] == environment
+    assert result.result["data"][0]["name"] == agent_name

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import textwrap
 
 import pytest
@@ -28,7 +29,7 @@ def test_list_attributes(snippetcompiler):
         """
 entity Jos:
   bool[] bar
-  std::package_state[] ips = ["installed"]
+  std::email_str[] ips = ["aaa@aaa.com"]
   string[] floom = []
   string[] floomx = ["a", "b"]
   string box = "a"
@@ -41,11 +42,12 @@ b = Jos(bar = [true, false])
 c = Jos(bar = [])
 d = Jos(bar = [], floom=["test","test2"])
 
-"""
+""",
+        autostd=True,
     )
     (_, root) = compiler.do_compile()
 
-    def check_jos(jos, bar, ips=["installed"], floom=[], floomx=["a", "b"], box="a"):
+    def check_jos(jos, bar, ips=["aaa@aaa.com"], floom=[], floomx=["a", "b"], box="a"):
         jos = jos.get_value()
         assert jos.get_attribute("bar").get_value() == bar
         assert jos.get_attribute("ips").get_value(), ips
@@ -119,7 +121,8 @@ Test1.tests [0:] -- Test2.tests [0:]
 
 t1 = Test1(tests=[])
 std::print(t1.tests)
-"""
+""",
+        ministd=True,
     )
     (_, root) = compiler.do_compile()
     scope = root.get_child("__config__").scope
@@ -389,10 +392,13 @@ entity Network:
     string[] tags=[]
 end
 
-implement Network using std::none
+implement Network using none
 
 net1 = Network(tags=["vlan"])
 a="Net has tags {{ net1.tags }}"
+
+implementation none for std::Entity:
+end
 """
     )
 
@@ -407,7 +413,10 @@ a="Net has tags {{ net1.tags }}"
 def test_emptylists(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-    implement std::Entity using std::none
+    implement std::Entity using none
+
+    implementation none for std::Entity:
+    end
 
     a=std::Entity()
     b=std::Entity()
@@ -430,7 +439,10 @@ def test_653_list_attribute_unset(snippetcompiler, type: str):
 
         Test()
 
-        implement Test using std::none
+        implement Test using none
+
+        implementation none for std::Entity:
+        end
         """,
         "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete:"
         f" attribute bla ({{dir}}/main.cf:3:{20 + len(type)}) is not set",
@@ -501,7 +513,8 @@ cluster = Cluster()
 deployment2 = Deployment(
     clusters=cluster,
 )
-"""
+""",
+        autostd=True,
     )
 
     (_, scopes) = compiler.do_compile()
@@ -512,16 +525,19 @@ def test_1435_instance_in_list(snippetcompiler):
         """
 entity A:
 end
-implement A using std::none
+implement A using none
 
 entity ListContainer:
     list lst
 end
 
-implement ListContainer using std::none
+implement ListContainer using none
 
 x = ListContainer()
 x.lst = [x]
+
+implementation none for std::Entity:
+end
         """,
         "Could not set attribute `lst` on instance `__config__::ListContainer (instantiated at {dir}/main.cf:12)`"
         " (reported in x.lst = List() ({dir}/main.cf:13))"
@@ -544,15 +560,94 @@ def test_relation_list_duplicate_assignment(snippetcompiler):
             """
             entity A: end
             A.others [0:] -- A
-            implement A using std::none
+            implement A using none
 
             x = A()
             y = A()
 
             x.others += [y.others, y.others]
+
+            implementation none for std::Entity:
+            end
             """.strip(
                 "\n"
             )
         )
+    )
+    compiler.do_compile()
+
+
+def test_error_list_validation(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+        std::print(std::count("hello"))
+        """,
+        autostd=True,
+    )
+    with pytest.raises(RuntimeException, match="Invalid value 'hello', expected list"):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_error_dict_validation(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+        std::print(std::dict_get("hello1", "hello2"))
+        """,
+        autostd=True,
+    )
+    with pytest.raises(RuntimeException, match="Invalid value 'hello1', expected dict"):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_list_duplicates(snippetcompiler):
+    """Primitive lists retain duplicates"""
+    snippetcompiler.setup_for_snippet(
+        """
+        a = ['a', 'a']
+        len_var = 2
+        len_var = std::count(a)
+        """,
+        autostd=True,
+    )
+    compiler.do_compile()
+
+
+def test_nested_list_on_as_constant(snippetcompiler):
+    """Constant lists are flattened in typedefs"""
+    snippetcompiler.setup_for_snippet(
+        """
+        typedef thestring as string matching self in [["a","b"],"c", ["d"]]
+
+        entity It:
+            thestring a = "a"
+        end
+
+        It(a="a")
+
+        implement It using none
+
+        implementation none for std::Entity:
+        end
+        """
+    )
+    compiler.do_compile()
+
+
+def test_nested_list_on_execute_direct(snippetcompiler):
+    """Conditional lists are flattened in typedefs"""
+    snippetcompiler.setup_for_snippet(
+        """
+        typedef thestring as string matching self in [1==1?["a","b"]:[],"c", ["d"]]
+
+        entity It:
+            thestring a = "a"
+        end
+
+        It(a="a")
+
+        implement It using none
+        implementation none for std::Entity:
+        end
+        """
     )
     compiler.do_compile()

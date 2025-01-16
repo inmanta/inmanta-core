@@ -4,7 +4,7 @@ Install Inmanta
 ***************
 
 This page explains how to install the Inmanta orchestrator software and setup an orchestration server. Regardless what platform
-you installed it on, Inmanta requires at least the latest Python 3.9 and git to be installed.
+you installed it on, Inmanta requires at least Python and Git to be installed.
 
 
 Install the software
@@ -189,8 +189,9 @@ Install the software
     Create a repositories file to point yum to the inmanta service orchestrator release repository. Create a file
     ``/etc/yum.repos.d/inmanta.repo`` with the following content:
 
+
     .. code-block:: sh
-       :substitutions:
+        :substitutions:
 
         [inmanta-service-orchestrator-|version_major|-stable]
         name=inmanta-service-orchestrator-|version_major|-stable
@@ -209,11 +210,11 @@ Install the software
 
     Replace ``<token>`` with the token provided with your license.
 
-    Use yum to install the software:
+    Use dnf to install the software:
 
     .. code-block:: sh
 
-        sudo yum install -y inmanta-service-orchestrator-server
+        sudo dnf install -y inmanta-service-orchestrator-server
 
 
     This command installs the software and all of its dependencies.
@@ -228,8 +229,8 @@ Install the software
     - The file with the .license extension is the license file
     - The file with the .jwe extension is the entitlement file
 
-    Copy the license file to the server and store them for example in ``/etc/inmanta/license``. If this directory does not exist, create it. Then create a
-    configuration file to point the orchestrator to the license file. Create a file ``/etc/inmanta/inmanta.d/license.cfg`` with the following content:
+    Copy both files to the server and store them for example in ``/etc/inmanta/license``. If this directory does not exist, create it. Then create a
+    configuration file to point the orchestrator to the license files. Create a file ``/etc/inmanta/inmanta.d/license.cfg`` with the following content:
 
     .. code-block::
 
@@ -249,23 +250,24 @@ While not mandatory, it is highly recommended you do so.
 
 .. _install-step-2:
 
-Step 3: Install PostgreSQL 13
+Step 3: Install PostgreSQL 16
 -----------------------------
 
 .. only:: oss
 
-    For most platforms you can install PostgreSQL 13 following the `installation guide <https://www.postgresql.org/download/>`_ for your
+    For most platforms you can install PostgreSQL 16 following the `installation guide <https://www.postgresql.org/download/>`_ for your
     platform.
 
     For RHEL based systems you can also use the PostgreSQL that comes with the distribution.
 
     .. code-block:: sh
 
-        sudo dnf module install postgresql:13/server
+        sudo dnf module install postgresql:16/server
 
 .. only:: iso
 
-    Install the PostgreSQL 13 package included in RHEL.
+    Install the PostgreSQL 16 package included in RHEL. More info in the 'Included in Distribution' section
+    of the `postgresql documentation <https://www.postgresql.org/download/linux/redhat/>`_.
 
     .. tab-set::
 
@@ -273,16 +275,26 @@ Step 3: Install PostgreSQL 13
 
             .. code-block:: sh
 
-                sudo dnf module install postgresql:13/server
+                sudo dnf module install postgresql:16/server
                 sudo systemctl enable postgresql
 
         .. tab-item:: RHEL 9
 
             .. code-block:: sh
 
-                sudo dnf module install postgresql-server
+                sudo dnf module install postgresql:16/server
                 sudo systemctl enable postgresql
 
+            .. warning::
+                Before moving on to the next step, make sure that the locale used by the system is actually installed.
+                By default, RHEL9 uses the ``en_US.UTF-8`` locale which can be installed via:
+
+                .. code-block:: sh
+
+                    sudo dnf install langpacks-en -y
+
+                .. note::
+                    If your system uses a different locale, please install the corresponding langpack.
 
 .. _install-step-3:
 
@@ -291,74 +303,58 @@ Step 4: Setup a PostgreSQL database for the Inmanta server
 
 Initialize the PostgreSQL server:
 
-.. only:: oss
+.. code-block:: sh
 
-    .. code-block:: sh
-
-        sudo su - postgres -c "postgresql-13-setup --initdb"
-
-.. only:: iso
-
-    .. code-block:: sh
-
-        sudo su - postgres -c "postgresql-setup --initdb"
-
+    sudo su - postgres -c "postgresql-setup --initdb"
 
 Start the PostgreSQL database and make sure it is started at boot.
 
-.. only:: oss
+.. code-block:: sh
 
-    .. code-block:: sh
-
-        sudo systemctl enable --now postgresql-13
-
-.. only:: iso
-
-    .. code-block:: sh
-
-        sudo systemctl enable --now postgresql
+    sudo systemctl enable --now postgresql
 
 Create a inmanta user and an inmanta database by executing the following command. This command will request you to choose a
 password for the inmanta database.
 
 .. code-block:: sh
 
-  sudo -u postgres -i bash -c "createuser --pwprompt inmanta"
-  sudo -u postgres -i bash -c "createdb -O inmanta inmanta"
+    sudo -u postgres -i bash -c "createuser --pwprompt inmanta"
+    sudo -u postgres -i bash -c "createdb -O inmanta inmanta"
 
 Change the authentication method for local connections to md5 by changing the following lines in the
 ``/var/lib/pgsql/data/pg_hba.conf`` file
 
 .. code-block:: text
 
-  # IPv4 local connections:
-  host    all             all             127.0.0.1/32            ident
-  # IPv6 local connections:
-  host    all             all             ::1/128                 ident
+    # IPv4 local connections:
+    host    all             all             127.0.0.1/32            ident
+    # IPv6 local connections:
+    host    all             all             ::1/128                 ident
 
 to
 
 .. code-block:: text
 
-  # IPv4 local connections:
-  host    all             all             127.0.0.1/32            md5
-  # IPv6 local connections:
-  host    all             all             ::1/128                 md5
+    # IPv4 local connections:
+    host    all             all             127.0.0.1/32            md5
+    # IPv6 local connections:
+    host    all             all             ::1/128                 md5
 
+Make sure JIT is disabled for the PostgreSQL database as it might result in poor query performance.
+To disable JIT, set
 
-Restart the PostgreSQL server to apply the changes made in the ``pg_hba.conf`` file:
+.. code-block:: text
 
-.. only:: oss
+    # disable JIT
+    jit = off
 
-    .. code-block:: sh
+in ``/var/lib/pgsql/data/postgresql.conf``.
 
-        sudo systemctl restart postgresql-13
+Restart the PostgreSQL server to apply the changes made in the ``pg_hba.conf`` and  ``postgresql.conf`` files:
 
-.. only:: iso
+.. code-block:: sh
 
-    .. code-block:: sh
-
-        sudo systemctl restart postgresql
+    sudo systemctl restart postgresql
 
 .. _install-step-4:
 
@@ -370,27 +366,24 @@ That file should look as follows:
 
 .. code-block:: text
 
-  [database]
-  host=<ip-address-database-server>
-  name=inmanta
-  username=inmanta
-  password=<password>
+    [database]
+    host=<ip-address-database-server>
+    name=inmanta
+    username=inmanta
+    password=<password>
 
 Replace <password> in the above-mentioned snippet with the password of the inmanta database. By default Inmanta tries to
 connect to the local server and uses the database inmanta. See the :inmanta.config:group:`database` section in the
-configfile for other options.
+config file for other options.
 
 .. _configure_server_step_5:
 
 Step 6: Set the server address
 ------------------------------
 
-When virtual machines are started by this server that install the inmanta agent, the correct
-:inmanta.config:option:`server.server-address` needs to be
-configured. This address is used to create the correct boot script for the virtual machine.
 
-Set this value to the hostname or IP address that other systems use to connect to the server
-in the configuration file stored at ``/etc/inmanta/inmanta.d/server.cfg``.
+Set this value to the hostname or IP address that other components (e.g. the :term:`resource scheduler<resource scheduler>`)
+use to connect to the server, in the configuration file stored at ``/etc/inmanta/inmanta.d/server.cfg``.
 
 .. code-block:: text
 
@@ -407,7 +400,7 @@ Step 7: Configure ssh of the inmanta user
 -----------------------------------------
 
 The inmanta user that runs the server needs a working ssh client. This client is required to checkout git repositories over
-ssh and if the remote agent is used.
+ssh.
 
 1. Provide the inmanta user with one or more private keys:
 
@@ -437,8 +430,8 @@ ssh and if the remote agent is used.
 
     sudo chown inmanta:inmanta /var/lib/inmanta/.ssh/config
 
-3. Add the public key to any git repositories and save if to include in configuration models that require remote agents.
-4. Test if you can login into a machine that has the public key and make sure ssh does not show you any prompts to store
+3. Add the public key to all relevant git repositories and save it.
+4. Test if you can clone a git repo that has the public key set and make sure ssh does not show you any prompts to store
    the host key.
 
 Step 8: Configure the server bind address
@@ -487,7 +480,7 @@ Start the Inmanta server and make sure it is started at boot.
   sudo systemctl enable --now inmanta-server
 
 
-The web-console is now available on the port and host configured in step 7.
+The web-console is now available on the port and host configured in step 8.
 
 Optional Step 11: Setup influxdb for collection of performance metrics
 ----------------------------------------------------------------------

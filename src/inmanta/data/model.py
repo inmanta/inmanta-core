@@ -15,24 +15,30 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
+import json
 import typing
+import urllib
 import uuid
 from collections import abc
 from collections.abc import Sequence
-from enum import Enum
-from itertools import chain
-from typing import ClassVar, NewType, Optional, Self, Union
+from enum import Enum, StrEnum
+from typing import ClassVar, Mapping, Optional, Self, Union
 
-import pydantic
 import pydantic.schema
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
+import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
-from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
+from inmanta.types import ArgumentTypes, JsonType
+from inmanta.types import ResourceIdStr as ResourceIdStr  # Keep in place for backwards compat with <=ISO8
+from inmanta.types import ResourceType as ResourceType  # Keep in place for backwards compat with <=ISO8
+from inmanta.types import ResourceVersionIdStr as ResourceVersionIdStr  # Keep in place for backwards compat with <=ISO8
+from inmanta.types import SimpleTypes
 
 
 def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
@@ -87,7 +93,7 @@ class SliceStatus(BaseModel):
     """
 
     name: str
-    status: dict[str, ArgumentTypes]
+    status: Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]
 
 
 class FeatureStatus(BaseModel):
@@ -127,6 +133,14 @@ class CompileData(BaseModel):
 
 
 class CompileRunBase(BaseModel):
+    """
+    :param requested_environment_variables: environment variables requested to be passed to the compiler
+    :param mergeable_environment_variables: environment variables to be passed to the compiler.
+            These env vars can be compacted over multiple compiles.
+            If multiple values are compacted, they will be joined using spaces.
+    :param environment_variables: environment variables passed to the compiler
+    """
+
     id: uuid.UUID
     remote_id: Optional[uuid.UUID] = None
     environment: uuid.UUID
@@ -136,6 +150,8 @@ class CompileRunBase(BaseModel):
     do_export: bool
     force_update: bool
     metadata: JsonType
+    mergeable_environment_variables: dict[str, str]
+    requested_environment_variables: dict[str, str]
     environment_variables: dict[str, str]
 
     partial: bool
@@ -145,6 +161,22 @@ class CompileRunBase(BaseModel):
 
     notify_failed_compile: Optional[bool] = None
     failed_compile_message: Optional[str] = None
+
+    @pydantic.field_validator("environment_variables", mode="before")
+    @classmethod
+    def validate_environment_variables(cls, v: typing.Any, info: pydantic_core.core_schema.ValidationInfo) -> typing.Any:
+        """
+        Default the environment_variables to requested_environment_variables + mergeable_environment_variables
+
+        This relies on the fact that fields are validated in the order they are declared!
+        """
+        if v is None:
+            out = {}
+            out.update(info.data["requested_environment_variables"])
+            out.update(info.data["mergeable_environment_variables"])
+            return out
+        else:
+            return v
 
 
 class CompileRun(CompileRunBase):
@@ -173,22 +205,6 @@ class CompileDetails(CompileReport):
     reports: Optional[list[CompileRunReport]] = None
 
 
-ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API
-"""
-    The resource id with the version included.
-"""
-
-ResourceIdStr = NewType("ResourceIdStr", str)  # Part of the stable API
-"""
-    The resource id without the version
-"""
-
-ResourceType = NewType("ResourceType", str)
-"""
-    The type of the resource
-"""
-
-
 class AttributeStateChange(BaseModel):
     """
     Changes in the attribute
@@ -214,6 +230,16 @@ class AttributeStateChange(BaseModel):
                 return str(v)
         return v
 
+    def __getstate__(self) -> str:
+        # make pickle use json to keep from leaking stuff
+        # Will make the objects into json-like things
+        # This method exists only to keep IPC light compatible with the json based RPC
+        return protocol.common.json_encode(self)
+
+    def __setstate__(self, state: str) -> None:
+        # This method exists only to keep IPC light compatible with the json based RPC
+        self.__dict__.update(json.loads(state))
+
 
 EnvSettingType = Union[bool, int, float, str, dict[str, Union[str, int, bool]]]
 
@@ -232,13 +258,14 @@ class Environment(BaseModel):
     repo_branch: str
     settings: dict[str, EnvSettingType]
     halted: bool
+    is_marked_for_deletion: bool = False
     description: Optional[str] = None
     icon: Optional[str] = None
 
 
 class Project(BaseModel):
     """
-    An inmanta environment.
+    An inmanta project.
     """
 
     id: uuid.UUID
@@ -310,7 +337,6 @@ class Resource(BaseModel):
     resource_version_id: ResourceVersionIdStr
     resource_id_value: str
     agent: str
-    last_deploy: Optional[datetime.datetime] = None
     attributes: JsonType
     status: const.ResourceState
     resource_set: Optional[str] = None
@@ -363,7 +389,7 @@ class LogLine(BaseModel):
     # Override the setting from the BaseModel class as such that the level field is
     # serialized using the name of the enum instead of its value. This is required
     # to make sure that data sent to the API endpoints resource_action_update
-    # and resource_deploy_done are serialized consistently using the name of the enum.
+    # and send_deploy_done are serialized consistently using the name of the enum.
     model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
 
     level: const.LogLevel
@@ -397,17 +423,19 @@ class ResourceIdDetails(BaseModel):
     resource_id_value: str
 
 
-class OrphanedResource(str, Enum):
+class ReleasedResourceState(StrEnum):
+    # Copied over from const.ResourceState
+    unavailable = "unavailable"  # This state is set by the agent when no handler is available for the resource
+    skipped = "skipped"  #
+    dry = "dry"
+    deployed = "deployed"
+    failed = "failed"
+    deploying = "deploying"
+    available = "available"
+    cancelled = "cancelled"  # When a new version is pushed, in progress deploys are cancelled
+    undefined = "undefined"  # The state of this resource is unknown at this moment in the orchestration process
+    skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
     orphaned = "orphaned"
-
-
-class StrEnum(str, Enum):
-    """Enum where members are also (and must be) strs"""
-
-
-ReleasedResourceState = StrEnum(
-    "ReleasedResourceState", [(i.name, i.value) for i in chain(const.ResourceState, OrphanedResource)]
-)
 
 
 class VersionedResource(BaseModel):
@@ -426,8 +454,41 @@ class LatestReleasedResource(VersionedResource):
 
 
 class PagingBoundaries:
-    """Represents the lower and upper bounds that should be used for the next and previous pages
-    when listing domain entities"""
+    """
+    Represents the lower and upper bounds that should be used for the next and previous pages
+    when listing domain entities.
+
+    The largest / smallest value of the current page represents respectively the min / max boundary value (exclusive) for the
+    neighbouring pages. Which represents next and which prev depends on sorting order (ASC or DESC).
+    So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "highest"
+    and "lowest".
+
+    Let's show this in an example: a user requests the following:
+     - all Resources with name > foo
+     - ASCENDING order
+     - Page size = 10
+
+    The equivalent RequestPagingBoundary will be as follows:
+        ```
+        RequestPagingBoundary:
+            start = foo
+            end = None
+        ```
+
+    The fetched data will be: [foo1 ... foo10]
+
+    But the Pagingboundary will be constructed this way:
+        ```
+        Pagingboundary:
+            end = foo1
+            start = foo10 # Reversed because these are meant to map to like-named fields on neighbouring RequestedPagingBoundary
+        ```
+
+    :param start: largest value of current page for the primary sort column.
+    :param end: smallest value of current page for the primary sort column.
+    :param first_id: largest value of current page for the secondary sort column, if there is one.
+    :param last_id: smallest value of current page for the secondary sort column, if there is one.
+    """
 
     def __init__(
         self,
@@ -556,6 +617,7 @@ class Parameter(BaseModel):
 
 class Fact(Parameter):
     resource_id: ResourceIdStr
+    expires: bool = True
 
 
 class Agent(BaseModel):
@@ -603,13 +665,11 @@ class DesiredStateVersion(BaseModel):
     status: const.DesiredStateVersionStatus
 
 
-class NoPushTriggerMethod(str, Enum):
+class PromoteTriggerMethod(StrEnum):
+    # partly copies from const.AgentTriggerMethod
+    push_incremental_deploy = "push_incremental_deploy"
+    push_full_deploy = "push_full_deploy"
     no_push = "no_push"
-
-
-PromoteTriggerMethod = StrEnum(
-    "PromoteTriggerMethod", [(i.name, i.value) for i in chain(const.AgentTriggerMethod, NoPushTriggerMethod)]
-)
 
 
 class DryRun(BaseModel):
@@ -647,7 +707,7 @@ class Notification(BaseModel):
     title: str
     message: str
     severity: const.NotificationSeverity
-    uri: str
+    uri: Optional[str] = None
     read: bool
     cleared: bool
 
@@ -693,6 +753,12 @@ class User(BaseModel):
     auth_method: AuthMethod
 
 
+class CurrentUser(BaseModel):
+    """Information about the current logged in user"""
+
+    username: str
+
+
 class LoginReturn(BaseModel):
     """
     Login information
@@ -705,28 +771,60 @@ class LoginReturn(BaseModel):
     user: User
 
 
+def _check_resource_id_str(v: str) -> ResourceIdStr:
+    if resources.Id.is_resource_id(v):
+        return ResourceIdStr(v)
+    raise ValueError("Invalid id for resource %s" % v)
+
+
+ResourceId: typing.TypeAlias = typing.Annotated[ResourceIdStr, pydantic.AfterValidator(_check_resource_id_str)]
+
+
 class DiscoveredResource(BaseModel):
     """
     :param discovered_resource_id: The name of the resource
     :param values: The actual resource
+    :param managed_resource_uri: URI of the resource with the same ID that is already
+        managed by the orchestrator e.g. "/api/v2/resource/<rid>". Or None if the resource is not managed.
+    :param discovery_resource_id: Resource id of the (managed) discovery resource that reported this
+        discovered resource.
     """
 
-    discovered_resource_id: ResourceIdStr
+    discovered_resource_id: ResourceId
     values: dict[str, object]
+    managed_resource_uri: Optional[str] = None
 
-    @field_validator("discovered_resource_id")
-    @classmethod
-    def discovered_resource_id_is_resource_id(cls, v: str) -> str:
-        if resources.Id.is_resource_id(v):
-            return v
-        raise ValueError(f"id {v} is not of type ResourceIdStr")
+    discovery_resource_id: Optional[ResourceId]
 
-    def to_dao(self, env: uuid) -> "data.DiscoveredResource":
+    @computed_field  # type: ignore[misc]
+    @property
+    def discovery_resource_uri(self) -> str | None:
+        if self.discovery_resource_id is None:
+            return None
+        return f"/api/v2/resource/{urllib.parse.quote(self.discovery_resource_id, safe='')}"
+
+
+class LinkedDiscoveredResource(DiscoveredResource):
+    """
+    DiscoveredResource linked to the discovery resource that discovered it.
+
+    :param discovery_resource_id: Resource id of the (managed) discovery resource that reported this
+           discovered resource.
+    """
+
+    # This class is used as API input. Its behaviour can be directly incorporated into the DiscoveredResource parent class
+    # when providing the id of the discovery resource is mandatory for all discovered resource. Ticket link:
+    # https://github.com/inmanta/inmanta-core/issues/8004
+
+    discovery_resource_id: ResourceId
+
+    def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
         return data.DiscoveredResource(
             discovered_resource_id=self.discovered_resource_id,
             values=self.values,
             discovered_at=datetime.datetime.now(),
             environment=env,
+            discovery_resource_id=self.discovery_resource_id,
         )
 
 
@@ -785,3 +883,82 @@ class PipConfig(BaseModel):
 
 
 LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
+
+
+class Discrepancy(BaseModel):
+    """
+    Records a discrepancy between the state as persisted in the database and
+    the in-memory state in the scheduler. Either model-wide when no
+    resource id is specified (e.g. when model versions are mismatched)
+    or for a specific resource.
+
+    :param rid: If set, this discrepancy is specific to this resource.
+        If left unset, this discrepancy is not specific to any particular resource.
+    :param field: If set, specifies on which field this discrepancy was detected.
+        If left unset, and a rid is specified, the discrepancy was detected on the
+        resource level i.e. it is missing from either the db or the scheduler.
+    :param expected: User-facing message denoting the expected state (i.e. as persisted
+        in the DB).
+    :param actual: User-facing message denoting the actual state (i.e. in-memory state
+        in the scheduler).
+
+    """
+
+    rid: ResourceIdStr | None
+    field: str | None
+    expected: str
+    actual: str
+
+
+class SchedulerStatusReport(BaseModel):
+    """
+    Status report for the scheduler self-check
+
+    :param scheduler_state: In-memory representation of the resources in the scheduler
+    :param db_state: Desired state of the resources as persisted in the database
+    :param discrepancies: Discrepancies between the in-memory representation of the resources
+        and their state in the database.
+    """
+
+    # Can't type properly because of current module structure
+    scheduler_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceState
+    db_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceIntent
+    resource_states: Mapping[ResourceIdStr, const.ResourceState]
+    discrepancies: list[Discrepancy] | dict[ResourceIdStr, list[Discrepancy]]
+
+
+class DataBaseReport(BaseModel):
+    """
+    :param max_pool: maximal pool size
+    :param free_pool: number of connections not in use in the pool
+    :param open_connections: number of connections currently open
+    :param free_connections: number of connections currently open and not in use
+    :param pool_exhaustion_time: nr of seconds since start we observed the pool to be exhausted
+    """
+
+    connected: bool
+    database: str
+    host: str
+    max_pool: int
+    free_pool: int
+    open_connections: int
+    free_connections: int
+    pool_exhaustion_time: float
+
+    def __add__(self, other: "DataBaseReport") -> "DataBaseReport":
+        if not isinstance(other, DataBaseReport):
+            return NotImplemented
+        if other.database != self.database:
+            return NotImplemented
+        if other.host != self.host:
+            return NotImplemented
+        return DataBaseReport(
+            connected=self.connected and other.connected,
+            database=self.database,
+            host=self.host,
+            max_pool=self.max_pool + other.max_pool,
+            free_pool=self.free_pool + other.free_pool,
+            open_connections=self.open_connections + other.open_connections,
+            free_connections=self.free_connections + other.free_connections,
+            pool_exhaustion_time=self.pool_exhaustion_time + other.pool_exhaustion_time,
+        )

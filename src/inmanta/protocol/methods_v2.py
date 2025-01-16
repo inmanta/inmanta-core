@@ -17,18 +17,20 @@
 
     Module defining the v2 rest api
 """
+
 import datetime
 import uuid
 from typing import Literal, Optional, Union
 
-from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
+import inmanta.types
+from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
-from inmanta.data.model import DiscoveredResource, PipConfig, ResourceIdStr
+from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig
 from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
 from inmanta.protocol.openapi.model import OpenAPI
-from inmanta.types import PrimitiveTypes
+from inmanta.types import PrimitiveTypes, ResourceIdStr
 
 
 @typedmethod(
@@ -266,7 +268,7 @@ def resume_environment(tid: uuid.UUID) -> None:
 )
 def environment_clear(id: uuid.UUID) -> None:
     """
-    Clear all data from this environment.
+    Clear all data from this environment. The environment will be temporarily halted during the decommissioning process.
 
     :param id: The uuid of the environment.
 
@@ -392,6 +394,55 @@ def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> Ret
 
 
 @typedmethod(
+    path="/scheduler_status",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_scheduler_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
+    """
+    Inspect the scheduler state from the given environment.
+
+    :param tid: The id of the environment in which to inspect the scheduler.
+
+    """
+
+
+@typedmethod(
+    path="/scheduler/state",
+    operation="GET",
+    server_agent=True,
+    enforce_auth=False,
+    arg_options=methods.ENV_OPTS,
+    client_types=[],
+    api_version=2,
+)
+def trigger_get_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
+    """
+    Get a snapshot of the scheduler state
+
+    :param tid: The id of the environment.
+    """
+
+
+@typedmethod(
+    path="/scheduler/timers",
+    operation="POST",
+    server_agent=True,
+    timeout=5,
+    arg_options=methods.AGENT_ENV_OPTS,
+    client_types=[],
+    reply=False,
+    enforce_auth=False,
+)
+def notify_timer_update(tid: uuid.UUID) -> None:
+    """
+    Notify the scheduler of a change in the timer settings
+    """
+
+
+@typedmethod(
     path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
 def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
@@ -484,12 +535,12 @@ def get_agent_process_details(tid: uuid.UUID, id: uuid.UUID, report: bool = Fals
     """
 
 
-@typedmethod(path="/agentmap", api=False, server_agent=True, operation="POST", client_types=[], api_version=2)
-def update_agent_map(agent_map: dict[str, str]) -> None:
+@typedmethod(
+    path="/db_status", api=False, server_agent=True, enforce_auth=False, operation="POST", client_types=[], api_version=2
+)
+def get_db_status() -> DataBaseReport:
     """
-    Notify an agent about the fact that the autostart_agent_map has been updated.
-
-    :param agent_map: The content of the new autostart_agent_map
+    Get a report of the DB connection pool status
     """
 
 
@@ -521,6 +572,7 @@ def get_resource_actions(
     action_id: Optional[uuid.UUID] = None,
     first_timestamp: Optional[datetime.datetime] = None,
     last_timestamp: Optional[datetime.datetime] = None,
+    exclude_changes: Optional[list[Change]] = None,
 ) -> ReturnValue[list[model.ResourceAction]]:
     """
     Return resource actions matching the search criteria.
@@ -539,69 +591,15 @@ def get_resource_actions(
     :param last_timestamp: Limit the results to resource actions that started earlier
             than the value of this parameter (exclusive).
             Only the first_timestamp or last_timestamp parameter should be supplied
-    :return: the list of matching Resource Actions in a descending order according to the 'started' timestamp.
-            If a limit was specified, also return the links to the next and previous pages.
-            The "next" page always refers to the actions that started earlier,
-            while the "prev" page refers to actions that started later.
+    :param exclude_changes: only return ResourceActions where the change type is different from the one in this list.
+    :return: The list of matching Resource Actions.
+            The order is ascending if first_timestamp is provided, otherwise descending.
+            If a limit is specified, also return links to the next and previous pages.
+            The "next" page refers to actions that started earlier, while the "prev" page refers to actions that started later.
+
 
     :raises BadRequest: When the supplied parameters are not valid.
 
-    """
-
-
-@typedmethod(
-    path="/resource/<rvid>/deploy/done",
-    operation="POST",
-    agent_server=True,
-    arg_options={**methods.ENV_OPTS, **methods.RVID_OPTS},
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def resource_deploy_done(
-    tid: uuid.UUID,
-    rvid: model.ResourceVersionIdStr,
-    action_id: uuid.UUID,
-    status: ResourceState,
-    messages: list[model.LogLine] = [],
-    changes: dict[str, model.AttributeStateChange] = {},
-    change: Optional[Change] = None,
-) -> None:
-    """
-    Report to the server that an agent has finished the deployment of a certain resource.
-
-    :param tid: The id of the environment the resource belongs to
-    :param rvid: The resource version id of the resource for which the deployment is finished.
-    :param action_id: A unique ID associated with this resource deployment action. This should be the same ID that was
-                      passed to the `/resource/<resource_id>/deploy/start` API call.
-    :param status: The current status of the resource (if known)
-    :param messages: A list of log entries produced by the deployment action.
-    :param changes: A dict of changes to this resource. The key of this dict indicates the attributes/fields that
-                   have been changed. The value contains the new value and/or the original value.
-    :param change: The type of change that was done the given resource.
-    """
-
-
-@typedmethod(
-    path="/resource/<rvid>/deploy/start",
-    operation="POST",
-    agent_server=True,
-    arg_options={**methods.ENV_OPTS, **methods.RVID_OPTS},
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def resource_deploy_start(
-    tid: uuid.UUID,
-    rvid: model.ResourceVersionIdStr,
-    action_id: uuid.UUID,
-) -> dict[model.ResourceVersionIdStr, ResourceState]:
-    """
-    Report to the server that the agent will start the deployment of the given resource.
-
-    :param tid: The id of the environment the resource belongs to
-    :param rvid: The resource version id of the resource for which the deployment will start
-    :param action_id: A unique id used to track the action of this deployment
-    :return: A dict mapping the resource version id of each dependency of resource_id to
-             the last deployment status of that resource.
     """
 
 
@@ -616,9 +614,9 @@ def resource_deploy_start(
 )
 def get_resource_events(
     tid: uuid.UUID,
-    rvid: model.ResourceVersionIdStr,
+    rvid: inmanta.types.ResourceVersionIdStr,
     exclude_change: Optional[Change] = None,
-) -> dict[model.ResourceIdStr, list[model.ResourceAction]]:
+) -> dict[inmanta.types.ResourceIdStr, list[model.ResourceAction]]:
     """
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
     successful deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in
@@ -646,7 +644,7 @@ def get_resource_events(
 )
 def resource_did_dependency_change(
     tid: uuid.UUID,
-    rvid: model.ResourceVersionIdStr,
+    rvid: inmanta.types.ResourceVersionIdStr,
 ) -> bool:
     """
     Returns True iff this resources' events indicate a change in its dependencies since the resource's last deployment.
@@ -665,8 +663,8 @@ def resource_did_dependency_change(
 def resource_list(
     tid: uuid.UUID,
     limit: Optional[int] = None,
-    first_id: Optional[model.ResourceVersionIdStr] = None,
-    last_id: Optional[model.ResourceVersionIdStr] = None,
+    first_id: Optional[inmanta.types.ResourceVersionIdStr] = None,
+    last_id: Optional[inmanta.types.ResourceVersionIdStr] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
     filter: Optional[dict[str, list[str]]] = None,
@@ -719,7 +717,7 @@ def resource_list(
 @typedmethod(
     path="/resource/<rid>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def resource_details(tid: uuid.UUID, rid: model.ResourceIdStr) -> model.ReleasedResourceDetails:
+def resource_details(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> model.ReleasedResourceDetails:
     """
     :param tid: The id of the environment from which the resource's details are being requested.
     :param rid: The unique identifier (ResourceIdStr) of the resource. This value specifies the particular resource
@@ -735,7 +733,7 @@ def resource_details(tid: uuid.UUID, rid: model.ResourceIdStr) -> model.Released
 )
 def resource_history(
     tid: uuid.UUID,
-    rid: model.ResourceIdStr,
+    rid: inmanta.types.ResourceIdStr,
     limit: Optional[int] = None,
     first_id: Optional[str] = None,
     last_id: Optional[str] = None,
@@ -771,7 +769,7 @@ def resource_history(
 )
 def resource_logs(
     tid: uuid.UUID,
-    rid: model.ResourceIdStr,
+    rid: inmanta.types.ResourceIdStr,
     limit: Optional[int] = None,
     start: Optional[datetime.datetime] = None,
     end: Optional[datetime.datetime] = None,
@@ -830,7 +828,7 @@ def resource_logs(
 @typedmethod(
     path="/resource/<rid>/facts", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def get_facts(tid: uuid.UUID, rid: model.ResourceIdStr) -> list[model.Fact]:
+def get_facts(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> list[model.Fact]:
     """
     Get the facts related to a specific resource. The results are sorted alphabetically by name.
     :param tid: The id of the environment
@@ -847,7 +845,7 @@ def get_facts(tid: uuid.UUID, rid: model.ResourceIdStr) -> list[model.Fact]:
     client_types=[ClientType.api],
     api_version=2,
 )
-def get_fact(tid: uuid.UUID, rid: model.ResourceIdStr, id: uuid.UUID) -> model.Fact:
+def get_fact(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr, id: uuid.UUID) -> model.Fact:
     """
     Get one specific fact
     :param tid: The id of the environment
@@ -971,11 +969,7 @@ def promote_desired_state_version(
 
     :param tid: The id of the environment
     :param version: The number of the version to promote
-    :param trigger_method: If set to 'push_incremental_deploy' or 'push_full_deploy',
-        the agents will perform an incremental or full deploy, respectively.
-        If set to 'no_push', the new version is not pushed to the agents.
-        If the parameter is not set (or set to null), the new version is pushed and
-        the environment setting 'environment_agent_trigger_method' decides if the deploy should be full or incremental
+    :param trigger_method: [DEPRECATED] This argument is ignored.
     """
 
 
@@ -990,8 +984,8 @@ def get_resources_in_version(
     tid: uuid.UUID,
     version: int,
     limit: Optional[int] = None,
-    first_id: Optional[model.ResourceVersionIdStr] = None,
-    last_id: Optional[model.ResourceVersionIdStr] = None,
+    first_id: Optional[inmanta.types.ResourceVersionIdStr] = None,
+    last_id: Optional[inmanta.types.ResourceVersionIdStr] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
     filter: Optional[dict[str, list[str]]] = None,
@@ -1063,7 +1057,9 @@ def get_diff_of_versions(
     client_types=[ClientType.api],
     api_version=2,
 )
-def versioned_resource_details(tid: uuid.UUID, version: int, rid: model.ResourceIdStr) -> model.VersionedResourceDetails:
+def versioned_resource_details(
+    tid: uuid.UUID, version: int, rid: inmanta.types.ResourceIdStr
+) -> model.VersionedResourceDetails:
     """
     :param tid: The id of the environment
     :param version: The version number of the resource
@@ -1119,6 +1115,34 @@ def get_parameters(
 
 
 @typedmethod(
+    path="/parameters/<name>",
+    operation="PUT",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api, ClientType.compiler, ClientType.agent],
+    api_version=2,
+)
+def set_parameter(
+    tid: uuid.UUID,
+    name: str,
+    source: ParameterSource,
+    value: str,
+    metadata: Optional[dict[str, str]] = None,
+    recompile: bool = False,
+) -> ReturnValue[model.Parameter]:
+    """
+    Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
+    Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
+
+    :param tid: The id of the environment
+    :param name: The name of the parameter
+    :param source: The source of the parameter.
+    :param value: The value of the parameter
+    :param metadata: Optional. Metadata about the parameter
+    :param recompile: Optional. Whether to trigger a recompile if the value of the parameter changed.
+    """
+
+
+@typedmethod(
     path="/facts",
     operation="GET",
     arg_options=methods.ENV_OPTS,
@@ -1152,12 +1176,45 @@ def get_all_facts(
                 The following options are available:
                 name: filter by the name of the fact
                 resource_id: filter by the resource_id of the fact
+                expires: filter on whether the fact expires or not
     :param sort: Return the results sorted according to the parameter value.
                 The following sorting attributes are supported: 'name', 'resource_id'.
                 The following orders are supported: 'asc', 'desc'
     :return: A list of all matching facts
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/facts/<name>",
+    operation="PUT",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api, ClientType.compiler, ClientType.agent],
+    api_version=2,
+)
+def set_fact(
+    tid: uuid.UUID,
+    name: str,
+    source: ParameterSource,
+    value: str,
+    resource_id: str,
+    metadata: Optional[dict[str, str]] = None,
+    recompile: bool = False,
+    expires: Optional[bool] = True,
+) -> ReturnValue[model.Fact]:
+    """
+    Set a fact on the server. If the fact is a tracked unknown, it will trigger a recompile on the server.
+    Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
+
+    :param tid: The id of the environment
+    :param name: The name of the fact
+    :param source: The source of the fact
+    :param value: The value of the fact
+    :param resource_id: The resource this fact belongs to
+    :param metadata: Optional. Metadata about the fact
+    :param recompile: Optional. Whether to trigger a recompile if the value of the fact changed.
+    :param expires: Optional. If the fact should expire or not. By default, facts expire.
     """
 
 
@@ -1231,6 +1288,9 @@ def list_notifications(
 ) -> list[model.Notification]:
     """
     List the notifications in an environment.
+
+    The returned notification objects may carry links to other objects, e.g. a compile report. The full list of supported links
+    can be found :ref:`here <api_self_referencing_links>`.
 
     :param tid: The id of the environment
     :param limit: Limit the number of notifications that are returned
@@ -1384,7 +1444,9 @@ def get_environment_metrics(
 
 @typedmethod(path="/login", operation="POST", client_types=[ClientType.api], enforce_auth=False, api_version=2)
 def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
-    """Login a user. When the login succeeds an authentication header is returned with the Bearer token set.
+    """Login a user.
+
+     When the login succeeds an authentication header is returned with the Bearer token set.
 
     :param username: The user to login
     :param password: The password of this user
@@ -1397,6 +1459,14 @@ def list_users() -> list[model.User]:
     """List all users
 
     :return: A list of all users"""
+
+
+@typedmethod(path="/current_user", operation="GET", client_types=[ClientType.api], api_version=2)
+def get_current_user() -> model.CurrentUser:
+    """Get the current logged in user (based on the provided JWT) and server auth settings
+
+    :raises NotFound: Raised when server authentication is not enabled
+    """
 
 
 @typedmethod(path="/user/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
@@ -1441,13 +1511,17 @@ def set_password(username: str, password: str) -> None:
     varkw=True,
 )
 def discovered_resource_create(
-    tid: uuid.UUID, discovered_resource_id: str, **kwargs: object  # bypass the type checking for the values
+    tid: uuid.UUID,
+    discovered_resource_id: str,
+    discovery_resource_id: str,
+    **kwargs: object,  # bypass the type checking for the values
 ) -> None:
     """
     create a discovered resource.
 
     :param tid: The id of the environment this resource belongs to
     :param discovered_resource_id: The id of the discovered_resource
+    :param discovery_resource_id: The id of the discovery resource responsible for discovering this resource
     :param **kwargs: The following arguments are supported:
            values: The values associated with the discovered_resource
     """
@@ -1461,7 +1535,7 @@ def discovered_resource_create(
     client_types=[ClientType.agent],
     api_version=2,
 )
-def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: list[DiscoveredResource]) -> None:
+def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: list[LinkedDiscoveredResource]) -> None:
     """
     create multiple discovered resource in the DB
     :param tid: The id of the environment this resource belongs to
@@ -1498,8 +1572,16 @@ def discovered_resources_get_batch(
     start: Optional[str] = None,
     end: Optional[str] = None,
     sort: str = "discovered_resource_id.asc",
+    filter: Optional[dict[str, list[str]]] = None,
 ) -> list[model.DiscoveredResource]:
     """
+    Get a list of discovered resources.
+
+    The discovery resource responsible for discovering each resource is included.
+    For resources that the orchestrator is already managing, a link to the corresponding resource is provided. The full list of
+    supported links can be found :ref:`here <api_self_referencing_links>`.
+
+
     :param tid: The id of the environment this resource belongs to
     :param limit: Limit the number of instances that are returned
     :param start: The lower limit for the order by column (exclusive).
@@ -1509,6 +1591,15 @@ def discovered_resources_get_batch(
     :param sort: Return the results sorted according to the parameter value.
             The following sorting attributes are supported: 'discovered_resource_id'.
             The following orders are supported: 'asc', 'desc'
+    :param filter: Filter the list of returned resources.
+        Default behavior: return all discovered resources.
+        Filtering by 'managed' is supported:
+
+            - filter.managed=true: only return discovered resources that the orchestrator is already aware of i.e.
+              resources that are present in any released configuration model of environment tid.
+            - filter.managed=false: only return discovered resources that the orchestrator is unaware of i.e. resources
+              that are not part of any released configuration model of environment tid.
+
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid

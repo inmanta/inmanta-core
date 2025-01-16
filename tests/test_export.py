@@ -15,15 +15,17 @@
 
     Contact: code@inmanta.com
 """
+
 import json
 import logging
 import os
+from collections.abc import Mapping
 from typing import Optional
 
 import pytest
 
 import inmanta.resources
-from inmanta import config, const
+from inmanta import config, const, module
 from inmanta.ast import CompilerException, ExternalException
 from inmanta.const import ResourceState
 from inmanta.data import Environment, Resource
@@ -35,9 +37,9 @@ from utils import LogSequence
 
 async def assert_resource_set_assignment(environment, assignment: dict[str, Optional[str]]) -> None:
     """
-    Verify whether the resources on the server are assignment to the resource sets given via the assignment argument.
+    Verify whether the resources on the server are assigned to the resource sets given via the assignment argument.
 
-    :param environment
+    :param environment: environment uuid
     :param assignment: Map the value of name attribute of resource Res to the resource set that resource is expected to
                        belong to.
     """
@@ -47,18 +49,71 @@ async def assert_resource_set_assignment(environment, assignment: dict[str, Opti
     assert actual_assignment == assignment
 
 
+def test_attribute_mapping_export(snippetcompiler):
+    """
+    Verify Python-defined attribute mapping between model resource and exported resource.
+    """
+    snippetcompiler.setup_for_snippet(
+        """\
+        import exp
+
+        exp::Test(name="a", agent="x")
+        exp::Test(name="b", agent="x", send_event=false, receive_events=true)
+        exp::Test(name="c", agent="x", send_event=true, receive_events=false)
+        """,
+        autostd=True,
+        project_requires=[module.InmantaModuleRequirement.parse("std>=6.1")],
+    )
+
+    _version, json_value = snippetcompiler.do_export()
+
+    assert len(json_value) == 3
+    resources: Mapping[str, Mapping[str, object]] = {
+        resource.name: {
+            # base resource mapping
+            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: getattr(resource, const.RESOURCE_ATTRIBUTE_SEND_EVENTS),
+            const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: getattr(resource, const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS),
+            # custom mapping
+            "mapped": resource.mapped,
+        }
+        for resource in json_value.values()
+    }
+    assert resources == {
+        "a": {
+            "mapped": "mapped_value_a",
+            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: False,
+            const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: True,
+        },
+        "b": {
+            "mapped": "mapped_value_b",
+            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: False,
+            const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: True,
+        },
+        "c": {
+            "mapped": "mapped_value_c",
+            const.RESOURCE_ATTRIBUTE_SEND_EVENTS: True,
+            const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: False,
+        },
+    }
+
+
 def test_id_mapping_export(snippetcompiler):
+    """
+    Verify id mapping for a virtual id value, i.e. not a field of the resource.
+    """
     snippetcompiler.setup_for_snippet(
         """import exp
 
         exp::Test(name="a", agent="b")
-        """
+        """,
+        autostd=True,
     )
 
     _version, json_value = snippetcompiler.do_export()
 
     assert len(json_value) == 1
     resource = list(json_value.values())[0]
+    assert not hasattr(resource, resource.id.attribute)
     assert resource.id.attribute_value == "test_value_a"
 
 
@@ -68,7 +123,8 @@ def test_unknown_agent(snippetcompiler):
         import tests
 
         exp::Test(name="a", agent=tests::unknown())
-        """
+        """,
+        autostd=True,
     )
     _version, json_value = snippetcompiler.do_export()
 
@@ -81,7 +137,8 @@ def test_unknown_attribute_value(snippetcompiler):
         import tests
 
         exp::Test(name=tests::unknown(), agent="b")
-        """
+        """,
+        autostd=True,
     )
     _version, json_value = snippetcompiler.do_export()
 
@@ -94,7 +151,8 @@ def test_ignore_resource(snippetcompiler):
         import tests
 
         exp::Test(name="a", agent="b", managed=false)
-        """
+        """,
+        autostd=True,
     )
     _version, json_value = snippetcompiler.do_export()
 
@@ -109,7 +167,8 @@ def test_ignore_resource_requires(snippetcompiler, caplog):
         a = exp::Test(name="a", agent="aa", managed=false)
         b = exp::Test(name="b", agent="aa", requires=a)
         c = exp::Test(name="c", agent="aa", requires=b)
-        """
+        """,
+        autostd=True,
     )
     _version, json_value = snippetcompiler.do_export()
     assert len(json_value) == 2
@@ -144,9 +203,9 @@ def test_unknown_in_id_requires(snippetcompiler, caplog):
         a = exp::Test(name=tests::unknown(), agent="aa")
         b = exp::Test(name="b", agent="aa", requires=a)
         c = exp::Test(name="c", agent="aa", requires=b)
-        """
+        """,
+        autostd=True,
     )
-    config.Config.set("unknown_handler", "default", "prune-resource")
     _version, json_value = snippetcompiler.do_export()
 
     assert len(json_value) == 2
@@ -181,9 +240,9 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
         a = exp::Test(name="a", agent="aa", field1=tests::unknown())
         b = exp::Test(name="b", agent="aa", requires=a)
         c = exp::Test(name="c", agent="aa", requires=b)
-        """
+        """,
+        autostd=True,
     )
-    config.Config.set("unknown_handler", "default", "prune-resource")
     _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 3
@@ -205,6 +264,7 @@ async def test_empty_server_export(snippetcompiler, server, client, environment)
             h = std::Host(name="test", os=std::linux)
         """,
         extra_index_url=["example.inmanta.com/index"],
+        autostd=True,
     )
     await snippetcompiler.do_export_and_deploy()
 
@@ -222,9 +282,10 @@ async def test_empty_server_export(snippetcompiler, server, client, environment)
 async def test_server_export(snippetcompiler, server: Server, client, environment):
     snippetcompiler.setup_for_snippet(
         """
-            h = std::Host(name="test", os=std::linux)
-            f = std::ConfigFile(host=h, path="/etc/motd", content="test")
-        """
+            import std::testing
+            f = std::testing::NullResource(name="test")
+        """,
+        autostd=True,
     )
     await snippetcompiler.do_export_and_deploy()
 
@@ -256,7 +317,8 @@ async def test_dict_export_server(snippetcompiler, server, client, environment):
 import exp
 
 a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
-"""
+""",
+        autostd=True,
     )
 
     await snippetcompiler.do_export_and_deploy()
@@ -278,7 +340,8 @@ def test_dict_export(snippetcompiler):
 import exp
 
 a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
-"""
+""",
+        autostd=True,
     )
     _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
@@ -291,7 +354,8 @@ def test_export_null_in_collection(snippetcompiler):
 import exp
 
 a = exp::Test2(mydict={"a": null}, mylist=["a",null])
-"""
+""",
+        autostd=True,
     )
     _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
@@ -310,7 +374,8 @@ import tests
 
 a = exp::Test2(mydict={"a": tests::unknown()}, mylist=["a"])
 b = exp::Test2(name="idb", mydict={"a": "b"}, mylist=["a", tests::unknown()])
-"""
+""",
+        autostd=True,
     )
     _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
@@ -327,7 +392,8 @@ import exp
 a = exp::RequiresTest()
 b = exp::RequiresTest(name="idb")
 a.requires += b
-"""
+""",
+        autostd=True,
     )
     with pytest.raises(DependencyCycleException):
         snippetcompiler.do_export()
@@ -339,7 +405,8 @@ def test_bad_value_in_dep_mgmr(snippetcompiler):
 import exp
 
 a = exp::RequiresTest(do_break=1)
-"""
+""",
+        autostd=True,
     )
     with pytest.raises(Exception, match="Invalid id for resource xyz"):
         snippetcompiler.do_export()
@@ -351,7 +418,8 @@ def test_bad_value_in_dep_mgmr_2(snippetcompiler):
 import exp
 
 a = exp::RequiresTest(do_break=2)
-"""
+""",
+        autostd=True,
     )
     with pytest.raises(
         Exception,
@@ -367,7 +435,8 @@ def test_bad_value_in_dep_mgmr_3(snippetcompiler):
 import exp
 
 a = exp::RequiresTest(do_break=3)
-"""
+""",
+        autostd=True,
     )
     with pytest.raises(
         Exception,
@@ -392,6 +461,7 @@ x = exp::WrappedProxyTest(
     }
 )
         """,
+        autostd=True,
     )
     snippetcompiler.do_export()
     tmp_file: str = os.path.join(snippetcompiler.project_dir, "dump.json")
@@ -419,7 +489,8 @@ exp::WrappedSelfTest(
     name = "my_wrapped_self_test",
     agent = "my_agent",
 )
-        """
+        """,
+        autostd=True,
     )
     with pytest.raises(ExternalException) as e:
         snippetcompiler.do_export()
@@ -447,7 +518,8 @@ exp::Test3(
         uri="local:",
     ),
 )
-        """
+        """,
+        autostd=True,
     )
     with pytest.raises(ExternalException) as e:
         snippetcompiler.do_export()
@@ -457,7 +529,8 @@ exp::Test3(
     )
 
 
-async def test_resource_set(snippetcompiler, modules_dir: str, environment, client, agent) -> None:
+@pytest.mark.parametrize("soft_delete", [True, False])
+async def test_resource_set(snippetcompiler, modules_dir: str, environment, client, agent, soft_delete: bool) -> None:
     """
     Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
     """
@@ -470,10 +543,12 @@ async def test_resource_set(snippetcompiler, modules_dir: str, environment, clie
         snippetcompiler.setup_for_snippet(
             model,
             extra_index_url=["example.inmanta.com/index"],
+            autostd=True,
         )
         await snippetcompiler.do_export_and_deploy(
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
+            soft_delete=soft_delete,
         )
 
     # Full compile
@@ -537,9 +612,54 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         },
     )
 
+    # Test soft_delete option
+
+    model = """
+        import test_resources
+
+        g = test_resources::Resource(value="A", agent="A", key="the_resource_g")
+        std::ResourceSet(name="resource_set_5", resources=[g])
+
+        """
+    if not soft_delete:
+        with pytest.raises(
+            Exception,
+            match=(
+                "Invalid request: Following resource sets are present in the removed resource"
+                " sets and in the resources that are exported: {'resource_set_5'}"
+            ),
+        ):
+            await export_model(
+                model=model,
+                partial_compile=True,
+                resource_sets_to_remove=["resource_set_5"],
+            )
+
+    else:
+        await export_model(
+            model=model,
+            partial_compile=True,
+            resource_sets_to_remove=["resource_set_5"],
+        )
+        await assert_resource_set_assignment(
+            environment,
+            assignment={
+                "the_resource_a": "resource_set_1",
+                "the_resource_c2": "resource_set_1",
+                "the_resource_d": "resource_set_3",
+                "the_resource_e": "resource_set_3",
+                "the_resource_f": "resource_set_4",
+                "the_resource_g": "resource_set_5",  # Check it didn't get removed
+                "the_resource_y": None,
+                "the_resource_z": None,
+            },
+        )
+
     response = await client.list_versions(tid=environment)
     assert response.code == 200
-    assert len(response.result["versions"]) == 2
+
+    # One of the 3 partial compiles is expected to fail when soft_delete is true:
+    assert len(response.result["versions"]) == 2 + soft_delete
     last_version_nr = 0
     expected_pip_config = {
         "extra-index-url": ["example.inmanta.com/index"],
@@ -573,7 +693,10 @@ std::ResourceSet(name="resource_set_1", resources=[a])
 std::ResourceSet(name="resource_set_2", resources=[a])
 """
 
-    snippetcompiler.setup_for_snippet(model)
+    snippetcompiler.setup_for_snippet(
+        model,
+        autostd=True,
+    )
     with pytest.raises(CompilerException) as e:
         await snippetcompiler.do_export_and_deploy()
     assert str(e.value).startswith(
@@ -589,7 +712,8 @@ async def test_resource_not_exported(snippetcompiler, caplog, environment) -> No
         """
 std::ResourceSet(name="resource_set_1", resources=[std::Resource()])
 implement std::Resource using std::none
-"""
+""",
+        autostd=True,
     )
     caplog.clear()
     caplog.set_level(logging.WARNING)
@@ -616,9 +740,7 @@ async def test_empty_resource_set_removal(snippetcompiler, environment) -> None:
         partial_compile: bool,
         resource_sets_to_remove: Optional[list[str]] = None,
     ) -> None:
-        snippetcompiler.setup_for_snippet(
-            model,
-        )
+        snippetcompiler.setup_for_snippet(model, autostd=True)
         await snippetcompiler.do_export_and_deploy(
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
@@ -693,7 +815,8 @@ def test_attribute_value_of_id_has_str_type(snippetcompiler):
             id_attr=123,
             agent="internal",
         )
-        """
+        """,
+        autostd=True,
     )
     version, resource_dct = snippetcompiler.do_export()
     resources = list(resource_dct.values())
@@ -701,3 +824,23 @@ def test_attribute_value_of_id_has_str_type(snippetcompiler):
     id_attribute_value = resources[0].id.attribute_value
     assert isinstance(id_attribute_value, str)
     assert id_attribute_value == "123"
+
+
+async def test_export_duplicate(resource_container, snippetcompiler):
+    """
+    The exported should provide a compilation error when a resource is defined twice in a model
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        import test
+
+        test::Resource(key="test", value="foo")
+        test::Resource(key="test", value="bar")
+    """,
+        autostd=True,
+    )
+
+    with pytest.raises(CompilerException) as exc:
+        snippetcompiler.do_export()
+
+    assert "exists more than once in the configuration model" in str(exc.value)

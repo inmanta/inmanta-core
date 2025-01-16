@@ -1,0 +1,6 @@
+description: Fix anchormap entrypoint (language server) for imports with rename
+change-type: patch
+destination-branches: [master, iso7]
+sections:
+  bugfix: "{{description}}"
+

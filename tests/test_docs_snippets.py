@@ -16,6 +16,8 @@
     Contact: code@inmanta.com
 """
 
+import inmanta.types
+
 """
 Tests to verify correctness/compatibility of code snippets in the docs.
 """
@@ -29,8 +31,7 @@ import py
 import pytest
 
 from inmanta import data
-from inmanta.data import model
-from utils import _wait_until_deployment_finishes, v1_module_from_template
+from utils import v1_module_from_template, wait_until_deployment_finishes
 
 DOCS_DIR: str = os.path.join(os.path.dirname(__file__), "..", "docs")
 
@@ -79,7 +80,8 @@ async def test_docs_snippet_partial_compile(
         """
         Add handlers for the base model and set up the snippetcompiler.
         """
-        handlers_addition: str = f"""
+        handlers_addition: str = (
+            f"""
             import {handler_module_name} as handler
 
             # add dummy agent attribute for the handler
@@ -89,14 +91,15 @@ async def test_docs_snippet_partial_compile(
             end
             implement Host using bind_agent
         """.strip()
+        )
         full_model: str = "\n".join((base, handlers_addition))
-        snippetcompiler.setup_for_snippet(full_model, add_to_module_path=[str(tmpdir)])
+        snippetcompiler.setup_for_snippet(full_model, add_to_module_path=[str(tmpdir)], autostd=True)
 
     async def get_hosts_by_network(version: int) -> abc.Mapping[int, abc.Set[int]]:
         resources: abc.Sequence[data.Resource] = await data.Resource.get_resources_for_version(env_id, version)
         hosts_by_network: dict[int, set[int]] = defaultdict(set)
         for resource in resources:
-            if resource.resource_type == model.ResourceType("__config__::Host"):
+            if resource.resource_type == inmanta.types.ResourceType("__config__::Host"):
                 hosts_by_network[resource.attributes["network_id"]].add(resource.attributes["host_id"])
         return hosts_by_network
 
@@ -128,14 +131,12 @@ async def test_docs_snippet_partial_compile(
 
 @pytest.mark.slowtest
 async def test_docs_snippets_unmanaged_resources_basic(
-    tmpdir: py.path.local, snippetcompiler, modules_dir: str, server, client, environment: str, agent
+    tmpdir: py.path.local, snippetcompiler, modules_dir: str, server, client, environment: str, agent, clienthelper
 ) -> None:
     """
     Test the basic_example code snippets used in the documentation to explain the usage of unmanaged_resources.
     """
     result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
-    assert result.code == 200
-    result = await client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
     assert result.code == 200
 
     cf_file_path = os.path.join(os.path.dirname(__file__), "../docs/model_developers/unmanaged_resources/basic_example.cf")
@@ -168,10 +169,11 @@ async def test_docs_snippets_unmanaged_resources_basic(
         my_module::InterfaceDiscovery(host=host)
         """
     )
-    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True)
+    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True, autostd=True)
     version, _ = await snippetcompiler.do_export_and_deploy()
 
-    await _wait_until_deployment_finishes(client, environment, version=1)
+    await clienthelper.wait_for_released(version)
+    await wait_until_deployment_finishes(client, environment, version=version)
 
     result = await client.discovered_resources_get_batch(tid=environment)
     assert result.code == 200
@@ -182,14 +184,12 @@ async def test_docs_snippets_unmanaged_resources_basic(
 
 @pytest.mark.slowtest
 async def test_docs_snippets_unmanaged_resources_shared_attributes(
-    tmpdir: py.path.local, snippetcompiler, modules_dir: str, server, client, environment: str, agent
+    tmpdir: py.path.local, snippetcompiler, modules_dir: str, server, client, environment: str, agent, clienthelper
 ) -> None:
     """
     Test the shared_attributes_example code snippets used in the documentation to explain the usage of unmanaged_resources.
     """
     result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
-    assert result.code == 200
-    result = await client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
     assert result.code == 200
 
     cf_file_path = os.path.join(
@@ -232,7 +232,9 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
     snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True)
     version, _ = await snippetcompiler.do_export_and_deploy()
 
-    await _wait_until_deployment_finishes(client, environment, version=1)
+    await clienthelper.wait_for_released(version)
+
+    await wait_until_deployment_finishes(client, environment, version=version)
 
     result = await client.discovered_resources_get_batch(tid=environment)
     assert result.code == 200

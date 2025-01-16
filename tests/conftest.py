@@ -15,13 +15,30 @@
 
     Contact: code@inmanta.com
 """
+
+import copy
+import logging.config
+import pathlib
 import warnings
+from glob import glob
+from re import Pattern
+from threading import Condition
 
 from tornado.httpclient import AsyncHTTPClient
 
+import _pytest.logging
+import inmanta.deploy.state
 import toml
-from inmanta.config import AuthJWTConfig
+from inmanta import logging as inmanta_logging
+from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
+from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
+from inmanta.config import log_dir
+from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
+from inmanta.protocol import auth
+from inmanta.resources import PurgeableResource, Resource, resource
+from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
+from packaging.requirements import Requirement
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -83,39 +100,38 @@ import time
 import traceback
 import uuid
 import venv
-from collections import abc
+import weakref
+from collections import abc, defaultdict, namedtuple
 from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
-from typing import Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, Generic, Optional, Union
 
 import asyncpg
-import pkg_resources
 import psutil
 import py
 import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 
-import build.env
 import inmanta
 import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.compiler.config
 import inmanta.main
+import inmanta.server.agentmanager as agentmanager
 import inmanta.user_setup
 from inmanta import config, const, data, env, loader, protocol, resources
-from inmanta.agent import config as agent_cfg
 from inmanta.agent import handler
-from inmanta.agent.agent import Agent
+from inmanta.agent.agent_new import Agent
+from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
-from inmanta.env import CommandRunner, LocalPackagePath, VirtualEnv, mock_process_env
+from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, process_env, store_venv, swap_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
@@ -126,7 +142,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
-from inmanta.types import JsonType
+from inmanta.types import JsonType, ResourceIdStr
 from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
@@ -139,15 +155,11 @@ if PYTEST_PLUGIN_MODE:
 else:
     import utils
 
-# These elements were moved to inmanta.db.util to allow them to be used from other extensions.
-# This import statement is present to ensure backwards compatibility.
-from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, PGRestore  # noqa: F401
-from inmanta.db.util import clear_database as do_clean_hard  # noqa: F401
-from inmanta.db.util import postgres_get_custom_types as postgress_get_custom_types  # noqa: F401
-
 logger = logging.getLogger(__name__)
 
-TABLES_TO_KEEP = [x.table_name() for x in data._classes] + ["resourceaction_resource"]  # Join table
+TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
+    "resourceaction_resource",
+]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
 # before it's saved.
@@ -494,44 +506,13 @@ def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[Optional[str
 
 
 @pytest.fixture(scope="function")
-def deactive_venv():
-    old_os_path = os.environ.get("PATH", "")
-    old_prefix = sys.prefix
-    old_path = list(sys.path)
-    old_meta_path = sys.meta_path.copy()
-    old_path_hooks = sys.path_hooks.copy()
-    old_pythonpath = os.environ.get("PYTHONPATH", None)
-    old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
-    old_process_env: str = env.process_env.python_path
-    old_working_set = pkg_resources.working_set
+def deactive_venv() -> ActiveEnv:
+    snapshot = env.store_venv()
     old_available_extensions = (
         dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
     )
-
-    yield
-
-    os.environ["PATH"] = old_os_path
-    sys.prefix = old_prefix
-    sys.path = old_path
-    # reset sys.meta_path because it might contain finders for editable installs, make sure to keep the same object
-    sys.meta_path.clear()
-    sys.meta_path.extend(old_meta_path)
-    sys.path_hooks.clear()
-    sys.path_hooks.extend(old_path_hooks)
-    # Clear cache for sys.path_hooks
-    sys.path_importer_cache.clear()
-    pkg_resources.working_set = old_working_set
-    # Restore PYTHONPATH
-    if old_pythonpath is not None:
-        os.environ["PYTHONPATH"] = old_pythonpath
-    elif "PYTHONPATH" in os.environ:
-        del os.environ["PYTHONPATH"]
-    # Restore VIRTUAL_ENV
-    if old_os_venv is not None:
-        os.environ["VIRTUAL_ENV"] = old_os_venv
-    elif "VIRTUAL_ENV" in os.environ:
-        del os.environ["VIRTUAL_ENV"]
-    env.mock_process_env(python_path=old_process_env)
+    yield process_env
+    snapshot.restore()
     loader.PluginModuleFinder.reset()
     InmantaBootloader.AVAILABLE_EXTENSIONS = old_available_extensions
 
@@ -540,7 +521,7 @@ def reset_metrics():
     pyformance.set_global_registry(MetricsRegistry())
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="function")
 async def clean_reset(create_db, clean_db, deactive_venv):
     reset_all_objects()
     config.Config._reset()
@@ -577,7 +558,7 @@ def reset_all_objects():
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
     V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
-    AuthJWTConfig.reset()
+    auth.AuthJWTConfig.reset()
     InmantaLoggerConfig.clean_instance()
     AsyncHTTPClient.configure(None)
 
@@ -590,18 +571,10 @@ def disable_isolated_env_builder_cache() -> None:
 @pytest.fixture(scope="function", autouse=True)
 def restore_cwd():
     """
-    Restore the current working directory after search test.
+    Restore the current working directory after each test.
     """
     yield
     os.chdir(initial_cwd)
-
-
-@pytest.fixture(scope="function")
-def no_agent_backoff(inmanta_config: ConfigParser) -> None:
-    old_backoff = agent_cfg.agent_get_resource_backoff.get()
-    inmanta_config.set(section="config", option="agent-get-resource-backoff", value="0")
-    yield
-    inmanta_config.set(section="config", option="agent-get-resource-backoff", value=str(old_backoff))
 
 
 @pytest.fixture()
@@ -619,7 +592,7 @@ def free_socket():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def inmanta_config() -> Iterator[ConfigParser]:
+def inmanta_config(clean_reset) -> Iterator[ConfigParser]:
     config.Config.load_config()
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
     config.Config.set("auth_jwt_default", "sign", "true")
@@ -629,7 +602,7 @@ def inmanta_config() -> Iterator[ConfigParser]:
     config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
     config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
 
-    yield config.Config._get_instance()
+    yield config.Config.get_instance()
 
 
 @pytest.fixture
@@ -637,82 +610,25 @@ def server_pre_start(server_config):
     """This fixture is called by the server. Override this fixture to influence server config"""
 
 
-@pytest.fixture(scope="function")
-async def agent_multi(server_multi, environment_multi):
-    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
+@pytest.fixture
+def disable_background_jobs(monkeypatch):
+    """
+    This fixture disables the scheduling of all background jobs.
+    """
 
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
-    a = Agent(hostname="node1", environment=environment_multi, agent_map={"agent1": "localhost"}, code_loader=False)
-    await a.add_end_point_name("agent1")
-    await a.start()
-    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    class NoopScheduler(Scheduler):
+        def add_action(
+            self,
+            action: TaskMethod,
+            schedule: Union[TaskSchedule, int],
+            cancel_on_stop: bool = True,
+            quiet_mode: bool = False,
+        ) -> Optional[ScheduledTask]:
+            pass
 
-    yield a
+    monkeypatch.setattr(inmanta.server.protocol, "Scheduler", NoopScheduler)
 
-    await a.stop()
-
-
-@pytest.fixture(scope="function")
-async def agent(server, environment):
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
-    a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    await a.add_end_point_name("agent1")
-    await a.start()
-    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
-
-    yield a
-
-    await a.stop()
-
-
-@pytest.fixture(scope="function")
-async def agent_factory(server):
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
-
-    started_agents = []
-
-    async def create_agent(
-        environment: uuid.UUID,
-        hostname: Optional[str] = None,
-        agent_map: Optional[dict[str, str]] = None,
-        code_loader: bool = False,
-        agent_names: list[str] = [],
-    ) -> Agent:
-        a = Agent(hostname=hostname, environment=environment, agent_map=agent_map, code_loader=code_loader)
-        for agent_name in agent_names:
-            await a.add_end_point_name(agent_name)
-        await a.start()
-        started_agents.append(a)
-        await utils.retry_limited(lambda: a.sessionid in agentmanager.sessions, 10)
-        return a
-
-    yield create_agent
-    await asyncio.gather(*[agent.stop() for agent in started_agents])
-
-
-@pytest.fixture(scope="function")
-async def autostarted_agent(server, client, environment):
-    """Configure agent1 as an autostarted agent."""
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
-    assert result.code == 200
-    result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
-    assert result.code == 200
-    result = await client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
-    assert result.code == 200
-    # disable deploy and repair intervals
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
-    assert result.code == 200
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
-    assert result.code == 200
-    result = await client.set_setting(environment, data.AUTOSTART_ON_START, True)
-    assert result.code == 200
+    yield None
 
 
 @pytest.fixture(scope="function")
@@ -759,18 +675,25 @@ def log_state_tcp_ports(request, log_file):
 
 
 @pytest.fixture(scope="function")
-async def server_config(event_loop, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
+async def server_config(
+    inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory, auto_start_agent, no_agent
+):
     reset_metrics()
+    agentmanager.assert_no_start_scheduler = not auto_start_agent
+    agentmanager.no_start_scheduler = no_agent
 
     with tempfile.TemporaryDirectory() as state_dir:
         port = str(unused_tcp_port_factory())
+
+        # Config.set() always expects a string value
+        pg_password = "" if postgres_db.password is None else postgres_db.password
 
         config.Config.set("database", "name", database_name)
         config.Config.set("database", "host", "localhost")
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
-        config.Config.set("database", "password", postgres_db.password)
-        config.Config.set("database", "connection_timeout", str(3))
+        config.Config.set("database", "password", pg_password)
+        config.Config.set("database", "db_connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
         config.Config.set("agent_rest_transport", "port", port)
@@ -783,19 +706,20 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
+        config.Config.set("agent", "executor-mode", "forking")
+        config.Config.set("agent", "executor-venv-retention-time", "60")
+        config.Config.set("agent", "executor-retention-time", "10")
         yield config
+    agentmanager.assert_no_start_scheduler = False
+    agentmanager.no_start_scheduler = False
 
 
 @pytest.fixture(scope="function")
-async def server(server_pre_start) -> abc.AsyncIterator[Server]:
-    """
-    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
-    May not be required
-    """
+async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterator[Server]:
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
-
-    ibl = InmantaBootloader()
+    tests_failed_before = request.session.testsfailed
+    ibl = InmantaBootloader(configure_logging=True)
 
     try:
         await ibl.start()
@@ -810,11 +734,18 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     yield ibl.restserver
 
     try:
-        await ibl.stop(timeout=15)
+        # This timeout needs to be bigger than the timeout of other components. Otherwise, this would leak sessions and cause
+        # problems in other tests
+        await ibl.stop(timeout=20)
     except concurrent.futures.TimeoutError:
         logger.exception("Timeout during stop of the server in teardown")
-
     logger.info("Server clean up done")
+    tests_failed_during = request.session.testsfailed - tests_failed_before
+    if tests_failed_during and auto_start_agent:
+        for file in glob(log_dir.get() + "/*"):
+            if not os.path.isdir(file):
+                with open(file, "r") as fh:
+                    logger.debug("%s\n%s", file, fh.read())
 
 
 @pytest.fixture(
@@ -823,50 +754,23 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"],
 )
 async def server_multi(
-    server_pre_start, event_loop, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory
+    server_pre_start, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory
 ):
-    """
-    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
-    May not be required
-    """
     with tempfile.TemporaryDirectory() as state_dir:
         ssl, auth, ca = request.param
 
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        utils.configure_auth(auth, ca, ssl)
 
-        if auth:
-            config.Config.set("server", "auth", "true")
-
-        for x, ct in [
-            ("server", None),
-            ("agent_rest_transport", ["agent"]),
-            ("compiler_rest_transport", ["compiler"]),
-            ("client_rest_transport", ["api", "compiler"]),
-            ("cmdline_rest_transport", ["api"]),
-        ]:
-            if ssl and not ca:
-                config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
-                config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
-                config.Config.set(x, "ssl_ca_cert_file", os.path.join(path, "server.crt"))
-                config.Config.set(x, "ssl", "True")
-            if ssl and ca:
-                capath = os.path.join(path, "ca", "enduser-certs")
-
-                config.Config.set(x, "ssl_cert_file", os.path.join(capath, "server.crt"))
-                config.Config.set(x, "ssl_key_file", os.path.join(capath, "server.key.open"))
-                config.Config.set(x, "ssl_ca_cert_file", os.path.join(capath, "server.chain"))
-                config.Config.set(x, "ssl", "True")
-            if auth and ct is not None:
-                token = protocol.encode_token(ct)
-                config.Config.set(x, "token", token)
+        # Config.set() always expects a string value
+        pg_password = "" if postgres_db.password is None else postgres_db.password
 
         port = str(unused_tcp_port_factory())
         config.Config.set("database", "name", database_name)
         config.Config.set("database", "host", "localhost")
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
-        config.Config.set("database", "password", postgres_db.password)
-        config.Config.set("database", "connection_timeout", str(3))
+        config.Config.set("database", "password", pg_password)
+        config.Config.set("database", "db_connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
         config.Config.set("agent_rest_transport", "port", port)
@@ -878,8 +782,11 @@ async def server_multi(
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
+        config.Config.set("agent", "executor-mode", "forking")
+        config.Config.set("agent", "executor-venv-retention-time", "60")
+        config.Config.set("agent", "executor-retention-time", "10")
 
-        ibl = InmantaBootloader()
+        ibl = InmantaBootloader(configure_logging=True)
 
         try:
             await ibl.start()
@@ -893,9 +800,185 @@ async def server_multi(
 
         yield ibl.restserver
         try:
-            await ibl.stop(timeout=15)
+            await ibl.stop(timeout=20)
         except concurrent.futures.TimeoutError:
             logger.exception("Timeout during stop of the server in teardown")
+
+
+@pytest.fixture(scope="function")
+async def auto_start_agent() -> bool:
+    """Marker fixture, indicates if we expect scheduler autostart.
+    If set to False, any attempt to start the scheduler results in failure"""
+    return False
+
+
+@pytest.fixture(scope="function")
+async def no_agent() -> bool:
+    """Marker fixture, disables scheduler autostart, any attempt to start the scheduler is ignored"""
+    return False
+
+
+@pytest.fixture(scope="function")
+async def clienthelper(client, environment):
+    return utils.ClientHelper(client, environment)
+
+
+DISABLE_STATE_CHECK = False
+
+
+@pytest.fixture(scope="function")
+async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUID], Awaitable[Agent]]]:
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    agents: list[Agent] = []
+
+    async def create(environment: uuid.UUID) -> Agent:
+        # Mock scheduler state-dir: outside of tests this happens
+        # when the scheduler config is loaded, before starting the scheduler
+        server_state_dir = config.Config.get("config", "state-dir")
+        scheduler_state_dir = pathlib.Path(server_state_dir) / "server" / str(environment)
+        scheduler_state_dir.mkdir(exist_ok=True)
+        config.Config.set("config", "state-dir", str(scheduler_state_dir))
+        a = Agent(environment)
+        agents.append(a)
+        # Restore state-dir
+        config.Config.set("config", "state-dir", str(server_state_dir))
+
+        executor = InProcessExecutorManager(
+            environment,
+            a._client,
+            asyncio.get_running_loop(),
+            logger,
+            a.thread_pool,
+            str(pathlib.Path(a._storage["executors"]) / "code"),
+            str(pathlib.Path(a._storage["executors"]) / "venvs"),
+            False,
+        )
+
+        executor = WriteBarierExecutorManager(executor)
+
+        a.executor_manager = executor
+        a.scheduler.executor_manager = executor
+        a.scheduler.code_manager = utils.DummyCodeManager(a._client)
+        await a.start()
+        await utils.retry_limited(
+            lambda: agentmanager.get_agent_client(tid=environment, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=True)
+            is not None,
+            timeout=10,
+        )
+        return a
+
+    yield create
+
+    global DISABLE_STATE_CHECK
+    try:
+        if not DISABLE_STATE_CHECK:
+            for agent in agents:
+                await agent.stop_working()
+                the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
+                for r, state in the_state.items():
+                    if state.blocked is inmanta.deploy.state.Blocked.TEMPORARILY_BLOCKED:
+                        # TODO[#8541]: also persist TEMPORARILY_BLOCKED in database
+                        state.blocked = inmanta.deploy.state.Blocked.NOT_BLOCKED
+                    print(r, state)
+                monkeypatch.setattr(agent.scheduler._work.agent_queues, "_new_agent_notify", lambda x: x)
+                await agent.start_working()
+                new_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
+                assert the_state == new_state
+
+        await asyncio.gather(*[agent.stop() for agent in agents])
+    finally:
+        DISABLE_STATE_CHECK = False
+
+
+@pytest.fixture(scope="function")
+async def agent(
+    server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch
+) -> AsyncIterator[Agent]:
+    """Construct an agent that can execute using the resource container"""
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    a: Agent = await agent_factory(uuid.UUID(environment))
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+
+@pytest.fixture(scope="function")
+async def agent_no_state_check(server, environment, agent_factory: Callable[[uuid.UUID], Awaitable[Agent]], monkeypatch):
+    """Construct an agent that can execute using the resource container"""
+    global DISABLE_STATE_CHECK
+    DISABLE_STATE_CHECK = True
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    a: Agent = await agent_factory(uuid.UUID(environment))
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+
+@pytest.fixture(scope="function")
+async def null_agent(server, environment):
+    """Construct an agent that does nothing"""
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    a = utils.NullAgent(environment)
+
+    await a.start()
+
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+    await a.stop()
+
+
+@pytest.fixture(scope="function")
+async def null_agent_multi(server_multi, environment_multi):
+    """Construct an agent that does nothing"""
+    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
+
+    a = utils.NullAgent(environment_multi)
+
+    await a.start()
+
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+    await a.stop()
+
+
+@pytest.fixture(scope="function")
+async def agent_multi(server_multi, environment_multi):
+    """Construct an agent that can execute using the resource container"""
+    server = server_multi
+    environment = environment_multi
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    a = Agent(environment)
+
+    executor = InProcessExecutorManager(
+        environment,
+        a._client,
+        asyncio.get_event_loop(),
+        logger,
+        a.thread_pool,
+        str(pathlib.Path(a._storage["executors"]) / "code"),
+        str(pathlib.Path(a._storage["executors"]) / "venvs"),
+        False,
+    )
+    executor = WriteBarierExecutorManager(executor)
+    a.executor_manager = executor
+    a.scheduler.executor_manager = executor
+    a.scheduler.code_manager = utils.DummyCodeManager(a._client)
+
+    await a.start()
+
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+    await a.stop()
 
 
 @pytest.fixture(scope="function")
@@ -914,11 +997,6 @@ def client_multi(server_multi):
 def sync_client_multi(server_multi):
     client = protocol.SyncClient("client")
     yield client
-
-
-@pytest.fixture(scope="function")
-def clienthelper(client, environment):
-    return utils.ClientHelper(client, environment)
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -974,8 +1052,6 @@ async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str,
         if use_custom_env_settings:
             env_obj = await data.Environment.get_by_id(uuid.UUID(env_id))
             await env_obj.set(data.AUTO_DEPLOY, False)
-            await env_obj.set(data.PUSH_ON_AUTO_DEPLOY, False)
-            await env_obj.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
             await env_obj.set(data.RECOMPILE_BACKOFF, 0)
 
         return env_id
@@ -1067,14 +1143,28 @@ class ReentrantVirtualEnv(VirtualEnv):
     This is intended for use in testcases to require a lot of venv switching
     """
 
-    def __init__(self, env_path: str) -> None:
+    def __init__(self, env_path: str, re_check: bool = False):
+        """
+        :param re_check: For performance reasons, we don't check all constraints every time,
+            setting re_check makes it check every time
+        """
         super().__init__(env_path)
-        self.working_set = None
+        self.was_checked = False
+        self.re_check = re_check
+        # The venv we replaced when getting activated
+        self.previous_venv = None
+        self.snapshot = None
 
     def deactivate(self):
         if self._using_venv:
             self._using_venv = False
-            self.working_set = pkg_resources.working_set
+            if self.snapshot:
+                self.snapshot.restore()
+                self.snapshot = None
+                swap_process_env(self.previous_venv)
+
+    def fake_use(self) -> None:
+        self._using_venv = True
 
     def use_virtual_env(self) -> None:
         """
@@ -1084,23 +1174,34 @@ class ReentrantVirtualEnv(VirtualEnv):
             # We are in use, just ignore double activation
             return
 
-        if not self.working_set:
-            # First run
-            super().use_virtual_env()
-        else:
-            # Later run
-            self._activate_that()
-            mock_process_env(python_path=self.python_path)
-            pkg_resources.working_set = self.working_set
-            self._using_venv = True
+        self.init_env()
+        self._using_venv = True
+        self.snapshot = store_venv()
+        self.previous_venv = swap_process_env(self)
+        self._activate_that()
+
+    def check(
+        self,
+        strict_scope: Optional[Pattern[str]] = None,
+        constraints: Optional[list[Requirement]] = None,
+    ) -> None:
+        # Avoid re-checking
+        if not self.was_checked or self.re_check:
+            super().check(strict_scope, constraints)
+            self.was_checked = True
 
 
 class SnippetCompilationTest(KeepOnFail):
-    def setUpClass(self):
+    def setUpClass(self, re_check_venv: bool = False):
+        """
+        :param re_check_venv: For performance reasons, we don't check all constraints every time,
+            setting re_check_venv makes it check every time
+        """
         self.libs = tempfile.mkdtemp()
         self.repo: str = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
-        self.venv = ReentrantVirtualEnv(env_path=self.env)
+        self.venv = ReentrantVirtualEnv(env_path=self.env, re_check=re_check_venv)
+        self.re_check_venv = re_check_venv
         config.Config.load_config()
         self.keep_shared = False
         self.project = None
@@ -1122,6 +1223,8 @@ class SnippetCompilationTest(KeepOnFail):
             shutil.rmtree(self.project_dir)
         self.project = None
         self.venv.deactivate()
+        sys.path_importer_cache.clear()
+        loader.PluginModuleFinder.reset()
 
     def keep(self):
         self._keep = True
@@ -1132,7 +1235,8 @@ class SnippetCompilationTest(KeepOnFail):
         self,
         snippet: str,
         *,
-        autostd: bool = True,
+        autostd: bool = False,
+        ministd: bool = False,
         install_project: bool = True,
         install_v2_modules: Optional[list[LocalPackagePath]] = None,
         add_to_module_path: Optional[list[str]] = None,
@@ -1145,6 +1249,7 @@ class SnippetCompilationTest(KeepOnFail):
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
+        main_file: str = "main.cf",
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -1165,6 +1270,12 @@ class SnippetCompilationTest(KeepOnFail):
         :param strict_deps_check: True iff the returned project should have strict dependency checking enabled.
         :param use_pip_config_file: True iff the pip config file should be used and no source is required for v2 to work
                                     False if a package source is needed for v2 modules to work
+        :param main_file: Path to the .cf file to use as main entry point. A relative or an absolute path can be provided.
+            If a relative path is used, it's interpreted relative to the root of the project directory.
+        :param autostd: do we automatically import std? This does have a performance impact!
+            it is small on individual test cases, (100 ms) but it adds up quickly (as this is 50% of the run time)
+        :param ministd: if we need some of std, but not everything, this loads a small, embedded version of std, that has less
+            overhead
         """
         self.setup_for_snippet_external(
             snippet,
@@ -1177,8 +1288,19 @@ class SnippetCompilationTest(KeepOnFail):
             use_pip_config_file,
             index_url,
             extra_index_url,
+            main_file,
         )
-        return self._load_project(autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check)
+
+        dirty_venv = autostd or install_project or install_v2_modules or self.re_check_venv or python_requires
+
+        return self._load_project(
+            autostd or ministd,
+            install_project,
+            install_v2_modules,
+            strict_deps_check=strict_deps_check,
+            main_file=main_file,
+            dirty_venv=dirty_venv,
+        )
 
     def _load_project(
         self,
@@ -1187,25 +1309,23 @@ class SnippetCompilationTest(KeepOnFail):
         install_v2_modules: Optional[list[LocalPackagePath]] = None,
         main_file: str = "main.cf",
         strict_deps_check: Optional[bool] = None,
+        dirty_venv: bool = True,
     ):
         loader.PluginModuleFinder.reset()
         self.project = Project(
             self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
         )
         Project.set(self.project)
-        self.project.use_virtual_env()
-        self._patch_process_env()
-        self._install_v2_modules(install_v2_modules)
-        if install_project:
-            self.project.install_modules()
-        return self.project
 
-    def _patch_process_env(self) -> None:
-        """
-        Patch env.process_env to accommodate the SnippetCompilationTest's switching between active environments within a single
-        running process.
-        """
-        env.mock_process_env(env_path=self.env)
+        if dirty_venv:
+            # Don't bother loading the venv if we don't need to
+            self.project.use_virtual_env()
+            self._install_v2_modules(install_v2_modules)
+            if install_project:
+                self.project.install_modules()
+        else:
+            self.venv.fake_use()
+        return self.project
 
     def _install_v2_modules(self, install_v2_modules: Optional[list[LocalPackagePath]] = None) -> None:
         """Assumes we have a project set"""
@@ -1240,6 +1360,8 @@ class SnippetCompilationTest(KeepOnFail):
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
+        main_file: str = "main.cf",
+        ministd: bool = False,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
@@ -1247,6 +1369,9 @@ class SnippetCompilationTest(KeepOnFail):
         project_requires = project_requires if project_requires is not None else []
         python_requires = python_requires if python_requires is not None else []
         relation_precedence_rules = relation_precedence_rules if relation_precedence_rules else []
+        ministd_path = os.path.join(__file__, "..", "data/mini_str_container")
+        if ministd:
+            add_to_module_path += ministd_path
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 f"""
@@ -1286,7 +1411,7 @@ class SnippetCompilationTest(KeepOnFail):
                 )
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
-        self.main = os.path.join(self.project_dir, "main.cf")
+        self.main = os.path.join(self.project_dir, main_file)
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
 
@@ -1304,6 +1429,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete=False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         return self._do_export(
             deploy=False,
@@ -1311,6 +1437,7 @@ class SnippetCompilationTest(KeepOnFail):
             do_raise=do_raise,
             partial_compile=partial_compile,
             resource_sets_to_remove=resource_sets_to_remove,
+            soft_delete=soft_delete,
         )
 
     def get_exported_json(self) -> JsonType:
@@ -1324,6 +1451,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete=False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         """
         helper function to allow actual export to be run on a different thread
@@ -1338,6 +1466,7 @@ class SnippetCompilationTest(KeepOnFail):
         options.depgraph = False
         options.deploy = deploy
         options.ssl = False
+        options.soft_delete = soft_delete
 
         from inmanta.export import Exporter  # noqa: H307
 
@@ -1369,6 +1498,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[list[str]] = None,
+        soft_delete: bool = False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
         """Export to an actual server"""
         return await asyncio.get_running_loop().run_in_executor(
@@ -1379,15 +1509,23 @@ class SnippetCompilationTest(KeepOnFail):
                 do_raise=do_raise,
                 partial_compile=partial_compile,
                 resource_sets_to_remove=resource_sets_to_remove,
+                soft_delete=soft_delete,
             ),
         )
 
-    def setup_for_error(self, snippet, shouldbe, indent_offset=0):
+    def setup_for_error(
+        self,
+        snippet,
+        shouldbe,
+        indent_offset=0,
+        ministd: bool = False,
+        autostd: bool = False,
+    ):
         """
         Set up project to expect an error during compilation or project install.
         """
         try:
-            self.setup_for_snippet(snippet)
+            self.setup_for_snippet(snippet, ministd=ministd, autostd=autostd)
             compiler.do_compile()
             assert False, "Should get exception"
         except CompilerException as e:
@@ -1427,7 +1565,7 @@ def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
 
 @pytest.fixture(scope="function")
 def snippetcompiler(
-    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str
+    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str, clean_reset
 ) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with shared libs directory and compiler venv.
@@ -1438,12 +1576,12 @@ def snippetcompiler(
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler_clean(modules_dir: str) -> Iterator[SnippetCompilationTest]:
+def snippetcompiler_clean(modules_dir: str, clean_reset, deactive_venv) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with its own libs directory and compiler venv.
     """
     ast = SnippetCompilationTest()
-    ast.setUpClass()
+    ast.setUpClass(re_check_venv=True)
     ast.setup_func(modules_dir)
     yield ast
     ast.tear_down_func()
@@ -1575,7 +1713,7 @@ async def mocked_compiler_service_block(server, monkeypatch):
 
 
 @pytest.fixture
-def tmpvenv(tmpdir: py.path.local) -> Iterator[tuple[py.path.local, py.path.local]]:
+def tmpvenv(tmpdir: py.path.local, deactive_venv) -> Iterator[tuple[py.path.local, py.path.local]]:
     """
     Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the `tmpdir`
     fixture. This venv is completely decoupled from the active development venv.
@@ -1587,6 +1725,10 @@ def tmpvenv(tmpdir: py.path.local) -> Iterator[tuple[py.path.local, py.path.loca
     venv.create(venv_dir, with_pip=True)
     subprocess.check_output([str(python_path), "-m", "pip", "install", "-U", "pip"])
     yield (venv_dir, python_path)
+
+
+# Capture early, while loading code
+real_prefix = sys.prefix
 
 
 @pytest.fixture
@@ -1630,9 +1772,20 @@ def tmpvenv_active(
             base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
         )
 
+    this_source_root = os.path.dirname(os.path.dirname(__file__))
+
+    def keep_path_element(element: str) -> bool:
+        # old venv paths are dropped
+        if element.startswith(real_prefix):
+            return False
+        # exclude source install of the module
+        if element.startswith(this_source_root):
+            return False
+        return True
+
     # prepend bin to PATH (this file is inside the bin directory), exclude old venv path
     os.environ["PATH"] = os.pathsep.join(
-        [binpath] + [elem for elem in os.environ.get("PATH", "").split(os.pathsep) if not elem.startswith(sys.prefix)]
+        [binpath] + [elem for elem in os.environ.get("PATH", "").split(os.pathsep) if keep_path_element(elem)]
     )
     os.environ["VIRTUAL_ENV"] = base  # virtual env is right above bin directory
 
@@ -1640,7 +1793,7 @@ def tmpvenv_active(
     prev_length = len(sys.path)
     site.addsitedir(site_packages)
     # exclude old venv path
-    sys.path[:] = sys.path[prev_length:] + [elem for elem in sys.path[0:prev_length] if not elem.startswith(sys.prefix)]
+    sys.path[:] = sys.path[prev_length:] + [elem for elem in sys.path[0:prev_length] if keep_path_element(elem)]
 
     sys.real_prefix = sys.prefix
     sys.prefix = base
@@ -1649,15 +1802,9 @@ def tmpvenv_active(
     env.mock_process_env(python_path=str(python_path))
     env.process_env.notify_change()
 
-    # Force refresh build's decision on whether it should use virtualenv or venv. This decision is made based on the active
-    # environment, which we're changing now.
-    build.env._should_use_virtualenv.cache_clear()
-
     yield tmpvenv
 
     loader.unload_modules_for_path(site_packages)
-    # Force refresh build's cache once more
-    build.env._should_use_virtualenv.cache_clear()
 
 
 @pytest.fixture
@@ -1673,12 +1820,41 @@ def tmpvenv_active_inherit(deactive_venv, tmpdir: py.path.local) -> Iterator[env
     loader.unload_modules_for_path(venv.site_packages_dir)
 
 
+@pytest.fixture
+def create_empty_local_package_index_factory() -> Callable[[str], str]:
+    """
+    A fixture that acts as a factory to create empty local pip package indexes.
+    Each call creates a new index in a different temporary directory.
+    """
+
+    created_directories: list[str] = []
+
+    def _create_local_package_index(prefix: str = "test"):
+        """
+        Creates an empty pip index. The prefix argument is used as a prefix for the temporary directory name
+        for clarity and debugging purposes. The 'dir2pi' tool will then create a 'simple' directory inside
+        this temporary directory, which contains the index files.
+        """
+        tmpdir = tempfile.mkdtemp(prefix=f"{prefix}-")
+        created_directories.append(tmpdir)  # Keep track of the tempdir for cleanup
+        dir2pi(argv=["dir2pi", tmpdir])
+        index_dir = os.path.join(tmpdir, "simple")  # The 'simple' directory is created inside the tmpdir by dir2pi
+        return index_dir
+
+    yield _create_local_package_index
+
+    # Cleanup after the session ends
+    for directory in created_directories:
+        shutil.rmtree(directory)
+
+
 @pytest.fixture(scope="session")
 def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
     :return: The path to the index
     """
+
     cache_dir = os.path.abspath(os.path.join(os.path.dirname(modules_v2_dir), f"{os.path.basename(modules_v2_dir)}.cache"))
     build_dir = os.path.join(cache_dir, "build")
     index_dir = os.path.join(build_dir, "simple")
@@ -1700,8 +1876,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         )
 
     if _should_rebuild_cache():
-        logger.info(f"Cache {cache_dir} is dirty. Rebuilding cache.")
-        # Remove cache
+        logger.info("Cache %s is dirty. Rebuilding cache.", cache_dir)  # Remove cache
         if os.path.exists(cache_dir):
             shutil.rmtree(cache_dir)
         os.makedirs(build_dir)
@@ -1719,14 +1894,19 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         # Update timestamp file
         open(timestamp_file, "w").close()
     else:
-        logger.info(f"Using cache {cache_dir}")
+        logger.info("Using cache %s", cache_dir)
 
     yield index_dir
 
 
 @pytest.fixture
 async def migrate_db_from(
-    request: pytest.FixtureRequest, hard_clean_db, hard_clean_db_post, postgresql_client: asyncpg.Connection, server_pre_start
+    request: pytest.FixtureRequest,
+    hard_clean_db,
+    hard_clean_db_post,
+    postgresql_client: asyncpg.Connection,
+    disable_background_jobs,
+    server_pre_start,
 ) -> AsyncIterator[Callable[[], Awaitable[None]]]:
     """
     Restores a db dump and yields a function that starts the server and migrates the database schema to the latest version.
@@ -1739,8 +1919,9 @@ async def migrate_db_from(
     # restore old version
     with open(marker.args[0]) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
+        logger.debug("Restored %s", marker.args[0])
 
-    bootloader: InmantaBootloader = InmantaBootloader()
+    bootloader: InmantaBootloader = InmantaBootloader(configure_logging=True)
 
     async def migrate() -> None:
         # start boatloader, triggering db migration
@@ -1816,6 +1997,78 @@ async def set_running_tests():
     inmanta.RUNNING_TESTS = True
 
 
+def is_caplog_handler(handler: logging.Handler) -> bool:
+    return isinstance(
+        handler,
+        (
+            _pytest.logging._FileHandler,
+            _pytest.logging._LiveLoggingStreamHandler,
+            _pytest.logging._LiveLoggingNullHandler,
+            _pytest.logging.LogCaptureHandler,
+        ),
+    )
+
+
+ALLOW_OVERRIDING_ROOT_LOG_LEVEL: bool = False
+
+
+@pytest.fixture(scope="function")
+def allow_overriding_root_log_level() -> None:
+    """
+    Fixture that allows a test case to indicate that the root log level, specified in a call to
+    `inmanta_logging.FullLoggingConfig.apply_config()`, should be taken into account. By default,
+    it's ignored to make sure that pytest logging works correctly. This fixture is mainly intended
+    for the test cases that test the logging framework itself.
+    """
+    global ALLOW_OVERRIDING_ROOT_LOG_LEVEL
+    ALLOW_OVERRIDING_ROOT_LOG_LEVEL = True
+    yield
+    ALLOW_OVERRIDING_ROOT_LOG_LEVEL = False
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def dont_remove_caplog_handlers(request, monkeypatch):
+    """
+    Caplog captures log messages by attaching handlers to the root logger. Applying a logging config with
+    `inmanta_logging.FullLoggingConfig.apply_config()` removes any existing logging configuration.
+    As such, this fixture puts a wrapper around the `apply_config()` method to make sure that:
+
+     * The pytest handlers are not removed/closed after the execution of the apply_config() method.
+     * The configured root log level is not altered by the call to apply_config().
+    """
+    original_apply_config = inmanta_logging.FullLoggingConfig.apply_config
+
+    def apply_config_wrapper(self) -> None:
+        # Make sure the root log level is not altered.
+        root_log_level: int = logging.root.level
+        # Save the caplog root handlers so that we can restore them after.
+        caplog_root_handler: list[logging.Handler] = [h for h in logging.root.handlers if is_caplog_handler(h)]
+        for current_handler in caplog_root_handler:
+            logging.root.removeHandler(current_handler)
+        # When the `apply_config()` method is called, the `logging._handlerList` is used to find all the handlers
+        # that should be closed. We remove the handlers from that list to prevent the handlers from being closed.
+        #
+        # This `logging._handlerList` is used to tear down the handlers in the reverse order with respect to the setup order.
+        # As such, this method should not alter the order. We assume the caplog handlers are entirely independent
+        # from any other handler. Like that the order only matters within the set of caplog handlers.
+        re_add_to_handler_list: list[weakref.ReferenceType] = [
+            weak_ref for weak_ref in logging._handlerList if is_caplog_handler(weak_ref())
+        ]
+        for weak_ref in re_add_to_handler_list:
+            logging._handlerList.remove(weak_ref)
+
+        original_apply_config(self)
+
+        for weak_ref in re_add_to_handler_list:
+            logging._handlerList.append(weak_ref)
+        for current_handler in caplog_root_handler:
+            logging.root.addHandler(current_handler)
+        if not ALLOW_OVERRIDING_ROOT_LOG_LEVEL:
+            logging.root.setLevel(root_log_level)
+
+    monkeypatch.setattr(inmanta_logging.FullLoggingConfig, "apply_config", apply_config_wrapper)
+
+
 @pytest.fixture(scope="session")
 def index_with_pkgs_containing_optional_deps() -> str:
     """
@@ -1831,8 +2084,11 @@ def index_with_pkgs_containing_optional_deps() -> str:
             path=os.path.join(tmpdirname, "pkg"),
             publish_index=pip_index,
             optional_dependencies={
-                "optional-a": [Requirement.parse("dep-a")],
-                "optional-b": [Requirement.parse("dep-b"), Requirement.parse("dep-c")],
+                "optional-a": [inmanta.util.parse_requirement(requirement="dep-a")],
+                "optional-b": [
+                    inmanta.util.parse_requirement(requirement="dep-b"),
+                    inmanta.util.parse_requirement(requirement="dep-c"),
+                ],
             },
         )
         for pkg_name in ["dep-a", "dep-b", "dep-c"]:
@@ -1856,3 +2112,584 @@ def disable_version_and_agent_cleanup_job():
     orchestrationservice.PERFORM_CLEANUP = False
     yield
     orchestrationservice.PERFORM_CLEANUP = old_perform_cleanup
+
+
+ResourceContainer = namedtuple(
+    "ResourceContainer", ["Provider", "waiter", "wait_for_done_with_waiters", "wait_for_condition_with_waiters"]
+)
+
+
+@pytest.fixture(scope="function")
+def resource_container(clean_reset):
+    @resource("test::Resource", agent="agent", id_attribute="key")
+    class MyResource(Resource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::Resourcex", agent="agent", id_attribute="key")
+    class MyResourcex(Resource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged", "attributes")
+
+    @resource("test::Fact", agent="agent", id_attribute="key")
+    class FactResource(Resource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged", "skip", "factvalue", "skipFact")
+
+    @resource("test::SetFact", agent="agent", id_attribute="key")
+    class SetFactResource(PurgeableResource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged", "purge_on_delete")
+
+    @resource("test::SetNonExpiringFact", agent="agent", id_attribute="key")
+    class SetNonExpiringFactResource(PurgeableResource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged", "purge_on_delete")
+
+    @resource("test::Fail", agent="agent", id_attribute="key")
+    class FailR(Resource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::Wait", agent="agent", id_attribute="key")
+    class WaitR(Resource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::Noprov", agent="agent", id_attribute="key")
+    class NoProv(Resource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::FailFast", agent="agent", id_attribute="key")
+    class FailFastR(Resource):
+        """
+        Raise an exception in the check_resource() method.
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::FailFastCRUD", agent="agent", id_attribute="key")
+    class FailFastPR(PurgeableResource):
+        """
+        Raise an exception at the beginning of the read_resource() method
+        """
+
+        fields = ("key", "value", "purged", "purge_on_delete")
+
+    @resource("test::BadPost", agent="agent", id_attribute="key")
+    class BadPostR(Resource):
+        """
+        Raise an exception in the post() method of the ResourceHandler.
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::BadPostCRUD", agent="agent", id_attribute="key")
+    class BadPostPR(PurgeableResource):
+        """
+        Raise an exception in the post() method of the CRUDHandlerGeneric.
+        """
+
+        fields = ("key", "value", "purged", "purge_on_delete")
+
+    @resource("test::BadLogging", agent="agent", id_attribute="key")
+    class BadLoggingR(Resource):
+        """
+        Raises an exception when trying to log a message that's not serializable.
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::Deploy", agent="agent", id_attribute="key")
+    class DeployR(Resource):
+        """
+        Raise a SkipResource exception in the deploy() handler method.
+        """
+
+        fields = ("key", "value", "set_state_to_deployed", "purged")
+
+    @resource("test::LSMLike", agent="agent", id_attribute="key")
+    class LsmLike(Resource):
+        """
+        Raise a SkipResource exception in the deploy() handler method.
+        """
+
+        fields = ("key", "value", "purged")
+
+    @resource("test::EventResource", agent="agent", id_attribute="key")
+    class EventResource(PurgeableResource):
+        """
+        Raise a SkipResource exception in the deploy() handler method.
+        """
+
+        fields = ("key", "value", "change", "purged")
+
+        @classmethod
+        def get_change(cls, _, r):
+            return False
+
+    # Remote control state, shared over all resources
+    _STATE = defaultdict(dict)
+    _WRITE_COUNT = defaultdict(lambda: defaultdict(int))
+    _RELOAD_COUNT = defaultdict(lambda: defaultdict(int))
+    _READ_COUNT = defaultdict(lambda: defaultdict(int))
+    _TO_SKIP = defaultdict(lambda: defaultdict(int))
+    _TO_FAIL = defaultdict(lambda: defaultdict(int))
+
+    class Provider(ResourceHandler[TResource], Generic[TResource]):
+        def check_resource(self, ctx, resource):
+            self.read(resource.id.get_agent_name(), resource.key)
+            assert resource.value != const.UNKNOWN_STRING
+            current = resource.clone()
+            current.purged = not self.isset(resource.id.get_agent_name(), resource.key)
+
+            if not current.purged:
+                current.value = self.get(resource.id.get_agent_name(), resource.key)
+            else:
+                current.value = None
+
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            if self.skip(resource.id.get_agent_name(), resource.key):
+                raise SkipResource()
+
+            if self.fail(resource.id.get_agent_name(), resource.key):
+                raise Exception("Failed")
+
+            if "purged" in changes:
+                self.touch(resource.id.get_agent_name(), resource.key)
+                if changes["purged"]["desired"]:
+                    self.delete(resource.id.get_agent_name(), resource.key)
+                    ctx.set_purged()
+                else:
+                    self.set(resource.id.get_agent_name(), resource.key, resource.value)
+                    ctx.set_created()
+
+            elif "value" in changes:
+                ctx.info("Set key '%(key)s' to value '%(value)s'", key=resource.key, value=resource.value)
+                self.touch(resource.id.get_agent_name(), resource.key)
+                self.set(resource.id.get_agent_name(), resource.key, resource.value)
+                ctx.set_updated()
+
+            return changes
+
+        def facts(self, ctx, resource):
+            return {"length": len(self.get(resource.id.get_agent_name(), resource.key)), "key1": "value1", "key2": "value2"}
+
+        def can_reload(self) -> bool:
+            return True
+
+        def do_reload(self, ctx, resource):
+            _RELOAD_COUNT[resource.id.get_agent_name()][resource.key] += 1
+
+        @classmethod
+        def set_skip(cls, agent, key, skip):
+            _TO_SKIP[agent][key] = skip
+
+        @classmethod
+        def set_fail(cls, agent, key, failcount):
+            _TO_FAIL[agent][key] = failcount
+
+        @classmethod
+        def skip(cls, agent, key):
+            doskip = _TO_SKIP[agent][key]
+            if doskip == 0:
+                return False
+            _TO_SKIP[agent][key] -= 1
+            return True
+
+        @classmethod
+        def fail(cls, agent, key):
+            doskip = _TO_FAIL[agent][key]
+            if doskip == 0:
+                return False
+            _TO_FAIL[agent][key] -= 1
+            return True
+
+        @classmethod
+        def touch(cls, agent, key):
+            _WRITE_COUNT[agent][key] += 1
+
+        @classmethod
+        def read(cls, agent, key):
+            _READ_COUNT[agent][key] += 1
+
+        @classmethod
+        def set(cls, agent, key, value):
+            _STATE[agent][key] = value
+
+        @classmethod
+        def get(cls, agent, key):
+            if key in _STATE[agent]:
+                return _STATE[agent][key]
+            return None
+
+        @classmethod
+        def isset(cls, agent, key):
+            return key in _STATE[agent]
+
+        @classmethod
+        def delete(cls, agent, key):
+            if cls.isset(agent, key):
+                del _STATE[agent][key]
+
+        @classmethod
+        def changecount(cls, agent, key):
+            return _WRITE_COUNT[agent][key]
+
+        @classmethod
+        def readcount(cls, agent, key):
+            return _READ_COUNT[agent][key]
+
+        @classmethod
+        def reloadcount(cls, agent, key):
+            return _RELOAD_COUNT[agent][key]
+
+        @classmethod
+        def reset(cls):
+            _STATE.clear()
+            _WRITE_COUNT.clear()
+            _READ_COUNT.clear()
+            _TO_SKIP.clear()
+            _TO_FAIL.clear()
+            _RELOAD_COUNT.clear()
+
+    @provider("test::Resource", name="test_resource")
+    class ResourceProvider(Provider[MyResource]):
+        pass
+
+    @provider("test::Resourcex", name="test_resource")
+    class ResourceProviderX(Provider[MyResource]):
+
+        def check_resource(self, ctx, resource):
+            # This resource checks that the executor can withstand mutating the resources
+            assert resource.attributes == {"A": "B"}
+            resource.attributes.clear()
+            return super().check_resource(ctx, resource)
+
+    @provider("test::Fail", name="test_fail")
+    class Fail(ResourceHandler[FailR]):
+        def check_resource(self, ctx, resource):
+            current = resource.clone()
+            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
+
+            if not current.purged:
+                current.value = Provider.get(resource.id.get_agent_name(), resource.key)
+            else:
+                current.value = None
+
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            raise Exception()
+
+    @provider("test::FailFast", name="test_failfast")
+    class FailFast(ResourceHandler[FailFastR]):
+        def check_resource(self, ctx: HandlerContext, resource: Resource) -> Resource:
+            raise Exception("An\nError\tMessage")
+
+    @provider("test::FailFastCRUD", name="test_failfast_crud")
+    class FailFastCRUD(CRUDHandler[FailFastPR]):
+        def read_resource(self, ctx: HandlerContext, resource: FailFastPR) -> None:
+            raise Exception("An\nError\tMessage")
+
+    @provider("test::Fact", name="test_fact")
+    class Fact(ResourceHandler[FactResource]):
+        def check_resource(self, ctx, resource):
+            current = resource.clone()
+            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
+
+            current.value = "that"
+
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            if resource.skip:
+                raise SkipResource("can not deploy")
+            if "purged" in changes:
+                if changes["purged"]["desired"]:
+                    Provider.delete(resource.id.get_agent_name(), resource.key)
+                    ctx.set_purged()
+                else:
+                    Provider.set(resource.id.get_agent_name(), resource.key, "x")
+                    ctx.set_created()
+            else:
+                ctx.set_updated()
+
+        def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
+            if not Provider.isset(resource.id.get_agent_name(), resource.key):
+                return {}
+            elif resource.skipFact:
+                raise SkipResource("Not ready")
+            return {"fact": resource.factvalue}
+
+    @provider("test::SetFact", name="test_set_fact")
+    class SetFact(CRUDHandler[SetFactResource]):
+        def read_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+            self._do_set_fact(ctx, resource)
+
+        def create_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+            pass
+
+        def delete_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+            pass
+
+        def update_resource(self, ctx: HandlerContext, changes: dict, resource: SetFactResource) -> None:
+            pass
+
+        def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
+            self._do_set_fact(ctx, resource)
+            return {f"returned_fact_{resource.key}": "test"}
+
+        def _do_set_fact(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+            ctx.set_fact(fact_id=resource.key, value=resource.value)
+
+    @provider("test::SetNonExpiringFact", name="test_set_non_expiring_fact")
+    class SetNonExpiringFact(CRUDHandler[SetNonExpiringFactResource]):
+        def read_resource(self, ctx: HandlerContext, resource: SetNonExpiringFactResource) -> None:
+            self._do_set_fact(ctx, resource)
+
+        def create_resource(self, ctx: HandlerContext, resource: SetNonExpiringFactResource) -> None:
+            pass
+
+        def delete_resource(self, ctx: HandlerContext, resource: SetNonExpiringFactResource) -> None:
+            pass
+
+        def update_resource(self, ctx: HandlerContext, changes: dict, resource: SetNonExpiringFactResource) -> None:
+            pass
+
+        def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
+            self._do_set_fact(ctx, resource)
+            return {}
+
+        def _do_set_fact(self, ctx: HandlerContext, resource: SetNonExpiringFactResource) -> None:
+            expires = resource.key == "expiring"
+            ctx.set_fact(fact_id=resource.key, value=resource.value, expires=expires)
+
+    @provider("test::BadPost", name="test_bad_posts")
+    class BadPost(Provider):
+        def post(self, ctx: HandlerContext, resource: Resource) -> None:
+            raise Exception("An\nError\tMessage")
+
+    @provider("test::BadPostCRUD", name="test_bad_posts_crud")
+    class BadPostCRUD(CRUDHandler[BadPostPR]):
+        def post(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+            raise Exception("An\nError\tMessage")
+
+    class Empty:
+        pass
+
+    @provider("test::BadLogging", name="test_bad_logging")
+    class BadLogging(ResourceHandler[BadLoggingR]):
+        def check_resource(self, ctx, resource):
+            current = resource.clone()
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            ctx.info("This is not JSON serializable: %(val)s", val=Empty())
+
+    @provider("test::LSMLike", name="lsmlike")
+    class LSMLikeHandler(CRUDHandler[LsmLike]):
+        def deploy(
+            self,
+            ctx: handler.HandlerContext,
+            resource: LsmLike,
+            requires: dict[ResourceIdStr, const.ResourceState],
+        ) -> None:
+            self.pre(ctx, resource)
+            try:
+                all_resources_are_deployed_successfully = self._send_current_state(ctx, resource, requires)
+                if all_resources_are_deployed_successfully:
+                    ctx.set_status(const.ResourceState.deployed)
+                else:
+                    ctx.set_status(const.ResourceState.failed)
+            finally:
+                self.post(ctx, resource)
+
+        def _send_current_state(
+            self,
+            ctx: handler.HandlerContext,
+            resource: LsmLike,
+            fine_grained_resource_states: dict[ResourceIdStr, const.ResourceState],
+        ) -> bool:
+            # If a resource is not in events, it means that it was deployed before so we can mark it as success
+            is_failed = False
+            skipped_resources = []
+            # Convert inmanta.const.ResourceState to inmanta_lsm.model.ResourceState
+            for resource_id, state in fine_grained_resource_states.items():
+                if state == const.ResourceState.failed:
+                    is_failed = True
+                elif state == const.ResourceState.deployed:
+                    pass
+                else:
+                    # some transient state that is not failed and not success, so lets skip
+                    skipped_resources.append(f"skipped because the `{resource_id}` is `{state.value}`")
+
+            # failure takes precedence over transient
+            # transient takes precedence over success
+            if len(skipped_resources) > 0 and not is_failed:
+                raise SkipResource("\n".join(skipped_resources))
+
+            return not is_failed
+
+    waiter = Condition()
+
+    async def wait_for_done_with_waiters(client, env_id, version, wait_for_this_amount_of_resources_in_done=None, timeout=10):
+        def log_progress(done: int, total: int) -> None:
+            logger.info(
+                "waiting with waiters, %s/%s resources done",
+                done,
+                (wait_for_this_amount_of_resources_in_done if wait_for_this_amount_of_resources_in_done else total),
+            )
+
+        # unhang waiters
+        now = time.time()
+        done, total = await utils.get_done_and_total(client, env_id)
+
+        log_progress(done, total)
+        while (total - done) > 0:
+            if now + timeout < time.time():
+                raise Exception("Timeout")
+            if wait_for_this_amount_of_resources_in_done and done - wait_for_this_amount_of_resources_in_done >= 0:
+                break
+            done, total = await utils.get_done_and_total(client, env_id)
+            log_progress(done, total)
+            waiter.acquire()
+            waiter.notify_all()
+            waiter.release()
+            await asyncio.sleep(0.1)
+
+    async def wait_for_condition_with_waiters(wait_condition, timeout=10):
+        """
+        Wait until wait_condition() returns false
+        """
+        now = time.time()
+        while await wait_condition():
+            if now + timeout < time.time():
+                raise Exception("Timeout")
+            logger.info("waiting with waiters")
+            waiter.acquire()
+            waiter.notify_all()
+            waiter.release()
+            await asyncio.sleep(0.1)
+
+    @provider("test::Wait", name="test_wait")
+    class Wait(Provider[WaitR]):
+        def __init__(self, agent, io=None):
+            super().__init__(agent, io)
+            self.traceid = uuid.uuid4()
+
+        def deploy(self, ctx, resource, requires) -> None:
+            # Hang even when skipped
+            logger.info("Hanging waiter %s", self.traceid)
+            waiter.acquire()
+            notified_before_timeout = waiter.wait(timeout=10)
+            waiter.release()
+            if not notified_before_timeout:
+                raise Exception("Timeout occurred")
+            logger.info("Releasing waiter %s", self.traceid)
+            super().deploy(ctx, resource, requires)
+
+    @provider("test::EventResource", name="test_event_processing")
+    class EventResourceProvider(CRUDHandler[EventResource]):
+        def __init__(self, agent, io=None):
+            super().__init__(agent, io)
+            self.traceid = uuid.uuid4()
+
+        def read_resource(self, ctx: HandlerContext, resource: EventResource) -> None:
+            logger.info("Hanging waiter %s", self.traceid)
+            waiter.acquire()
+            notified_before_timeout = waiter.wait(timeout=10)
+            waiter.release()
+            if not notified_before_timeout:
+                raise Exception("Timeout occurred")
+            logger.info("Releasing waiter %s", self.traceid)
+
+            Provider.read(resource.id.get_agent_name(), resource.key)
+            environment = self._agent.environment
+
+            async def should_redeploy() -> bool:
+                client = self.get_client()
+                result = await client.get_resource_events(
+                    environment,
+                    resource.id.resource_version_str(),
+                    const.Change.nochange,
+                )
+                if result.code != 200:
+                    raise RuntimeError(
+                        f"Unexpected response code when checking for events: received {result.code} "
+                        f"(expected 200): {result.result}"
+                    )
+                changed_dependencies = result.result["data"]
+                assert isinstance(changed_dependencies, dict)
+
+                actual_changes = {k: v for k, v in changed_dependencies.items() if v}
+                if actual_changes:
+                    ctx.debug("Change found: %(changes)s, deploying", changes=actual_changes)
+                else:
+                    ctx.debug("No changes, not deploying")
+
+                return bool(actual_changes)
+
+            resource.change = self.run_sync(should_redeploy)
+
+        def create_resource(self, ctx: HandlerContext, resource: EventResource) -> None:
+            Provider.touch(resource.id.get_agent_name(), resource.key)
+            ctx.set_created()
+
+        def update_resource(self, ctx: HandlerContext, changes: dict[str, dict[str, Any]], resource: EventResource) -> None:
+            Provider.touch(resource.id.get_agent_name(), resource.key)
+            ctx.set_updated()
+
+        def delete_resource(self, ctx: HandlerContext, resource: EventResource) -> None:
+            Provider.touch(resource.id.get_agent_name(), resource.key)
+            ctx.set_purged()
+
+    @provider("test::Deploy", name="test_wait")
+    class Deploy(Provider):
+        def deploy(
+            self,
+            ctx: HandlerContext,
+            resource: Resource,
+            requires: dict[ResourceIdStr, const.ResourceState],
+        ) -> None:
+            if self.skip(resource.id.agent_name, resource.key):
+                raise SkipResource()
+            elif self.fail(resource.id.agent_name, resource.key):
+                raise Exception()
+            elif resource.set_state_to_deployed:
+                ctx.set_status(const.ResourceState.deployed)
+
+    yield ResourceContainer(
+        Provider=Provider,
+        wait_for_done_with_waiters=wait_for_done_with_waiters,
+        waiter=waiter,
+        wait_for_condition_with_waiters=wait_for_condition_with_waiters,
+    )
+    Provider.reset()

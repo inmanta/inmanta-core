@@ -15,23 +15,22 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import datetime
 import logging
-import os
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Sequence
 from typing import Any, Callable, Optional, Union, cast
 
 from asyncpg.connection import Connection
-from asyncpg.exceptions import UniqueViolationError
 from pydantic import ValidationError
 from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data import APILIMIT, InvalidSort
+from inmanta.data import APILIMIT, InvalidSort, model
 from inmanta.data.dataview import (
     DiscoveredResourceView,
     ResourceHistoryView,
@@ -40,33 +39,37 @@ from inmanta.data.dataview import (
     ResourceView,
 )
 from inmanta.data.model import (
-    AttributeStateChange,
     DiscoveredResource,
     LatestReleasedResource,
-    LogLine,
+    LinkedDiscoveredResource,
     ReleasedResourceDetails,
     Resource,
     ResourceAction,
     ResourceHistory,
-    ResourceIdStr,
     ResourceLog,
-    ResourceType,
-    ResourceVersionIdStr,
     VersionedResource,
     VersionedResourceDetails,
 )
+from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
-from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
+from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_RESOURCE, SLICE_TRANSPORT, agentmanager
 from inmanta.server import config as opt
-from inmanta.server import protocol
-from inmanta.server.agentmanager import AgentManager
+from inmanta.server import extensions, protocol
+from inmanta.server.services.environmentlistener import EnvironmentAction, EnvironmentListener
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, JsonType, PrimitiveTypes
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
+
+resource_discovery = extensions.BoolFeature(
+    slice=SLICE_RESOURCE,
+    name="resource_discovery",
+    description="Enable resource discovery. This feature controls the APIs it does not affect the use of discovery resources.",
+)
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -102,21 +105,30 @@ class ResourceActionLogLine(logging.LogRecord):
         self.relativeCreated = (self.created - logging._startTime) * 1000
 
 
-class ResourceService(protocol.ServerSlice):
+class ResourceService(protocol.ServerSlice, EnvironmentListener):
     """Resource Manager service"""
 
-    agentmanager_service: "AgentManager"
+    agentmanager_service: "agentmanager.AgentManager"
 
     def __init__(self) -> None:
         super().__init__(SLICE_RESOURCE)
 
-        self._resource_action_loggers: dict[uuid.UUID, logging.Logger] = {}
-        self._resource_action_handlers: dict[uuid.UUID, logging.Handler] = {}
-
-        # Dict: environment_id: (model_version, increment, negative_increment)
-        self._increment_cache: dict[uuid.UUID, Optional[tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]] = {}
+        # Dict: environment_id: (model_version, increment, negative_increment, negative_increment_per_agent, run_ahead_lock)
+        self._increment_cache: dict[
+            uuid.UUID,
+            Optional[
+                tuple[
+                    int,
+                    abc.Set[ResourceIdStr],
+                    abc.Set[ResourceIdStr],
+                    abc.Mapping[str, abc.Set[ResourceIdStr]],
+                    Optional[asyncio.Event],
+                ]
+            ],
+        ] = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks: dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
+        self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE, SLICE_AGENT_MANAGER]
@@ -124,9 +136,17 @@ class ResourceService(protocol.ServerSlice):
     def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
+    def define_features(self) -> list[extensions.Feature]:
+        return [resource_discovery]
+
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
-        self.agentmanager_service = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
+        self.agentmanager_service = cast("agentmanager.AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
+        # This is difficult to type without import loop
+        # The type is EnvironmentService
+        server.get_slice(SLICE_ENVIRONMENT).register_listener_for_multiple_actions(
+            self, [EnvironmentAction.deleted, EnvironmentAction.cleared]
+        )
 
     async def start(self) -> None:
         self.schedule(
@@ -136,68 +156,31 @@ class ResourceService(protocol.ServerSlice):
 
     async def stop(self) -> None:
         await super().stop()
-        self._close_resource_action_loggers()
 
-    def clear_env_cache(self, env: data.Environment) -> None:
+    def clear_env_cache(self, env: data.Environment | model.Environment) -> None:
         LOGGER.log(const.LOG_LEVEL_TRACE, "Clearing cache for %s", env.id)
         self._increment_cache[env.id] = None
 
-    @staticmethod
-    def get_resource_action_log_file(environment: uuid.UUID) -> str:
-        """Get the correct filename for the given environment
-        :param environment: The environment id to get the file for
-        :return: The path to the logfile
+    async def environment_action_cleared(self, env: model.Environment) -> None:
         """
-        return os.path.join(opt.log_dir.get(), opt.server_resource_action_log_prefix.get() + str(environment) + ".log")
+        Will be called when the environment is cleared
+        :param env: The environment that is cleared
+        """
+        self.clear_env_cache(env)
+
+    async def environment_action_deleted(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is deleted
+        :param env: The environment that is deleted
+        """
+        self.clear_env_cache(env)
 
     def get_resource_action_logger(self, environment: uuid.UUID) -> logging.Logger:
-        """Get the resource action logger for the given environment. If the logger was not created, create it.
+        """Get the resource action logger for the given environment.
         :param environment: The environment to get a logger for
         :return: The logger for the given environment.
         """
-        if environment in self._resource_action_loggers:
-            return self._resource_action_loggers[environment]
-
-        resource_action_log = self.get_resource_action_log_file(environment)
-
-        file_handler = logging.handlers.WatchedFileHandler(filename=resource_action_log, mode="a+")
-        # Most logs will come from agents. We need to use their level and timestamp and their formatted message
-        file_handler.setFormatter(logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s"))
-        file_handler.setLevel(logging.DEBUG)
-
-        resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER).getChild(str(environment))
-        resource_action_logger.setLevel(logging.DEBUG)
-        resource_action_logger.addHandler(file_handler)
-
-        self._resource_action_loggers[environment] = resource_action_logger
-        self._resource_action_handlers[environment] = file_handler
-
-        return resource_action_logger
-
-    def _close_resource_action_loggers(self) -> None:
-        """Close all resource action loggers and their associated handlers"""
-        try:
-            while True:
-                env, logger = self._resource_action_loggers.popitem()
-                self.close_resource_action_logger(env, logger)
-        except KeyError:
-            pass
-
-    def close_resource_action_logger(self, env: uuid.UUID, logger: Optional[logging.Logger] = None) -> None:
-        """Close the given logger for the given env.
-        :param env: The environment to close the logger for
-        :param logger: The logger to close, if the logger is none it is retrieved
-        """
-        if logger is None:
-            if env in self._resource_action_loggers:
-                logger = self._resource_action_loggers.pop(env)
-            else:
-                return
-
-        handler = self._resource_action_handlers.pop(env)
-        logger.removeHandler(handler)
-        handler.flush()
-        handler.close()
+        return self._resource_action_logger.getChild(str(environment))
 
     def log_resource_action(
         self, env: uuid.UUID, resource_ids: Sequence[str], log_level: int, ts: datetime.datetime, message: str
@@ -219,9 +202,9 @@ class ResourceService(protocol.ServerSlice):
         env: data.Environment,
         resource_id: ResourceVersionIdStr,
         logs: bool,
-        status: bool,
         log_action: const.ResourceAction,
         log_limit: int,
+        connection: Optional[Connection] = None,
     ) -> Apireturn:
         # Validate resource version id
         try:
@@ -229,24 +212,22 @@ class ResourceService(protocol.ServerSlice):
         except ValueError:
             return 400, {"message": f"{resource_id} is not a valid resource version id"}
 
-        resv = await data.Resource.get(env.id, resource_id)
-        if resv is None:
-            return 404, {"message": "The resource with the given id does not exist in the given environment"}
+        async with data.ResourceAction.get_connection(connection) as con:
+            resv = await data.Resource.get(env.id, resource_id, con)
+            if resv is None:
+                return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
-        if status is not None and status:
-            return 200, {"status": resv.status}
+            actions: list[data.ResourceAction] = []
+            if bool(logs):
+                action_name = None
+                if log_action is not None:
+                    action_name = log_action.name
 
-        actions: list[data.ResourceAction] = []
-        if bool(logs):
-            action_name = None
-            if log_action is not None:
-                action_name = log_action.name
+                actions = await data.ResourceAction.get_log(
+                    environment=env.id, resource_version_id=resource_id, action=action_name, limit=log_limit, connection=con
+                )
 
-            actions = await data.ResourceAction.get_log(
-                environment=env.id, resource_version_id=resource_id, action=action_name, limit=log_limit
-            )
-
-        return 200, {"resource": resv, "logs": actions}
+            return 200, {"resource": resv, "logs": actions}
 
     # This endpoint doesn't have a method associated yet.
     # Intended for use by other slices
@@ -255,136 +236,12 @@ class ResourceService(protocol.ServerSlice):
         environment: data.Environment,
         resource_type: Optional[ResourceType] = None,
         attributes: dict[PrimitiveTypes, PrimitiveTypes] = {},
+        connection: Optional[Connection] = None,
     ) -> list[Resource]:
-        result = await data.Resource.get_resources_in_latest_version(environment.id, resource_type, attributes)
+        result = await data.Resource.get_resources_in_latest_version(
+            environment.id, resource_type, attributes, connection=connection
+        )
         return [r.to_dto() for r in result]
-
-    @handle(methods.get_resources_for_agent, env="tid")
-    async def get_resources_for_agent(
-        self, env: data.Environment, agent: str, version: int, sid: uuid.UUID, incremental_deploy: bool
-    ) -> Apireturn:
-        if not self.agentmanager_service.is_primary(env, sid, agent):
-            return 409, {"message": f"This agent is not currently the primary for the endpoint {agent} (sid: {sid})"}
-        if incremental_deploy:
-            if version is not None:
-                return 500, {"message": "Cannot request increment for a specific version"}
-            result = await self.get_resource_increment_for_agent(env, agent)
-        else:
-            result = await self.get_all_resources_for_agent(env, agent, version)
-        return result
-
-    async def get_all_resources_for_agent(self, env: data.Environment, agent: str, version: int) -> Apireturn:
-        started = datetime.datetime.now().astimezone()
-        if version is None:
-            version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
-            if version is None:
-                return 404, {"message": "No version available"}
-
-        else:
-            exists = await data.ConfigurationModel.version_exists(environment=env.id, version=version)
-            if not exists:
-                return 404, {"message": "The given version does not exist"}
-
-        deploy_model = []
-
-        resources = await data.Resource.get_resources_for_version(env.id, version, agent)
-
-        resource_ids = []
-        for rv in resources:
-            deploy_model.append(rv.to_dict())
-            resource_ids.append(rv.resource_version_id)
-
-        # Don't log ResourceActions without resource_version_ids, because
-        # no API call exists to retrieve them.
-        if resource_ids:
-            now = datetime.datetime.now().astimezone()
-            log_line = data.LogLine.log(
-                logging.INFO, "Resource version pulled by client for agent %(agent)s state", agent=agent
-            )
-            self.log_resource_action(env.id, resource_ids, logging.INFO, now, log_line.msg)
-            ra = data.ResourceAction(
-                environment=env.id,
-                version=version,
-                resource_version_ids=resource_ids,
-                action=const.ResourceAction.pull,
-                action_id=uuid.uuid4(),
-                started=started,
-                finished=now,
-                messages=[log_line],
-            )
-            await ra.insert()
-
-        return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
-
-    async def get_resource_increment_for_agent(self, env: data.Environment, agent: str) -> Apireturn:
-        started = datetime.datetime.now().astimezone()
-
-        version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
-        if version is None:
-            return 404, {"message": "No version available"}
-
-        increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = await self.get_increment(env, version)
-        increment_ids, neg_increment = increments
-
-        now = datetime.datetime.now().astimezone()
-
-        def on_agent(res: ResourceIdStr) -> bool:
-            idr = Id.parse_id(res)
-            return idr.get_agent_name() == agent
-
-        # This is a bit subtle
-        # Any resource we consider deployed has to be marked as such
-        # Otherwise the agent will fail the deployment
-        # Stale successful deployments can cause resource that were available to be now considered deployed
-        # We don't do this back propagation on deploy,
-        #   because it is about a lot of resource that need to grab a lock to check if they are stale
-        # We do it here, as we always have.
-        # BUT because we race with other code paths that update resource state, we need to grab the lock
-        async with data.Resource.get_connection() as connection:
-            async with connection.transaction():
-                # lock out release version and deploy_done
-                await env.acquire_release_version_lock(connection=connection)
-                # set already done to deployed
-                await self.mark_deployed(env, neg_increment, now, version, filter=on_agent)
-
-        resources = await data.Resource.get_resources_for_version(env.id, version, agent)
-
-        deploy_model: list[dict[str, Any]] = []
-        resource_ids: list[str] = []
-
-        for rv in resources:
-            if rv.resource_id not in increment_ids:
-                continue
-
-            # TODO double parsing of ID
-            def in_requires(req: ResourceIdStr) -> bool:
-                if req in increment_ids:
-                    return True
-                idr = Id.parse_id(req)
-                return idr.get_agent_name() != agent
-
-            rv.attributes["requires"] = [r for r in rv.attributes["requires"] if in_requires(r)]
-            deploy_model.append(rv.to_dict())
-            resource_ids.append(rv.resource_version_id)
-
-        # Don't log ResourceActions without resource_version_ids, because
-        # no API call exists to retrieve them.
-        if resource_ids:
-            ra = data.ResourceAction(
-                environment=env.id,
-                version=version,
-                resource_version_ids=resource_ids,
-                action=const.ResourceAction.pull,
-                action_id=uuid.uuid4(),
-                started=started,
-                finished=now,
-                messages=[
-                    data.LogLine.log(logging.INFO, "Resource version pulled by client for agent %(agent)s state", agent=agent)
-                ],
-            )
-            await ra.insert()
-
-        return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
     async def mark_deployed(
         self,
@@ -393,7 +250,8 @@ class ResourceService(protocol.ServerSlice):
         timestamp: datetime.datetime,
         version: int,
         filter: Callable[[ResourceIdStr], bool] = lambda x: True,
-        connection: Optional[Connection] = None,
+        connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
+        only_update_from_states: Optional[Sequence[const.ResourceState]] = None,
     ) -> None:
         """
         Set the status of the provided resources as deployed
@@ -403,140 +261,76 @@ class ResourceService(protocol.ServerSlice):
         :param version: Version of the resources to consider.
         :param filter: Filter function that takes a resource id as an argument and returns True if it should be kept.
         """
-        resources_version_ids: list[ResourceVersionIdStr] = [
-            ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id if filter(res_id)
-        ]
-        logline = {
-            "level": "INFO",
-            "msg": "Setting deployed due to known good status",
-            "timestamp": util.datetime_iso_format(timestamp),
-            "args": [],
-        }
+        if not resources_id:
+            return
 
-        await self.resource_action_update(
-            env,
-            resources_version_ids,
-            action_id=uuid.uuid4(),
-            started=timestamp,
-            finished=timestamp,
-            status=const.ResourceState.deployed,
-            # does this require a different ResourceAction?
-            action=const.ResourceAction.deploy,
-            changes={},
-            messages=[logline],
-            change=const.Change.nochange,
-            send_events=False,
-            keep_increment_cache=True,
-            is_increment_notification=True,
-            connection=connection,
-        )
+        # performance-critical path: avoid parsing cost if we can
+        resources_id_filtered = [res_id for res_id in resources_id if filter(res_id)]
+        if not resources_id_filtered:
+            return
 
-    async def _update_deploy_state(
-        self,
-        env: data.Environment,
-        resource_id: ResourceIdStr,
-        timestamp: datetime.datetime,
-        version: int,
-        status: ResourceState,
-        message: str,
-        fail_on_error: bool,
-        connection: Optional[Connection] = None,
-        can_overwrite_available: bool = True,
-    ) -> None:
-        """
-        Set the status of the provided resources as to skipped or failed
+        action_id = uuid.uuid4()
 
-        Performs all required bookkeeping for this.
-
-        Factored out the code to set a status on a resource
-
-
-        :param env: Environment to consider.
-        :param resource_id: resource to mark.
-        :param timestamp: Timestamp for the log message and the resource action entry.
-        :param version: Version of the resources to consider.
-        :param status: status to set
-        :param message: reason to log on the transfer
-        :param fail_on_error: When encountering an undeployable state: fail or do nothing?.
-        :param can_overwrite_available: can we overwrite available.
-            If set to false, we return without changes if the current state is available
-        """
-        resource_version_id = resource_id + ",v=" + str(version)
-        logline = LogLine(
-            level=const.LogLevel.INFO,
-            msg=f"Setting {status.value} because of {message}",
-            timestamp=timestamp,
-        )
-
-        assert status in [ResourceState.failed, ResourceState.skipped]
-        # this method is purpose specific for now.
-
-        async with data.Resource.get_connection(connection) as connection:
-            async with connection.transaction():
+        async with data.Resource.get_connection(connection.connection) as inner_connection:
+            async with inner_connection.transaction():
                 # validate resources
-                resource = await data.Resource.get_one(
-                    environment=env.id,
-                    resource_id=resource_id,
-                    model=version,
-                    # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
-                    # cascading deletes
-                    lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
-                    connection=connection,
-                )
-                if not resource:
-                    raise NotFound("The resource with the given ids do not exist in the given environment.")
+                if only_update_from_states is not None:
+                    resources = await data.Resource.get_resource_ids_with_status(
+                        env.id,
+                        resources_id_filtered,
+                        version,
+                        only_update_from_states,
+                        # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
+                        # cascading deletes
+                        lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
+                        connection=inner_connection,
+                    )
+                    if not resources:
+                        return None
 
-                # no escape from terminal
-                if resource.status != status and resource.status in TERMINAL_STATES:
-                    if not fail_on_error:
-                        return
-                    else:
-                        LOGGER.error("Attempting to set undeployable resource to deployable state")
-                        raise AssertionError("Attempting to set undeployable resource to deployable state")
-
-                if resource.status == ResourceState.available and not can_overwrite_available:
-                    return
+                resources_version_ids: list[ResourceVersionIdStr] = [
+                    ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id_filtered
+                ]
 
                 resource_action = data.ResourceAction(
                     environment=env.id,
                     version=version,
-                    resource_version_ids=[resource_version_id],
-                    action_id=uuid.uuid4(),
+                    resource_version_ids=resources_version_ids,
+                    action_id=action_id,
                     action=const.ResourceAction.deploy,
                     started=timestamp,
                     messages=[
                         {
-                            **logline.dict(),
-                            "timestamp": logline.timestamp.astimezone().isoformat(timespec="microseconds"),
+                            "level": "INFO",
+                            "msg": "Setting deployed due to known good status",
+                            "args": [],
+                            "timestamp": timestamp.isoformat(timespec="microseconds"),
                         }
                     ],
                     changes={},
-                    status=status,
+                    status=const.ResourceState.deployed,
                     change=const.Change.nochange,
                     finished=timestamp,
                 )
-                await resource_action.insert(connection=connection)
-
+                await resource_action.insert(connection=inner_connection)
                 self.log_resource_action(
                     env.id,
-                    [resource_version_id],
-                    logline.level.to_int,
-                    logline.timestamp,
-                    logline.msg,
+                    resources_version_ids,
+                    const.LogLevel.INFO.to_int,
+                    timestamp,
+                    "Setting deployed due to known good status",
                 )
 
-                self.clear_env_cache(env)
-
-                await resource.update_fields(
-                    last_deploy=timestamp,
-                    status=status,
-                    last_non_deploying_status=const.NonDeployingResourceState(status),
-                    connection=connection,
-                )
+                await data.Resource.set_deployed_multi(env.id, resources_id_filtered, version, connection=inner_connection)
+                # Resource persistent state should not be affected
 
     async def get_increment(
-        self, env: data.Environment, version: int, connection: Optional[Connection] = None
-    ) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
+        self,
+        env: data.Environment,
+        version: int,
+        connection: Optional[Connection] = None,
+        run_ahead_lock: Optional[asyncio.Event] = None,
+    ) -> tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]]]:
         """
         Get the increment for a given environment and a given version of the model from the _increment_cache if possible.
         In case of cache miss, the increment calculation is performed behind a lock to make sure it is only done once per
@@ -546,214 +340,48 @@ class ResourceService(protocol.ServerSlice):
         :param version: The version of the model to consider.
         :param connection: connection to use towards the DB.
             When the connection is in a transaction, we will always invalidate the cache
+        :param run_ahead_lock: lock used to keep agents hanging while building up the latest version
         """
 
-        def _get_cache_entry() -> Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]:
+        async def _get_cache_entry() -> (
+            Optional[tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]]]]
+        ):
             """
-            Returns a tuple (increment, negative_increment) if a cache entry exists for the given environment and version
+            Returns a tuple (increment, negative_increment, negative_increment_per_agent)
+            if a cache entry exists for the given environment and version
             or None if no such cache entry exists.
             """
             cache_entry = self._increment_cache.get(env.id, None)
             if cache_entry is None:
                 # No cache entry found
                 return None
-            (version_cache_entry, incr, neg_incr) = cache_entry
-            if version_cache_entry != version:
+            (version_cache_entry, incr, neg_incr, neg_incr_per_agent, cached_run_ahead_lock) = cache_entry
+            if version_cache_entry >= version:
+                assert not run_ahead_lock  # We only expect a lock if WE are ahead
+                # Cache is ahead or equal
+                if cached_run_ahead_lock is not None:
+                    await cached_run_ahead_lock.wait()
+            elif version_cache_entry != version:
                 # Cache entry exists for another version
+                # Expire
                 return None
-            return incr, neg_incr
+            return version_cache_entry, incr, neg_incr, neg_incr_per_agent
 
-        increment: Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]] = _get_cache_entry()
+        increment: Optional[
+            tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]]]
+        ] = await _get_cache_entry()
         if increment is None or (connection is not None and connection.is_in_transaction()):
             lock = self._increment_cache_locks[env.id]
             async with lock:
-                increment = _get_cache_entry()
+                increment = await _get_cache_entry()
                 if increment is None:
-                    increment = await data.ConfigurationModel.get_increment(env.id, version, connection=connection)
-                    self._increment_cache[env.id] = (version, *increment)
+                    positive, negative = await data.ConfigurationModel.get_increment(env.id, version, connection=connection)
+                    negative_per_agent: dict[str, set[ResourceIdStr]] = defaultdict(set)
+                    for rid in negative:
+                        negative_per_agent[Id.parse_id(rid).agent_name].add(rid)
+                    increment = (version, positive, negative, negative_per_agent)
+                    self._increment_cache[env.id] = (version, positive, negative, negative_per_agent, run_ahead_lock)
         return increment
-
-    @handle(methods_v2.resource_deploy_done, env="tid", resource_id="rvid")
-    async def resource_deploy_done(
-        self,
-        env: data.Environment,
-        resource_id: Id,
-        action_id: uuid.UUID,
-        status: ResourceState,
-        messages: list[LogLine] = [],
-        changes: dict[str, AttributeStateChange] = {},
-        change: Optional[Change] = None,
-        keep_increment_cache: bool = False,
-    ) -> None:
-        resource_id_str = resource_id.resource_version_str()
-        finished = datetime.datetime.now().astimezone()
-        changes_with_rvid = {
-            resource_id_str: {attr_name: attr_change.model_dump()} for attr_name, attr_change in changes.items()
-        }
-
-        if status not in VALID_STATES_ON_STATE_UPDATE:
-            error_and_log(
-                f"Status {status} is not a valid status at the end of a deployment.",
-                resource_ids=[resource_id_str],
-                action=const.ResourceAction.deploy,
-                action_id=action_id,
-            )
-        if status in TRANSIENT_STATES:
-            error_and_log(
-                "No transient state can be used to mark a deployment as done.",
-                status=status,
-                resource_ids=[resource_id_str],
-                action=const.ResourceAction.deploy,
-                action_id=action_id,
-            )
-
-        async with data.Resource.get_connection() as connection:
-            async with connection.transaction():
-                resource = await data.Resource.get_one(
-                    connection=connection,
-                    environment=env.id,
-                    resource_id=resource_id.resource_str(),
-                    model=resource_id.version,
-                    # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
-                    # cascading deletes
-                    lock=data.RowLockMode.FOR_UPDATE,
-                )
-                if resource is None:
-                    raise NotFound("The resource with the given id does not exist in the given environment.")
-
-                # no escape from terminal
-                if resource.status != status and resource.status in TERMINAL_STATES:
-                    LOGGER.error("Attempting to set undeployable resource to deployable state")
-                    raise AssertionError("Attempting to set undeployable resource to deployable state")
-
-                resource_action = await data.ResourceAction.get(action_id=action_id, connection=connection)
-                if resource_action is None:
-                    raise NotFound(
-                        f"No resource action exists for action_id {action_id}. Ensure "
-                        f"`/resource/<resource_id>/deploy/start` is called first. "
-                    )
-                if resource_action.finished is not None:
-                    raise Conflict(
-                        f"Resource action with id {resource_id_str} was already marked as done at {resource_action.finished}."
-                    )
-
-                for log in messages:
-                    # All other data is stored in the database. The msg was already formatted at the client side.
-                    self.log_resource_action(
-                        env.id,
-                        [resource_id_str],
-                        log.level.to_int,
-                        log.timestamp,
-                        log.msg,
-                    )
-
-                await resource_action.set_and_save(
-                    messages=[
-                        {
-                            **log.model_dump(),
-                            "timestamp": log.timestamp.astimezone().isoformat(timespec="microseconds"),
-                        }
-                        for log in messages
-                    ],
-                    changes=changes_with_rvid,
-                    status=status,
-                    change=change,
-                    finished=finished,
-                    connection=connection,
-                )
-
-                extra_fields = {}
-                if status == ResourceState.deployed:
-                    extra_fields["last_success"] = resource_action.started
-
-                propagate_last_produced_events = False
-                # keep track IF we need to propagate if we are stale
-                # but only do it at the end of the transaction
-                if change != Change.nochange:
-                    # We are producing an event
-                    extra_fields["last_produced_events"] = finished
-                    propagate_last_produced_events = True
-
-                await resource.update_fields(
-                    last_deploy=finished,
-                    status=status,
-                    last_non_deploying_status=const.NonDeployingResourceState(status),
-                    **extra_fields,
-                    connection=connection,
-                )
-
-                # final resource update
-                if not keep_increment_cache:
-                    self.clear_env_cache(env)
-
-                if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
-                    await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
-
-                propagate_deploy_state = status == ResourceState.failed or status == ResourceState.skipped
-                await self.propagate_resource_state_if_stale(
-                    connection, env, [resource_id], finished, status, propagate_last_produced_events, propagate_deploy_state
-                )
-
-        self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
-
-        waiting_agents = {(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides}
-        for agent, resource_id in waiting_agents:
-            aclient = self.agentmanager_service.get_agent_client(env.id, agent)
-            if aclient is not None:
-                if change is None:
-                    change = const.Change.nochange
-                await aclient.resource_event(
-                    tid=env.id,
-                    id=agent,
-                    resource=resource_id,
-                    send_events=False,
-                    state=status,
-                    change=change,
-                    changes=changes_with_rvid,
-                )
-
-    async def propagate_resource_state_if_stale(
-        self,
-        connection: Connection,
-        env: data.Environment,
-        resource_ids: list[Id],
-        last_produced_events: datetime.datetime,
-        deploy_state: ResourceState,
-        propagate_last_produced_events: bool,
-        propagate_deploy_state: bool,
-    ) -> None:
-        if propagate_deploy_state or propagate_last_produced_events:
-            # lock out release version
-            await env.acquire_release_version_lock(connection=connection)
-            latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
-
-            for resource_id in resource_ids:
-                if latest_version is not None and latest_version > resource_id.version:
-                    # we are stale, forward propagate our status
-                    # this is required because:
-                    # upon release of the newer version our old status may have been copied over into the new version
-                    # (by the increment calculation)
-                    # the new version may thus hide this failure
-                    # issue #6475
-                    # the release_version_lock above ensure we can not race with release itself
-                    # this is at the end of the transaction to not block release too long
-                    # and vice versa
-                    if propagate_deploy_state:
-                        await self._update_deploy_state(
-                            env,
-                            resource_id.resource_str(),
-                            last_produced_events,
-                            latest_version,
-                            deploy_state,
-                            f"update on stale version {resource_id.version}",
-                            fail_on_error=False,
-                            connection=connection,
-                            can_overwrite_available=False,
-                        )
-                    if propagate_last_produced_events:
-                        await data.Resource.update_last_produced_events_if_newer(
-                            env.id, resource_id.resource_str(), latest_version, last_produced_events, connection=connection
-                        )
 
     @handle(methods.resource_action_update, env="tid")
     async def resource_action_update(
@@ -766,20 +394,14 @@ class ResourceService(protocol.ServerSlice):
         finished: datetime.datetime,
         status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
         messages: list[dict[str, Any]],
-        changes: dict[str, Any],
+        changes: dict[ResourceVersionIdStr, dict[str, object]],
         change: const.Change,
         send_events: bool,
         keep_increment_cache: bool = False,
-        is_increment_notification: bool = False,
+        only_update_from_states: Optional[set[const.ResourceState]] = None,
         *,
-        connection: Optional[Connection] = None,
+        connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
     ) -> Apireturn:
-        """
-        :param is_increment_notification: is this the increment calucation setting the deployed status,
-            instead of an actual deploy? Used to keep track of the last_success field on the resources,
-            which should not be updated for increments.
-        """
-
         def convert_legacy_state(
             status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]]
         ) -> Optional[const.ResourceState]:
@@ -790,6 +412,7 @@ class ResourceService(protocol.ServerSlice):
             else:
                 raise BadRequest(f"Unsupported deprecated resources state {status.value}")
 
+        # TODO: get rid of this?
         status = convert_legacy_state(status)
 
         # can update resource state
@@ -840,8 +463,8 @@ class ResourceService(protocol.ServerSlice):
         assert all(Id.is_resource_version_id(rvid) for rvid in resource_ids)
 
         resources: list[data.Resource]
-        async with data.Resource.get_connection(connection) as connection:
-            async with connection.transaction():
+        async with data.Resource.get_connection(connection.connection) as inner_connection:
+            async with inner_connection.transaction():
                 # validate resources
                 resources = await data.Resource.get_resources(
                     env.id,
@@ -849,16 +472,19 @@ class ResourceService(protocol.ServerSlice):
                     # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
                     # cascading deletes
                     lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
-                    connection=connection,
+                    connection=inner_connection,
                 )
                 if len(resources) == 0 or (len(resources) != len(resource_ids)):
-                    return (
-                        404,
-                        {
-                            "message": "The resources with the given ids do not exist in the given environment. "
-                            "Only %s of %s resources found." % (len(resources), len(resource_ids))
-                        },
+                    raise NotFound(
+                        message="The resources with the given ids do not exist in the given environment. "
+                        f"Only {len(resources)} of {len(resource_ids)} resources found."
                     )
+
+                if only_update_from_states is not None:
+                    resources = [resource for resource in resources if resource.status in only_update_from_states]
+                    if not resources:
+                        return 200, {"message": "no resources with the given state found"}
+                    resource_ids = [resource.resource_version_id for resource in resources]
 
                 # validate transitions
                 if is_resource_state_update:
@@ -867,14 +493,15 @@ class ResourceService(protocol.ServerSlice):
                         LOGGER.error("Attempting to set undeployable resource to deployable state")
                         raise AssertionError("Attempting to set undeployable resource to deployable state")
 
+                version = Id.parse_id(resource_ids[0]).version
+
                 # get instance
-                resource_action = await data.ResourceAction.get(action_id=action_id, connection=connection)
+                resource_action = await data.ResourceAction.get(action_id=action_id, connection=inner_connection)
                 if resource_action is None:
                     # new
                     if started is None:
-                        return 500, {"message": "A resource action can only be created with a start datetime."}
+                        raise ServerError(message="A resource action can only be created with a start datetime.")
 
-                    version = Id.parse_id(resource_ids[0]).version
                     resource_action = data.ResourceAction(
                         environment=env.id,
                         version=version,
@@ -883,20 +510,14 @@ class ResourceService(protocol.ServerSlice):
                         action=action,
                         started=started,
                     )
-                    await resource_action.insert(connection=connection)
+                    await resource_action.insert(connection=inner_connection)
                 else:
                     # existing
                     if resource_action.finished is not None:
-                        return (
-                            500,
-                            {
-                                "message": (
-                                    "An resource action can only be updated when it has not been finished yet. This action "
-                                    "finished at %s" % resource_action.finished
-                                )
-                            },
+                        raise ServerError(
+                            message="An resource action can only be updated when it has not been finished yet. This action "
+                            f"finished at {resource_action.finished}"
                         )
-
                 for msg in messages:
                     # All other data is stored in the database. The msg was already formatted at the client side.
                     self.log_resource_action(
@@ -918,25 +539,14 @@ class ResourceService(protocol.ServerSlice):
                     status=status,
                     change=change,
                     finished=finished,
-                    connection=connection,
+                    connection=inner_connection,
                 )
-
-                async def update_fields_resource(
-                    resource: data.Resource, connection: Optional[Connection] = None, **kwargs: object
-                ) -> None:
-                    """
-                    This method ensures that the `last_non_deploying_status` field in the database
-                    is updated correctly when the `status` field of a resource is updated.
-                    """
-                    if "status" in kwargs and kwargs["status"] is not ResourceState.deploying:
-                        kwargs["last_non_deploying_status"] = const.NonDeployingResourceState(kwargs["status"])
-                    await resource.update_fields(**kwargs, connection=connection)
 
                 if is_resource_state_update:
                     # transient resource update
                     if not is_resource_action_finished:
                         for res in resources:
-                            await update_fields_resource(res, status=status, connection=connection)
+                            await res.update_fields(status=status, connection=inner_connection)
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
                         return 200
@@ -946,29 +556,33 @@ class ResourceService(protocol.ServerSlice):
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
 
-                        propagate_last_produced_events = change != Change.nochange
-
-                        await self.propagate_resource_state_if_stale(
-                            connection,
-                            env,
-                            [Id.parse_id(res) for res in resource_ids],
-                            finished,
-                            status,  # mypy can't figure out this is never None here
-                            propagate_last_produced_events,
-                            status == ResourceState.failed or status == ResourceState.skipped,
-                        )
-
-                        model_version = None
                         for res in resources:
-                            extra_fields = {}
-                            if status == ResourceState.deployed and not is_increment_notification:
-                                extra_fields["last_success"] = resource_action.started
-                            if propagate_last_produced_events:
-                                extra_fields["last_produced_events"] = finished
-                            await update_fields_resource(
-                                res, last_deploy=finished, status=status, **extra_fields, connection=connection
+                            await res.update_fields(
+                                status=status,
+                                connection=inner_connection,
                             )
-                            model_version = res.model
+                            # Not very typeable
+                            extra_fields: dict[str, Any] = {}
+
+                            if change is not None and change != Change.nochange:
+                                extra_fields["last_produced_events"] = finished
+
+                            if status == ResourceState.deployed:
+                                extra_fields["last_success"] = resource_action.started
+                            if status not in {
+                                ResourceState.deploying,
+                                ResourceState.undefined,
+                                ResourceState.skipped_for_undefined,
+                            }:
+                                extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
+                                extra_fields["last_deployed_attribute_hash"] = res.attribute_hash
+                                extra_fields["last_deploy"] = finished
+                                extra_fields["last_deployed_version"] = version
+
+                            await res.update_persistent_state(
+                                **extra_fields,
+                                connection=inner_connection,
+                            )
 
                             if (
                                 "purged" in res.attributes
@@ -976,73 +590,31 @@ class ResourceService(protocol.ServerSlice):
                                 and status == const.ResourceState.deployed
                             ):
                                 await data.Parameter.delete_all(
-                                    environment=env.id, resource_id=res.resource_id, connection=connection
+                                    environment=env.id, resource_id=res.resource_id, connection=inner_connection
                                 )
 
         if is_resource_state_update and is_resource_action_finished:
-            self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, model_version))
-            waiting_agents = {
-                (Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides
-            }
 
-            for agent, resource_id in waiting_agents:
-                aclient = self.agentmanager_service.get_agent_client(env.id, agent)
-                if aclient is not None:
-                    if change is None:
-                        change = const.Change.nochange
-                    self.add_background_task(
-                        aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
-                    )
+            def post_deploy_update() -> None:
+                waiting_agents = {
+                    (Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides
+                }
+
+                for agent, resource_id in waiting_agents:
+                    aclient = self.agentmanager_service.get_agent_client(env.id, agent)
+                    if aclient is not None:
+                        if change is None:
+                            my_change = const.Change.nochange
+                        else:
+                            my_change = change
+
+                        self.add_background_task(
+                            aclient.resource_event(env.id, agent, resource_id, send_events, status, my_change, changes)
+                        )
+
+            connection.call_after_tx(post_deploy_update)
 
         return 200
-
-    @handle(methods_v2.resource_deploy_start, env="tid", resource_id="rvid")
-    async def resource_deploy_start(
-        self,
-        env: data.Environment,
-        resource_id: Id,
-        action_id: uuid.UUID,
-    ) -> dict[ResourceVersionIdStr, const.ResourceState]:
-        resource_id_str = resource_id.resource_version_str()
-        async with data.Resource.get_connection() as connection:
-            async with connection.transaction():
-                resource = await data.Resource.get_one(
-                    connection=connection,
-                    environment=env.id,
-                    resource_id=resource_id.resource_str(),
-                    model=resource_id.version,
-                )
-                if resource is None:
-                    raise NotFound(message=f"Environment {env.id} doesn't contain a resource with id {resource_id_str}")
-
-                resource_action = data.ResourceAction(
-                    environment=env.id,
-                    version=resource_id.version,
-                    resource_version_ids=[resource_id_str],
-                    action_id=action_id,
-                    action=const.ResourceAction.deploy,
-                    started=datetime.datetime.now().astimezone(),
-                    messages=[
-                        data.LogLine.log(
-                            logging.INFO,
-                            "Resource deploy started on agent %(agent)s, setting status to deploying",
-                            agent=resource_id.agent_name,
-                        )
-                    ],
-                    status=const.ResourceState.deploying,
-                )
-                try:
-                    await resource_action.insert(connection=connection)
-                except UniqueViolationError:
-                    raise Conflict(message=f"A resource action with id {action_id} already exists.")
-
-                await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
-
-            self.clear_env_cache(env)
-
-            return await data.Resource.get_last_non_deploying_state_for_dependencies(
-                environment=env.id, resource_version_id=resource_id, connection=connection
-            )
 
     @handle(methods_v2.get_resource_actions, env="tid")
     async def get_resource_actions(
@@ -1057,7 +629,11 @@ class ResourceService(protocol.ServerSlice):
         action_id: Optional[uuid.UUID] = None,
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
+        exclude_changes: Optional[list[Change]] = None,
     ) -> ReturnValue[list[ResourceAction]]:
+        if exclude_changes is None:
+            exclude_changes = []
+
         if (attribute and not attribute_value) or (not attribute and attribute_value):
             raise BadRequest(
                 f"Attribute and attribute_value should both be supplied to use them filtering. "
@@ -1090,6 +666,7 @@ class ResourceService(protocol.ServerSlice):
             action_id=action_id,
             first_timestamp=first_timestamp,
             last_timestamp=last_timestamp,
+            exclude_changes=exclude_changes,
         )
         resource_action_dtos = [resource_action.to_dto() for resource_action in resource_actions]
         links = {}
@@ -1101,29 +678,28 @@ class ResourceService(protocol.ServerSlice):
             attribute_value: Optional[str] = None,
             log_severity: Optional[str] = None,
             limit: Optional[int] = 0,
-        ) -> dict:
+        ) -> dict[str, str]:
             query_params = {
                 "resource_type": resource_type,
                 "agent": agent,
                 "attribute": attribute,
                 "attribute_value": attribute_value,
                 "log_severity": log_severity,
-                "limit": limit,
+                "limit": str(limit) if limit else None,
             }
-            query_params = {param_key: param_value for param_key, param_value in query_params.items() if param_value}
-            return query_params
+            return {param_key: param_value for param_key, param_value in query_params.items() if param_value is not None}
 
         if limit and resource_action_dtos:
             base_url = "/api/v2/resource_actions"
             common_query_params = _get_query_params(resource_type, agent, attribute, attribute_value, log_severity, limit)
             # Next is always earlier with regards to 'started' time
             next_params = common_query_params.copy()
-            next_params["last_timestamp"] = resource_action_dtos[-1].started
-            next_params["action_id"] = resource_action_dtos[-1].action_id
+            next_params["last_timestamp"] = util.datetime_iso_format(resource_action_dtos[-1].started)
+            next_params["action_id"] = str(resource_action_dtos[-1].action_id)
             links["next"] = url_concat(base_url, next_params)
             previous_params = common_query_params.copy()
-            previous_params["first_timestamp"] = resource_action_dtos[0].started
-            previous_params["action_id"] = resource_action_dtos[0].action_id
+            previous_params["first_timestamp"] = util.datetime_iso_format(resource_action_dtos[0].started)
+            previous_params["action_id"] = str(resource_action_dtos[0].action_id)
             links["prev"] = url_concat(base_url, previous_params)
         return_value = ReturnValue(response=resource_action_dtos, links=links if links else None)
         return return_value
@@ -1180,7 +756,7 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ReleasedResourceDetails:
-        details = await data.Resource.get_resource_details(env.id, rid)
+        details = await data.Resource.get_released_resource_details(env.id, rid)
         if not details:
             raise NotFound("The resource with the given id does not exist, or was not released yet in the given environment.")
         return details
@@ -1260,9 +836,17 @@ class ResourceService(protocol.ServerSlice):
         return resource
 
     @handle(methods_v2.discovered_resource_create, env="tid")
-    async def discovered_resource_create(self, env: data.Environment, discovered_resource_id: str, values: JsonType) -> None:
+    async def discovered_resource_create(
+        self,
+        env: data.Environment,
+        discovered_resource_id: ResourceIdStr,
+        values: JsonType,
+        discovery_resource_id: ResourceIdStr,
+    ) -> None:
         try:
-            discovered_resource = DiscoveredResource(discovered_resource_id=discovered_resource_id, values=values)
+            discovered_resource = LinkedDiscoveredResource(
+                discovered_resource_id=discovered_resource_id, values=values, discovery_resource_id=discovery_resource_id
+            )
         except ValidationError as e:
             # this part was copy/pasted from protocol.common.MethodProperties.validate_arguments.
             error_msg = f"Failed to validate argument\n{str(e)}"
@@ -1274,7 +858,7 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods_v2.discovered_resource_create_batch, env="tid")
     async def discovered_resources_create_batch(
-        self, env: data.Environment, discovered_resources: list[DiscoveredResource]
+        self, env: data.Environment, discovered_resources: list[LinkedDiscoveredResource]
     ) -> None:
         dao_list = [res.to_dao(env.id) for res in discovered_resources]
         await data.DiscoveredResource.insert_many_with_overwrite(dao_list)
@@ -1283,6 +867,9 @@ class ResourceService(protocol.ServerSlice):
     async def discovered_resources_get(
         self, env: data.Environment, discovered_resource_id: ResourceIdStr
     ) -> DiscoveredResource:
+        if not self.feature_manager.enabled(resource_discovery):
+            raise Forbidden(message="The resource discovery feature is not enabled.")
+
         result = await data.DiscoveredResource.get_one(environment=env.id, discovered_resource_id=discovered_resource_id)
         if not result:
             raise NotFound(f"discovered_resource with name {discovered_resource_id} not found in env {env.id}")
@@ -1297,16 +884,15 @@ class ResourceService(protocol.ServerSlice):
         start: Optional[str] = None,
         end: Optional[str] = None,
         sort: str = "discovered_resource_id.asc",
+        filter: Optional[dict[str, list[str]]] = None,
     ) -> ReturnValue[Sequence[DiscoveredResource]]:
+        if not self.feature_manager.enabled(resource_discovery):
+            raise Forbidden(message="The resource discovery feature is not enabled.")
+
         try:
-            handler = DiscoveredResourceView(
-                environment=env,
-                limit=limit,
-                sort=sort,
-                start=start,
-                end=end,
-            )
+            handler = DiscoveredResourceView(environment=env, limit=limit, sort=sort, start=start, end=end, filter=filter)
             out = await handler.execute()
+
             return out
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e

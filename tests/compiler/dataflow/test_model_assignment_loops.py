@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-
 import pytest
 
 from compiler.dataflow.conftest import DataflowTestHelper

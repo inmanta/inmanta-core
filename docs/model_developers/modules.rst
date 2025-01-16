@@ -251,10 +251,10 @@ The Inmanta Python SDK offers several extension mechanism:
 * Resource handlers
 * Dependency managers
 
-Only the compiler and agents load code included in modules (See :doc:`/architecture`). A module can include external
-dependencies. Both the compiler and the agent will install this dependencies with ``pip install`` in an virtual
-environment dedicated to the compiler or agent. By default this is in `.env` of the project for the compiler and in
-`/var/lib/inmanta/agent/env` for the agent.
+Only the compiler and executors load code included in modules (See :doc:`/architecture`). A module can include external
+dependencies. Both the compiler and the executors will install these dependencies with ``pip install``, each in a
+dedicated virtual environment. By default this is in `.env` of the project for the compiler and in
+`/var/lib/inmanta/server/<environment>/executors/venvs/` for the executors.
 
 Inmanta uses a special format of requirements that was defined in python PEP440 but never fully
 implemented in all python tools (setuptools and pip). Inmanta rewrites this to the syntax pip
@@ -347,10 +347,9 @@ Add the following content to the file:
   login <username>
   password <password>
 
-For more information see the doc about`pip authentication <https://pip.pypa.io/en/stable/topics/authentication/>`_.
+For more information see the doc about `pip authentication <https://pip.pypa.io/en/stable/topics/authentication/>`_.
 
 You will also need to specify the url of the repository in the ``project.yml`` file of your project (See: :ref:`specify_location_pip`).
 
 By following the previous steps, the Inmanta server will be able to install modules from a private Python package repository.
-
 

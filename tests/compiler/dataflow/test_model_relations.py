@@ -32,15 +32,15 @@ def test_dataflow_model_relation(
         """
 entity AParent:
 end
-implement AParent using std::none
+implement AParent using none
 
 entity A extends AParent:
 end
-implement A using std::none
+implement A using none
 
 entity B:
 end
-implement B using std::none
+implement B using none
 
 %s
 
@@ -50,6 +50,9 @@ b = B()
 a.b = b
 
 %s
+
+implementation none for std::Entity:
+end
         """
         % ("" if assign_first else relation_stmt, relation_stmt if assign_first else "")
     )
@@ -86,9 +89,9 @@ end
 X.u [1] -- U
 U.v [1] -- V
 
-implement X using std::none
-implement U using std::none
-implement V using std::none
+implement X using none
+implement U using none
+implement V using none
 
 n = 42
 
@@ -96,6 +99,9 @@ x = X()
 x.u = U()
 x.u.v = V()
 x.u.v.n = n
+
+implementation none for std::Entity:
+end
         """,
     )
     dataflow_test_helper.verify_graphstring(
@@ -122,8 +128,8 @@ end
 
 U.v [1] -- V
 
-implement U using std::none
-implement V using std::none
+implement U using none
+implement V using none
 
 n = 42
 
@@ -131,6 +137,9 @@ u = U(v = v)
 v = V(n = n)
 
 uvn = u.v.n
+
+implementation none for std::Entity:
+end
         """,
     )
     dataflow_test_helper.verify_graphstring(
@@ -159,10 +168,13 @@ end
 
 index A(n)
 
-implement A using std::none
+implement A using none
 
 x = A(n = 42, k = 0)
 y = A(n = 42, l = 1)
+
+implementation none for std::Entity:
+end
         """,
     )
     dataflow_test_helper.verify_graphstring(
@@ -189,10 +201,13 @@ entity A:
     int n = 42
 end
 
-implement A using std::none
+implement A using none
 
 x = A()
 y = A(n = 0)
+
+implementation none for std::Entity:
+end
         """,
     )
     dataflow_test_helper.verify_graphstring(
@@ -244,13 +259,16 @@ end
 entity B:
 end
 
-implement A using std::none
-implement B using std::none
+implement A using none
+implement B using none
 
 A.b [0:] -- B.a [0:]
 
 a = A()
 # Lists are not supported yet. Mustn't crash on trying to model the other side of the bidirectional relation
 a.b = [B(), B()]
+
+implementation none for std::Entity:
+end
         """,
     )

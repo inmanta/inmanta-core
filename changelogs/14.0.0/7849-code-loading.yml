@@ -1,0 +1,3 @@
+description: Make sure the compiler will not load Python code code present in the `files`, `model` or `templates` directory
+change-type: patch
+destination-branches: [master, iso7]

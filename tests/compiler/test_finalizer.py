@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import os
 
@@ -33,13 +34,14 @@ def test_modules_compiler_finalizer(
     """
     verify that the finalizers are called at the end of the compilation.
     """
-    snippetcompiler_clean.setup_for_snippet("", install_project=True)
+    snippetcompiler_clean.setup_for_snippet("", install_project=True, autostd=True)
 
     v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
-    test_module_plugin_contents: str = """
+    test_module_plugin_contents: str = (
+        """
 from inmanta.plugins import plugin
 from inmanta import compiler
 
@@ -70,6 +72,7 @@ def finalize2():
     if connection2:
         connection2 = "closed"
         """.strip()
+    )
 
     v1_module_from_template(
         v1_template_path,
@@ -104,13 +107,14 @@ def test_modules_compiler_exception_finalizer(tmpdir: str, snippetcompiler_clean
     """
     verify that the finalizers are called even if there is an exception raised during compilation
     """
-    snippetcompiler_clean.setup_for_snippet("", install_project=True)
+    snippetcompiler_clean.setup_for_snippet("", install_project=True, autostd=True)
 
     v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
-    test_module_plugin_contents: str = """
+    test_module_plugin_contents: str = (
+        """
 from inmanta import compiler
 
 connection = None
@@ -120,6 +124,7 @@ def finalize():
     global connection
     connection = "closed"
         """.strip()
+    )
 
     v1_module_from_template(
         v1_template_path,
@@ -160,13 +165,14 @@ def test_modules_compiler_finalizer_exception(
     verify that the exceptions in the finalizer are raised if there are no exceptions during the compilation,
     and that they are logged if there is an exception during compilation.
     """
-    snippetcompiler_clean.setup_for_snippet("", install_project=True)
+    snippetcompiler_clean.setup_for_snippet("", install_project=True, autostd=True)
 
     v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
-    test_module_plugin_contents: str = """
+    test_module_plugin_contents: str = (
+        """
 from inmanta import compiler
 
 @compiler.finalizer
@@ -177,6 +183,7 @@ def finalize1():
 def finalize2():
     raise Exception("big mistake")
         """.strip()
+    )
 
     v1_module_from_template(
         v1_template_path,

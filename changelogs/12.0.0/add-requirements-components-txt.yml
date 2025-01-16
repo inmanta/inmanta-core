@@ -1,0 +1,4 @@
+---
+description: Add the requirements.components.txt constraint file to tox.ini
+change-type: patch
+destination-branches: [master, iso7, iso6]

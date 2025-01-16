@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-
 """
 This module enables tracking of object construction.
 

@@ -1,0 +1,9 @@
+description: "Increased the default value of the database.connection_pool_max_size setting to 70"
+change-type: patch
+sections:
+  minor-improvement: "{{description}}"
+issue-nr: 7248
+destination-branches:
+  - master
+  - iso7
+  - iso6

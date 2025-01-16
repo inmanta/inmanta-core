@@ -15,14 +15,16 @@
 
     Contact: code@inmanta.com
 """
+
+import importlib.metadata
 import logging
 import os
 from collections import defaultdict
 from typing import Any, Generic, Optional, TypeVar
 
-import pkg_resources
 import yaml
 
+import inmanta.logging
 from inmanta import data
 from inmanta.config import feature_file_config
 from inmanta.data.model import ExtensionStatus
@@ -86,6 +88,9 @@ class StringListFeature(Feature[list[str]]):
         super().__init__(slice, name, description, default_value=["*"])
 
 
+FeatureValueTypes = bool | str | list[str]
+
+
 class ProductMetadata:
     def __init__(self, product: str, edition: str, license: str, version: Optional[str]) -> None:
         self.product = product
@@ -102,18 +107,19 @@ class FeatureManager:
 
         slices:
             slice_name:
-                feature_name: bool
+                feature_name: FeatureValueTypes
 
     """
 
     def __init__(self) -> None:
         self._features: dict[str, dict[str, Feature[object]]] = defaultdict(dict)
-        self._feature_config: dict[str, dict[str, Any]] = self._load_feature_config()
+        self._feature_config: dict[str, dict[str, FeatureValueTypes]] = self._load_feature_config()
 
     def get_features(self) -> list[Feature[object]]:
         return [feature for slice in self._features.values() for feature in slice.values()]
 
-    def _load_feature_config(self) -> dict[str, dict[str, Any]]:
+    def _load_feature_config(self) -> dict[str, dict[str, FeatureValueTypes]]:
+        """Return the value of the slices key in the feature config file"""
         feature_file = feature_file_config.get()
         if feature_file is None:
             return {}
@@ -123,7 +129,7 @@ class FeatureManager:
             return {}
 
         with open(feature_file, encoding="utf-8") as fd:
-            result = yaml.safe_load(fd)
+            result: dict[str, dict[str, dict[str, FeatureValueTypes]]] = yaml.safe_load(fd)
 
         if "slices" in result:
             return result["slices"]
@@ -141,8 +147,8 @@ class FeatureManager:
         packages = ["inmanta-oss", "inmanta", "inmanta-core"]
         for package in packages:
             try:
-                return pkg_resources.get_distribution(package).version
-            except pkg_resources.DistributionNotFound:
+                return importlib.metadata.version(package)
+            except importlib.metadata.PackageNotFoundError:
                 pass
 
         LOGGER.warning("Couldn't determine product version. Make sure inmanta is properly installed.")
@@ -187,6 +193,7 @@ class ApplicationContext:
     def __init__(self) -> None:
         self._slices: list[ServerSlice] = []
         self._feature_manager: Optional[FeatureManager] = None
+        self._log_config_extenders: list[inmanta.logging.LoggingConfigBuilderExtension] = []
 
     def register_slice(self, slice: ServerSlice) -> None:
         assert slice is not None
@@ -221,3 +228,9 @@ class ApplicationContext:
         Returns the list of all available environment settings
         """
         return sorted(data.Environment._settings.values(), key=lambda x: x.name)
+
+    def get_default_log_config_extenders(self) -> list[inmanta.logging.LoggingConfigBuilderExtension]:
+        return self._log_config_extenders
+
+    def register_default_logging_config(self, log_config_extender: inmanta.logging.LoggingConfigBuilderExtension) -> None:
+        self._log_config_extenders.append(log_config_extender)

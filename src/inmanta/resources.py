@@ -15,24 +15,25 @@
 
     Contact: code@inmanta.com
 """
+
 import json
 import logging
 import re
 from collections.abc import Iterable, Iterator, Sequence
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
 
+import inmanta.ast
 import inmanta.util
-from inmanta import plugins
+from inmanta import const
 from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
-from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
-from inmanta.execute import proxy, util
+from inmanta.execute import util
 from inmanta.stable_api import stable_api
-from inmanta.types import JsonType
+from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 
 if TYPE_CHECKING:
     from inmanta import export
     from inmanta.data import ResourceAction
-    from inmanta.execute import runtime
+    from inmanta.execute import proxy, runtime
 
 LOGGER = logging.getLogger(__name__)
 
@@ -50,13 +51,12 @@ class resource:  # noqa: N801
     A decorator that registers a new resource. The decorator must be applied to classes that inherit from
     :class:`~inmanta.resources.Resource`
 
-    :param name: The name of the entity in the configuration model it creates a resources from. For example
-                 :inmanta:entity:`std::File`
-    :param id_attribute: The attribute of `this` resource that uniquely identifies a resource on an agent. This attribute
-                         can be mapped.
+    :param name: The name of the entity in the configuration model it creates a resource from. For example
+        :inmanta:entity:`std::testing::NullResource`
+    :param id_attribute: The attribute of `this` resource that uniquely identifies a resource on a logical agent.
+        This attribute can be mapped.
     :param agent: This string indicates how the agent of this resource is determined. This string points to an attribute,
-                  but it can navigate relations (this value cannot be mapped). For example, the agent argument could be
-                  ``host.name``
+        but it can navigate relations (this value cannot be mapped). For example, the agent argument could be ``host.name``.
     """
 
     # The _resources dict is accessed by the compile function in pytest-inmanta.
@@ -190,7 +190,7 @@ class Resource(metaclass=ResourceMeta):
     static methods in the class with the name "get_$fieldname".
     """
 
-    fields: Sequence[str] = ("send_event",)
+    fields: Sequence[str] = (const.RESOURCE_ATTRIBUTE_SEND_EVENTS, const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS)
     send_event: bool  # Deprecated field
     model: "proxy.DynamicProxy"
     map: dict[str, Callable[[Optional["export.Exporter"], "proxy.DynamicProxy"], Any]]
@@ -201,6 +201,14 @@ class Resource(metaclass=ResourceMeta):
             return obj.send_event
         except Exception:
             return False
+
+    @staticmethod
+    def get_receive_events(_exporter: "export.Exporter", obj: "Resource") -> bool:
+        try:
+            return obj.receive_events
+        except Exception:
+            # default to True for backward compatibility (all resources used to receive events)
+            return True
 
     @classmethod
     def convert_requires(
@@ -260,9 +268,9 @@ class Resource(metaclass=ResourceMeta):
 
                 agent_value = getattr(agent_value, el)
 
-            except proxy.UnsetException as e:
+            except inmanta.ast.UnsetException as e:
                 raise e
-            except proxy.UnknownException as e:
+            except inmanta.ast.UnknownException as e:
                 raise e
             except Exception:
                 raise Exception(
@@ -272,7 +280,7 @@ class Resource(metaclass=ResourceMeta):
 
         attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
         if isinstance(attribute_value, util.Unknown):
-            raise proxy.UnknownException(attribute_value)
+            raise inmanta.ast.UnknownException(attribute_value)
         if not isinstance(agent_value, str):
             raise ResourceException(
                 f"The agent attribute should lead to a string, got {agent_value} of type {type(agent_value)}"
@@ -300,9 +308,9 @@ class Resource(metaclass=ResourceMeta):
             return value
         except IgnoreResourceException:
             raise  # will be handled in _load_resources of export.py
-        except proxy.UnknownException as e:
+        except inmanta.ast.UnknownException as e:
             return e.unknown
-        except plugins.PluginException as e:
+        except inmanta.ast.PluginException as e:
             raise ExplicitPluginException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
         except CompilerException:
             # Internal exceptions (like UnsetException) should be propagated without being wrapped
@@ -334,7 +342,7 @@ class Resource(metaclass=ResourceMeta):
         return obj
 
     @classmethod
-    def deserialize(cls, obj_map: JsonType, use_generic: bool = False) -> "Resource":
+    def deserialize(cls, obj_map: JsonType) -> "Resource":
         """
         Deserialize the resource from the given dictionary
         """
@@ -343,11 +351,12 @@ class Resource(metaclass=ResourceMeta):
 
         force_fields = False
         if cls_resource is None:
-            if not use_generic:
-                raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
-            else:
-                cls_resource = cls
-                force_fields = True
+            raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
+
+        # backward compatibility for resources that were exported and stored in serialized form before the
+        # receive_events field was introduced
+        if const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS not in obj_map:
+            obj_map = {**obj_map, const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: True}
 
         obj = cls_resource(obj_id)
         obj.populate(obj_map, force_fields)
@@ -495,7 +504,8 @@ class Id:
 
     def __init__(self, entity_type: str, agent_name: str, attribute: str, attribute_value: str, version: int = 0) -> None:
         """
-        :attr entity_type: The resource type, as defined in the configuration model. For example :inmanta:entity:`std::File`.
+        :attr entity_type: The resource type, as defined in the configuration model.
+            For example :inmanta:entity:`std::testing::NullResource`.
         :attr agent_name: The agent responsible for this resource.
         :attr attribute: The key attribute that uniquely identifies this resource on the agent
         :attr attribute_value: The corresponding value for this key attribute.
@@ -558,10 +568,13 @@ class Id:
         """
         String representation for this resource id with the following format:
             <type>[<agent>,<attribute>=<value>]
-            - type: The resource type, as defined in the configuration model. For example :inmanta:entity:`std::File`.
+
+            - type: The resource type, as defined in the configuration model.
+                For example :inmanta:entity:`std::testing::NullResource`.
             - agent: The agent responsible for this resource.
             - attribute: The key attribute that uniquely identifies this resource on the agent
             - value: The corresponding value for this key attribute.
+
         :return: Returns a :py:class:`inmanta.data.model.ResourceIdStr`
         """
         return cast(

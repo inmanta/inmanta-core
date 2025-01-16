@@ -32,7 +32,8 @@ from inmanta.app import cmd_parser
 from inmanta.command import ShowUsageException
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.config import Config
-from inmanta.const import VersionState
+from inmanta.const import INMANTA_REMOVED_SET_ID
+from inmanta.data import AUTO_DEPLOY
 from utils import v1_module_from_template
 
 
@@ -147,16 +148,24 @@ def test_module_help(inmanta_config, capsys):
 @pytest.mark.parametrize_any("push_method", [([]), (["-d"]), (["-d", "--full"])])
 @pytest.mark.parametrize_any("set_server", [True, False])
 @pytest.mark.parametrize_any("set_port", [True, False])
-async def test_export(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, server, client, push_method, set_server, set_port):
+async def test_export(
+    tmpvenv_active_inherit: env.VirtualEnv,
+    tmpdir,
+    server,
+    client,
+    push_method,
+    set_server,
+    set_port,
+    null_agent,
+    environment,
+    clienthelper,
+):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")
 
-    result = await client.create_project("test")
+    env_id = environment
+    result = await client.environment_settings_set(tid=environment, id=AUTO_DEPLOY, value=True)
     assert result.code == 200
-    proj_id = result.result["project"]["id"]
-    result = await client.create_environment(proj_id, "test", None, None)
-    assert result.code == 200
-    env_id = result.result["environment"]["id"]
 
     workspace = tmpdir.mkdir("tmp")
     path_main_file = workspace.join("main.cf")
@@ -173,10 +182,14 @@ repo: https://github.com/inmanta/
 """
     )
 
+    # Use non-default agent to make sure the resource can be checked in the 'deploying' state.
+    # Using the internal default agent might trigger a race condition where the 'success' state
+    # is reached because the resource actually gets deployed.
+
     path_main_file.write(
         """
-vm1=std::Host(name="non-existing-machine", os=std::linux)
-std::ConfigFile(host=vm1, path="/test", content="")
+import std::testing
+std::testing::NullResource(name="test", agentname="non_existing_agent")
 """
     )
 
@@ -225,9 +238,8 @@ std::ConfigFile(host=vm1, path="/test", content="")
     assert result.code == 200
     assert len(result.result["versions"]) == 1
 
-    details_exported_version = result.result["versions"][0]
-
-    assert details_exported_version["result"] == VersionState.deploying.name
+    # wait for release by auto release
+    await clienthelper.wait_for_released(None)
 
     shutil.rmtree(workspace)
 
@@ -395,8 +407,9 @@ repo: https://github.com/inmanta/
 
     path_main_file.write(
         """
-vm1=std::Host(name="non-existing-machine", os=std::linux)
-std::ConfigFile(host=vm1, path="/test", content="")
+import std::testing
+
+std::testing::NullResource(name="test")
 """
     )
 
@@ -432,8 +445,9 @@ std::ConfigFile(host=vm1, path="/test", content="")
 
 async def test_export_invalid_argument_combination() -> None:
     """
-    Ensure that the `inmanta export` command exits with an error when the --delete-resource-set option is
-    provided without the --partial option being provided.
+    Ensure that the `inmanta export` command exits with an error when resource sets are marked for deletion
+    (either by the --delete-resource-set option or the INMANTA_REMOVED_SET_ID env variable) without the --partial
+    option being provided.
     """
     args = [sys.executable, "-m", "inmanta.app", "export", "--delete-resource-set", "test"]
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -444,8 +458,27 @@ async def test_export_invalid_argument_combination() -> None:
         await process.communicate()
         raise e
 
+    missing_partial_flag = (
+        "A full export was requested but resource sets were marked for deletion (via the --delete-resource-set cli option "
+        "or the INMANTA_REMOVED_SET_ID env variable). Deleting a resource set can only be performed during a partial export. "
+        "To trigger a partial export, use the --partial option."
+    )
+
     assert process.returncode == 1
-    assert "The --delete-resource-set option should always be used together with the --partial option" in stderr.decode("utf-8")
+    assert missing_partial_flag in stderr.decode("utf-8")
+
+    args = [sys.executable, "-m", "inmanta.app", "export"]
+    env = {INMANTA_REMOVED_SET_ID: "a b c"}
+    process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+    try:
+        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=5)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+
+    assert process.returncode == 1
+    assert missing_partial_flag in stderr.decode("utf-8")
 
 
 @pytest.mark.parametrize("set_keep_logger_names_option", [True, False])
@@ -571,6 +604,6 @@ async def test_logger_name_in_compiler_exporter_output(
         assert "inmanta_plugins.mymod    INFO    test" in stdout
         assert re.search("inmanta.export[ ]+INFO[ ]+Committed resources with version 1", stdout)
     else:
-        assert re.search("^compiler[ ]*DEBUG[ ]+Starting compile", stdout)
+        assert re.search("^compiler[ ]*DEBUG[ ]+Starting compile", stdout, re.MULTILINE)
         assert "mymod          INFO    test" in stdout
         assert re.search("\nexporter[ ]+INFO[ ]+Committed resources with version 1", stdout)

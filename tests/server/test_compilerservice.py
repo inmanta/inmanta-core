@@ -15,11 +15,15 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import datetime
+import functools
 import logging
 import os
+import platform
 import queue
+import re
 import shutil
 import subprocess
 import uuid
@@ -27,31 +31,29 @@ from asyncio import Semaphore
 from collections import abc
 from typing import TYPE_CHECKING, Optional
 
-import pkg_resources
 import py.path
 import pytest
 from pytest import approx
 
 import inmanta.ast.export as ast_export
 import inmanta.data.model as model
+import inmanta.util
 import utils
 from inmanta import config, data
-from inmanta.const import ParameterSource
+from inmanta.const import INMANTA_REMOVED_SET_ID, ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
-from inmanta.env import PythonEnvironment
+from inmanta.env import PythonEnvironment, VirtualEnv
 from inmanta.export import cfg_env
 from inmanta.protocol import Result
-from inmanta.server import SLICE_COMPILER, SLICE_SERVER
-from inmanta.server import config as server_config
-from inmanta.server import protocol
+from inmanta.server import SLICE_COMPILER, SLICE_SERVER, protocol
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.server.services.notificationservice import NotificationService
 from inmanta.util import ensure_directory_exist
 from server.conftest import EnvironmentFactory
-from utils import LogSequence, report_db_index_usage, retry_limited, wait_for_version
+from utils import LogSequence, log_contains, report_db_index_usage, retry_limited, wait_for_version
 
 logger = logging.getLogger("inmanta.test.server.compilerservice")
 
@@ -94,7 +96,8 @@ async def compile_and_assert(
         environment=env.id,
         do_export=export,
         metadata=meta,
-        environment_variables=env_vars,
+        requested_environment_variables=env_vars,
+        used_environment_variables=env_vars,
         force_update=update,
         exporter_plugin=exporter_plugin,
     )
@@ -132,30 +135,36 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
         Collect all state updates, optionally hang the processing of listeners
         """
 
-        def __init__(self):
+        def __init__(self) -> None:
             self.seen = []
             self.preseen = []
             self.lock = Semaphore(1)
+            self.blocking = False
 
-        def reset(self):
+        def reset(self) -> None:
             self.seen = []
             self.preseen = []
 
-        async def compile_done(self, compile: data.Compile):
+        async def compile_done(self, compile: data.Compile) -> None:
             self.preseen.append(compile)
             print("Got compile done for ", compile.remote_id)
+            logger.info("Got compile done for %s (blocking: %s)", compile.remote_id, self.blocking)
             async with self.lock:
+                logger.info("INTO LOCK %s (blocking: %s)", compile.remote_id, self.blocking)
                 self.seen.append(compile)
 
-        async def hang(self):
+        async def hang(self) -> None:
             await self.lock.acquire()
 
-        def release(self):
+        def release(self) -> None:
             self.lock.release()
 
-        def verify(self, envs: uuid.UUID):
+        def verify(self, envs: uuid.UUID) -> None:
             assert sorted([x.remote_id for x in self.seen]) == sorted(envs)
             self.reset()
+
+        def is_blocking(self) -> bool:
+            return self.blocking
 
     class HangRunner:
         """
@@ -186,11 +195,11 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
         hook in the hangrunner
         """
 
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__()
             self.locks = {}
 
-        def _get_compile_runner(self, compile: data.Compile, project_dir: str):
+        def _get_compile_runner(self, compile: data.Compile, project_dir: str) -> HangRunner:
             runner = HangRunner(compile)
             self.locks[compile.remote_id] = runner
             return runner
@@ -221,8 +230,13 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     collector = Collector()
     cs.add_listener(collector)
 
+    hanging_collector = Collector()
+    hanging_collector.blocking = True
+    cs.add_listener(hanging_collector)
+
     async def request_compile(env: data.Environment) -> uuid.UUID:
         """Request compile for given env, return remote_id"""
+        logger.info("Requesting compile for %s", env)
         u1 = uuid.uuid4()
         # add unique environment variables to prevent merging in request_recompile
         await cs.request_recompile(env, False, False, u1, env_vars={"uuid": str(u1)})
@@ -231,6 +245,16 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
         assert results[0].remote_id == u1
         print("request: ", results[0].id, env.id)
         return u1
+
+    async def get_compile(env: data.Environment, remote_id: uuid.UUID) -> data.Compile:
+        results = await data.Compile.get_by_remote_id(env.id, remote_id)
+        assert len(results) == 1
+        assert results[0].remote_id == remote_id
+        return results[0]
+
+    async def is_handled(env: data.Environment, remote_id: uuid.UUID) -> bool:
+        compile = await get_compile(env, remote_id)
+        return compile.handled
 
     # setup projects in the database
     project = data.Project(name="test")
@@ -247,7 +271,9 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     e2 = [await request_compile(env2) for i in range(4)]
     print("env 1:", e1)
 
-    async def check_compile_in_sequence(env: data.Environment, remote_ids: list[uuid.UUID], idx: int):
+    async def check_compile_in_sequence(
+        env: data.Environment, remote_ids: list[uuid.UUID], idx: int, can_handle: bool = True
+    ) -> None:
         """
         Check integrity of a compile sequence and progress the hangrunner.
         """
@@ -270,10 +296,27 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
                 nextrunner = cs.get_runner(rid)
                 assert nextrunner is None
 
+            logger.info("Test in-line handlers by making it block for %s", current)
+            await hanging_collector.hang()
+
+            logger.info("Progress compile for %s", current)
             cs.get_runner(current).release()
             await asyncio.sleep(0)
-            await retry_limited(lambda: cs.get_runner(current).done, 1)
 
+            # Wait for done
+            await retry_limited(lambda: cs.get_runner(current).done, 1)
+            logger.info("Compile done for %s", current)
+
+            # Ensure we are blocked on the handler
+            compile = await get_compile(env, current)
+            assert compile.handled is False
+
+            # Proceed
+            logger.info("Start handling for %s", current)
+            hanging_collector.release()
+            if can_handle:
+                await retry_limited(functools.partial(is_handled, env, current), 1)
+                logger.info("Handling done for %s", current)
         else:
 
             async def isdone():
@@ -302,7 +345,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     await collector.hang()
     # progress two steps into env2
     for i in range(2):
-        await check_compile_in_sequence(env2, e2, i)
+        await check_compile_in_sequence(env2, e2, i, can_handle=False)
         await compiler_cache_consistent(2 - i)
 
     assert not collector.seen
@@ -325,17 +368,32 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     # restart new server
     cs = HookedCompilerService()
     await cs.prestart(server)
-    await cs.start()
     collector = Collector()
     cs.add_listener(collector)
 
-    # one in cache, one running
-    await compiler_cache_consistent(1)
+    hanging_collector = Collector()
+    hanging_collector.blocking = True
+    await hanging_collector.hang()  # Can we boot when a handler hangs?
+    cs.add_listener(hanging_collector)
+    await cs.start()
+
+    # Can we request compiles while recovery is ongoing?
+    extra_compile = await request_compile(env2)
+    e2.append(extra_compile)
+
+    # We haven't started, because we hang on a handler,
+    assert len(cs._env_to_compile_task) == 0
+
+    # Continue
+    hanging_collector.release()
+
+    # two in cache, one running
+    await compiler_cache_consistent(2)
 
     # complete the sequence, expect re-run of third compile
-    for i in range(3):
+    for i in range(4):
         await check_compile_in_sequence(env2, e2[2:], i)
-        await compiler_cache_consistent(0)
+    await compiler_cache_consistent(0)
 
     # all are re-run, entire sequence present
     collector.verify(e2)
@@ -344,6 +402,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
 
 @pytest.mark.slowtest
+@pytest.mark.parametrize("no_agent", [True])
 async def test_compile_runner(environment_factory: EnvironmentFactory, server, client, tmpdir):
     testmarker_env = "TESTMARKER"
     no_marker = "__no__marker__"
@@ -353,11 +412,11 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
 
     def make_main(marker_print):
         return f"""
+    import std::testing
     marker = std::get_env("{testmarker_env}","{no_marker}")
     std::print("{marker_print} {{{{marker}}}}")
 
-    host = std::Host(name="test", os=std::linux)
-    std::ConfigFile(host=host, path="/etc/motd", content="1234")
+    std::testing::NullResource(name="test")
         """
 
     env = await environment_factory.create_environment(make_main(marker_print))
@@ -382,7 +441,7 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     compile, stages = await _compile_and_assert(env=env, export=True, meta={"type": "Test"})
     assert stages["Init"]["returncode"] == 0
     assert stages["Cloning repository"]["returncode"] == 0
-    assert stages["Creating venv"]["returncode"] == 0
+    assert stages["Venv check"]["returncode"] == 0
     assert stages["Installing modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
@@ -393,57 +452,62 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     # no export
     compile, stages = await _compile_and_assert(env=env, export=False)
     assert stages["Init"]["returncode"] == 0
+    assert stages["Venv check"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print} {no_marker}" in out
-    assert len(stages) == 2
+    assert len(stages) == 3
     assert compile.version is None
 
     # env vars
     marker = str(uuid.uuid4())
     compile, stages = await _compile_and_assert(env=env, export=False, env_vars={testmarker_env: marker})
-    assert len(compile.request.environment_variables) == 1
+    assert len(compile.request.requested_environment_variables) == 1
     assert stages["Init"]["returncode"] == 0
     assert f"Using extra environment variables during compile TESTMARKER='{marker}'" in stages["Init"]["outstream"]
+    assert stages["Venv check"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print} {marker}" in out
-    assert len(stages) == 2
+    assert len(stages) == 3
     assert compile.version is None
 
     # switch branch
     compile, stages = await _compile_and_assert(env=env2, export=False)
     assert stages["Init"]["returncode"] == 0
     assert stages[f"Switching branch from {env.repo_branch} to {env2.repo_branch}"]["returncode"] == 0
+    assert stages["Venv check"]["returncode"] == 0
     assert stages["Installing modules"]["returncode"] == 0
-    assert stages["Recompiling configuration model"]["returncode"] == 0
-    out = stages["Recompiling configuration model"]["outstream"]
-    assert f"{marker_print2} {no_marker}" in out
-    assert len(stages) == 4
-    assert compile.version is None
-
-    # update with no update
-    compile, stages = await _compile_and_assert(env=env2, export=False, update=True)
-    assert stages["Init"]["returncode"] == 0
-    assert stages["Pulling updates"]["returncode"] == 0
-    assert stages["Uninstall inmanta packages from the compiler venv"]["returncode"] == 0
-    assert stages["Updating modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print2} {no_marker}" in out
     assert len(stages) == 5
     assert compile.version is None
 
+    # update with no update
+    compile, stages = await _compile_and_assert(env=env2, export=False, update=True)
+    assert stages["Init"]["returncode"] == 0
+    assert stages["Venv check"]["returncode"] == 0
+    assert stages["Pulling updates"]["returncode"] == 0
+    assert stages["Uninstall inmanta packages from the compiler venv"]["returncode"] == 0
+    assert stages["Updating modules"]["returncode"] == 0
+    assert stages["Recompiling configuration model"]["returncode"] == 0
+    out = stages["Recompiling configuration model"]["outstream"]
+    assert f"{marker_print2} {no_marker}" in out
+    assert len(stages) == 6
+    assert compile.version is None
+
     environment_factory.write_main(make_main(marker_print3))
     compile, stages = await _compile_and_assert(env=env2, export=False, update=True)
     assert stages["Init"]["returncode"] == 0
+    assert stages["Venv check"]["returncode"] == 0
     assert stages["Pulling updates"]["returncode"] == 0
     assert stages["Uninstall inmanta packages from the compiler venv"]["returncode"] == 0
     assert stages["Updating modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print3} {no_marker}" in out
-    assert len(stages) == 5
+    assert len(stages) == 6
     assert compile.version is None
 
     # Ensure that the pip binary created in the venv of the compiler service works correctly
@@ -470,8 +534,8 @@ async def test_server_side_compile_with_ssl_enabled(
     ensure_directory_exist(project_work_dir)
 
     main_cf = """
-host = std::Host(name="test", os=std::linux)
-std::ConfigFile(host=host, path="/tmp/test", content="1234")
+import std::testing
+std::testing::NullResource(name="test")
     """.strip()
 
     # Add .inmanta file with inverse SSL config as the server itself.
@@ -495,7 +559,7 @@ async def test_compilerservice_compile_data(environment_factory: EnvironmentFact
         assert result.code == 200
 
         async def compile_done():
-            return (await client.is_compiling(env.id)).code == 204
+            return (await client.get_compile_queue(env.id)).result["queue"] == []
 
         await retry_limited(compile_done, 10)
 
@@ -557,12 +621,10 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService, use_trx_b
     u2 = uuid.uuid4()
     await request_compile(remote_id=u2, env_vars={"my_unique_var": str(u2)})
 
-    assert await compilerservice.is_compiling(env.id) == 200
-
     async def compile_done():
         res = await compilerservice.is_compiling(env.id)
         print(res)
-        return res == 204
+        return res == 204 and compilerservice._queue_count_cache == 0
 
     await retry_limited(compile_done, 10)
     # All compiles are finished. The queue should be empty
@@ -603,7 +665,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
     """
     Test a partial_compile on the server
     """
-    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), "compiler")
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
     print("Project at: ", project_dir)
 
@@ -635,13 +697,26 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
         report = [x for x in reports if x["name"] == "Recompiling configuration model"][0]
         return expected in report["command"]
 
+    def set_removal_was_requested(report: dict, removed_sets: Optional[set[str]] = None) -> bool:
+        """
+        Returns True if a resource set removal was requested for a given compile report.
+        In addition, if the removed_sets param is set, the removal of these specific sets is checked.
+
+        :param report: Compile report for which to check if a resource set removal was requested
+        """
+        if not removed_sets:
+            return INMANTA_REMOVED_SET_ID in report["requested_environment_variables"]
+
+        assert INMANTA_REMOVED_SET_ID in report["requested_environment_variables"]
+        return set(report["requested_environment_variables"][INMANTA_REMOVED_SET_ID].split()) == removed_sets
+
     # Do a compile
     compile_id, _ = await compilerslice.request_recompile(env, force_update=False, do_export=False, remote_id=remote_id1)
 
     await retry_limited(wait_for_report, 10)
     report = await client.get_report(compile_id)
     assert not verify_command_report(report, "--partial")
-    assert not verify_command_report(report, "--removed_resource_sets")
+    assert not set_removal_was_requested(report.result["report"])
 
     # Do a partial compile
     compile_id, _ = await compilerslice.request_recompile(
@@ -651,25 +726,32 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
     await retry_limited(wait_for_report, 10)
     report = await client.get_report(compile_id)
     assert verify_command_report(report, "--partial")
-    assert not verify_command_report(report, "--removed_resource_sets")
+    assert not set_removal_was_requested(report.result["report"])
 
     # Do a partial compile with removed resource_sets
     compile_id, _ = await compilerslice.request_recompile(
-        env, force_update=False, do_export=False, remote_id=remote_id1, partial=True, removed_resource_sets=["a", "b", "c"]
+        env,
+        force_update=False,
+        do_export=False,
+        remote_id=remote_id1,
+        partial=True,
+        env_vars={INMANTA_REMOVED_SET_ID: "a b c"},
     )
 
     await retry_limited(wait_for_report, 10)
     report = await client.get_report(compile_id)
-    assert verify_command_report(report, "--partial --delete-resource-set a --delete-resource-set b --delete-resource-set c")
+    assert verify_command_report(report, "--partial")
+    assert set_removal_was_requested(report.result["report"], {"a", "b", "c"})
 
 
 @pytest.mark.slowtest
+@pytest.mark.parametrize("no_agent", [True])
 async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
     """
 
-    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), "compiler")
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
     print("Project at: ", project_dir)
 
@@ -689,8 +771,10 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
         fd.write(
             f"""
+        import std::testing
+
         host = std::Host(name="test", os=std::linux)
-        std::ConfigFile(host=host, path="/etc/motd", content="1234")
+        std::testing::NullResource(name=host.name)
         std::print(std::get_env("{key_env_var}"))
 """
         )
@@ -790,8 +874,8 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert result.result["count"] == 5
 
     # clear the environment
-    state_dir = server_config.state_dir.get()
-    project_dir = os.path.join(state_dir, "server", "environments", environment)
+    state_dir = config.state_dir.get()
+    project_dir = os.path.join(state_dir, "server", environment)
     assert os.path.exists(project_dir)
 
     result = await client.clear_environment(environment)
@@ -800,34 +884,133 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert not os.path.exists(project_dir)
 
 
+@pytest.mark.slowtest
+async def test_server_recompile_param_fact_v2(server, client, environment):
+    """
+    Test recompile triggers when setting params and facts with the v2 endpoint
+    """
+
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["server"], str(environment), "compiler")
+    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
+
+    shutil.copytree(project_source, project_dir)
+
+    # add main.cf
+    with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
+        fd.write(
+            """
+import std::testing
+std::testing::NullResource(name='test')
+"""
+        )
+
+    logger.info("request a compile")
+    result = await client.notify_change(environment)
+    assert result.code == 200
+
+    versions = await wait_for_version(client, environment, cnt=1, compile_timeout=40)
+    assert versions["versions"][0]["total"] == 1
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
+
+    # get an existing resource
+    resources = await data.Resource.get_resources_for_version(environment, 1)
+    resource_id = resources[0].resource_id
+
+    # set a parameter without requesting a recompile
+    result = await client.set_parameter(environment, name="param1", value="test", source=ParameterSource.plugin)
+    assert result.code == 200
+    versions = await wait_for_version(client, environment, cnt=1)
+    assert versions["count"] == 1
+
+    logger.info("request second compile")
+    # set a new parameter and request a recompile
+    result = await client.set_parameter(environment, name="param2", value="test", source=ParameterSource.plugin, recompile=True)
+    assert result.code == 200
+    logger.info("wait for 2")
+    versions = await wait_for_version(client, environment, cnt=2)
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
+    assert versions["count"] == 2
+
+    # update the parameter to the same value -> no compile
+    result = await client.set_parameter(environment, name="param2", value="test", source=ParameterSource.plugin, recompile=True)
+    assert result.code == 200
+    versions = await wait_for_version(client, environment, cnt=2)
+    assert versions["count"] == 2
+
+    # update the parameter to a new value
+    result = await client.set_parameter(
+        environment, name="param2", value="test2", source=ParameterSource.plugin, recompile=True
+    )
+    assert result.code == 200
+    logger.info("wait for 3")
+    versions = await wait_for_version(client, environment, cnt=3)
+    assert versions["count"] == 3
+
+    # set a fact without requesting a recompile
+    result = await client.set_fact(
+        environment, name="fact1", value="test", source=ParameterSource.fact, resource_id=resource_id
+    )
+    assert result.code == 200
+    versions = await wait_for_version(client, environment, cnt=3)
+    assert versions["count"] == 3
+
+    # set a new fact and request a recompile
+    result = await client.set_fact(
+        environment, name="fact2", value="test", source=ParameterSource.fact, resource_id=resource_id, recompile=True
+    )
+    assert result.code == 200
+    logger.info("wait for 4")
+    versions = await wait_for_version(client, environment, cnt=4)
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "fact"
+    assert versions["count"] == 4
+
+    # update the fact to the same value -> no compile
+    result = await client.set_fact(
+        environment, name="fact2", value="test", source=ParameterSource.fact, resource_id=resource_id, recompile=True
+    )
+    assert result.code == 200
+    versions = await wait_for_version(client, environment, cnt=4)
+    assert versions["count"] == 4
+
+    # update the fact to a new value
+    result = await client.set_fact(
+        environment, name="fact2", value="test2", source=ParameterSource.fact, resource_id=resource_id, recompile=True
+    )
+    assert result.code == 200
+    logger.info("wait for 5")
+    versions = await wait_for_version(client, environment, cnt=5)
+    assert versions["count"] == 5
+
+
 async def run_compile_and_wait_until_compile_is_done(
     compiler_service: CompilerService,
     compiler_queue: queue.Queue["CompileRunnerMock"],
     env_id: uuid.UUID,
     fail: Optional[bool] = None,
     fail_on_pull=False,
-) -> None:
+) -> "CompileRunnerMock":
     """
     Unblock the first compile in the compiler queue and wait until the compile finishes.
     """
-    current_task = compiler_service._recompiles[env_id]
-
     # prevent race conditions where compile request is not yet in queue
     await retry_limited(lambda: not compiler_queue.empty(), timeout=10)
     run = compiler_queue.get(block=True)
     if fail is not None:
         run._make_compile_fail = fail
     run._make_pull_fail = fail_on_pull
+
+    current_task = compiler_service._env_to_compile_task[env_id]
     run.block = False
 
     def _is_compile_finished() -> bool:
-        if env_id not in compiler_service._recompiles:
+        if env_id not in compiler_service._env_to_compile_task:
             return True
-        if current_task is not compiler_service._recompiles[env_id]:
+        if current_task is not compiler_service._env_to_compile_task[env_id]:
             return True
         return False
 
     await retry_limited(_is_compile_finished, timeout=10)
+    return run
 
 
 async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, server, client, environment):
@@ -838,6 +1021,9 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     env = await data.Environment.get_by_id(environment)
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
+    # Queue = [
+    #
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 0
     assert result.code == 200
@@ -849,6 +1035,9 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     )
 
     # api should return one
+    # Queue = [
+    #   remote_id1 (Running)
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 1
     assert result.result["queue"][0]["remote_id"] == str(remote_id1)
@@ -861,6 +1050,10 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     compile_id2, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=remote_id2)
 
     # api should return two
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting),
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 2
     assert result.result["queue"][1]["remote_id"] == str(remote_id2)
@@ -872,6 +1065,11 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     remote_id3 = uuid.uuid4()
     compile_id3, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=remote_id3)
 
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting),
+    #   remote_id3 (Waiting),
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 3
     assert result.result["queue"][2]["remote_id"] == str(remote_id3)
@@ -883,6 +1081,12 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     remote_id4 = uuid.uuid4()
     compile_id4, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=remote_id4)
 
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting), <--+
+    #   remote_id3 (Waiting),    |-- same _compile_merge_key
+    #   remote_id4 (Waiting), <--+
+    # ]
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 4
     assert result.result["queue"][3]["remote_id"] == str(remote_id4)
@@ -896,13 +1100,39 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     remote_id6 = uuid.uuid4()
     compile_id6, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=remote_id6)
 
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting), <----------+
+    #   remote_id3 (Waiting), <----+     |-- same _compile_merge_key
+    #   remote_id4 (Waiting), <--- | ----+
+    #   remote_id5 (Waiting), <----+
+    #   remote_id6 (Waiting), <----+-- same _compile_merge_key
+    # ]
+
+    # request with partial, will not be merged
+    remote_id7 = uuid.uuid4()
+    compile_id7, _ = await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=True, remote_id=remote_id7, partial=True
+    )
+
+    # Queue = [
+    #   remote_id1 (Running),
+    #   remote_id2 (Waiting), <----------+
+    #   remote_id3 (Waiting), <----+     |-- same _compile_merge_key
+    #   remote_id4 (Waiting), <--- | ----+
+    #   remote_id5 (Waiting), <----+
+    #   remote_id6 (Waiting), <----+-- same _compile_merge_key
+    #   remote_id7 (Waiting),
+    # ]
+
     result = await client.get_compile_queue(environment)
-    assert len(result.result["queue"]) == 6
+    assert len(result.result["queue"]) == 7
     assert result.result["queue"][4]["remote_id"] == str(remote_id5)
     assert result.result["queue"][5]["remote_id"] == str(remote_id6)
+    assert result.result["queue"][6]["remote_id"] == str(remote_id7)
     assert result.code == 200
-    # 5 in the queue, 1 running
-    await retry_limited(lambda: compilerslice._queue_count_cache == 5, 10)
+    # 6 in the queue, 1 running
+    await retry_limited(lambda: compilerslice._queue_count_cache == 6, 10)
 
     async def has_matching_compile_report(first_compile_id: uuid.UUID, second_compile_id: uuid.UUID) -> bool:
         return await compilerslice.get_report(first_compile_id) == await compilerslice.get_report(second_compile_id)
@@ -910,38 +1140,55 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     # finish a compile and wait for service to take on next
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
-    # api should return five when ready
+    # api should return 6 when ready
+    # Queue = [
+    #   remote_id2 (Running), <----------+
+    #   remote_id3 (Waiting), <----+     |-- same _compile_merge_key
+    #   remote_id4 (Waiting), <--- | ----+
+    #   remote_id5 (Waiting), <----+
+    #   remote_id6 (Waiting), <----+-- same _compile_merge_key
+    #   remote_id7 (Waiting),
+    # ]
     result = await client.get_compile_queue(environment)
-    assert len(result.result["queue"]) == 5
+    assert len(result.result["queue"]) == 6
     assert result.result["queue"][0]["remote_id"] == str(remote_id2)
     assert result.code == 200
-    # 4 in the queue, 1 running
-    await retry_limited(lambda: compilerslice._queue_count_cache == 4, 10)
+    # 5 in the queue, 1 running
+    await retry_limited(lambda: compilerslice._queue_count_cache == 5, 10)
 
     # finish second compile
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
+    # Queue = [
+    #   remote_id3 (Running), <----+
+    #   remote_id5 (Waiting), <----+-- same _compile_merge_key
+    #   remote_id6 (Waiting), <----+
+    #   remote_id7 (Waiting),
+    # ]
+
     # The "halted" field of a compile report is set asynchronously by a background task.
     # Use try_limited to prevent a race condition.
     await retry_limited(lambda: has_matching_compile_report(compile_id2, compile_id4), timeout=10)
-    # 2 in the queue, 1 running
-    await retry_limited(lambda: compilerslice._queue_count_cache == 2, 10)
+    # 3 in the queue, 1 running
+    await retry_limited(lambda: compilerslice._queue_count_cache == 3, 10)
 
     # finish third compile
-    # prevent race conditions where compile is not yet in queue
-    await retry_limited(lambda: not mocked_compiler_service_block.empty(), timeout=10)
-    run = mocked_compiler_service_block.get(block=True)
-    result = await client.get_compile_queue(environment)
-    assert len(result.result["queue"]) == 3
-    assert result.result["queue"][0]["remote_id"] == str(remote_id3)
-    assert result.code == 200
-    run.block = False
-
-    while env.id in compilerslice._recompiles:
-        await asyncio.sleep(0.2)
-
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
     await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id5), timeout=10)
     await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id6), timeout=10)
+
+    # One left
+    # Queue = [
+    #   remote_id7 (Running),
+    # ]
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 1
+
+    # finish 7th compile
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
+
+    while env.id in compilerslice._env_to_compile_task:
+        await asyncio.sleep(0.2)
 
     # 0 in the queue, 0 running
     await retry_limited(lambda: compilerslice._queue_count_cache == 0, 10)
@@ -952,7 +1199,73 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert result.code == 200
 
 
-async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
+async def test_compileservice_queue_with_env_var_merging(
+    mocked_compiler_service_block: queue.Queue, server, client, environment
+):
+    """
+    Test the compile queue (as above), but with mergeable env vars
+    """
+    env = await data.Environment.get_by_id(environment)
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 0
+    assert result.code == 200
+
+    # request a compile, all by itself
+    remote_id1 = uuid.uuid4()
+    compile_id1, _ = await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=True, remote_id=remote_id1, env_vars={"my_var": "1"}, partial=False
+    )
+
+    # Then one to compact on top of
+    remote_id2 = uuid.uuid4()
+    compile_id2, _ = await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=True, remote_id=remote_id2, env_vars={"my_var": "1"}, partial=True
+    )
+
+    # Then add one
+    remote_id3 = uuid.uuid4()
+    compile_id3, _ = await compilerslice.request_recompile(
+        env=env,
+        force_update=False,
+        do_export=True,
+        remote_id=remote_id3,
+        env_vars={"my_var": "1"},
+        partial=True,
+        mergeable_env_vars={"v1": "a", "v2": "b"},
+    )
+
+    # Then another one
+    remote_id4 = uuid.uuid4()
+    compile_id4, _ = await compilerslice.request_recompile(
+        env=env,
+        force_update=False,
+        do_export=True,
+        remote_id=remote_id4,
+        env_vars={"my_var": "1"},
+        partial=True,
+        mergeable_env_vars={"v1": "C"},
+    )
+
+    # finish first compile
+    t1 = await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
+    # finish all other compiles at once
+    t2 = await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
+
+    # api should return none
+    result = await client.get_compile_queue(environment)
+    assert len(result.result["queue"]) == 0
+    assert result.code == 200
+
+    assert t1.request.used_environment_variables == {"my_var": "1"}
+    assert t2.request.used_environment_variables == {"my_var": "1", "v1": "a C", "v2": "b"}
+
+
+@pytest.mark.parametrize("no_agent", [True])
+async def test_compilerservice_halt(
+    mocked_compiler_service_block, server, client, environment: uuid.UUID, no_agent: bool
+) -> None:
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     result = await client.get_compile_queue(environment)
@@ -1000,24 +1313,27 @@ async def test_compileservice_queue_count_on_trx_based_api(mocked_compiler_servi
             )
             assert compile_id is not None, warnings
             assert compiler_service._queue_count_cache == 0
-            assert len(compiler_service._recompiles) == 0
+            assert len(compiler_service._env_to_compile_task) == 0
     # Transaction committed
     await compiler_service.notify_compile_request_committed(compile_id)
-    assert compiler_service._queue_count_cache == 1
-    assert len(compiler_service._recompiles) == 1
+    # Wait until the compile request is picked up the compiler service.
+    await retry_limited(lambda: compiler_service._queue_count_cache == 0, timeout=10)
+    assert len(compiler_service._env_to_compile_task) == 1
+    compile_obj = await data.Compile.get_by_id(compile_id)
+    assert compile_obj.started is not None
 
     await run_compile_and_wait_until_compile_is_done(compiler_service, mocked_compiler_service_block, env.id)
-    assert len(compiler_service._recompiles) == 0
+    assert len(compiler_service._env_to_compile_task) == 0
 
 
 @pytest.fixture(scope="function")
 async def server_with_frequent_cleanups(server_pre_start, server_config, async_finalizer):
     config.Config.set("server", "compiler-report-retention", "60")
     config.Config.set("server", "cleanup-compiler-reports_interval", "1")
-    ibl = InmantaBootloader()
+    ibl = InmantaBootloader(configure_logging=True)
     await ibl.start()
     yield ibl.restserver
-    await ibl.stop(timeout=15)
+    await ibl.stop(timeout=20)
 
 
 @pytest.fixture(scope="function")
@@ -1065,7 +1381,7 @@ async def old_and_new_compile_report(server_with_frequent_cleanups, environment_
         "do_export": True,
         "force_update": True,
         "metadata": {"type": "api", "message": "Recompile trigger through API call"},
-        "environment_variables": {},
+        "requested_environment_variables": {},
         "success": True,
         "handled": True,
         "version": 1,
@@ -1162,7 +1478,8 @@ async def test_compileservice_cleanup_halted(server, client, environment, halted
         "do_export": True,
         "force_update": True,
         "metadata": {"type": "api", "message": "Recompile trigger through API call"},
-        "environment_variables": {},
+        "requested_environment_variables": {},
+        "used_environment_variables": {},
         "success": True,
         "handled": True,
         "version": 1,
@@ -1204,7 +1521,8 @@ async def test_issue_2361(environment_factory: EnvironmentFactory, server, clien
         environment=env.id,
         do_export=True,
         metadata={},
-        environment_variables={},
+        requested_environment_variables={},
+        used_environment_variables={},
         force_update=True,
     )
     await compile.insert()
@@ -1234,7 +1552,8 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
         environment=env.id,
         do_export=True,
         metadata={},
-        environment_variables={},
+        requested_environment_variables={},
+        used_environment_variables={},
         force_update=True,
     )
     await compile.insert()
@@ -1250,33 +1569,26 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
 
 
 @pytest.mark.parametrize(
-    "auto_recompile_wait,recompile_backoff,expected_log_message,expected_log_level",
+    "recompile_backoff,expected_log_message,expected_log_level",
     [
-        ("0", "2.1", "The recompile_backoff environment setting is enabled and set to 2.1 seconds", logging.INFO),
-        ("2", "0", "This option is deprecated in favor of the recompile_backoff environment setting.", logging.WARNING),
-        ("0", "0", "The recompile_backoff environment setting is disabled", logging.INFO),
+        ("2.1", "The recompile_backoff environment setting is enabled and set to 2.1 seconds", logging.INFO),
+        ("0", "The recompile_backoff environment setting is disabled", logging.INFO),
     ],
 )
-async def test_compileservice_auto_recompile_wait(
+async def test_compileservice_recompile_backoff(
     mocked_compiler_service_block,
     server,
     client,
     environment,
     caplog,
-    auto_recompile_wait,
-    recompile_backoff,
-    expected_log_message,
-    expected_log_level,
+    recompile_backoff: str,
+    expected_log_message: str,
+    expected_log_level: int,
 ):
     """
-    Test the auto-recompile-wait setting when multiple recompiles are requested in a short amount of time
+    Test the recompile_backoff setting when multiple recompiles are requested in a short amount of time
     """
     with caplog.at_level(logging.DEBUG):
-        if auto_recompile_wait == "0":
-            config.Config._get_instance().remove_option("server", "auto-recompile-wait")
-        else:
-            config.Config.set("server", "auto-recompile-wait", auto_recompile_wait)
-
         env = await data.Environment.get_by_id(environment)
         await env.set(data.RECOMPILE_BACKOFF, recompile_backoff)
         compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
@@ -1311,9 +1623,9 @@ async def test_compileservice_auto_recompile_wait(
         )
 
 
-async def test_compileservice_calculate_auto_recompile_wait(mocked_compiler_service_block, server):
+async def test_compileservice_calculate_recompile_backoff_time(mocked_compiler_service_block, server):
     """
-    Test the recompile waiting time calculation when auto-recompile-wait environment setting is enabled
+    Test the recompile backoff time calculation when the recompile_backoff environment setting is enabled
     """
     auto_recompile_wait = 2
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
@@ -1321,22 +1633,30 @@ async def test_compileservice_calculate_auto_recompile_wait(mocked_compiler_serv
     now = datetime.datetime.now()
     compile_requested = now - datetime.timedelta(seconds=1)
     last_compile_completed = now - datetime.timedelta(seconds=4)
-    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_backoff_time(
+        auto_recompile_wait, compile_requested, last_compile_completed, now
+    )
     assert waiting_time == 0
 
     compile_requested = now - datetime.timedelta(seconds=0.1)
     last_compile_completed = now - datetime.timedelta(seconds=1)
-    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_backoff_time(
+        auto_recompile_wait, compile_requested, last_compile_completed, now
+    )
     assert waiting_time == approx(1)
 
     compile_requested = now - datetime.timedelta(seconds=1)
     last_compile_completed = now - datetime.timedelta(seconds=0.1)
-    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_backoff_time(
+        auto_recompile_wait, compile_requested, last_compile_completed, now
+    )
     assert waiting_time == approx(1)
 
     compile_requested = now - datetime.timedelta(seconds=4)
     last_compile_completed = now - datetime.timedelta(seconds=1)
-    waiting_time = compilerslice._calculate_recompile_wait(auto_recompile_wait, compile_requested, last_compile_completed, now)
+    waiting_time = compilerslice._calculate_recompile_backoff_time(
+        auto_recompile_wait, compile_requested, last_compile_completed, now
+    )
     assert waiting_time == 0
 
 
@@ -1344,7 +1664,7 @@ async def test_compileservice_api(client, environment):
     # Exceed max value for limit
     result = await client.get_reports(environment, limit=APILIMIT + 1)
     assert result.code == 400
-    assert result.result["message"] == f"Invalid request: limit parameter can not exceed {APILIMIT}, got {APILIMIT+1}."
+    assert result.result["message"] == f"Invalid request: limit parameter can not exceed {APILIMIT}, got {APILIMIT + 1}."
 
     result = await client.get_reports(environment, limit=APILIMIT)
     assert result.code == 200
@@ -1477,6 +1797,7 @@ async def test_uninstall_python_packages(
         compile_db_record = data.Compile(
             remote_id=uuid.uuid4(),
             environment=env.id,
+            used_environment_variables={},
             force_update=True,
         )
         await compile_db_record.insert()
@@ -1501,7 +1822,7 @@ async def test_uninstall_python_packages(
     venv = PythonEnvironment(env_path=venv_path)
     assert name_protected_pkg not in venv.get_installed_packages()
     venv.install_for_config(
-        requirements=[pkg_resources.Requirement.parse(name_protected_pkg)],
+        requirements=[inmanta.util.parse_requirement(requirement=name_protected_pkg)],
         config=PipConfig(
             index_url=local_module_package_index,
         ),
@@ -1588,8 +1909,15 @@ def {exporter_name}(exporter: Exporter) -> None:
 
 @pytest.mark.parametrize("only_clear_environment", [True, False])
 @pytest.mark.parametrize("compile_is_running", [True, False])
+@pytest.mark.parametrize("no_agent", [True])
 async def test_status_compilerservice_task_queue(
-    server, client, environment: str, mocked_compiler_service_block, only_clear_environment: bool, compile_is_running: bool
+    server,
+    client,
+    environment: str,
+    mocked_compiler_service_block,
+    only_clear_environment: bool,
+    compile_is_running: bool,
+    no_agent: bool,
 ) -> None:
     """
     Verify that the size of the compiler queue, reported by the /serverstatus API endpoint, is correctly
@@ -1651,7 +1979,6 @@ async def test_environment_delete_removes_env_directories_on_server(
     """
     state_dir: Optional[str] = config.Config.get("config", "state-dir")
     assert state_dir is not None
-    env_dir = py.path.local(state_dir).join("server", "environments")
 
     result = await client.create_project("env-test")
     assert result.code == 200
@@ -1665,14 +1992,128 @@ async def test_environment_delete_removes_env_directories_on_server(
     assert result.code == 200
 
     async def wait_for_compile() -> bool:
-        result = await client.is_compiling(env_id)
-        return result.code == 204
+        result = await client.get_compile_reports(tid=env_id)
+        assert result.code == 200
+        if len(result.result["data"]) == 0:
+            # The compile request is registered in the database asynchronously with respect to the notify_change() API call.
+            # Here we check that the compile request finished.
+            return False
+        # Check whether the compilation finished.
+        return result.result["data"][0]["completed"] is not None
 
     await utils.retry_limited(wait_for_compile, 15)
 
-    assert os.path.exists(os.path.join(env_dir, env_id))
+    env_dir = py.path.local(state_dir).join("server", str(env_id), "compiler")
+    assert os.path.exists(env_dir)
 
     result = await client.environment_delete(env_id)
     assert result.code == 200
 
-    assert not os.path.exists(os.path.join(env_dir, env_id))
+    assert not os.path.exists(env_dir)
+
+
+async def test_overlapping_env_vars(mocked_compiler_service, server, client, environment) -> None:
+    """
+    Ensure that the compiler service raises an exception if a compile is requested where the same
+    environment variable is present in the env_vars and the mergeable_env_vars dictionary.
+    """
+    env = await data.Environment.get_by_id(environment)
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+
+    expected_exception_message = (
+        "Invalid compile request: The same environment variable cannot be present in the "
+        "env_vars and mergeable_env_vars dictionary simultaneously: {'var'}."
+    )
+    with pytest.raises(ValueError, match=re.escape(expected_exception_message)):
+        await compilerslice.request_recompile(
+            env=env,
+            force_update=False,
+            do_export=False,
+            remote_id=uuid.uuid4(),
+            env_vars={"var": "val", "test": "123"},
+            mergeable_env_vars={"var": "otherval", "somekey": "someval"},
+        )
+
+
+class Mockreport:
+
+    async def update_streams(self, out: str = "", err: str = "") -> None:
+        pass
+
+
+async def test_venv_use_and_reuse(tmp_path, caplog):
+    caplog.at_level(logging.DEBUG)
+
+    # Set up mock
+    project = tmp_path / "project"
+    venv = project / ".env"
+    project.mkdir()
+    run = CompileRun(None, str(project))
+    run.stage = Mockreport()
+
+    # Create a venv
+    await run.ensure_compiler_venv()
+    assert venv.exists()
+    log_contains(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Creating new venv at")
+    caplog.clear()
+
+    # re-use the venv
+    await run.ensure_compiler_venv()
+    log_contains(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Found existing venv")
+
+
+async def test_venv_upgrade_version_match(tmp_path, caplog):
+    """
+    1. Make a venv in the old layout and upgrade it
+    2. Test we can handle re-creation of the venv
+    """
+    caplog.at_level(logging.DEBUG)
+
+    # Set up mock
+    project = tmp_path / "project"
+    project.mkdir()
+    venv = project / ".env"
+    run = CompileRun(None, str(project))
+    run.stage = Mockreport()
+
+    # make venv on old location, correct version
+    VirtualEnv(str(venv)).init_env()
+
+    await run.ensure_compiler_venv()
+    log_contains(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Moving existing venv from")
+    caplog.clear()
+    assert venv.exists()
+
+    # remove actual venv
+    python_version = ".".join(platform.python_version_tuple()[0:2])
+    versioned_venv_dir = ".env-py" + python_version
+    versioned_venv_dir_full = project / versioned_venv_dir
+    shutil.rmtree(str(versioned_venv_dir_full))
+
+    await run.ensure_compiler_venv()
+    log_contains(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Creating new venv at")
+    assert venv.exists()
+
+
+async def test_venv_upgrade_version_mismatch(tmp_path, caplog):
+    # Make fake venv of wrong version
+
+    caplog.at_level(logging.DEBUG)
+
+    # Old setup
+    project = tmp_path / "project2"
+    project.mkdir()
+    venv = project / ".env"
+
+    run = CompileRun(None, str(project))
+    run.stage = Mockreport()
+
+    # This venv is a bit broken, but the code sees it wrong version
+    # Because it doesn't have the right version
+    venv.mkdir()
+    (venv / "bin").mkdir()
+    (venv / "bin" / "python").touch()
+
+    await run.ensure_compiler_venv()
+    log_contains(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Discarding existing venv from")
+    assert (project / ".env").exists()

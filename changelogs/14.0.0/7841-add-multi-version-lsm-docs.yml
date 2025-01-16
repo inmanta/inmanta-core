@@ -1,0 +1,4 @@
+---
+description: Add documentation for multi-version lsm
+change-type: minor
+destination-branches: [master, iso7]

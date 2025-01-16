@@ -1,0 +1,14 @@
+description: Remove status from Resource
+issue-nr: 8196
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: |
+    All api endpoints reporting deployment status for specific versions of resources have been removed.
+
+    | api endpoint | change | alternative |
+    | ------------ | ------ | ------------|
+    | `/api/v1/resource/<id>` | removal of the status argument and removal of status field from the response | `/api/v2/resource/<id>/` |
+    | `/api/v1/version/<id>` | removal of `resources/status` field from the response | `/api/v2/resource` |
+
+

@@ -1,0 +1,10 @@
+description: >
+  The ``export`` command will now look for resource sets marked for deletion in the ``INMANTA_REMOVED_RESOURCE_SET_ID``
+  environment variable (As a space-separated list of sets to remove) in addition to the ones passed via the
+  ``--delete-resource-set`` parameter.
+issue-nr: 736
+change-type: minor
+issue-repo: lsm
+destination-branches: [master, iso7]
+sections:
+  upgrade-note: "{{description}}"

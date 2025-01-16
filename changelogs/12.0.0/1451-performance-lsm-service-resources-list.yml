@@ -1,0 +1,5 @@
+description: Add a connection attribute to some methods in the database layer.
+issue-nr: 1451
+issue-repo: inmanta-lsm
+change-type: patch
+destination-branches: [master, iso7, iso6]
