@@ -5,7 +5,7 @@ issue-repo: inmanta-core
 change-type: major
 destination-branches: [master]
 sections:
-  upgrade-note: |
+  deprecation-note: |
     The following configuration options were removed:
       - config.agent-map
       - config.use_autostart_agent_map
@@ -16,11 +16,15 @@ sections:
       - config.agent-interval
       - config.agent-splay
       - server_rest_transport.port
+
     The following environment settings were removed:
       - push_on_auto_deploy
       - agent_trigger_method_on_auto_deploy
       - environment_agent_trigger_method
       - autostart_agent_map
+      - autostart_agent_deploy_splay
+      - autostart_agent_repair_splay
+
     The following internal API endpoints were removed:
       - get_resources_for_agent: `GET /api/v1/resource`
       - get_code: `GET api/v1/code/<id>`
@@ -28,3 +32,9 @@ sections:
       - update_agent_map: `POST api/v2/agentmap`
       - resource_deploy_done: `POST api/v2/resource/<rvid>/deploy/done`
       - resource_deploy_start: `POST api/v2/resource/<rvid>/deploy/start`
+
+    The following settings are being deprecated:
+      - {inmanta.config:option}`database.db_connection_pool_max_size` replaced by {inmanta.config:option}`server.db_connection_pool_max_size` and {inmanta.config:option}`scheduler.db_connection_pool_max_size`
+      - {inmanta.config:option}`database.db_connection_pool_min_size` replaced by  {inmanta.config:option}`server.db_connection_pool_min_size` and  {inmanta.config:option}`scheduler.db_connection_pool_min_size`
+      - {inmanta.config:option}`database.db_connection_timeout` replaced by {inmanta.config:option}`server.db_connection_timeout` and {inmanta.config:option}`scheduler.db_connection_timeout`
+
