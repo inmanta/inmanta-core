@@ -27,7 +27,7 @@ from . import common
 FuncT = TypeVar("FuncT", bound=HandlerType)
 
 
-class handle:  # noqa: N801
+class handle:
     """
     Decorator for subclasses of an endpoint to handle protocol methods
 
@@ -42,7 +42,7 @@ class handle:  # noqa: N801
         self.mapping: dict[str, str] = kwargs
         self._api_version = api_version
 
-    def __call__[FuncT](self, function: FuncT) -> FuncT:
+    def __call__(self, function: FuncT) -> FuncT:
         """
         The wrapping
         """
