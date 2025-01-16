@@ -792,18 +792,25 @@ class InmantaLoggerConfig:
         :param context: context variables to use if the config file is a template
         """
 
-        def user_defined_options() -> Optional[str]:
+        def user_defined_options() -> str:
             """
             Returns a string with the options (excluding "--verbose" and "--logging-config") that were set by the user
             """
-            option_to_cli = {
+            args_to_cli = {
                 "log_file": "--log-file",
                 "log_file_level": "--log-file-level",
+            }
+            flags_to_cli = {
                 "timed": "--timed-logs",
                 "keep_logger_names": "--keep-logger-names",
             }
-            ignored_options = [f"{value} {getattr(options, key)}" for key, value in option_to_cli.items() if key in options]
-            return ", ".join(ignored_options) if ignored_options else None
+            ignored_options_list = []
+            for key, value in {**args_to_cli, **flags_to_cli}.items():
+                if key not in options:
+                    continue
+                ignored_options_list.append(f"{value} {getattr(options, key)}" if key in args_to_cli else value)
+
+            return ", ".join(ignored_options_list)
 
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
@@ -825,7 +832,7 @@ class InmantaLoggerConfig:
             ignored_options = user_defined_options()
             if ignored_options:
                 LOGGER.warning(
-                    "%s options were ignored. Using logging config from %s",
+                    "Ignoring the following options: %s. Using logging config from %s",
                     ignored_options,
                     self.logging_config_source.source(),
                 )
