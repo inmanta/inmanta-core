@@ -6,4 +6,5 @@ sections:
   feature: >
     Added SkipResourceForDependencies exception.
     This exception can be raised by the handler when it wants to skip a resource
-    and retry only when all of its dependencies succeed. See the [docs](:class:`~inmanta.agent.handler.SkipResourceForDependencies`) for more details.
+    and retry only when all of its dependencies succeed. See the [docs](reference/api.html#inmanta.agent.handler.SkipResourceForDependencies) for more details.
+
