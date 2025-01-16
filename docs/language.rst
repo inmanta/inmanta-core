@@ -938,7 +938,9 @@ flow at all.
     Unknowns are a subtle concept. Luckily, for the majority of model development you don't really need to take them into
     account. However, for some advanced scenarios it may be important to know how and where they may occur.
 
-For the most part, unknowns are simply propagated along the data flow: statements like assignment statements, constructors
+For the most part, unknowns are simply propagated along the data flow: they're treated like any other value, except
+when anything needs to be derived from them, the result simply becomes an unknown as well. More specifically: statements like
+assignment statements, constructors
 and lists simply include the unknown in their result like they would any other value. Any expression that can not produce
 a definite result without knowing the value, will return another unknown. And finally, statements that expand the model
 with new blocks based on some value, like the if statement and the for loop, simply do not expand the model with their
