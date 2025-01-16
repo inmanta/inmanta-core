@@ -13,5 +13,5 @@ sections:
         By default, the server pool will be 50% the size of the previous global pool.
       - For the scheduler: {inmanta.config:option}`scheduler.db_connection_pool_max_size`, {inmanta.config:option}`scheduler.db_connection_pool_min_size`, {inmanta.config:option}`scheduler.db_connection_timeout`
         By default, each scheduler pool will be 10% the size of the previous global pool.
-    These defaults are tuned to 5 environments per server, if you have more or less, please adjust accordingly. 
+    These defaults are tuned to 5 environments per server, if you have more or fewer, please adjust accordingly. 
 
