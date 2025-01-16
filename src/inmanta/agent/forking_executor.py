@@ -75,6 +75,7 @@ import threading
 import typing
 import uuid
 from asyncio import Future, transports
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from typing import Awaitable
 
@@ -94,8 +95,9 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
+from inmanta.agent.executor import DeployReport, GetFactReport
 from inmanta.agent.resourcepool import PoolManager, PoolMember
-from inmanta.data.model import ResourceType
+from inmanta.const import LOGGER_NAME_EXECUTOR
 from inmanta.protocol.ipc_light import (
     FinalizingIPCClient,
     IPCMethod,
@@ -105,9 +107,10 @@ from inmanta.protocol.ipc_light import (
     LogShipper,
     ReturnType,
 )
+from inmanta.types import ResourceIdStr, ResourceType
 from setproctitle import setproctitle
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger(LOGGER_NAME_EXECUTOR)
 
 
 class ExecutorContext:
@@ -133,10 +136,10 @@ class ExecutorContext:
     # We have no join here yet, don't know if we need it
     async def init_for(self, name: str, uri: str) -> None:
         """Initialize a new executor in this process"""
-        LOGGER.info("Starting for %s", name)
+        self.server.logger.info("Starting for %s", name)
         if name in self.executors:
             # We existed before
-            LOGGER.info("Waiting for old executor %s to shutdown", name)
+            self.server.logger.info("Waiting for old executor %s to shutdown", name)
             old_one = self.executors[name]
             # But were stopped
             assert old_one.is_stopped()
@@ -144,7 +147,7 @@ class ExecutorContext:
             await old_one.join()
 
         loop = asyncio.get_running_loop()
-        parent_logger = logging.getLogger("agent.executor")
+        parent_logger = LOGGER
         assert self.client  # mypy
         # Setup agent instance
         executor = inmanta.agent.in_process_executor.InProcessExecutor(
@@ -399,7 +402,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         assert context.server.timer_venv_scheduler_interval is None, "InitCommand should be only called once!"
 
         loop = asyncio.get_running_loop()
-        parent_logger = logging.getLogger("agent.executor")
+        parent_logger = LOGGER
         logger = parent_logger.getChild(context.name)
 
         context.server.post_init(self._venv_touch_interval)
@@ -438,7 +441,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
             try:
                 await loop.run_in_executor(
                     context.threadpool,
-                    functools.partial(loader._load_module, module_source.name, module_source.hash_value, require_reload=False),
+                    functools.partial(loader.load_module, module_source.name, module_source.hash_value),
                 )
             except Exception as e:
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)
@@ -463,50 +466,56 @@ class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
         await context.init_for(self.name, self.uri)
 
 
-class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+class DryRunCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, executor.DryrunReport]):
     """Run a dryrun in an executor"""
 
     def __init__(
         self,
         agent_name: str,
-        resources: typing.Sequence["inmanta.agent.executor.ResourceDetails"],
+        resource: "inmanta.agent.executor.ResourceDetails",
         dry_run_id: uuid.UUID,
     ) -> None:
         self.agent_name = agent_name
-        self.resources = resources
+        self.resource = resource
         self.dry_run_id = dry_run_id
 
-    async def call(self, context: ExecutorContext) -> None:
-        await context.get(self.agent_name).dry_run(self.resources, self.dry_run_id)
+    async def call(self, context: ExecutorContext) -> executor.DryrunReport:
+        return await context.get(self.agent_name).dry_run(self.resource, self.dry_run_id)
 
 
-class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, const.ResourceState]):
+class ExecuteCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, DeployReport]):
     """Run a deploy in an executor"""
 
     def __init__(
         self,
         agent_name: str,
+        action_id: uuid.UUID,
         gid: uuid.UUID,
         resource_details: "inmanta.agent.executor.ResourceDetails",
         reason: str,
+        requires: Mapping[ResourceIdStr, const.ResourceState],
     ) -> None:
         self.agent_name = agent_name
         self.gid = gid
         self.resource_details = resource_details
         self.reason = reason
+        self.action_id = action_id
+        self.requires = requires
 
-    async def call(self, context: ExecutorContext) -> const.ResourceState:
-        return await context.get(self.agent_name).execute(self.gid, self.resource_details, self.reason)
+    async def call(self, context: ExecutorContext) -> DeployReport:
+        return await context.get(self.agent_name).execute(
+            self.action_id, self.gid, self.resource_details, self.reason, self.requires
+        )
 
 
-class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, inmanta.types.Apireturn]):
+class FactsCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, GetFactReport]):
     """Get facts from in an executor"""
 
     def __init__(self, agent_name: str, resource: "inmanta.agent.executor.ResourceDetails") -> None:
         self.agent_name = agent_name
         self.resource = resource
 
-    async def call(self, context: ExecutorContext) -> inmanta.types.Apireturn:
+    async def call(self, context: ExecutorContext) -> GetFactReport:
         return await context.get(self.agent_name).get_facts(self.resource)
 
 
@@ -526,6 +535,7 @@ def mp_worker_entrypoint(
 ) -> None:
     """Entry point for child processes"""
     set_executor_status(name, "connecting")
+
     # Set up logging stage 1
     # Basic config, starts on std.out
     config_builder = inmanta.logging.LoggingConfigBuilder()
@@ -534,13 +544,13 @@ def mp_worker_entrypoint(
     logging.captureWarnings(True)
 
     # Set up our own logger
-    logger = logging.getLogger(f"agent.executor.{name}")
+    logger = logging.getLogger(f"{LOGGER_NAME_EXECUTOR}.{name}")
 
     # Load config
     inmanta.config.Config.load_config_from_dict(config)
 
     # Make sure logfire is configured correctly
-    tracing.configure_logfire("agent.executor")
+    tracing.configure_logfire("executor")
 
     async def serve() -> None:
         loop = asyncio.get_running_loop()
@@ -766,6 +776,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
             self.in_flight -= 1
 
     async def start(self) -> None:
+
         await self.call(InitCommandFor(self.name, self.id.agent_uri))
 
     async def request_shutdown(self) -> None:
@@ -793,20 +804,22 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
 
     async def dry_run(
         self,
-        resources: typing.Sequence["inmanta.agent.executor.ResourceDetails"],
+        resource: "inmanta.agent.executor.ResourceDetails",
         dry_run_id: uuid.UUID,
-    ) -> None:
-        await self.call(DryRunCommand(self.id.agent_name, resources, dry_run_id))
+    ) -> executor.DryrunReport:
+        return await self.call(DryRunCommand(self.id.agent_name, resource, dry_run_id))
 
     async def execute(
         self,
+        action_id: uuid.UUID,
         gid: uuid.UUID,
         resource_details: "inmanta.agent.executor.ResourceDetails",
         reason: str,
-    ) -> const.ResourceState:
-        return await self.call(ExecuteCommand(self.id.agent_name, gid, resource_details, reason))
+        requires: Mapping[ResourceIdStr, const.ResourceState],
+    ) -> DeployReport:
+        return await self.call(ExecuteCommand(self.id.agent_name, action_id, gid, resource_details, reason, requires))
 
-    async def get_facts(self, resource: "inmanta.agent.executor.ResourceDetails") -> inmanta.types.Apireturn:
+    async def get_facts(self, resource: "inmanta.agent.executor.ResourceDetails") -> GetFactReport:
         return await self.call(FactsCommand(self.id.agent_name, resource))
 
     async def join(self) -> None:
@@ -831,7 +844,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
         :param environment: the inmanta environment we are deploying for
         :param log_folder: folder to place log files for the executors
-        :param storage_folder: folder to place code files
+        :param storage_folder: folder to place code files and venvs
         :param log_level: log level for the executors
         :param cli_log: do we also want to echo the log to std_err
 
@@ -852,11 +865,16 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         self.storage_folder = storage_folder
         os.makedirs(self.log_folder, exist_ok=True)
         os.makedirs(self.storage_folder, exist_ok=True)
-        venv_dir = pathlib.Path(self.storage_folder) / "venv"
+        venv_dir = pathlib.Path(self.storage_folder) / "venvs"
         venv_dir.mkdir(exist_ok=True)
 
+        self.code_folder = pathlib.Path(self.storage_folder) / "code"
+        self.code_folder.mkdir(exist_ok=True)
+
         # Env manager
-        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venv_dir.absolute()), self.thread_pool)
+        self.environment_manager = inmanta.agent.executor.VirtualEnvironmentManager(
+            envs_dir=str(venv_dir.absolute()), thread_pool=self.thread_pool
+        )
 
         # logging
         self.log_level = log_level
@@ -903,6 +921,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         return ext_id
 
     async def create_member(self, blueprint: executor.ExecutorBlueprint) -> MPProcess:
+
         venv = await self.environment_manager.get_environment(blueprint.to_env_blueprint())
         executor = await self.make_child_and_connect(blueprint, venv)
         LOGGER.debug(
@@ -910,7 +929,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
             executor.process.pid,
             self.render_id(blueprint),
         )
-        storage_for_blueprint = os.path.join(self.storage_folder, "code", blueprint.blueprint_hash())
+        storage_for_blueprint = os.path.join(self.code_folder, blueprint.blueprint_hash())
         os.makedirs(storage_for_blueprint, exist_ok=True)
         failed_types = await executor.connection.call(
             InitCommand(
@@ -935,7 +954,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         """Async code to make a child process and share a socket with it"""
         loop = asyncio.get_running_loop()
         name = executor_id.blueprint_hash()  # FIXME: improve naming https://github.com/inmanta/inmanta-core/issues/7999
-
         # Start child
         process, parent_conn = await loop.run_in_executor(
             self.thread_pool, functools.partial(self._make_child, name, self.environment, self.log_level, self.cli_log)
@@ -944,7 +962,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         transport, protocol = await loop.connect_accepted_socket(
             functools.partial(ExecutorClient, f"executor.{name}"), parent_conn
         )
-
         child_handle = MPProcess(name, process, protocol, executor_id, venv, self.thread_pool)
         return child_handle
 
@@ -991,7 +1008,7 @@ class MPManager(
         :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
         :param environment: the inmanta environment we are deploying for
         :param log_folder: folder to place log files for the executors
-        :param storage_folder: folder to place code files
+        :param storage_folder: folder to place code files and venvs
         :param log_level: log level for the executors
         :param cli_log: do we also want to echo the log to std_err
 
@@ -1061,15 +1078,19 @@ class MPManager(
         return my_executor
 
     async def create_member(self, executor_id: executor.ExecutorId) -> MPExecutor:
-        process = await self.process_pool.get(executor_id.blueprint)
-        # FIXME: we have a race here: the process can become empty between these two calls
-        # Current thinking is that this race is unlikely
-        result = await process.get(executor_id)
+        try:
+            process = await self.process_pool.get(executor_id.blueprint)
+            # FIXME: we have a race here: the process can become empty between these two calls
+            # Current thinking is that this race is unlikely
+            result = await process.get(executor_id)
 
-        executors = self.agent_map.get(executor_id.agent_name)
-        assert executors is not None  # make mypy happy
-        executors.add(result)
-        return result
+            executors = self.agent_map.get(executor_id.agent_name)
+            assert executors is not None  # make mypy happy
+            executors.add(result)
+            return result
+        except Exception:
+            LOGGER.info("Could not create executor.", exc_info=True)
+            raise
 
     async def notify_member_shutdown(self, pool_member: MPExecutor) -> bool:
         executors = self.agent_map.get(pool_member.get_id().agent_name)

@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump logfire from 2.4.0 to 2.4.1
+destination-branches:
+- master
+sections: {}

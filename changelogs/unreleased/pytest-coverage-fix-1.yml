@@ -1,0 +1,4 @@
+description: Attempt to fix pytest-coverage configuration
+change-type: patch
+destination-branches: [master]
+

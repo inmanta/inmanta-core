@@ -1,0 +1,64 @@
+# Generated using: inmanta -c /etc/inmanta/inmanta.cfg --log-file /var/log/inmanta/server.log --log-file-level 2 \
+#                  --timed-logs output-default-logging-config --component server server_lsm_log_container.yml
+# with the addition that it config also writes the server log to stdout.
+formatters:
+  core_console_formatter:
+    # Console formatter with coloring.
+    # This formatter also does indentation of multi-line log message, so all lines are put nicely underneath each other.
+    (): inmanta.logging.MultiLineFormatter
+    fmt: '%(asctime)s %(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s'
+    # Don't shorten logger names by default
+    keep_logger_names: true
+    log_colors:
+      CRITICAL: red
+      DEBUG: cyan
+      ERROR: red
+      INFO: green
+      WARNING: yellow
+  # Normal formatter
+  core_log_formatter:
+    format: '%(asctime)s %(levelname)-8s %(name)-10s %(message)s'
+  # Lsm callback
+  lsm_callback_formatter:
+    format: '%(asctime)s %(name)-25s%(levelname)-8s%(message)s'
+handlers:
+  server_handler:
+    # Main handler for the server
+    class: logging.handlers.WatchedFileHandler
+    filename: /var/log/inmanta/server.log
+    formatter: core_log_formatter
+    level: INFO
+    mode: a+
+  core_console_handler:
+    class: logging.StreamHandler
+    formatter: core_console_formatter
+    level: INFO
+    stream: ext://sys.stdout
+  lsm_callback_handler:
+    # LSM callback log
+    class: logging.FileHandler
+    filename: /var/log/inmanta/callback.log
+    formatter: lsm_callback_formatter
+  core_tornado_debug_log_handler:
+    # Special handler that captures tornado max_clients limit reached messages and turns them into warnings
+    # As these may cause instability
+    class: inmanta.logging.TornadoDebugLogHandler
+    level: DEBUG
+loggers:
+  inmanta_lsm.callback:
+    handlers:
+    - lsm_callback_handler
+    level: INFO
+    propagate: true
+  tornado.general:
+    handlers:
+    - core_tornado_debug_log_handler
+    level: DEBUG
+    propagate: true
+root:
+  handlers:
+  - server_handler
+  - core_console_handler
+  level: INFO
+version: 1
+disable_existing_loggers: false

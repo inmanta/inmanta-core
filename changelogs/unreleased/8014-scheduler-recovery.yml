@@ -1,0 +1,6 @@
+---
+description: Implemented recovery of scheduler state at startup time.
+issue-nr: 8014
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master]

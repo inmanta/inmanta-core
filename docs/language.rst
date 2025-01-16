@@ -64,6 +64,16 @@ Imports can also define an alias, to shorten long names::
 
 
 
+Comments
+========
+The Inmanta language uses ``#`` to define comments. Everything after the ``#`` symbol is treated as a comment.
+
+.. code-block:: inmanta
+
+    # This is a comment
+    import test::services # This is also a comment
+
+
 Variables
 ==========
 

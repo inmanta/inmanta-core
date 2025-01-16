@@ -50,7 +50,7 @@ class BidirectionalManyMapping(MutableMapping[S, Set[T]], Generic[S, T]):
         Set the key-value pair on the primary dict and update the reverse mapping to uphold the bidirectionality.
 
         :param primary: The dict to consider as primary for this set operation, i.e. the one to set the key-value pair on.
-        :param primary: The dict to consider as secondary for this set operation, i.e. the one to apply the reverse key-value
+        :param reverse: The dict to consider as secondary for this set operation, i.e. the one to apply the reverse key-value
             mapping on (may include deleting edges that were dropped from the primary mapping).
         """
         current: Set[V] = primary.get(key, set())

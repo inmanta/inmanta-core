@@ -80,6 +80,8 @@ class InfluxReporter(AsyncReporter):
     """
     InfluxDB reporter using native http api
     (based on https://influxdb.com/docs/v1.1/guides/writing_data.html)
+
+    If metric name end with `,a=b` these will append as tags `a=b`
     """
 
     def __init__(

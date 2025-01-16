@@ -60,6 +60,8 @@ async def test_environment_settings(client, server, environment_default):
     assert "settings" in result.result
     assert "metadata" in result.result
     assert "auto_deploy" in result.result["metadata"]
+    # Removed setting
+    assert "autostart_agent_deploy_splay_time" not in result.result
 
     check_only_contains_default_setting(result.result["settings"])
 
@@ -108,44 +110,6 @@ async def test_environment_settings(client, server, environment_default):
     assert "settings" in result.result
 
     check_only_contains_default_setting(result.result["settings"])
-
-    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value=20)
-    assert result.code == 200
-
-    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value="30")
-    assert result.code == 200
-
-    result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
-    assert result.code == 200
-    assert result.result["value"] == 30
-
-    result = await client.delete_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
-    assert result.code == 200
-
-    agent_map = {"internal": "", "agent1": "", "agent2": "localhost", "agent3": "user@agent3"}
-    result = await client.set_setting(
-        tid=environment_default,
-        id=data.AUTOSTART_AGENT_MAP,
-        value=agent_map,
-    )
-    assert result.code == 200
-
-    # Internal agent is missing
-    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP, value={"agent1": ""})
-    assert result.code == 400
-    assert "The internal agent must be present in the autostart_agent_map" in result.result["message"]
-    # Assert agent_map didn't change
-    result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP)
-    assert result.code == 200
-    assert result.result["value"] == agent_map
-
-    result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP, value="")
-    assert result.code == 400
-    assert "Agent map should be a dict" in result.result["message"]
-    # Assert agent_map didn't change
-    result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP)
-    assert result.code == 200
-    assert result.result["value"] == agent_map
 
 
 async def test_environment_settings_v2(client_v2, server, environment_default):
@@ -212,6 +176,7 @@ async def test_delete_protected_environment(server, client):
     await assert_env_deletion(env_id, deletion_succeeds=True)
 
 
+@pytest.mark.parametrize("no_agent", [True])
 async def test_clear_protected_environment(server, client):
     result = await client.create_project("env-test")
     assert result.code == 200

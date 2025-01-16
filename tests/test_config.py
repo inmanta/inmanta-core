@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import logging
 import os
 import random
 import socket
@@ -30,34 +29,15 @@ from inmanta import protocol
 from inmanta.config import Config, Option, option_as_default
 from inmanta.const import ClientType
 from inmanta.server.protocol import Server, ServerSlice
-from utils import LogSequence
-
-
-def test_environment_deprecated_options(caplog):
-    for deprecated_option, new_option in [
-        (cfg.agent_interval, cfg.agent_deploy_interval),
-        (cfg.agent_splay, cfg.agent_deploy_splay_time),
-    ]:
-        Config.set(deprecated_option.section, deprecated_option.name, "22")
-        caplog.clear()
-        assert new_option.get() == 22
-        assert f"Config option {deprecated_option.name} is deprecated. Use {new_option.name} instead." in caplog.text
-
-        Config.set(new_option.section, new_option.name, "23")
-        caplog.clear()
-        assert new_option.get() == 23
-        assert f"Config option {deprecated_option.name} is deprecated. Use {new_option.name} instead." not in caplog.text
-
-        Config.load_config()  # Reset config options to default values
-        assert new_option.get() != 23
-        assert deprecated_option.get() != 23
-        Config.set(new_option.section, new_option.name, "24")
-        caplog.clear()
-        assert new_option.get() == 24
-        assert f"Config option {deprecated_option.name} is deprecated. Use {new_option.name} instead." not in caplog.text
 
 
 def test_options(monkeypatch):
+    """
+    Test basic functionalities of the configuration framework:
+        - setting/getting option values
+        - overriding using an environment variable
+        - using the get_environment_variable method to return associated env variable
+    """
     configa = Option("test", "a", "markerA", "test a docs")
     configb = Option("test", "B", option_as_default(configa), "test b docs")
     configc = Option("test", "c", "defaultc", "docstringc")
@@ -75,8 +55,23 @@ def test_options(monkeypatch):
     assert configb.get() == "MB2"
     assert configc.get() == "environ_c"
 
+    for option, expected_sub_part in zip([configa, configb, configc], ["TEST_A", "TEST_B", "TEST_C"]):
+        assert option.get_environment_variable() == f"INMANTA_{expected_sub_part}"
+
 
 def test_configfile_hierarchy(monkeypatch, tmpdir):
+    """
+    Test the hierarchy when a config option is set in multiple places:
+
+        - in the default main config file /etc/inmanta/inmanta.cfg
+        - in a config directory --config-dir cli option
+        - in dot files (.inmanta or .inmanta.cfg)
+        - in a config file passed via --config cli option
+        - via environment variable
+
+        Lower in the list means higher precedence and ties are broken
+        by alphabetical ordering of file names.
+    """
     etc_inmanta_dir = os.path.join(tmpdir, "etc", "inmanta")
     os.makedirs(etc_inmanta_dir, exist_ok=False)
 
@@ -102,13 +97,13 @@ def test_configfile_hierarchy(monkeypatch, tmpdir):
             """
 [server]
 auth=false
+db-connection-pool-max-size=2
 [config]
 log-dir=/log
 [database]
 host=host1
 name=db1
 port=1234
-connection_pool_min_size=2
 username=non-default-name-0
 [influxdb]
 host=host1
@@ -163,15 +158,16 @@ tags=tag2=value2
             """
 [database]
 username=non-default-name-2
-connection_pool_min_size=3
+[server]
+db-connection-pool-max-size=3
         """
         )
 
     with open(min_c_file, "w", encoding="utf-8") as f:
         f.write(
             """
-[database]
-connection_pool_min_size=5
+[server]
+db-connection-pool-max-size=5
         """
         )
 
@@ -186,7 +182,7 @@ connection_pool_min_size=5
     assert Config.get("influxdb", "interval") == 20
     assert Config.get("influxdb", "tags")["tag2"] == "value2"
     assert Config.get("database", "username") == "non-default-name-2"
-    assert Config.get("database", "connection_pool_min_size") == 5
+    assert Config.get("server", "db_connection_pool_max_size") == 5
     assert Config.get("server", "auth")
     assert Config.get("server", "agent-timeout") == 60
 
@@ -279,7 +275,7 @@ async def test_bind_address_ipv6(async_finalizer) -> None:
     assert result.code == 200
 
 
-async def test_bind_port(unused_tcp_port, async_finalizer, caplog):
+async def test_bind_port(unused_tcp_port, async_finalizer):
     @protocol.method(path="/test", operation="POST", client_types=[ClientType.api])
     async def test_endpoint():
         pass
@@ -302,44 +298,10 @@ async def test_bind_port(unused_tcp_port, async_finalizer, caplog):
         assert result.code == 200
         await rs.stop()
 
-    deprecation_line_log_line = (
-        "The server_rest_transport.port config option is deprecated in favour of the " "server.bind-port option."
-    )
-    ignoring_log_line = (
-        "Ignoring the server_rest_transport.port config option since the new config options "
-        "server.bind-port/server.bind-address are used."
-    )
-
-    # Old config option server_rest_transport.port is set
-    Config.load_config()
-    Config.set("server_rest_transport", "port", str(unused_tcp_port))
-    Config.set("client_rest_transport", "port", str(unused_tcp_port))
-    caplog.clear()
-    await assert_port_bound()
-    log_sequence = LogSequence(caplog, allow_errors=False)
-    log_sequence.contains("py.warnings", logging.WARNING, deprecation_line_log_line)
-    log_sequence.assert_not("py.warnings", logging.WARNING, ignoring_log_line)
-
-    # Old config option server_rest_transport.port and new config option server.bind-port are set together
-    Config.load_config()
-    Config.set("server_rest_transport", "port", str(unused_tcp_port))
-    Config.set("server", "bind-port", str(unused_tcp_port))
-    Config.set("client_rest_transport", "port", str(unused_tcp_port))
-    caplog.clear()
-    await assert_port_bound()
-    log_sequence = LogSequence(caplog, allow_errors=False)
-    log_sequence.assert_not("py.warnings", logging.WARNING, deprecation_line_log_line)
-    log_sequence.contains("py.warnings", logging.WARNING, ignoring_log_line)
-
-    # The new config option server.bind-port is set
     Config.load_config()
     Config.set("server", "bind-port", str(unused_tcp_port))
     Config.set("client_rest_transport", "port", str(unused_tcp_port))
-    caplog.clear()
     await assert_port_bound()
-    log_sequence = LogSequence(caplog, allow_errors=False)
-    log_sequence.assert_not("py.warnings", logging.WARNING, deprecation_line_log_line)
-    log_sequence.assert_not("py.warnings", logging.WARNING, ignoring_log_line)
 
 
 def test_option_is_list():

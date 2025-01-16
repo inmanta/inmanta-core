@@ -19,15 +19,30 @@
 import asyncio
 import collections.abc
 import inspect
+import numbers
 import os
 import subprocess
+import typing
 import warnings
 from collections import abc
-from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional, Sequence, Type, TypeVar
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Type, TypeVar
+
+import typing_inspect
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
-from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException, WithComment
+from inmanta.ast import (  # noqa: F401 Plugin exception is part of the stable api
+    LocatableString,
+    Location,
+    Namespace,
+    PluginException,
+    Range,
+    RuntimeException,
+    TypeNotFoundException,
+    TypingException,
+    WithComment,
+)
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
@@ -37,6 +52,7 @@ from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
 T = TypeVar("T")
+T_FUNC = TypeVar("T_FUNC", bound=Callable[..., object])
 
 if TYPE_CHECKING:
     from inmanta.ast.statements import DynamicStatement
@@ -201,6 +217,9 @@ class Null(inmanta_type.Type):
     def type_string_internal(self) -> str:
         return self.type_string()
 
+    def __eq__(self, other: object) -> bool:
+        return type(self) == type(other)  # noqa: E721
+
 
 # Define some types which are used in the context of plugins.
 PLUGIN_TYPES = {
@@ -209,6 +228,109 @@ PLUGIN_TYPES = {
     "null": Null(),  # Only NoneValue will pass validation
     None: Null(),  # Only NoneValue will pass validation
 }
+
+python_to_model = {
+    str: inmanta_type.String(),
+    float: inmanta_type.Float(),
+    numbers.Number: inmanta_type.Number(),
+    int: inmanta_type.Integer(),
+    bool: inmanta_type.Bool(),
+    dict: inmanta_type.TypedDict(inmanta_type.Type()),
+    typing.Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
+    Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
+    list: inmanta_type.List(),
+    typing.Sequence: inmanta_type.List(),
+    Sequence: inmanta_type.List(),
+    object: inmanta_type.Type(),
+}
+
+
+def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
+    """
+    Convert a python type annotation to an Inmanta DSL type annotation.
+
+    :param python_type: The evaluated python type as provided in the Python type annotation.
+    """
+    # Any to any
+    if python_type is typing.Any:
+        return inmanta_type.Type()
+
+    # None to None
+    if python_type is type(None) or python_type is None:
+        return Null()
+
+    # Unions and optionals
+    if typing_inspect.is_union_type(python_type):
+        # Optional type
+        if typing_inspect.is_optional_type(python_type):
+            other_types = [tt for tt in typing.get_args(python_type) if not typing_inspect.is_optional_type(tt)]
+            if len(other_types) == 0:
+                # Probably not possible
+                return Null()
+            if len(other_types) == 1:
+                return inmanta_type.NullableType(to_dsl_type(other_types[0]))
+            # TODO: optional unions
+            return inmanta_type.Type()
+        else:
+            # TODO: unions
+            return inmanta_type.Type()
+        # bases: Sequence[inmanta.ast.type.Type] = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
+        # return inmanta.ast.type.Union(bases)
+
+    # Lists and dicts
+    if typing_inspect.is_generic_type(python_type):
+        origin = typing.get_origin(python_type)
+
+        # dict
+        if issubclass(origin, Mapping):
+            if origin in [collections.abc.Mapping, dict, typing.Mapping]:
+                args = typing_inspect.get_args(python_type)
+                if not args:
+                    return inmanta_type.TypedDict(inmanta_type.Type())
+
+                if not issubclass(args[0], str):
+                    raise TypingException(
+                        None, f"invalid type {python_type}, the keys of any dict should be 'str', got {args[0]} instead"
+                    )
+
+                if len(args) == 1:
+                    return inmanta_type.TypedDict(inmanta_type.Type())
+
+                return inmanta_type.TypedDict(to_dsl_type(args[1]))
+            else:
+                raise TypingException(None, f"invalid type {python_type}, dictionary types should be Mapping or dict")
+
+        # List
+        if issubclass(origin, Sequence):
+            if origin in [collections.abc.Sequence, list, typing.Sequence]:
+                args = typing.get_args(python_type)
+                if not args:
+                    return inmanta_type.List()
+                return inmanta_type.TypedList(to_dsl_type(args[0]))
+            else:
+                raise TypingException(None, f"invalid type {python_type}, list types should be Sequence or list")
+
+        # Set
+        if issubclass(origin, collections.abc.Set):
+            raise TypingException(None, f"invalid type {python_type}, set is not supported on the plugin boundary")
+
+    # TODO annotated types
+    # if typing.get_origin(t) is typing.Annotated:
+    #     args: Sequence[object] = typing.get_args(python_type)
+    #     inmanta_types: Sequence[plugin_typing.InmantaType] =
+    #     [arg if isinstance(arg, plugin_typing.InmantaType) for arg in args]
+    #     if inmanta_types:
+    #         if len(inmanta_types) > 1:
+    #             # TODO
+    #             raise Exception()
+    #         # TODO
+    #         return parse_dsl_type(inmanta_types[0].dsl_type)
+    #     # the annotation doesn't concern us => use base type
+    #     return to_dsl_type(args[0])
+    if python_type in python_to_model:
+        return python_to_model[python_type]
+
+    return inmanta_type.Type()
 
 
 class PluginValue:
@@ -258,15 +380,18 @@ class PluginValue:
             return self._resolved_type
 
         if not isinstance(self.type_expression, str):
-            raise RuntimeException(
-                stmt=None,
-                msg="Bad annotation in plugin %s for %s, expected str but got %s (%s)"
-                % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression),
-            )
-
-        plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
-        locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, resolver)
-        self._resolved_type = inmanta_type.resolve_type(locatable_type, resolver)
+            if isinstance(self.type_expression, type) or typing.get_origin(self.type_expression) is not None:
+                self._resolved_type = to_dsl_type(self.type_expression)
+            else:
+                raise RuntimeException(
+                    stmt=None,
+                    msg="Bad annotation in plugin %s for %s, expected str or python type but got %s (%s)"
+                    % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression),
+                )
+        else:
+            plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
+            locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, resolver)
+            self._resolved_type = inmanta_type.resolve_type(locatable_type, resolver)
         return self._resolved_type
 
     def validate(self, value: object) -> bool:
@@ -717,23 +842,31 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         return self.get_full_name()
 
 
-@stable_api
-class PluginException(Exception):
-    """
-    Base class for custom exceptions raised from a plugin.
-    """
+@typing.overload
+def plugin(
+    function: str | None = None,
+    commands: Optional[list[str]] = None,
+    emits_statements: bool = False,
+    allow_unknown: bool = False,
+) -> Callable[[T_FUNC], T_FUNC]: ...
 
-    def __init__(self, message: str) -> None:
-        self.message = message
+
+@typing.overload
+def plugin(
+    function: T_FUNC,
+    commands: Optional[list[str]] = None,
+    emits_statements: bool = False,
+    allow_unknown: bool = False,
+) -> T_FUNC: ...
 
 
 @stable_api
 def plugin(
-    function: Optional[Callable] = None,
+    function: T_FUNC | str | None = None,
     commands: Optional[list[str]] = None,
     emits_statements: bool = False,
     allow_unknown: bool = False,
-) -> Callable:
+) -> T_FUNC | Callable[[T_FUNC], T_FUNC]:
     """
     Python decorator to register functions with inmanta as plugin
 
@@ -750,12 +883,12 @@ def plugin(
         commands: Optional[list[str]] = None,
         emits_statements: bool = False,
         allow_unknown: bool = False,
-    ) -> Callable:
+    ) -> Callable[[T_FUNC], T_FUNC]:
         """
         Function to curry the name of the function
         """
 
-        def call(fnc):
+        def call(fnc: T_FUNC) -> T_FUNC:
             """
             Create class to register the function and return the function itself
             """
@@ -778,7 +911,7 @@ def plugin(
 
             fq_plugin_name = "::".join(ns_parts[1:])
 
-            dictionary = {}
+            dictionary: dict[str, object] = {}
             dictionary["__module__"] = fnc.__module__
 
             dictionary["__function_name__"] = name
@@ -789,7 +922,7 @@ def plugin(
             dictionary["__function__"] = fnc
 
             bases = (Plugin,)
-            fnc.__plugin__ = PluginMeta.__new__(PluginMeta, name, bases, dictionary)
+            fnc.__plugin__ = PluginMeta.__new__(PluginMeta, name, bases, dictionary)  # type: ignore[attr-defined]
             return fnc
 
         return call

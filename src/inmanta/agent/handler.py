@@ -18,6 +18,7 @@
 
 import base64
 import inspect
+import json
 import logging
 import traceback
 import typing
@@ -34,14 +35,13 @@ import inmanta
 from inmanta import const, data, protocol, resources, tracing
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResource, LinkedDiscoveredResource, ResourceIdStr
+from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResource, LinkedDiscoveredResource
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
-from inmanta.types import SimpleTypes
+from inmanta.types import ResourceIdStr, SimpleTypes
 from inmanta.util import hash_file
 
 if typing.TYPE_CHECKING:
-    import inmanta.agent.agent
     import inmanta.agent.executor
 
 
@@ -52,7 +52,7 @@ T = TypeVar("T")
 TDiscovery = TypeVar("TDiscovery", bound=resources.DiscoveryResource)
 # The type of elements produced by the resource discovery process.
 TDiscovered = TypeVar("TDiscovered", bound=BaseModel)
-T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
+T_FUNC = TypeVar("T_FUNC", bound=Callable[..., object])
 TResource = TypeVar("TResource", bound=resources.Resource)
 
 
@@ -82,7 +82,16 @@ class provider:  # noqa: N801
 class SkipResource(Exception):
     """
     A handler should raise this exception when a resource should be skipped. The resource will be marked as skipped
-    instead of failed.
+    instead of failed. We will try to deploy again later .
+    """
+
+
+@stable_api
+class SkipResourceForDependencies(SkipResource):
+    """
+    A handler should raise this exception when a resource should be skipped as a result of unsuccessful dependencies.
+    The resource will be marked as skipped instead of failed.
+    We will try to deploy again when its dependencies are successfully deployed for their latest intent.
     """
 
 
@@ -98,6 +107,34 @@ class InvalidOperation(Exception):
     """
     This exception is raised by the context or handler methods when an invalid operation is performed.
     """
+
+
+@typing.overload
+def cache(
+    func: None = None,
+    ignore: list[str] = [],
+    timeout: Optional[int] = None,
+    for_version: Optional[bool] = None,
+    cache_none: bool = True,
+    cacheNone: Optional[bool] = None,  # noqa: N803
+    call_on_delete: Optional[Callable[[Any], None]] = None,
+    evict_after_creation: float = 0.0,
+    evict_after_last_access: float = 0.0,
+) -> Callable[[T_FUNC], T_FUNC]: ...
+
+
+@typing.overload
+def cache(
+    func: T_FUNC,
+    ignore: list[str] = [],
+    timeout: Optional[int] = None,
+    for_version: Optional[bool] = None,
+    cache_none: bool = True,
+    cacheNone: Optional[bool] = None,  # noqa: N803
+    call_on_delete: Optional[Callable[[Any], None]] = None,
+    evict_after_creation: float = 0.0,
+    evict_after_last_access: float = 0.0,
+) -> T_FUNC: ...
 
 
 @stable_api
@@ -249,6 +286,7 @@ class HandlerContext(LoggerABC):
             action_id = uuid.uuid4()
         self._action_id = action_id
         self._status: Optional[ResourceState] = None
+        self._resource_state: Optional[const.HandlerResourceState] = None
         self._logs: list[data.LogLine] = []
         self.logger: logging.Logger
         if logger is None:
@@ -289,14 +327,34 @@ class HandlerContext(LoggerABC):
         return self._status
 
     @property
+    def resource_state(self) -> Optional[const.HandlerResourceState]:
+        return self._resource_state
+
+    @property
     def logs(self) -> list[data.LogLine]:
         return self._logs
 
     def set_status(self, status: const.ResourceState) -> None:
         """
-        Set the status of the handler operation.
+        Set the status of the handler operation and translate it to HandlerResourceState
         """
         self._status = status
+        try:
+            self._resource_state = const.HandlerResourceState(status)
+        except ValueError:
+            self._resource_state = const.HandlerResourceState.failed
+            self.logger.warning("Called set_status with status %s which is not supported on the handler API", status)
+
+    def set_resource_state(self, new_state: const.HandlerResourceState) -> None:
+        """
+        Set the state of the resource
+        """
+        self._resource_state = new_state
+        if new_state == const.HandlerResourceState.skipped_for_dependency:
+            # This is the only state that is not present in const.ResourceState
+            self._status = const.ResourceState.skipped
+        else:
+            self._status = const.ResourceState(new_state)
 
     def is_dry_run(self) -> bool:
         """
@@ -425,20 +483,33 @@ class HandlerContext(LoggerABC):
         if exc_info:
             kwargs["traceback"] = traceback.format_exc()
 
-        for k, v in kwargs.items():
+        def clean_arg_value(k: str, v: object) -> object:
+            """
+            Make sure we have a clean dict.
+
+            These values will be pickled and json serialized later down the stream.
+            As such we have to make sure both things are possible.
+
+            Clean json is both json serializable and (safely) pickleable
+
+            Also, the data will only be accessed via json endpoints,
+            so anything not picked up by the json serializer will be lost anyways.
+            """
             try:
-                json_encode(v)
+                return json.loads(json_encode(v))
             except TypeError:
                 if inmanta.RUNNING_TESTS:
                     # Fail the test when the value is not serializable
                     raise Exception(f"Failed to serialize argument for log message {k}={v}")
                 else:
                     # In production, try to cast the non-serializable value to str to prevent the handler from failing.
-                    kwargs[k] = str(v)
-
+                    return str(v)
             except Exception as e:
                 raise Exception("Exception during serializing log message arguments") from e
-        log = data.LogLine.log(level, msg, **kwargs)
+
+        packaged_kwargs = {k: clean_arg_value(k, v) for k, v in kwargs.items()}
+
+        log = data.LogLine.log(level, msg, **packaged_kwargs)
         self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
         self._logs.append(log)
 
@@ -508,28 +579,49 @@ class HandlerAPI(ABC, Generic[TResource]):
                 raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
             return result.result["data"]
 
-        def filter_resources_in_unexpected_state(
-            reqs: abc.Mapping[ResourceIdStr, ResourceState]
+        def filter_resources_by_state(
+            reqs: abc.Mapping[ResourceIdStr, ResourceState], states: typing.Set[ResourceState]
         ) -> abc.Mapping[ResourceIdStr, ResourceState]:
             """
-            Return a sub-dictionary of reqs with only those resources that are in an unexpected state.
+            Return a sub-dictionary of dependencies of this resource.
+            Only keeping dependencies that are in a state that is in the provided set.
+
+            :param reqs: The list of requirements of this resource
+            :param states: The list of states that we want to keep in this sub-dictionary
             """
-            unexpected_states = {
-                const.ResourceState.available,
+
+            return {rid: state for rid, state in reqs.items() if state in states}
+
+        # Check if any dependencies got into any unexpected state
+        dependencies_in_unexpected_state = filter_resources_by_state(
+            requires,
+            {
                 const.ResourceState.dry,
                 const.ResourceState.undefined,
                 const.ResourceState.skipped_for_undefined,
-                const.ResourceState.deploying,
-            }
-            return {rid: state for rid, state in reqs.items() if state in unexpected_states}
-
-        resources_in_unexpected_state = filter_resources_in_unexpected_state(requires)
-        if resources_in_unexpected_state:
-            ctx.set_status(const.ResourceState.skipped)
+            },
+        )
+        if dependencies_in_unexpected_state:
+            ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
             ctx.warning(
                 "Resource %(resource)s skipped because a dependency is in an unexpected state: %(unexpected_states)s",
                 resource=resource.id.resource_version_str(),
-                unexpected_states=str({rid: state.value for rid, state in resources_in_unexpected_state.items()}),
+                unexpected_states=str({rid: state.value for rid, state in dependencies_in_unexpected_state.items()}),
+            )
+            return
+
+        # Check if any dependencies got a new desired state while this resource was waiting to deploy
+        dependencies_waiting_to_be_deployed = filter_resources_by_state(
+            requires, {const.ResourceState.available, const.ResourceState.deploying}
+        )
+        if dependencies_waiting_to_be_deployed:
+            ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
+            ctx.info(
+                "Resource %(resource)s skipped because some dependencies %(reqs)s "
+                "got a new desired state while we were preparing to deploy."
+                " We will retry when all dependencies get deployed successfully",
+                resource=resource.id.resource_version_str(),
+                reqs=str({rid for rid in dependencies_waiting_to_be_deployed.keys()}),
             )
             return
 
@@ -539,7 +631,7 @@ class HandlerAPI(ABC, Generic[TResource]):
             if _should_reload():
                 self.do_reload(ctx, resource)
         else:
-            ctx.set_status(const.ResourceState.skipped)
+            ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
             ctx.info(
                 "Resource %(resource)s skipped due to failed dependencies: %(failed)s",
                 resource=resource.id.resource_version_str(),
@@ -790,14 +882,23 @@ class ResourceHandler(HandlerAPI[TResource]):
             if not dry_run:
                 with tracing.span("do_changes"):
                     self.do_changes(ctx, resource, changes)
-                    ctx.set_status(const.ResourceState.deployed)
+                    ctx.set_resource_state(const.HandlerResourceState.deployed)
             else:
-                ctx.set_status(const.ResourceState.dry)
+                ctx.set_resource_state(const.HandlerResourceState.dry)
+        except SkipResourceForDependencies as e:
+            ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s",
+                resource_id=resource.id,
+                reason=e.args,
+            )
         except SkipResource as e:
-            ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+            ctx.set_resource_state(const.HandlerResourceState.skipped)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
+            )
         except Exception as e:
-            ctx.set_status(const.ResourceState.failed)
+            ctx.set_resource_state(const.HandlerResourceState.failed)
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
                 resource_id=resource.id,
@@ -809,7 +910,7 @@ class ResourceHandler(HandlerAPI[TResource]):
             except Exception as e:
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
-                    resource_id=resource.id,
+                    resource_id=resource.id.resource_str(),
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
@@ -834,7 +935,7 @@ class ResourceHandler(HandlerAPI[TResource]):
             except Exception as e:
                 ctx.exception(
                     "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s)",
-                    resource_id=resource.id,
+                    resource_id=resource.id.resource_str(),
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
@@ -860,6 +961,8 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                    id used in API calls
         :param resource: A clone of the desired resource state. The read method need to set values on this object.
         :raise SkipResource: Raise this exception when the handler should skip this resource
+        :raise SkipResourceForDependencies: Raise this exception when the handler should skip this resource and retry only
+            when its dependencies succeed.
         :raise ResourcePurged: Raise this exception when the resource does not exist yet.
         """
 
@@ -952,19 +1055,27 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                     with tracing.span("update_resource"):
                         self.update_resource(ctx, dict(changes), desired)
 
-                ctx.set_status(const.ResourceState.deployed)
+                ctx.set_resource_state(const.HandlerResourceState.deployed)
             else:
-                ctx.set_status(const.ResourceState.dry)
+                ctx.set_resource_state(const.HandlerResourceState.dry)
 
+        except SkipResourceForDependencies as e:
+            ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s",
+                resource_id=resource.id,
+                reason=e.args,
+            )
         except SkipResource as e:
-            ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
-
+            ctx.set_resource_state(const.HandlerResourceState.skipped)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
+            )
         except Exception as e:
-            ctx.set_status(const.ResourceState.failed)
+            ctx.set_resource_state(const.HandlerResourceState.failed)
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
-                resource_id=resource.id,
+                resource_id=resource.id.resource_str(),
                 exception=f"{e.__class__.__name__}('{e}')",
                 traceback=traceback.format_exc(),
             )
@@ -974,7 +1085,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             except Exception as e:
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
-                    resource_id=resource.id,
+                    resource_id=resource.id.resource_str(),
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
@@ -1040,7 +1151,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
 
             if result.code != 200:
                 assert result.result is not None  # Make mypy happy
-                ctx.set_status(const.ResourceState.failed)
+                ctx.set_resource_state(const.HandlerResourceState.failed)
                 error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
                 ctx.error(
                     "Failed to report discovered resources to the server (status code: %(code)s)%(error_msg_from_server)s",
@@ -1048,15 +1159,24 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                     error_msg_from_server=error_msg_from_server,
                 )
             else:
-                ctx.set_status(const.ResourceState.deployed)
+                ctx.set_resource_state(const.HandlerResourceState.deployed)
+        except SkipResourceForDependencies as e:
+            ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s",
+                resource_id=resource.id,
+                reason=e.args,
+            )
         except SkipResource as e:
-            ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+            ctx.set_resource_state(const.HandlerResourceState.skipped)
+            ctx.warning(
+                msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id.resource_str(), reason=e.args
+            )
         except Exception as e:
-            ctx.set_status(const.ResourceState.failed)
+            ctx.set_resource_state(const.HandlerResourceState.failed)
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
-                resource_id=resource.id,
+                resource_id=resource.id.resource_str(),
                 exception=f"{e.__class__.__name__}('{e}')",
                 traceback=traceback.format_exc(),
             )
@@ -1066,7 +1186,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
             except Exception as e:
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
-                    resource_id=resource.id,
+                    resource_id=resource.id.resource_str(),
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 

@@ -35,7 +35,7 @@ import asyncpg
 from asyncpg import StringDataRightTruncationError
 
 from inmanta import config, data
-from inmanta.data import Setting, model
+from inmanta.data import AUTOSTART_AGENT_DEPLOY_INTERVAL, AUTOSTART_AGENT_REPAIR_INTERVAL, Setting, model
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
@@ -163,12 +163,14 @@ class EnvironmentService(protocol.ServerSlice):
             warnings = await self.server_slice._async_recompile(env, setting.update, metadata=metadata.model_dump())
 
         if setting.agent_restart:
-            if key == data.AUTOSTART_AGENT_MAP:
-                LOGGER.info("Environment setting %s changed. Notifying agents.", key)
-                self.add_background_task(self.autostarted_agent_manager.notify_agent_about_agent_map_update(env))
-            else:
-                LOGGER.info("Environment setting %s changed. Restarting agents.", key)
-                self.add_background_task(self.autostarted_agent_manager.restart_agents(env))
+            LOGGER.info("Environment setting %s changed. Restarting agents.", key)
+            self.add_background_task(self.autostarted_agent_manager.restart_agents(env))
+
+        if key in [
+            AUTOSTART_AGENT_DEPLOY_INTERVAL,
+            AUTOSTART_AGENT_REPAIR_INTERVAL,
+        ]:
+            await self.autostarted_agent_manager.notify_agent_deploy_timer_update(env)
 
         self.add_background_task(self._enable_schedules(env, setting))
 
@@ -617,7 +619,7 @@ class EnvironmentService(protocol.ServerSlice):
         one running the Inmanta server inside the environment directory marked for removal.
         """
         state_dir = config.state_dir.get()
-        environment_dir = os.path.join(state_dir, "server", "environments", str(environment_id))
+        environment_dir = os.path.join(state_dir, "server", str(environment_id))
 
         if os.path.exists(environment_dir):
             loop = asyncio.get_running_loop()

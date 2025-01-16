@@ -21,6 +21,7 @@ import datetime
 import logging
 import uuid
 from collections import abc, defaultdict
+from collections.abc import Sequence
 from typing import Literal, Optional, cast
 
 import asyncpg
@@ -31,23 +32,15 @@ import pydantic
 import inmanta.util
 from inmanta import const, data, tracing
 from inmanta.const import ResourceState
-from inmanta.data import (
-    APILIMIT,
-    AVAILABLE_VERSIONS_TO_KEEP,
-    ENVIRONMENT_AGENT_TRIGGER_METHOD,
-    InvalidSort,
-    ResourcePersistentState,
-    RowLockMode,
-)
+from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
     PipConfig,
     PromoteTriggerMethod,
     ResourceDiff,
-    ResourceIdStr,
     ResourceMinimal,
-    ResourceVersionIdStr,
+    SchedulerStatusReport,
 )
 from inmanta.db.util import ConnectionInTransaction
 from inmanta.protocol import handle, methods, methods_v2
@@ -67,7 +60,7 @@ from inmanta.server import config as opt
 from inmanta.server import diff, protocol
 from inmanta.server.services import resourceservice
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ReturnTupple
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
 
 LOGGER = logging.getLogger(__name__)
 PLOGGER = logging.getLogger("performance")
@@ -417,7 +410,7 @@ class OrchestrationService(protocol.ServerSlice):
                 n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP, connection=connection)
                 assert isinstance(n_versions, int)
                 versions = await data.ConfigurationModel.get_list(
-                    environment=env_item.id, connection=connection, no_status=True, order_by_column="version", order="DESC"
+                    environment=env_item.id, connection=connection, order_by_column="version", order="DESC"
                 )
                 if len(versions) > n_versions:
                     version_dict = {x.version: x for x in versions}
@@ -671,7 +664,7 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
-    ) -> abc.Collection[str]:
+    ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
                                 When a partial compile is done, it should contain all the resources that belong to the
@@ -684,8 +677,6 @@ class OrchestrationService(protocol.ServerSlice):
         :param removed_resource_sets: When a partial compile is done, this parameter should indicate the names of the resource
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
-
-        :return: all agents affected
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -819,11 +810,8 @@ class OrchestrationService(protocol.ServerSlice):
 
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
-            all_agents: abc.Set[str]
-            if opt.server_use_resource_scheduler.get():
-                all_agents = {const.AGENT_SCHEDULER_ID}
-            else:
-                all_agents = {res.agent for res in rid_to_resource.values()}
+            all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
+            all_agents.add(const.AGENT_SCHEDULER_ID)
 
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
@@ -848,32 +836,21 @@ class OrchestrationService(protocol.ServerSlice):
                 await ra.insert(connection=connection)
 
         LOGGER.debug("Successfully stored version %d", version)
-        return list(all_agents)
 
     async def _trigger_auto_deploy(
         self,
         env: data.Environment,
         version: int,
-        *,
-        agents: Optional[abc.Sequence[str]] = None,
     ) -> None:
         """
         Triggers auto-deploy for stored resources. Must be called only after transaction that stores resources has been allowed
         to commit. If not respected, the auto deploy might work on stale data, likely resulting in resources hanging in the
         deploying state.
-
-        :argument agents: the list of agents we should restrict our notifications to. if it is None, we notify all agents if
-            PUSH_ON_AUTO_DEPLOY is set
         """
         auto_deploy = await env.get(data.AUTO_DEPLOY)
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)
-            push_on_auto_deploy = cast(bool, await env.get(data.PUSH_ON_AUTO_DEPLOY))
-            agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
-            agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
-            self.add_background_task(
-                self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy, agents=agents)
-            )
+            self.add_background_task(self.release_version(env, version, push=False, agent_trigger_method=None))
 
     def _create_unknown_parameter_daos_from_api_unknowns(
         self, env_id: uuid.UUID, version: int, unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None
@@ -1071,7 +1048,7 @@ class OrchestrationService(protocol.ServerSlice):
                     unknowns_in_partial_compile=self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
                 )
 
-                all_agents = await self._put_version(
+                await self._put_version(
                     env,
                     version,
                     merged_resources,
@@ -1085,7 +1062,7 @@ class OrchestrationService(protocol.ServerSlice):
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)
-            await self._trigger_auto_deploy(env, version, agents=all_agents)
+            await self._trigger_auto_deploy(env, version)
 
         return returnvalue
 
@@ -1098,7 +1075,6 @@ class OrchestrationService(protocol.ServerSlice):
         agent_trigger_method: Optional[const.AgentTriggerMethod] = None,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
-        agents: Optional[abc.Sequence[str]] = None,
     ) -> ReturnTupple:
         """
         :param agents: agents that have to be notified by the push, defaults to all
@@ -1131,7 +1107,10 @@ class OrchestrationService(protocol.ServerSlice):
                             f"is older then the latest released version {latest_version}."
                         )
 
-                    # Already mark undeployable resources as deployed to create a better UX (change the version counters)
+                    # Ensure there is a record for every resource in the resource_persistent_state table.
+                    await data.ResourcePersistentState.populate_for_version(env.id, version_id, connection=connection)
+
+                    # # Already mark undeployable resources as deployed to create a better UX (change the version counters)
                     undep = model.get_undeployable()
                     now = datetime.datetime.now().astimezone()
 
@@ -1192,53 +1171,24 @@ class OrchestrationService(protocol.ServerSlice):
                     # Setting the model's released field to True is the trigger for the agents
                     # to start pulling in the resources.
                     # This has to be done after the resources outside of the increment have been marked as deployed.
-                    await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
+                    await model.update_fields(released=True, connection=connection)
 
             if model.total == 0:
-                await model.mark_done(connection=connection)
                 return 200, {"model": model}
 
-            is_using_new_scheduler = opt.server_use_resource_scheduler.get()
-            # New code relying on the ResourceScheduler
-            if is_using_new_scheduler:
-                if connection.is_in_transaction():
-                    raise RuntimeError(
-                        "The release of a new version cannot be in a transaction! "
-                        "The agent would not see the data that as committed"
-                    )
-                await self.autostarted_agent_manager._ensure_scheduler(env)
-                agent = const.AGENT_SCHEDULER_ID
+            if connection.is_in_transaction():
+                raise RuntimeError(
+                    "The release of a new version cannot be in a transaction! "
+                    "The agent would not see the data that as committed"
+                )
+            await self.autostarted_agent_manager._ensure_scheduler(env.id)
+            agent = const.AGENT_SCHEDULER_ID
 
-                client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
-                if client is not None:
-                    self.add_background_task(client.trigger_read_version(env.id))
-                else:
-                    LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id)
-            # Old code
-            elif push:
-                # We can't be in a transaction here, or the agent will not see the data that as committed
-                # This assert prevents anyone from wrapping this method in a transaction by accident
-                assert not connection.is_in_transaction()
-
-                if agents is None:
-                    # fetch all resource in this cm and create a list of distinct agents
-                    agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
-                await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
-
-                assert agents is not None
-                for agent in agents:
-                    client = self.agentmanager_service.get_agent_client(env.id, agent)
-                    if client is not None:
-                        if not agent_trigger_method:
-                            env_agent_trigger_method = await env.get(ENVIRONMENT_AGENT_TRIGGER_METHOD, connection=connection)
-                            incremental_deploy = env_agent_trigger_method == const.AgentTriggerMethod.push_incremental_deploy
-                        else:
-                            incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
-                        self.add_background_task(client.trigger(env.id, agent, incremental_deploy))
-                    else:
-                        LOGGER.warning(
-                            "Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id
-                        )
+            client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
+            if client is not None:
+                self.add_background_task(client.trigger_read_version(env.id))
+            else:
+                LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id)
 
             return 200, {"model": model}
 
@@ -1249,7 +1199,7 @@ class OrchestrationService(protocol.ServerSlice):
         agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
         agents: Optional[list[str]] = None,
     ) -> Apireturn:
-        warnings = []
+        warnings: list[str] = []
 
         # get latest version
         version_id = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
@@ -1258,10 +1208,14 @@ class OrchestrationService(protocol.ServerSlice):
 
         # filter agents
         allagents = await data.ConfigurationModel.get_agents(env.id, version_id)
+        agents_to_call: Sequence[str] = []
+
         if agents is not None:
+            # select specific agents
             required = set(agents)
             present = set(allagents)
             allagents = list(required.intersection(present))
+            agents_to_call = allagents
             notfound = required - present
             if notfound:
                 warnings.append(
@@ -1271,31 +1225,21 @@ class OrchestrationService(protocol.ServerSlice):
         if not allagents:
             return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
 
-        is_using_new_scheduler = opt.server_use_resource_scheduler.get()
-        if is_using_new_scheduler:
-            await self.autostarted_agent_manager._ensure_scheduler(env)
-            allagents = [const.AGENT_SCHEDULER_ID]
+        await self.autostarted_agent_manager._ensure_scheduler(env.id)
+
+        client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
+        if not client:
+            return attach_warnings(404, {"message": "Scheduler could not be reached"}, warnings)
+
+        incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
+
+        if agents is None:
+            self.add_background_task(client.trigger(env.id, None, incremental_deploy))
         else:
-            await self.autostarted_agent_manager._ensure_agents(env, allagents)
-
-        present = set()
-        absent = set()
-        for agent in allagents:
-            client = self.agentmanager_service.get_agent_client(env.id, agent)
-            if client is not None:
-                incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
+            for agent in agents_to_call:
                 self.add_background_task(client.trigger(env.id, agent, incremental_deploy))
-                present.add(agent)
-            else:
-                absent.add(agent)
 
-        if absent:
-            warnings.append("Could not reach agents named [%s]" % ",".join(sorted(list(absent))))
-
-        if not present:
-            return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
-
-        return attach_warnings(200, {"agents": sorted(list(present))}, warnings)
+        return attach_warnings(200, {"agents": sorted(allagents)}, warnings)
 
     @handle(methods_v2.list_desired_state_versions, env="tid")
     async def desired_state_version_list(
@@ -1363,6 +1307,34 @@ class OrchestrationService(protocol.ServerSlice):
         version_diff = to_state.generate_diff(from_state)
 
         return version_diff
+
+    @handle(methods_v2.get_scheduler_status, env="tid")
+    async def get_scheduler_status(
+        self,
+        env: data.Environment,
+    ) -> SchedulerStatusReport:
+        try:
+            await self.autostarted_agent_manager._ensure_scheduler(env.id)
+        except Exception as e:
+            raise ServerError(f"Scheduler in env {env.id} failed to start.") from e
+        else:
+            client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
+
+            if client is None:
+                raise ServerError(f"Cannot retrieve session for scheduler in env {env.id}.")
+
+            status = await client.trigger_get_status(env.id)
+
+            status_code = status.code
+            result = status.result
+
+            if status_code != 200:
+                raise BaseHttpException(status_code, result["message"] if result else "")
+
+            assert result is not None
+
+            resp = SchedulerStatusReport.model_validate(result["data"])
+            return resp
 
     def convert_resources(self, resources: list[data.Resource]) -> dict[ResourceIdStr, diff.Resource]:
         return {res.resource_id: diff.Resource(resource_id=res.resource_id, attributes=res.attributes) for res in resources}

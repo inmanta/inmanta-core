@@ -23,8 +23,10 @@ import datetime
 import enum
 import functools
 import hashlib
+import importlib.metadata
 import inspect
 import itertools
+import json
 import logging
 import os
 import pathlib
@@ -42,21 +44,25 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import BinaryIO, Callable, Generic, Optional, Sequence, TypeVar, Union
+from typing import TYPE_CHECKING, BinaryIO, Callable, Generic, Mapping, Optional, Sequence, TypeVar, Union
 
 import asyncpg
 import click
-import importlib_metadata
+import pydantic
 from tornado import gen
 
 import packaging
 import packaging.requirements
 import packaging.utils
+import pydantic_core
 from crontab import CronTab
 from inmanta import COMPILER_VERSION, const
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
-from pydantic_core import Url
+from packaging.utils import NormalizedName
+
+if TYPE_CHECKING:
+    from inmanta.data.model import ResourceId
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -311,6 +317,12 @@ class Scheduler:
         """
         Add task that is currently executing to `self._executing_tasks`.
         """
+        # requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
+        # # types per agent keeps track of which resource types live on which agent by doing a reference count
+        # # the dict is agent_name -> resource_type -> resource_count
+        # types_per_agent: dict[str, dict["ResourceType", int]] = dataclasses.field(
+        #     default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
+        # )
         if action in self._executing_tasks and self._executing_tasks[action]:
             LOGGER.warning("Multiple instances of background task %s are executing simultaneously", action.__name__)
         self._executing_tasks[action].append(task)
@@ -529,7 +541,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     if isinstance(o, JSONSerializable):
         return o.json_serialization_step()
 
-    if isinstance(o, (uuid.UUID, Url)):
+    if isinstance(o, (uuid.UUID, pydantic.AnyUrl, pydantic_core.Url)):
         return str(o)
 
     if isinstance(o, datetime.datetime):
@@ -849,6 +861,7 @@ class ExhaustedPoolWatcher:
 
     def __init__(self, pool: asyncpg.pool.Pool) -> None:
         self._exhausted_pool_events_count: int = 0
+        self._last_report: int = 0
         self._pool: asyncpg.pool.Pool = pool
 
     def report_and_reset(self, logger: logging.Logger) -> None:
@@ -856,20 +869,18 @@ class ExhaustedPoolWatcher:
         Log how many exhausted pool events were recorded since the last time the counter
         was reset, if any, and reset the counter.
         """
-        if self._exhausted_pool_events_count > 0:
-            logger.warning("Database pool was exhausted %d times in the past 24h.", self._exhausted_pool_events_count)
-            self._reset_counter()
+        since_last = self._exhausted_pool_events_count - self._last_report
+        if since_last > 0:
+            logger.warning("Database pool was exhausted %d times in the past 24h.", since_last)
+            self._last_report = self._exhausted_pool_events_count
 
     def check_for_pool_exhaustion(self) -> None:
         """
         Checks if the database pool is exhausted
         """
-        pool_exhausted: bool = self._pool.get_size() == self._pool.get_max_size() and self._pool.get_idle_size() == 0
+        pool_exhausted: bool = (self._pool.get_size() == self._pool.get_max_size()) and self._pool.get_idle_size() == 0
         if pool_exhausted:
             self._exhausted_pool_events_count += 1
-
-    def _reset_counter(self) -> None:
-        self._exhausted_pool_events_count = 0
 
 
 def remove_comment_part_from_specifier(to_clean: str) -> str:
@@ -887,11 +898,20 @@ def remove_comment_part_from_specifier(to_clean: str) -> str:
     return drop_comment
 
 
-CanonicalRequirement = typing.NewType("CanonicalRequirement", packaging.requirements.Requirement)
-"""
-A CanonicalRequirement is a packaging.requirements.Requirement except that the name of this Requirement is canonicalized, which
-allows us to compare names without dealing afterwards with the format of these requirements.
-"""
+if typing.TYPE_CHECKING:
+
+    class CanonicalRequirement(packaging.requirements.Requirement):
+        name: NormalizedName
+
+        def __init__(self, requirement: packaging.requirements.Requirement) -> None:
+            raise Exception("Typing dummy, should never be seen")
+
+else:
+    CanonicalRequirement = typing.NewType("CanonicalRequirement", packaging.requirements.Requirement)
+    """
+    A CanonicalRequirement is a packaging.requirements.Requirement except that the name of this Requirement is canonicalized,
+    which allows us to compare names without dealing afterwards with the format of these requirements.
+    """
 
 
 def parse_requirement(requirement: str) -> CanonicalRequirement:
@@ -950,7 +970,7 @@ def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequi
 
 
 # Retaken from the `click-plugins` repo which is now unmaintained
-def click_group_with_plugins(plugins: Iterable[importlib_metadata.EntryPoint]) -> Callable[[click.Group], click.Group]:
+def click_group_with_plugins(plugins: Iterable[importlib.metadata.EntryPoint]) -> Callable[[click.Group], click.Group]:
     """
     A decorator to register external CLI commands to an instance of `click.Group()`.
 
@@ -975,3 +995,20 @@ def click_group_with_plugins(plugins: Iterable[importlib_metadata.EntryPoint]) -
         return group
 
     return decorator
+
+
+def make_attribute_hash(resource_id: "ResourceId", attributes: Mapping[str, object]) -> str:
+    """
+    This method returns the attribute hash for the attributes of the given resource.
+    """
+    from inmanta.protocol.common import custom_json_encoder
+
+    character = json.dumps(
+        {k: v for k, v in attributes.items() if k not in ["requires", "provides", "version"]},
+        default=custom_json_encoder,
+        sort_keys=True,  # sort the keys for stable hashes when using dicts, see #5306
+    )
+    m = hashlib.md5()
+    m.update(resource_id.encode("utf-8"))
+    m.update(character.encode("utf-8"))
+    return m.hexdigest()
