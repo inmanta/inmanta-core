@@ -75,44 +75,28 @@ class ParameterService(protocol.ServerSlice):
         LOGGER.info("Renewing facts")
 
         updated_before = datetime.datetime.now().astimezone() - datetime.timedelta(0, self._fact_renew)
-        params_to_renew = await data.Parameter.get_updated_before_active_env(updated_before)
+        async with data.Parameter.get_connection() as connection:
+            params_to_renew = await data.Parameter.get_updated_before_active_env(updated_before, connection=connection)
+            unknown_parameters = await data.UnknownParameter.get_unknowns_in_latest_released_model_versions(
+                connection=connection
+            )
 
         LOGGER.debug("Renewing %d parameters", len(params_to_renew))
-
-        environments = await data.Environment.get_list(halted=False)
-        ids_non_halted_envs = [env.id for env in environments]
-
         for param in params_to_renew:
-            if param.environment in ids_non_halted_envs:
-                LOGGER.debug(
-                    "Requesting new parameter value for %s of resource %s in env %s",
-                    param.name,
-                    param.resource_id,
-                    param.environment,
-                )
-                await self.agentmanager.request_parameter(param.environment, param.resource_id)
-            else:
-                LOGGER.debug(
-                    "Not Requesting value for unknown parameter %s of resource %s in env %s as the env is halted",
-                    param.name,
-                    param.resource_id,
-                    param.environment,
-                )
+            LOGGER.debug(
+                "Requesting new parameter value for %s of resource %s in env %s",
+                param.name,
+                param.resource_id,
+                param.environment,
+            )
+            await self.agentmanager.request_parameter(param.environment, param.resource_id)
 
-        unknown_parameters = await data.UnknownParameter.get_list(resolved=False)
+        LOGGER.debug("Requesting value for %d unknowns", len(unknown_parameters))
         for u in unknown_parameters:
-            if u.environment in ids_non_halted_envs:
-                LOGGER.debug(
-                    "Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.environment
-                )
-                await self.agentmanager.request_parameter(u.environment, u.resource_id)
-            else:
-                LOGGER.debug(
-                    "Not Requesting value for unknown parameter %s of resource %s in env %s as the env is halted",
-                    u.name,
-                    u.resource_id,
-                    u.environment,
-                )
+            LOGGER.debug(
+                "Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.environment
+            )
+            await self.agentmanager.request_parameter(u.environment, u.resource_id)
         LOGGER.info("Done renewing parameters")
 
     @handle(methods.get_param, param_id="id", env="tid")
@@ -146,10 +130,10 @@ class ParameterService(protocol.ServerSlice):
         self,
         env: data.Environment,
         name: str,
-        value: str,
+        value: Optional[str],
         source: str,
         resource_id: Optional[str],
-        metadata: JsonType,
+        metadata: Optional[JsonType],
         recompile: bool = False,
         expires: Optional[bool] = None,
     ) -> bool:
@@ -273,7 +257,7 @@ class ParameterService(protocol.ServerSlice):
         updating_parameters: bool = False
         parameters_and_or_facts: str = "parameters"
 
-        params: list[tuple[str, ResourceIdStr]] = []
+        params: list[tuple[str, ResourceIdStr | None]] = []
 
         # Validate the full list of parameters before applying any changes
         for param in parameters:
@@ -287,7 +271,7 @@ class ParameterService(protocol.ServerSlice):
             name: str = param["id"]
             source = param["source"]
             value = param["value"] if "value" in param else None
-            resource_id: ResourceIdStr = param["resource_id"] if "resource_id" in param else None
+            resource_id: ResourceIdStr | None = param["resource_id"] if "resource_id" in param else None
             metadata = param["metadata"] if "metadata" in param else None
             expires = param["expires"] if "expires" in param else None
 

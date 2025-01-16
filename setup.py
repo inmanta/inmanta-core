@@ -10,7 +10,7 @@ requires = [
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab>=0.23,<2.0",
-    "cryptography>=36,<44",
+    "cryptography>=36,<45",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.17",
     "email-validator>=1,<3",
@@ -23,7 +23,7 @@ requires = [
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
-    "pydantic~=2.5",
+    "pydantic~=2.5,!=2.9.2",
     "pyformance~=0.4",
     "PyJWT~=2.0",
     "pynacl~=1.5",
@@ -46,7 +46,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "11.4.0"
+version = "11.5.0"
 
 setup(
     version=version,

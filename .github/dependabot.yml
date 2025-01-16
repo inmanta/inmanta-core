@@ -30,7 +30,7 @@ updates:
   ignore:
     - dependency-name: "pytest-inmanta-extensions"
       versions: [">=0.0.1"]
-    # pydantic/pydantic#10494
-    - dependency-name: "pydantic-core"
+    - dependency-name: "pydantic"
+      update-types: ["version-update:semver-major"]
     - dependency-name: "execnet"
       update-types: ["version-update:semver-major"]

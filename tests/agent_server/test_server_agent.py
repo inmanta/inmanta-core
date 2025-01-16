@@ -888,10 +888,7 @@ async def test_unknown_parameters(
         log_contains(caplog, "inmanta.server.services.paramservice", logging.DEBUG, msg)
 
     else:
-        msg = (
-            "Not Requesting value for unknown parameter length of resource test::Resource[agent1,key=key] "
-            f"in env {environment} as the env is halted"
-        )
+        msg = "Requesting value for 0 unknowns"
         log_contains(caplog, "inmanta.server.services.paramservice", logging.DEBUG, msg)
 
 

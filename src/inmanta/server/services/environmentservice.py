@@ -28,7 +28,6 @@ import warnings
 from collections import defaultdict
 from collections.abc import Set
 from concurrent import futures
-from enum import Enum
 from re import Pattern
 from typing import Optional, cast
 
@@ -55,6 +54,7 @@ from inmanta.server import (
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.server import Server
 from inmanta.server.services import compilerservice
+from inmanta.server.services.environmentlistener import EnvironmentAction, EnvironmentListener
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType, Warnings
@@ -67,48 +67,6 @@ def rename_fields(env: model.Environment) -> JsonType:
     env_dict["project"] = env_dict["project_id"]
     del env_dict["project_id"]
     return env_dict
-
-
-class EnvironmentAction(str, Enum):
-    created = "created"
-    deleted = "deleted"
-    cleared = "cleared"
-    updated = "updated"
-
-
-class EnvironmentListener:
-    """
-    Base class for environment listeners
-    Exceptions from the listeners are dropped, the listeners are responsible for handling them
-    """
-
-    async def environment_action_created(self, env: model.Environment) -> None:
-        """
-        Will be called when a new environment is created
-
-        :param env: The new environment
-        """
-
-    async def environment_action_cleared(self, env: model.Environment) -> None:
-        """
-        Will be called when the environment is cleared
-
-        :param env: The environment that is cleared
-        """
-
-    async def environment_action_deleted(self, env: model.Environment) -> None:
-        """
-        Will be called when the environment is deleted
-
-        :param env: The environment that is deleted
-        """
-
-    async def environment_action_updated(self, updated_env: model.Environment, original_env: model.Environment) -> None:
-        """
-        Will be called when an environment is updated
-        :param updated_env: The updated environment
-        :param original_env: The original environment
-        """
 
 
 class EnvironmentService(protocol.ServerSlice):

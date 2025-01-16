@@ -1305,8 +1305,11 @@ async def test_compileservice_queue_count_on_trx_based_api(mocked_compiler_servi
             assert len(compiler_service._env_to_compile_task) == 0
     # Transaction committed
     await compiler_service.notify_compile_request_committed(compile_id)
-    assert compiler_service._queue_count_cache == 1
+    # Wait until the compile request is picked up the compiler service.
+    await retry_limited(lambda: compiler_service._queue_count_cache == 0, timeout=10)
     assert len(compiler_service._env_to_compile_task) == 1
+    compile_obj = await data.Compile.get_by_id(compile_id)
+    assert compile_obj.started is not None
 
     await run_compile_and_wait_until_compile_is_done(compiler_service, mocked_compiler_service_block, env.id)
     assert len(compiler_service._env_to_compile_task) == 0
@@ -1971,8 +1974,14 @@ async def test_environment_delete_removes_env_directories_on_server(
     assert result.code == 200
 
     async def wait_for_compile() -> bool:
-        result = await client.is_compiling(env_id)
-        return result.code == 204
+        result = await client.get_compile_reports(tid=env_id)
+        assert result.code == 200
+        if len(result.result["data"]) == 0:
+            # The compile request is registered in the database asynchronously with respect to the notify_change() API call.
+            # Here we check that the compile request finished.
+            return False
+        # Check whether the compilation finished.
+        return result.result["data"][0]["completed"] is not None
 
     await utils.retry_limited(wait_for_compile, 15)
 

@@ -947,7 +947,7 @@ async def test_method_definition():
 
     assert (
         "Type object of argument name must be one of BaseModel, Enum, UUID, str, float, int, bool, datetime, "
-        "bytes, Url or a List of these types or a Dict with str keys and values of these types."
+        "bytes, AnyUrl or a List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
     with pytest.raises(InvalidMethodDefinition) as e:
@@ -970,7 +970,7 @@ async def test_method_definition():
 
     assert (
         "Type object of argument name must be one of BaseModel, Enum, UUID, str, float, int, bool, datetime, "
-        "bytes, Url or a List of these types or a Dict with str keys and values of these types."
+        "bytes, AnyUrl or a List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
     @protocol.typedmethod(path="/service_types/<service_type>", operation="DELETE", client_types=["api"])

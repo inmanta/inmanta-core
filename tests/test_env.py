@@ -40,18 +40,9 @@ from inmanta.env import Pip
 from packaging import version
 from utils import LogSequence, PipIndex, create_python_package
 
-if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
-    pytest.skip(
-        "The tests in this module will fail if it runs against inmanta-core installed in editable mode, "
-        "because the build tag on the development branch is set to .dev0 by default. The inmanta package protection feature "
-        "would make pip install a non-editable version of the same package. But no version with build tag .dev0 exists "
-        "on the python package repository.",
-        allow_module_level=True,
-    )
-
 
 @pytest.mark.slowtest
-def test_venv_pyton_env_empty_string(tmpdir):
+def test_venv_pyton_env_empty_string(tmpdir, deactive_venv):
     """test that an exception is raised if the venv path is an empty string"""
     with pytest.raises(ValueError) as e:
         env.VirtualEnv("")
@@ -78,12 +69,13 @@ def test_venv_pyton_env_empty_string(tmpdir):
 
 
 @pytest.mark.slowtest
-def test_basic_install(tmpdir):
+def test_basic_install(tmpdir, deactive_venv):
     env_dir1 = tmpdir.mkdir("env1").strpath
     venv1 = env.VirtualEnv(env_dir1)
+    venv1.use_virtual_env()
+
     assert not venv1.are_installed(["lorem"])
 
-    venv1.use_virtual_env()
     venv1.install_from_list(["lorem"])
     assert venv1.are_installed(["lorem"])
 
@@ -95,7 +87,7 @@ def test_basic_install(tmpdir):
     assert venv1.are_installed(["dummy-yummy"])
 
 
-def test_git_based_install(tmpdir: py.path.local) -> None:
+def test_git_based_install(tmpdir: py.path.local, deactive_venv) -> None:
     """
     Verify that the install methods can handle git-based installs over https.
     """
@@ -115,7 +107,7 @@ def test_git_based_install(tmpdir: py.path.local) -> None:
 
 
 @pytest.mark.slowtest
-def test_install_package_already_installed_in_parent_env(tmpdir):
+def test_install_package_already_installed_in_parent_env(tmpdir, deactive_venv):
     """Test using and installing a package that is already present in the parent virtual environment."""
     # get all packages in the parent
     parent_installed = list(env.process_env.get_installed_packages().keys())
@@ -124,8 +116,7 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     venv = env.VirtualEnv(str(tmpdir))
     venv.use_virtual_env()
 
-    installed_packages = list(env.PythonEnvironment(python_path=venv._parent_python).get_installed_packages().keys())
-
+    installed_packages = list(venv.get_installed_packages().keys())
     # verify that the venv sees all parent packages
     assert not set(parent_installed) - set(installed_packages)
 
@@ -284,7 +275,7 @@ def test_process_env_install_from_index_not_found_env_var(
 
 
 @pytest.mark.parametrize_any("use_system_config", [True, False])
-def test_process_env_install_no_index(tmpdir: py.path.local, monkeypatch, use_system_config: bool) -> None:
+def test_process_env_install_no_index(tmpdir: py.path.local, monkeypatch, use_system_config: bool, deactive_venv) -> None:
     """
     Attempt to install a package that does not exist with --no-index.
     To have --no-index set in the pip cmd, the config should not contain an index_url,
@@ -307,7 +298,7 @@ setup(name="test")
     expected = "Packages this-package-does-not-exist were not found. No indexes were used."
 
     with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
-        env.process_env.install_for_config(
+        deactive_venv.install_for_config(
             requirements=[inmanta.util.parse_requirement(requirement="this-package-does-not-exist")],
             paths=[env.LocalPackagePath(path=str(tmpdir))],
             config=PipConfig(use_system_config=use_system_config),

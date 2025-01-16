@@ -47,7 +47,7 @@ def get_module_source(module: str, code: str) -> ModuleSource:
     return ModuleSource(module, hv, False, data)
 
 
-def test_code_manager(tmpdir: py.path.local):
+def test_code_manager(tmpdir: py.path.local, deactive_venv):
     """Verify the code manager"""
     original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
@@ -165,7 +165,7 @@ def test():
     assert not any("Deploying code " in message for message in caplog.messages)
 
 
-def test_code_loader_dependency(tmp_path, caplog):
+def test_code_loader_dependency(tmp_path, caplog, deactive_venv):
     """Test loading two modules with a dependency between them"""
     cl = loader.CodeLoader(tmp_path)
 
@@ -215,7 +215,7 @@ def test():
     assert sm.test() == 10
 
 
-def test_code_loader_import_error(tmp_path, caplog):
+def test_code_loader_import_error(tmp_path, caplog, deactive_venv):
     """Test loading code with an import error"""
     cl = loader.CodeLoader(tmp_path)
     code = """
@@ -322,10 +322,11 @@ def test_plugin_module_finder(
     assert mod.where == "libs" if prefer_finder else "venv"
 
 
-def test_code_loader_prefer_finder(tmpdir: py.path.local) -> None:
+def test_code_loader_prefer_finder(tmpdir: py.path.local, deactive_venv) -> None:
     """
     Verify that the agent code loader prefers its loaded code over code in the Python venv.
     """
+    loader.PluginModuleFinder.reset()
     assert not isinstance(sys.meta_path[0], loader.PluginModuleFinder)
     loader.CodeLoader(code_dir=str(tmpdir))
     # it suffices to verify that the module finder is first in the meta path:
@@ -333,7 +334,7 @@ def test_code_loader_prefer_finder(tmpdir: py.path.local) -> None:
     assert isinstance(sys.meta_path[0], loader.PluginModuleFinder)
 
 
-def test_venv_path(tmpdir: py.path.local, projects_dir: str):
+def test_venv_path(tmpdir: py.path.local, projects_dir: str, deactive_venv):
     original_project_dir: str = os.path.join(projects_dir, "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
     shutil.copytree(original_project_dir, project_dir)
@@ -443,7 +444,7 @@ def test_module_unload(module_path: str, modules_dir: str) -> None:
     assert "inmanta_plugins.elaboratev1module" not in sys.modules
 
 
-def test_plugin_loading_on_project_load(tmpdir, capsys):
+def test_plugin_loading_on_project_load(tmpdir, capsys, deactive_venv):
     """
     Load all plugins via the Project.load() method call and verify that no
     module is loaded twice when an import statement is used.

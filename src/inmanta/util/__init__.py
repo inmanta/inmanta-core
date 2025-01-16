@@ -23,6 +23,7 @@ import datetime
 import enum
 import functools
 import hashlib
+import importlib.metadata
 import inspect
 import itertools
 import logging
@@ -46,17 +47,18 @@ from typing import BinaryIO, Callable, Generic, Optional, Sequence, TypeVar, Uni
 
 import asyncpg
 import click
-import importlib_metadata
+import pydantic
 from tornado import gen
 
 import packaging
 import packaging.requirements
 import packaging.utils
+import pydantic_core
 from crontab import CronTab
 from inmanta import COMPILER_VERSION, const
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
-from pydantic_core import Url
+from packaging.utils import NormalizedName
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -529,7 +531,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     if isinstance(o, JSONSerializable):
         return o.json_serialization_step()
 
-    if isinstance(o, (uuid.UUID, Url)):
+    if isinstance(o, (uuid.UUID, pydantic.AnyUrl, pydantic_core.Url)):
         return str(o)
 
     if isinstance(o, datetime.datetime):
@@ -888,11 +890,20 @@ def remove_comment_part_from_specifier(to_clean: str) -> str:
     return drop_comment
 
 
-CanonicalRequirement = typing.NewType("CanonicalRequirement", packaging.requirements.Requirement)
-"""
-A CanonicalRequirement is a packaging.requirements.Requirement except that the name of this Requirement is canonicalized, which
-allows us to compare names without dealing afterwards with the format of these requirements.
-"""
+if typing.TYPE_CHECKING:
+
+    class CanonicalRequirement(packaging.requirements.Requirement):
+        name: NormalizedName
+
+        def __init__(self, requirement: packaging.requirements.Requirement) -> None:
+            raise Exception("Typing dummy, should never be seen")
+
+else:
+    CanonicalRequirement = typing.NewType("CanonicalRequirement", packaging.requirements.Requirement)
+    """
+    A CanonicalRequirement is a packaging.requirements.Requirement except that the name of this Requirement is canonicalized,
+    which allows us to compare names without dealing afterwards with the format of these requirements.
+    """
 
 
 def parse_requirement(requirement: str) -> CanonicalRequirement:
@@ -951,7 +962,7 @@ def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequi
 
 
 # Retaken from the `click-plugins` repo which is now unmaintained
-def click_group_with_plugins(plugins: Iterable[importlib_metadata.EntryPoint]) -> Callable[[click.Group], click.Group]:
+def click_group_with_plugins(plugins: Iterable[importlib.metadata.EntryPoint]) -> Callable[[click.Group], click.Group]:
     """
     A decorator to register external CLI commands to an instance of `click.Group()`.
 

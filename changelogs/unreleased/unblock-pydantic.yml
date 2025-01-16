@@ -1,0 +1,7 @@
+description: stop holding back pydantic after upstream bugfixes
+issue-repo: inmanta-lsm
+issue-nr: 1900
+change-type: patch
+destination-branches:
+  - master
+  - iso7
