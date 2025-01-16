@@ -962,21 +962,31 @@ The model below presents some examples of how an unknown propagates.
 
     if my_unknown:
         # this block is never executed
+        std::print("This message is never printed!")
     else:
         # neither is this one
+        std::print("This message is never printed!")
     end
 
     for x in my_unknown:
         # neither is this one
+        std::print("This message is never printed!")
     end
 
     for x in [1, 2, my_unknown]:
         # this block is executed twice: x=1 and x=2
+        std::print(f"This message is printed twice! x={x}")
     end
 
     g = my_unknown ? true : false  # condition is unknown -> neither branch is executed, result is unknown
-    h = [1 for x in [1, 2, my_unknown]]  # the expression `1` is executed once with x=1 and once with x=2. Unknown is propagated as is -> h = [1, 1, unknown]
-    i = [1 for x in [1, 2, my_unknown] if not std::is_unknown(x)]  # the unknown is filtered out -> i = [1, 1]
+
+    entity E:
+        int n
+    end
+    implement E using std::none
+
+    h = [E(n=x) for x in [1, 2, my_unknown]]  # the constructor is executed once with n=1 and once with n=2. Unknown is propagated as is -> h = [E(n=1), E(n=2), unknown]
+    i = [E(n=x) for x in [1, 2, my_unknown] if not std::is_unknown(x)]  # the unknown is filtered out -> i = [E(n=1), E(n=2)]
 
 Now that we've covered how unknowns flow through the model, we can discuss what an unknown value actually means. In most cases
 it simply represents an unknown value. But because of the propagation semantics outlined above, if it happens to occur in a
