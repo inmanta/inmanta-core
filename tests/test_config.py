@@ -57,6 +57,12 @@ def test_environment_deprecated_options(caplog):
 
 
 def test_options(monkeypatch):
+    """
+    Test basic functionalities of the configuration framework:
+        - setting/getting option values
+        - overriding using an environment variable
+        - using the get_environment_variable method to return associated env variable
+    """
     configa = Option("test", "a", "markerA", "test a docs")
     configb = Option("test", "B", option_as_default(configa), "test b docs")
     configc = Option("test", "c", "defaultc", "docstringc")
@@ -74,8 +80,23 @@ def test_options(monkeypatch):
     assert configb.get() == "MB2"
     assert configc.get() == "environ_c"
 
+    for option, expected_sub_part in zip([configa, configb, configc], ["TEST_A", "TEST_B", "TEST_C"]):
+        assert option.get_environment_variable() == f"INMANTA_{expected_sub_part}"
+
 
 def test_configfile_hierarchy(monkeypatch, tmpdir):
+    """
+    Test the hierarchy when a config option is set in multiple places:
+
+        - in the default main config file /etc/inmanta/inmanta.cfg
+        - in a config directory --config-dir cli option
+        - in dot files (.inmanta or .inmanta.cfg)
+        - in a config file passed via --config cli option
+        - via environment variable
+
+        Lower in the list means higher precedence and ties are broken
+        by alphabetical ordering of file names.
+    """
     etc_inmanta_dir = os.path.join(tmpdir, "etc", "inmanta")
     os.makedirs(etc_inmanta_dir, exist_ok=False)
 

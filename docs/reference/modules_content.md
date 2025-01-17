@@ -32,6 +32,7 @@ product suites or directly licensed.
 | gcp-interco        | Support for Google Cloud Platform interconnect resources                                                      |
 | juniper-ex         | Support for Juniper EX based devices using Netconf/YANG                                                       |
 | juniper-mx         | Support for Juniper MX based devices using Netconf/YANG                                                       |
+| juniper-srx        | Support for Juniper SRX based devices using Netconf/YANG                                                      |
 | kubernetes         | Support for managing resources on Kubernetes                                                                  |
 | libvirt            | Support for managing the lifecycle of virtual machines through libvirt                                        |
 | n5k-lan            | Support for Cisco Nexus 5000 datacenter switch using Netconfig and CLI                                        |
@@ -43,7 +44,7 @@ product suites or directly licensed.
 | openstack          | Support for Openstack resources                                                                               |
 | rest               | Support for doing REST based calls                                                                            |
 | systemd            | Support for managing services on systemd based Linux systems                                                  |
-| tibit              | Support for xPON services on Tibit OLTs using MCMS                                                            |
+| tibit              | Support for xPON services on Ciena (Tibit) OLTs using MCMS                                                    |
 | transportpce       | Support for Optical Services through OpendayLight transportpce                                                |
 | vcenter            | Support for managing resources on vCenter and ESXi directly (virtal machines, DVS, vSwitch, ...)              |
 | vyos               | Support for managing vyos resources through SSH and CLI                                                       |

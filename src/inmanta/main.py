@@ -17,6 +17,7 @@
 """
 
 import datetime
+import importlib.metadata
 import logging
 import os
 import shutil
@@ -26,7 +27,6 @@ from time import sleep
 from typing import Any, Callable, Optional, Union, cast
 
 import click
-import importlib_metadata
 import texttable
 
 from inmanta import protocol, util
@@ -180,7 +180,7 @@ def get_table(header: list[str], rows: list[list[str]], data_type: Optional[list
     return table.draw()
 
 
-@util.click_group_with_plugins(iter(importlib_metadata.entry_points(group="inmanta.cli_plugins")))
+@util.click_group_with_plugins(iter(importlib.metadata.entry_points(group="inmanta.cli_plugins")))
 @click.group(help="Base command")
 @click.option("--host", help="The server hostname to connect to")
 @click.option("--port", help="The server port to connect to")
@@ -740,7 +740,7 @@ def version_report(client: Client, environment: str, version: str, show_detailed
     if not result:
         return
 
-    agents: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    agents: dict[str, dict[str, list[dict[str, object]]]] = defaultdict(lambda: defaultdict(list))
     for res in result["resources"]:
         if len(res["actions"]) > 0 or show_detailed_report:
             agents[res["agent"]][res["resource_type"]].append(res)
@@ -750,7 +750,8 @@ def version_report(client: Client, environment: str, version: str, show_detailed
         click.echo("=" * 72)
 
         for t in sorted(agents[agent].keys()):
-            parsed_resource_version_id = Id.parse_id(ResourceVersionIdStr(agents[agent][t][0]["resource_version_id"]))
+            resource_version_id = cast(ResourceVersionIdStr, agents[agent][t][0]["resource_version_id"])
+            parsed_resource_version_id = Id.parse_id(resource_version_id)
             click.echo(click.style("Resource type:", bold=True) + f"{t} ({parsed_resource_version_id.attribute})")
             click.echo("-" * 72)
 

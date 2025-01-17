@@ -1,0 +1,6 @@
+description: >
+  Add the ``get_environment_variable`` method to the configuration framework that returns
+  the associated environment variable for the given configuration option.
+issue-nr: 8303
+change-type: patch
+destination-branches: [master, iso7]

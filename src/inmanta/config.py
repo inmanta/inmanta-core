@@ -349,6 +349,12 @@ class Option(Generic[T]):
             return self.validator.__doc__
         return None
 
+    def get_environment_variable(self) -> str:
+        """
+        Return the environment variable associated with this config option.
+        """
+        return f"INMANTA_{self.section}_{self.name.replace('-', '_')}".upper()
+
     def get_default_desc(self) -> str:
         defa = self.default
         if callable(defa):
@@ -397,16 +403,6 @@ log_dir = Option(
     "/var/log/inmanta",
     "The directory where the resource action log is stored and the logs of auto-started agents.",
     is_str,
-)
-
-logging_config = Option(
-    section="config",
-    name="logging_config",
-    default=None,
-    documentation="The path to the configuration file for the logging framework. This is a YAML file that follows "
-    "the dictionary-schema accepted by logging.config.dictConfig(). All other log-related configuration "
-    "options will be ignored when this option is set.",
-    validator=is_str_opt,
 )
 
 

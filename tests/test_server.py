@@ -70,8 +70,7 @@ async def test_autostart(server, client, environment, caplog):
     await agentmanager.ensure_agent_registered(env, "iaas_agent")
     await agentmanager.ensure_agent_registered(env, "iaas_agentx")
 
-    res = await autostarted_agentmanager._ensure_agents(env, ["iaas_agent"])
-    assert res
+    await autostarted_agentmanager._ensure_agents(env, ["iaas_agent"])
 
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
     assert len(sessionendpoint._sessions) == 1

@@ -126,10 +126,10 @@ class TableLockMode(enum.Enum):
     may be extended when a new lock mode is required.
     """
 
-    ROW_EXCLUSIVE: str = "ROW EXCLUSIVE"
-    SHARE_UPDATE_EXCLUSIVE: str = "SHARE UPDATE EXCLUSIVE"
-    SHARE: str = "SHARE"
-    SHARE_ROW_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
+    ROW_EXCLUSIVE = "ROW EXCLUSIVE"
+    SHARE_UPDATE_EXCLUSIVE = "SHARE UPDATE EXCLUSIVE"
+    SHARE = "SHARE"
+    SHARE_ROW_EXCLUSIVE = "SHARE ROW EXCLUSIVE"
 
 
 class RowLockMode(enum.Enum):
@@ -140,10 +140,10 @@ class RowLockMode(enum.Enum):
     https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
     """
 
-    FOR_UPDATE: str = "FOR UPDATE"
-    FOR_NO_KEY_UPDATE: str = "FOR NO KEY UPDATE"
-    FOR_SHARE: str = "FOR SHARE"
-    FOR_KEY_SHARE: str = "FOR KEY SHARE"
+    FOR_UPDATE = "FOR UPDATE"
+    FOR_NO_KEY_UPDATE = "FOR NO KEY UPDATE"
+    FOR_SHARE = "FOR SHARE"
+    FOR_KEY_SHARE = "FOR KEY SHARE"
 
 
 class RangeOperator(enum.Enum):
@@ -2948,25 +2948,39 @@ class Parameter(BaseDocument):
     expires: bool
 
     @classmethod
-    async def get_updated_before_active_env(cls, updated_before: datetime.datetime) -> list["Parameter"]:
+    async def get_updated_before_active_env(
+        cls,
+        updated_before: datetime.datetime,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> list["Parameter"]:
         """
         Retrieve the list of parameters that were updated before a specified datetime for environments that are not halted
-
         """
         query = f"""
-        WITH non_halted_envs AS (
-            SELECT id FROM public.environment WHERE NOT halted
-        )
-        SELECT * FROM {cls.table_name()}
-        WHERE environment IN (
-            SELECT id FROM non_halted_envs
-        )
-        AND updated < $1
-        AND expires = true;
+        SELECT p.*
+        FROM {cls.table_name()} AS p INNER JOIN {Environment.table_name()} AS e ON p.environment=e.id
+        WHERE NOT e.halted
+            AND p.updated < $1
+            AND p.expires
+            AND (
+                -- If it's a fact, it needs to belong to the latest released version.
+                p.resource_id IS NULL
+                OR p.resource_id = ''
+                OR EXISTS(
+                    SELECT 1
+                    FROM {Resource.table_name()} AS r
+                    WHERE r.environment=p.environment
+                        AND r.model=(
+                            SELECT max(c.version)
+                            FROM {ConfigurationModel.table_name()} AS c
+                            WHERE c.environment=p.environment AND c.released
+                        )
+                        AND r.resource_id=p.resource_id
+                )
+            );
         """
         values = [cls._get_value(updated_before)]
-        result = await cls.select_query(query, values)
-        return result
+        return await cls.select_query(query, values, connection=connection)
 
     @classmethod
     async def list_parameters(cls, env_id: uuid.UUID, **metadata_constraints: str) -> list["Parameter"]:
@@ -3044,6 +3058,26 @@ class UnknownParameter(BaseDocument):
             metadata=self.metadata,
             resolved=self.resolved,
         )
+
+    @classmethod
+    async def get_unknowns_in_latest_released_model_versions(
+        cls, connection: asyncpg.Connection
+    ) -> Sequence["UnknownParameter"]:
+        """
+        Returns all the unknowns in the latest released model version of each non-halted environment.
+        """
+        query = f"""
+        SELECT u.*
+        FROM {cls.table_name()} AS u INNER JOIN {Environment.table_name()} AS e ON u.environment=e.id
+        WHERE NOT e.halted
+            AND u.version=(
+                SELECT max(c.version)
+                FROM {ConfigurationModel.table_name()} AS c
+                WHERE c.environment=e.id AND c.released
+            )
+            AND NOT u.resolved;
+        """
+        return await cls.select_query(query, values=[], connection=connection)
 
     @classmethod
     async def get_unknowns_to_copy_in_partial_compile(
@@ -3895,7 +3929,7 @@ class Compile(BaseDocument):
             environment_variables=(
                 json.loads(requested_compile["used_environment_variables"])
                 if requested_compile["used_environment_variables"] is not None
-                else None
+                else {}
             ),
             requested_environment_variables=(json.loads(requested_compile["requested_environment_variables"])),
             mergeable_environment_variables=(json.loads(requested_compile["mergeable_environment_variables"])),
@@ -6015,14 +6049,14 @@ class ConfigurationModel(BaseDocument):
 
         outset: set[ResourceIdStr] = {res["resource_id"] for res in increment}
         original_provides: dict[str, list[ResourceIdStr]] = defaultdict(list)
-        send_events: list[ResourceIdStr] = []
+        send_events: set[ResourceIdStr] = set()
 
         # build lookup tables
         for res in resources:
             for req in res["requires"]:
                 original_provides[req].append(res["resource_id"])
             if res["send_event"]:
-                send_events.append(res["resource_id"])
+                send_events.add(res["resource_id"])
 
         # recursively include stuff potentially receiving events from nodes in the increment
         increment_work: list[ResourceIdStr] = list(outset)
