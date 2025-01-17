@@ -269,13 +269,11 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
                 return Null()
             if len(other_types) == 1:
                 return inmanta_type.NullableType(to_dsl_type(other_types[0]))
-            # TODO: optional unions
-            return inmanta_type.Type()
+            bases: Sequence[inmanta_type.Type] = [to_dsl_type(arg) for arg in other_types]
+            return inmanta_type.NullableType(inmanta_type.Union(bases))
         else:
-            # TODO: unions
-            return inmanta_type.Type()
-        # bases: Sequence[inmanta.ast.type.Type] = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
-        # return inmanta.ast.type.Union(bases)
+            bases: Sequence[inmanta_type.Type] = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
+            return inmanta_type.Union(bases)
 
     # Lists and dicts
     if typing_inspect.is_generic_type(python_type):
@@ -380,6 +378,11 @@ class PluginValue:
             return self._resolved_type
 
         if not isinstance(self.type_expression, str):
+            if typing_inspect.is_union_type(self.type_expression) and not typing.get_args(self.type_expression):
+                # If typing.Union is not subscripted, isinstance(self.type_expression, type) evaluates to False.
+                raise TypingException(
+                    None, f"Union type must be subscripted, got {self.type_expression}"
+                )
             if isinstance(self.type_expression, type) or typing.get_origin(self.type_expression) is not None:
                 self._resolved_type = to_dsl_type(self.type_expression)
             else:

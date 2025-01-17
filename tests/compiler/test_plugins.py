@@ -26,7 +26,7 @@ import pytest
 import inmanta.ast.statements.define
 import inmanta.compiler as compiler
 import inmanta.plugins
-from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException
+from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException, WrappingRuntimeException, TypingException
 from utils import log_contains
 
 if typing.TYPE_CHECKING:
@@ -435,6 +435,73 @@ none = plugin_native_types::get_from_dict({"a":"b"}, "B")
 a = plugin_native_types::many_arguments(["a","c","b"], 1)
 
 none = plugin_native_types::as_none("a")
+
+# Union types (input)
+plugin_native_types::union_single_type(value="test")     # type value: Union[str]
+plugin_native_types::union_multiple_types(value="test")  # type value: Union[int, str]
+plugin_native_types::union_multiple_types(value=123)     # type value: Union[int, str]
+for val in ["test", 123, null]:
+    plugin_native_types::union_optional_1(value=val)     # type value: Union[None, int, str]
+    plugin_native_types::union_optional_2(value=val)     # type value: Optional[Union[int, str]]
+    plugin_native_types::union_optional_3(value=val)     # type value: Union[int, str] | None
+    plugin_native_types::union_optional_4(value=val)     # type value: None | Union[int, str]
+end
+
+# Union types (return value)
+plugin_native_types::union_return_single_type(value="test")     # type return value: Union[str]
+plugin_native_types::union_return_multiple_types(value="test")  # type return value: Union[str, int]
+plugin_native_types::union_return_multiple_types(value=123)     # type return value: Union[str, int]
+for val in ["test", 123, null]:
+    plugin_native_types::union_return_optional_1(value=val)     # type return value: Union[None, int, str]
+    plugin_native_types::union_return_optional_2(value=val)     # type return value: Optional[Union[int, str]]
+    plugin_native_types::union_return_optional_3(value=val)     # type return value: Union[int, str] | None
+    plugin_native_types::union_return_optional_4(value=val)     # type return value: None | Union[int, str]
+end
         """
     )
     compiler.do_compile()
+
+    for plugin_name, plugin_value, error_message in [
+        ("union_single_type", 123, "Invalid value '123', expected string"),
+        ("union_multiple_types", "[1, 2, 3]", "Invalid value '[1, 2, 3]', expected Union[int,string]"),
+        ("union_optional_1", 1.2, "Invalid value '1.2', expected Union[int,string]"),
+        ("union_optional_2", 1.2, "Invalid value '1.2', expected Union[int,string]"),
+        ("union_optional_3", 1.2, "Invalid value '1.2', expected Union[int,string]"),
+        ("union_optional_4", 1.2, "Invalid value '1.2', expected Union[int,string]"),
+    ]:
+        snippetcompiler.setup_for_snippet(
+            f"""
+            import plugin_native_types
+            plugin_native_types::{plugin_name}(value={plugin_value})
+            """
+        )
+        with pytest.raises(RuntimeException) as exc_info:
+            compiler.do_compile()
+        assert error_message in str(exc_info.value)
+
+    for plugin_name, plugin_value, error_message in [
+        ("union_return_single_type", 123, "Invalid value '123', expected string"),
+        ("union_return_multiple_types", "[1, 2, 3]", "Invalid value '[1, 2, 3]', expected Union[string,int]"),
+        ("union_return_optional_1", 1.2, "Invalid value '1.2', expected Union[int,string]"),
+        ("union_return_optional_2", 1.2, "Invalid value '1.2', expected Union[int,string]"),
+        ("union_return_optional_3", 1.2, "Invalid value '1.2', expected Union[int,string]"),
+        ("union_return_optional_4", 1.2, "Invalid value '1.2', expected Union[int,string]"),
+    ]:
+        snippetcompiler.setup_for_snippet(
+            f"""
+            import plugin_native_types
+            plugin_native_types::{plugin_name}(value={plugin_value})
+            """
+        )
+        with pytest.raises(WrappingRuntimeException) as exc_info:
+            compiler.do_compile()
+        assert error_message in str(exc_info.value.get_causes()[0])
+
+    snippetcompiler.setup_for_snippet(
+        f"""
+        import plugin_invalid_union_type
+        """
+    )
+    with pytest.raises(TypingException) as exc_info:
+        compiler.do_compile()
+    assert "Union type must be subscripted, got typing.Union" in str(exc_info.value)
