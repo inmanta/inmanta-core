@@ -427,7 +427,12 @@ def test_native_types(snippetcompiler: "SnippetCompilationTest", caplog) -> None
         snippetcompiler.setup_for_snippet(
             """
 import plugin_native_types
-        """
+a = "b"
+a = plugin_native_types::get_from_dict({"a":"b"}, "a")
+none = null
+none = plugin_native_types::get_from_dict({"a":"b"}, "B")
+a = plugin_native_types::many_arguments(["a","c","b"], 1)
+            """
         )
         compiler.do_compile()
 
