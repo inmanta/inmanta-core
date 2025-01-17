@@ -154,7 +154,6 @@ class SessionEndpoint(Endpoint, CallTarget):
 
     def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
         super().__init__(name)
-        self._transport = client.RESTClient
         self._sched = util.Scheduler("session endpoint")
 
         self._env_id: Optional[uuid.UUID] = None
@@ -243,11 +242,9 @@ class SessionEndpoint(Endpoint, CallTarget):
                             method_calls: list[common.Request] = [
                                 common.Request.from_dict(req) for req in result.result["method_calls"]
                             ]
-                            # FIXME: reuse transport?
-                            transport = self._transport(self)
-
+                            rest_client = client.RESTClient(self)
                             for method_call in method_calls:
-                                self.add_background_task(self.dispatch_method(transport, method_call))
+                                self.add_background_task(self.dispatch_method(rest_client, method_call))
                     # Always wait a bit between calls. This encourage call batching.
                     await asyncio.sleep(self.dispatch_delay)
                 else:
@@ -263,14 +260,19 @@ class SessionEndpoint(Endpoint, CallTarget):
         except CancelledError:
             pass
 
-    async def dispatch_method(self, transport: client.RESTClient, method_call: common.Request) -> None:
+    async def dispatch_method(self, rest_client: client.RESTClient, method_call: common.Request) -> None:
+        """Dispatch a request from the server into the RPC code so the requests gets executed. The call results is send back
+        to the server using a heartbeat reply.
+        """
         if self._client is None:
             raise Exception("AgentEndpoint not started")
 
         LOGGER.debug("Received call through heartbeat: %s %s %s", method_call.reply_id, method_call.method, method_call.url)
-        kwargs, config = transport.match_call(method_call.url, method_call.method)
+        kwargs, config = rest_client.match_call(method_call.url, method_call.method)
 
         if config is None:
+            # We cannot match the call to method on this endpoint. We send a reply to report this + ensure that the session
+            # does not time out
             msg = "An error occurred during heartbeat method call ({} {} {}): {}".format(
                 method_call.reply_id,
                 method_call.method,
@@ -283,6 +285,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                 await self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500})
             return
 
+        # rebuild a request so that the RPC layer can process it as if it came from a proper HTTP call
         body = method_call.body or {}
         query_string = parse.urlparse(method_call.url).query
         for key, value in parse.parse_qs(query_string, keep_blank_values=True):
@@ -296,8 +299,10 @@ class SessionEndpoint(Endpoint, CallTarget):
         with tracing.attach_context(
             {const.TRACEPARENT: method_call.headers[const.TRACEPARENT]} if const.TRACEPARENT in method_call.headers else {}
         ):
-            response: common.Response = await transport._execute_call(config, body, method_call.headers)
+            # do the dispatch
+            response: common.Response = await rest_client._execute_call(config, body, method_call.headers)
 
+        # report the result back
         if response.status_code == 500:
             msg = ""
             if response.body is not None and "message" in response.body:
@@ -313,11 +318,18 @@ class SessionEndpoint(Endpoint, CallTarget):
         if self._client is None:
             raise Exception("AgentEndpoint not started")
 
-        # if reply is is none, we don't send the reply
+        # if reply is none, we don't send the reply
         if method_call.reply_id is not None:
             await self._client.heartbeat_reply(
                 self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
             )
+
+
+class WebsocketEndpoint(Endpoint, CallTarget):
+    """An endpoint on which RPC calls can be done through a websocket"""
+
+    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5) -> None:
+        super().__init__(name)
 
 
 class VersionMatch(str, Enum):
@@ -332,35 +344,8 @@ class VersionMatch(str, Enum):
     """
 
 
-class Client(Endpoint):
-    """
-    A client that communicates with end-point based on its configuration
-    """
-
-    def __init__(
-        self,
-        name: str,
-        timeout: int = 120,
-        version_match: VersionMatch = VersionMatch.lowest,
-        exact_version: int = 0,
-        with_rest_client: bool = True,
-        force_instance: bool = False,
-    ) -> None:
-        super().__init__(name)
-        assert isinstance(timeout, int), "Timeout needs to be an integer value."
-        LOGGER.debug("Start transport for client %s", self.name)
-        if with_rest_client:
-            self._transport_instance = client.RESTClient(self, connection_timout=timeout, force_instance=force_instance)
-        else:
-            self._transport_instance = None
-        self._version_match = version_match
-        self._exact_version = exact_version
-
-    def close(self):
-        """
-        Closes the RESTclient instance manually. This is only needed when it is started with force_instance set to true
-        """
-        self._transport_instance.close()
+class BaseClient(Endpoint):
+    """A base client that implements the virtual methods from protocol"""
 
     async def _call(
         self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
@@ -401,6 +386,37 @@ class Client(Endpoint):
             return self._call(method_properties=method, args=args, kwargs=kwargs)
 
         return wrap
+
+
+class Client(BaseClient):
+    """
+    A client that communicates with end-point based on its configuration
+    """
+
+    def __init__(
+        self,
+        name: str,
+        timeout: int = 120,
+        version_match: VersionMatch = VersionMatch.lowest,
+        exact_version: int = 0,
+        with_rest_client: bool = True,
+        force_instance: bool = False,
+    ) -> None:
+        super().__init__(name)
+        assert isinstance(timeout, int), "Timeout needs to be an integer value."
+        LOGGER.debug("Start transport for client %s", self.name)
+        if with_rest_client:
+            self._transport_instance = client.RESTClient(self, connection_timout=timeout, force_instance=force_instance)
+        else:
+            self._transport_instance = None
+        self._version_match = version_match
+        self._exact_version = exact_version
+
+    def close(self):
+        """
+        Closes the RESTclient instance manually. This is only needed when it is started with force_instance set to true
+        """
+        self._transport_instance.close()
 
 
 class SyncClient:
@@ -481,10 +497,10 @@ class SessionClient(Client):
         return result
 
 
-class TypedClient(Client):
-    """A client that returns typed data instead of JSON"""
+def typed_process_response(method_properties: common.MethodProperties, response: common.Result) -> types.ReturnTypes:
+    """Convert the response into a proper type and restore exception if any"""
 
-    def _raise_exception(self, exception_class: type[exceptions.BaseHttpException], result: Optional[types.JsonType]) -> None:
+    def _raise_exception(exception_class: type[exceptions.BaseHttpException], result: Optional[types.JsonType]) -> None:
         """Raise an exception based on the provided status"""
         if result is None:
             raise exception_class()
@@ -492,55 +508,64 @@ class TypedClient(Client):
         message = result.get("message", None)
         details = result.get("error_details", None)
 
-        raise exception_class(message, details)
+        raise exception_class(message=message, details=details)
 
-    def _process_response(self, method_properties: common.MethodProperties, response: common.Result) -> types.ReturnTypes:
-        """Convert the response into a proper type and restore exception if any"""
-        match response.code:
-            case 200:
-                # typed methods always require an envelope key
-                if response.result is None or method_properties.envelope_key not in response.result:
-                    raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
+    match response.code:
+        case 200:
+            # typed methods always require an envelope key
+            if response.result is None or method_properties.envelope_key not in response.result:
+                raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
 
-                if method_properties.return_type is None:
-                    return None
+            if method_properties.return_type is None:
+                return None
 
-                try:
-                    ta = pydantic.TypeAdapter(method_properties.return_type)
-                except common.InvalidMethodDefinition:
-                    raise exceptions.BadRequest("Typed client can only be used with typed methods.")
+            try:
+                ta = pydantic.TypeAdapter(method_properties.return_type)
+            except common.InvalidMethodDefinition:
+                raise exceptions.BadRequest("Typed client can only be used with typed methods.")
 
-                return ta.validate_python(response.result[method_properties.envelope_key])
+            return ta.validate_python(response.result[method_properties.envelope_key])
 
-            case 400:
-                self._raise_exception(exceptions.BadRequest, response.result)
+        case 400:
+            _raise_exception(exceptions.BadRequest, response.result)
 
-            case 401:
-                self._raise_exception(exceptions.UnauthorizedException, response.result)
+        case 401:
+            _raise_exception(exceptions.UnauthorizedException, response.result)
 
-            case 403:
-                self._raise_exception(exceptions.Forbidden, response.result)
+        case 403:
+            _raise_exception(exceptions.Forbidden, response.result)
 
-            case 404:
-                self._raise_exception(exceptions.NotFound, response.result)
+        case 404:
+            _raise_exception(exceptions.NotFound, response.result)
 
-            case 409:
-                self._raise_exception(exceptions.Conflict, response.result)
+        case 409:
+            _raise_exception(exceptions.Conflict, response.result)
 
-            case 500:
-                self._raise_exception(exceptions.ServerError, response.result)
+        case 500:
+            _raise_exception(exceptions.ServerError, response.result)
 
-            case 503:
-                self._raise_exception(exceptions.ShutdownInProgress, response.result)
+        case 503:
+            _raise_exception(exceptions.ShutdownInProgress, response.result)
 
-            case _:
-                self._raise_exception(exceptions.ServerError, response.result)
+        case _:
+            _raise_exception(exceptions.ServerError, response.result)
 
-        # make mypy happy, it cannot deduce that all the cases will always raise an exception
-        return None
+    # make mypy happy, it cannot deduce that all the cases will always raise an exception
+    return None
+
+
+class TypedClient(Client):
+    """A client that returns typed data instead of JSON"""
 
     async def _call(
         self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
     ) -> types.ReturnTypes:
         """Execute a call and return the result"""
-        return self._process_response(method_properties, await super()._call(method_properties, args, kwargs))
+        return typed_process_response(method_properties, await super()._call(method_properties, args, kwargs))
+
+
+class WSClient(BaseClient):
+    """A websocket based client"""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(name=name)

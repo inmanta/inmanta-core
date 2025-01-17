@@ -125,7 +125,7 @@ async def assert_agent_counter(agent: Agent, reconnect: int, disconnected: int) 
     await retry_limited(is_same, 10)
 
 
-async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgres_db, database_name):
+async def test_2way_protocol(inmanta_config, server_config, no_tid_check):
     # Authentication complicates this even further
     configure_auth(auth=True, ca=False, ssl=False)
     rs = Server()

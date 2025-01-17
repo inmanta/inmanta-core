@@ -28,7 +28,7 @@ from typing import Optional, Union
 
 import tornado
 from pyformance import timer
-from tornado import httpserver, iostream, routing, web
+from tornado import httpserver, iostream, routing, web, websocket
 
 import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
@@ -230,6 +230,33 @@ class StaticContentHandler(tornado.web.RequestHandler):
         self.set_status(200)
 
 
+class WebsocketHandler(tornado.websocket.WebSocketHandler):
+    """A handler for websocket based 2-way communication"""
+
+    def initialize(self, transport: "RESTServer") -> None:
+        LOGGER.debug("Starting websocket handler")
+        self._transport: "RESTServer" = transport
+        self._session_id: Optional[uuid.UUID] = None
+        self._environment_id: Optional[uuid.UUID] = None
+
+    async def open(self, *args: str, **kwargs: str) -> None:
+        print("WebSocket opened", args, kwargs)
+
+    async def on_message(self, message: Union[str, bytes]) -> None:
+        await self.write_message("You said: " + message)
+
+    async def on_ping(self, data: bytes) -> None:
+        """Called when we get a ping request from the client. The handler will send a pong back."""
+        print("Got a ping", data)
+
+    async def on_pong(self, data: bytes) -> None:
+        """Called when we get a response to our ping"""
+        print("Got a pong", data)
+
+    async def on_close(self) -> None:
+        print("WebSocket closed")
+
+
 class RESTServer(RESTBase):
     """
     A tornado based rest server
@@ -283,14 +310,18 @@ class RESTServer(RESTBase):
         """
         global_url_map: dict[str, dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
 
-        rules: list[routing.Rule] = []
+        rules: list[routing.Rule] = [
+            routing.Rule(
+                routing.PathMatches("/v2/ws/(?P<env_id>[^/]+)/(?P<session_id>[^/]+)"), WebsocketHandler, {"transport": self}
+            )
+        ]
         rules.extend(additional_rules)
 
         for url, handler_config in global_url_map.items():
             rules.append(routing.Rule(routing.PathMatches(url), RESTHandler, {"transport": self, "config": handler_config}))
             LOGGER.debug("Registering handler(s) for url %s and methods %s", url, ", ".join(handler_config.keys()))
 
-        application = web.Application(rules, compress_response=True)
+        application = web.Application(rules, compress_response=True, websocket_ping_interval=1)
 
         crt = inmanta_config.Config.get("server", "ssl_cert_file", None)
         key = inmanta_config.Config.get("server", "ssl_key_file", None)

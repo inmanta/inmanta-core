@@ -153,6 +153,7 @@ class Request:
 
     @classmethod
     def from_dict(cls, value: JsonType) -> "Request":
+        """Rebuild a request from a dict"""
         reply_id: Optional[str] = None
         if "reply_id" in value:
             reply_id = cast(str, value["reply_id"])

@@ -34,6 +34,8 @@ import inmanta.protocol.endpoints
 from inmanta import tracing
 from inmanta.data.model import ExtensionStatus
 from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods
+from inmanta.protocol.common import SessionManagerInterface
+from inmanta.protocol.endpoints import typed_process_response
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
@@ -491,6 +493,7 @@ class Session:
             LOGGER.warning(log_message)
 
     def put_call(self, call_spec: common.Request, timeout: int = 10, expect_reply: bool = True) -> asyncio.Future:
+        """Put an RPC call in the queue to dispatch over longpoll to the client"""
         reply_id = uuid.uuid4()
         future = asyncio.Future()
 
@@ -640,7 +643,7 @@ class TransportSlice(ServerSlice):
         }
 
 
-class SessionManager(ServerSlice):
+class SessionManager(ServerSlice, SessionManagerInterface):
     """
     A service that receives method calls over one or more transports
     """
@@ -699,7 +702,8 @@ class SessionManager(ServerSlice):
             if self.is_stopping():
                 raise ShutdownInProgress()
             if sid not in self._sessions:
-                session = self.new_session(sid, tid, endpoint_names, nodename)
+                LOGGER.debug(f"New session with id {sid} on node {nodename} for env {tid} with endpoints {endpoint_names}")
+                session = Session(self, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
                 self._sessions[sid] = session
                 endpoint_names_snapshot = set(session.endpoint_names)
                 await asyncio.gather(*[listener.new_session(session, endpoint_names_snapshot) for listener in self.listeners])
@@ -710,10 +714,6 @@ class SessionManager(ServerSlice):
                 await asyncio.gather(*[listener.seen(session, endpoint_names_snapshot) for listener in self.listeners])
 
             return session
-
-    def new_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: set[str], nodename: str) -> Session:
-        LOGGER.debug(f"New session with id {sid} on node {nodename} for env {tid} with endpoints {endpoint_names}")
-        return Session(self, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
 
     async def expire(self, session: Session, timeout: float) -> None:
         async with self._sessions_lock:
@@ -799,4 +799,4 @@ class LocalClient(TypedClient):
         spec = method_properties.build_call(args, kwargs)
         method_config = self._get_op_mapping(spec.url, spec.method)
         response = await self._server._transport._execute_call(method_config, spec.body, spec.headers)
-        return self._process_response(method_properties, common.Result(code=response.status_code, result=response.body))
+        return typed_process_response(method_properties, common.Result(code=response.status_code, result=response.body))

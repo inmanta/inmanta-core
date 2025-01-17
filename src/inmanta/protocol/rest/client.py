@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, AnyStr, Optional
 from urllib.parse import unquote
 
 import tornado.simple_httpclient
+from tornado import websocket
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
 
 from inmanta import config as inmanta_config
@@ -37,12 +38,13 @@ LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 class RESTClient(RESTBase):
-    """ "
+    """
     A REST (json body over http) client transport. Only methods that operate on resource can use all
     HTTP verbs. For other methods the POST verb is used.
     """
 
     def __init__(self, endpoint: "Endpoint", connection_timout: int = 120, force_instance: bool = False) -> None:
+        """Create the rest client that either uses normal http or a websocket"""
         super().__init__()
         self.__end_point: "Endpoint" = endpoint
         self.daemon: bool = True
