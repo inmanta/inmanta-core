@@ -515,8 +515,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         # Resolve all the types that we expect to receive as input of our plugin
         for arg in self.all_args.values():
-            at = arg.resolve_type(self, self.resolver)
-            arg_name_to_type_map[arg.arg_name] = at.type_string_internal()
+            arg_type = arg.resolve_type(self, self.resolver)
+            arg_name_to_type_map[arg.arg_name] = arg_type.type_string_internal()
         if self.var_args is not None:
             var_args_types = self.var_args.resolve_type(self, self.resolver)
             arg_name_to_type_map[f"*{self.var_args.arg_name}"] = var_args_types.type_string_internal()
