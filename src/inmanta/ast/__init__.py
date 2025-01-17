@@ -823,11 +823,13 @@ class AttributeException(WrappingRuntimeException):
         self.attribute = attribute
         self.instance = instance
 
+
 class InvalidTypeException(WrappingRuntimeException):
     """
     Raised when an argument or return value of a plugin is not in-line with the type
     annotation of that plugin.
     """
+
     pass
 
 

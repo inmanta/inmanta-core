@@ -26,14 +26,7 @@ import pytest
 import inmanta.ast.statements.define
 import inmanta.compiler as compiler
 import inmanta.plugins
-from inmanta.ast import (
-    CompilerException,
-    ExplicitPluginException,
-    Namespace,
-    RuntimeException,
-    TypingException,
-    WrappingRuntimeException,
-)
+from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException, WrappingRuntimeException
 from utils import log_contains
 
 if typing.TYPE_CHECKING:
@@ -474,37 +467,37 @@ end
         (
             "union_single_type",
             123,
-            f"Value 123 for argument value of plugin {ns}::union_single_type has invalid type. Expected type: string"
+            f"Value 123 for argument value of plugin {ns}::union_single_type has invalid type. Expected type: string",
         ),
         (
             "union_multiple_types",
             "[1, 2, 3]",
             f"Value [1, 2, 3] for argument value of plugin {ns}::union_multiple_types has invalid type."
-            " Expected type: Union[int,string]"
+            " Expected type: Union[int,string]",
         ),
         (
             "union_optional_1",
             1.2,
             f"Value 1.2 for argument value of plugin {ns}::union_optional_1 has invalid type."
-            f" Expected type: Union[int,string]?"
+            f" Expected type: Union[int,string]?",
         ),
         (
             "union_optional_2",
             1.2,
             f"Value 1.2 for argument value of plugin {ns}::union_optional_2 has invalid type."
-            f" Expected type: Union[int,string]?"
+            f" Expected type: Union[int,string]?",
         ),
         (
             "union_optional_3",
             1.2,
             f"Value 1.2 for argument value of plugin {ns}::union_optional_3 has invalid type."
-            f" Expected type: Union[int,string]?"
+            f" Expected type: Union[int,string]?",
         ),
         (
             "union_optional_4",
             1.2,
             f"Value 1.2 for argument value of plugin {ns}::union_optional_4 has invalid type."
-            f" Expected type: Union[int,string]?"
+            f" Expected type: Union[int,string]?",
         ),
     ]:
         snippetcompiler.setup_for_snippet(
@@ -522,33 +515,33 @@ end
         (
             "union_return_single_type",
             123,
-            f"Return value 123 of plugin {ns}::union_return_single_type has invalid type. Expected type: string"
+            f"Return value 123 of plugin {ns}::union_return_single_type has invalid type. Expected type: string",
         ),
         (
             "union_return_multiple_types",
             "[1, 2, 3]",
             f"Return value [1, 2, 3] of plugin {ns}::union_return_multiple_types has invalid type."
-            " Expected type: Union[string,int]"
+            " Expected type: Union[string,int]",
         ),
         (
             "union_return_optional_1",
             1.2,
-            f"Return value 1.2 of plugin {ns}::union_return_optional_1 has invalid type. Expected type: Union[int,string]?"
+            f"Return value 1.2 of plugin {ns}::union_return_optional_1 has invalid type. Expected type: Union[int,string]?",
         ),
         (
             "union_return_optional_2",
             1.2,
-            f"Return value 1.2 of plugin {ns}::union_return_optional_2 has invalid type. Expected type: Union[int,string]?"
+            f"Return value 1.2 of plugin {ns}::union_return_optional_2 has invalid type. Expected type: Union[int,string]?",
         ),
         (
             "union_return_optional_3",
             1.2,
-            f"Return value 1.2 of plugin {ns}::union_return_optional_3 has invalid type. Expected type: Union[int,string]?"
+            f"Return value 1.2 of plugin {ns}::union_return_optional_3 has invalid type. Expected type: Union[int,string]?",
         ),
         (
             "union_return_optional_4",
             1.2,
-            f"Return value 1.2 of plugin {ns}::union_return_optional_4 has invalid type. Expected type: Union[int,string]?"
+            f"Return value 1.2 of plugin {ns}::union_return_optional_4 has invalid type. Expected type: Union[int,string]?",
         ),
     ]:
         snippetcompiler.setup_for_snippet(

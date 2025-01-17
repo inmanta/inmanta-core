@@ -19,7 +19,7 @@
 import copy
 import functools
 import numbers
-from collections.abc import Sequence, Callable
+from collections.abc import Callable, Sequence
 from typing import Optional
 
 from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException

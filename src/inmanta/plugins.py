@@ -33,6 +33,7 @@ import typing_inspect
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
 from inmanta.ast import (  # noqa: F401 Plugin exception is part of the stable api
+    InvalidTypeException,
     LocatableString,
     Location,
     Namespace,
@@ -42,7 +43,6 @@ from inmanta.ast import (  # noqa: F401 Plugin exception is part of the stable a
     TypeNotFoundException,
     TypingException,
     WithComment,
-    InvalidTypeException,
 )
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
@@ -412,6 +412,7 @@ class PluginValue:
         # Validate the value, use custom validate method of the type if it exists
         return self.resolved_type.validate(value)
 
+
 class PluginArgument(PluginValue):
     """
     Represents the argument of an Inmanta plugin.
@@ -766,8 +767,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 raise InvalidTypeException(
                     stmt=None,
                     msg=f"Value {value} for argument {arg.arg_name} of plugin {self.get_full_name()} has invalid type."
-                        f" Expected type: {arg.resolved_type}",
-                    cause=e
+                    f" Expected type: {arg.resolved_type}",
+                    cause=e,
                 )
             else:
                 if not no_unknowns:
@@ -791,7 +792,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 raise InvalidTypeException(
                     stmt=None,
                     msg=f"Value {value} for argument {kwarg.arg_name} of plugin {self.get_full_name()} has invalid type."
-                        f" Expected type: {kwarg.resolved_type}",
+                    f" Expected type: {kwarg.resolved_type}",
                     cause=e,
                 )
             else:
@@ -859,7 +860,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             raise InvalidTypeException(
                 stmt=None,
                 msg=f"Return value {value} of plugin {self.get_full_name()} has invalid type."
-                    f" Expected type: {self.return_type.resolved_type}",
+                f" Expected type: {self.return_type.resolved_type}",
                 cause=e,
             )
 
