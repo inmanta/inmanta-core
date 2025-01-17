@@ -469,13 +469,43 @@ end
     compiler.do_compile()
 
     # Parameter to plugin has incompatible type
+    ns = "plugin_native_types"
     for plugin_name, plugin_value, error_message in [
-        ("union_single_type", 123, "Invalid value '123', expected string"),
-        ("union_multiple_types", "[1, 2, 3]", "Invalid value '[1, 2, 3]', expected Union[int,string]"),
-        ("union_optional_1", 1.2, "Invalid value '1.2', expected Union[int,string]"),
-        ("union_optional_2", 1.2, "Invalid value '1.2', expected Union[int,string]"),
-        ("union_optional_3", 1.2, "Invalid value '1.2', expected Union[int,string]"),
-        ("union_optional_4", 1.2, "Invalid value '1.2', expected Union[int,string]"),
+        (
+            "union_single_type",
+            123,
+            f"Value 123 for argument value of plugin {ns}::union_single_type has invalid type. Expected type: string"
+        ),
+        (
+            "union_multiple_types",
+            "[1, 2, 3]",
+            f"Value [1, 2, 3] for argument value of plugin {ns}::union_multiple_types has invalid type."
+            " Expected type: Union[int,string]"
+        ),
+        (
+            "union_optional_1",
+            1.2,
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_1 has invalid type."
+            f" Expected type: Union[int,string]?"
+        ),
+        (
+            "union_optional_2",
+            1.2,
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_2 has invalid type."
+            f" Expected type: Union[int,string]?"
+        ),
+        (
+            "union_optional_3",
+            1.2,
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_3 has invalid type."
+            f" Expected type: Union[int,string]?"
+        ),
+        (
+            "union_optional_4",
+            1.2,
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_4 has invalid type."
+            f" Expected type: Union[int,string]?"
+        ),
     ]:
         snippetcompiler.setup_for_snippet(
             f"""
@@ -489,12 +519,37 @@ end
 
     # Return value of plugin has incompatible type
     for plugin_name, plugin_value, error_message in [
-        ("union_return_single_type", 123, "Invalid value '123', expected string"),
-        ("union_return_multiple_types", "[1, 2, 3]", "Invalid value '[1, 2, 3]', expected Union[string,int]"),
-        ("union_return_optional_1", 1.2, "Invalid value '1.2', expected Union[int,string]"),
-        ("union_return_optional_2", 1.2, "Invalid value '1.2', expected Union[int,string]"),
-        ("union_return_optional_3", 1.2, "Invalid value '1.2', expected Union[int,string]"),
-        ("union_return_optional_4", 1.2, "Invalid value '1.2', expected Union[int,string]"),
+        (
+            "union_return_single_type",
+            123,
+            f"Return value 123 of plugin {ns}::union_return_single_type has invalid type. Expected type: string"
+        ),
+        (
+            "union_return_multiple_types",
+            "[1, 2, 3]",
+            f"Return value [1, 2, 3] of plugin {ns}::union_return_multiple_types has invalid type."
+            " Expected type: Union[string,int]"
+        ),
+        (
+            "union_return_optional_1",
+            1.2,
+            f"Return value 1.2 of plugin {ns}::union_return_optional_1 has invalid type. Expected type: Union[int,string]?"
+        ),
+        (
+            "union_return_optional_2",
+            1.2,
+            f"Return value 1.2 of plugin {ns}::union_return_optional_2 has invalid type. Expected type: Union[int,string]?"
+        ),
+        (
+            "union_return_optional_3",
+            1.2,
+            f"Return value 1.2 of plugin {ns}::union_return_optional_3 has invalid type. Expected type: Union[int,string]?"
+        ),
+        (
+            "union_return_optional_4",
+            1.2,
+            f"Return value 1.2 of plugin {ns}::union_return_optional_4 has invalid type. Expected type: Union[int,string]?"
+        ),
     ]:
         snippetcompiler.setup_for_snippet(
             f"""
@@ -511,6 +566,6 @@ end
         import plugin_invalid_union_type
         """
     )
-    with pytest.raises(TypingException) as exc_info:
+    with pytest.raises(RuntimeException) as exc_info:
         compiler.do_compile()
     assert "Union type must be subscripted, got typing.Union" in str(exc_info.value)
