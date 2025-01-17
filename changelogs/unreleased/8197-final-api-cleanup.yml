@@ -34,7 +34,7 @@ sections:
       - resource_deploy_start: `POST api/v2/resource/<rvid>/deploy/start`
 
     The following settings are being deprecated:
-      - {inmanta.config:option}`database.db_connection_pool_max_size` replaced by {inmanta.config:option}`server.db_connection_pool_max_size` and {inmanta.config:option}`scheduler.db_connection_pool_max_size`
-      - {inmanta.config:option}`database.db_connection_pool_min_size` replaced by  {inmanta.config:option}`server.db_connection_pool_min_size` and  {inmanta.config:option}`scheduler.db_connection_pool_min_size`
-      - {inmanta.config:option}`database.connection_timeout` replaced by {inmanta.config:option}`server.db_connection_timeout` and {inmanta.config:option}`scheduler.db_connection_timeout`
+      - [database.connection-pool-max-size](#database.connection-pool-max-size) replaced by [server.db-connection-pool-max-size](#server.db-connection-pool-max-size) and [scheduler.db-connection-pool-max-size](#scheduler.db-connection-pool-max-size).
+      - [database.connection-pool-min-size](#database.connection-pool-min-size) replaced by [server.db-connection-pool-min-size](#server.db-connection-pool-min-size) and [scheduler.db-connection-pool-min-size](#scheduler.db-connection-pool-min-size).
+      - [database.connection-timeout](#database.connection-timeout) replaced by [server.db-connection-timeout](#server.db-connection-timeout) and [scheduler.db-connection-timeout](#scheduler.db-connection-timeout).
 
