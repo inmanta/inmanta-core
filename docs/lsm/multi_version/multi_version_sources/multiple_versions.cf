@@ -1,6 +1,5 @@
 import lsm
 import lsm::fsm
-import ip
 
 entity InterfaceIPAssignment extends lsm::ServiceEntity:
     """

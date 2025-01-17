@@ -28,17 +28,18 @@ import pydantic
 
 from inmanta import const, loader, protocol
 from inmanta.agent.handler import Commander
-from inmanta.ast import CompilerException, Namespace
+from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
-from inmanta.config import Option, is_list, is_str, is_uuid_opt
+from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.const import ResourceState
-from inmanta.data.model import PipConfig, ResourceVersionIdStr
-from inmanta.execute.proxy import DynamicProxy, UnknownException
+from inmanta.data.model import PipConfig
+from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import Instance
 from inmanta.module import Project
 from inmanta.protocol import Result
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
+from inmanta.types import ResourceVersionIdStr
 from inmanta.util import get_compiler_version, hash_file
 
 LOGGER = logging.getLogger(__name__)
@@ -53,7 +54,6 @@ cfg_export = Option(
     "The list of exporters to use. This option is ignored when the --export-plugin option is used.",
     is_list,
 )
-cfg_unknown_handler = Option("unknown_handler", "default", "prune-agent", "default method to handle unknown values ", is_str)
 
 
 ModelDict = dict[str, Entity]

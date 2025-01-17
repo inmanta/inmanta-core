@@ -22,15 +22,21 @@ import uuid
 from typing import Optional, cast
 
 from inmanta import const, data
-from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffStatus, ResourceVersionIdStr
+from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffStatus
 from inmanta.protocol import handle, methods, methods_v2
-from inmanta.protocol.exceptions import NotFound
+from inmanta.protocol.exceptions import Conflict, NotFound
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_DATABASE, SLICE_DRYRUN, SLICE_TRANSPORT
-from inmanta.server import config as opt
-from inmanta.server import diff, protocol
+from inmanta.server import (
+    SLICE_AGENT_MANAGER,
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_DATABASE,
+    SLICE_DRYRUN,
+    SLICE_TRANSPORT,
+    diff,
+    protocol,
+)
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
-from inmanta.types import Apireturn, JsonType
+from inmanta.types import Apireturn, JsonType, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
@@ -67,27 +73,24 @@ class DyrunService(protocol.ServerSlice):
         return 200, {"dryrun": dryrun}
 
     async def create_dryrun(self, env: data.Environment, version_id: int, model: data.ConfigurationModel) -> data.DryRun:
+        if env.halted:
+            raise Conflict(f"The environment {env.name}({env.id}) is halted")
+
         # fetch all resource in this cm and create a list of distinct agents
         rvs = await data.Resource.get_list(model=version_id, environment=env.id)
 
         # Create a dryrun document
         dryrun = await data.DryRun.create(environment=env.id, model=version_id, todo=len(rvs), total=len(rvs))
 
-        if opt.server_use_resource_scheduler.get():
-            agents = [const.AGENT_SCHEDULER_ID]
-            await self.autostarted_agent_manager._ensure_scheduler(env)
-        else:
-            agents = await data.ConfigurationModel.get_agents(env.id, version_id)
-            await self.autostarted_agent_manager._ensure_agents(env, agents)
+        await self.autostarted_agent_manager._ensure_scheduler(env.id)
 
-        agents_down = []
-        for agent in agents:
-            client = self.agent_manager.get_agent_client(env.id, agent)
-            if client is not None:
-                self.add_background_task(client.do_dryrun(env.id, dryrun.id, agent, version_id))
-            else:
-                agents_down.append(agent)
-                LOGGER.warning("Agent %s from model %s in env %s is not available for a dryrun", agent, version_id, env.id)
+        client = self.agent_manager.get_agent_client(env.id, const.AGENT_SCHEDULER_ID, live_agent_only=True)
+        if client is not None:
+            self.add_background_task(client.do_dryrun(env.id, dryrun.id, const.AGENT_SCHEDULER_ID, version_id))
+        else:
+            raise Conflict("Could not start the scheduler")
+
+        paused_agents = {agent.name for agent in await data.Agent.get_list(environment=env.id, paused=True)}
 
         # Mark the resources in an undeployable state as done
         async with self.dryrun_lock:
@@ -112,7 +115,7 @@ class DyrunService(protocol.ServerSlice):
                 for res in rvs
                 if res.resource_version_id not in undeployable_version_ids
                 and res.resource_version_id not in skip_undeployable_version_ids
-                and res.agent in agents_down
+                and res.agent in paused_agents
             ]
             await self._save_resources_without_changes_to_dryrun(
                 dryrun_id=dryrun.id, resources=resources_with_agents_down, diff_status=ResourceDiffStatus.agent_down

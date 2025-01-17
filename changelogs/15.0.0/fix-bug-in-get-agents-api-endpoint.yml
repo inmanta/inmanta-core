@@ -1,0 +1,4 @@
+---
+description: "Fix bug in `get_agents()` API endpoint where it returns an empty list if the agent record for the scheduler is missing."
+change-type: patch
+destination-branches: [master]

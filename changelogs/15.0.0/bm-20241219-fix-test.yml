@@ -1,0 +1,3 @@
+description: Fix test test_purge_versions to use the agent_no_state_check fixture
+change-type: patch
+destination-branches: [master]

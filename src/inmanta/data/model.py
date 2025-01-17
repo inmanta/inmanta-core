@@ -17,16 +17,15 @@
 """
 
 import datetime
+import json
 import typing
 import urllib
 import uuid
 from collections import abc
 from collections.abc import Sequence
-from enum import Enum
-from itertools import chain
-from typing import ClassVar, NewType, Optional, Self, Union
+from enum import Enum, StrEnum
+from typing import ClassVar, Mapping, Optional, Self, Union
 
-import pydantic
 import pydantic.schema
 from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
 
@@ -35,7 +34,11 @@ import inmanta.ast.export as ast_export
 import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
-from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
+from inmanta.types import ArgumentTypes, JsonType
+from inmanta.types import ResourceIdStr as ResourceIdStr  # Keep in place for backwards compat with <=ISO8
+from inmanta.types import ResourceType as ResourceType  # Keep in place for backwards compat with <=ISO8
+from inmanta.types import ResourceVersionIdStr as ResourceVersionIdStr  # Keep in place for backwards compat with <=ISO8
+from inmanta.types import SimpleTypes
 
 
 def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
@@ -90,7 +93,7 @@ class SliceStatus(BaseModel):
     """
 
     name: str
-    status: dict[str, ArgumentTypes]
+    status: Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]
 
 
 class FeatureStatus(BaseModel):
@@ -202,22 +205,6 @@ class CompileDetails(CompileReport):
     reports: Optional[list[CompileRunReport]] = None
 
 
-ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API
-"""
-    The resource id with the version included.
-"""
-
-ResourceIdStr = NewType("ResourceIdStr", str)  # Part of the stable API
-"""
-    The resource id without the version
-"""
-
-ResourceType = NewType("ResourceType", str)
-"""
-    The type of the resource
-"""
-
-
 class AttributeStateChange(BaseModel):
     """
     Changes in the attribute
@@ -242,6 +229,16 @@ class AttributeStateChange(BaseModel):
                 # In production, try to cast the non-serializable value to str to prevent the handler from failing.
                 return str(v)
         return v
+
+    def __getstate__(self) -> str:
+        # make pickle use json to keep from leaking stuff
+        # Will make the objects into json-like things
+        # This method exists only to keep IPC light compatible with the json based RPC
+        return protocol.common.json_encode(self)
+
+    def __setstate__(self, state: str) -> None:
+        # This method exists only to keep IPC light compatible with the json based RPC
+        self.__dict__.update(json.loads(state))
 
 
 EnvSettingType = Union[bool, int, float, str, dict[str, Union[str, int, bool]]]
@@ -392,7 +389,7 @@ class LogLine(BaseModel):
     # Override the setting from the BaseModel class as such that the level field is
     # serialized using the name of the enum instead of its value. This is required
     # to make sure that data sent to the API endpoints resource_action_update
-    # and resource_deploy_done are serialized consistently using the name of the enum.
+    # and send_deploy_done are serialized consistently using the name of the enum.
     model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
 
     level: const.LogLevel
@@ -426,17 +423,19 @@ class ResourceIdDetails(BaseModel):
     resource_id_value: str
 
 
-class OrphanedResource(str, Enum):
+class ReleasedResourceState(StrEnum):
+    # Copied over from const.ResourceState
+    unavailable = "unavailable"  # This state is set by the agent when no handler is available for the resource
+    skipped = "skipped"  #
+    dry = "dry"
+    deployed = "deployed"
+    failed = "failed"
+    deploying = "deploying"
+    available = "available"
+    cancelled = "cancelled"  # When a new version is pushed, in progress deploys are cancelled
+    undefined = "undefined"  # The state of this resource is unknown at this moment in the orchestration process
+    skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
     orphaned = "orphaned"
-
-
-class StrEnum(str, Enum):
-    """Enum where members are also (and must be) strs"""
-
-
-ReleasedResourceState = StrEnum(
-    "ReleasedResourceState", [(i.name, i.value) for i in chain(const.ResourceState, OrphanedResource)]
-)
 
 
 class VersionedResource(BaseModel):
@@ -459,10 +458,36 @@ class PagingBoundaries:
     Represents the lower and upper bounds that should be used for the next and previous pages
     when listing domain entities.
 
-    :param start: largest value of the page for the primary sort column.
-    :param end: smallest value of the page for the primary sort column.
-    :param first_id: largest value of the page for the secondary sort column, if there is one.
-    :param last_id: smallest value of the page for the secondary sort column, if there is one.
+    The largest / smallest value of the current page represents respectively the min / max boundary value (exclusive) for the
+    neighbouring pages. Which represents next and which prev depends on sorting order (ASC or DESC).
+    So, while the names "start" and "end" might seem to indicate "left" and "right" of the page, they actually mean "highest"
+    and "lowest".
+
+    Let's show this in an example: a user requests the following:
+     - all Resources with name > foo
+     - ASCENDING order
+     - Page size = 10
+
+    The equivalent RequestPagingBoundary will be as follows:
+        ```
+        RequestPagingBoundary:
+            start = foo
+            end = None
+        ```
+
+    The fetched data will be: [foo1 ... foo10]
+
+    But the Pagingboundary will be constructed this way:
+        ```
+        Pagingboundary:
+            end = foo1
+            start = foo10 # Reversed because these are meant to map to like-named fields on neighbouring RequestedPagingBoundary
+        ```
+
+    :param start: largest value of current page for the primary sort column.
+    :param end: smallest value of current page for the primary sort column.
+    :param first_id: largest value of current page for the secondary sort column, if there is one.
+    :param last_id: smallest value of current page for the secondary sort column, if there is one.
     """
 
     def __init__(
@@ -640,13 +665,11 @@ class DesiredStateVersion(BaseModel):
     status: const.DesiredStateVersionStatus
 
 
-class NoPushTriggerMethod(str, Enum):
+class PromoteTriggerMethod(StrEnum):
+    # partly copies from const.AgentTriggerMethod
+    push_incremental_deploy = "push_incremental_deploy"
+    push_full_deploy = "push_full_deploy"
     no_push = "no_push"
-
-
-PromoteTriggerMethod = StrEnum(
-    "PromoteTriggerMethod", [(i.name, i.value) for i in chain(const.AgentTriggerMethod, NoPushTriggerMethod)]
-)
 
 
 class DryRun(BaseModel):
@@ -860,3 +883,82 @@ class PipConfig(BaseModel):
 
 
 LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)
+
+
+class Discrepancy(BaseModel):
+    """
+    Records a discrepancy between the state as persisted in the database and
+    the in-memory state in the scheduler. Either model-wide when no
+    resource id is specified (e.g. when model versions are mismatched)
+    or for a specific resource.
+
+    :param rid: If set, this discrepancy is specific to this resource.
+        If left unset, this discrepancy is not specific to any particular resource.
+    :param field: If set, specifies on which field this discrepancy was detected.
+        If left unset, and a rid is specified, the discrepancy was detected on the
+        resource level i.e. it is missing from either the db or the scheduler.
+    :param expected: User-facing message denoting the expected state (i.e. as persisted
+        in the DB).
+    :param actual: User-facing message denoting the actual state (i.e. in-memory state
+        in the scheduler).
+
+    """
+
+    rid: ResourceIdStr | None
+    field: str | None
+    expected: str
+    actual: str
+
+
+class SchedulerStatusReport(BaseModel):
+    """
+    Status report for the scheduler self-check
+
+    :param scheduler_state: In-memory representation of the resources in the scheduler
+    :param db_state: Desired state of the resources as persisted in the database
+    :param discrepancies: Discrepancies between the in-memory representation of the resources
+        and their state in the database.
+    """
+
+    # Can't type properly because of current module structure
+    scheduler_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceState
+    db_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceIntent
+    resource_states: Mapping[ResourceIdStr, const.ResourceState]
+    discrepancies: list[Discrepancy] | dict[ResourceIdStr, list[Discrepancy]]
+
+
+class DataBaseReport(BaseModel):
+    """
+    :param max_pool: maximal pool size
+    :param free_pool: number of connections not in use in the pool
+    :param open_connections: number of connections currently open
+    :param free_connections: number of connections currently open and not in use
+    :param pool_exhaustion_time: nr of seconds since start we observed the pool to be exhausted
+    """
+
+    connected: bool
+    database: str
+    host: str
+    max_pool: int
+    free_pool: int
+    open_connections: int
+    free_connections: int
+    pool_exhaustion_time: float
+
+    def __add__(self, other: "DataBaseReport") -> "DataBaseReport":
+        if not isinstance(other, DataBaseReport):
+            return NotImplemented
+        if other.database != self.database:
+            return NotImplemented
+        if other.host != self.host:
+            return NotImplemented
+        return DataBaseReport(
+            connected=self.connected and other.connected,
+            database=self.database,
+            host=self.host,
+            max_pool=self.max_pool + other.max_pool,
+            free_pool=self.free_pool + other.free_pool,
+            open_connections=self.open_connections + other.open_connections,
+            free_connections=self.free_connections + other.free_connections,
+            pool_exhaustion_time=self.pool_exhaustion_time + other.pool_exhaustion_time,
+        )

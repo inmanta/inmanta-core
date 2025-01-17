@@ -1,0 +1,5 @@
+description: Make executor report get facts to scheduler
+issue-nr: 8190
+change-type: minor
+destination-branches: [master]
+

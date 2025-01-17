@@ -31,158 +31,24 @@ from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import config, const, data, loader, resources, util
-from inmanta.agent import handler
-from inmanta.agent.agent import Agent
+from inmanta.agent import executor, handler
 from inmanta.const import ParameterSource
 from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
-from inmanta.data.model import AttributeStateChange, LogLine, ResourceVersionIdStr
+from inmanta.data.model import AttributeStateChange
+from inmanta.deploy import persistence, state
 from inmanta.export import upload_code
 from inmanta.protocol import Client
-from inmanta.server import (
-    SLICE_AGENT_MANAGER,
-    SLICE_AUTOSTARTED_AGENT_MANAGER,
-    SLICE_ORCHESTRATION,
-    SLICE_SERVER,
-    SLICE_SESSION_MANAGER,
-)
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
 from utils import log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
 
-@pytest.mark.slowtest
-async def test_autostart(server, client, environment, caplog):
-    """
-    Test auto start of agent
-    An agent is started and then killed to simulate unexpected failure
-    When the second agent is started for the same environment, the first is terminated in a controlled manner
-    """
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "iaas_agent": "", "iaas_agentx": ""})
-
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-    autostarted_agentmanager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
-    sessionendpoint = server.get_slice(SLICE_SESSION_MANAGER)
-
-    await agentmanager.ensure_agent_registered(env, "iaas_agent")
-    await agentmanager.ensure_agent_registered(env, "iaas_agentx")
-
-    res = await autostarted_agentmanager._ensure_agents(env, ["iaas_agent"])
-    assert res
-
-    await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
-    assert len(sessionendpoint._sessions) == 1
-    res = await autostarted_agentmanager._ensure_agents(env, ["iaas_agent"])
-    assert not res
-    assert len(sessionendpoint._sessions) == 1
-
-    LOGGER.warning("Killing agent")
-    autostarted_agentmanager._agent_procs[env.id].terminate()
-    await autostarted_agentmanager._agent_procs[env.id].wait()
-    await retry_limited(lambda: len(sessionendpoint._sessions) == 0, 20)
-    # Prevent race condition
-    await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 20)
-    res = await autostarted_agentmanager._ensure_agents(env, ["iaas_agent"])
-    assert res
-    await retry_limited(
-        lambda: (
-            len(sessionendpoint._sessions) == 1
-            # starting any agent eventually causes it to reload the agent map, starting all three
-            and len(agentmanager.tid_endpoint_to_session.keys()) == 3
-        ),
-        5,
-    )
-
-    # Test stopping all agents
-    await autostarted_agentmanager.stop_agents(env)
-    assert len(sessionendpoint._sessions) == 0
-    assert len(autostarted_agentmanager._agent_procs) == 0
-
-    log_doesnt_contain(caplog, "inmanta.config", logging.WARNING, "rest_transport not defined")
-    log_doesnt_contain(caplog, "inmanta.server.agentmanager", logging.WARNING, "Agent processes did not close in time")
-
-
-@pytest.mark.slowtest
-async def test_autostart_dual_env(client, server):
-    """
-    Test auto start of agent
-    """
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
-    sessionendpoint = server.get_slice(SLICE_SESSION_MANAGER)
-
-    result = await client.create_project("env-test")
-    assert result.code == 200
-    project_id = result.result["project"]["id"]
-
-    result = await client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
-
-    result = await client.create_environment(project_id=project_id, name="devx")
-    env_id2 = result.result["environment"]["id"]
-
-    env = await data.Environment.get_by_id(uuid.UUID(env_id))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "iaas_agent": ""})
-
-    env2 = await data.Environment.get_by_id(uuid.UUID(env_id2))
-    await env2.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "iaas_agent": ""})
-
-    await agentmanager.ensure_agent_registered(env, "iaas_agent")
-    await agentmanager.ensure_agent_registered(env2, "iaas_agent")
-
-    res = await autostarted_agent_manager._ensure_agents(env, ["iaas_agent"])
-    assert res
-    await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
-    assert len(sessionendpoint._sessions) == 1
-
-    res = await autostarted_agent_manager._ensure_agents(env2, ["iaas_agent"])
-    assert res
-    await retry_limited(lambda: len(sessionendpoint._sessions) == 2, 20)
-    assert len(sessionendpoint._sessions) == 2
-
-
-@pytest.mark.slowtest
-async def test_autostart_batched(client, server, environment):
-    """
-    Test auto start of agent
-    """
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "iaas_agentx": ""})
-
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
-    sessionendpoint = server.get_slice(SLICE_SESSION_MANAGER)
-
-    await agentmanager.ensure_agent_registered(env, "internal")
-    await agentmanager.ensure_agent_registered(env, "iaas_agentx")
-
-    res = await autostarted_agent_manager._ensure_agents(env, ["internal", "iaas_agentx"])
-    assert res
-    await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
-    assert len(sessionendpoint._sessions) == 1
-    res = await autostarted_agent_manager._ensure_agents(env, ["internal"])
-    assert not res
-    assert len(sessionendpoint._sessions) == 1
-
-    res = await autostarted_agent_manager._ensure_agents(env, ["internal", "iaas_agentx"])
-    assert not res
-    assert len(sessionendpoint._sessions) == 1
-
-    LOGGER.warning("Killing agent")
-    autostarted_agent_manager._agent_procs[env.id].terminate()
-    await autostarted_agent_manager._agent_procs[env.id].wait()
-    await retry_limited(lambda: len(sessionendpoint._sessions) == 0, 20)
-    # Prevent race condition
-    await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 20)
-    res = await autostarted_agent_manager._ensure_agents(env, ["internal", "iaas_agentx"])
-    assert res
-    await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 3)
-    assert len(sessionendpoint._sessions) == 1
-
-
+@pytest.mark.parametrize("no_agent", [True])
 @pytest.mark.parametrize(
     "n_versions_to_keep, n_versions_to_create",
     [
@@ -191,7 +57,7 @@ async def test_autostart_batched(client, server, environment):
         (2, 2),
     ],
 )
-async def test_create_too_many_versions(client, server, n_versions_to_keep, n_versions_to_create):
+async def test_create_too_many_versions(client, server, no_agent, n_versions_to_keep, n_versions_to_create):
     """
     - set AVAILABLE_VERSIONS_TO_KEEP environment setting to <n_versions_to_keep>
     - create <n_versions_to_create> versions
@@ -208,7 +74,7 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     env_1_id = result.result["environment"]["id"]
     result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep)
     assert result.code == 200
-    # Make sure we don't have a released version. _purge_versions() always keeps the latest released version.
+    # Perform release manually using the release_version() endpoint to prevent race conditions.
     result = await client.set_setting(env_1_id, AUTO_DEPLOY, False)
     assert result.code == 200
 
@@ -255,6 +121,9 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
         )
         assert res.code == 200
 
+        res = await client.release_version(tid=env_1_id, id=version)
+        assert res.code == 200
+
     versions = await client.list_versions(tid=env_1_id)
     assert versions.result["count"] == n_versions_to_create
 
@@ -270,14 +139,16 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
 
     versions = await client.list_versions(tid=env_1_id)
-    assert versions.result["count"] == min(n_versions_to_keep, n_versions_to_create)
+    # Add +1, because the latest released version is not included in the AVAILABLE_VERSIONS_TO_KEEP setting.
+    assert versions.result["count"] == min(n_versions_to_keep + 1, n_versions_to_create)
 
     prvs = await ResourcePersistentState.get_list()
-    assert len(prvs) == min(n_versions_to_keep, n_versions_to_create) + 1
+    # 1 variable resource per version + 1 fixed resource per version
+    assert len(prvs) == min(n_versions_to_keep + 2, n_versions_to_create + 1)
 
 
 @pytest.mark.parametrize("has_released_versions", [True, False])
-async def test_purge_versions(server, client, environment, has_released_versions: bool) -> None:
+async def test_purge_versions(server, client, environment, has_released_versions: bool, agent_no_state_check) -> None:
     """
     Verify that the `OrchestrationService._purge_versions()` method works correctly and that it doesn't cleanup
     the latest released version.
@@ -415,20 +286,11 @@ async def test_n_versions_env_setting_scope(client, server):
 
 
 @pytest.mark.slowtest
-async def test_get_resource_for_agent(server_multi, client_multi, environment_multi, async_finalizer):
+async def test_resource_action_update(server_multi, client_multi, environment_multi, null_agent_multi):
     """
     Test the server to manage the updates on a model during agent deploy
     """
-    agent = Agent("localhost", {"nvblah": "localhost"}, environment=environment_multi, code_loader=False)
-    await agent.add_end_point_name("vm1.dev.inmanta.com")
-    await agent.add_end_point_name("vm2.dev.inmanta.com")
-    async_finalizer(agent.stop)
-    await agent.start()
-    aclient = agent._client
-
-    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
-    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
-
+    aclient = null_agent_multi._client
     version = (await client_multi.reserve_version(environment_multi)).result["data"]
 
     resources = [
@@ -500,17 +362,6 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     assert result.result["model"]["version"] == version
     assert result.result["model"]["total"] == len(resources)
     assert result.result["model"]["released"]
-    assert result.result["model"]["result"] == "deploying"
-
-    async def wait_for_session() -> bool:
-        result = await aclient.get_resources_for_agent(environment_multi, "vm1.dev.inmanta.com")
-        return result.code == 200 and len(result.result["resources"]) == 3
-
-    """
-    This retry_limited is required to prevent 409 errors in case the agent didn't obtain
-    a session yet by the time the get_resources_for_agent API call is made.
-    """
-    await retry_limited(wait_for_session, 10)
 
     action_id = uuid.uuid4()
     now = datetime.now()
@@ -528,9 +379,9 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
 
     assert result.code == 200
 
-    result = await client_multi.get_version(environment_multi, version)
+    result = await client_multi.resource_list(tid=environment_multi, deploy_summary=True)
     assert result.code == 200
-    assert result.result["model"]["done"] == 1
+    assert result.result["metadata"]["deploy_summary"]["by_state"]["deployed"] == 1
 
     action_id = uuid.uuid4()
     now = datetime.now()
@@ -547,9 +398,9 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     )
     assert result.code == 200
 
-    result = await client_multi.get_version(environment_multi, version)
+    result = await client_multi.resource_list(tid=environment_multi, deploy_summary=True)
     assert result.code == 200
-    assert result.result["model"]["done"] == 2
+    assert result.result["metadata"]["deploy_summary"]["by_state"]["deployed"] == 2
 
 
 async def test_get_environment(client, clienthelper, server, environment):
@@ -589,17 +440,12 @@ async def test_get_environment(client, clienthelper, server, environment):
     assert len(result.result["environment"]["resources"]) == 9
 
 
-async def test_resource_update(postgresql_client, client, clienthelper, server, environment, async_finalizer):
+async def test_resource_update(postgresql_client, client, clienthelper, server, environment, async_finalizer, null_agent):
     """
     Test updating resources and logging
     """
-    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    async_finalizer(agent.stop)
-    await agent.start()
-    aclient = agent._client
 
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    aclient = null_agent._client
 
     version = await clienthelper.get_version()
 
@@ -686,10 +532,7 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
         environment, resource_ids, action_id, "deploy", status=const.ResourceState.deployed, finished=now, changes=changes
     )
     assert result.code == 200
-
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    assert result.result["model"]["done"] == 10
+    assert await clienthelper.done_count() == 10
 
 
 async def test_get_resource_on_invalid_resource_id(server, client, environment) -> None:
@@ -703,6 +546,7 @@ async def test_get_resource_on_invalid_resource_id(server, client, environment) 
     assert f"{invalid_resource_version_id} is not a valid resource version id" in result.result["message"]
 
 
+@pytest.mark.parametrize("no_agent", [True])
 async def test_clear_environment(client, server, clienthelper, environment):
     """
     Test clearing out an environment
@@ -732,7 +576,7 @@ async def test_clear_environment(client, server, clienthelper, environment):
 
     # Wait for env directory to appear
     slice = server.get_slice(SLICE_SERVER)
-    env_dir = os.path.join(slice._server_storage["environments"], environment)
+    env_dir = os.path.join(slice._server_storage["server"], environment, "compiler")
 
     while not os.path.exists(env_dir):
         await asyncio.sleep(0.1)
@@ -809,49 +653,41 @@ async def test_batched_code_upload(
     )
 
     for name, source_info in code_manager.get_types():
-        res = await agent_multi._client.get_code(tid=environment_multi, id=version, resource=name)
-        assert res.code == 200
         assert len(source_info) >= 2
         for info in source_info:
-            assert info.hash in res.result["sources"]
-            code = res.result["sources"][info.hash]
-
             # fetch the code from the server
             response = await agent_multi._client.get_file(info.hash)
             assert response.code == 200
-
             source_code = base64.b64decode(response.result["content"])
             assert info.content == source_code
-            assert info.requires == code[3]
 
 
-async def test_resource_action_log(server, client, environment):
-    version = (await client.reserve_version(environment)).result["data"]
-    resources = [
-        {
-            "group": "root",
-            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::testing::NullResource[vm1.dev.inmanta.com,name=network],v=%d" % version,
-            "owner": "root",
-            "path": "/etc/sysconfig/network",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "version": version,
-        }
-    ]
-    res = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_resource_action_log(server, client, environment, clienthelper, snippetcompiler):
+    await clienthelper.set_auto_deploy()
+
+    snippetcompiler.setup_for_snippet(
+        """\
+        import std::testing
+
+        std::testing::NullResource(name="network", agentname="internal")
+        """,
+        autostd=True,
     )
-    assert res.code == 200
 
+    version, _ = await snippetcompiler.do_export_and_deploy()
+
+    await clienthelper.wait_for_released(version)
+    await clienthelper.wait_for_deployed(version)
     resource_action_log = os.path.join(config.log_dir.get(), f"{opt.server_resource_action_log_prefix.get()}{environment}.log")
+    print(resource_action_log)
+    logging.root.warning("%s", resource_action_log)
+
+    log = os.path.join(config.log_dir.get(), f"agent-{environment}.log")
+    with open(log, "r") as fh:
+        for line in fh:
+            logging.warning(line)
+
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
     with open(resource_action_log) as f:
@@ -863,10 +699,14 @@ async def test_resource_action_log(server, client, environment):
 
 async def test_invalid_sid(server, client, environment):
     """
-    Test the server to manage the updates on a model during agent deploy
+    Verify that API endpoints, that should only be called by an agent, return an HTTP 400
+    if they are called without a session id.
     """
-    # request get_code with a compiler client that does not have a sid
-    res = await client.get_code(tid=environment, id=1, resource="std::testing::NullResource")
+    res = await client.discovered_resource_create(
+        tid=environment,
+        discovered_resource_id="test::Test[agent1,attr=val]",
+        discovery_resource_id="test::Test[agent1,attr=other_val]",
+    )
     assert res.code == 400
     assert res.result["message"] == "Invalid request: this is an agent to server call, it should contain an agent session id"
 
@@ -875,8 +715,6 @@ async def test_invalid_sid(server, client, environment):
 async def test_get_param(server, client, environment, tz_aware_timestamp: bool):
     config.Config.set("server", "tz-aware-timestamps", str(tz_aware_timestamp).lower())
 
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
-    assert result.code == 200
     metadata = {"key1": "val1", "key2": "val2"}
 
     await client.set_param(environment, "param", ParameterSource.user, "val", "", metadata, False)
@@ -981,7 +819,7 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
 
     log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
 
-    await ibl.stop(timeout=15)
+    await ibl.stop(timeout=20)
 
 
 @pytest.mark.parametrize("db_wait_time", ["2", "0"])
@@ -994,7 +832,7 @@ async def test_bootloader_connect_running_db(server_config, postgres_db, caplog,
     caplog.clear()
     caplog.set_level(logging.INFO)
     await ibl.start()
-    await ibl.stop(timeout=15)
+    await ibl.stop(timeout=20)
 
     if db_wait_time != "0":
         log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
@@ -1005,11 +843,11 @@ async def test_bootloader_connect_running_db(server_config, postgres_db, caplog,
     log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
 
 
-async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, agent):
+async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, null_agent):
     """
     Test querying resource actions via the API
     """
-    aclient = agent._client
+    aclient = null_agent._client
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -1224,7 +1062,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
 
     # Use the next link for pagination
     next_page = result.result["links"]["next"]
-    port = opt.get_bind_port()
+    port = opt.server_bind_port.get()
     base_url = f"http://localhost:{port}"
     url = f"{base_url}{next_page}"
     client = AsyncHTTPClient()
@@ -1265,11 +1103,12 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     assert action_ids == third_page_action_ids
 
 
-@pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_start", "resource_action_update"])
-async def test_resource_deploy_start(server, client, environment, agent, endpoint_to_use: str):
+@pytest.mark.parametrize("no_agent", [True])
+@pytest.mark.parametrize("method_to_use", ["send_in_progress", "resource_action_update"])
+async def test_send_in_progress(server, client, environment, agent, method_to_use: str):
     """
-    Ensure that API endpoint `resource_deploy_start()` does the same as the `resource_action_update()`
-    API endpoint when a new deployment is reported.
+    Ensure that the `ToDbUpdateManager.send_in_progress()` method and the `resource_action_update()` API endpoint do the same
+    when a new deployment is reported.
     """
     env_id = uuid.UUID(environment)
 
@@ -1297,7 +1136,8 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
         last_non_deploying_status: const.NonDeployingResourceState,
         resource_version_id: str,
         attributes: dict[str, object],
-    ) -> data.Resource:
+        version: int,
+    ) -> None:
         r1 = data.Resource.new(
             environment=env_id,
             status=status,
@@ -1305,6 +1145,7 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
             attributes=attributes,
         )
         await r1.insert()
+        await data.ResourcePersistentState.populate_for_version(environment=uuid.UUID(environment), model_version=version)
         await r1.update_persistent_state(last_deploy=datetime.now(tz=UTC), last_non_deploying_status=last_non_deploying_status)
 
     await make_resource_with_last_non_deploying_status(
@@ -1312,29 +1153,28 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2, rvid_r3]},
+        version=model_version,
     )
     await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
+        version=model_version,
     )
     await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.failed,
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
+        version=model_version,
     )
 
     action_id = uuid.uuid4()
 
-    if endpoint_to_use == "resource_deploy_start":
-        result = await agent._client.resource_deploy_start(tid=env_id, rvid=rvid_r1_v1, action_id=action_id)
-        assert result.code == 200
-        resource_states_dependencies = result.result["data"]
-        assert len(resource_states_dependencies) == 2
-        assert resource_states_dependencies[rvid_r2_v1] == const.ResourceState.deployed
-        assert resource_states_dependencies[rvid_r3_v1] == const.ResourceState.failed
+    if method_to_use == "send_in_progress":
+        update_manager = persistence.ToDbUpdateManager(client, env_id)
+        await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid_r1_v1))
     else:
         await agent._client.resource_action_update(
             tid=env_id,
@@ -1362,29 +1202,9 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     assert resource_action["change"] is None
 
 
-async def test_resource_deploy_start_error_handling(server, client, environment, agent):
+async def test_send_in_progress_action_id_conflict(server, client, environment, agent):
     """
-    Test the error handling of the `resource_deploy_start` API endpoint.
-    """
-    env_id = uuid.UUID(environment)
-
-    # Version part missing from resource_version_id
-    result = await agent._client.resource_deploy_start(
-        tid=env_id, rvid="std::testing::NullResource[agent1,name=file1]", action_id=uuid.uuid4()
-    )
-    assert result.code == 400
-    assert "Invalid resource version id" in result.result["message"]
-
-    # Execute resource_deploy_start call for resource that doesn't exist
-    resource_id = "std::testing::NullResource[agent1,name=file1],v=1"
-    result = await agent._client.resource_deploy_start(tid=env_id, rvid=resource_id, action_id=uuid.uuid4())
-    assert result.code == 404
-    assert f"Environment {environment} doesn't contain a resource with id {resource_id}" in result.result["message"]
-
-
-async def test_resource_deploy_start_action_id_conflict(server, client, environment, agent):
-    """
-    Ensure proper error handling when the same action_id is provided twice to the `resource_deploy_start` API endpoint.
+    Ensure proper error handling when the same action_id is provided twice to the `ToDbUpdateManager.send_in_progress()` method.
     """
     env_id = uuid.UUID(environment)
 
@@ -1400,7 +1220,7 @@ async def test_resource_deploy_start_action_id_conflict(server, client, environm
     await cm.insert()
 
     model_version = 1
-    rvid_r1_v1 = f"std::testing::NullResource[agent1,name=file1],v={model_version}"
+    rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
 
     await data.Resource.new(
         environment=env_id,
@@ -1410,48 +1230,49 @@ async def test_resource_deploy_start_action_id_conflict(server, client, environm
     ).insert()
 
     action_id = uuid.uuid4()
+    update_manager = persistence.ToDbUpdateManager(client, env_id)
 
-    async def execute_resource_deploy_start(expected_return_code: int, resulting_nr_resource_actions: int) -> None:
-        result = await agent._client.resource_deploy_start(tid=env_id, rvid=rvid_r1_v1, action_id=action_id)
-        assert result.code == expected_return_code
+    async def execute_send_in_progress(expect_exception: bool, resulting_nr_resource_actions: int) -> None:
+        try:
+            await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid_r1_v1))
+        except ValueError:
+            assert expect_exception
+        else:
+            assert not expect_exception
 
         result = await client.get_resource_actions(tid=env_id)
         assert result.code == 200
         assert len(result.result["data"]) == resulting_nr_resource_actions
 
-    await execute_resource_deploy_start(expected_return_code=200, resulting_nr_resource_actions=1)
-    await execute_resource_deploy_start(expected_return_code=409, resulting_nr_resource_actions=1)
+    await execute_send_in_progress(expect_exception=False, resulting_nr_resource_actions=1)
+    await execute_send_in_progress(expect_exception=True, resulting_nr_resource_actions=1)
 
 
 @pytest.mark.parametrize(
-    "endpoint_to_use",
-    ["resource_deploy_done", "resource_action_update"],
+    "method_to_use",
+    ["send_deploy_done", "resource_action_update"],
 )
-async def test_resource_deploy_done(server, client, environment, agent, caplog, endpoint_to_use):
+async def test_send_deploy_done(server, client, environment, null_agent, caplog, method_to_use, clienthelper):
     """
-    Ensure that the `resource_deploy_done` endpoint behaves in the same way as the `resource_action_update` endpoint
+    Ensure that the `send_deploy_done` method behaves in the same way as the `resource_action_update` endpoint
     when the finished field is not None.
     """
+    result = await client.set_setting(environment, "auto_deploy", True)
+    assert result.code == 200
+
     env_id = uuid.UUID(environment)
-
-    model_version = 1
-    cm = data.ConfigurationModel(
-        environment=env_id,
-        version=model_version,
-        date=datetime.now().astimezone(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm.insert()
-
-    rvid_r1_v1 = f"std::testing::NullResource[agent1,name=file1],v={model_version}"
-    await data.Resource.new(
-        environment=env_id,
-        status=const.ResourceState.available,
-        resource_version_id=rvid_r1_v1,
-        attributes={"purge_on_delete": False, "purged": True, "requires": []},
-    ).insert()
+    model_version = await clienthelper.get_version()
+    rid_r1 = ResourceIdStr("std::testing::NullResource[agent1,name=file1]")
+    rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1},v={model_version}")
+    attributes_r1 = {
+        "name": "file1",
+        "id": f"std::testing::NullResource[agent1,name=file1],v={model_version}",
+        "version": model_version,
+        "purge_on_delete": False,
+        "purged": True,
+        "requires": [],
+    }
+    await clienthelper.put_version_simple(resources=[attributes_r1], version=model_version, wait_for_released=True)
 
     # Add parameter for resource
     parameter_id = "test_param"
@@ -1464,15 +1285,16 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     )
     assert result.code == 200
 
+    update_manager = persistence.ToDbUpdateManager(client, env_id)
     action_id = uuid.uuid4()
-    result = await agent._client.resource_deploy_start(tid=env_id, rvid=rvid_r1_v1, action_id=action_id)
-    assert result.code == 200, result.result
+    await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid_r1_v1))
 
     # Assert initial state
     result = await client.get_resource_actions(tid=env_id)
     assert result.code == 200, result.result
-    assert len(result.result["data"]) == 1
-    resource_action = result.result["data"][0]
+    deploy_resource_actions = [r for r in result.result["data"] if r["action"] == const.ResourceAction.deploy.value]
+    assert len(deploy_resource_actions) == 1
+    resource_action = deploy_resource_actions[0]
     assert resource_action["environment"] == str(env_id)
     assert resource_action["version"] == model_version
     assert resource_action["resource_version_ids"] == [rvid_r1_v1]
@@ -1486,32 +1308,37 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
     assert result.code == 200, result.result
-    assert result.result["resource"]["status"] == const.ResourceState.deploying
-
-    result = await client.get_version(tid=env_id, id=1)
-    assert result.code == 200, result.result
-    assert not result.result["model"]["deployed"]
 
     caplog.clear()
     with caplog.at_level(logging.DEBUG):
         # Mark deployment as done
         now = datetime.now().astimezone()
-        if endpoint_to_use == "resource_deploy_done":
-            result = await agent._client.resource_deploy_done(
-                tid=env_id,
-                rvid=rvid_r1_v1,
-                action_id=action_id,
-                status=const.ResourceState.deployed,
-                messages=[
-                    LogLine(level=const.LogLevel.DEBUG, msg="message", kwargs={"keyword": 123, "none": None}, timestamp=now),
-                    LogLine(level=const.LogLevel.INFO, msg="test", kwargs={}, timestamp=now),
-                ],
-                changes={"attr1": AttributeStateChange(current=None, desired="test")},
-                change=const.Change.purged,
+        messages = [
+            data.LogLine.log(level=const.LogLevel.DEBUG, msg="message", timestamp=now, keyword=123, none=None),
+            data.LogLine.log(level=const.LogLevel.INFO, msg="test", timestamp=now),
+        ]
+        if method_to_use == "send_deploy_done":
+            await update_manager.send_deploy_done(
+                attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes_r1),
+                result=executor.DeployReport(
+                    rvid=rvid_r1_v1,
+                    action_id=action_id,
+                    resource_state=const.HandlerResourceState.deployed,
+                    messages=messages,
+                    changes={"attr1": AttributeStateChange(current=None, desired="test")},
+                    change=const.Change.purged,
+                ),
+                state=state.ResourceState(
+                    compliance=state.Compliance.COMPLIANT,
+                    last_deploy_result=state.DeployResult.DEPLOYED,
+                    blocked=state.Blocked.NOT_BLOCKED,
+                    last_deployed=now,
+                ),
+                started=now,
+                finished=now,
             )
-            assert result.code == 200, result.result
         else:
-            result = await agent._client.resource_action_update(
+            result = await null_agent._client.resource_action_update(
                 tid=env_id,
                 resource_ids=[rvid_r1_v1],
                 action_id=action_id,
@@ -1519,24 +1346,18 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
                 started=None,
                 finished=now,
                 status=const.ResourceState.deployed,
-                messages=[
-                    data.LogLine.log(level=const.LogLevel.DEBUG, msg="message", timestamp=now, keyword=123, none=None),
-                    data.LogLine.log(level=const.LogLevel.INFO, msg="test", timestamp=now),
-                ],
+                messages=messages,
                 changes={rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test")}},
                 change=const.Change.purged,
                 send_events=True,
             )
             assert result.code == 200, result.result
 
-    # Assert effect of resource_deploy_done call
-    assert f"{rvid_r1_v1}: message" in caplog.messages
-    assert f"{rvid_r1_v1}: test" in caplog.messages
-
     result = await client.get_resource_actions(tid=env_id)
     assert result.code == 200, result.result
-    assert len(result.result["data"]) == 1
-    resource_action = result.result["data"][0]
+    deploy_resource_actions = [r for r in result.result["data"] if r["action"] == const.ResourceAction.deploy.value]
+    assert len(deploy_resource_actions) == 1
+    resource_action = deploy_resource_actions[0]
     assert resource_action["environment"] == str(env_id)
     assert resource_action["version"] == model_version
     assert resource_action["resource_version_ids"] == [rvid_r1_v1]
@@ -1572,37 +1393,44 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert resource_action["changes"] == {rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test").dict()}}
     assert resource_action["change"] == const.Change.purged.value
 
-    result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
+    result = await client.resource_details(tid=env_id, rid=rid_r1)
     assert result.code == 200, result.result
-    assert result.result["resource"]["status"] == const.ResourceState.deployed
+    assert result.result["data"]["status"] == const.ResourceState.deployed
 
     result = await client.get_version(tid=env_id, id=1)
     assert result.code == 200, result.result
-    assert result.result["model"]["deployed"]
 
     # parameter was deleted due to purge operation
     result = await client.list_params(tid=env_id)
     assert result.code == 200
     assert len(result.result["parameters"]) == 0
 
-    # A new resource_deploy_done call for the same action_id should result in a Conflict
-    result = await agent._client.resource_deploy_done(
-        tid=env_id,
-        rvid=rvid_r1_v1,
-        action_id=action_id,
-        status=const.ResourceState.deployed,
-        messages=[],
-        changes={"attr1": AttributeStateChange(current="test", desired="test2")},
-        change=const.Change.created,
-    )
-    assert result.code == 409, result.result
+    # A new send_deploy_done call for the same action_id should result in a ValueError
+    with pytest.raises(ValueError):
+        await update_manager.send_deploy_done(
+            attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes_r1),
+            result=executor.DeployReport(
+                rvid=rvid_r1_v1,
+                action_id=action_id,
+                resource_state=const.HandlerResourceState.deployed,
+                messages=[],
+                changes={"attr1": AttributeStateChange(current="test", desired="test2")},
+                change=const.Change.created,
+            ),
+            state=state.ResourceState(
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
+                last_deployed=datetime.now().astimezone(),
+            ),
+            started=datetime.now().astimezone(),
+            finished=datetime.now().astimezone(),
+        )
 
 
-async def test_resource_deploy_done_invalid_state(server, client, environment, agent, caplog):
-    """
-    Ensure proper error handling when a transient state is passed to the `resource_deploy_done` endpoint.
-    """
+async def test_send_deploy_done_error_handling(server, client, environment, agent):
     env_id = uuid.UUID(environment)
+    update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
 
     model_version = 1
     cm = data.ConfigurationModel(
@@ -1615,58 +1443,30 @@ async def test_resource_deploy_done_invalid_state(server, client, environment, a
     )
     await cm.insert()
 
-    rvid_r1_v1 = f"std::testing::NullResource[agent1,name=file1],v={model_version}"
-    await data.Resource.new(
-        environment=env_id,
-        status=const.ResourceState.available,
-        resource_version_id=rvid_r1_v1,
-        attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
-
-    action_id = uuid.uuid4()
-    result = await agent._client.resource_deploy_start(tid=env_id, rvid=rvid_r1_v1, action_id=action_id)
-    assert result.code == 200, result.result
-
-    result = await agent._client.resource_deploy_done(
-        tid=env_id,
-        rvid=rvid_r1_v1,
-        action_id=action_id,
-        status=const.ResourceState.deploying,
-        messages=[],
-        changes={"attr1": AttributeStateChange(current=None, desired="test")},
-        change=const.Change.created,
-    )
-    assert result.code == 400, result.result
-    assert "No transient state can be used to mark a deployment as done" in result.result["message"]
-
-
-async def test_resource_deploy_done_error_handling(server, client, environment, agent):
-    env_id = uuid.UUID(environment)
-
-    model_version = 1
-    cm = data.ConfigurationModel(
-        environment=env_id,
-        version=model_version,
-        date=datetime.now().astimezone(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm.insert()
-
-    rvid_r1_v1 = f"std::testing::NullResource[agent1,name=file1],v={model_version}"
+    rvid_r1_v1 = ResourceVersionIdStr(f"std::testing::NullResource[agent1,name=file1],v={model_version}")
 
     # Resource doesn't exist
-    result = await agent._client.resource_deploy_done(
-        tid=env_id,
-        rvid=rvid_r1_v1,
-        action_id=uuid.uuid4(),
-        status=const.ResourceState.deployed,
-        messages=[],
-        changes={},
-        change=const.Change.nochange,
-    )
-    assert result.code == 404, result.result
+    with pytest.raises(ValueError) as exec_info:
+        await update_manager.send_deploy_done(
+            attribute_hash="",
+            result=executor.DeployReport(
+                rvid=rvid_r1_v1,
+                action_id=uuid.uuid4(),
+                resource_state=const.HandlerResourceState.deployed,
+                messages=[],
+                changes={},
+                change=const.Change.nochange,
+            ),
+            state=state.ResourceState(
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
+                last_deployed=datetime.now().astimezone(),
+            ),
+            started=datetime.now().astimezone(),
+            finished=datetime.now().astimezone(),
+        )
+    assert "The resource with the given id does not exist in the given environment" in str(exec_info.value)
 
     # Create resource
     await data.Resource.new(
@@ -1677,23 +1477,34 @@ async def test_resource_deploy_done_error_handling(server, client, environment, 
     ).insert()
 
     # Resource action doesn't exist
-    result = await agent._client.resource_deploy_done(
-        tid=env_id,
-        rvid=rvid_r1_v1,
-        action_id=uuid.uuid4(),
-        status=const.ResourceState.deployed,
-        messages=[],
-        changes={},
-        change=const.Change.nochange,
-    )
-    assert result.code == 404, result.result
+    with pytest.raises(ValueError) as exec_info:
+        await update_manager.send_deploy_done(
+            attribute_hash="",
+            result=executor.DeployReport(
+                rvid=rvid_r1_v1,
+                action_id=uuid.uuid4(),
+                resource_state=const.HandlerResourceState.deployed,
+                messages=[],
+                changes={},
+                change=const.Change.nochange,
+            ),
+            state=state.ResourceState(
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
+                last_deployed=datetime.now().astimezone(),
+            ),
+            started=datetime.now().astimezone(),
+            finished=datetime.now().astimezone(),
+        )
+    assert "No resource action exists for action_id" in str(exec_info.value)
 
 
 async def test_start_location_no_redirect(server):
     """
     Ensure that there is no redirection for the "start" location. (issue #3497)
     """
-    port = opt.get_bind_port()
+    port = opt.server_bind_port.get()
     base_url = f"http://localhost:{port}/"
     http_client = AsyncHTTPClient()
     request = HTTPRequest(
@@ -1708,7 +1519,7 @@ async def test_redirect_dashboard_to_console(server, path):
     """
     Ensure that there is a redirection from the dashboard to the webconsole
     """
-    port = opt.get_bind_port()
+    port = opt.server_bind_port.get()
     base_url = f"http://localhost:{port}/dashboard{path}"
     result_url = f"http://localhost:{port}/console{path}"
     http_client = AsyncHTTPClient()
@@ -1724,10 +1535,10 @@ async def test_redirect_dashboard_to_console(server, path):
 async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     """
     This test is testing the functionality of cleaning up old agents in the database.
-    The test creates 2 environments and adds agents with various properties (some used in a version,
-    some in the agent map, and some with the primary ID set), and then tests that
-    the cleanup function correctly removes only the agents that meet the criteria for deletion.
-    Also verifies that only agents in envs that are not halted are cleaned up
+    The test creates 2 environments and adds agents with various properties (some used in a version
+    and some with the primary ID set), and then tests that the cleanup function correctly removes
+    only the agents that meet the criteria for deletion. Also verifies that only agents in envs that
+    are not halted are cleaned up
     """
 
     project = data.Project(name="test")
@@ -1737,16 +1548,6 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     await env1.insert()
     env2 = data.Environment(name="env2", project=project.id)
     await env2.insert()
-
-    await env1.set(data.AUTOSTART_AGENT_MAP, {"agent3": "", "internal": ""})
-    await env2.set(data.AUTOSTART_AGENT_MAP, {"agent1": "", "internal": ""})
-
-    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
-    # that it is an issue with the agent map
-    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
-    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
-    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
-    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
 
     if env1_halted:
         result = await client.halt_environment(env1.id)
@@ -1788,13 +1589,6 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     ).insert()
     # should not get purged as the id_primary is set -> not down
     await data.Agent(environment=env1.id, name="agent2", paused=False, id_primary=id_primary).insert()
-    # should not get purged as it is in the agent map
-    await data.Agent(
-        environment=env1.id,
-        name="agent3",
-        paused=False,
-        id_primary=None,
-    ).insert()
     # should not get purged as it is used in a version of the ConfigurationModel
     await data.Agent(
         environment=env1.id,
@@ -1809,7 +1603,7 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
         paused=False,
         id_primary=None,
     ).insert()
-    # agent with "agent1" as name but being present in the agent_map and in another env will not get purged:
+    # agent with "agent1" as name but in another env will get purged:
     await data.Agent(
         environment=env2.id,
         name="agent1",
@@ -1818,39 +1612,23 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     ).insert()
 
     agents_before_purge = await data.Agent.get_list()
-    assert len(agents_before_purge) == 6
-
-    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
-    # that it is an issue with the agent map
-    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
-    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
-    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
-    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
+    assert len(agents_before_purge) == 5
 
     await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
 
-    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
-    # that it is an issue with the agent map
-    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
-    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
-    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
-    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
-
     agents_after_purge = [(agent.environment, agent.name) for agent in await data.Agent.get_list()]
-    number_agents_env1_after_purge = 4 if env1_halted else 3
-    number_agents_env2_after_purge = 2 if env2_halted else 1
+    number_agents_env1_after_purge = 3 if env1_halted else 2
+    number_agents_env2_after_purge = 2 if env2_halted else 0
     assert len(agents_after_purge) == number_agents_env1_after_purge + number_agents_env2_after_purge
     if not (env1_halted or env2_halted):
         expected_agents_after_purge = [
             (env1.id, "agent2"),
-            (env1.id, "agent3"),
             (env1.id, "agent4"),
-            (env2.id, "agent1"),
         ]
         assert sorted(agents_after_purge) == sorted(expected_agents_after_purge)
 
 
-async def test_serialization_attributes_of_resource_to_api(client, server, environment, clienthelper) -> None:
+async def test_serialization_attributes_of_resource_to_api(client, server, environment, clienthelper, null_agent) -> None:
     """
     Due to a bug, the version of a resource was always included in the attribute dictionary.
     This issue has been patched in the database, but at the API boundary we still serve the version
@@ -2099,7 +1877,7 @@ async def test_set_param_v2(server, client, environment):
     assert len(parameters) == 2
 
 
-async def test_delete_active_version(client, clienthelper, server, environment):
+async def test_delete_active_version(client, clienthelper, server, environment, null_agent):
     """
     Test that the active version cannot be deleted
     """

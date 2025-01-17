@@ -84,7 +84,7 @@ async def test_user_setup(tmpdir, server_pre_start, postgres_db, database_name, 
     # to be shut down afterwards, otherwise the call to get_connection_pool() will result in an exception saying
     # that the connection pool is already set in the database layer.
     await ibl.start()
-    await ibl.stop(timeout=15)
+    await ibl.stop(timeout=20)
 
     setup_config(tmpdir, postgres_db, database_name)
     cli = CLI_user_setup()
@@ -117,7 +117,7 @@ async def test_user_setup_empty_username(
     # to be shut down afterwards, otherwise the call to get_connection_pool() will result in an exception saying
     # that the connection pool is already set in the database layer.
     await ibl.start()
-    await ibl.stop(timeout=15)
+    await ibl.stop(timeout=20)
 
     setup_config(tmpdir, postgres_db, database_name)
     cli = CLI_user_setup()

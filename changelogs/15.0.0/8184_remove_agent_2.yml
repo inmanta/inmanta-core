@@ -1,0 +1,4 @@
+description: Fix pytest-inmanta-extensions
+change-type: patch
+destination-branches: [master]
+

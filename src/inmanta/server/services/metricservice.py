@@ -18,7 +18,7 @@
 
 import logging
 from time import perf_counter, time
-from typing import Optional
+from typing import Mapping, Optional
 
 from pyformance import gauge
 from pyformance.meters import Gauge
@@ -34,9 +34,16 @@ LOGGER = logging.getLogger(__name__)
 class MetricsService(protocol.ServerSlice):
     """Slice managing metrics collector"""
 
-    def __init__(self) -> None:
+    def __init__(self, extra_tags: Mapping[str, str] | None = None) -> None:
+        """
+        extra_tags defaults to {"component": "server"}
+        """
         super().__init__(SLICE_METRICS)
         self._influx_db_reporter: Optional[InfluxReporter] = None
+        if extra_tags is None:
+            self._extra_tags = {"component": "server"}
+        else:
+            self._extra_tags = dict(extra_tags)
 
     async def start(self) -> None:
         self.start_auto_benchmark()
@@ -53,6 +60,7 @@ class MetricsService(protocol.ServerSlice):
             self._influx_db_reporter = None
 
     def start_metric_reporters(self) -> None:
+        tags = dict(**self._extra_tags, **opt.influxdb_tags.get())
         if opt.influxdb_host.get():
             self._influx_db_reporter = InfluxReporter(
                 server=opt.influxdb_host.get(),
@@ -62,7 +70,7 @@ class MetricsService(protocol.ServerSlice):
                 password=opt.influxdb_password.get(),
                 reporting_interval=opt.influxdb_interval.get(),
                 autocreate_database=True,
-                tags=opt.influxdb_tags.get(),
+                tags=tags,
             )
             self._influx_db_reporter.start()
 

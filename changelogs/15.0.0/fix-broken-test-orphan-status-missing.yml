@@ -1,0 +1,4 @@
+---
+description: Fix test that broke due to missing CompianceStatus ORPHAN.
+change-type: patch
+destination-branches: [master]

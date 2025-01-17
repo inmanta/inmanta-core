@@ -11,9 +11,9 @@ Adding new finalizers
 A finalizer is a python function that is registered by using the :func:`~inmanta.compiler.finalizer` function as decorator
 or as callback.
 This function should be a function that doesn't take arguments and that doesn't return anything.
-Functions registered this way will be call when the compiler finishes (with no guarantee on the execution order).
+Functions registered this way will be called when the compiler finishes (with no guarantee on the execution order).
 
-an example of a finalizer that will close an open connection using the decorator option requires the following code:
+An example of a finalizer that will close an open connection using the decorator option requires the following code:
 
 .. code-block:: python
     :linenos:
@@ -33,7 +33,7 @@ an example of a finalizer that will close an open connection using the decorator
        if connection:
           connection.close()
 
-the same example but using the callback option would look like this:
+The same example but using the callback option would look like this:
 
 .. code-block:: python
     :linenos:

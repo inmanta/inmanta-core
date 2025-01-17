@@ -1,0 +1,6 @@
+---
+description: Add logging configuration for containers to misc
+issue-nr: 527
+issue-repo: inmanta-service-orchestrator
+change-type: patch
+destination-branches: [master]

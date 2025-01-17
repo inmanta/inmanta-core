@@ -435,6 +435,7 @@ async def test_create_with_id(client):
     assert result.code == 500
 
 
+@pytest.mark.parametrize("no_agent", [True])
 async def test_environment_listener(server, client_v2, caplog):
     class EnvironmentListenerCounter(inmanta.server.services.environmentlistener.EnvironmentListener):
         def __init__(self):

@@ -23,15 +23,17 @@ import sys
 from collections.abc import Generator
 from contextlib import contextmanager
 from functools import partial
+from io import StringIO
 from typing import Any
 
 import pytest
 import yaml
 
+import inmanta.logging
 import inmanta.server
 import inmanta_ext
-from inmanta import data
 from inmanta.config import feature_file_config
+from inmanta.logging import Options
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -251,7 +253,7 @@ async def test_custom_feature_manager(
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
         config.Config.set("database", "password", pg_password)
-        config.Config.set("database", "connection_timeout", str(1))
+        config.Config.set("database", "db_connection_timeout", str(1))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
         config.Config.set("agent_rest_transport", "port", port)
@@ -275,9 +277,16 @@ async def test_custom_feature_manager(
 
 async def test_register_setting() -> None:
     """
-    Test registering a new setting.
+    Test extending log config
     """
-    with splice_extension_in("test_load_env_setting"):
-        ibl = InmantaBootloader(configure_logging=True)
-        ibl.load_slices(load_all_extensions=True, only_register_environment_settings=True)
-        assert "test" in data.Environment._settings
+    io = StringIO()
+    log_instance = inmanta.logging.InmantaLoggerConfig.get_instance(stream=io)
+    options = Options(verbose=3)
+    log_instance.apply_options(options, "server", {})
+
+    config.server_enabled_extensions.set("testlogextender")
+    with splice_extension_in("test_module_path"):
+        ibl = InmantaBootloader()
+        ibl.start_loggers_for_extensions()
+        logging.info("This is a log line")
+    assert "TEST TEST TEST" in io.getvalue()

@@ -2275,7 +2275,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         # get imports: don't use a set because this collection is used to drive control flow and we want to keep control flow as
         # deterministic as possible
         imports: list[DefineImport] = [x for x in self.get_imports()]
-
         # All imports of the entire project
         all_imports: set[DefineImport] = set(imports)
 
@@ -2762,8 +2761,8 @@ class ModuleGeneration(Enum):
     The generation of a module. This might affect the on-disk structure of a module as well as how it's distributed.
     """
 
-    V1: int = 1
-    V2: int = 2
+    V1 = 1
+    V2 = 2
 
 
 @stable_api

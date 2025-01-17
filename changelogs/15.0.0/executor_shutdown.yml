@@ -1,0 +1,3 @@
+description: Prevent exectors from being created when the executor manager is down
+change-type: patch
+destination-branches: [master]

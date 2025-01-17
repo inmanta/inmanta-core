@@ -1,0 +1,3 @@
+description: Fix utils import on the test suite
+change-type: patch
+destination-branches: [master]

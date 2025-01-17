@@ -206,7 +206,6 @@ def test_unknown_in_id_requires(snippetcompiler, caplog):
         """,
         autostd=True,
     )
-    config.Config.set("unknown_handler", "default", "prune-resource")
     _version, json_value = snippetcompiler.do_export()
 
     assert len(json_value) == 2
@@ -244,7 +243,6 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
         """,
         autostd=True,
     )
-    config.Config.set("unknown_handler", "default", "prune-resource")
     _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 3
@@ -826,3 +824,23 @@ def test_attribute_value_of_id_has_str_type(snippetcompiler):
     id_attribute_value = resources[0].id.attribute_value
     assert isinstance(id_attribute_value, str)
     assert id_attribute_value == "123"
+
+
+async def test_export_duplicate(resource_container, snippetcompiler):
+    """
+    The exported should provide a compilation error when a resource is defined twice in a model
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        import test
+
+        test::Resource(key="test", value="foo")
+        test::Resource(key="test", value="bar")
+    """,
+        autostd=True,
+    )
+
+    with pytest.raises(CompilerException) as exc:
+        snippetcompiler.do_export()
+
+    assert "exists more than once in the configuration model" in str(exc.value)

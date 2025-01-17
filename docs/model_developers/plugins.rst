@@ -8,7 +8,7 @@ Adding new plugins
 ========================
 
 Plugins provide :ref:`functions<lang-plugins>` that can be called from the :term:`DSL`. This is the
-primary mechanism to interface Python code with the orchestration model at compile time. For Example,
+primary mechanism to interface Python code with the orchestration model at compile time. For example,
 this mechanism is also used for std::template and std::file. In addition to this, Inmanta also registers all
 plugins with the template engine (Jinja2) to use as filters.
 
@@ -122,7 +122,7 @@ decorator. Using this decorator will log a warning message when the function is 
 optional argument ``replaced_by`` which can be used to potentially improve the warning message by telling which other
 plugin should be used in the place of the current one.
 
-for example if the plugin below is called:
+For example if the plugin below is called:
 
 .. code-block:: python
     :linenos:

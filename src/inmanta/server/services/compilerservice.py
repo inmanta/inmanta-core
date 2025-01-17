@@ -18,10 +18,12 @@
 
 import abc
 import asyncio
+import contextlib
 import datetime
 import json
 import logging
 import os
+import platform
 import re
 import subprocess
 import traceback
@@ -42,9 +44,10 @@ from asyncpg import Connection
 import inmanta.data.model as model
 import inmanta.server.services.environmentlistener
 from inmanta import config, const, data, protocol, server, tracing
+from inmanta.config import Config
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView
-from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvCreationFailedError, VirtualEnv
+from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvActivationFailedError, VirtualEnv
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -226,6 +229,73 @@ class CompileRun:
                 # The process is still running, kill it
                 sub_process.kill()
 
+    async def ensure_compiler_venv(self) -> None:
+        """ "
+        Ensure we have a compiler venv in the project
+
+        Expected to be in a running stage
+
+        It is built as
+        1. a `.env` symlink to
+        2. a `.env-py3.12` versioned directory
+        """
+        assert os.path.exists(self._project_dir)
+        project_dir = self._project_dir
+
+        # Eventual venv dir
+        venv_dir = os.path.join(project_dir, ".env")
+
+        # Versioned python dir
+        python_version = ".".join(platform.python_version_tuple()[0:2])
+        versioned_venv_dir = ".env-py" + python_version
+        versioned_venv_dir_full = os.path.join(project_dir, versioned_venv_dir)
+
+        async def ensure_venv() -> None:
+            """
+            Ensures that a compatible venv exists at .venv-py<version>
+            """
+            if os.path.exists(versioned_venv_dir_full):
+                return
+            # migration from old .env
+            if os.path.exists(venv_dir) and not os.path.islink(venv_dir):
+                virtual_env = VirtualEnv(venv_dir)
+                if virtual_env.exists():
+                    with contextlib.suppress(VenvActivationFailedError):
+                        virtual_env.can_activate()  # raises exception
+                        # version matches, move it to the correct folder
+                        os.rename(venv_dir, versioned_venv_dir_full)
+                        await self._info(f"Moving existing venv from {venv_dir} to {versioned_venv_dir_full}")
+                        # All done
+                        return
+                # version doesn't match
+                os.rename(venv_dir, venv_dir + "_old")
+                await self._info(f"Discarding existing venv from {venv_dir} to {venv_dir}_old, Creating new")
+
+            # No there yet
+            await self._info(f"Creating new venv at {versioned_venv_dir_full}")
+            virtual_env = VirtualEnv(versioned_venv_dir_full)
+            virtual_env.init_env()
+
+        async def link() -> None:
+            """
+            Ensures that a link from .venv to .venv-py<version> exists
+            """
+            is_link: bool = os.path.islink(venv_dir)
+            with contextlib.suppress(FileNotFoundError):
+                if is_link and os.path.samefile(venv_dir, versioned_venv_dir_full):
+                    await self._info("Found existing venv")
+                    return
+            if os.path.exists(venv_dir):
+                if is_link:
+                    os.unlink(venv_dir)
+                else:
+                    os.rename(venv_dir, f"{venv_dir}_old")
+
+            os.symlink(versioned_venv_dir, venv_dir)
+
+        await ensure_venv()
+        await link()
+
     async def run(self, force_update: Optional[bool] = False) -> tuple[bool, Optional[model.CompileData]]:
         """
         Runs this compile run.
@@ -258,7 +328,7 @@ class CompileRun:
 
             if not os.path.exists(project_dir):
                 await self._info(f"Creating project directory for environment {environment_id} at {project_dir}")
-                os.mkdir(project_dir)
+                os.makedirs(project_dir)
 
             # Use a separate venv to compile the project to prevent that packages are installed in the
             # venv of the Inmanta server.
@@ -268,15 +338,11 @@ class CompileRun:
                 """
                 Ensure a venv is present at `venv_dir`.
                 """
-                virtual_env = VirtualEnv(venv_dir)
-                if virtual_env.exists():
-                    return None
-
-                await self._start_stage("Creating venv", command="")
+                await self._start_stage("Venv check", command="")
                 try:
-                    virtual_env.init_env()
-                except VenvCreationFailedError as e:
-                    await self._error(message=e.msg)
+                    await self.ensure_compiler_venv()
+                except Exception as e:
+                    await self._error(message=str(e))
                     return await self._end_stage(returncode=1)
                 else:
                     return await self._end_stage(returncode=0)
@@ -382,9 +448,19 @@ class CompileRun:
                     return False, None
 
             server_address = opt.server_address.get()
-            server_port = opt.get_bind_port()
-            cmd = [
-                "-vvv",
+            server_port = opt.server_bind_port.get()
+
+            app_cli_args = ["-vvv"]
+
+            if Config._min_c_config_file is not None:
+                app_cli_args.append("-c")
+                app_cli_args.append(Config._min_c_config_file)
+
+            if Config._config_dir is not None:
+                app_cli_args.append("--config-dir")
+                app_cli_args.append(Config._config_dir)
+
+            export_command = [
                 "export",
                 "-X",
                 "-e",
@@ -401,39 +477,39 @@ class CompileRun:
             ]
 
             if self.request.exporter_plugin:
-                cmd.append("--export-plugin")
-                cmd.append(self.request.exporter_plugin)
+                export_command.append("--export-plugin")
+                export_command.append(self.request.exporter_plugin)
 
             if self.request.partial:
-                cmd.append("--partial")
+                export_command.append("--partial")
 
             if self.request.removed_resource_sets is not None:
                 for resource_set in self.request.removed_resource_sets:
-                    cmd.append("--delete-resource-set")
-                    cmd.append(resource_set)
+                    export_command.append("--delete-resource-set")
+                    export_command.append(resource_set)
 
             if self.request.soft_delete:
-                cmd.append("--soft-delete")
+                export_command.append("--soft-delete")
 
             if not self.request.do_export:
                 f = NamedTemporaryFile()
-                cmd.append("-j")
-                cmd.append(f.name)
+                export_command.append("-j")
+                export_command.append(f.name)
 
             if config.Config.get("server", "auth", False):
                 token = encode_token(["compiler", "api"], str(environment_id))
-                cmd.append("--token")
-                cmd.append(token)
+                export_command.append("--token")
+                export_command.append(token)
 
             if opt.server_ssl_cert.get() is not None:
-                cmd.append("--ssl")
+                export_command.append("--ssl")
             else:
-                cmd.append("--no-ssl")
+                export_command.append("--no-ssl")
 
             ssl_ca_cert = opt.server_ssl_ca_cert.get()
             if ssl_ca_cert is not None:
-                cmd.append("--ssl-ca-cert")
-                cmd.append(ssl_ca_cert)
+                export_command.append("--ssl-ca-cert")
+                export_command.append(ssl_ca_cert)
 
             self.tail_stdout = ""
 
@@ -441,6 +517,8 @@ class CompileRun:
             assert self.request.used_environment_variables is not None
             env_vars_compile: dict[str, str] = os.environ.copy()
             env_vars_compile.update(self.request.used_environment_variables)
+
+            cmd = app_cli_args + export_command
 
             result: data.Report = await run_compile_stage_in_venv(
                 "Recompiling configuration model", cmd, cwd=project_dir, env=env_vars_compile
@@ -518,7 +596,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
     2. find all unhandled but complete jobs and run _notify_listeners on them
     """
 
-    _env_folder: str
+    _server_state_dir: str
     environment_service: "environmentservice.EnvironmentService"
 
     def __init__(self) -> None:
@@ -540,7 +618,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         self._queue_count_cache: int = 0
         self._queue_count_cache_lock = asyncio.locks.Lock()
 
-    async def get_status(self) -> dict[str, ArgumentTypes]:
+    async def get_status(self) -> Mapping[str, ArgumentTypes]:
         return {"task_queue": self._queue_count_cache, "listeners": len(self.async_listeners) + len(self.blocking_listeners)}
 
     def add_listener(self, listener: CompileStateListener) -> None:
@@ -558,8 +636,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
     async def prestart(self, server: server.protocol.Server) -> None:
         await super().prestart(server)
         state_dir: str = config.state_dir.get()
-        server_state_dir = ensure_directory_exist(state_dir, "server")
-        self._env_folder = ensure_directory_exist(server_state_dir, "environments")
+        self._server_state_dir = ensure_directory_exist(state_dir, "server")
 
     async def start(self) -> None:
         await super().start()
@@ -879,9 +956,9 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             return 200
         return 204
 
-    def _calculate_recompile_wait(
+    def _calculate_recompile_backoff_time(
         self,
-        wait_time: int,
+        wait_time: float,
         compile_requested: datetime.datetime,
         last_compile_completed: datetime.datetime,
         now: datetime.datetime,
@@ -895,31 +972,26 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
                 wait = max(0, wait_time - (now - last_compile_completed).total_seconds())
         return wait
 
-    async def _auto_recompile_wait(self, compile: data.Compile) -> None:
-        if config.Config.is_set("server", "auto-recompile-wait"):
-            wait_time = opt.server_autrecompile_wait.get()
-            LOGGER.warning(
-                "The server-auto-recompile-wait is enabled and set to %s seconds. "
-                "This option is deprecated in favor of the recompile_backoff environment setting.",
-                wait_time,
-            )
+    async def _recompile_backoff(self, compile: data.Compile) -> None:
+        """
+        If a recompile_backoff is set for the environment, this method waits until the backoff time has finished.
+        """
+        env = await data.Environment.get_by_id(compile.environment)
+        if env is None:
+            LOGGER.error("Unable to find environment %s in the database.", compile.environment)
+            return
+        wait_time: float = cast(float, await env.get(data.RECOMPILE_BACKOFF))
+        if wait_time:
+            LOGGER.info("The recompile_backoff environment setting is enabled and set to %s seconds.", wait_time)
         else:
-            env = await data.Environment.get_by_id(compile.environment)
-            if env is None:
-                LOGGER.error("Unable to find environment %s in the database.", compile.environment)
-                return
-            wait_time = await env.get(data.RECOMPILE_BACKOFF)
-            if wait_time:
-                LOGGER.info("The recompile_backoff environment setting is enabled and set to %s seconds.", wait_time)
-            else:
-                LOGGER.info("The recompile_backoff environment setting is disabled")
+            LOGGER.info("The recompile_backoff environment setting is disabled")
         last_run = await data.Compile.get_last_run(compile.environment)
         if not last_run:
             wait: float = 0
         else:
             assert last_run.completed is not None
             assert compile.requested is not None
-            wait = self._calculate_recompile_wait(
+            wait = self._calculate_recompile_backoff_time(
                 wait_time, compile.requested, last_run.completed, datetime.datetime.now().astimezone()
             )
         if wait > 0:
@@ -937,7 +1009,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         Runs a compile request. At completion, looks for similar compile requests based on _compile_merge_key and marks
         those as completed as well.
         """
-        await self._auto_recompile_wait(compile)
+        await self._recompile_backoff(compile)
 
         compile_merge_key: Hashable = CompilerService._compile_merge_key(compile)
         merge_candidates: list[data.Compile] = [
@@ -946,7 +1018,9 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             if not c.id == compile.id and CompilerService._compile_merge_key(c) == compile_merge_key
         ]
 
-        runner = self._get_compile_runner(compile, project_dir=os.path.join(self._env_folder, str(compile.environment)))
+        runner = self._get_compile_runner(
+            compile, project_dir=os.path.join(self._server_state_dir, str(compile.environment), "compiler")
+        )
 
         merged_env_vars = dict(compile.mergeable_environment_variables)
         for merge_candidate in merge_candidates:

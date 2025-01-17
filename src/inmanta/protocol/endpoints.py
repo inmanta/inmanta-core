@@ -207,7 +207,7 @@ class SessionEndpoint(Endpoint, CallTarget):
     async def on_reconnect(self) -> None:
         """
         Called when a connection becomes active. i.e. when a first heartbeat is received after startup or
-        a first hearbeat after an :py:`on_disconnect`
+        a first heartbeat after an :py:`on_disconnect`
         """
 
     async def on_disconnect(self) -> None:
@@ -248,9 +248,7 @@ class SessionEndpoint(Endpoint, CallTarget):
 
                             for method_call in method_calls:
                                 self.add_background_task(self.dispatch_method(transport, method_call))
-                    # Always wait a bit between calls
-                    # reduces chance of missed agent map updates: https://github.com/inmanta/inmanta-core/issues/7831
-                    # encourage call batching
+                    # Always wait a bit between calls. This encourage call batching.
                     await asyncio.sleep(self.dispatch_delay)
                 else:
                     LOGGER.warning(

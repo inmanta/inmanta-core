@@ -410,9 +410,9 @@ def test():
     await environment_manager.cleanup_inactive_pool_members()
     logger.debug("cleanup_virtual_environments ended")
 
-    venvs = [str(e) for e in venv_dir.iterdir()]
+    venvs = {str(e) for e in venv_dir.iterdir()}
     assert len(venvs) == 2, "Only two Virtual Environment should exist!"  # Venv one is gone
-    assert [executor_2.process.executor_virtual_env.env_path, executor_3.process.executor_virtual_env.env_path] == venvs
+    assert {executor_2.process.executor_virtual_env.env_path, executor_3.process.executor_virtual_env.env_path} == venvs
 
     # Let's stop the other agent and pretend that the venv is broken
     executors = await executor_manager.stop_for_agent("agent2")

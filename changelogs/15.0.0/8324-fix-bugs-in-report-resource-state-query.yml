@@ -1,0 +1,4 @@
+description: Fix bugs and inefficiencies in report resource state query
+issue-nr: 8324
+change-type: patch
+destination-branches: [master]

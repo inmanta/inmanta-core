@@ -182,12 +182,6 @@ def t_COMMENT(t: lex.LexToken) -> None:  # noqa: N802
     t.lexer.linestart = t.lexer.lexpos
 
 
-def t_JCOMMENT(t: lex.LexToken) -> None:  # noqa: N802
-    r"\//.*?\n"
-    t.lexer.lineno += 1
-    t.lexer.linestart = t.lexer.lexpos
-
-
 def t_MLS(t: lex.LexToken) -> lex.LexToken:
     r'"{3,5}([\s\S]*?)"{3,5}'
 
