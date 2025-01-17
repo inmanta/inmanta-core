@@ -262,6 +262,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     # Unions and optionals
     if typing_inspect.is_union_type(python_type):
         # Optional type
+        bases: Sequence[inmanta_type.Type]
         if typing_inspect.is_optional_type(python_type):
             other_types = [tt for tt in typing.get_args(python_type) if not typing_inspect.is_optional_type(tt)]
             if len(other_types) == 0:
@@ -269,10 +270,10 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
                 return Null()
             if len(other_types) == 1:
                 return inmanta_type.NullableType(to_dsl_type(other_types[0]))
-            bases: Sequence[inmanta_type.Type] = [to_dsl_type(arg) for arg in other_types]
+            bases = [to_dsl_type(arg) for arg in other_types]
             return inmanta_type.NullableType(inmanta_type.Union(bases))
         else:
-            bases: Sequence[inmanta_type.Type] = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
+            bases = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
             return inmanta_type.Union(bases)
 
     # Lists and dicts
