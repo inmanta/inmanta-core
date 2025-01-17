@@ -468,6 +468,7 @@ end
     )
     compiler.do_compile()
 
+    # Parameter to plugin has incompatible type
     for plugin_name, plugin_value, error_message in [
         ("union_single_type", 123, "Invalid value '123', expected string"),
         ("union_multiple_types", "[1, 2, 3]", "Invalid value '[1, 2, 3]', expected Union[int,string]"),
@@ -486,6 +487,7 @@ end
             compiler.do_compile()
         assert error_message in str(exc_info.value)
 
+    # Return value of plugin has incompatible type
     for plugin_name, plugin_value, error_message in [
         ("union_return_single_type", 123, "Invalid value '123', expected string"),
         ("union_return_multiple_types", "[1, 2, 3]", "Invalid value '[1, 2, 3]', expected Union[string,int]"),
