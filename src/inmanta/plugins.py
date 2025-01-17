@@ -526,13 +526,13 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         return_type = self.return_type.resolve_type(self, self.resolver)
 
-        signature_fmt_str = 'Inmanta types inferred for plugin {full_name}({args_types}) -> "{return_type}"'
+        signature_fmt_str = '{full_name}({args_types}) -> "{return_type}"'
         signature = signature_fmt_str.format(
             full_name=self.get_full_name(),
             args_types=", ".join(f'{k}: "{v}"' for k, v in arg_name_to_type_map.items()),
             return_type=return_type,
         )
-        LOGGER.debug(signature)
+        LOGGER.debug("Inmanta types inferred for plugin %s", signature)
 
     def _load_signature(self, function: Callable[..., object]) -> None:
         """
