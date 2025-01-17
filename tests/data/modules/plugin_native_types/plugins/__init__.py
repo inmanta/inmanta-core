@@ -32,3 +32,13 @@ def many_arguments(il: list[str], idx: int) -> str:
 @plugin
 def as_none(value: str) -> None:
     pass
+
+
+@plugin
+def var_args_test(value: str, *other: list[str]) -> None:
+    pass
+
+
+@plugin
+def var_kwargs_test(value: str, *other: list[str], **more: dict[str, int]) -> None:
+    pass

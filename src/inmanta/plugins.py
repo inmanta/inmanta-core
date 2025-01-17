@@ -19,6 +19,7 @@
 import asyncio
 import collections.abc
 import inspect
+import logging
 import numbers
 import os
 import subprocess
@@ -50,6 +51,9 @@ from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
+
+LOGGER = logging.getLogger(__name__)
+
 
 T = TypeVar("T")
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., object])
@@ -506,15 +510,29 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     def normalize(self) -> None:
         self.resolver = self.namespace
 
+        # Maps argument names to their inferred type (i.e. Inmanta DSL type)
+        arg_name_to_type_map: dict[str, str] = {}
+
         # Resolve all the types that we expect to receive as input of our plugin
         for arg in self.all_args.values():
-            arg.resolve_type(self, self.resolver)
+            at = arg.resolve_type(self, self.resolver)
+            arg_name_to_type_map[arg.arg_name] = at.type_string_internal()
         if self.var_args is not None:
-            self.var_args.resolve_type(self, self.resolver)
+            var_args_types = self.var_args.resolve_type(self, self.resolver)
+            arg_name_to_type_map[f"*{self.var_args.arg_name}"] = var_args_types.type_string_internal()
         if self.var_kwargs is not None:
-            self.var_kwargs.resolve_type(self, self.resolver)
+            var_kwargs_types = self.var_kwargs.resolve_type(self, self.resolver)
+            arg_name_to_type_map[f"**{self.var_kwargs.arg_name}"] = var_kwargs_types.type_string_internal()
 
-        self.return_type.resolve_type(self, self.resolver)
+        return_type = self.return_type.resolve_type(self, self.resolver)
+
+        signature_fmt_str = 'Inmanta types inferred for plugin {full_name}({args_types}) -> "{return_type}"'
+        signature = signature_fmt_str.format(
+            full_name=self.get_full_name(),
+            args_types=", ".join(f'{k}: "{v}"' for k, v in arg_name_to_type_map.items()),
+            return_type=return_type,
+        )
+        LOGGER.debug(signature)
 
     def _load_signature(self, function: Callable[..., object]) -> None:
         """
@@ -615,7 +633,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
     def get_signature(self) -> str:
         """
-        Generate the signature of this plugin.  The signature is a string representing the the function
+        Generate the signature of this plugin.  The signature is a string representing the function
         as it can be called as a plugin in the model.
         """
         # Start the list with all positional arguments

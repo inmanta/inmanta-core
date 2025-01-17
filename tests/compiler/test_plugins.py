@@ -418,23 +418,30 @@ plugin_context_and_defaults::func()
     compiler.do_compile()
 
 
-def test_native_types(snippetcompiler: "SnippetCompilationTest") -> None:
+def test_native_types(snippetcompiler: "SnippetCompilationTest", caplog) -> None:
     """
     test the use of python types
     """
-    snippetcompiler.setup_for_snippet(
-        """
+    with caplog.at_level(logging.DEBUG):
+
+        snippetcompiler.setup_for_snippet(
+            """
 import plugin_native_types
-
-a = "b"
-a = plugin_native_types::get_from_dict({"a":"b"}, "a")
-
-none = null
-none = plugin_native_types::get_from_dict({"a":"b"}, "B")
-
-a = plugin_native_types::many_arguments(["a","c","b"], 1)
-
-none = plugin_native_types::as_none("a")
         """
-    )
-    compiler.do_compile()
+        )
+        compiler.do_compile()
+
+        expected_signatures = [
+            'get_from_dict(value: "dict[string]", key: "string") -> "string?"',
+            'many_arguments(il: "string[]", idx: "int") -> "string"',
+            'as_none(value: "string") -> "null"',
+            'var_args_test(value: "string", *other: "string[]") -> "null"',
+            'var_kwargs_test(value: "string", *other: "string[]", **more: "dict[int]") -> "null"',
+        ]
+        for plugin_signature in expected_signatures:
+            log_contains(
+                caplog=caplog,
+                loggerpart="inmanta.plugins",
+                level=logging.DEBUG,
+                msg=f"Inmanta types inferred for plugin plugin_native_types::{plugin_signature}",
+            )
