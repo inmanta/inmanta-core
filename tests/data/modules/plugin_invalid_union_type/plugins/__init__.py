@@ -15,8 +15,10 @@
 
     Contact: code@inmanta.com
 """
+
 from typing import Union
 from inmanta.plugins import plugin
+
 
 @plugin
 def invalid_plugin(value: Union) -> None:

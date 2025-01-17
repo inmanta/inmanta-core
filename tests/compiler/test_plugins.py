@@ -26,7 +26,14 @@ import pytest
 import inmanta.ast.statements.define
 import inmanta.compiler as compiler
 import inmanta.plugins
-from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException, WrappingRuntimeException, TypingException
+from inmanta.ast import (
+    CompilerException,
+    ExplicitPluginException,
+    Namespace,
+    RuntimeException,
+    TypingException,
+    WrappingRuntimeException,
+)
 from utils import log_contains
 
 if typing.TYPE_CHECKING:
@@ -498,7 +505,7 @@ end
         assert error_message in str(exc_info.value.get_causes()[0])
 
     snippetcompiler.setup_for_snippet(
-        f"""
+        """
         import plugin_invalid_union_type
         """
     )

@@ -380,9 +380,7 @@ class PluginValue:
         if not isinstance(self.type_expression, str):
             if typing_inspect.is_union_type(self.type_expression) and not typing.get_args(self.type_expression):
                 # If typing.Union is not subscripted, isinstance(self.type_expression, type) evaluates to False.
-                raise TypingException(
-                    None, f"Union type must be subscripted, got {self.type_expression}"
-                )
+                raise TypingException(None, f"Union type must be subscripted, got {self.type_expression}")
             if isinstance(self.type_expression, type) or typing.get_origin(self.type_expression) is not None:
                 self._resolved_type = to_dsl_type(self.type_expression)
             else:

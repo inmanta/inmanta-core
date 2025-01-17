@@ -17,13 +17,12 @@
 """
 
 import collections.abc
-from typing import Any, Mapping, Sequence, Union, Optional
+from typing import Any, Mapping, Optional, Sequence, Union
 
 import pytest
 
 import inmanta.ast.type as inmanta_type
 from inmanta.ast import RuntimeException
-from inmanta.logging import Options
 from inmanta.plugins import Null, to_dsl_type
 
 
@@ -47,18 +46,18 @@ def test_conversion():
     # Union types
     assert inmanta_type.Integer() == to_dsl_type(Union[int])
     assert inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()]) == to_dsl_type(Union[int, str])
-    assert inmanta_type.NullableType(
-        inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])
-    ) == to_dsl_type(Union[None, int, str])
-    assert inmanta_type.NullableType(
-        inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])
-    ) == to_dsl_type(Optional[Union[int, str]])
-    assert inmanta_type.NullableType(
-        inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])
-    ) == to_dsl_type(Union[int, str] | None)
-    assert inmanta_type.NullableType(
-        inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])
-    ) == to_dsl_type(None | Union[int, str])
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+        Union[None, int, str]
+    )
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+        Optional[Union[int, str]]
+    )
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+        Union[int, str] | None
+    )
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+        None | Union[int, str]
+    )
 
     assert Null() == to_dsl_type(Union[None])
 
