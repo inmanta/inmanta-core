@@ -1,0 +1,4 @@
+description: Fixed dump tool
+change-type: patch
+destination-branches:
+  - master

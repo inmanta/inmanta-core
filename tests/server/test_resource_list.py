@@ -35,11 +35,11 @@ import inmanta.util
 import util.performance
 import utils
 from inmanta import const, data, resources, util
-from inmanta.agent.executor import DeployResult
+from inmanta.agent.executor import DeployReport
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource
 from inmanta.deploy import persistence, state
-from inmanta.deploy.state import DeploymentResult
+from inmanta.deploy.state import DeployResult
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
@@ -798,19 +798,19 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
             else:
                 if "sub=2]" in rid:
                     status = const.HandlerResourceState.failed
-                    compliance_status = state.ComplianceStatus.NON_COMPLIANT
-                    deployment_result = DeploymentResult.FAILED
+                    compliance_status = state.Compliance.NON_COMPLIANT
+                    deployment_result = DeployResult.FAILED
                 elif "sub=3]" in rid:
                     status = const.HandlerResourceState.skipped
-                    compliance_status = state.ComplianceStatus.NON_COMPLIANT
-                    deployment_result = DeploymentResult.SKIPPED
+                    compliance_status = state.Compliance.NON_COMPLIANT
+                    deployment_result = DeployResult.SKIPPED
                 else:
                     status = const.HandlerResourceState.deployed
-                    compliance_status = state.ComplianceStatus.COMPLIANT
-                    deployment_result = DeploymentResult.DEPLOYED
+                    compliance_status = state.Compliance.COMPLIANT
+                    deployment_result = DeployResult.DEPLOYED
                 await to_db_update_manager.send_deploy_done(
                     attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resource),
-                    result=DeployResult(
+                    result=DeployReport(
                         rvid=rvid,
                         action_id=actionid,
                         resource_state=status,
@@ -819,9 +819,9 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                         change=None,
                     ),
                     state=state.ResourceState(
-                        status=compliance_status,
-                        deployment_result=deployment_result,
-                        blocked=state.BlockedStatus.NO,
+                        compliance=compliance_status,
+                        last_deploy_result=deployment_result,
+                        blocked=state.Blocked.NOT_BLOCKED,
                         last_deployed=datetime.now().astimezone(),
                     ),
                     started=start_time,

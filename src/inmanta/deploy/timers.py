@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 
 from inmanta import util
 from inmanta.agent import config as agent_config
-from inmanta.deploy.state import BlockedStatus, ComplianceStatus, ResourceState
+from inmanta.deploy.state import Blocked, Compliance, ResourceState
 from inmanta.deploy.work import TaskPriority
 from inmanta.types import ResourceIdStr
 
@@ -299,12 +299,12 @@ class TimerManager:
         repair_only: bool  # consider only repair or also deploy?
 
         match state.blocked:
-            case BlockedStatus.YES:
+            case Blocked.BLOCKED:
                 self.resource_timers[resource].cancel()
                 return
-            case BlockedStatus.NO:
-                repair_only = state.status == ComplianceStatus.COMPLIANT
-            case BlockedStatus.TRANSIENT:
+            case Blocked.NOT_BLOCKED:
+                repair_only = state.compliance == Compliance.COMPLIANT
+            case Blocked.TEMPORARILY_BLOCKED:
                 repair_only = True
             case _ as _never:
                 typing.assert_never(_never)

@@ -65,7 +65,7 @@ class StateUpdateManager(abc.ABC):
     async def send_deploy_done(
         self,
         attribute_hash: str,
-        result: executor.DeployResult,
+        result: executor.DeployReport,
         state: Optional[state.ResourceState],
         *,
         started: datetime.datetime,
@@ -80,18 +80,18 @@ class StateUpdateManager(abc.ABC):
         """
 
     @abc.abstractmethod
-    async def dryrun_update(self, env: UUID, dryrun_result: executor.DryrunResult) -> None:
+    async def dryrun_update(self, env: UUID, dryrun_result: executor.DryrunReport) -> None:
         pass
 
     @abc.abstractmethod
-    async def set_parameters(self, fact_result: executor.FactResult) -> None:
+    async def set_parameters(self, fact_result: executor.GetFactReport) -> None:
         pass
 
     @abc.abstractmethod
     async def update_resource_intent(
         self,
         environment: UUID,
-        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceIntent]],
         update_blocked_state: bool,
         connection: Optional[Connection] = None,
     ) -> None:
@@ -169,7 +169,7 @@ class ToDbUpdateManager(StateUpdateManager):
     async def send_deploy_done(
         self,
         attribute_hash: str,
-        result: executor.DeployResult,
+        result: executor.DeployReport,
         state: Optional[state.ResourceState],
         *,
         started: datetime.datetime,
@@ -279,7 +279,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     last_deployed_version=resource_id_parsed.version,
                     last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
-                    deployment_result=state.deployment_result if state is not None else None,
+                    last_deploy_result=state.last_deploy_result if state is not None else None,
                     **extra_datetime_fields,
                     connection=connection,
                 )
@@ -294,7 +294,7 @@ class ToDbUpdateManager(StateUpdateManager):
                         environment=self.environment, resource_id=resource.resource_id, connection=connection
                     )
 
-    async def dryrun_update(self, env: UUID, dryrun_result: executor.DryrunResult) -> None:
+    async def dryrun_update(self, env: UUID, dryrun_result: executor.DryrunReport) -> None:
         await self.client.dryrun_update(
             tid=env,
             id=dryrun_result.dryrun_id,
@@ -307,7 +307,7 @@ class ToDbUpdateManager(StateUpdateManager):
             dryrun_result.rvid,
             const.ResourceAction.dryrun,
             uuid.uuid4(),
-            const.ResourceState.dry,
+            dryrun_result.resource_state or const.ResourceState.dry,
             dryrun_result.started,
             dryrun_result.finished,
             dryrun_result.messages,
@@ -339,8 +339,10 @@ class ToDbUpdateManager(StateUpdateManager):
         )
         await resource_action.insert()
 
-    async def set_parameters(self, fact_result: executor.FactResult) -> None:
-        await self.client.set_parameters(tid=self.environment, parameters=fact_result.parameters)
+    async def set_parameters(self, fact_result: executor.GetFactReport) -> None:
+        # TODO: fact_result -> fact_report
+        if fact_result.success:
+            await self.client.set_parameters(tid=self.environment, parameters=fact_result.parameters)
         await self._write_resource_action(
             env=self.environment,
             resource=fact_result.resource_id,
@@ -349,13 +351,13 @@ class ToDbUpdateManager(StateUpdateManager):
             started=fact_result.started,
             finished=fact_result.finished,
             messages=fact_result.messages,
-            status=None,
+            status=fact_result.resource_state,
         )
 
     async def update_resource_intent(
         self,
         environment: UUID,
-        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceIntent]],
         update_blocked_state: bool,
         connection: Optional[Connection] = None,
     ) -> None:

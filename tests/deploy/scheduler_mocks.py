@@ -31,7 +31,7 @@ from asyncpg import Connection
 
 from inmanta import const
 from inmanta.agent import Agent, executor
-from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ResourceDetails, ResourceInstallSpec
 from inmanta.const import Change
 from inmanta.deploy import state
 from inmanta.deploy.persistence import StateUpdateManager
@@ -73,7 +73,7 @@ class DummyExecutor(executor.Executor):
         resource_details: ResourceDetails,
         reason: str,
         requires: Mapping[ResourceIdStr, const.HandlerResourceState],
-    ) -> DeployResult:
+    ) -> DeployReport:
         assert reason
         # Actual reason or test reason
         # The actual reasons are of the form `action because of reason`
@@ -84,7 +84,7 @@ class DummyExecutor(executor.Executor):
             if resource_details.attributes.get(FAIL_DEPLOY, False) is True
             else const.HandlerResourceState.deployed
         )
-        return DeployResult(
+        return DeployReport(
             resource_details.rvid,
             action_id,
             resource_state=result,
@@ -140,7 +140,7 @@ class ManagedExecutor(DummyExecutor):
         resource_details: ResourceDetails,
         reason: str,
         requires: dict[ResourceIdStr, const.HandlerResourceState],
-    ) -> DeployResult:
+    ) -> DeployReport:
         assert resource_details.rid not in self._deploys
         self._deploys[resource_details.rid] = asyncio.get_running_loop().create_future()
         # wait until the test case sets desired resource state
@@ -148,7 +148,7 @@ class ManagedExecutor(DummyExecutor):
         del self._deploys[resource_details.rid]
         self.execute_count += 1
 
-        return DeployResult(
+        return DeployReport(
             resource_details.rvid,
             action_id,
             resource_state=const.HandlerResourceState(result),
@@ -196,20 +196,18 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         pass
 
 
-state_translation_table: dict[
-    const.ResourceState, tuple[state.DeploymentResult, state.BlockedStatus, state.ComplianceStatus]
-] = {
+state_translation_table: dict[const.ResourceState, tuple[state.DeployResult, state.Blocked, state.Compliance]] = {
     # A table to translate the old states into the new states
     # None means don't care, mostly used for values we can't derive from the old state
-    const.ResourceState.unavailable: (None, state.BlockedStatus.NO, state.ComplianceStatus.NON_COMPLIANT),
-    const.ResourceState.skipped: (state.DeploymentResult.SKIPPED, None, None),
+    const.ResourceState.unavailable: (None, state.Blocked.NOT_BLOCKED, state.Compliance.NON_COMPLIANT),
+    const.ResourceState.skipped: (state.DeployResult.SKIPPED, None, None),
     const.ResourceState.dry: (None, None, None),  # don't care
-    const.ResourceState.deployed: (state.DeploymentResult.DEPLOYED, state.BlockedStatus.NO, None),
-    const.ResourceState.failed: (state.DeploymentResult.FAILED, state.BlockedStatus.NO, None),
-    const.ResourceState.deploying: (None, state.BlockedStatus.NO, None),
-    const.ResourceState.available: (None, state.BlockedStatus.NO, state.ComplianceStatus.HAS_UPDATE),
-    const.ResourceState.undefined: (None, state.BlockedStatus.YES, state.ComplianceStatus.UNDEFINED),
-    const.ResourceState.skipped_for_undefined: (None, state.BlockedStatus.YES, None),
+    const.ResourceState.deployed: (state.DeployResult.DEPLOYED, state.Blocked.NOT_BLOCKED, None),
+    const.ResourceState.failed: (state.DeployResult.FAILED, state.Blocked.NOT_BLOCKED, None),
+    const.ResourceState.deploying: (None, state.Blocked.NOT_BLOCKED, None),
+    const.ResourceState.available: (None, state.Blocked.NOT_BLOCKED, state.Compliance.HAS_UPDATE),
+    const.ResourceState.undefined: (None, state.Blocked.BLOCKED, state.Compliance.UNDEFINED),
+    const.ResourceState.skipped_for_undefined: (None, state.Blocked.BLOCKED, None),
 }
 
 
@@ -237,7 +235,7 @@ class DummyStateManager(StateUpdateManager):
     def __init__(self):
         self.state: dict[ResourceIdStr, const.ResourceState] = {}
         # latest deploy result for each resource
-        self.deploys: dict[ResourceIdStr, DeployResult] = {}
+        self.deploys: dict[ResourceIdStr, DeployReport] = {}
 
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         self.state[resource_id.resource_str()] = const.ResourceState.deploying
@@ -245,7 +243,7 @@ class DummyStateManager(StateUpdateManager):
     async def send_deploy_done(
         self,
         attribute_hash: str,
-        result: DeployResult,
+        result: DeployReport,
         state: state.ResourceState,
         *,
         started: datetime.datetime,
@@ -260,22 +258,22 @@ class DummyStateManager(StateUpdateManager):
         for resource, cstate in self.state.items():
             deploy_result, blocked, status = state_translation_table[cstate]
             if deploy_result:
-                assert scheduler._state.resource_state[resource].deployment_result == deploy_result
+                assert scheduler._state.resource_state[resource].last_deploy_result == deploy_result
             if blocked:
                 assert scheduler._state.resource_state[resource].blocked == blocked
             if status:
-                assert scheduler._state.resource_state[resource].status == status
+                assert scheduler._state.resource_state[resource].compliance == status
 
-    def set_parameters(self, fact_result: FactResult) -> None:
+    def set_parameters(self, fact_result: GetFactReport) -> None:
         pass
 
-    async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
+    async def dryrun_update(self, env: UUID, dryrun_result: DryrunReport) -> None:
         self.state[Id.parse_id(dryrun_result.rvid).resource_str()] = const.ResourceState.dry
 
     async def update_resource_intent(
         self,
         environment: UUID,
-        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceIntent]],
         update_blocked_state: bool,
         connection: Optional[Connection] = None,
     ) -> None:
@@ -329,6 +327,9 @@ class TestScheduler(ResourceScheduler):
 
     async def should_runner_be_running(self, endpoint: str) -> bool:
         return True
+
+    async def all_paused_agents(self) -> set[str]:
+        return set()
 
     async def _get_single_model_version_from_db(
         self,

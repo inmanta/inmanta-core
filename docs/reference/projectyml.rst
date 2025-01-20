@@ -78,7 +78,7 @@ overriden in the ``project.yml`` (See below for more details).
 
 Setting this to ``false`` is generally recommended, especially during development, both for portability (achieving
 consistent behavior regardless of the system it runs on, which is important for reproductive testing on developer
-machines, easy compatibility with Inmanta pytest extensions, and consistency between compiler and agents) and for
+machines, easy compatibility with Inmanta pytest extensions, and consistency between compiler and executors) and for
 security (the isolation reduces the risk of dependency confusion attacks).
 
 Setting this to ``true`` will have the following consequences:
@@ -95,8 +95,7 @@ Setting this to ``true`` will have the following consequences:
 - If ``pre`` is set, it will supersede pip's ``pre`` option set by the ``PIP_PRE`` environment variable or in pip
 config file. When true, pre-release versions are allowed when installing v2 modules or v1 modules' dependencies.
 
-- Auto-started agents live on the same host as the server, and so they will share the pip config at the system level.
-
+- :term:`Executors<executor>` live on the same host as the server, and so they will share the pip config at the system level.
 
 .. warning::
 

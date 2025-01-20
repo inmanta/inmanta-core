@@ -115,7 +115,7 @@ async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> N
     all_db_document_classes: abc.Set[type[data.BaseDocument]] = utils.get_all_subclasses(data.BaseDocument) - {
         data.BaseDocument
     }
-    exclude_enums = [state.DeploymentResult, state.BlockedStatus]  # These enums are modelled in the db using a varchar
+    exclude_enums = [state.DeployResult, state.Blocked]  # These enums are modelled in the db using a varchar
     for cls in all_db_document_classes:
         enums: abc.Mapping[str, data.Field] = {
             name: field
@@ -3009,7 +3009,6 @@ async def test_retrieve_optional_field_no_default(init_dataclasses_and_load_sche
     assert report.returncode is None
 
 
-@pytest.mark.skip("std loading is currently a bit broken")
 async def test_get_current_resource_state(server, environment, client, clienthelper, agent):
     """
     Verify the behavior of the Resource.get_current_resource_state() method.
@@ -3041,11 +3040,13 @@ async def test_get_current_resource_state(server, environment, client, clienthel
     result = await client.release_version(tid=environment, id=version1)
     assert result.code == 200
 
+    await utils.wait_until_deployment_finishes(client, environment, version=version1)
+
     state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
         env=environment,
         rid="std::testing::NullResource[agent1,name=test1]",
     )
-    assert state is const.ResourceState.available
+    assert state is const.ResourceState.unavailable  # executor fails to load handler code because we never pushed any code
 
     # Create version 2 with undefined resource. Don't release the version yet.
     version2 = await clienthelper.get_version()
@@ -3069,10 +3070,12 @@ async def test_get_current_resource_state(server, environment, client, clienthel
         env=environment,
         rid="std::testing::NullResource[agent1,name=test1]",
     )
-    assert state is const.ResourceState.available
+    assert state is const.ResourceState.unavailable
 
     result = await client.release_version(tid=environment, id=version2)
     assert result.code == 200
+
+    await utils.wait_until_deployment_finishes(client, environment, version=version2)
 
     state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
         env=environment,

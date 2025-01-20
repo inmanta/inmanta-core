@@ -158,9 +158,7 @@ Procedure
 
 7. Verify that automation settings are on
 
-   * :inmanta.environment-settings:setting:`agent_trigger_method_on_auto_deploy` = push_incremental_deploy
    * :inmanta.environment-settings:setting:`auto_deploy` = True
-   * :inmanta.environment-settings:setting:`push_on_auto_deploy` = True
    * :inmanta.environment-settings:setting:`server_compile` = True
 
 8. If this model uses LSM, perform initial tests of all services via the API.
@@ -184,7 +182,6 @@ This procedure only works when all agents are autostarted by the server.
    * :inmanta.environment-settings:setting:`autostart_agent_deploy_interval` = 0
    * :inmanta.environment-settings:setting:`autostart_agent_repair_interval` = 0
    * :inmanta.environment-settings:setting:`auto_deploy` = True
-   * :inmanta.environment-settings:setting:`push_on_auto_deploy` = False
 
 3. Click ‘recompile’ to install the project.
 
@@ -201,9 +198,7 @@ This procedure only works when all agents are autostarted by the server.
 6. Click `deploy on agent/force repair` on each agent. Verify results.
 7. Ensure all environment setting are set correctly
 
-   * :inmanta.environment-settings:setting:`agent_trigger_method_on_auto_deploy` = push_incremental_deploy
    * :inmanta.environment-settings:setting:`auto_deploy` = True
-   * :inmanta.environment-settings:setting:`push_on_auto_deploy` = True
    * :inmanta.environment-settings:setting:`server_compile` = True
    * :inmanta.environment-settings:setting:`autostart_agent_deploy_interval` (restore initial value from step 1)
    * :inmanta.environment-settings:setting:`autostart_agent_repair_interval` (restore initial value from step 1)
