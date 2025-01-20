@@ -1,0 +1,5 @@
+import std
+entity TestEntity:
+end
+
+implement TestEntity using std::none

@@ -426,6 +426,7 @@ def test_native_types(snippetcompiler: "SnippetCompilationTest") -> None:
         """
 import plugin_native_types
 
+test_entity = plugin_native_types::TestEntity()
 a = "b"
 a = plugin_native_types::get_from_dict({"a":"b"}, "a")
 
@@ -435,6 +436,10 @@ none = plugin_native_types::get_from_dict({"a":"b"}, "B")
 a = plugin_native_types::many_arguments(["a","c","b"], 1)
 
 none = plugin_native_types::as_none("a")
-        """
+        # Annotated types
+plugin_native_types::annotated_arg_entity(test_entity)     # type value: Annotated[object, InmantaType("TestEntity")]
+plugin_native_types::annotated_return_entity(test_entity)  # type return value: Annotated[object, InmantaType("TestEntity")]
+        """,
+        autostd=True,
     )
     compiler.do_compile()

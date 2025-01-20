@@ -16,7 +16,9 @@
     Contact: code@inmanta.com
 """
 
+from typing import Any, Annotated
 from inmanta.plugins import plugin
+from inmanta import plugin_typing
 
 
 @plugin
@@ -32,3 +34,16 @@ def many_arguments(il: list[str], idx: int) -> str:
 @plugin
 def as_none(value: str) -> None:
     pass
+
+
+# Annotated values
+
+
+@plugin
+def annotated_arg_entity(value: Annotated[object, plugin_typing.InmantaType("TestEntity")]) -> None:
+    pass
+
+
+@plugin
+def annotated_return_entity(value: Any) -> Annotated[object, plugin_typing.InmantaType("TestEntity")]:
+    return value
