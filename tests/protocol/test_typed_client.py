@@ -22,7 +22,6 @@ import pytest
 
 from inmanta import protocol
 from inmanta.data.model import BaseModel
-from inmanta.postgresproc import PostgresProc
 from inmanta.protocol import exceptions
 from inmanta.server.protocol import LocalClient, Server, ServerSlice, common
 
