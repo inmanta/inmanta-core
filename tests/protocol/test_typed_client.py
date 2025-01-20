@@ -24,12 +24,10 @@ from inmanta import protocol
 from inmanta.data.model import BaseModel
 from inmanta.protocol import exceptions
 from inmanta.server.protocol import LocalClient, Server, ServerSlice, common
-from utils import configure
 
 
-async def test_local_client(unused_tcp_port: int, postgres_db, database_name: str, async_finalizer) -> None:
+async def test_local_client(server_config, async_finalizer) -> None:
     """Test the local client"""
-    configure(unused_tcp_port, database_name, postgres_db.port)
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<name>", operation="POST", client_types=["api"])
@@ -53,11 +51,10 @@ async def test_local_client(unused_tcp_port: int, postgres_db, database_name: st
     assert response == "y -> x"
 
 
-async def test_return_types(unused_tcp_port, postgres_db, database_name, async_finalizer):
+async def test_return_types(server_config, async_finalizer):
     """
     Test the use and validation of methods that use common.ReturnValue
     """
-    configure(unused_tcp_port, database_name, postgres_db.port)
 
     class Project(BaseModel):
         id: uuid.UUID
