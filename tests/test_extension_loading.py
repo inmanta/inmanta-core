@@ -247,7 +247,7 @@ async def test_custom_feature_manager(
         pg_password = "" if postgres_db.password is None else postgres_db.password
 
         config.Config.set("database", "name", database_name)
-        config.Config.set("database", "host", "localhost")
+        config.Config.set("database", "host", postgres_db.host)
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
         config.Config.set("database", "password", pg_password)

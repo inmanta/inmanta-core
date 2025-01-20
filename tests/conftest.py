@@ -295,7 +295,7 @@ async def postgres_db_debug(postgres_db, database_name) -> abc.AsyncIterator[Non
     yield
     print(
         "Connection to DB will be kept alive for one hour. Connect with"
-        f" `psql --host localhost --port {postgres_db.port} {database_name} {postgres_db.user}`"
+        f" `psql --host {postgres_db.host} --port {postgres_db.port} {database_name} {postgres_db.user}`"
     )
     await asyncio.sleep(3600)
 
@@ -766,7 +766,7 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
         pg_password = "" if postgres_db.password is None else postgres_db.password
 
         config.Config.set("database", "name", database_name)
-        config.Config.set("database", "host", "localhost")
+        config.Config.set("database", "host", postgres_db.host)
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
         config.Config.set("database", "password", pg_password)
@@ -839,7 +839,7 @@ async def server_multi(
 
         port = str(unused_tcp_port_factory())
         config.Config.set("database", "name", database_name)
-        config.Config.set("database", "host", "localhost")
+        config.Config.set("database", "host", postgres_db.host)
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
         config.Config.set("database", "password", pg_password)
