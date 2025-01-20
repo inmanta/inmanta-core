@@ -46,7 +46,7 @@ def issubclass(sub: type, super: Union[type, tuple[type, ...]]) -> bool:
     return builtins.issubclass(sub, super)
 
 
-PrimitiveTypes = Union[uuid.UUID, bool, int, float, datetime, str]
+PrimitiveTypes = Optional[uuid.UUID | bool | int | float | datetime | str]
 SimpleTypes = Union["BaseModel", PrimitiveTypes]
 
 JsonType = dict[str, Any]

@@ -51,13 +51,12 @@ class resource:  # noqa: N801
     A decorator that registers a new resource. The decorator must be applied to classes that inherit from
     :class:`~inmanta.resources.Resource`
 
-    :param name: The name of the entity in the configuration model it creates a resources from. For example
-                 :inmanta:entity:`std::testing::NullResource`
-    :param id_attribute: The attribute of `this` resource that uniquely identifies a resource on an agent. This attribute
-                         can be mapped.
+    :param name: The name of the entity in the configuration model it creates a resource from. For example
+        :inmanta:entity:`std::testing::NullResource`
+    :param id_attribute: The attribute of `this` resource that uniquely identifies a resource on a logical agent.
+        This attribute can be mapped.
     :param agent: This string indicates how the agent of this resource is determined. This string points to an attribute,
-                  but it can navigate relations (this value cannot be mapped). For example, the agent argument could be
-                  ``host.name``
+        but it can navigate relations (this value cannot be mapped). For example, the agent argument could be ``host.name``.
     """
 
     # The _resources dict is accessed by the compile function in pytest-inmanta.

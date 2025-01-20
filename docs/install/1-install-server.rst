@@ -381,12 +381,9 @@ config file for other options.
 Step 6: Set the server address
 ------------------------------
 
-When virtual machines are started by this server that install the inmanta agent, the correct
-:inmanta.config:option:`server.server-address` needs to be
-configured. This address is used to create the correct boot script for the virtual machine.
 
-Set this value to the hostname or IP address that other systems use to connect to the server
-in the configuration file stored at ``/etc/inmanta/inmanta.d/server.cfg``.
+Set this value to the hostname or IP address that other components (e.g. the :term:`resource scheduler<resource scheduler>`)
+use to connect to the server, in the configuration file stored at ``/etc/inmanta/inmanta.d/server.cfg``.
 
 .. code-block:: text
 
@@ -403,7 +400,7 @@ Step 7: Configure ssh of the inmanta user
 -----------------------------------------
 
 The inmanta user that runs the server needs a working ssh client. This client is required to checkout git repositories over
-ssh and if the remote agent is used.
+ssh.
 
 1. Provide the inmanta user with one or more private keys:
 
@@ -433,8 +430,8 @@ ssh and if the remote agent is used.
 
     sudo chown inmanta:inmanta /var/lib/inmanta/.ssh/config
 
-3. Add the public key to any git repositories and save it to include in configuration models that require remote agents.
-4. Test if you can login into a machine that has the public key and make sure ssh does not show you any prompts to store
+3. Add the public key to all relevant git repositories and save it.
+4. Test if you can clone a git repo that has the public key set and make sure ssh does not show you any prompts to store
    the host key.
 
 Step 8: Configure the server bind address

@@ -112,6 +112,7 @@ class Agent(SessionEndpoint):
 
     async def start_working(self) -> None:
         """Start working, once we have a session"""
+
         if self.working:
             return
         self.working = True
@@ -192,18 +193,24 @@ class Agent(SessionEndpoint):
         await self.stop_working()
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
-    async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
+    async def trigger_update(self, env: uuid.UUID, agent: None | str, incremental_deploy: bool) -> Apireturn:
         """
-        Trigger an update
+        Trigger an update for a specific agent, or for ALL agents in the environment when <agent> param is None.
         """
-        assert env == self.environment
-        assert agent == AGENT_SCHEDULER_ID
-        if incremental_deploy:
-            LOGGER.info("Agent %s got a trigger to run deploy in environment %s", agent, env)
-            await self.scheduler.deploy(reason="Deploy was triggered because user has requested a deploy")
+        if agent == const.AGENT_SCHEDULER_ID:
+            agent = None
+
+        if agent is None:
+            agent_id = "All agents"
         else:
-            LOGGER.info("Agent %s got a trigger to run repair in environment %s", agent, env)
-            await self.scheduler.repair(reason="Deploy was triggered because user has requested a repair")
+            agent_id = f"Agent {agent}"
+
+        if incremental_deploy:
+            LOGGER.info("%s got a trigger to run deploy in environment %s", agent_id, env)
+            await self.scheduler.deploy(reason="Deploy was triggered because user has requested a deploy", agent=agent)
+        else:
+            LOGGER.info("%s got a trigger to run repair in environment %s", agent_id, env)
+            await self.scheduler.repair(reason="Deploy was triggered because user has requested a repair", agent=agent)
         return 200
 
     @protocol.handle(methods.trigger_read_version, env="tid", agent="id")

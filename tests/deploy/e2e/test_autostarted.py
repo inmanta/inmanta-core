@@ -128,7 +128,7 @@ async def setup_environment_with_agent(client, project_name):
     assert result.code == 200
 
     # check deploy
-    await clienthelper.wait_for_deployed()
+    await clienthelper.wait_for_deployed(version=version)
     result = await client.get_version(env_id, version)
     assert result.code == 200
     assert result.result["model"]["released"]
@@ -575,7 +575,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     await retry_limited(are_resources_being_deployed, timeout=5)
 
     # Let's check the agent table and check that agent1 is present and not paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
+    await assert_is_paused(client, environment, {"agent1": False})
 
     # Make sure the children of the scheduler are consistent
     await wait_for_consistent_children(
@@ -613,7 +613,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     assert result.result["versions"][0]["total"] == 1
 
     # Let's check the agent table and check that agent1 is present and not paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
+    await assert_is_paused(client, environment, {"agent1": False})
 
     # Now let's halt the environment
     result = await client.halt_environment(tid=environment)
@@ -632,7 +632,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     assert result.code == 200
 
     # Let's recheck the agent table and check that the scheduler and agent1 are present and paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: True, "agent1": True})
+    await assert_is_paused(client, environment, {"agent1": True})
 
     # Let's wait for the executor to die (
     await retry_limited(
@@ -668,7 +668,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     await client.resume_environment(environment)
 
     # Let's check the agent table and check that the scheduler and agent1 are present and not paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
+    await assert_is_paused(client, environment, {"agent1": False})
 
     if should_time_out:
         # Wait for at least one resource to be in deploying
@@ -769,14 +769,14 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert result.result["versions"][0]["total"] == 3
 
     # Let's check the agent table and check that agent1 is present and not paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
+    await assert_is_paused(client, environment, {"agent1": False})
 
     # Now let's pause agent1
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
     assert result.code == 200
 
     # Let's recheck the agent table and check that agent1 is present and paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": True})
+    await assert_is_paused(client, environment, {"agent1": True})
 
     # Let's also check if the state of resources are consistent with what we expect:
     # The agent finished deploying resource n°2 before pausing and resource n°3
@@ -797,7 +797,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert result.code == 200
 
     # Everything should be back online
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
+    await assert_is_paused(client, environment, {"agent1": False})
 
     # Nothing should have changed concerning the state of our resources, yet!
     result = await client.resource_list(environment, deploy_summary=True)
@@ -934,7 +934,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     )
 
     # Everything should be consistent in DB: the agent should still be paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": True})
+    await assert_is_paused(client, environment, {"agent1": True})
 
     # Let's recheck the number of processes after restarting the server
     state_after_restart = construct_scheduler_children(current_pid)
@@ -1021,13 +1021,13 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert result.result["versions"][0]["total"] == 3
 
     # Let's check the agent table and check that agent1 is present and not paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
+    await assert_is_paused(client, environment, {"agent1": False})
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
     assert result.code == 200
 
     # Let's check the agent table and check that agent1 is present and paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": True})
+    await assert_is_paused(client, environment, {"agent1": True})
 
     # Wait for the current deployment of the agent to end
     await retry_limited(are_resources_deployed, timeout=6, interval=1, deployed_resources=2)
@@ -1050,7 +1050,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     result = await client.agent_action(environment, name="agent1", action=AgentAction.keep_paused_on_resume.value)
     assert result.code == 200
 
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: True, "agent1": True})
+    await assert_is_paused(client, environment, {"agent1": True})
 
     await retry_limited(
         wait_for_terminated_status,
@@ -1077,11 +1077,10 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
 
     result = await client.list_agents(tid=environment)
     assert result.code == 200
-    assert len(result.result["agents"]) == 2
+    assert len(result.result["agents"]) == 1
     expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
-    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert set(expected_agents_status.keys()) == {"agent1"}
     assert expected_agents_status["agent1"]
-    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
 
     # Make sure the children of the scheduler are consistent
     await wait_for_consistent_children(
@@ -1152,17 +1151,13 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
     assert result.result["versions"][0]["total"] == 3
 
     # Let's check the agent table and check that all agents are presents and not paused
-    await assert_is_paused(
-        client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False, "agent2": False, "agent3": False}
-    )
+    await assert_is_paused(client, environment, {"agent1": False, "agent2": False, "agent3": False})
 
     await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
     assert result.code == 200
 
     # Let's check the agent table and check that all agents are presents and paused
-    await assert_is_paused(
-        client, environment, {const.AGENT_SCHEDULER_ID: True, "agent1": True, "agent2": True, "agent3": True}
-    )
+    await assert_is_paused(client, environment, {"agent1": True, "agent2": True, "agent3": True})
     result = await client.get_agents(environment)
     assert result.code == 200
     actual_data = result.result["data"]
@@ -1211,9 +1206,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
     assert result.code == 200
 
     # Let's check the agent table and check that all agents are presents and not paused
-    await assert_is_paused(
-        client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False, "agent2": False, "agent3": False}
-    )
+    await assert_is_paused(client, environment, {"agent1": False, "agent2": False, "agent3": False})
 
     result = await client.get_agents(environment)
     assert result.code == 200
