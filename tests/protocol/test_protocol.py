@@ -1379,7 +1379,7 @@ async def test_auth_enabled_options_method(
     client = AsyncHTTPClient()
     response = await client.fetch(
         HTTPRequest(
-            url=f"http://localhost:{server_config.Config.get("server", "bind-port")}/api/v1/test",
+            url=f"http://localhost:{server_config.Config.get('server', 'bind-port')}/api/v1/test",
             method="OPTIONS",
             connect_timeout=1.0,
             request_timeout=1.0,
