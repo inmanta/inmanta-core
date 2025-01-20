@@ -26,7 +26,10 @@ from inmanta.ast import RuntimeException
 from inmanta.plugins import Null, to_dsl_type
 
 
-def test_conversion():
+def test_conversion(caplog):
+    """
+    Test behaviour of to_dsl_type function.
+    """
     assert inmanta_type.Integer() == to_dsl_type(int)
     assert inmanta_type.Float() == to_dsl_type(float)
     assert inmanta_type.NullableType(inmanta_type.Float()) == to_dsl_type(float | None)
@@ -64,3 +67,13 @@ def test_conversion():
 
     with pytest.raises(RuntimeException):
         to_dsl_type(CustomDict[str, str])
+
+    # Check that a warning is produced when implicit cast to 'Any'
+    caplog.clear()
+    to_dsl_type(complex)
+    warning_message = (
+        "InmantaWarning: Python type <class 'complex'> was implicitly cast to 'Any' because no matching type "
+        "was found in the Inmanta DSL. Please refer to the documentation for an overview of supported types at the "
+        "plugin boundary."
+    )
+    assert warning_message in caplog.messages
