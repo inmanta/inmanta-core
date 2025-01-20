@@ -325,13 +325,6 @@ class SessionEndpoint(Endpoint, CallTarget):
             )
 
 
-class WebsocketEndpoint(Endpoint, CallTarget):
-    """An endpoint on which RPC calls can be done through a websocket"""
-
-    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5) -> None:
-        super().__init__(name)
-
-
 class VersionMatch(str, Enum):
     lowest = "lowest"
     """ Select the lowest available version of the method

@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import asyncio
 import enum
 import gzip
 import importlib
@@ -110,7 +111,9 @@ class Request:
     A protocol request
     """
 
-    def __init__(self, url: str, method: str, headers: dict[str, str], body: Optional[JsonType]) -> None:
+    def __init__(
+        self, url: str, method: str, headers: dict[str, str], body: Optional[JsonType], reply_id: Optional[uuid.UUID] = None
+    ) -> None:
         self._url = url
         self._method = method
         self._headers = headers
@@ -118,7 +121,7 @@ class Request:
         # Reply ID is used to send back the result
         # If None, no reply is expected
         #  i.e. this call will immediately return, potentially even before the request is dispatched
-        self._reply_id: Optional[uuid.UUID] = None
+        self.reply_id: uuid.UUID = reply_id
 
     @property
     def body(self) -> Optional[JsonType]:
@@ -136,18 +139,10 @@ class Request:
     def method(self) -> str:
         return self._method
 
-    def set_reply_id(self, reply_id: uuid.UUID) -> None:
-        self._reply_id = reply_id
-
-    def get_reply_id(self) -> Optional[uuid.UUID]:
-        return self._reply_id
-
-    reply_id = property(get_reply_id, set_reply_id)
-
     def to_dict(self) -> JsonType:
         return_dict: JsonType = {"url": self._url, "headers": self._headers, "body": self._body, "method": self._method}
-        if self._reply_id is not None:
-            return_dict["reply_id"] = self._reply_id
+        if self.reply_id is not None:
+            return_dict["reply_id"] = self.reply_id
 
         return return_dict
 
@@ -1073,3 +1068,32 @@ class SessionManagerInterface:
         :return: True if the session is valid
         """
         raise NotImplementedError()
+
+
+class SessionListener:
+    async def new_session(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
+        """
+        Notify that a new session was created.
+
+        :param session: The session that was created
+        :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
+                                        method was called. This parameter provides a snapshot which will not change.
+        """
+
+    async def expire(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
+        """
+        Notify that a session expired.
+
+        :param session: The session that was created
+        :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
+                                        method was called. This parameter provides a snapshot which will not change.
+        """
+
+    async def seen(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
+        """
+        Notify that a heartbeat was received for an existing session.
+
+        :param session: The session that was created
+        :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
+                                        method was called. This parameter provides a snapshot which will not change.
+        """

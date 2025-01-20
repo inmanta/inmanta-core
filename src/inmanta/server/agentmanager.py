@@ -42,7 +42,7 @@ from inmanta.config import Config, config_map_to_str, scheduler_log_config
 from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
 from inmanta.data import APILIMIT, Environment, InvalidSort, model
 from inmanta.data.model import DataBaseReport
-from inmanta.protocol import encode_token, handle, methods, methods_v2
+from inmanta.protocol import encode_token, handle, methods, methods_v2, session
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
 from inmanta.server import (
@@ -228,7 +228,7 @@ class AgentManager(ServerSlice, SessionListener):
         return out
 
     def get_dependencies(self) -> list[str]:
-        return [SLICE_DATABASE, SLICE_SESSION_MANAGER]
+        return [SLICE_DATABASE]
 
     def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
@@ -238,9 +238,8 @@ class AgentManager(ServerSlice, SessionListener):
         autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
         assert isinstance(autostarted_agent_manager, AutostartedAgentManager)
         self._autostarted_agent_manager = autostarted_agent_manager
-        presession = server.get_slice(SLICE_SESSION_MANAGER)
-        assert isinstance(presession, SessionManager)
-        presession.add_listener(self)
+
+        server.rest_server.add_session_listener(self)
 
     async def start(self) -> None:
         await super().start()
