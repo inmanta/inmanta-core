@@ -329,6 +329,13 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     if python_type in python_to_model:
         return python_to_model[python_type]
 
+    warnings.warn(
+        InmantaWarning(
+            f"Python type {python_type} was implicitly cast to 'Any' because no matching type was found in the Inmanta DSL. "
+            f"Please refer to the documentation for an overview of supported types at the plugin boundary."
+        )
+    )
+
     return inmanta_type.Type()
 
 
