@@ -255,6 +255,8 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
     Convert a python type annotation to an Inmanta DSL type annotation.
 
     :param python_type: The evaluated python type as provided in the Python type annotation.
+    :param location: The location of this evaluation on the model
+    :param resolver: The namespace that can be used to resolve the type annotation of this argument.
     """
     # Any to any
     if python_type is typing.Any:
@@ -320,7 +322,7 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
             raise TypingException(None, f"invalid type {python_type}, set is not supported on the plugin boundary")
 
     if typing.get_origin(python_type) is typing.Annotated:
-        annotated_args: Sequence[object] = typing.get_args(python_type)
+        annotated_args = typing.get_args(python_type)
         inmanta_types: Sequence[plugin_typing.InmantaType] = [
             arg for arg in annotated_args if isinstance(arg, plugin_typing.InmantaType)
         ]
