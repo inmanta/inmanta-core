@@ -40,4 +40,3 @@ class InmantaType:
 # TODO: how to do Entity? "object" is appropriate but raises too many errors for practical use. Any is Any
 Entity: typing.TypeAlias = typing.Annotated[object, InmantaType("std::Entity")]
 string: typing.TypeAlias = typing.Annotated[str, InmantaType("string")]
-dict_str_int: typing.Annotated[typing.Mapping[str, int], InmantaType("dict")]

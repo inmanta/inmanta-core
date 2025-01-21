@@ -321,7 +321,9 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
 
     if typing.get_origin(python_type) is typing.Annotated:
         annotated_args: Sequence[object] = typing.get_args(python_type)
-        inmanta_types: Sequence[plugin_typing.InmantaType] = [arg for arg in annotated_args if isinstance(arg, plugin_typing.InmantaType)]
+        inmanta_types: Sequence[plugin_typing.InmantaType] = [
+            arg for arg in annotated_args if isinstance(arg, plugin_typing.InmantaType)
+        ]
         if inmanta_types:
             if len(inmanta_types) > 1:
                 raise TypingException(None, f"invalid type {python_type}, only one InmantaType annotation is supported")
