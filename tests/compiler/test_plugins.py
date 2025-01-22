@@ -566,6 +566,6 @@ end
         import plugin_invalid_union_type
         """
     )
-    with pytest.raises(InvalidPluginType) as exc_info:
+    with pytest.raises(InvalidTypeAnnotation) as exc_info:
         compiler.do_compile()
     assert "Union type must be subscripted, got typing.Union" in str(exc_info.value)
