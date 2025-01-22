@@ -22,12 +22,9 @@ from typing import Annotated, Any, Mapping, Sequence, Union
 import pytest
 
 import inmanta.ast.type as inmanta_type
-from inmanta import plugin_typing
 from inmanta.ast import Namespace, Range, RuntimeException
 from inmanta.plugins import Null, to_dsl_type
-
-# from inmanta.ast.entity import Entity
-# from inmanta.ast.type import TYPES
+from inmanta.plugins.typing import InmantaType
 
 
 def test_conversion(caplog):
@@ -35,28 +32,17 @@ def test_conversion(caplog):
     Test behaviour of to_dsl_type function.
     """
     namespace = Namespace("dummy-namespace")
-    # namespace.set_primitives(inmanta_type.TYPES)
-    # FIXME: Not working    because of std = self.get_ns_from_string("std") std is None
     namespace.primitives = inmanta_type.TYPES
 
     location: Range = Range("test", 1, 1, 2, 1)
-
-    assert inmanta_type.String() == to_dsl_type(plugin_typing.string, location, namespace)
 
     assert inmanta_type.NullableType(inmanta_type.Integer()) == to_dsl_type(
         Annotated[int | None, "something"], location, namespace
     )
 
     assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type(
-        Annotated[dict[str, int], plugin_typing.InmantaType("dict")], location, namespace
+        Annotated[dict[str, int], InmantaType("dict")], location, namespace
     )
-
-    # FIXME: Not working
-    # entity: Entity = Entity("my-entity", namespace)
-    # namespace.define_type("my-entity", entity)
-    # assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type(
-    #     Annotated[Union[int, str] | None, plugin_typing.InmantaType("my-entity")], location, namespace
-    # )
     assert inmanta_type.Integer() == to_dsl_type(int, location, namespace)
     assert inmanta_type.Float() == to_dsl_type(float, location, namespace)
     assert inmanta_type.NullableType(inmanta_type.Float()) == to_dsl_type(float | None, location, namespace)

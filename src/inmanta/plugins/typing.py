@@ -19,8 +19,6 @@
 import typing
 from dataclasses import dataclass
 
-# TODO: move this module to inmanta.plugins.typing? Probably not because that would import the whole `plugins` namespace?
-
 
 @dataclass(frozen=True)
 class InmantaType:
@@ -31,12 +29,13 @@ class InmantaType:
     evaluated as a DSL type, extended with "any".
     For maximum static type coverage, it is recommended to use these only when absolutely necessary, and to use them as deeply
     in the type as possible, e.g. prefer `Sequence[Annotated[MyEntity, InmantaType("std::Entity")]]` over
-    `Annotated[Sequence[Entity], InmantaType("std::Entity[]")]`.
+    `Annotated[Sequence[MyEntity], InmantaType("std::Entity[]")]`.
     """
 
     dsl_type: str
 
 
-# TODO: how to do Entity? "object" is appropriate but raises too many errors for practical use. Any is Any
 Entity: typing.TypeAlias = typing.Annotated[object, InmantaType("std::Entity")]
-string: typing.TypeAlias = typing.Annotated[str, InmantaType("string")]
+"""
+    Alias used to treat std::Entity as an object in Python for type verification
+"""

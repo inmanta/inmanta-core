@@ -426,7 +426,7 @@ def test_native_types(snippetcompiler: "SnippetCompilationTest") -> None:
         """
 import plugin_native_types
 
-test_entity = plugin_native_types::TestEntity()
+test_entity = plugin_native_types::TestEntity(value=2)
 a = "b"
 a = plugin_native_types::get_from_dict({"a":"b"}, "a")
 
@@ -437,9 +437,14 @@ a = plugin_native_types::many_arguments(["a","c","b"], 1)
 
 none = plugin_native_types::as_none("a")
         # Annotated types
-plugin_native_types::annotated_arg_entity(test_entity)     # type value: Annotated[object, InmantaType("TestEntity")]
-plugin_native_types::annotated_return_entity(test_entity)  # type return value: Annotated[object, InmantaType("TestEntity")]
+plugin_native_types::annotated_arg_entity(test_entity)     # type value: Annotated[MyEntity, InmantaType("TestEntity")]
+plugin_native_types::annotated_return_entity(test_entity)  # type return value: Annotated[MyEntity, InmantaType("TestEntity")]
+
+for val in ["yes", "no"]:
+    plugin_native_types::annotated_arg_literal(val)        # type value: Annotated[Literal["yes", "no"], InmantaType("response")
+    plugin_native_types::annotated_response_literal(val)   # type value: Annotated[Literal["yes", "no"], InmantaType("response")
+end
         """,
-        autostd=True,
+        ministd=True,
     )
     compiler.do_compile()

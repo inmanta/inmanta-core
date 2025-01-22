@@ -16,9 +16,9 @@
     Contact: code@inmanta.com
 """
 
-from typing import Any, Annotated
+from typing import Any, Annotated, Protocol, Literal
 from inmanta.plugins import plugin
-from inmanta import plugin_typing
+from inmanta.plugins.typing import InmantaType
 
 
 @plugin
@@ -39,11 +39,25 @@ def as_none(value: str) -> None:
 # Annotated values
 
 
+class MyEntity(Protocol):
+    value: int
+
+
 @plugin
-def annotated_arg_entity(value: Annotated[object, plugin_typing.InmantaType("TestEntity")]) -> None:
+def annotated_arg_entity(value: Annotated[MyEntity, InmantaType("TestEntity")]) -> None:
     pass
 
 
 @plugin
-def annotated_return_entity(value: Any) -> Annotated[object, plugin_typing.InmantaType("TestEntity")]:
+def annotated_return_entity(value: Any) -> Annotated[MyEntity, InmantaType("TestEntity")]:
+    return value
+
+
+@plugin
+def annotated_arg_literal(value: Annotated[Literal["yes", "no"], InmantaType("response")]) -> None:
+    pass
+
+
+@plugin
+def annotated_response_literal(value: Any) -> Annotated[Literal["yes", "no"], InmantaType("response")]:
     return value
