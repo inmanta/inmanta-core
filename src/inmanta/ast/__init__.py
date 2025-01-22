@@ -824,6 +824,15 @@ class AttributeException(WrappingRuntimeException):
         self.instance = instance
 
 
+class PluginTypeException(WrappingRuntimeException):
+    """
+    Raised when an argument or return value of a plugin is not in-line with the type
+    annotation of that plugin. Wraps the validation error.
+    """
+
+    pass
+
+
 class OptionalValueException(RuntimeException):
     """Exception raised when an optional value is accessed that has no value (and is frozen)"""
 

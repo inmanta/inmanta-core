@@ -59,5 +59,5 @@ def annotated_arg_literal(value: Annotated[Literal["yes", "no"], InmantaType("re
 
 
 @plugin
-def annotated_response_literal(value: Any) -> Annotated[Literal["yes", "no"], InmantaType("response")]:
+def annotated_return_literal(value: Any) -> Annotated[Literal["yes", "no"], InmantaType("response")]:
     return value

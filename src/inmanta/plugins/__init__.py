@@ -36,6 +36,7 @@ from inmanta.ast import (  # noqa: F401 Plugin
     Location,
     Namespace,
     PluginException,
+    PluginTypeException,
     Range,
     RuntimeException,
     TypeNotFoundException,
@@ -407,8 +408,8 @@ class PluginValue:
     def validate(self, value: object) -> bool:
         """
         Validate that the given value can be passed to this argument.  Returns True if the value is known
-        and valid, False if the value is unknown, and raises a ValueError is the value is not of the
-        expected type.
+        and valid, False if the value is unknown, and raises a :py:class:`inmanta.ast.RuntimeException`
+        if the value is not of the expected type.
 
         :param value: The value to validate
         """
@@ -768,8 +769,18 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             arg = self.get_arg(position)
 
             # (4) Validate the input value
-            if not arg.validate(value):
-                return False
+            try:
+                no_unknowns = arg.validate(value)
+            except RuntimeException as e:
+                raise PluginTypeException(
+                    stmt=None,
+                    msg=f"Value {value} for argument {arg.arg_name} of plugin {self.get_full_name()} has invalid type."
+                    f" Expected type: {arg.resolved_type}",
+                    cause=e,
+                )
+            else:
+                if not no_unknowns:
+                    return False
 
         # Validate all kw arguments
         for name, value in kwargs.items():
@@ -783,8 +794,18 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 raise RuntimeException(None, f"{self.get_full_name()}() got multiple values for argument '{name}'")
 
             # (4) Validate the input value
-            if not kwarg.validate(value):
-                return False
+            try:
+                no_unknowns = kwarg.validate(value)
+            except RuntimeException as e:
+                raise PluginTypeException(
+                    stmt=None,
+                    msg=f"Value {value} for argument {kwarg.arg_name} of plugin {self.get_full_name()} has invalid type."
+                    f" Expected type: {kwarg.resolved_type}",
+                    cause=e,
+                )
+            else:
+                if not no_unknowns:
+                    return False
         return True
 
     def emit_statement(self) -> "DynamicStatement":
@@ -841,7 +862,15 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         value = DynamicProxy.unwrap(value)
 
         # Validate the returned value
-        self.return_type.validate(value)
+        try:
+            self.return_type.validate(value)
+        except RuntimeException as e:
+            raise PluginTypeException(
+                stmt=None,
+                msg=f"Return value {value} of plugin {self.get_full_name()} has invalid type."
+                f" Expected type: {self.return_type.resolved_type}",
+                cause=e,
+            )
 
         return value
 

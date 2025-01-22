@@ -26,7 +26,7 @@ import pytest
 import inmanta.ast.statements.define
 import inmanta.compiler as compiler
 import inmanta.plugins
-from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException
+from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException, WrappingRuntimeException
 from utils import log_contains
 
 if typing.TYPE_CHECKING:
@@ -448,3 +448,75 @@ end
         ministd=True,
     )
     compiler.do_compile()
+
+
+def test_annotated_native_types_rejection(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    test the use of python types
+    """
+    ns = "plugin_native_types"
+    dir = snippetcompiler.project_dir
+
+    # Return value of plugin has incompatible type
+    for plugin_name, plugin_value, error_message in [
+        (
+            "annotated_arg_entity",
+            "AnotherEntity(value=2)",
+            f"Value __config__::AnotherEntity (instantiated at {dir}/main.cf:10) for argument value of plugin "
+            f"{ns}::annotated_arg_entity has invalid type. Expected type: {ns}::TestEntity",
+        ),
+        (
+            "annotated_arg_literal",
+            "'maybe'",
+            f"Value maybe for argument value of plugin {ns}::annotated_arg_literal has invalid type. "
+            f"Expected type: {ns}::response",
+        ),
+    ]:
+        snippetcompiler.setup_for_snippet(
+            f"""
+            import plugin_native_types
+
+            entity AnotherEntity:
+                int value
+            end
+
+            implement AnotherEntity using std::none
+
+            plugin_native_types::{plugin_name}(value={plugin_value})
+            """,
+            ministd=True,
+        )
+        with pytest.raises(WrappingRuntimeException) as exc_info:
+            compiler.do_compile()
+        assert error_message in str(exc_info.value.get_message())
+
+    for plugin_name, plugin_value, error_message in [
+        (
+            "annotated_return_entity",
+            "AnotherEntity(value=2)",
+            f"Return value __config__::AnotherEntity (instantiated at {dir}/main.cf:10) of plugin "
+            f"{ns}::annotated_return_entity has invalid type. Expected type: {ns}::TestEntity",
+        ),
+        (
+            "annotated_return_literal",
+            "'maybe'",
+            f"Return value maybe of plugin {ns}::annotated_return_literal has invalid type. Expected type: {ns}::response",
+        ),
+    ]:
+        snippetcompiler.setup_for_snippet(
+            f"""
+            import plugin_native_types
+
+            entity AnotherEntity:
+                int value
+            end
+
+            implement AnotherEntity using std::none
+
+            plugin_native_types::{plugin_name}(value={plugin_value})
+            """,
+            ministd=True,
+        )
+        with pytest.raises(WrappingRuntimeException) as exc_info:
+            compiler.do_compile()
+        assert error_message in str(exc_info.value.get_causes()[0])
