@@ -3,4 +3,4 @@ description: Added support for native union types to plugins.
 issue-nr: 8574
 issue-repo: inmanta-core
 change-type: minor
-destination-branches: [master, iso8]
+destination-branches: [master, iso8, iso7]
