@@ -35,7 +35,7 @@ import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
 from inmanta.ast import LocatableString, Location, Namespace
 from inmanta.ast import PluginException as PluginException  # noqa: F401 Plugin exception is part of the stable api
-from inmanta.ast import Range, RuntimeException, TypeNotFoundException, WithComment, entity
+from inmanta.ast import Range, RuntimeException, TypeNotFoundException, TypingException, WithComment, entity
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
