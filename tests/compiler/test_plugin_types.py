@@ -36,38 +36,37 @@ def test_conversion(caplog):
 
     location: Range = Range("test", 1, 1, 2, 1)
 
-    assert inmanta_type.NullableType(inmanta_type.Integer()) == to_dsl_type(
-        Annotated[int | None, "something"], location, namespace
-    )
+    def to_dsl_type_simple(python_type: type[object]) -> inmanta_type.Type:
+        return to_dsl_type(python_type, location, namespace)
 
-    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type(
-        Annotated[dict[str, int], InmantaType("dict")], location, namespace
-    )
-    assert inmanta_type.Integer() == to_dsl_type(int, location, namespace)
-    assert inmanta_type.Float() == to_dsl_type(float, location, namespace)
-    assert inmanta_type.NullableType(inmanta_type.Float()) == to_dsl_type(float | None, location, namespace)
-    assert inmanta_type.List() == to_dsl_type(list, location, namespace)
-    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(list[str], location, namespace)
-    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(Sequence[str], location, namespace)
-    assert inmanta_type.List() == to_dsl_type(Sequence, location, namespace)
-    assert inmanta_type.List() == to_dsl_type(collections.abc.Sequence, location, namespace)
-    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(collections.abc.Sequence[str], location, namespace)
-    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type(dict, location, namespace)
-    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type(Mapping, location, namespace)
-    assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(dict[str, str], location, namespace)
-    assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(Mapping[str, str], location, namespace)
+    assert inmanta_type.NullableType(inmanta_type.Integer()) == to_dsl_type_simple(Annotated[int | None, "something"])
 
-    assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(collections.abc.Mapping[str, str], location, namespace)
+    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type_simple(Annotated[dict[str, int], InmantaType("dict")])
+    assert inmanta_type.Integer() == to_dsl_type_simple(int)
+    assert inmanta_type.Float() == to_dsl_type_simple(float)
+    assert inmanta_type.NullableType(inmanta_type.Float()) == to_dsl_type_simple(float | None)
+    assert inmanta_type.List() == to_dsl_type_simple(list)
+    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type_simple(list[str])
+    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type_simple(Sequence[str])
+    assert inmanta_type.List() == to_dsl_type_simple(Sequence)
+    assert inmanta_type.List() == to_dsl_type_simple(collections.abc.Sequence)
+    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type_simple(collections.abc.Sequence[str])
+    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type_simple(dict)
+    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type_simple(Mapping)
+    assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type_simple(dict[str, str])
+    assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type_simple(Mapping[str, str])
 
-    assert Null() == to_dsl_type(Union[None], location, namespace)
+    assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type_simple(collections.abc.Mapping[str, str])
 
-    assert isinstance(to_dsl_type(Any, location, namespace), inmanta_type.Type)
+    assert Null() == to_dsl_type_simple(Union[None])
 
-    with pytest.raises(RuntimeException):
-        to_dsl_type(dict[int, int], location, namespace)
+    assert isinstance(to_dsl_type_simple(Any), inmanta_type.Type)
 
     with pytest.raises(RuntimeException):
-        to_dsl_type(set[str], location, namespace)
+        to_dsl_type_simple(dict[int, int])
+
+    with pytest.raises(RuntimeException):
+        to_dsl_type_simple(set[str])
 
     class CustomList[T](list[T]):
         pass
@@ -76,14 +75,14 @@ def test_conversion(caplog):
         pass
 
     with pytest.raises(RuntimeException):
-        to_dsl_type(CustomList[str], location, namespace)
+        to_dsl_type_simple(CustomList[str])
 
     with pytest.raises(RuntimeException):
-        to_dsl_type(CustomDict[str, str], location, namespace)
+        to_dsl_type_simple(CustomDict[str, str])
 
     # Check that a warning is produced when implicit cast to 'Any'
     caplog.clear()
-    to_dsl_type(complex, location, namespace)
+    to_dsl_type_simple(complex)
     warning_message = (
         "InmantaWarning: Python type <class 'complex'> was implicitly cast to 'Any' because no matching type "
         "was found in the Inmanta DSL. Please refer to the documentation for an overview of supported types at the "
