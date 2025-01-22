@@ -83,6 +83,36 @@ setup(
     include_package_data=True,
     install_requires=requires,
     extras_require={
+        "dev": [
+            # all extra's (for testing and mypy)
+            "inmanta-core[datatrace,debug,tracing]",
+            # test dependencies
+            "inmanta-dev-dependencies[pytest,async,core]",
+            "bumpversion",
+            "flake8-junit-report",
+            "openapi_spec_validator",
+            "pip2pi",
+            "time-machine",
+            # types
+            "types-python-dateutil",
+            "types-PyYAML",
+            "types-setuptools",
+            "types-toml",
+            # doc dependencies
+            "furo",
+            "inmanta-sphinx",
+            "myst-parser",
+            "sphinx",
+            "sphinx-argparse",
+            "sphinx-autodoc-annotation",
+            "sphinx-click",
+            "sphinxcontrib-contentui",
+            "sphinxcontrib.datatemplates",
+            "sphinxcontrib-redoc",
+            "sphinxcontrib-serializinghtml",
+            "sphinx-design",
+            "Sphinx-Substitution-Extensions",
+        ],
         "debug": ["rpdb"],
         # option to install a matched pair of inmanta-core and pytest-inmanta-extensions
         "pytest-inmanta-extensions": [f"pytest-inmanta-extensions~={version}.0.dev"],
