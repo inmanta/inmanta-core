@@ -33,7 +33,7 @@ import typing_inspect
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
 from inmanta.ast import (  # noqa: F401 Plugin exception is part of the stable api
-    InvalidTypeException,
+    PluginTypeException,
     LocatableString,
     Location,
     Namespace,
@@ -764,7 +764,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             try:
                 no_unknowns = arg.validate(value)
             except RuntimeException as e:
-                raise InvalidTypeException(
+                raise PluginTypeException(
                     stmt=None,
                     msg=f"Value {value} for argument {arg.arg_name} of plugin {self.get_full_name()} has invalid type."
                     f" Expected type: {arg.resolved_type}",
@@ -789,7 +789,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             try:
                 no_unknowns = kwarg.validate(value)
             except RuntimeException as e:
-                raise InvalidTypeException(
+                raise PluginTypeException(
                     stmt=None,
                     msg=f"Value {value} for argument {kwarg.arg_name} of plugin {self.get_full_name()} has invalid type."
                     f" Expected type: {kwarg.resolved_type}",
@@ -857,7 +857,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         try:
             self.return_type.validate(value)
         except RuntimeException as e:
-            raise InvalidTypeException(
+            raise PluginTypeException(
                 stmt=None,
                 msg=f"Return value {value} of plugin {self.get_full_name()} has invalid type."
                 f" Expected type: {self.return_type.resolved_type}",
