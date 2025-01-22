@@ -58,6 +58,10 @@ def test_conversion():
     assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
         None | Union[int, str]
     )
+    # verify that nested unions are flattened and nested None values are considered for NullableType
+    assert inmanta_type.NullableType(
+        inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String(), inmanta_type.Float()])
+    ) == to_dsl_type(Union[int, Union[str, Union[float, None]]])
 
     assert Null() == to_dsl_type(Union[None])
 
