@@ -259,8 +259,15 @@ class Scheduler:
         self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
         # give type info to all types (includes plugins), to normalize blocks inside them
-        # normalize implementations last because they have subblocks that might depend on other type information
-        for t in sorted(self.types.values(), key=lambda t: isinstance(t, Implementation)):
+        for t in sorted(
+            self.types.values(),
+            key=lambda t: (
+                # normalize implementations last because they have subblocks that might depend on other type information
+                isinstance(t, Implementation),
+                # normalize entities second last because it may call validate on its attribute types to validate defaults
+                isinstance(t, Entity),
+            ),
+        ):
             t.normalize()
 
         # normalize root blocks
