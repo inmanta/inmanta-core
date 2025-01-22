@@ -229,7 +229,7 @@ class PluginFunction(Function):
         else:
             try:
                 return self.plugin(*args, **kwargs)
-            except PluginTypeException as e:
+            except PluginTypeException:
                 # already has sufficient context, no need to wrap it
                 raise
             except RuntimeException as e:
@@ -283,7 +283,7 @@ class PluginFunction(Function):
                 # If it is handled here, the re-queueing can not be done,
                 # leading to very subtle errors such as #2787
                 raise e
-            except PluginTypeException as e:
+            except PluginTypeException:
                 # already has sufficient context, no need to wrap it
                 raise
             except RuntimeException as e:

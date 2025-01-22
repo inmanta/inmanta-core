@@ -539,22 +539,34 @@ end
         (
             "union_return_optional_1",
             1.2,
-            f"Return value 1.2 of plugin {ns}::union_return_optional_1 has incompatible type. Expected type: Union[int,string]?",
+            (
+                f"Return value 1.2 of plugin {ns}::union_return_optional_1 has incompatible type."
+                " Expected type: Union[int,string]?"
+            ),
         ),
         (
             "union_return_optional_2",
             1.2,
-            f"Return value 1.2 of plugin {ns}::union_return_optional_2 has incompatible type. Expected type: Union[int,string]?",
+            (
+                f"Return value 1.2 of plugin {ns}::union_return_optional_2 has incompatible type."
+                " Expected type: Union[int,string]?"
+            ),
         ),
         (
             "union_return_optional_3",
             1.2,
-            f"Return value 1.2 of plugin {ns}::union_return_optional_3 has incompatible type. Expected type: Union[int,string]?",
+            (
+                f"Return value 1.2 of plugin {ns}::union_return_optional_3 has incompatible type."
+                " Expected type: Union[int,string]?"
+            ),
         ),
         (
             "union_return_optional_4",
             1.2,
-            f"Return value 1.2 of plugin {ns}::union_return_optional_4 has incompatible type. Expected type: Union[int,string]?",
+            (
+                f"Return value 1.2 of plugin {ns}::union_return_optional_4 has incompatible type."
+                " Expected type: Union[int,string]?"
+            ),
         ),
     ]:
         snippetcompiler.setup_for_snippet(
