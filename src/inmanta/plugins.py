@@ -770,7 +770,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 raise PluginTypeException(
                     stmt=None,
                     msg=(
-                        f"Value {value} for argument {arg.arg_name} of plugin {self.get_full_name()} has incompatible type."
+                        f"Value {value!r} for argument {arg.arg_name} of plugin {self.get_full_name()} has incompatible type."
                         f" Expected type: {arg.resolved_type}"
                     ),
                     cause=e,
