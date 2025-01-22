@@ -26,7 +26,14 @@ import pytest
 import inmanta.ast.statements.define
 import inmanta.compiler as compiler
 import inmanta.plugins
-from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException, WrappingRuntimeException
+from inmanta.ast import (
+    CompilerException,
+    ExplicitPluginException,
+    InvalidTypeAnnotation,
+    Namespace,
+    RuntimeException,
+    WrappingRuntimeException,
+)
 from utils import log_contains
 
 if typing.TYPE_CHECKING:
@@ -559,6 +566,6 @@ end
         import plugin_invalid_union_type
         """
     )
-    with pytest.raises(RuntimeException) as exc_info:
+    with pytest.raises(InvalidPluginType) as exc_info:
         compiler.do_compile()
     assert "Union type must be subscripted, got typing.Union" in str(exc_info.value)

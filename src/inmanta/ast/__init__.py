@@ -715,7 +715,9 @@ class MissingImportException(TypeNotFoundException):
 
 
 class AmbiguousTypeException(TypeNotFoundException):
-    """Exception raised when a type is referenced that does not exist"""
+    """
+    Exception raised when a type is referenced in an unqualified manner in a context where it can not be unambiguously resolved.
+    """
 
     def __init__(self, type: LocatableString, candidates: list["Entity"]) -> None:
         candidates = sorted(candidates, key=lambda x: x.get_full_name())
@@ -859,6 +861,12 @@ class TypingException(RuntimeException):
 
     def importantance(self) -> int:
         return 10
+
+
+class InvalidTypeAnnotation(TypingException):
+    """
+    Invalid type annotation, e.g. for a plugin.
+    """
 
 
 class DirectExecuteException(TypingException):

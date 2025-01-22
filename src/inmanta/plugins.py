@@ -32,12 +32,13 @@ import typing_inspect
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
-from inmanta.ast import (  # noqa: F401 Plugin exception is part of the stable api
-    PluginTypeException,
+from inmanta.ast import (  # noqa: F401 PluginException is part of the stable api
+    InvalidTypeAnnotation,
     LocatableString,
     Location,
     Namespace,
     PluginException,
+    PluginTypeException,
     Range,
     RuntimeException,
     TypeNotFoundException,
@@ -371,6 +372,8 @@ class PluginValue:
         If no type annotation is present or if the type annotation allows any type to be passed
         as argument, then None is returned.
 
+        Expects to be called during the normalization stage.
+
         :param plugin: The plugin that this argument is part of.
         :param resolver: The namespace that can be used to resolve the type annotation of this
             argument.
@@ -382,11 +385,11 @@ class PluginValue:
         if not isinstance(self.type_expression, str):
             if typing_inspect.is_union_type(self.type_expression) and not typing.get_args(self.type_expression):
                 # If typing.Union is not subscripted, isinstance(self.type_expression, type) evaluates to False.
-                raise RuntimeException(stmt=None, msg=f"Union type must be subscripted, got {self.type_expression}")
+                raise InvalidTypeAnnotation(stmt=None, msg=f"Union type must be subscripted, got {self.type_expression}")
             if isinstance(self.type_expression, type) or typing.get_origin(self.type_expression) is not None:
                 self._resolved_type = to_dsl_type(self.type_expression)
             else:
-                raise RuntimeException(
+                raise InvalidTypeAnnotation(
                     stmt=None,
                     msg="Bad annotation in plugin %s for %s, expected str or python type but got %s (%s)"
                     % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression),
