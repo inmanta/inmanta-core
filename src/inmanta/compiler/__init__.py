@@ -247,20 +247,8 @@ class Compiler:
         )
         requires_rel.namespace = self.__root_ns.get_ns_from_string("std")
 
-        # Add std::DataClass
-        dataclass = DefineEntity(
-            ns,
-            LocatableString("Dataclass", nullrange, 0, ns),
-            LocatableString("Base Dataclass.", nullrange, 0, ns),
-            [
-                LocatableString("std::Entity", nullrange, 0, ns),
-            ],
-            [],
-        )
-
         statements.append(entity)
         statements.append(requires_rel)
-        statements.append(dataclass)
         return (statements, blocks)
 
     def export_data(self) -> None:
