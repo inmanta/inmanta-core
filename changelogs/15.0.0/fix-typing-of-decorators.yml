@@ -1,0 +1,6 @@
+---
+description: Fix the typing of agent cache and plugins decorators.
+change-type: patch
+sections:
+  bugfix: "{{description}}"
+destination-branches: [master, iso7]

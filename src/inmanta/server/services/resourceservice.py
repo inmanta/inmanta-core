@@ -493,6 +493,8 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                         LOGGER.error("Attempting to set undeployable resource to deployable state")
                         raise AssertionError("Attempting to set undeployable resource to deployable state")
 
+                version = Id.parse_id(resource_ids[0]).version
+
                 # get instance
                 resource_action = await data.ResourceAction.get(action_id=action_id, connection=inner_connection)
                 if resource_action is None:
@@ -500,7 +502,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                     if started is None:
                         raise ServerError(message="A resource action can only be created with a start datetime.")
 
-                    version = Id.parse_id(resource_ids[0]).version
                     resource_action = data.ResourceAction(
                         environment=env.id,
                         version=version,
@@ -575,10 +576,11 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                             }:
                                 extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
                                 extra_fields["last_deployed_attribute_hash"] = res.attribute_hash
+                                extra_fields["last_deploy"] = finished
+                                extra_fields["last_deployed_version"] = version
 
                             await res.update_persistent_state(
                                 **extra_fields,
-                                last_deploy=finished,
                                 connection=inner_connection,
                             )
 

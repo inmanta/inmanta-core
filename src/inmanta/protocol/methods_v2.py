@@ -427,6 +427,22 @@ def trigger_get_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
 
 
 @typedmethod(
+    path="/scheduler/timers",
+    operation="POST",
+    server_agent=True,
+    timeout=5,
+    arg_options=methods.AGENT_ENV_OPTS,
+    client_types=[],
+    reply=False,
+    enforce_auth=False,
+)
+def notify_timer_update(tid: uuid.UUID) -> None:
+    """
+    Notify the scheduler of a change in the timer settings
+    """
+
+
+@typedmethod(
     path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
 def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:

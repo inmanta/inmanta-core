@@ -25,6 +25,7 @@ import uuid
 import pytest
 
 from inmanta import const, data, execute
+from inmanta.const import AgentAction
 from inmanta.util import get_compiler_version
 from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
 
@@ -447,6 +448,11 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
         compiler_version=get_compiler_version(),
     )
     assert result.code == 200
+    # Pause agent3
+    result = await client.agent_action(tid=environment, name="agent3", action=AgentAction.pause.name)
+    assert result.code == 200
+    a = await data.Agent.get_one(environment=environment, name="agent3")
+    assert a.paused
 
     mod_db = await data.ConfigurationModel.get_version(uuid.UUID(environment), version)
     assert mod_db is not None
@@ -525,7 +531,6 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
     assert changes[6]["status"] == "skipped_for_undefined"
     assert changes[7]["status"] == "skipped_for_undefined"
 
-    pytest.skip("Agent down will only work when we have pause ability!!!")
     assert changes[8]["status"] == "agent_down"
     # Changes for undeployable resources are empty
     for i in range(4, 9):

@@ -28,8 +28,8 @@ from uuid import UUID
 from asyncpg import Connection, UniqueViolationError
 
 from inmanta import const, data
-from inmanta.agent.executor import DeployResult, DryrunResult, FactResult
-from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
+from inmanta.agent import executor
+from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, ResourceState
 from inmanta.data import LogLine
 from inmanta.deploy import state
 from inmanta.protocol import Client
@@ -62,22 +62,36 @@ class StateUpdateManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: state.ResourceState) -> None:
+    async def send_deploy_done(
+        self,
+        attribute_hash: str,
+        result: executor.DeployReport,
+        state: Optional[state.ResourceState],
+        *,
+        started: datetime.datetime,
+        finished: datetime.datetime,
+    ) -> None:
+        """
+        Update the db to reflect the result of a deploy for a given resource.
+
+        :param attribute_hash: The attribute hash of the intent that just finished deploying
+        :param result: The deploy result of the finished deploy. Includes version information.
+        :param state: The current state of this resource. None for stale deploys.
+        """
+
+    @abc.abstractmethod
+    async def dryrun_update(self, env: UUID, dryrun_result: executor.DryrunReport) -> None:
         pass
 
     @abc.abstractmethod
-    async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
-        pass
-
-    @abc.abstractmethod
-    async def set_parameters(self, fact_result: FactResult) -> None:
+    async def set_parameters(self, fact_result: executor.GetFactReport) -> None:
         pass
 
     @abc.abstractmethod
     async def update_resource_intent(
         self,
         environment: UUID,
-        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceIntent]],
         update_blocked_state: bool,
         connection: Optional[Connection] = None,
     ) -> None:
@@ -152,10 +166,16 @@ class ToDbUpdateManager(StateUpdateManager):
                 # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
-    async def send_deploy_done(self, attribute_hash: str, result: DeployResult, state: state.ResourceState) -> None:
-        """
-        Update the db to reflect the result of a deploy for a given resource.
-        """
+    async def send_deploy_done(
+        self,
+        attribute_hash: str,
+        result: executor.DeployReport,
+        state: Optional[state.ResourceState],
+        *,
+        started: datetime.datetime,
+        finished: datetime.datetime,
+    ) -> None:
+        stale_deploy: bool = state is None
 
         def error_and_log(message: str, **context: Any) -> None:
             """
@@ -174,8 +194,6 @@ class ToDbUpdateManager(StateUpdateManager):
         status = result.status
         messages = result.messages
         change = result.change
-
-        finished = datetime.datetime.now().astimezone()
 
         # TODO: clean up this particular dict
         changes_with_rvid: dict[ResourceVersionIdStr, dict[str, object]] = {
@@ -245,13 +263,12 @@ class ToDbUpdateManager(StateUpdateManager):
 
                 extra_datetime_fields: dict[str, datetime.datetime] = {}
                 if status == ResourceState.deployed:
-                    extra_datetime_fields["last_success"] = resource_action.started
+                    # use start time for last_success because it is used for comparison with dependencies' last_produced_events
+                    extra_datetime_fields["last_success"] = started
 
-                # keep track IF we need to propagate if we are stale
-                # but only do it at the end of the transaction
-                if change != Change.nochange:
-                    # We are producing an event
-                    extra_datetime_fields["last_produced_events"] = finished
+                # We are producing an event
+                # use finished time for last_produced_events because it is used for comparison with dependencies' start
+                extra_datetime_fields["last_produced_events"] = finished
 
                 await resource.update_fields(
                     status=status,
@@ -262,17 +279,22 @@ class ToDbUpdateManager(StateUpdateManager):
                     last_deployed_version=resource_id_parsed.version,
                     last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
-                    state=state,
+                    last_deploy_result=state.last_deploy_result if state is not None else None,
                     **extra_datetime_fields,
                     connection=connection,
                 )
 
-                if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
+                if (
+                    not stale_deploy
+                    and "purged" in resource.attributes
+                    and resource.attributes["purged"]
+                    and status == const.ResourceState.deployed
+                ):
                     await data.Parameter.delete_all(
                         environment=self.environment, resource_id=resource.resource_id, connection=connection
                     )
 
-    async def dryrun_update(self, env: UUID, dryrun_result: DryrunResult) -> None:
+    async def dryrun_update(self, env: UUID, dryrun_result: executor.DryrunReport) -> None:
         await self.client.dryrun_update(
             tid=env,
             id=dryrun_result.dryrun_id,
@@ -285,7 +307,7 @@ class ToDbUpdateManager(StateUpdateManager):
             dryrun_result.rvid,
             const.ResourceAction.dryrun,
             uuid.uuid4(),
-            const.ResourceState.dry,
+            dryrun_result.resource_state or const.ResourceState.dry,
             dryrun_result.started,
             dryrun_result.finished,
             dryrun_result.messages,
@@ -317,8 +339,10 @@ class ToDbUpdateManager(StateUpdateManager):
         )
         await resource_action.insert()
 
-    async def set_parameters(self, fact_result: FactResult) -> None:
-        await self.client.set_parameters(tid=self.environment, parameters=fact_result.parameters)
+    async def set_parameters(self, fact_result: executor.GetFactReport) -> None:
+        # TODO: fact_result -> fact_report
+        if fact_result.success:
+            await self.client.set_parameters(tid=self.environment, parameters=fact_result.parameters)
         await self._write_resource_action(
             env=self.environment,
             resource=fact_result.resource_id,
@@ -327,13 +351,13 @@ class ToDbUpdateManager(StateUpdateManager):
             started=fact_result.started,
             finished=fact_result.finished,
             messages=fact_result.messages,
-            status=None,
+            status=fact_result.resource_state,
         )
 
     async def update_resource_intent(
         self,
         environment: UUID,
-        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceDetails]],
+        intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceIntent]],
         update_blocked_state: bool,
         connection: Optional[Connection] = None,
     ) -> None:

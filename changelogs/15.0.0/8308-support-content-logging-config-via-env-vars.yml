@@ -1,0 +1,6 @@
+---
+description: Added support to provide the content of a logging configuration in an environment variable.
+issue-nr: 8308
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master]

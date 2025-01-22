@@ -28,7 +28,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from inmanta import const, data, util
-from inmanta.agent.executor import DeployResult
+from inmanta.agent.executor import DeployReport
 from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.data.model import ResourceId
 from inmanta.deploy import persistence, state
@@ -424,10 +424,11 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
     async def deploy(rvid: ResourceVersionIdStr, change: Change = Change.nochange):
         update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
         action_id = uuid.uuid4()
+        start_time: datetime = datetime.now().astimezone()
         await update_manager.send_in_progress(action_id, Id.parse_id(rvid))
         await update_manager.send_deploy_done(
             attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resources[0]),
-            result=DeployResult(
+            result=DeployReport(
                 rvid=rvid,
                 action_id=action_id,
                 resource_state=const.HandlerResourceState.deployed,
@@ -436,10 +437,13 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
                 change=change,
             ),
             state=state.ResourceState(
-                status=state.ComplianceStatus.COMPLIANT,
-                deployment_result=state.DeploymentResult.DEPLOYED,
-                blocked=state.BlockedStatus.NO,
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
+                last_deployed=datetime.now().astimezone(),
             ),
+            started=start_time,
+            finished=datetime.now().astimezone(),
         )
 
     async def assert_resources_to_deploy(

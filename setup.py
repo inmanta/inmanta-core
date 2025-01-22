@@ -45,7 +45,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "15.0.0"
+version = "15.0.1"
 
 setup(
     version=version,
@@ -87,7 +87,7 @@ setup(
         # option to install a matched pair of inmanta-core and pytest-inmanta-extensions
         "pytest-inmanta-extensions": [f"pytest-inmanta-extensions~={version}.0.dev"],
         "datatrace": ["graphviz"],
-        "tracing": ["logfire>=0.46,<3.0", "opentelemetry-instrumentation-asyncpg~=0.46b0"],
+        "tracing": ["logfire>=0.46,<4.0", "opentelemetry-instrumentation-asyncpg~=0.46b0"],
     },
     entry_points={
         "console_scripts": [

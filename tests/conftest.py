@@ -27,6 +27,7 @@ from threading import Condition
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
+import inmanta.deploy.state
 import toml
 from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
@@ -299,7 +300,7 @@ async def postgres_db_debug(postgres_db, database_name) -> abc.AsyncIterator[Non
     yield
     print(
         "Connection to DB will be kept alive for one hour. Connect with"
-        f" `psql --host localhost --port {postgres_db.port} {database_name} {postgres_db.user}`"
+        f" `psql --host {postgres_db.host} --port {postgres_db.port} {database_name} {postgres_db.user}`"
     )
     await asyncio.sleep(3600)
 
@@ -688,7 +689,7 @@ async def server_config(
         pg_password = "" if postgres_db.password is None else postgres_db.password
 
         config.Config.set("database", "name", database_name)
-        config.Config.set("database", "host", "localhost")
+        config.Config.set("database", "host", postgres_db.host)
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
         config.Config.set("database", "password", pg_password)
@@ -765,7 +766,7 @@ async def server_multi(
 
         port = str(unused_tcp_port_factory())
         config.Config.set("database", "name", database_name)
-        config.Config.set("database", "host", "localhost")
+        config.Config.set("database", "host", postgres_db.host)
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
         config.Config.set("database", "password", pg_password)
@@ -872,10 +873,13 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
     try:
         if not DISABLE_STATE_CHECK:
             for agent in agents:
+                await agent.stop_working()
                 the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
                 for r, state in the_state.items():
+                    if state.blocked is inmanta.deploy.state.Blocked.TEMPORARILY_BLOCKED:
+                        # TODO[#8541]: also persist TEMPORARILY_BLOCKED in database
+                        state.blocked = inmanta.deploy.state.Blocked.NOT_BLOCKED
                     print(r, state)
-                await agent.stop_working()
                 monkeypatch.setattr(agent.scheduler._work.agent_queues, "_new_agent_notify", lambda x: x)
                 await agent.start_working()
                 new_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))

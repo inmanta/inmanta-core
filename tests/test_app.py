@@ -24,6 +24,7 @@ import subprocess
 import sys
 import time
 import typing
+import uuid
 from subprocess import TimeoutExpired
 from threading import Timer
 
@@ -518,3 +519,210 @@ def test_compiler_summary_reporter(monkeypatch, capsys) -> None:
     summary_reporter.print_summary(show_stack_traces=True)
     output = capsys.readouterr().err
     assert re.match(r"\n=+ EXCEPTION TRACE =+\n(.|\n)*\n=+ EXPORT FAILURE =+\nError: This is an export failure\n", output)
+
+
+def test_validate_logging_config(tmpdir, monkeypatch):
+    """
+    Test the validate-logging-config command.
+    """
+    _, stderr, returncode = run_without_tty(
+        args=[sys.executable, "-m", "inmanta.app", "validate-logging-config"],
+    )
+    assert returncode == 1
+    assert any("No logging configuration found." in line for line in stderr)
+
+    logging_config_file = os.path.join(tmpdir, "non-existing-file")
+    _, stderr, returncode = run_without_tty(
+        args=[sys.executable, "-m", "inmanta.app", "--logging-config", logging_config_file, "validate-logging-config"],
+    )
+    assert returncode == 1
+    assert any(f"Logging config file {logging_config_file} doesn't exist" in line for line in stderr)
+
+    logging_config_file = os.path.join(tmpdir, "logging_config.yml")
+    # Write logging config that contains a syntax error
+    with open(logging_config_file, "w") as fh:
+        fh.write(
+            """
+        formatters:
+          server_log_formatter:
+            format: '%(levelname)-8s %(name)-10s %(message)s'
+        handlers   # HERE A COLON IS MISSING
+          server_handler:
+            class: logging.StreamHandler
+            level: INFO
+            formatter: server_log_formatter
+            stream: ext://sys.stdout
+        root:
+          handlers:
+          - server_handler
+          level: DEBUG
+        version: 1
+        disable_existing_loggers: false
+        """
+        )
+    _, stderr, returncode = run_without_tty(
+        args=[sys.executable, "-m", "inmanta.app", "--logging-config", logging_config_file, "validate-logging-config"],
+    )
+    assert returncode == 1
+    assert any("could not find expected ':'" in line for line in stderr)
+
+    # Simple logging config that writes all logs to stdout
+    with open(logging_config_file, "w") as fh:
+        fh.write(
+            """
+        formatters:
+          server_log_formatter:
+            format: '%(levelname)-8s %(name)-10s %(message)s'
+        handlers:
+          server_handler:
+            class: logging.StreamHandler
+            level: INFO
+            formatter: server_log_formatter
+            stream: ext://sys.stdout
+        root:
+          handlers:
+          - server_handler
+          level: DEBUG
+        version: 1
+        disable_existing_loggers: false
+        """
+        )
+    stdout, stderr, returncode = run_without_tty(
+        args=[sys.executable, "-m", "inmanta.app", "--logging-config", logging_config_file, "validate-logging-config"],
+    )
+    assert returncode == 0
+    assert any(f"Using logging config from file {logging_config_file}" in line for line in stderr)
+    assert any(
+        "Emitting log line 'Log line from Inmanta server at level <LEVEL>' using logger 'inmanta.protocol.rest.server'" in line
+        for line in stderr
+    )
+    assert any("INFO     inmanta.protocol.rest.server Log line from Inmanta server at level INFO" in line for line in stdout)
+    assert not any(
+        "DEBUG    inmanta.protocol.rest.server Log line from Inmanta server at level DEBUG" in line for line in stdout
+    )
+
+    # Write a logging config that works.
+    #  * Write all logs to server.log
+    #  * Write resource-action-log to different file.
+    log_dir = os.path.join(tmpdir, "log")
+    os.mkdir(log_dir)
+    assert not os.listdir(log_dir)
+    logging_config_file = os.path.join(tmpdir, "logging_config.yml.tmpl")
+    with open(logging_config_file, "w") as fh:
+        fh.write(
+            f"""
+        formatters:
+          server_log_formatter:
+            format: '%(levelname)-8s %(name)-10s %(message)s'
+          resource_action_log_formatter:
+            format: '%(name)-10s %(levelname)-8s %(message)s'
+        handlers:
+          server_handler:
+            class: logging.handlers.WatchedFileHandler
+            filename: {log_dir}/server.log
+            formatter: server_log_formatter
+            level: WARNING
+            mode: a+
+          scheduler_resource_action_handler:
+            class: logging.handlers.WatchedFileHandler
+            filename: {log_dir}/resource-action-{{environment}}.log
+            formatter: resource_action_log_formatter
+            level: ERROR
+        loggers:
+          inmanta.resource_action:
+            handlers:
+            - scheduler_resource_action_handler
+            level: DEBUG
+            propagate: true
+        root:
+          handlers:
+          - server_handler
+          level: DEBUG
+        version: 1
+        disable_existing_loggers: false
+        """
+        )
+    env_id = uuid.uuid4()
+    stdout, stderr, returncode = run_without_tty(
+        args=[
+            sys.executable,
+            "-m",
+            "inmanta.app",
+            "--logging-config",
+            logging_config_file,
+            "validate-logging-config",
+            "-e",
+            str(env_id),
+        ],
+    )
+    assert any(f"Using logging config from file {logging_config_file}" in line for line in stderr)
+    assert any(
+        "Emitting log line 'Log line from callback at level <LEVEL>' using logger 'inmanta_lsm.callback'" in line
+        for line in stderr
+    )
+    assert any(
+        f"Emitting log line 'Log line for resource action log at level <LEVEL>' using logger 'inmanta.resource_action.{env_id}'"
+        in line
+        for line in stderr
+    )
+    assert returncode == 0
+    server_log_file = os.path.join(log_dir, "server.log")
+    resource_action_log_file = os.path.join(log_dir, f"resource-action-{env_id}.log")
+    files_in_log_dir = os.listdir(log_dir)
+    assert sorted(files_in_log_dir) == sorted([os.path.basename(server_log_file), os.path.basename(resource_action_log_file)])
+
+    with open(server_log_file, "r") as fh:
+        content_log_file = fh.read()
+    assert "WARNING  inmanta_lsm.callback Log line from callback at level WARNING" in content_log_file
+    assert "INFO     inmanta_lsm.callback Log line from callback at level INFO" not in content_log_file
+
+    with open(resource_action_log_file, "r") as fh:
+        content_log_file = fh.read()
+    assert f"inmanta.resource_action.{env_id} ERROR    Log line for resource action log at level ERROR" in content_log_file
+    assert f"inmanta.resource_action.{env_id} INFO     Log line for resource action log at level INFO" not in content_log_file
+    assert "WARNING  inmanta_lsm.callback Log line from callback at level WARNING" not in content_log_file
+    assert "INFO     inmanta_lsm.callback Log line from callback at level INFO" not in content_log_file
+
+    # Test whether component config file is picked up correctly
+    monkeypatch.chdir(tmpdir)
+    logging_config_file = os.path.join(tmpdir, f"{logging_config_file}.yml")
+    dot_inmanta_file = os.path.join(tmpdir, ".inmanta")
+    for component_name in ["server", "scheduler", "compiler"]:
+        with open(logging_config_file, "w") as fh:
+            fh.write(
+                f"""
+                    formatters:
+                      server_log_formatter:
+                        format: '{component_name} -- %(message)s'
+                    handlers:
+                      server_handler:
+                        class: logging.StreamHandler
+                        level: INFO
+                        formatter: server_log_formatter
+                        stream: ext://sys.stdout
+                    root:
+                      handlers:
+                      - server_handler
+                      level: DEBUG
+                    version: 1
+                    disable_existing_loggers: false
+                """
+            )
+        with open(dot_inmanta_file, "w") as fh:
+            fh.write(
+                f"""
+                    [logging]
+                    {component_name} = {logging_config_file}
+                """
+            )
+        stdout, stderr, returncode = run_without_tty(
+            args=[sys.executable, "-m", "inmanta.app", "validate-logging-config", component_name],
+        )
+        assert any(f"Using logging config from file {logging_config_file}" in line for line in stderr)
+        assert any(
+            "Emitting log line 'Log line from Inmanta server at level <LEVEL>' using logger 'inmanta.protocol.rest.server'"
+            in line
+            for line in stderr
+        )
+        assert any(f"{component_name} -- Log line from Inmanta server at level INFO" in line for line in stdout)
+        assert returncode == 0

@@ -21,6 +21,7 @@ import datetime
 import logging
 import uuid
 from collections import abc, defaultdict
+from collections.abc import Sequence
 from typing import Literal, Optional, cast
 
 import asyncpg
@@ -809,9 +810,11 @@ class OrchestrationService(protocol.ServerSlice):
 
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
-            await self.agentmanager_service.ensure_agent_registered(
-                env, nodename=const.AGENT_SCHEDULER_ID, connection=connection
-            )
+            all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
+            all_agents.add(const.AGENT_SCHEDULER_ID)
+
+            for agent in all_agents:
+                await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
@@ -1196,7 +1199,7 @@ class OrchestrationService(protocol.ServerSlice):
         agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
         agents: Optional[list[str]] = None,
     ) -> Apireturn:
-        warnings = []
+        warnings: list[str] = []
 
         # get latest version
         version_id = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
@@ -1205,10 +1208,14 @@ class OrchestrationService(protocol.ServerSlice):
 
         # filter agents
         allagents = await data.ConfigurationModel.get_agents(env.id, version_id)
+        agents_to_call: Sequence[str] = []
+
         if agents is not None:
+            # select specific agents
             required = set(agents)
             present = set(allagents)
             allagents = list(required.intersection(present))
+            agents_to_call = allagents
             notfound = required - present
             if notfound:
                 warnings.append(
@@ -1219,26 +1226,20 @@ class OrchestrationService(protocol.ServerSlice):
             return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
 
         await self.autostarted_agent_manager._ensure_scheduler(env.id)
-        allagents = [const.AGENT_SCHEDULER_ID]
 
-        present = set()
-        absent = set()
-        for agent in allagents:
-            client = self.agentmanager_service.get_agent_client(env.id, agent)
-            if client is not None:
-                incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
+        client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
+        if not client:
+            return attach_warnings(404, {"message": "Scheduler could not be reached"}, warnings)
+
+        incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
+
+        if agents is None:
+            self.add_background_task(client.trigger(env.id, None, incremental_deploy))
+        else:
+            for agent in agents_to_call:
                 self.add_background_task(client.trigger(env.id, agent, incremental_deploy))
-                present.add(agent)
-            else:
-                absent.add(agent)
 
-        if absent:
-            warnings.append("Could not reach agents named [%s]" % ",".join(sorted(list(absent))))
-
-        if not present:
-            return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
-
-        return attach_warnings(200, {"agents": sorted(list(present))}, warnings)
+        return attach_warnings(200, {"agents": sorted(allagents)}, warnings)
 
     @handle(methods_v2.list_desired_state_versions, env="tid")
     async def desired_state_version_list(

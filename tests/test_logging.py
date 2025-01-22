@@ -20,6 +20,8 @@ import logging
 import os.path
 import sys
 import uuid
+from asyncio import TimeoutError, subprocess, wait_for
+from collections.abc import Mapping
 from io import StringIO
 from typing import Optional
 
@@ -28,8 +30,14 @@ import yaml
 
 import inmanta
 from inmanta import config
+from inmanta.config import logging_config
 from inmanta.const import ENVIRON_FORCE_TTY
-from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, MultiLineFormatter, Options, load_config_file_to_dict
+from inmanta.logging import InmantaLoggerConfig, LoggingConfigBuilder, LoggingConfigFromFile, Options
+
+
+def load_config_file_to_dict(file_name: str, context: Mapping[str, str]) -> dict[str, object]:
+    logging_config_source = LoggingConfigFromFile(file_name=file_name)
+    return logging_config_source.read_logging_config(context=context)
 
 
 @pytest.fixture(autouse=True)
@@ -39,117 +47,6 @@ def cleanup_logger():
     yield
     # Make sure we maintain the initial root log level, so that logging in pytest works as expected.
     logging.root.setLevel(root_log_level)
-
-
-def test_setup_instance():
-    inmanta_logger = InmantaLoggerConfig.get_instance()
-    handler = inmanta_logger.get_handler()
-    assert handler.stream == sys.stdout
-    assert isinstance(handler.formatter, MultiLineFormatter)
-    assert handler.level == logging.INFO
-
-
-def test_setup_instance_2_times():
-    inmanta_logger = InmantaLoggerConfig.get_instance(sys.stderr)
-    handler = inmanta_logger.get_handler()
-    assert handler.stream == sys.stderr
-    assert isinstance(handler.formatter, MultiLineFormatter)
-    assert handler.level == logging.INFO
-
-    inmanta_logger = InmantaLoggerConfig.get_instance(sys.stderr)
-    handler = inmanta_logger.get_handler()
-    assert handler.stream == sys.stderr
-    assert isinstance(handler.formatter, MultiLineFormatter)
-    assert handler.level == logging.INFO
-
-    with pytest.raises(Exception) as e:
-        InmantaLoggerConfig.get_instance(sys.stdout)
-    message = "Instance already exists with a different stream"
-    assert message in str(e.value)
-
-
-def test_setup_instance_with_stream(allow_overriding_root_log_level: None):
-    stream = StringIO()
-    inmanta_logger = InmantaLoggerConfig.get_instance(stream)
-    handler = inmanta_logger.get_handler()
-    assert handler.stream == stream
-    assert isinstance(handler.formatter, MultiLineFormatter)
-    assert handler.level == logging.INFO
-
-    # Log a message
-    logger = logging.getLogger("test_logger")
-    logger.info("This is a test message")
-    log_output = stream.getvalue().strip()
-    expected_output = "test_logger              INFO    This is a test message"
-    assert log_output == expected_output
-
-
-def test_set_log_level(allow_overriding_root_log_level: None):
-    stream = StringIO()
-    inmanta_logger = InmantaLoggerConfig.get_instance(stream)
-    handler = inmanta_logger.get_handler()
-    assert handler.level == logging.INFO
-
-    logger = logging.getLogger("test_logger")
-    expected_output = "test_logger              DEBUG   This is a test message"
-
-    # Log a message and verify that it is not logged as the log level is too high
-    logger.debug("This is a test message")
-    log_output = stream.getvalue().strip()
-    assert expected_output not in log_output
-
-    # change the log_level and verify the log is visible this time.
-    inmanta_logger.set_log_level("DEBUG")
-    logger.debug("This is a test message")
-    log_output = stream.getvalue().strip()
-    assert expected_output in log_output
-
-
-def test_set_log_formatter(allow_overriding_root_log_level: None):
-    stream = StringIO()
-    inmanta_logger = InmantaLoggerConfig.get_instance(stream)
-
-    handler = inmanta_logger.get_handler()
-    assert isinstance(handler.formatter, MultiLineFormatter)
-
-    logger = logging.getLogger("test_logger")
-    expected_output_format1 = "test_logger              INFO    This is a test message"
-    expected_output_format2 = "test_logger - INFO - This is a test message"
-
-    # Log a message with the default formatter
-    logger.info("This is a test message")
-    log_output = stream.getvalue().strip()
-    assert expected_output_format1 in log_output
-
-    # change the formatter and verify the output is different
-    formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
-    inmanta_logger.set_log_formatter(formatter)
-    assert inmanta_logger.get_handler().formatter == formatter
-
-    logger.info("This is a test message")
-    log_output = stream.getvalue().strip()
-    assert expected_output_format2 in log_output
-
-
-def test_set_logfile_location(
-    tmpdir,
-    allow_overriding_root_log_level: None,
-):
-    log_file = tmpdir.join("test.log")
-    inmanta_logger = InmantaLoggerConfig.get_instance()
-    inmanta_logger.set_logfile_location(str(log_file))
-    handler = inmanta_logger.get_handler()
-    assert isinstance(handler, logging.handlers.WatchedFileHandler)
-    assert handler.baseFilename == str(log_file)
-
-    # Log a message
-    logger = logging.getLogger("test_logger")
-    logger.info("This is a test message")
-
-    # Verify the message was written to the log file
-    with open(str(log_file)) as f:
-        contents = f.read()
-        assert "This is a test message" in contents
 
 
 @pytest.mark.parametrize_any(
@@ -281,6 +178,15 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
         # Reset stream buffer
         stream.truncate()
 
+    def get_output_and_clear() -> str:
+        value = stream.getvalue()
+        stream.seek(0)
+        stream.truncate(0)
+        return value
+
+    # Log file to pass in the options.
+    # This config option will be overridden by the other config in this test case.
+    old_log_file = os.path.join(tmpdir, "old_log_file.txt")
     path_logging_config_file1 = os.path.join(tmpdir, "logging_config1.yml")
     path_logging_config_file2 = os.path.join(tmpdir, "logging_config2.yml")
     path_logging_config_file3 = os.path.join(tmpdir, "logging_config3.yml")
@@ -288,57 +194,108 @@ def test_handling_logging_config_option(tmpdir, monkeypatch, allow_overriding_ro
     # Set --logging-config option on CLI only
     write_logging_config_file(path=path_logging_config_file1, formatter="AAA %(message)s")
     # Also assert that the other config options are ignored when logging_config is set.
-    setup_logging_config(cli_options=Options(logging_config=path_logging_config_file1, verbose=1), file_option_value=None)
+    options1 = {"log_file": old_log_file, "log_file_level": "4", "keep_logger_names": True}
+    setup_logging_config(
+        cli_options=Options(logging_config=path_logging_config_file1, **options1),
+        file_option_value=None,
+    )
     logger.info("test")
-    assert "AAA test" in stream.getvalue()
+    output = get_output_and_clear()
+    assert "AAA test" in output
+    assert (
+        f"Ignoring the following options: --log-file {old_log_file}, --log-file-level 4, --keep-logger-names. "
+        f"Using logging config from file {path_logging_config_file1}" in output
+    )
 
     # Set logging_config option in cfg file only
     write_logging_config_file(path=path_logging_config_file1, formatter="BBB %(message)s")
-    setup_logging_config(cli_options=Options(), file_option_value=path_logging_config_file1)
+    options2 = {"keep_logger_names": True}
+    setup_logging_config(
+        cli_options=Options(**options2),
+        file_option_value=path_logging_config_file1,
+    )
     logger.info("test")
-    assert "BBB test" in stream.getvalue()
+    output = get_output_and_clear()
+    assert "BBB test" in output
+    assert (
+        f"Ignoring the following options: --keep-logger-names. "
+        f"Using logging config from file {path_logging_config_file1}" in output
+    )
 
     # Set the logging-config config option both on CLI and cfg file. CLI option takes precedence.
     write_logging_config_file(path=path_logging_config_file1, formatter="CCC %(message)s")
     write_logging_config_file(path=path_logging_config_file2, formatter="DDD %(message)s")
     setup_logging_config(
-        cli_options=Options(logging_config=path_logging_config_file1),
+        cli_options=Options(logging_config=path_logging_config_file1, **options2),
         file_option_value=path_logging_config_file2,
     )
     logger.info("test")
-    assert "CCC test" in stream.getvalue()
+    output = get_output_and_clear()
+    assert "CCC test" in output
+    assert (
+        f"Ignoring the following options: --keep-logger-names. "
+        f"Using logging config from file {path_logging_config_file1}" in output
+    )
 
     # Set the logging-config config option in the cfg config file and using the environment variable.
     # The environment variable takes precedence.
     write_logging_config_file(path=path_logging_config_file1, formatter="EEE %(message)s")
     write_logging_config_file(path=path_logging_config_file2, formatter="FFF %(message)s")
+    options3 = {"timed": True}
     with monkeypatch.context() as m:
         m.setenv("INMANTA_CONFIG_LOGGING_CONFIG", path_logging_config_file1)
         setup_logging_config(
-            cli_options=Options(),
+            cli_options=Options(**options3),
             file_option_value=path_logging_config_file2,
         )
         logger.info("test")
-        assert "EEE test" in stream.getvalue()
+        output = get_output_and_clear()
+        assert "EEE test" in output
+        assert (
+            f"Ignoring the following options: --timed-logs. "
+            f"Using logging config from file {path_logging_config_file1}" in output
+        )
 
     # Set the logging-config config option on the CLI, in the cfg config file and using the environment variable.
     # The CLI option takes precedence.
     write_logging_config_file(path=path_logging_config_file1, formatter="GGG %(message)s")
     write_logging_config_file(path=path_logging_config_file2, formatter="HHH %(message)s")
     write_logging_config_file(path=path_logging_config_file3, formatter="III %(message)s")
+    options4 = {"log_file": old_log_file, **options3}
     with monkeypatch.context() as m:
         m.setenv("INMANTA_CONFIG_LOGGING_CONFIG", path_logging_config_file1)
         setup_logging_config(
-            cli_options=Options(logging_config=path_logging_config_file2),
+            cli_options=Options(logging_config=path_logging_config_file2, **options4),
             file_option_value=path_logging_config_file3,
         )
         logger.info("test")
-        assert "HHH test" in stream.getvalue()
+        output = get_output_and_clear()
+        assert "HHH test" in output
+        assert (
+            f"Ignoring the following options: --log-file {old_log_file}, --timed-logs. "
+            f"Using logging config from file {path_logging_config_file2}" in output
+        )
+
+    # After all of these logs, we assert that the log file passed to the options (old_log_file)
+    # Was ignored and nothing was written to it.
+    assert not os.path.exists(old_log_file)
+
+    # If given no other options, we can still use the old logging cli options
+    setup_logging_config(
+        cli_options=Options(**options1),
+    )
+    logger.info("test")
+    # Assert that the file gets created
+    assert os.path.exists(old_log_file)
+    with open(old_log_file, "r") as file:
+        content = file.read()
+        assert "test" in content
+        assert "WARNING" not in content
 
 
 def test_log_file_or_template(tmp_path):
 
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(Exception, match=f"Logging config file {str(tmp_path / 'test')} doesn't exist."):
         # TODO: do we want more specific exceptions?
         load_config_file_to_dict(str(tmp_path / "test"), {})
 
@@ -358,7 +315,7 @@ def test_log_file_or_template(tmp_path):
 
     with pytest.raises(
         Exception,
-        match="The configuration template at .* refers to context variable 'test',"
+        match="The logging configuration template from .* refers to context variable 'test',"
         " but this variable is not available. The context is limited to xvar, yvar",
     ):
         load_config_file_to_dict(
@@ -402,7 +359,235 @@ def test_server_documentation_conformance(inmanta_config, monkeypatch):
 
     default = LoggingConfigBuilder()
     from_config = default.get_logging_config_from_options(
-        sys.stdout, Options(log_file_level="INFO", log_file="/var/log/inmanta/server.log"), component="server", context={}
+        sys.stdout,
+        Options(log_file_level="INFO", log_file="/var/log/inmanta/server.log", timed=True),
+        component="server",
+        context={},
     )
 
     assert from_config._to_dict_config() == from_file_dict
+
+
+def test_logging_config_content_environment_variables(monkeypatch, capsys, tmpdir) -> None:
+    """
+    Verify that the environment variables, that contain the content of the logging configuration,
+    are correctly taken into account when loading the logging configuration.
+    """
+    logging_config_file = os.path.join(tmpdir, "config.yml")
+    with open(logging_config_file, "w") as fh:
+        fh.write(
+            """
+                disable_existing_loggers: false
+                formatters:
+                  console_formatter:
+                    format: "DONT_USE -- %(message)s"
+                handlers:
+                  console_handler:
+                    class: logging.StreamHandler
+                    formatter: console_formatter
+                    level: INFO
+                    stream: ext://sys.stdout
+                root:
+                  handlers:
+                  - console_handler
+                  level: INFO
+                version: 1
+            """
+        )
+    logging_config.set(logging_config_file)
+
+    # Set the INMANTA_CONFIG_LOGGING_CONFIG_TMPL environment variable and verify that it overrides
+    # the logging config set via the config.logging_config configuration option.
+    logging_config1 = """
+        disable_existing_loggers: false
+        formatters:
+          console_formatter:
+            format: "config1 -- {environment} -- %(message)s"
+        handlers:
+          console_handler:
+            class: logging.StreamHandler
+            formatter: console_formatter
+            level: INFO
+            stream: ext://sys.stdout
+        root:
+          handlers:
+          - console_handler
+          level: INFO
+        version: 1
+    """
+    env_id = str(uuid.uuid4())
+    monkeypatch.setenv("INMANTA_CONFIG_LOGGING_CONFIG_TMPL", logging_config1)
+    inmanta_logging_config = InmantaLoggerConfig.get_instance(stream=sys.stdout)
+    inmanta_logging_config.apply_options(options=Options(), component="server", context={"environment": env_id})
+    logger = logging.getLogger("test")
+    capsys.readouterr()  # Clear buffer
+    logger.info("test")
+    captured = capsys.readouterr()
+    assert f"config1 -- {env_id} -- test" in captured.out
+
+    # Set the component-specific template and verify that it overrides the config from INMANTA_CONFIG_LOGGING_CONFIG_TMPL
+    logging_config2 = """
+        disable_existing_loggers: false
+        formatters:
+          console_formatter:
+            format: "config2 -- {environment} -- %(message)s"
+        handlers:
+          console_handler:
+            class: logging.StreamHandler
+            formatter: console_formatter
+            level: INFO
+            stream: ext://sys.stdout
+        root:
+          handlers:
+          - console_handler
+          level: INFO
+        version: 1
+    """
+    monkeypatch.setenv("INMANTA_LOGGING_SERVER_TMPL", logging_config2)
+    inmanta_logging_config.clean_instance()
+    inmanta_logging_config = InmantaLoggerConfig.get_instance(stream=sys.stdout)
+    inmanta_logging_config.apply_options(options=Options(), component="server", context={"environment": env_id})
+    logger = logging.getLogger("test")
+    capsys.readouterr()  # Clear buffer
+    logger.info("test")
+    captured = capsys.readouterr()
+    assert f"config2 -- {env_id} -- test" in captured.out
+
+    # Set INMANTA_LOGGING_SERVER_TMPL AND INMANTA_LOGGING_SERVER_CONTENT simultaneously.
+    # Assert that INMANTA_LOGGING_SERVER_CONTENT is used.
+    logging_config3 = """
+        disable_existing_loggers: false
+        formatters:
+          console_formatter:
+            format: "config3 -- {environment} -- %(message)s"
+        handlers:
+          console_handler:
+            class: logging.StreamHandler
+            formatter: console_formatter
+            level: INFO
+            stream: ext://sys.stdout
+        root:
+          handlers:
+          - console_handler
+          level: INFO
+        version: 1
+    """
+    monkeypatch.setenv("INMANTA_LOGGING_SERVER_CONTENT", logging_config3)
+    inmanta_logging_config.clean_instance()
+    inmanta_logging_config = InmantaLoggerConfig.get_instance(stream=sys.stdout)
+    inmanta_logging_config.apply_options(options=Options(), component="server", context={"environment": env_id})
+    captured = capsys.readouterr()
+    assert (
+        "Environment variables INMANTA_LOGGING_SERVER_CONTENT and INMANTA_LOGGING_SERVER_TMPL are set simultaneously."
+        " Using INMANTA_LOGGING_SERVER_CONTENT" in captured.out
+    )
+    logger = logging.getLogger("test")
+    logger.info("test")
+    captured = capsys.readouterr()
+    assert "config3 -- {environment} -- test" in captured.out
+
+    # Verify that the --logging-config CLI option still overrides all other config.
+    other_logging_config_file = os.path.join(tmpdir, "cli.yml")
+    with open(other_logging_config_file, "w") as fh:
+        fh.write(
+            """
+                disable_existing_loggers: false
+                formatters:
+                  console_formatter:
+                    format: "CLI -- %(message)s"
+                handlers:
+                  console_handler:
+                    class: logging.StreamHandler
+                    formatter: console_formatter
+                    level: INFO
+                    stream: ext://sys.stdout
+                root:
+                  handlers:
+                  - console_handler
+                  level: INFO
+                version: 1
+            """
+        )
+    inmanta_logging_config.clean_instance()
+    inmanta_logging_config = InmantaLoggerConfig.get_instance(stream=sys.stdout)
+    inmanta_logging_config.apply_options(
+        options=Options(logging_config=other_logging_config_file), component="server", context={"environment": env_id}
+    )
+    logger = logging.getLogger("test")
+    capsys.readouterr()  # Clear buffer
+    logger.info("test")
+    captured = capsys.readouterr()
+    assert "CLI -- test" in captured.out
+
+
+async def test_output_default_logging_cmd(inmanta_config, tmp_path):
+
+    components = ["scheduler", "server", "compiler"]
+    for component in components:
+        if component == "scheduler":
+            output_file = str(tmp_path / f"{component}.yml.tmpl")
+        else:
+            output_file = str(tmp_path / f"{component}.yml")
+
+        args = [
+            sys.executable,
+            "-m",
+            "inmanta.app",
+            "output-default-logging-config",
+            "--component",
+            component,
+            output_file,
+        ]
+        process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE)
+        try:
+            await wait_for(process.communicate(), timeout=5)
+        except TimeoutError as e:
+            process.kill()
+            await process.communicate()
+            raise e
+        assert process.returncode == 0
+
+        with open(output_file, "r") as fh:
+            logging_config = fh.read()
+        assert "no_color: false" in logging_config
+        assert "reset: true" in logging_config
+        assert "log_colors: null" not in logging_config
+
+        # Assert we get an error if the output file already exists
+        process = await subprocess.create_subprocess_exec(*args, stderr=subprocess.PIPE)
+        try:
+            (_, stderr) = await wait_for(process.communicate(), timeout=5)
+            assert f"The requested output location already exists: {output_file}" in stderr.decode()
+        except TimeoutError as e:
+            process.kill()
+            await process.communicate()
+            raise e
+        assert process.returncode == 1
+
+        os.remove(output_file)
+
+    # Assert that the .tmpl suffix is enforced when generating the logging config for the scheduler.
+    output_file = str(tmp_path / "test.yml")
+    args = [
+        sys.executable,
+        "-m",
+        "inmanta.app",
+        "output-default-logging-config",
+        "--component",
+        "scheduler",
+        "-e",
+        str(uuid.uuid4()),
+        output_file,
+    ]
+    process = await subprocess.create_subprocess_exec(*args, stderr=subprocess.PIPE)
+    try:
+        (_, stderr) = await wait_for(process.communicate(), timeout=5)
+    except TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+    assert process.returncode == 1
+    assert (
+        "The config being generated will be a template, but the given filename doesn't end with the .tmpl suffix."
+        in stderr.decode()
+    )

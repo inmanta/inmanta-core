@@ -446,46 +446,19 @@ async def test_api(init_dataclasses_and_load_schema):
     assert result == 404
 
     code, all_agents = await am.list_agents(None)
-    assert code == 200
-    shouldbe = {
-        "agents": [
-            {"name": "agent1", "paused": True, "last_failover": "", "primary": "", "environment": env.id, "state": "paused"},
-            {
-                "name": "agent1",
-                "paused": False,
-                "last_failover": expiration,
-                "primary": "",
-                "environment": env5.id,
-                "state": "down",
-            },
-            {"name": "agent2", "paused": False, "last_failover": UNKWN, "primary": UNKWN, "environment": env.id, "state": "up"},
-            {"name": "agent3", "paused": False, "last_failover": UNKWN, "primary": UNKWN, "environment": env.id, "state": "up"},
-            {"name": "agent1", "paused": True, "last_failover": "", "primary": "", "environment": env4.id, "state": "paused"},
-            {
-                "name": "agent2",
-                "paused": False,
-                "last_failover": UNKWN,
-                "primary": UNKWN,
-                "environment": env4.id,
-                "state": "up",
-            },
-            {"name": "agent3", "paused": False, "last_failover": "", "primary": "", "environment": env4.id, "state": "down"},
-            {"name": "agent4", "paused": False, "last_failover": "", "primary": "", "environment": env2.id, "state": "down"},
-        ]
-    }
-    assert_equal_ish(shouldbe, all_agents, sortby=["environment", "name"])
+    assert code == 404
 
     start = "agent2"
-    code, all_agents = await am.list_agents(env=None, start=start)
+    code, all_agents = await am.list_agents(env=env, start=start)
     assert code == 200
-    assert len(all_agents["agents"]) == 3
+    assert len(all_agents["agents"]) == 1
     for a in all_agents["agents"]:
         assert a["name"] > start, f"List of agent should not contain a name (={a['name']}) before or equal to start (={start})"
 
     end = "agent2"
-    code, all_agents = await am.list_agents(env=None, end=end)
+    code, all_agents = await am.list_agents(env=env, end=end)
     assert code == 200
-    assert len(all_agents["agents"]) == 3
+    assert len(all_agents["agents"]) == 1
     for a in all_agents["agents"]:
         assert a["name"] < end, f"List of agent should not contain a name (={a['name']}) after or equal to end (={end})"
 
@@ -786,191 +759,6 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     assert len(session_manager._sessions) == 0
 
 
-@pytest.mark.parametrize("no_agent", [True])
-async def test_agent_actions(server, client, async_finalizer, no_agent: bool):
-    """
-    Test the agent_action() and the all_agents_action() API call.
-    """
-    pytest.skip("Need to be migrated with the new Scheduler")
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
-    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    result = await client.create_project("test")
-    assert result.code == 200
-    project_id = result.result["project"]["id"]
-
-    result = await client.create_environment(project_id=project_id, name="test1")
-    env1_id = UUID(result.result["environment"]["id"])
-    result = await client.create_environment(project_id=project_id, name="test2")
-    env2_id = UUID(result.result["environment"]["id"])
-
-    env_to_agent_map: dict[UUID, NullAgent] = {}
-
-    async def start_agent(env_id: UUID, agent_names: list[str]) -> None:
-        for agent_name in agent_names:
-            await data.Agent(environment=env_id, name=agent_name, paused=False).insert()
-
-        a = NullAgent(environment=env_id)
-        for agent_name in agent_names:
-            await a.add_end_point_name(agent_name)
-        await a.start()
-        async_finalizer(a.stop)
-        env_to_agent_map[env_id] = a
-
-        async def has_primary(agent_name: str) -> bool:
-            agent: data.Agent = await data.Agent.get_one(environment=env_id, name=agent_name)
-            return agent.primary is not None
-
-        await asyncio.gather(*(retry_limited(has_primary, timeout=10, agent_name=agent_name) for agent_name in agent_names))
-
-    await asyncio.gather(start_agent(env1_id, ["agent1", "agent2"]), start_agent(env2_id, ["agent1"]))
-
-    async def assert_agents_paused(expected_statuses: dict[tuple[UUID, str], bool]) -> None:
-        async def _does_expected_status_match_actual_status() -> bool:
-            for (env_id, agent_name), paused in expected_statuses.items():
-                # Check in-memory session state
-                live_session_found = (env_id, agent_name) in agent_manager.tid_endpoint_to_session
-                if live_session_found == paused:
-                    LOGGER.info(
-                        "live_session_found=%s for agent %s in environment %s, while expected paused state is %s",
-                        live_session_found,
-                        agent_name,
-                        env_id,
-                        paused,
-                    )
-                    return False
-                # Check database state
-                agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
-                if agent_from_db.paused != paused:
-                    LOGGER.info(
-                        "Agent paused state in database is %s for agent %s in environment %s while %s was expected",
-                        agent_from_db.paused,
-                        agent_name,
-                        env_id,
-                        paused,
-                    )
-                    return False
-                if (agent_from_db.primary is None) != paused:
-                    LOGGER.info(
-                        "Agent %s in environment %s has primary %s, while paused state is expected to be %s",
-                        agent_name,
-                        env_id,
-                        agent_from_db.primary,
-                        paused,
-                    )
-                    return False
-                if not paused:
-                    live_session = agent_manager.tid_endpoint_to_session[(env_id, agent_name)]
-                    agent_instance: Optional[data.AgentInstance] = await data.AgentInstance.get_by_id(agent_from_db.primary)
-                    if agent_instance is None:
-                        LOGGER.info("Agent %s in environment %s is not paused, but no AgentInstance exists", agent_name, env_id)
-                        return False
-                    if agent_instance.process != live_session.id:
-                        LOGGER.info(
-                            "ID of live session %s doesn't match the ID on the AgentInstance %s for agent %s in environment %s",
-                            live_session.id,
-                            agent_instance.process,
-                            agent_name,
-                            env_id,
-                        )
-                        return False
-                # Check agent state
-                if env_to_agent_map[env_id].enabled[agent_name] == paused:
-                    LOGGER.info(
-                        "Agent %s in environment %s has enabled state %s (expected %s)",
-                        agent_name,
-                        env_id,
-                        env_to_agent_map[env_id].enabled[agent_name],
-                        not paused,
-                    )
-                    return False
-            return True
-
-        # It may take some time until the in-memory and in-database session state converges.
-        await retry_limited(_does_expected_status_match_actual_status, timeout=10)
-
-    await assert_agents_paused(
-        expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
-    )
-    # Pause agent1 and pause again
-    for _ in range(2):
-        result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.pause.value)
-        assert result.code == 200
-        await assert_agents_paused(
-            expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
-        )
-
-    # Unpause agent1 and unpause again
-    for _ in range(2):
-        result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.unpause.value)
-        assert result.code == 200
-        await assert_agents_paused(
-            expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
-        )
-
-    # Pause all agents in env1 and pause again
-    for _ in range(2):
-        result = await client.all_agents_action(tid=env1_id, action=AgentAction.pause.value)
-        assert result.code == 200
-        await assert_agents_paused(
-            expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): True, (env2_id, "agent1"): False}
-        )
-
-    # Unpause all agents in env1 and unpause again
-    for _ in range(2):
-        result = await client.all_agents_action(tid=env1_id, action=AgentAction.unpause.value)
-        assert result.code == 200
-        await assert_agents_paused(
-            expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
-        )
-
-    # set up for halt test
-    async def assert_agents_halt_state(env_id: UUID, agents_running: dict[str, bool], halted: bool) -> None:
-        """
-        :param agents_running: dictionary of agents that were running before environment halting.
-        """
-        for agent_name, running in agents_running.items():
-            db_agent: data.Agent = await data.Agent.get_one(environment=env_id, name=agent_name)
-            assert db_agent.unpause_on_resume is (running if halted else None)
-
-    result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.pause.value)
-    assert result.code == 200
-    await assert_agents_paused(
-        expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): False, (env2_id, "agent1"): False}
-    )
-    await assert_agents_halt_state(env1_id, {"agent1": False, "agent2": True}, False)
-    await assert_agents_halt_state(env2_id, {"agent1": True}, False)
-
-    # halt environment
-    result = await client.halt_environment(env1_id)
-    assert result.code == 200
-    await assert_agents_paused(
-        expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): True, (env2_id, "agent1"): False}
-    )
-    await assert_agents_halt_state(env1_id, {"agent1": False, "agent2": True}, True)
-    await assert_agents_halt_state(env2_id, {"agent1": True}, False)
-
-    # verify agent actions are not allowed in halted state
-    result = await client.agent_action(tid=env1_id, name="agent1", action=AgentAction.unpause.value)
-    assert result.code == 403
-    assert "message" in result.result
-    assert result.result["message"] == "Access denied: Can not pause or unpause agents when the environment has been halted."
-    result = await client.agent_action(tid=env1_id, name="agent2", action=AgentAction.pause.value)
-    assert result.code == 403
-    result = await client.agent_action(tid=env2_id, name="agent1", action=AgentAction.pause.value)
-    assert result.code == 200
-
-    # resume environment, make sure only agents that were already running are unpaused
-    result = await client.resume_environment(env1_id)
-    assert result.code == 200
-    await assert_agents_paused(
-        expected_statuses={(env1_id, "agent1"): True, (env1_id, "agent2"): False, (env2_id, "agent1"): True}
-    )
-    await assert_agents_halt_state(env1_id, {"agent1": False, "agent2": True}, False)
-    await assert_agents_halt_state(env2_id, {"agent1": False}, False)
-
-
 async def test_agent_on_resume_actions(server, environment, client, agent) -> None:
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
@@ -1136,26 +924,6 @@ async def test_exception_occurs_while_processing_session_action(server, environm
 
     # Verify that session is created successfully -> Consumer didn't crash
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
-
-
-async def test_restart_on_environment_setting(server, client, environment, caplog):
-    with caplog.at_level(logging.DEBUG):
-        response = await client.environment_settings_set(tid=environment, id="autostart_agent_deploy_interval", value=300)
-        assert response.code == 200
-
-        def check_log_contains(caplog, loggerpart, level, msg):
-            for record in caplog.get_records("call"):
-                logger_name, log_level, message = record.name, record.levelno, record.message
-                if msg in message and loggerpart in logger_name and level == log_level:
-                    return True
-            return False
-
-        await retry_limited(
-            lambda: check_log_contains(
-                caplog, "inmanta.server.agentmanager", logging.DEBUG, "Restarting Scheduler in environment"
-            ),
-            10,
-        )
 
 
 async def test_error_handling_agent_fork(server, environment, monkeypatch):

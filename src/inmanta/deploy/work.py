@@ -153,9 +153,6 @@ class AgentQueues:
         self._entry_count: int = 0
         self._in_progress: dict[tasks.Task, TaskPriority] = {}
 
-    def is_empty(self) -> bool:
-        return len(self._in_progress) == 0 and len(self._tasks_by_resource) == 0
-
     @property
     def in_progress(self) -> Mapping[tasks.Task, TaskPriority]:
         return self._in_progress
@@ -400,19 +397,6 @@ class ScheduledWork:
         self.agent_queues.reset()
         self._waiting.clear()
 
-    def link_to_new_requires_provides_view(
-        self,
-        requires_view: Mapping[ResourceIdStr, Set[ResourceIdStr]],
-        provides_view: Mapping[ResourceIdStr, Set[ResourceIdStr]],
-    ) -> None:
-        """
-        Link the requires and provides fields to the views given by the arguments.
-        """
-        # This method should only be called during the initialization phase of the scheduler. No work should be scheduled yet.
-        assert self.agent_queues.is_empty() and len(self._waiting) == 0
-        self.requires = requires_view
-        self.provides = provides_view
-
     def deploy_with_context(
         self,
         resources: Set[ResourceIdStr],
@@ -422,6 +406,7 @@ class ScheduledWork:
         deploying: Optional[Set[ResourceIdStr]] = None,
         added_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
         dropped_requires: Optional[Mapping[ResourceIdStr, Set[ResourceIdStr]]] = None,
+        force_deploy: bool = False,
     ) -> None:
         """
         Add deploy tasks for the given resources. Additionally update the scheduled work state to reflect the new model state
@@ -436,6 +421,7 @@ class ScheduledWork:
             (it will still ensure they are scheduled if they have gotten new dependencies).
         :param added_requires: Requires edges that were added since the previous state update, if any.
         :param dropped_requires: Requires edges that were removed since the previous state update, if any.
+        :param force_deploy: Force the deploy of the given resources, even if a deploy is already running for the same intent.
         """
         deploying = deploying if deploying is not None else set()
         added_requires = added_requires if added_requires is not None else {}
@@ -445,7 +431,8 @@ class ScheduledWork:
         maybe_runnable: set[ResourceIdStr] = set()
 
         # lookup caches for visited nodes
-        queued: set[ResourceIdStr] = set(deploying)  # queued or running, pre-populate with in-progress deploys
+        # queued or running, pre-populate with in-progress deploys
+        queued: set[ResourceIdStr] = set(deploying) if not force_deploy else set(deploying - resources)
         not_scheduled: set[ResourceIdStr] = set()
 
         # Bump the priority of (non-stale) deploying tasks. This will only increase the priority of propagated events
@@ -524,7 +511,7 @@ class ScheduledWork:
                     new_priority = self.agent_queues.in_progress.get(task, priority)
                     # old task is already running, consider this a new request
                     new_requested_at = self.agent_queues.reserve_requested_at()
-                    new_reason = "rescheduling because a dependency was added to this resource while it was deploying"
+                    new_reason = "rescheduling because a dependency was scheduled while it was deploying"
 
                 queued.remove(resource)
                 self._waiting[resource] = BlockedDeploy(
@@ -620,11 +607,16 @@ class ScheduledWork:
 
     def finished_deploy(self, resource: ResourceIdStr) -> None:
         """
-        Report that a resource has finished deploying for its current desired state, regardless of the deploy result (success /
-        failure). Stale deploys must never be reported.
+        Report that a resource has finished deploying, regardless of the intent version (including stale deploys)
+        and regardless of the deploy result (success / failure).
         """
         if resource in self._waiting or tasks.Deploy(resource=resource) in self.agent_queues:
-            # a new deploy task was scheduled in the meantime, no need to do anything else
+            # A new deploy task was scheduled in the meantime, no need to do anything else
+            # This check also happens to cover the case of stale deploys. They are always expected to have a non-stale
+            # one in the queue, so they would fall in this NOOP condition. If for some reason (e.g. due to a bug in the
+            # scheduler) this invariant is not met, we'd rather clean up the state that have the risk of stuck deploys.
+            # This is why the docstring states that all deploys, even stale ones, should be reported, even if we expect
+            # stale ones to be a NOOP.
             return
         for dependant in self.provides.get(resource, []):
             blocked_deploy: Optional[BlockedDeploy] = self._waiting.get(dependant, None)
