@@ -769,8 +769,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             except RuntimeException as e:
                 raise PluginTypeException(
                     stmt=None,
-                    msg=f"Value {value} for argument {arg.arg_name} of plugin {self.get_full_name()} has invalid type."
-                    f" Expected type: {arg.resolved_type}",
+                    msg=(
+                        f"Value {value} for argument {arg.arg_name} of plugin {self.get_full_name()} has incompatible type."
+                        f" Expected type: {arg.resolved_type}"
+                    ),
                     cause=e,
                 )
             else:
@@ -794,8 +796,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             except RuntimeException as e:
                 raise PluginTypeException(
                     stmt=None,
-                    msg=f"Value {value} for argument {kwarg.arg_name} of plugin {self.get_full_name()} has invalid type."
-                    f" Expected type: {kwarg.resolved_type}",
+                    msg=(
+                        f"Value {value} for argument {kwarg.arg_name} of plugin {self.get_full_name()} has incompatible type."
+                        f" Expected type: {kwarg.resolved_type}"
+                    ),
                     cause=e,
                 )
             else:
@@ -862,8 +866,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         except RuntimeException as e:
             raise PluginTypeException(
                 stmt=None,
-                msg=f"Return value {value} of plugin {self.get_full_name()} has invalid type."
-                f" Expected type: {self.return_type.resolved_type}",
+                msg=(
+                    f"Return value {value} of plugin {self.get_full_name()} has incompatible type."
+                    f" Expected type: {self.return_type.resolved_type}"
+                ),
                 cause=e,
             )
 

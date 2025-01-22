@@ -187,7 +187,10 @@ import test_674
 
 test_674::test_not_nullable(null)
         """,
-        "Invalid value 'null', expected string (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))",
+        "Value null for argument param of plugin test_674::test_not_nullable has incompatible type."
+        " Expected type: string (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))"
+        "\ncaused by:"
+        "\n  Invalid value 'null', expected string (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))",
     )
 
 
@@ -221,7 +224,10 @@ import test_674
 
 test_674::test_not_nullable_list(null)
         """,
-        "Invalid value 'null', expected int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))",
+        "Value null for argument param of plugin test_674::test_not_nullable_list has incompatible type."
+        " Expected type: int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))"
+        "\ncaused by:"
+        "\n  Invalid value 'null', expected int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))",
     )
 
 
@@ -474,36 +480,36 @@ end
         (
             "union_single_type",
             123,
-            f"Value 123 for argument value of plugin {ns}::union_single_type has invalid type. Expected type: string",
+            f"Value 123 for argument value of plugin {ns}::union_single_type has incompatible type. Expected type: string",
         ),
         (
             "union_multiple_types",
             "[1, 2, 3]",
-            f"Value [1, 2, 3] for argument value of plugin {ns}::union_multiple_types has invalid type."
+            f"Value [1, 2, 3] for argument value of plugin {ns}::union_multiple_types has incompatible type."
             " Expected type: Union[int,string]",
         ),
         (
             "union_optional_1",
             1.2,
-            f"Value 1.2 for argument value of plugin {ns}::union_optional_1 has invalid type."
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_1 has incompatible type."
             f" Expected type: Union[int,string]?",
         ),
         (
             "union_optional_2",
             1.2,
-            f"Value 1.2 for argument value of plugin {ns}::union_optional_2 has invalid type."
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_2 has incompatible type."
             f" Expected type: Union[int,string]?",
         ),
         (
             "union_optional_3",
             1.2,
-            f"Value 1.2 for argument value of plugin {ns}::union_optional_3 has invalid type."
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_3 has incompatible type."
             f" Expected type: Union[int,string]?",
         ),
         (
             "union_optional_4",
             1.2,
-            f"Value 1.2 for argument value of plugin {ns}::union_optional_4 has invalid type."
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_4 has incompatible type."
             f" Expected type: Union[int,string]?",
         ),
     ]:
@@ -522,33 +528,33 @@ end
         (
             "union_return_single_type",
             123,
-            f"Return value 123 of plugin {ns}::union_return_single_type has invalid type. Expected type: string",
+            f"Return value 123 of plugin {ns}::union_return_single_type has incompatible type. Expected type: string",
         ),
         (
             "union_return_multiple_types",
             "[1, 2, 3]",
-            f"Return value [1, 2, 3] of plugin {ns}::union_return_multiple_types has invalid type."
+            f"Return value [1, 2, 3] of plugin {ns}::union_return_multiple_types has incompatible type."
             " Expected type: Union[string,int]",
         ),
         (
             "union_return_optional_1",
             1.2,
-            f"Return value 1.2 of plugin {ns}::union_return_optional_1 has invalid type. Expected type: Union[int,string]?",
+            f"Return value 1.2 of plugin {ns}::union_return_optional_1 has incompatible type. Expected type: Union[int,string]?",
         ),
         (
             "union_return_optional_2",
             1.2,
-            f"Return value 1.2 of plugin {ns}::union_return_optional_2 has invalid type. Expected type: Union[int,string]?",
+            f"Return value 1.2 of plugin {ns}::union_return_optional_2 has incompatible type. Expected type: Union[int,string]?",
         ),
         (
             "union_return_optional_3",
             1.2,
-            f"Return value 1.2 of plugin {ns}::union_return_optional_3 has invalid type. Expected type: Union[int,string]?",
+            f"Return value 1.2 of plugin {ns}::union_return_optional_3 has incompatible type. Expected type: Union[int,string]?",
         ),
         (
             "union_return_optional_4",
             1.2,
-            f"Return value 1.2 of plugin {ns}::union_return_optional_4 has invalid type. Expected type: Union[int,string]?",
+            f"Return value 1.2 of plugin {ns}::union_return_optional_4 has incompatible type. Expected type: Union[int,string]?",
         ),
     ]:
         snippetcompiler.setup_for_snippet(
@@ -559,7 +565,7 @@ end
         )
         with pytest.raises(WrappingRuntimeException) as exc_info:
             compiler.do_compile()
-        assert error_message in str(exc_info.value.get_causes()[0])
+        assert error_message in str(exc_info)
 
     snippetcompiler.setup_for_snippet(
         """
