@@ -248,22 +248,23 @@ class Scheduler:
             implement.evaluate()
 
         compiler.plugins = {k: v for k, v in types_and_impl.items() if isinstance(v, plugins.Plugin)}
-        types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
+        self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
-        # normalize plugins
-        for p in compiler.plugins.values():
-            p.normalize()
-
-        # give type info to all types, to normalize blocks inside them
-        # normalize implementations last because they have subblocks that might depend on other type information
-        for t in sorted(types.values(), key=lambda t: isinstance(t, Implementation)):
+        # give type info to all types (includes plugins), to normalize blocks inside them
+        for t in sorted(
+            self.types.values(),
+            key=lambda t: (
+                # normalize implementations last because they have subblocks that might depend on other type information
+                isinstance(t, Implementation),
+                # normalize entities second last because it may call validate on its attribute types to validate defaults
+                isinstance(t, Entity),
+            ),
+        ):
             t.normalize()
 
         # normalize root blocks
         for block in blocks:
             block.normalize()
-
-        self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
     def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
