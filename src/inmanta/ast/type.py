@@ -795,7 +795,7 @@ class TypedDict(Dict):
 
     def to_python(self, instance: object) -> "object":
         assert isinstance(instance, dict)
-        base = self.get_base_type()
+        base = self.element_type
         return {k: base.to_python(v) for k, v in instance.items()}
 
     def __eq__(self, other: object) -> bool:

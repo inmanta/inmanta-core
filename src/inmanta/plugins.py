@@ -365,17 +365,6 @@ def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, valu
     return DynamicProxy.return_value(value)
 
 
-python_to_model = {
-    str: inmanta_type.String(),
-    float: inmanta_type.Float(),
-    numbers.Number: inmanta_type.Number(),
-    int: inmanta_type.Integer(),
-    bool: inmanta_type.Bool(),
-    dict: inmanta_type.LiteralDict(),
-    list: inmanta_type.LiteralList(),
-}
-
-
 def primitive_python_type_to_model_domain(intype: type) -> inmanta_type.Type:
     """
     Convert a primtive python type to the model domain
