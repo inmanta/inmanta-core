@@ -35,10 +35,10 @@ import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
 from inmanta.ast import LocatableString, Location, Namespace
 from inmanta.ast import PluginException as PluginException  # noqa: F401 Plugin exception is part of the stable api
-from inmanta.ast import Range, RuntimeException, TypeNotFoundException, TypingException, WithComment, entity
+from inmanta.ast import Range, RuntimeException, TypeNotFoundException, TypingException, WithComment
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
-from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
@@ -229,8 +229,8 @@ class Null(inmanta_type.Type):
 
 # Define some types which are used in the context of plugins.
 PLUGIN_TYPES = {
-    "any": inmanta_type.AnyType(),  # Any value will pass validation
-    "expression": inmanta_type.AnyType(),  # Any value will pass validation
+    "any": inmanta_type.Any(),  # Any value will pass validation
+    "expression": inmanta_type.Any(),  # Any value will pass validation
     "null": Null(),  # Only NoneValue will pass validation
     None: Null(),  # Only NoneValue will pass validation
 }
@@ -361,6 +361,7 @@ def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, valu
 
     if expected_type.has_custom_to_python():
         return expected_type.to_python(value)
+
     return DynamicProxy.return_value(value)
 
 
@@ -542,34 +543,14 @@ class PluginReturn(PluginValue):
     VALUE_TYPE = "returned value"
     VALUE_NAME = "return value"
 
-    def to_model_domain(self, value: object, resolver: Resolver, queue: QueueScheduler, location: Location) -> object:
-        # Basic unwrap
-        value = DynamicProxy.unwrap(value)
+    def to_model_domain(
+        self, value: object, resolver: Resolver, queue: QueueScheduler, namespace: Namespace, location: Location
+    ) -> object:
 
-        # Post process dataclasses
-        base_type = self.resolved_type.get_base_type()
-        if isinstance(base_type, entity.Entity) and (dc_type := base_type.get_paired_dataclass()) is not None:
-
-            def make_dc(value: object) -> object:
-                if isinstance(value, dc_type):
-                    return base_type.from_python(value, resolver, queue, location)
-                else:
-                    raise RuntimeException(None, f"Invalid value '{value}', expected {base_type.type_string()}")
-
-            outer_type = self.resolved_type
-
-            if isinstance(outer_type, inmanta_type.NullableType):
-                if isinstance(value, NoneValue):
-                    return value
-                outer_type = outer_type.element_type
-
-            if isinstance(outer_type, inmanta_type.List):
-                if isinstance(value, Sequence):
-                    return [make_dc(v) for v in value]
-                else:
-                    raise RuntimeException(None, f"Invalid value '{value}', expected {self.resolved_type.type_string()}")
-            else:
-                return make_dc(value)
+        value = DynamicProxy.unwrap(
+            value,
+            dynamic_context=DynamicUnwrapContext(resolver=resolver, queue=queue, location=location),
+        )
 
         self.validate(value)
         return value
@@ -978,7 +959,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self.check_requirements()
         value = self.call(*args, **kwargs)
         # Validate the returned value
-        return self.return_type.to_model_domain(value, resolver, queue, location)
+        return self.return_type.to_model_domain(value, resolver, queue, self.namespace, location)
 
     def get_full_name(self) -> str:
         return f"{self.ns.get_full_name()}::{self.__class__.__function_name__}"

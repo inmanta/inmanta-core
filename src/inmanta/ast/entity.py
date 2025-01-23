@@ -652,6 +652,7 @@ class Entity(NamedType, WithComment):
             )
 
         self._paired_dataclass = dataclass
+        dataclass._paired_inmanta_entity = self
 
     def get_paired_dataclass(self) -> Optional[type[object]]:
         return self._paired_dataclass

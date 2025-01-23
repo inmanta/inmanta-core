@@ -28,7 +28,7 @@ from typing import Optional
 import typing_inspect
 
 from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException
-from inmanta.execute.util import NoneValue, Unknown
+from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.stable_api import stable_api
 
 try:
@@ -225,7 +225,7 @@ class NullableType(Type):
         return self.element_type.has_custom_to_python()
 
 
-class AnyType(Type):
+class Any(Type):
 
     def corresponds_to(self, pytype: type[object]) -> bool:
         return True
@@ -235,6 +235,9 @@ class AnyType(Type):
 
     def has_custom_to_python(self) -> bool:
         return False
+
+    def __eq__(self, other: object) -> bool:
+        return type(self) == type(other)  # noqa: E721
 
 
 @stable_api

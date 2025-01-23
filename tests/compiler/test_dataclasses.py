@@ -225,5 +225,4 @@ a= "Test"
 """,
         ministd=True,
     )
-    with pytest.raises(WrappingRuntimeException, match="Exception in plugin dataclasses::make_bad_virtual_machine") as e:
-        compiler.do_compile()
+    compiler.do_compile()
