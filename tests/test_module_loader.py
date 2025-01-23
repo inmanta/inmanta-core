@@ -1368,7 +1368,7 @@ class Test(Resource):
     )
 
     plugins_dir: str = os.path.join(module_path, "plugins")
-    init_py_file: str = os.path.join(plugins_dir, "__init__.py")
+    init_py_file: str = os.path.join(plugins_dir, "plugins.py")
     py_compile.compile(file=init_py_file, cfile=init_py_file + "c", doraise=True)
 
     snippetcompiler.setup_for_snippet(

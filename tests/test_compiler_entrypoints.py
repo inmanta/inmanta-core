@@ -193,7 +193,7 @@ l = tests::length("Hello World!")
     assert location.start_char == 5
     assert location.end_lnr == 4
     assert location.end_char == 18
-    assert resolves_to.location.file == os.path.join(snippetcompiler.modules_dir, "tests", "plugins", "__init__.py")
+    assert resolves_to.location.file == os.path.join(snippetcompiler.modules_dir, "tests", "plugins", "plugins.py")
     assert resolves_to.location.lnr == 14
 
 

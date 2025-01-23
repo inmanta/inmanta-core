@@ -331,7 +331,7 @@ value = {expected_value}
     verify_compile(2)
 
     # verify editable mode for plugins
-    with open(os.path.join(v2_module_path, const.PLUGINS_PACKAGE, test_module, "__init__.py"), "w") as fh:
+    with open(os.path.join(v2_module_path, const.PLUGINS_PACKAGE, test_module, "plugins.py"), "w") as fh:
         fh.write(test_module_plugin_contents(3))
     verify_compile(3)
 

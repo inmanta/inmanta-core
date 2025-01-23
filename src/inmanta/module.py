@@ -811,16 +811,16 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             # be associated with the v1 loader.
             return None
         if init is None:
-            raise InvalidModuleException(f"Package {package} was installed but no __init__.py file could be found.")
+            raise InvalidModuleException(f"Package {package} was installed but no plugins.py file could be found.")
         # In case of editable installs the path may contain symlinks to actual location (see
         # PythonEnvironment.get_module_file docstring). Since modules contain non-Python files (of which setuptools may not be
         # aware, therefore they may not exist in the link structure), we need the real path.
         pkg_installation_dir = os.path.dirname(os.path.realpath(init))
         if os.path.exists(os.path.join(pkg_installation_dir, ModuleV2.MODULE_FILE)):
-            # normal install: __init__.py is in module root
+            # normal install: plugins.py is in module root
             return pkg_installation_dir
         else:
-            # editable install: __init__.py is in `inmanta_plugins/<mod_name>`
+            # editable install: plugins.py is in `inmanta_plugins/<mod_name>`
             module_root_dir = os.path.normpath(os.path.join(pkg_installation_dir, os.pardir, os.pardir))
             if os.path.exists(os.path.join(module_root_dir, ModuleV2.MODULE_FILE)):
                 return module_root_dir
@@ -3046,10 +3046,10 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         if plugin_dir is None:
             return iter(())
 
-        if not os.path.exists(os.path.join(plugin_dir, "__init__.py")) and not os.path.exists(
+        if not os.path.exists(os.path.join(plugin_dir, "plugins.py")) and not os.path.exists(
             os.path.join(plugin_dir, "__init__.pyc")
         ):
-            raise InvalidModuleException(f"Directory {plugin_dir} should be a valid python package with a __init__.py file")
+            raise InvalidModuleException(f"Directory {plugin_dir} should be a valid python package with a plugins.py file")
 
         self._plugin_file_cache = [
             (

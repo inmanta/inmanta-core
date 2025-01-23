@@ -321,7 +321,7 @@ class CodeLoader:
 
             all_modules_dir: str = os.path.join(self.__code_dir, MODULE_DIR)
             relative_module_path: str = convert_module_to_relative_path(module_source.name)
-            # Treat all modules as a package for simplicity: module is a dir with source in __init__.py
+            # Treat all modules as a package for simplicity: module is a dir with source in plugins.py
             module_dir: str = os.path.join(all_modules_dir, relative_module_path)
 
             package_dir: str = os.path.normpath(
@@ -337,16 +337,16 @@ class CodeLoader:
 
             def touch_inits(directory: str) -> None:
                 """
-                Make sure __init__.py files exist for this package and all parent packages. Required for compatibility
+                Make sure plugins.py files exist for this package and all parent packages. Required for compatibility
                 with pre-2020.4 inmanta clients because they don't necessarily upload the whole package.
                 """
                 normdir: str = os.path.normpath(directory)
                 if normdir == package_dir:
                     return
-                if not os.path.exists(os.path.join(normdir, "__init__.py")) and not os.path.exists(
+                if not os.path.exists(os.path.join(normdir, "plugins.py")) and not os.path.exists(
                     os.path.join(normdir, "__init__.pyc")
                 ):
-                    pathlib.Path(os.path.join(normdir, "__init__.py")).touch()
+                    pathlib.Path(os.path.join(normdir, "plugins.py")).touch()
                 touch_inits(os.path.dirname(normdir))
 
             # ensure correct package structure
@@ -406,7 +406,7 @@ class PluginModuleLoader(FileLoader):
         return super().exec_module(module)
 
     def get_source(self, fullname: str) -> bytes:
-        # No __init__.py exists for top level package
+        # No plugins.py exists for top level package
         if self._loading_top_level_package():
             return b""
         with open(self.path, "rb") as fd:
@@ -415,7 +415,7 @@ class PluginModuleLoader(FileLoader):
     def is_package(self, fullname: str) -> bool:
         if self._loading_top_level_package():
             return True
-        return os.path.basename(self.path) == "__init__.py"
+        return os.path.basename(self.path) == "plugins.py"
 
     def _loading_top_level_package(self) -> bool:
         return self.path == ""
@@ -437,7 +437,7 @@ def convert_relative_path_to_module(path: str) -> str:
     For example
         convert_relative_path_to_module("my_mod/plugins/my_submod")
         == convert_relative_path_to_module("my_mod/plugins/my_submod.py")
-        == convert_relative_path_to_module("my_mod/plugins/my_submod/__init__.py")
+        == convert_relative_path_to_module("my_mod/plugins/my_submod/plugins.py")
         == "inmanta_plugins.my_mod.my_submod".
     """
     if path.startswith("/"):
@@ -464,12 +464,12 @@ def convert_relative_path_to_module(path: str) -> str:
 
     def strip_py(module: list[str]) -> list[str]:
         """
-        Strip __init__.py or .py file extension from module parts.
+        Strip plugins.py or .py file extension from module parts.
         """
         if module == []:
             return []
         init, last = module[:-1], module[-1]
-        if last == "__init__.py" or last == "__init__.pyc":
+        if last == "plugins.py" or last == "__init__.pyc":
             return init
         if last.endswith(".py"):
             return list(chain(init, [last[:-3]]))
@@ -497,7 +497,7 @@ def convert_module_to_relative_path(full_mod_name: str) -> str:
             " Module %s is not part of the inmanta_plugins package." % full_mod_name,
         )
     module_parts = full_module_parts[1:]
-    # No __init__.py exists for top level package
+    # No plugins.py exists for top level package
     if len(module_parts) == 0:
         return ""
 

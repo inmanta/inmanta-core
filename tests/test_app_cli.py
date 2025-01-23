@@ -294,10 +294,10 @@ export=other_exporter
     """
     )
 
-    # plugin/__init__.py
+    # plugin/plugins.py
     plugins_dir = module_dir.join("plugins")
     os.makedirs(plugins_dir)
-    init_file = plugins_dir.join("__init__.py")
+    init_file = plugins_dir.join("plugins.py")
     init_file.write(
         """
 from inmanta.export import export, Exporter

@@ -64,7 +64,7 @@ async def compact_and_dump(
         versions = []
         for filename in os.listdir(directory):
             version = extract_version(filename)
-            if version is not None:  # only select the .py files with a version number and ignore __init__.py
+            if version is not None:  # only select the .py files with a version number and ignore plugins.py
                 versions.append(version)
         return sorted(versions)
 

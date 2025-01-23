@@ -92,12 +92,12 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
     # Example of what a source_map may look like:
     # Type Name: mymodule::Mytype"
     # Source Files:
-    #   /path/to/__init__.py (hash: 'abc123', module: 'inmanta_plugins.mymodule.Mytype')
+    #   /path/to/plugins.py (hash: 'abc123', module: 'inmanta_plugins.mymodule.Mytype')
     #   /path/to/utils.py (hash: 'def456', module: 'inmanta_plugins.mymodule.Mytype')
     #
     # source_map = {
     #    "mymodule::Mytype": {
-    #      'abc123': ('/path/to/__init__.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>),
+    #      'abc123': ('/path/to/plugins.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>),
     #      'def456': ('/path/to/utils.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>)
     #    },
     # ...other types would be included as well

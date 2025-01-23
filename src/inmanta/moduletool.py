@@ -1594,7 +1594,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         plugins_folder = os.path.join(build_path, "inmanta_plugins", self._module.name)
         if not os.path.exists(plugins_folder):
             os.makedirs(plugins_folder)
-        init_file = os.path.join(plugins_folder, "__init__.py")
+        init_file = os.path.join(plugins_folder, "plugins.py")
         if not os.path.exists(init_file):
             open(init_file, "w").close()
 
@@ -1741,7 +1741,7 @@ class ModuleConverter:
             shutil.move(old_plugins, new_plugins)
         else:
             os.makedirs(new_plugins)
-            with open(os.path.join(new_plugins, "__init__.py"), "w"):
+            with open(os.path.join(new_plugins, "plugins.py"), "w"):
                 pass
 
         # write out pyproject.toml

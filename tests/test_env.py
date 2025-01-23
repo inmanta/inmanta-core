@@ -398,7 +398,7 @@ def test_active_env_get_module_file(
     module_file, mod_loader = module_info
     assert module_file is not None
     assert not isinstance(mod_loader, loader.PluginModuleLoader)
-    assert module_file == os.path.join(env.process_env.site_packages_dir, *module_name.split("."), "__init__.py")
+    assert module_file == os.path.join(env.process_env.site_packages_dir, *module_name.split("."), "plugins.py")
     # verify that the package was installed in the development venv
     assert str(venv_dir) in module_file
     importlib.import_module(module_name)
@@ -433,7 +433,7 @@ def test_active_env_get_module_file_editable_namespace_package(
     module_file, mod_loader = module_info
     assert module_file is not None
     assert not isinstance(mod_loader, loader.PluginModuleLoader)
-    assert module_file == os.path.join(modules_v2_dir, "minimalv2module", *module_name.split("."), "__init__.py")
+    assert module_file == os.path.join(modules_v2_dir, "minimalv2module", *module_name.split("."), "plugins.py")
     importlib.import_module(module_name)
     assert module_name in sys.modules
     assert sys.modules[module_name].__file__ == module_file

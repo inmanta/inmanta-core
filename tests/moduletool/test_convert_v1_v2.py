@@ -157,7 +157,7 @@ def assert_v2_module(module_name, tmpdir, minimal=False):
     assert not os.path.exists(os.path.join(tmpdir, "module.yml"))
 
     assert os.path.exists(os.path.join(tmpdir, "model", "_init.cf"))
-    assert os.path.exists(os.path.join(tmpdir, "inmanta_plugins", module_name, "__init__.py"))
+    assert os.path.exists(os.path.join(tmpdir, "inmanta_plugins", module_name, "plugins.py"))
 
     if not minimal:
         assert os.path.exists(os.path.join(tmpdir, "requirements.txt"))
@@ -165,7 +165,7 @@ def assert_v2_module(module_name, tmpdir, minimal=False):
         assert os.path.exists(os.path.join(tmpdir, "templates", "template.txt.j2"))
         assert os.path.exists(os.path.join(tmpdir, "model", "other.cf"))
         assert os.path.exists(os.path.join(tmpdir, "inmanta_plugins", module_name, "other_module.py"))
-        assert os.path.exists(os.path.join(tmpdir, "inmanta_plugins", module_name, "subpkg", "__init__.py"))
+        assert os.path.exists(os.path.join(tmpdir, "inmanta_plugins", module_name, "subpkg", "plugins.py"))
 
         with open(os.path.join(tmpdir, "pyproject.toml")) as fht:
             contentt = toml.load(fht)

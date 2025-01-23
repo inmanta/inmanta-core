@@ -34,7 +34,6 @@ from inmanta.ast import (
     RuntimeException,
     WrappingRuntimeException,
 )
-from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException, WrappingRuntimeException
 from utils import log_contains
 
 if typing.TYPE_CHECKING:
@@ -60,7 +59,7 @@ def test_1221_plugin_incorrect_type_annotation(snippetcompiler):
         """
 import test_1221
         """,
-        "could not find type std::WrongName in namespace std (%s/plugins/__init__.py:5:1)" % modpath,
+        "could not find type std::WrongName in namespace std (%s/plugins/plugins.py:5:1)" % modpath,
     )
 
 
@@ -262,7 +261,7 @@ def test_1920_type_double_defined_plugin(snippetcompiler):
 import test_1920
         """,
         "Type test_1920::some_name is already defined"
-        f" (original at ({modpath}/plugins/__init__.py:5))"
+        f" (original at ({modpath}/plugins/plugins.py:5))"
         f" (duplicate at ({modpath}/model/_init.cf:1:16))",
     )
 

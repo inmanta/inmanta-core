@@ -22,9 +22,11 @@ import inspect
 import numbers
 import os
 import subprocess
+import typing
 import warnings
 from collections import abc
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any, Callable, Literal, Optional, Type, TypeVar, get_args, get_origin, overload
 
 import typing_inspect
@@ -49,7 +51,6 @@ from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
-from inmanta.plugins.typing import InmantaType
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
@@ -64,6 +65,27 @@ if TYPE_CHECKING:
 
 class PluginDeprecationWarning(InmantaWarning):
     pass
+
+
+@dataclass(frozen=True)
+class InmantaType:
+    """
+    Declaration of an inmanta type for use with typing.Annotated.
+    When a plugin type is declared as typing.Annotated with an `InmantaType` as annotation, the Python type is completely
+    ignored for type validation and conversion to and from the DSL. Instead the string provided to the `InmantaType` is
+    evaluated as a DSL type, extended with "any".
+    For maximum static type coverage, it is recommended to use these only when absolutely necessary, and to use them as deeply
+    in the type as possible, e.g. prefer `Sequence[Annotated[MyEntity, InmantaType("std::Entity")]]` over
+    `Annotated[Sequence[MyEntity], InmantaType("std::Entity[]")]`.
+    """
+
+    dsl_type: str
+
+
+Entity: typing.TypeAlias = typing.Annotated[object, InmantaType("std::Entity")]
+"""
+    Alias used to treat std::Entity as an object in Python for type verification
+"""
 
 
 @stable_api
@@ -121,7 +143,7 @@ class Context:
         """
         Get the path to the data dir (and create if it does not exist yet
         """
-        data_dir = os.path.join("../data", self.plugin.namespace.get_full_name())
+        data_dir = os.path.join("data", self.plugin.namespace.get_full_name())
 
         if not os.path.exists(data_dir):
             os.makedirs(data_dir, exist_ok=True)
