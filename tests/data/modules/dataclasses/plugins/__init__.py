@@ -108,3 +108,9 @@ def odd_string() -> "string":
 @plugin
 def is_odd_string(thing: "string") -> None:
     assert isinstance(thing, SomeWhatStringLike)
+
+
+@plugin
+def return_any() -> "any":
+    out = Virtualmachine(name="Test", os={"X": "x"}, ram=5, cpus={"s": 5}, disk=[15], slots=None)
+    return out

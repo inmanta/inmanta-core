@@ -210,3 +210,20 @@ two = dataclasses::make_bad_virtual_machine()""",
     cause = cause.get_causes()[0]
     assert isinstance(cause, RuntimeException)
     assert "Invalid value 'root', expected int (reported in dataclasses::make_bad_virtual_machine()" in str(cause)
+
+
+def test_returning_any(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import dataclasses
+
+
+it = dataclasses::return_any()
+
+a=it.name
+a= "Test"
+""",
+        ministd=True,
+    )
+    with pytest.raises(WrappingRuntimeException, match="Exception in plugin dataclasses::make_bad_virtual_machine") as e:
+        compiler.do_compile()

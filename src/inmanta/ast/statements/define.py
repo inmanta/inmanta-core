@@ -479,8 +479,16 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         constraint_type.comment = self.comment
         constraint_type.basetype = basetype
         constraint_type.constraint = self.expression
-        self.expression.normalize()
-        self.anchors.extend(self.expression.get_anchors())
+
+    def get_anchors(self) -> list[Anchor]:
+        """
+        This method overrides the default get_anchors() to accommodate the two-stage normalization process.
+        DefineTypeConstraint registers anchors for its condition expression. However, these anchors only come into existence
+        after the type normalization phase.
+        This implementation ensures that anchors are correctly gathered from both the condition expression and
+        the statement itself.
+        """
+        return [*self.anchors, *self.expression.get_anchors()]
 
 
 Relationside = tuple[LocatableString, Optional[LocatableString], Optional[tuple[int, Optional[int]]]]
