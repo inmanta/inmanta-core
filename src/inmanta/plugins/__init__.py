@@ -31,7 +31,8 @@ import typing_inspect
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
-from inmanta.ast import (  # noqa: F401 Plugin
+from inmanta.ast import (  # noqa: F401 PluginException is part of the stable api
+    InvalidTypeAnnotation,
     LocatableString,
     Location,
     Namespace,
@@ -268,20 +269,19 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
     # Unions and optionals
     if typing_inspect.is_union_type(python_type):
         # Optional type
+        bases: Sequence[inmanta_type.Type]
         if typing_inspect.is_optional_type(python_type):
             other_types = [tt for tt in get_args(python_type) if not typing_inspect.is_optional_type(tt)]
             if len(other_types) == 0:
                 # Probably not possible
                 return Null()
             if len(other_types) == 1:
-                return inmanta_type.NullableType(to_dsl_type(other_types[0], location, resolver))
-            # TODO: optional unions
-            return inmanta_type.Type()
+                return inmanta_type.NullableType(to_dsl_type(other_types[0]))
+            bases = [to_dsl_type(arg) for arg in other_types]
+            return inmanta_type.NullableType(inmanta_type.Union(bases))
         else:
-            # TODO: unions
-            return inmanta_type.Type()
-        # bases: Sequence[inmanta.ast.type.Type] = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
-        # return inmanta.ast.type.Union(bases)
+            bases = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
+            return inmanta_type.Union(bases)
 
     # Lists and dicts
     if typing_inspect.is_generic_type(python_type):
@@ -382,6 +382,8 @@ class PluginValue:
         If no type annotation is present or if the type annotation allows any type to be passed
         as argument, then None is returned.
 
+        Expects to be called during the normalization stage.
+
         :param plugin: The plugin that this argument is part of.
         :param resolver: The namespace that can be used to resolve the type annotation of this
             argument.
@@ -394,8 +396,13 @@ class PluginValue:
         if not isinstance(self.type_expression, str):
             if isinstance(self.type_expression, type) or get_origin(self.type_expression) is not None:
                 self._resolved_type = to_dsl_type(self.type_expression, plugin_line, resolver)
+            if typing_inspect.is_union_type(self.type_expression) and not typing.get_args(self.type_expression):
+                # If typing.Union is not subscripted, isinstance(self.type_expression, type) evaluates to False.
+                raise InvalidTypeAnnotation(stmt=None, msg=f"Union type must be subscripted, got {self.type_expression}")
+            if isinstance(self.type_expression, type) or typing.get_origin(self.type_expression) is not None:
+                self._resolved_type = to_dsl_type(self.type_expression)
             else:
-                raise RuntimeException(
+                raise InvalidTypeAnnotation(
                     stmt=None,
                     msg="Bad annotation in plugin %s for %s, expected str or python type but got %s (%s)"
                     % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression),
@@ -408,8 +415,8 @@ class PluginValue:
     def validate(self, value: object) -> bool:
         """
         Validate that the given value can be passed to this argument.  Returns True if the value is known
-        and valid, False if the value is unknown, and raises a :py:class:`inmanta.ast.RuntimeException`
-        if the value is not of the expected type.
+        and valid, False if the value is unknown, and raises a ValueError is the value is not of the
+        expected type.
 
         :param value: The value to validate
         """
@@ -774,8 +781,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             except RuntimeException as e:
                 raise PluginTypeException(
                     stmt=None,
-                    msg=f"Value {value} for argument {arg.arg_name} of plugin {self.get_full_name()} has invalid type."
-                    f" Expected type: {arg.resolved_type}",
+                    msg=(
+                        f"Value {value!r} for argument {arg.arg_name} of plugin {self.get_full_name()} has incompatible type."
+                        f" Expected type: {arg.resolved_type}"
+                    ),
                     cause=e,
                 )
             else:
@@ -799,8 +808,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             except RuntimeException as e:
                 raise PluginTypeException(
                     stmt=None,
-                    msg=f"Value {value} for argument {kwarg.arg_name} of plugin {self.get_full_name()} has invalid type."
-                    f" Expected type: {kwarg.resolved_type}",
+                    msg=(
+                        f"Value {value} for argument {kwarg.arg_name} of plugin {self.get_full_name()} has incompatible type."
+                        f" Expected type: {kwarg.resolved_type}"
+                    ),
                     cause=e,
                 )
             else:
@@ -867,8 +878,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         except RuntimeException as e:
             raise PluginTypeException(
                 stmt=None,
-                msg=f"Return value {value} of plugin {self.get_full_name()} has invalid type."
-                f" Expected type: {self.return_type.resolved_type}",
+                msg=(
+                    f"Return value {value} of plugin {self.get_full_name()} has incompatible type."
+                    f" Expected type: {self.return_type.resolved_type}"
+                ),
                 cause=e,
             )
 
