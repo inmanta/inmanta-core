@@ -679,7 +679,7 @@ def module_from_template(
     :param editable: Whether to install the module in editable mode, ignored if install is False.
     :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
     :param new_content_init_cf: The new content of the _init.cf file.
-    :param new_content_init_py: The new content of the plugins.py file.
+    :param new_content_init_py: The new content of the __init__.py file.
     :param in_place: Modify the module in-place instead of copying it.
     :param four_digit_version: if the version uses 4 digits (3 by default)
     """
@@ -738,7 +738,7 @@ def module_from_template(
             dest_dir,
             const.PLUGINS_PACKAGE,
             module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"]),
-            "plugins.py",
+            "__init__.py",
         )
         with open(init_py_file, "w", encoding="utf-8") as fd:
             fd.write(new_content_init_py)
@@ -784,7 +784,7 @@ def v1_module_from_template(
     :param new_name: The new name of the inmanta module, if any.
     :param new_requirements: The new Python requirements for the module, if any.
     :param new_content_init_cf: The new content of the _init.cf file.
-    :param new_content_init_py: The new content of the plugins.py file.
+    :param new_content_init_py: The new content of the __init__.py file.
     """
     shutil.copytree(source_dir, dest_dir)
     config_file: str = os.path.join(dest_dir, module.ModuleV1.MODULE_FILE)
@@ -802,7 +802,7 @@ def v1_module_from_template(
     if new_content_init_py is not None:
         plugins_dir: str = os.path.join(dest_dir, "plugins")
         os.makedirs(plugins_dir, exist_ok=True)
-        init_py_file: str = os.path.join(plugins_dir, "plugins.py")
+        init_py_file: str = os.path.join(plugins_dir, "__init__.py")
         with open(init_py_file, "w", encoding="utf-8") as fd:
             fd.write(new_content_init_py)
     with open(config_file, "w") as fd:

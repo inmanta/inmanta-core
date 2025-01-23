@@ -546,7 +546,7 @@ def test_plugin_loading_old_format(tmpdir, capsys):
     new_format_mod_dir.mkdir()
     new_format_plugins_dir = new_format_mod_dir.join("plugins")
     new_format_plugins_dir.mkdir()
-    new_format_source_file = new_format_plugins_dir.join("plugins.py")
+    new_format_source_file = new_format_plugins_dir.join("__init__.py")
     new_format_source_file.write(
         """
 def test():

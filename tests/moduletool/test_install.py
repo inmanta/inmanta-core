@@ -528,7 +528,7 @@ def test_project_install(
         env_module_file, module_loader = module_info
         assert not isinstance(module_loader, loader.PluginModuleLoader)
         assert env_module_file is not None
-        assert env_module_file == os.path.join(env.process_env.site_packages_dir, *fq_mod_name.split("."), "plugins.py")
+        assert env_module_file == os.path.join(env.process_env.site_packages_dir, *fq_mod_name.split("."), "__init__.py")
     v1_mod_dir: str = os.path.join(project.path, project.downloadpath)
     assert os.path.exists(v1_mod_dir)
     assert os.listdir(v1_mod_dir) == ["std"]
@@ -593,7 +593,7 @@ def test_project_install_preinstalled(
         assert not isinstance(module_loader, loader.PluginModuleLoader)
         assert env_module_file is not None
         install_path: str = module_path if editable else env.process_env.site_packages_dir
-        assert env_module_file == os.path.join(install_path, *fq_mod_name.split("."), "plugins.py")
+        assert env_module_file == os.path.join(install_path, *fq_mod_name.split("."), "__init__.py")
         assert (
             env.process_env.get_installed_packages(only_editable=editable).get(
                 f"{module.ModuleV2.PKG_NAME_PREFIX}{module_name}", None

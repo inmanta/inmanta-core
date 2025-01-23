@@ -124,7 +124,7 @@ def test_build_v2_module(
 
     assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "setup.cfg"))
     assert os.path.exists(
-        os.path.join(extract_dir, "inmanta_plugins", module_name, "plugins.py" if not byte_code else "__init__.pyc")
+        os.path.join(extract_dir, "inmanta_plugins", module_name, "__init__.py" if not byte_code else "__init__.pyc")
     )
     assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "_init.cf"))
 
@@ -140,7 +140,7 @@ def test_build_v2_module(
         )
         assert os.path.exists(
             os.path.join(
-                extract_dir, "inmanta_plugins", module_name, "subpkg", "plugins.py" if not byte_code else "__init__.pyc"
+                extract_dir, "inmanta_plugins", module_name, "subpkg", "__init__.py" if not byte_code else "__init__.pyc"
             )
         )
 
@@ -183,7 +183,7 @@ def test_build_v2_module_incomplete_package_data(tmpdir, modules_v2_dir: str, ca
     # load the module to make sure pycache files are ignored in the warning
     source_dir: str = os.path.join(module_copy_dir, "inmanta_plugins", "minimalv2module")
     spec: ModuleSpec = importlib.util.spec_from_file_location(
-        "inmanta_plugins.minimalv2module", os.path.join(source_dir, "plugins.py")
+        "inmanta_plugins.minimalv2module", os.path.join(source_dir, "__init__.py")
     )
     mod: ModuleType = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -346,7 +346,7 @@ def test_build_v1_module_existing_plugin_dir(tmpdir, modules_dir: str, module_na
 
         assert not os.path.exists(os.path.join(extract_dir, "plugins"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "setup.cfg"))
-        assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "plugins.py"))
+        assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "__init__.py"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "_init.cf"))
 
         if "elaborate" in module_name:
@@ -355,4 +355,4 @@ def test_build_v1_module_existing_plugin_dir(tmpdir, modules_dir: str, module_na
             assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "other.cf"))
             assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "py.typed"))
             assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "other_module.py"))
-            assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "subpkg", "plugins.py"))
+            assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "subpkg", "__init__.py"))

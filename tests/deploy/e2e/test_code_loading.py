@@ -135,7 +135,7 @@ def test():
     sources = {}
     await make_source_structure(
         sources,
-        "inmanta_plugins/test/plugins.py",
+        "inmanta_plugins/test/__init__.py",
         "inmanta_plugins.test",
         code,
         dependencies=["pkg[optional-a]"],

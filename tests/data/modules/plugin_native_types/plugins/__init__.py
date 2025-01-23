@@ -18,7 +18,8 @@
 
 from typing import Any, Annotated, Protocol, Literal
 from typing import Union, Optional, Any
-from inmanta.plugins import plugin, InmantaType
+from inmanta.plugins import plugin
+from inmanta.plugins.typing import InmantaType
 
 
 @plugin
