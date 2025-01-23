@@ -152,7 +152,7 @@ def log_contains(caplog, loggerpart, level, msg, test_phase="call"):
             print(logger_name, log_level, message)
         print("------------")
 
-    assert False
+    assert False, f'Message "{msg}" not present in logs'
 
 
 def log_doesnt_contain(caplog, loggerpart, level, msg):
