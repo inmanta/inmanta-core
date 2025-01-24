@@ -64,13 +64,14 @@ async def retry_limited_fast(
     await util.retry_limited(fun, timeout=timeout, interval=interval, *args, **kwargs)
 
 
-async def wait_until_done(agent: TestAgent) -> None:
+async def wait_until_done(agent: TestAgent, **kwargs) -> None:
     await retry_limited_fast(
         lambda: (
             len(agent.scheduler._work._waiting) == 0
             and len(agent.scheduler._work.agent_queues.queued()) == 0
             and all(queue._unfinished_tasks == 0 for queue in agent.scheduler._work.agent_queues._agent_queues.values())
-        )
+        ),
+        **kwargs,
     )
 
 
@@ -3384,3 +3385,107 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
     assert scheduler._state.resource_state[rid2].blocked is Blocked.NOT_BLOCKED
     # verify that scheduler recognized that it is no longer blocked
     assert scheduler._state.resource_state[rid1].blocked is Blocked.NOT_BLOCKED
+
+
+async def test_performance(agent: TestAgent, make_resource_minimal, monkeypatch) -> None:
+    import asyncio
+    import time
+
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+
+    # set up rid1 to depend on rid2
+    resources: Mapping[ResourceIdStr, state.ResourceIntent] = {
+        rid1: make_resource_minimal(rid1, values={"hello": "world 1"}, requires=[]),
+    }
+    version: int = 42
+    await agent.scheduler._new_version(
+        [ModelVersion(version=version, resources=resources, requires={}, undefined=set())]
+    )
+    await retry_limited_fast(lambda: (ex := agent.executor_manager.executors.get("agent1")) is not None and ex.execute_count == 1)
+
+    deploy_done_orig = agent.scheduler.deploy_done
+    deploy_done_future: asyncio.Future
+    loop = asyncio.get_running_loop()
+
+    async def deploy_done(*args, **kwargs):
+        await deploy_done_orig(*args, **kwargs)
+        deploy_done_future.set_result(None)
+
+    monkeypatch.setattr(agent.scheduler, "deploy_done", deploy_done)
+
+    nb_iterations = 200_000
+    start = time.time()
+    for i in range(nb_iterations):
+        deploy_done_future = loop.create_future()
+        await agent.scheduler.deploy_resource(
+            rid1,
+            reason="Test: deploying r1",
+            priority=TaskPriority.USER_DEPLOY,
+        )
+        await deploy_done_future
+    end = time.time()
+
+    assert False, f"{nb_iterations} iterations took {end - start:.4}s"
+
+
+async def test_performance_alt(server, agent: TestAgent, make_resource_minimal, monkeypatch) -> None:
+    import asyncio
+    import time
+    import uuid
+    import inmanta.resources
+    from inmanta import data
+
+    nb_agents = 50
+    nb_resources_per_agent = 1000
+
+    resources: Mapping[ResourceIdStr, state.ResourceIntent] = {
+        (rid := ResourceIdStr(f"test::Resource[agent{a},name={r}]")): make_resource_minimal(rid, values={"rid": rid}, requires=[])
+        for a in range(nb_agents)
+        for r in range(nb_resources_per_agent)
+    }
+
+    project_id = uuid.uuid4()
+    await data.Project(
+        id=project_id,
+        name=str(project_id),
+    ).insert()
+    await data.Environment(
+        id=agent.environment,
+        name="myenv",
+        project=project_id,
+    ).insert()
+    await data.ConfigurationModel(
+        environment=agent.environment,
+        version=42,
+        is_suitable_for_partial_compiles=True,
+    ).insert()
+    await data.Resource.insert_many([
+        data.Resource(
+            environment=agent.environment,
+            resource_id=resource_id.resource_str(),
+            resource_type=resource_id.entity_type,
+            resource_id_value=resource_id.attribute_value,
+            agent=resource_id.agent_name,
+            attribute_hash="helloworld",
+            model=42,
+        )
+        for resource_id in (
+            inmanta.resources.Id.parse_id(rid)
+            for rid in resources.keys()
+        )
+    ])
+    await data.ResourcePersistentState.populate_for_version(agent.environment, 42)
+
+    version: int = 42
+    start = time.time()
+    await agent.scheduler._new_version(
+        [ModelVersion(version=version, resources=resources, requires={}, undefined=set())]
+    )
+    version_processed = time.time()
+    await wait_until_done(agent, timeout=60*60*24, interval=0.1)
+    end = time.time()
+
+    assert len(agent.executor_manager.executors) == nb_agents
+    assert all(ex.execute_count == nb_resources_per_agent for ex in agent.executor_manager.executors.values())
+
+    assert False, f"{nb_agents} agents with {nb_resources_per_agent} resources per agent took {end - start:.4}s"

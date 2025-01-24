@@ -301,7 +301,6 @@ class TestScheduler(ResourceScheduler):
         self.executor_manager = self.executor_manager
         self.code_manager = DummyCodeManager(client)
         self.mock_versions = {}
-        self.state_update_manager = DummyStateManager()
         self._timer_manager = DummyTimerManager(self)
 
     async def read_version(
