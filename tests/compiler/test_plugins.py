@@ -26,7 +26,14 @@ import pytest
 import inmanta.ast.statements.define
 import inmanta.compiler as compiler
 import inmanta.plugins
-from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException
+from inmanta.ast import (
+    CompilerException,
+    ExplicitPluginException,
+    InvalidTypeAnnotation,
+    Namespace,
+    RuntimeException,
+    WrappingRuntimeException,
+)
 from utils import log_contains
 
 if typing.TYPE_CHECKING:
@@ -180,7 +187,10 @@ import test_674
 
 test_674::test_not_nullable(null)
         """,
-        "Invalid value 'null', expected string (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))",
+        "Value null for argument param of plugin test_674::test_not_nullable has incompatible type."
+        " Expected type: string (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))"
+        "\ncaused by:"
+        "\n  Invalid value 'null', expected string (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))",
     )
 
 
@@ -214,7 +224,10 @@ import test_674
 
 test_674::test_not_nullable_list(null)
         """,
-        "Invalid value 'null', expected int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))",
+        "Value null for argument param of plugin test_674::test_not_nullable_list has incompatible type."
+        " Expected type: int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))"
+        "\ncaused by:"
+        "\n  Invalid value 'null', expected int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))",
     )
 
 
@@ -435,6 +448,142 @@ none = plugin_native_types::get_from_dict({"a":"b"}, "B")
 a = plugin_native_types::many_arguments(["a","c","b"], 1)
 
 none = plugin_native_types::as_none("a")
+
+# Union types (input)
+plugin_native_types::union_single_type(value="test")     # type value: Union[str]
+plugin_native_types::union_multiple_types(value="test")  # type value: Union[int, str]
+plugin_native_types::union_multiple_types(value=123)     # type value: Union[int, str]
+for val in ["test", 123, null]:
+    plugin_native_types::union_optional_1(value=val)     # type value: Union[None, int, str]
+    plugin_native_types::union_optional_2(value=val)     # type value: Optional[Union[int, str]]
+    plugin_native_types::union_optional_3(value=val)     # type value: Union[int, str] | None
+    plugin_native_types::union_optional_4(value=val)     # type value: None | Union[int, str]
+end
+
+# Union types (return value)
+plugin_native_types::union_return_single_type(value="test")     # type return value: Union[str]
+plugin_native_types::union_return_multiple_types(value="test")  # type return value: Union[str, int]
+plugin_native_types::union_return_multiple_types(value=123)     # type return value: Union[str, int]
+for val in ["test", 123, null]:
+    plugin_native_types::union_return_optional_1(value=val)     # type return value: Union[None, int, str]
+    plugin_native_types::union_return_optional_2(value=val)     # type return value: Optional[Union[int, str]]
+    plugin_native_types::union_return_optional_3(value=val)     # type return value: Union[int, str] | None
+    plugin_native_types::union_return_optional_4(value=val)     # type return value: None | Union[int, str]
+end
         """
     )
     compiler.do_compile()
+
+    # Parameter to plugin has incompatible type
+    ns = "plugin_native_types"
+    for plugin_name, plugin_value, error_message in [
+        (
+            "union_single_type",
+            123,
+            f"Value 123 for argument value of plugin {ns}::union_single_type has incompatible type. Expected type: string",
+        ),
+        (
+            "union_multiple_types",
+            "[1, 2, 3]",
+            f"Value [1, 2, 3] for argument value of plugin {ns}::union_multiple_types has incompatible type."
+            " Expected type: Union[int,string]",
+        ),
+        (
+            "union_optional_1",
+            1.2,
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_1 has incompatible type."
+            f" Expected type: Union[int,string]?",
+        ),
+        (
+            "union_optional_2",
+            1.2,
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_2 has incompatible type."
+            f" Expected type: Union[int,string]?",
+        ),
+        (
+            "union_optional_3",
+            1.2,
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_3 has incompatible type."
+            f" Expected type: Union[int,string]?",
+        ),
+        (
+            "union_optional_4",
+            1.2,
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_4 has incompatible type."
+            f" Expected type: Union[int,string]?",
+        ),
+    ]:
+        snippetcompiler.setup_for_snippet(
+            f"""
+            import plugin_native_types
+            plugin_native_types::{plugin_name}(value={plugin_value})
+            """
+        )
+        with pytest.raises(RuntimeException) as exc_info:
+            compiler.do_compile()
+        assert error_message in str(exc_info.value)
+
+    # Return value of plugin has incompatible type
+    for plugin_name, plugin_value, error_message in [
+        (
+            "union_return_single_type",
+            123,
+            f"Return value 123 of plugin {ns}::union_return_single_type has incompatible type. Expected type: string",
+        ),
+        (
+            "union_return_multiple_types",
+            "[1, 2, 3]",
+            f"Return value [1, 2, 3] of plugin {ns}::union_return_multiple_types has incompatible type."
+            " Expected type: Union[string,int]",
+        ),
+        (
+            "union_return_optional_1",
+            1.2,
+            (
+                f"Return value 1.2 of plugin {ns}::union_return_optional_1 has incompatible type."
+                " Expected type: Union[int,string]?"
+            ),
+        ),
+        (
+            "union_return_optional_2",
+            1.2,
+            (
+                f"Return value 1.2 of plugin {ns}::union_return_optional_2 has incompatible type."
+                " Expected type: Union[int,string]?"
+            ),
+        ),
+        (
+            "union_return_optional_3",
+            1.2,
+            (
+                f"Return value 1.2 of plugin {ns}::union_return_optional_3 has incompatible type."
+                " Expected type: Union[int,string]?"
+            ),
+        ),
+        (
+            "union_return_optional_4",
+            1.2,
+            (
+                f"Return value 1.2 of plugin {ns}::union_return_optional_4 has incompatible type."
+                " Expected type: Union[int,string]?"
+            ),
+        ),
+    ]:
+        snippetcompiler.setup_for_snippet(
+            f"""
+            import plugin_native_types
+            plugin_native_types::{plugin_name}(value={plugin_value})
+            """
+        )
+        with pytest.raises(WrappingRuntimeException) as exc_info:
+            compiler.do_compile()
+        assert error_message in str(exc_info)
+
+    snippetcompiler.setup_for_snippet(
+        """
+        import plugin_invalid_union_type
+        """
+    )
+    with pytest.raises(InvalidTypeAnnotation) as exc_info:
+        compiler.do_compile()
+    assert "Union type must be subscripted, got typing.Union" in str(exc_info.value)
