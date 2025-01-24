@@ -298,7 +298,7 @@ class ModelState:
 
             # Populate resources intent
             resource_intent = ResourceIntent(
-                resource_id=resource_id,
+                resource_id=sys.intern(resource_id),
                 attribute_hash=res["attribute_hash"],
                 attributes=json.loads(res["attributes"]),
             )

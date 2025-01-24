@@ -135,7 +135,7 @@ class ModelVersion:
             version=version,
             resources={
                 ResourceIdStr(resource["resource_id"]): ResourceIntent(
-                    resource_id=ResourceIdStr(resource["resource_id"]),
+                    resource_id=sys.intern(ResourceIdStr(resource["resource_id"])),
                     attribute_hash=resource["attribute_hash"],
                     attributes=resource["attributes"],
                 )
@@ -1185,7 +1185,7 @@ class ResourceScheduler(TaskManager):
             # Always do this, even if the DB is broken
             async with self._scheduler_lock:
                 # report to the scheduled work that we're done
-                self._work.finished_deploy(report.resource_id)
+                self._work.finished_deploy(deploy_intent.intent.resource_id)
                 state = self._state.resource_state.get(deploy_intent.intent.resource_id)
                 if state is not None:
                     self._timer_manager.update_timer(deploy_intent.intent.resource_id, state=state)
@@ -1208,7 +1208,7 @@ class ResourceScheduler(TaskManager):
         :return: The new state of the resource, even if no changes were made. The returned object is a static copy that
             represents the state at the end of the deploy, and can therefore safely be returned out of the scheduler lock.
         """
-        resource: ResourceIdStr = result.resource_id
+        resource: ResourceIdStr = deploy_intent.intent.resource_id
         deploy_result: DeployResult = DeployResult.from_handler_resource_state(result.resource_state)
 
         async with self._scheduler_lock:
