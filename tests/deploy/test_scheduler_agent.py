@@ -3435,7 +3435,7 @@ async def test_performance_alt(server, agent: TestAgent, make_resource_minimal, 
     import inmanta.resources
     from inmanta import data
 
-    nb_agents = 50
+    nb_agents = 200
     nb_resources_per_agent = 1000
 
     resources: Mapping[ResourceIdStr, state.ResourceIntent] = {
