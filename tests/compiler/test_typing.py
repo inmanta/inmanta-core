@@ -601,15 +601,11 @@ def test_float_type_argument_plugin_error(snippetcompiler, val):
 
     test = test_674::test_float_to_int({repr(val)})
             """
+    msg = f"Invalid value '{val}', expected float (reported in test_674::test_float_to_int({repr(val)}) ({{dir}}/main.cf:4))"
+
     snippetcompiler.setup_for_error(
         snippet,
-        (
-            f"Value {repr(val)} for argument val1 of plugin test_674::test_float_to_int has incompatible type."
-            f" Expected type: float (reported in test_674::test_float_to_int({repr(val)}) ({{dir}}/main.cf:4))"
-            "\ncaused by:"
-            f"\n  Invalid value '{val}', expected float (reported in test_674::test_float_to_int({repr(val)})"
-            " ({dir}/main.cf:4))"
-        ),
+        msg,
     )
 
 
@@ -635,10 +631,11 @@ import test_674
 test = test_674::test_error_float()
         """,
         (
-            "Return value 1 of plugin test_674::test_error_float has incompatible type. Expected type: float"
-            " (reported in test_674::test_error_float() ({dir}/main.cf:4))"
-            "\ncaused by:"
-            "\n  Invalid value '1', expected float (reported in test_674::test_error_float() ({dir}/main.cf:4))"
+            "Exception in plugin test_674::test_error_float (reported in "
+            "test_674::test_error_float() ({dir}/main.cf:4))\n"
+            "caused by:\n"
+            "  Invalid value '1', expected float (reported in "
+            "test_674::test_error_float() ({dir}/main.cf:4))"
         ),
     )
 

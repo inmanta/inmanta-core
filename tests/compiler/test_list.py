@@ -584,10 +584,7 @@ def test_error_list_validation(snippetcompiler):
         """,
         autostd=True,
     )
-    with pytest.raises(
-        RuntimeException,
-        match="Value 'hello' for argument item_list of plugin std::count has incompatible type. Expected type: list",
-    ):
+    with pytest.raises(RuntimeException, match="Invalid value 'hello', expected list"):
         (_, scopes) = compiler.do_compile()
 
 
@@ -598,10 +595,7 @@ def test_error_dict_validation(snippetcompiler):
         """,
         autostd=True,
     )
-    with pytest.raises(
-        RuntimeException,
-        match="Value 'hello1' for argument dct of plugin std::dict_get has incompatible type. Expected type: dict",
-    ):
+    with pytest.raises(RuntimeException, match="Invalid value 'hello1', expected dict"):
         (_, scopes) = compiler.do_compile()
 
 

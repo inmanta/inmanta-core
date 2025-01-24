@@ -715,9 +715,7 @@ class MissingImportException(TypeNotFoundException):
 
 
 class AmbiguousTypeException(TypeNotFoundException):
-    """
-    Exception raised when a type is referenced in an unqualified manner in a context where it can not be unambiguously resolved.
-    """
+    """Exception raised when a type is referenced that does not exist"""
 
     def __init__(self, type: LocatableString, candidates: list["Entity"]) -> None:
         candidates = sorted(candidates, key=lambda x: x.get_full_name())
@@ -826,15 +824,6 @@ class AttributeException(WrappingRuntimeException):
         self.instance = instance
 
 
-class PluginTypeException(WrappingRuntimeException):
-    """
-    Raised when an argument or return value of a plugin is not in-line with the type
-    annotation of that plugin. Wraps the validation error.
-    """
-
-    pass
-
-
 class OptionalValueException(RuntimeException):
     """Exception raised when an optional value is accessed that has no value (and is frozen)"""
 
@@ -861,12 +850,6 @@ class TypingException(RuntimeException):
 
     def importantance(self) -> int:
         return 10
-
-
-class InvalidTypeAnnotation(TypingException):
-    """
-    Invalid type annotation, e.g. for a plugin.
-    """
 
 
 class DirectExecuteException(TypingException):

@@ -33,12 +33,9 @@ import typing_inspect
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
 from inmanta.ast import (
-    InvalidTypeAnnotation,
     LocatableString,
     Location,
     Namespace,
-    PluginException,
-    PluginTypeException,
     Range,
     RuntimeException,
     TypeNotFoundException,
@@ -264,7 +261,6 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     # Unions and optionals
     if typing_inspect.is_union_type(python_type):
         # Optional type
-        bases: Sequence[inmanta_type.Type]
         if typing_inspect.is_optional_type(python_type):
             other_types = [tt for tt in typing.get_args(python_type) if not typing_inspect.is_optional_type(tt)]
             if len(other_types) == 0:
@@ -272,11 +268,13 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
                 return Null()
             if len(other_types) == 1:
                 return inmanta_type.NullableType(to_dsl_type(other_types[0]))
-            bases = [to_dsl_type(arg) for arg in other_types]
-            return inmanta_type.NullableType(inmanta_type.Union(bases))
+            # TODO: optional unions
+            return inmanta_type.Type()
         else:
-            bases = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
-            return inmanta_type.Union(bases)
+            # TODO: unions
+            return inmanta_type.Type()
+        # bases: Sequence[inmanta.ast.type.Type] = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
+        # return inmanta.ast.type.Union(bases)
 
     # Lists and dicts
     if typing_inspect.is_generic_type(python_type):
@@ -379,8 +377,6 @@ class PluginValue:
         If no type annotation is present or if the type annotation allows any type to be passed
         as argument, then None is returned.
 
-        Expects to be called during the normalization stage.
-
         :param plugin: The plugin that this argument is part of.
         :param resolver: The namespace that can be used to resolve the type annotation of this
             argument.
@@ -390,13 +386,10 @@ class PluginValue:
             return self._resolved_type
 
         if not isinstance(self.type_expression, str):
-            if typing_inspect.is_union_type(self.type_expression) and not typing.get_args(self.type_expression):
-                # If typing.Union is not subscripted, isinstance(self.type_expression, type) evaluates to False.
-                raise InvalidTypeAnnotation(stmt=None, msg=f"Union type must be subscripted, got {self.type_expression}")
             if isinstance(self.type_expression, type) or typing.get_origin(self.type_expression) is not None:
                 self._resolved_type = to_dsl_type(self.type_expression)
             else:
-                raise InvalidTypeAnnotation(
+                raise RuntimeException(
                     stmt=None,
                     msg="Bad annotation in plugin %s for %s, expected str or python type but got %s (%s)"
                     % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression),
@@ -410,8 +403,8 @@ class PluginValue:
     def validate(self, value: object) -> bool:
         """
         Validate that the given value can be passed to this argument.  Returns True if the value is known
-        and valid, False if the value is unknown, and raises a :py:class:`inmanta.ast.RuntimeException`
-        if the value is not of the expected type.
+        and valid, False if the value is unknown, and raises a ValueError is the value is not of the
+        expected type.
 
         :param value: The value to validate
         """
@@ -771,20 +764,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             arg = self.get_arg(position)
 
             # (4) Validate the input value
-            try:
-                no_unknowns = arg.validate(value)
-            except RuntimeException as e:
-                raise PluginTypeException(
-                    stmt=None,
-                    msg=(
-                        f"Value {value!r} for argument {arg.arg_name} of plugin {self.get_full_name()} has incompatible type."
-                        f" Expected type: {arg.resolved_type}"
-                    ),
-                    cause=e,
-                )
-            else:
-                if not no_unknowns:
-                    return False
+            if not arg.validate(value):
+                return False
 
         # Validate all kw arguments
         for name, value in kwargs.items():
@@ -798,20 +779,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 raise RuntimeException(None, f"{self.get_full_name()}() got multiple values for argument '{name}'")
 
             # (4) Validate the input value
-            try:
-                no_unknowns = kwarg.validate(value)
-            except RuntimeException as e:
-                raise PluginTypeException(
-                    stmt=None,
-                    msg=(
-                        f"Value {value} for argument {kwarg.arg_name} of plugin {self.get_full_name()} has incompatible type."
-                        f" Expected type: {kwarg.resolved_type}"
-                    ),
-                    cause=e,
-                )
-            else:
-                if not no_unknowns:
-                    return False
+            if not kwarg.validate(value):
+                return False
         return True
 
     def emit_statement(self) -> "DynamicStatement":
@@ -868,17 +837,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         value = DynamicProxy.unwrap(value)
 
         # Validate the returned value
-        try:
-            self.return_type.validate(value)
-        except RuntimeException as e:
-            raise PluginTypeException(
-                stmt=None,
-                msg=(
-                    f"Return value {value} of plugin {self.get_full_name()} has incompatible type."
-                    f" Expected type: {self.return_type.resolved_type}"
-                ),
-                cause=e,
-            )
+        self.return_type.validate(value)
 
         return value
 

@@ -1,6 +1,0 @@
----
-description: Added support for native union types to plugins.
-issue-nr: 8574
-issue-repo: inmanta-core
-change-type: patch
-destination-branches: [iso7]  # cherry-pick from #8654
