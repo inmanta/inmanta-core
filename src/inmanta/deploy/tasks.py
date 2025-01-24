@@ -22,6 +22,7 @@ import datetime
 import logging
 import traceback
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass
 
 import pyformance
@@ -72,13 +73,19 @@ class Task(abc.ABC):
         )
 
     async def get_executor(
-        self, task_manager: "scheduler.TaskManager", agent: str, resource_type: ResourceType, version: int
+        self,
+        task_manager: "scheduler.TaskManager",
+        agent: str,
+        resource_type: ResourceType,
+        # TODO: name and signature
+        version: int,
+        all_resource_types: Collection[ResourceType],
     ) -> executor.Executor:
         """Helper method to produce the executor"""
         code, invalid_resources = await task_manager.code_manager.get_code(
             environment=task_manager.environment,
             version=version,
-            resource_types=task_manager.get_types_for_agent(agent),
+            resource_types=all_resource_types,
         )
 
         # Bail out if this failed
@@ -155,7 +162,7 @@ class Deploy(Task):
                     #       as it avoid the problem of fast chanfing model versions
 
                     my_executor: executor.Executor = await self.get_executor(
-                        task_manager, agent, executor_resource_details.id.entity_type, version
+                        task_manager, agent, executor_resource_details.id.entity_type, version, deploy_intent.resource_types_for_agent
                     )
                 except Exception as e:
                     log_line = data.LogLine.log(
@@ -225,7 +232,7 @@ class DryRun(Task):
         started = datetime.datetime.now().astimezone()
         try:
             my_executor: executor.Executor = await self.get_executor(
-                task_manager, agent, executor_resource_details.id.entity_type, self.version
+                task_manager, agent, executor_resource_details.id.entity_type, self.version, [executor_resource_details.id.entity_type]
             )
         except Exception:
             logger_for_agent(agent).error(
@@ -279,7 +286,7 @@ class RefreshFact(Task):
 
         executor_resource_details: executor.ResourceDetails = self.get_executor_resource_details(version, resource_intent)
         try:
-            my_executor = await self.get_executor(task_manager, agent, self.id.entity_type, version)
+            my_executor = await self.get_executor(task_manager, agent, self.id.entity_type, version, version_intent.resource_types_for_agent)
         except Exception:
             logger_for_agent(agent).warning(
                 "Cannot retrieve fact for %s because resource is undeployable or code could not be loaded",

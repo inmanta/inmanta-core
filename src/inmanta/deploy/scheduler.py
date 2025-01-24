@@ -67,6 +67,8 @@ class ResourceVersionIntent:
 
     model_version: int
     intent: ResourceIntent
+    # TODO: name
+    resource_types_for_agent: Collection[ResourceType]
 
 
 @dataclass(frozen=True)
@@ -164,12 +166,6 @@ class TaskManager(abc.ABC):
     client: Client
     code_manager: CodeManager
     executor_manager: executor.ExecutorManager[executor.Executor]
-
-    @abstractmethod
-    def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
-        """
-        Returns a collection of all resource types that are known to live on a given agent.
-        """
 
     @abstractmethod
     async def get_resource_version_intent(
@@ -1135,7 +1131,11 @@ class ResourceScheduler(TaskManager):
             resource_intent = self._get_resource_intent(resource)
             if resource_intent is None:
                 return None
-            return ResourceVersionIntent(model_version=self._state.version, intent=resource_intent)
+            return ResourceVersionIntent(
+                model_version=self._state.version,
+                intent=resource_intent,
+                resource_types_for_agent=list(self._state.types_per_agent[self._state.intent[resource].id.agent_name]),
+            )
 
     async def deploy_start(self, action_id: uuid.UUID, resource: ResourceIdStr) -> Optional[DeployIntent]:
         async with self._scheduler_lock:
@@ -1151,6 +1151,7 @@ class ResourceScheduler(TaskManager):
                 intent=resource_intent,
                 dependencies=dependencies,
                 deploy_start=datetime.datetime.now().astimezone(),
+                resource_types_for_agent=list(self._state.types_per_agent[self._state.intent[resource].id.agent_name]),
             )
             # Update the state in the database.
             await self.state_update_manager.send_in_progress(
@@ -1455,9 +1456,6 @@ class ResourceScheduler(TaskManager):
                 case _:
                     raise Exception(f"Failed to parse the resource state for {dep_id}: {resource_state_object}")
         return dependencies_state
-
-    def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
-        return list(self._state.types_per_agent[agent])
 
     async def get_resource_state(self) -> SchedulerStatusReport:
         """
