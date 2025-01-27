@@ -56,46 +56,46 @@ def test_conversion(caplog):
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type_simple(Mapping[str, str])
 
     # Union types
-    assert inmanta_type.Integer() == to_dsl_type(Union[int])
-    assert inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()]) == to_dsl_type(Union[int, str])
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+    assert inmanta_type.Integer() == to_dsl_type_simple(Union[int])
+    assert inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()]) == to_dsl_type_simple(Union[int, str])
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
         Union[None, int, str]
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
         Optional[Union[int, str]]
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
         Union[int, str] | None
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
         None | Union[int, str]
     )
     # verify that nested unions are flattened and nested None values are considered for NullableType
     assert inmanta_type.NullableType(
         inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String(), inmanta_type.Float()])
-    ) == to_dsl_type(Union[int, Union[str, Union[float, None]]])
+    ) == to_dsl_type_simple(Union[int, Union[str, Union[float, None]]])
 
     # Union types
-    assert inmanta_type.Integer() == to_dsl_type(Union[int])
-    assert inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()]) == to_dsl_type(Union[int, str])
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+    assert inmanta_type.Integer() == to_dsl_type_simple(Union[int])
+    assert inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()]) == to_dsl_type_simple(Union[int, str])
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
         Union[None, int, str]
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
         Optional[Union[int, str]]
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
         Union[int, str] | None
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
         None | Union[int, str]
     )
     # verify that nested unions are flattened and nested None values are considered for NullableType
     assert inmanta_type.NullableType(
         inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String(), inmanta_type.Float()])
-    ) == to_dsl_type(Union[int, Union[str, Union[float, None]]])
+    ) == to_dsl_type_simple(Union[int, Union[str, Union[float, None]]])
 
-    assert Null() == to_dsl_type(Union[None])
+    assert Null() == to_dsl_type_simple(Union[None])
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type_simple(collections.abc.Mapping[str, str])
 
     assert Null() == to_dsl_type_simple(Union[None])
