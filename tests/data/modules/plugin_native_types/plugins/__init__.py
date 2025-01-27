@@ -18,6 +18,7 @@
 
 from typing import Any, Annotated, Protocol, Literal
 from typing import Union, Optional, Any
+from typing import Union, Optional, Any
 from inmanta.plugins import plugin
 from inmanta.plugins.typing import InmantaType
 
@@ -101,7 +102,6 @@ def union_return_optional_3(value: Any) -> Union[int, str] | None:
 @plugin
 def union_return_optional_4(value: Any) -> None | Union[int, str]:
     return value
-
 
 # Annotated values
 

@@ -22,6 +22,7 @@ import inspect
 import numbers
 import os
 import subprocess
+import typing
 import warnings
 from collections import abc
 from collections.abc import Mapping, Sequence
@@ -238,8 +239,10 @@ python_to_model = {
     int: inmanta_type.Integer(),
     bool: inmanta_type.Bool(),
     dict: inmanta_type.TypedDict(inmanta_type.Type()),
+    typing.Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
     Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
     list: inmanta_type.List(),
+    typing.Sequence: inmanta_type.List(),
     Sequence: inmanta_type.List(),
     object: inmanta_type.Type(),
 }
@@ -394,6 +397,9 @@ class PluginValue:
 
         plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
         if not isinstance(self.type_expression, str):
+            if typing_inspect.is_union_type(self.type_expression) and not typing.get_args(self.type_expression):
+                # If typing.Union is not subscripted, isinstance(self.type_expression, type) evaluates to False.
+                raise InvalidTypeAnnotation(stmt=None, msg=f"Union type must be subscripted, got {self.type_expression}")
             if isinstance(self.type_expression, type) or get_origin(self.type_expression) is not None:
                 self._resolved_type = to_dsl_type(self.type_expression, plugin_line, resolver)
             if typing_inspect.is_union_type(self.type_expression) and not typing.get_args(self.type_expression):
@@ -408,15 +414,16 @@ class PluginValue:
                     % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression),
                 )
         else:
-            self._resolved_type = parse_dsl_type(self.type_expression, plugin_line, resolver)
-
+            plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
+            locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, resolver)
+            self._resolved_type = inmanta_type.resolve_type(locatable_type, resolver)
         return self._resolved_type
 
     def validate(self, value: object) -> bool:
         """
         Validate that the given value can be passed to this argument.  Returns True if the value is known
-        and valid, False if the value is unknown, and raises a ValueError is the value is not of the
-        expected type.
+        and valid, False if the value is unknown, and raises a :py:class:`inmanta.ast.RuntimeException`
+        if the value is not of the expected type.
 
         :param value: The value to validate
         """
@@ -894,7 +901,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         return self.get_full_name()
 
 
-@overload
+@typing.overload
 def plugin(
     function: str | None = None,
     commands: Optional[list[str]] = None,
@@ -903,7 +910,7 @@ def plugin(
 ) -> Callable[[T_FUNC], T_FUNC]: ...
 
 
-@overload
+@typing.overload
 def plugin(
     function: T_FUNC,
     commands: Optional[list[str]] = None,

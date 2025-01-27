@@ -34,6 +34,14 @@ from inmanta.ast import (
     RuntimeException,
     WrappingRuntimeException,
 )
+from inmanta.ast import (
+    CompilerException,
+    ExplicitPluginException,
+    InvalidTypeAnnotation,
+    Namespace,
+    RuntimeException,
+    WrappingRuntimeException,
+)
 from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException, WrappingRuntimeException
 from utils import log_contains
 
