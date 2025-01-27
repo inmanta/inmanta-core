@@ -34,15 +34,6 @@ from inmanta.ast import (
     RuntimeException,
     WrappingRuntimeException,
 )
-from inmanta.ast import (
-    CompilerException,
-    ExplicitPluginException,
-    InvalidTypeAnnotation,
-    Namespace,
-    RuntimeException,
-    WrappingRuntimeException,
-)
-from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException, WrappingRuntimeException
 from utils import log_contains
 
 if typing.TYPE_CHECKING:
@@ -487,9 +478,10 @@ plugin_native_types::annotated_return_entity(test_entity)  # type return value: 
 
 for val in ["yes", "no"]:
     plugin_native_types::annotated_arg_literal(val)        # type value: Annotated[Literal["yes", "no"], InmantaType("response")
-    plugin_native_types::annotated_response_literal(val)   # type value: Annotated[Literal["yes", "no"], InmantaType("response")
+    plugin_native_types::annotated_return_literal(val)   # type value: Annotated[Literal["yes", "no"], InmantaType("response")
 end
-        """
+        """,
+        ministd=True,
     )
     compiler.do_compile()
 
@@ -536,7 +528,8 @@ end
             f"""
             import plugin_native_types
             plugin_native_types::{plugin_name}(value={plugin_value})
-            """
+            """,
+            ministd=True,
         )
         with pytest.raises(RuntimeException) as exc_info:
             compiler.do_compile()
@@ -592,7 +585,8 @@ end
             f"""
             import plugin_native_types
             plugin_native_types::{plugin_name}(value={plugin_value})
-            """
+            """,
+            ministd=True,
         )
         with pytest.raises(WrappingRuntimeException) as exc_info:
             compiler.do_compile()
@@ -601,7 +595,8 @@ end
     snippetcompiler.setup_for_snippet(
         """
         import plugin_invalid_union_type
-        """
+        """,
+        ministd=True,
     )
     with pytest.raises(InvalidTypeAnnotation) as exc_info:
         compiler.do_compile()

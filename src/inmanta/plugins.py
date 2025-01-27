@@ -26,7 +26,8 @@ import typing
 import warnings
 from collections import abc
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Annotated, Any, Callable, Literal, Optional, Type, TypeVar, get_args, get_origin, overload
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Type, TypeVar
 
 import typing_inspect
 
@@ -50,7 +51,6 @@ from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
-from inmanta.plugins.typing import InmantaType
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
@@ -122,7 +122,7 @@ class Context:
         """
         Get the path to the data dir (and create if it does not exist yet
         """
-        data_dir = os.path.join("../data", self.plugin.namespace.get_full_name())
+        data_dir = os.path.join("data", self.plugin.namespace.get_full_name())
 
         if not os.path.exists(data_dir):
             os.makedirs(data_dir, exist_ok=True)
@@ -248,6 +248,27 @@ python_to_model = {
 }
 
 
+@dataclass(frozen=True)
+class InmantaType:
+    """
+    Declaration of an inmanta type for use with typing.Annotated.
+    When a plugin type is declared as typing.Annotated with an `InmantaType` as annotation, the Python type is completely
+    ignored for type validation and conversion to and from the DSL. Instead the string provided to the `InmantaType` is
+    evaluated as a DSL type, extended with "any".
+    For maximum static type coverage, it is recommended to use these only when absolutely necessary, and to use them as deeply
+    in the type as possible, e.g. prefer `Sequence[Annotated[MyEntity, InmantaType("std::Entity")]]` over
+    `Annotated[Sequence[MyEntity], InmantaType("std::Entity[]")]`.
+    """
+
+    dsl_type: str
+
+
+Entity: typing.TypeAlias = typing.Annotated[object, InmantaType("std::Entity")]
+"""
+    Alias used to treat std::Entity as an object in Python for type verification
+"""
+
+
 def parse_dsl_type(dsl_type: str, location: Range, resolver: Namespace) -> inmanta_type.Type:
     locatable_type: LocatableString = LocatableString(dsl_type, location, 0, resolver)
     return inmanta_type.resolve_type(locatable_type, resolver)
@@ -274,21 +295,21 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
         # Optional type
         bases: Sequence[inmanta_type.Type]
         if typing_inspect.is_optional_type(python_type):
-            other_types = [tt for tt in get_args(python_type) if not typing_inspect.is_optional_type(tt)]
+            other_types = [tt for tt in typing_inspect.get_args(python_type) if not typing_inspect.is_optional_type(tt)]
             if len(other_types) == 0:
                 # Probably not possible
                 return Null()
             if len(other_types) == 1:
-                return inmanta_type.NullableType(to_dsl_type(other_types[0]))
-            bases = [to_dsl_type(arg) for arg in other_types]
+                return inmanta_type.NullableType(to_dsl_type(other_types[0], location, resolver))
+            bases = [to_dsl_type(arg, location, resolver) for arg in other_types]
             return inmanta_type.NullableType(inmanta_type.Union(bases))
         else:
-            bases = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
+            bases = [to_dsl_type(arg, location, resolver) for arg in typing.get_args(python_type)]
             return inmanta_type.Union(bases)
 
     # Lists and dicts
     if typing_inspect.is_generic_type(python_type):
-        origin = get_origin(python_type)
+        origin = typing.get_origin(python_type)
 
         # dict
         if issubclass(origin, Mapping):
@@ -312,7 +333,7 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
         # List
         if issubclass(origin, Sequence):
             if origin in [collections.abc.Sequence, list, Sequence]:
-                args = get_args(python_type)
+                args = typing.get_args(python_type)
                 if not args:
                     return inmanta_type.List()
                 return inmanta_type.TypedList(to_dsl_type(args[0], location, resolver))
@@ -324,8 +345,8 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
             raise TypingException(None, f"invalid type {python_type}, set is not supported on the plugin boundary")
 
         # Annotated
-        if origin is Annotated:
-            annotated_args = get_args(python_type)
+        if origin is typing.Annotated:
+            annotated_args = typing.get_args(python_type)
             inmanta_types: Sequence[InmantaType] = [arg for arg in annotated_args if isinstance(arg, InmantaType)]
             if inmanta_types:
                 if len(inmanta_types) > 1:
@@ -400,13 +421,8 @@ class PluginValue:
             if typing_inspect.is_union_type(self.type_expression) and not typing.get_args(self.type_expression):
                 # If typing.Union is not subscripted, isinstance(self.type_expression, type) evaluates to False.
                 raise InvalidTypeAnnotation(stmt=None, msg=f"Union type must be subscripted, got {self.type_expression}")
-            if isinstance(self.type_expression, type) or get_origin(self.type_expression) is not None:
-                self._resolved_type = to_dsl_type(self.type_expression, plugin_line, resolver)
-            if typing_inspect.is_union_type(self.type_expression) and not typing.get_args(self.type_expression):
-                # If typing.Union is not subscripted, isinstance(self.type_expression, type) evaluates to False.
-                raise InvalidTypeAnnotation(stmt=None, msg=f"Union type must be subscripted, got {self.type_expression}")
             if isinstance(self.type_expression, type) or typing.get_origin(self.type_expression) is not None:
-                self._resolved_type = to_dsl_type(self.type_expression)
+                self._resolved_type = to_dsl_type(self.type_expression, plugin_line, resolver)
             else:
                 raise InvalidTypeAnnotation(
                     stmt=None,
@@ -414,7 +430,6 @@ class PluginValue:
                     % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression),
                 )
         else:
-            plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
             locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, resolver)
             self._resolved_type = inmanta_type.resolve_type(locatable_type, resolver)
         return self._resolved_type

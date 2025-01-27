@@ -17,16 +17,13 @@
 """
 
 import collections.abc
-from typing import Any, Mapping, Optional, Sequence, Union
-from typing import Annotated, Any, Mapping, Sequence, Union
-from typing import Any, Mapping, Optional, Sequence, Union
+from typing import Annotated, Any, Mapping, Optional, Sequence, Union
 
 import pytest
 
 import inmanta.ast.type as inmanta_type
 from inmanta.ast import Namespace, Range, RuntimeException
-from inmanta.plugins import Null, to_dsl_type
-from inmanta.plugins.typing import InmantaType
+from inmanta.plugins import InmantaType, Null, to_dsl_type
 
 
 def test_conversion(caplog):
