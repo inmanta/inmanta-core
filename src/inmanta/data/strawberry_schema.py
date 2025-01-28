@@ -3,6 +3,72 @@ import typing
 import uuid
 
 import strawberry
+"""
+TODO
+add filtering example
+
+"""
+
+
+"""
+README
+
+# Install strawberry
+pip install 'strawberry-graphql=0.258.0'
+
+# Run the GraphiQL server
+cd work/inmanta/github-repos/inmanta-core/src/inmanta/data/
+strawberry server strawberry_schema
+
+
+# Sample queries:
+{
+  environments {
+    id
+    settings {
+      name
+      doc
+      allowedValues
+    }
+    notifications {
+      id
+      created
+      message
+    }
+  }
+}
+
+{
+  projects {
+    id
+    name
+    environments {
+      id
+      settings {
+        name
+      }
+      notifications {
+        id
+        created
+        title
+        message
+        severity
+        uri
+        read
+        cleared
+      }
+      description
+      expertModeOn
+      halted
+      icon
+      name
+    }
+  }
+}
+
+
+"""
+
 
 # EnvSettingType = Union[str, int] # Cant use union ??
 EnvSettingType = str
@@ -57,7 +123,7 @@ def get_notifications_for_environment(root) -> list[Notification]:
     return notification_map.get(root.id, [])
 
 
-def get_settings_for_environment(root, name: str) -> list[EnvironmentSetting]:
+def get_settings_for_environment(root) -> list[EnvironmentSetting]:
     return [
         EnvironmentSetting(
             name=f"setting for env {root.name}",
