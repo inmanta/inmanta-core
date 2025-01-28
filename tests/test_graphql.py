@@ -33,3 +33,35 @@ async def test_test(server, client):
         "errors": None,
         "extensions": {},
     }
+
+
+
+async def test_get_projects(server, client):
+    query = """
+{
+  projects {
+    id
+    name
+    environments
+  }
+}
+    """
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    assert result.result["data"] == {
+        "data": {
+            "projects": [
+                {
+                    "id": "",
+                    "name": "",
+                    "environments": [],
+                },{
+                    "id": "",
+                    "name": "",
+                    "environments": [],
+                },
+            ]
+        },
+        "errors": None,
+        "extensions": {},
+    }
