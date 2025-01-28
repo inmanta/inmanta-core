@@ -797,7 +797,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
             "version": IntRangeFilter,
             "date": DateRangeFilter,
             "status": ContainsFilter,
-            "extended_status": ContainsFilter,
+            "released": BooleanEqualityFilter,
         }
 
     def get_base_url(self) -> str:
@@ -810,17 +810,12 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
             select_clause=f"""SELECT cm.version, cm.date, cm.total,
                                            version_info -> 'export_metadata' ->> 'message' as message,
                                            version_info -> 'export_metadata' ->> 'type' as type,
-                                              (CASE WHEN cm.version = {scheduled_version} THEN 'active'
-                                                  WHEN cm.version > {scheduled_version} THEN 'candidate'
-                                                  WHEN cm.version < {scheduled_version} AND cm.released=TRUE THEN 'retired'
-                                                  ELSE 'skipped_candidate'
-                                              END) as status,
                                           (CASE WHEN cm.version = {scheduled_version} THEN 'active'
-                                                  WHEN cm.version > {scheduled_version} AND cm.released=TRUE THEN 'released'
-                                                  WHEN cm.version > {scheduled_version} THEN 'candidate'
-                                                  WHEN cm.released=TRUE THEN 'retired'
-                                                  ELSE 'skipped_candidate'
-                                              END) as extended_status""",
+                                              WHEN cm.version > {scheduled_version} THEN 'candidate'
+                                              WHEN cm.version < {scheduled_version} AND cm.released=TRUE THEN 'retired'
+                                              ELSE 'skipped_candidate'
+                                          END) as status,
+                                          cm.released as released""",
             from_clause=f" FROM {ConfigurationModel.table_name()} as cm",
             filter_statements=[f" environment =  $1"],
             values=[self.environment.id],
@@ -845,7 +840,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
                     else []
                 ),
                 status=desired_state["status"],
-                extended_status=desired_state["extended_status"],
+                released=desired_state["released"],
             )
             for desired_state in records
         ]

@@ -256,15 +256,19 @@ async def test_filter_versions(
     )
     assert result.code == 200
     by_version = {cm["version"]: cm for cm in result.result["data"]}
-    assert by_version[8]["extended_status"] == "released"
     assert by_version[8]["status"] == "candidate"
+    assert by_version[8]["released"] == True
 
-    result = await client.list_desired_state_versions(env, filter={"extended_status": ["candidate"]}, sort="version.asc")
+    result = await client.list_desired_state_versions(
+        env, filter={"status": ["candidate"], "released": False}, sort="version.asc"
+    )
     assert result.code == 200
     assert len(result.result["data"]) == 1
     assert version_numbers(result.result["data"]) == [9]
 
-    result = await client.list_desired_state_versions(env, filter={"extended_status": ["released"]}, sort="version.asc")
+    result = await client.list_desired_state_versions(
+        env, filter={"status": ["candidate"], "released": True}, sort="version.asc"
+    )
     assert result.code == 200
     assert len(result.result["data"]) == 1
     assert version_numbers(result.result["data"]) == [8]
@@ -285,13 +289,11 @@ async def test_filter_versions(
     assert result.code == 200
     assert result.result["data"][0]["version"] == 5
     assert result.result["data"][0]["status"] == "active"
-    assert result.result["data"][0]["extended_status"] == "active"
 
     result = await client.list_desired_state_versions(environments["no_released_version"])
     assert result.code == 200
     assert result.result["data"][0]["version"] == 7
     assert result.result["data"][0]["status"] == "candidate"
-    assert result.result["data"][0]["extended_status"] == "candidate"
 
     # The version_info field of this ConfigurationModel is empty, which should result in an empty label list
     assert result.result["data"][0]["labels"] == []
