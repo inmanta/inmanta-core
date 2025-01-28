@@ -1227,6 +1227,7 @@ class Instance(ExecutionContext):
         "implementations",
         "locations",
         "instance_node",
+        "dataclass_self",
     )
 
     def __init__(
@@ -1269,6 +1270,7 @@ class Instance(ExecutionContext):
         self.implementations: "set[Implementation]" = set()
 
         self.locations: list[Location] = []
+        self.dataclass_self = None
 
     def get_type(self) -> "Entity":
         return self.type

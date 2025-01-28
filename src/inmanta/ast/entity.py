@@ -39,7 +39,6 @@ from inmanta.ast import (
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import Float, NamedType, NullableType, Type
-from inmanta.const import DATACLASS_SELF_FIELD
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
 from inmanta.types import DataclassProtocol
@@ -677,32 +676,20 @@ class Entity(NamedType, WithComment):
 
         assert isinstance(instance, Instance)
 
-        dataclass_self = instance.slots.get(DATACLASS_SELF_FIELD, None)
+        dataclass_self = instance.dataclass_self
         if dataclass_self is not None:
-            return dataclass_self.get_value()
+            return dataclass_self
         else:
             # Handle unsets
-            unset = [
-                v
-                for k, v in instance.slots.items()
-                if k not in ["self", DATACLASS_SELF_FIELD, "requires", "provides"]
-                if not v.is_ready()
-            ]
+            unset = [v for k, v in instance.slots.items() if k not in ["self", "requires", "provides"] if not v.is_ready()]
             if unset:
                 raise MultiUnsetException("Unset values when converting instance to dataclass", unset)
 
             # Convert values
             # All values are primitive, so this is trivial
-            kwargs = {
-                k: v.get_value()
-                for k, v in instance.slots.items()
-                if k not in ["self", DATACLASS_SELF_FIELD, "requires", "provides"]
-            }
+            kwargs = {k: v.get_value() for k, v in instance.slots.items() if k not in ["self", "requires", "provides"]}
             out = self._paired_dataclass(**kwargs)
-
-            dataclass_self = ResultVariable()
-            dataclass_self.set_value(out, self.location, False)
-            instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
+            instance.dataclass_self = out
             return out
 
     def from_python(self, value: object, resolver: Resolver, queue: QueueScheduler, location: Location) -> Instance:
@@ -726,9 +713,7 @@ class Entity(NamedType, WithComment):
             location,
             None,
         )
-        dataclass_self: ResultVariable[object] = ResultVariable()
-        dataclass_self.set_value(value, self.location, False)
-        instance.slots[DATACLASS_SELF_FIELD] = dataclass_self
+        instance.dataclass_self = value
         # generate an implementation
         for stmt in self.get_sub_constructor():
             stmt.emit(instance, queue)

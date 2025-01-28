@@ -99,13 +99,20 @@ class DynamicProxy:
 
             return dict(map(recurse_dict_item, item.items()))
 
-        if is_dataclass(item) and not isinstance(item, type) and dynamic_context is not None:
+        if is_dataclass(item) and not isinstance(item, type):
             # dataclass instance
             dataclass_type = get_inmanta_type_for_dataclass(type(item))
             if dataclass_type:
-                return dataclass_type.from_python(
-                    item, dynamic_context.resolver, dynamic_context.queue, dynamic_context.location
-                )
+                if dynamic_context is not None:
+                    return dataclass_type.from_python(
+                        item, dynamic_context.resolver, dynamic_context.queue, dynamic_context.location
+                    )
+                else:
+                    raise RuntimeException(
+                        None,
+                        f"{item} is a dataclass of type {dataclass_type.get_full_name()}. "
+                        "It can only be converted to an inmanta entity at the plugin boundary",
+                    )
 
         return item
 
