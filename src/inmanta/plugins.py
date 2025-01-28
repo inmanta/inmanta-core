@@ -37,7 +37,6 @@ from inmanta.ast import (
     LocatableString,
     Location,
     Namespace,
-    PluginException,
     PluginTypeException,
     Range,
     RuntimeException,
