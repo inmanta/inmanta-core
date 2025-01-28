@@ -218,9 +218,6 @@ class Null(inmanta_type.Type):
     def type_string(self) -> str:
         return "null"
 
-    def _signature_display_type(self, dsl_type: bool = True) -> str:
-        return self.type_string() if dsl_type else str(None)
-
     def type_string_internal(self) -> str:
         return self.type_string()
 
@@ -379,8 +376,6 @@ class PluginValue:
             )
         return self._resolved_type
 
-
-
     def resolve_type(self, plugin: "Plugin", resolver: Namespace) -> inmanta_type.Type:
         """
         Convert the string representation of this argument's type to a type.
@@ -467,7 +462,7 @@ class PluginArgument(PluginValue):
         if dsl_type:
             return "%s: %s" % (self.arg_name, self.resolved_type.type_string_internal())
 
-        return self.__str__()
+        return str(self)
 
     def __str__(self) -> str:
         if self.has_default_value():
@@ -533,19 +528,13 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     def normalize(self) -> None:
         self.resolver = self.namespace
 
-        # Maps argument names to their inferred type (i.e. Inmanta DSL type)
-        arg_name_to_type_map: dict[str, str] = {}
-
         # Resolve all the types that we expect to receive as input of our plugin
         for arg in self.all_args.values():
-            arg_type = arg.resolve_type(self, self.resolver)
-            arg_name_to_type_map[arg.arg_name] = arg_type.type_string_internal()
+            arg.resolve_type(self, self.resolver)
         if self.var_args is not None:
-            var_args_types = self.var_args.resolve_type(self, self.resolver)
-            arg_name_to_type_map[f"*{self.var_args.arg_name}"] = var_args_types.type_string_internal()
+            self.var_args.resolve_type(self, self.resolver)
         if self.var_kwargs is not None:
-            var_kwargs_types = self.var_kwargs.resolve_type(self, self.resolver)
-            arg_name_to_type_map[f"**{self.var_kwargs.arg_name}"] = var_kwargs_types.type_string_internal()
+            self.var_kwargs.resolve_type(self, self.resolver)
 
         self.return_type.resolve_type(self, self.resolver)
 
@@ -662,8 +651,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         """
         # Start the list with all positional arguments
         arg_list = [arg._signature_display(dsl_types) for arg in self.args]
-
-        # resolved_type.type_string_internal()
 
         # Filter all positional arguments out of the kwargs list
         kwargs = [arg._signature_display(dsl_types) for _, arg in self.kwargs.items() if arg.is_kw_only_argument]
