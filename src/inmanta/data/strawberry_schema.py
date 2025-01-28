@@ -3,6 +3,7 @@ import typing
 import uuid
 
 import strawberry
+
 """
 TODO
 add filtering example
@@ -73,6 +74,7 @@ strawberry server strawberry_schema
 # EnvSettingType = Union[str, int] # Cant use union ??
 EnvSettingType = str
 
+
 @strawberry.type
 class EnvironmentSetting:
     name: str
@@ -83,6 +85,7 @@ class EnvironmentSetting:
     update_model: bool
     agent_restart: bool
     allowed_values: list[EnvSettingType] | None = None
+
 
 @strawberry.type
 class Notification:
@@ -95,12 +98,13 @@ class Notification:
     read: bool
     cleared: bool
 
+
 def get_notifications_for_environment(root) -> list[Notification]:
     notification_map = {
         "11111111-1234-5678-1234-000000000002": [
             Notification(
                 id="22222222-1234-5678-1234-000000000000",
-                created = datetime.datetime.now(),
+                created=datetime.datetime.now(),
                 title="New notification",
                 message="This is a notification",
                 severity="message",
@@ -149,22 +153,11 @@ class Environment:
     halted: bool
 
 
-
 def get_environments():
     prefix = "[get_environments]"
     return [
-        Environment(
-            id="11111111-1234-5678-1234-000000000001",
-            name=f"{prefix} test-env-1",
-            expert_mode_on=False,
-            halted=False
-        ),
-        Environment(
-            id="11111111-1234-5678-1234-000000000002",
-            name=f"{prefix} test-env-2",
-            expert_mode_on=True,
-            halted=False
-        ),
+        Environment(id="11111111-1234-5678-1234-000000000001", name=f"{prefix} test-env-1", expert_mode_on=False, halted=False),
+        Environment(id="11111111-1234-5678-1234-000000000002", name=f"{prefix} test-env-2", expert_mode_on=True, halted=False),
     ]
 
 
@@ -187,19 +180,16 @@ def get_environments_for_project(root) -> list[Environment]:
     if root.id == "00000000-1234-5678-1234-000000000001":
         return [
             Environment(
-                id="11111111-1234-5678-1234-000000000001",
-                name=f"{prefix} test-env-1",
-                expert_mode_on=False,
-                halted=False
+                id="11111111-1234-5678-1234-000000000001", name=f"{prefix} test-env-1", expert_mode_on=False, halted=False
             ),
         ]
     if root.id == "00000000-1234-5678-1234-000000000002":
         return [
             Environment(
-            id="11111111-1234-5678-1234-000000000002",
-            name=f"{prefix} test-env-2",
-            expert_mode_on=True,
-            halted=False,
+                id="11111111-1234-5678-1234-000000000002",
+                name=f"{prefix} test-env-2",
+                expert_mode_on=True,
+                halted=False,
             )
         ]
     return []
