@@ -1270,7 +1270,7 @@ class Instance(ExecutionContext):
         self.implementations: "set[Implementation]" = set()
 
         self.locations: list[Location] = []
-        self.dataclass_self = None
+        self.dataclass_self: object | None = None
 
     def get_type(self) -> "Entity":
         return self.type
