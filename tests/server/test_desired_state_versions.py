@@ -29,7 +29,7 @@ from inmanta import data
 from inmanta.agent.config import agent_reconnect_delay, server_timeout
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data import ConfigurationModel, Scheduler
-from inmanta.data.model import DesiredStateLabel, PromoteTriggerMethod
+from inmanta.data.model import DesiredStateLabel
 from inmanta.protocol import SessionEndpoint, methods
 from inmanta.server import SLICE_AGENT_MANAGER, config, protocol
 from inmanta.types import Apireturn
@@ -257,7 +257,7 @@ async def test_filter_versions(
     assert result.code == 200
     by_version = {cm["version"]: cm for cm in result.result["data"]}
     assert by_version[8]["status"] == "candidate"
-    assert by_version[8]["released"] == True
+    assert by_version[8]["released"] is True
 
     result = await client.list_desired_state_versions(
         env, filter={"status": ["candidate"], "released": False}, sort="version.asc"

@@ -29,7 +29,6 @@ from asyncpg import Record
 
 import inmanta.data
 from inmanta import const, data
-from inmanta.const import ExtendedDesiredStateVersionStatus
 from inmanta.data import (
     APILIMIT,
     PRIMITIVE_SQL_TYPES,
@@ -49,7 +48,6 @@ from inmanta.data import (
     Parameter,
     ParameterOrder,
     QueryFilter,
-    QueryType,
     Resource,
     ResourceAction,
     ResourceHistoryOrder,
@@ -91,7 +89,6 @@ from inmanta.server.validate_filter import (
 )
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr, SimpleTypes
 from inmanta.util import datetime_iso_format
-from lazy_object_proxy.utils import await_
 
 T_ORDER = TypeVar("T_ORDER", bound=DatabaseOrderV2)
 T_DTO = TypeVar("T_DTO", bound=BaseModel)
@@ -817,7 +814,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
                                           END) as status,
                                           cm.released as released""",
             from_clause=f" FROM {ConfigurationModel.table_name()} as cm",
-            filter_statements=[f" environment =  $1"],
+            filter_statements=[" environment =  $1"],
             values=[self.environment.id],
         )
         subquery, subquery_values = query_builder.build()
@@ -840,7 +837,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
                     else []
                 ),
                 status=desired_state["status"],
-                released=desired_state["released"],
+                released=cast(bool,desired_state["released"]),
             )
             for desired_state in records
         ]
