@@ -29,6 +29,7 @@ from asyncpg import Record
 
 import inmanta.data
 from inmanta import const, data
+from inmanta.const import ExtendedDesiredStateVersionStatus
 from inmanta.data import (
     APILIMIT,
     PRIMITIVE_SQL_TYPES,
@@ -48,11 +49,13 @@ from inmanta.data import (
     Parameter,
     ParameterOrder,
     QueryFilter,
+    QueryType,
     Resource,
     ResourceAction,
     ResourceHistoryOrder,
     ResourceLogOrder,
     ResourceStatusOrder,
+    Scheduler,
     SimpleQueryBuilder,
     VersionedResourceOrder,
     model,
@@ -88,6 +91,7 @@ from inmanta.server.validate_filter import (
 )
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr, SimpleTypes
 from inmanta.util import datetime_iso_format
+from lazy_object_proxy.utils import await_
 
 T_ORDER = TypeVar("T_ORDER", bound=DatabaseOrderV2)
 T_DTO = TypeVar("T_DTO", bound=BaseModel)
@@ -793,13 +797,35 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
             "version": IntRangeFilter,
             "date": DateRangeFilter,
             "status": ContainsFilter,
+            "extended_status": ContainsFilter,
         }
 
     def get_base_url(self) -> str:
         return "/api/v2/desiredstate"
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        subquery, subquery_values = ConfigurationModel.desired_state_versions_subquery(self.environment.id)
+        scheduled_version = f"""SELECT last_processed_model_version FROM {Scheduler.table_name()} WHERE environment = $1"""
+        scheduled_version = f"(SELECT COALESCE(({scheduled_version}), 0))"
+        query_builder = SimpleQueryBuilder(
+            select_clause=f"""SELECT cm.version, cm.date, cm.total,
+                                           version_info -> 'export_metadata' ->> 'message' as message,
+                                           version_info -> 'export_metadata' ->> 'type' as type,
+                                              (CASE WHEN cm.version = {scheduled_version} THEN 'active'
+                                                  WHEN cm.version > {scheduled_version} THEN 'candidate'
+                                                  WHEN cm.version < {scheduled_version} AND cm.released=TRUE THEN 'retired'
+                                                  ELSE 'skipped_candidate'
+                                              END) as status,
+                                          (CASE WHEN cm.version = {scheduled_version} THEN 'active'
+                                                  WHEN cm.version > {scheduled_version} AND cm.released=TRUE THEN 'released'
+                                                  WHEN cm.version > {scheduled_version} THEN 'candidate'
+                                                  WHEN cm.released=TRUE THEN 'retired'
+                                                  ELSE 'skipped_candidate'
+                                              END) as extended_status""",
+            from_clause=f" FROM {ConfigurationModel.table_name()} as cm",
+            filter_statements=[f" environment =  $1"],
+            values=[self.environment.id],
+        )
+        subquery, subquery_values = query_builder.build()
         query_builder = SimpleQueryBuilder(
             select_clause="SELECT *",
             from_clause=f" FROM ({subquery}) as result",
@@ -819,6 +845,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
                     else []
                 ),
                 status=desired_state["status"],
+                extended_status=desired_state["extended_status"],
             )
             for desired_state in records
         ]

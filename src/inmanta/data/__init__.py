@@ -6209,38 +6209,6 @@ class ConfigurationModel(BaseDocument):
         }
         return outset, negative, last_deployed
 
-    @classmethod
-    def active_version_subquery(cls, environment: uuid.UUID) -> tuple[str, list[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""
-            SELECT max(version)
-            """,
-            from_clause=f" FROM {cls.table_name()} ",
-            filter_statements=[" environment = $1 AND released = TRUE"],
-            values=[cls._get_value(environment)],
-        )
-        return query_builder.build()
-
-    @classmethod
-    def desired_state_versions_subquery(cls, environment: uuid.UUID) -> tuple[str, list[object]]:
-        active_version, values = cls.active_version_subquery(environment)
-        # Coalesce to 0 in case there is no active version
-        active_version = f"(SELECT COALESCE(({active_version}), 0))"
-        query_builder = SimpleQueryBuilder(
-            select_clause=f"""SELECT cm.version, cm.date, cm.total,
-                                     version_info -> 'export_metadata' ->> 'message' as message,
-                                     version_info -> 'export_metadata' ->> 'type' as type,
-                                        (CASE WHEN cm.version = {active_version} THEN 'active'
-                                            WHEN cm.version > {active_version} THEN 'candidate'
-                                            WHEN cm.version < {active_version} AND cm.released=TRUE THEN 'retired'
-                                            ELSE 'skipped_candidate'
-                                        END) as status""",
-            from_clause=f" FROM {cls.table_name()} as cm",
-            filter_statements=[" environment = $1 "],
-            values=values,
-        )
-        return query_builder.build()
-
     async def recalculate_total(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         Make the total field of this ConfigurationModel in-line with the number

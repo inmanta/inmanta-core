@@ -663,6 +663,7 @@ class DesiredStateVersion(BaseModel):
     total: int
     labels: list[DesiredStateLabel]
     status: const.DesiredStateVersionStatus
+    extended_status: const.ExtendedDesiredStateVersionStatus
 
 
 class PromoteTriggerMethod(StrEnum):
