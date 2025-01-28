@@ -66,5 +66,5 @@ def no_collector(pos_arg_1: str, pos_arg_2: str, /, kw_only_123: str, kw_only_2:
 
 
 @plugin
-def only_kwargs(*, kw_only_1: str, kw_only_2: str, kw_only_3: str) -> None:
+def only_kwargs(*, kw_only_1: str, kw_only_2: str, kw_only_3: int) -> None:
     pass

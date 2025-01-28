@@ -378,10 +378,15 @@ import keyword_only_arguments
 
     assert (
         plugins["catch_all_arguments::sum_all"].get_signature()
-        == "sum_all(a: 'int', *aa: 'int', b: 'int', **bb: 'int') -> 'int'"
+        == "sum_all(a: int, *aa: int, b: int, **bb: int) -> int"
     )
+    # assert plugins["catch_all_arguments::none_args"].get_signature() == "none_args(a: int?)"
+    assert plugins["catch_all_arguments::none_args"].get_signature(dsl_types=False) == "none_args(a: int | None)"
     assert plugins["keyword_only_arguments::sum_all"].get_signature() == (
-        "sum_all(a: 'int', b: 'int' = 1, *, c: 'int', d: 'int' = 2) -> 'int'"
+        "sum_all(a: int, b: int = 1, *, c: int, d: int = 2) -> int"
+    )
+    assert plugins["keyword_only_arguments::sum_all"].get_signature(dsl_types=False) == (
+        "sum_all(a: int, b: int = 1, *, c: int, d: int = 2) -> int"
     )
 
 
@@ -441,16 +446,25 @@ none = plugin_native_types::as_none("a")
         compiler.do_compile()
 
         expected_signatures = [
-            'get_from_dict(value: "dict[string]", key: "string") -> "string?"',
-            'many_arguments(il: "string[]", idx: "int") -> "string"',
-            'as_none(value: "string") -> "null"',
-            'var_args_test(value: "string", *other: "string[]") -> "null"',
-            'var_kwargs_test(value: "string", *other: "string[]", **more: "dict[int]") -> "null"',
+            "get_from_dict(value: dict[string], key: string) -> string?",
+            "many_arguments(il: string[], idx: int) -> string",
+            "as_none(value: string)",
+            "var_args_test(value: string, *other: string[])",
+            "var_kwargs_test(value: string, *other: string[], **more: dict[int])",
+
+            # (positional_arg: string, *star_args_collector: string[], key_word_arg: string? = None, **star_star_args_collector: dict[string])'
+            (
+                "all_args_types(positional_arg: string, *star_args_collector: string[], "
+                "key_word_arg: string? = null, **star_star_args_collector: dict[string])"
+            ),
+            "positional_args_ordering_test(c: string, a: string, b: string) -> string",
+            "no_collector(pos_arg_1: string, pos_arg_2: string, kw_only_123: string, kw_only_2: string, kw_only_3: string)",
+            "only_kwargs(*, kw_only_1: string, kw_only_2: string, kw_only_3: int)",
         ]
         for plugin_signature in expected_signatures:
             log_contains(
                 caplog=caplog,
-                loggerpart="inmanta.plugins",
+                loggerpart="inmanta.execute.scheduler",
                 level=logging.DEBUG,
-                msg=f"Inmanta types inferred for plugin plugin_native_types::{plugin_signature}",
+                msg=f"Inmanta type signature inferred from type annotations for plugin plugin_native_types::{plugin_signature}",
             )

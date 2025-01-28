@@ -218,6 +218,9 @@ class Null(inmanta_type.Type):
     def type_string(self) -> str:
         return "null"
 
+    def _signature_display_type(self, dsl_type: bool = True) -> str:
+        return self.type_string() if dsl_type else str(None)
+
     def type_string_internal(self) -> str:
         return self.type_string()
 
@@ -376,6 +379,8 @@ class PluginValue:
             )
         return self._resolved_type
 
+
+
     def resolve_type(self, plugin: "Plugin", resolver: Namespace) -> inmanta_type.Type:
         """
         Convert the string representation of this argument's type to a type.
@@ -458,6 +463,12 @@ class PluginArgument(PluginValue):
         """
         return self._default_value is not self.NO_DEFAULT_VALUE_SET
 
+    def _signature_display(self, dsl_type: bool = False) -> str:
+        if dsl_type:
+            return "%s: %s" % (self.arg_name, self.resolved_type.type_string_internal())
+
+        return self.__str__()
+
     def __str__(self) -> str:
         if self.has_default_value():
             return "%s: %s = %s" % (self.arg_name, repr(self.arg_type), str(self.default_value))
@@ -473,6 +484,11 @@ class PluginReturn(PluginValue):
     VALUE_TYPE = "returned value"
     VALUE_NAME = "return value"
 
+    def _signature_display(self, dsl_types: bool = True) -> str:
+        if dsl_types:
+            return str(self.resolved_type)
+        else:
+            return str(self.type_expression)
 
 class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     """
@@ -531,15 +547,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             var_kwargs_types = self.var_kwargs.resolve_type(self, self.resolver)
             arg_name_to_type_map[f"**{self.var_kwargs.arg_name}"] = var_kwargs_types.type_string_internal()
 
-        return_type = self.return_type.resolve_type(self, self.resolver)
-
-        signature_fmt_str = '{full_name}({args_types}) -> "{return_type}"'
-        signature = signature_fmt_str.format(
-            full_name=self.get_full_name(),
-            args_types=", ".join(f'{k}: "{v}"' for k, v in arg_name_to_type_map.items()),
-            return_type=return_type,
-        )
-        LOGGER.debug("Inmanta types inferred for plugin %s", signature)
+        self.return_type.resolve_type(self, self.resolver)
 
     def _load_signature(self, function: Callable[..., object]) -> None:
         """
@@ -638,19 +646,30 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             self.kwargs[arg] = argument
             self.all_args[arg] = argument
 
-    def get_signature(self) -> str:
+    def get_signature(self, dsl_types: bool = True) -> str:
         """
-        Generate the signature of this plugin.  The signature is a string representing the function
-        as it can be called as a plugin in the model.
+        Generate the signature of this plugin. Return a string
+        containing the arguments and their types, and the type
+        of the returned value.  The `dsl_types` argument controls
+        whether to display the types in the signature as python
+        types, or as the corresponding inferred types from the
+        Inmanta DSL.
+
+        :param dsl_types: control if the signature should be displayed
+        using Inmanta DSL types or the corresponding inferred python
+        types.
+
         """
         # Start the list with all positional arguments
-        arg_list = [str(arg) for arg in self.args]
+        arg_list = [arg._signature_display(dsl_types) for arg in self.args]
+
+        # resolved_type.type_string_internal()
 
         # Filter all positional arguments out of the kwargs list
-        kwargs = [str(arg) for _, arg in self.kwargs.items() if arg.is_kw_only_argument]
+        kwargs = [arg._signature_display(dsl_types) for _, arg in self.kwargs.items() if arg.is_kw_only_argument]
 
         if self.var_args is not None:
-            arg_list.append("*" + str(self.var_args))
+            arg_list.append("*" + self.var_args._signature_display(dsl_types))
         elif kwargs:
             # For keyword only arguments, we need a marker if we don't have a catch-all
             # positional argument
@@ -660,14 +679,14 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         arg_list.extend(kwargs)
 
         if self.var_kwargs is not None:
-            arg_list.append("**" + str(self.var_kwargs))
+            arg_list.append("**" + self.var_kwargs._signature_display(dsl_types))
 
         # Join all arguments, separated by a comma
         args_string = ", ".join(arg_list)
 
         if self.return_type.type_expression is None:
             return "%s(%s)" % (self.__class__.__function_name__, args_string)
-        return "%s(%s) -> %s" % (self.__class__.__function_name__, args_string, repr(self.return_type.type_expression))
+        return "%s(%s) -> %s" % (self.__class__.__function_name__, args_string, self.return_type._signature_display(dsl_types))
 
     def get_arg(self, position: int) -> PluginArgument:
         """
