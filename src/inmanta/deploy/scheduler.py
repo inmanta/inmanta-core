@@ -68,7 +68,7 @@ class ResourceVersionIntent:
     model_version: int
     intent: ResourceIntent
     # TODO: name
-    resource_types_for_agent: Collection[ResourceType]
+    all_types_for_agent: Collection[ResourceType]
 
 
 @dataclass(frozen=True)
@@ -1134,7 +1134,7 @@ class ResourceScheduler(TaskManager):
             return ResourceVersionIntent(
                 model_version=self._state.version,
                 intent=resource_intent,
-                resource_types_for_agent=list(self._state.types_per_agent[self._state.intent[resource].id.agent_name]),
+                all_types_for_agent=list(self._state.types_per_agent[self._state.intent[resource].id.agent_name]),
             )
 
     async def deploy_start(self, action_id: uuid.UUID, resource: ResourceIdStr) -> Optional[DeployIntent]:
@@ -1151,7 +1151,7 @@ class ResourceScheduler(TaskManager):
                 intent=resource_intent,
                 dependencies=dependencies,
                 deploy_start=datetime.datetime.now().astimezone(),
-                resource_types_for_agent=list(self._state.types_per_agent[self._state.intent[resource].id.agent_name]),
+                all_types_for_agent=list(self._state.types_per_agent[self._state.intent[resource].id.agent_name]),
             )
             # Update the state in the database.
             await self.state_update_manager.send_in_progress(
