@@ -16,27 +16,6 @@
     Contact: code@inmanta.com
 """
 
-# async def test_test(server, client):
-#     query = """
-# {
-#   books {
-#     title
-#     author
-#   }
-# }
-#     """
-#     result = await client.graphql(query=query)
-#     assert result.code == 200
-#     assert result.result["data"] == {
-#         "data": {
-#             "books": [{
-#                 "title": "The Great Gatsby",
-#                 "author": "F. Scott Fitzgerald"}]},
-#         "errors": None,
-#         "extensions": {},
-#     }
-
-
 async def test_query_projects(server, client):
     query = """
 {

@@ -16,17 +16,6 @@
     Contact: code@inmanta.com
 """
 
-#
-#
-# @strawberry.type
-# class Book:
-#     title: str
-#     author: str
-#
-# @strawberry.type
-# class Query:
-#     books: typing.List[Book] = strawberry.field(resolver=inmanta.graphql.resolver.get_books)
-
 
 import datetime
 import typing
@@ -34,85 +23,7 @@ import uuid
 
 import strawberry
 
-# """
-# TODO
-# add filtering example
-#
-# """
-#
-#
-# """
-# README
-#
-# # Install strawberry
-# pip install 'strawberry-graphql=0.258.0'
-#
-# # Run the GraphiQL server
-# cd work/inmanta/github-repos/inmanta-core/src/inmanta/data/
-
-# add this line:
-# schema = strawberry.Schema(query=Query)
-
-# in cli:
-# strawberry server schema
-#
-#
-# # Sample queries:
-# {
-#   environments {
-#     id
-#     settings {
-#       name
-#       doc
-#       allowedValues
-#     }
-#     notifications {
-#       id
-#       created
-#       message
-#     }
-#   }
-# }
-#
-# {
-#   projects {
-#     id
-#     name
-#     environments {
-#       id
-#       settings {
-#         name
-#       }
-#       notifications {
-#         id
-#         created
-#         title
-#         message
-#         severity
-#         uri
-#         read
-#         cleared
-#       }
-#       description
-#       expertModeOn
-#       halted
-#       icon
-#       name
-#     }
-#   }
-# }
-#
-#
-# """
-#
-#
-#
-#
-
-
-# EnvSettingType = Union[str, int] # Cant use union ??
 EnvSettingType = str
-
 
 @strawberry.type
 class EnvironmentSetting:
