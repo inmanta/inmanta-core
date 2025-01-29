@@ -102,7 +102,7 @@ async def config(inmanta_config, tmp_path):
 
 
 @pytest.fixture
-async def agent(environment, config, monkeypatch):
+async def agent(environment, config):
     """
     Provide a new agent, with a scheduler that uses the dummy executor
 
@@ -1559,7 +1559,7 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
     assert len(agent.scheduler._state.intent) == 1
 
 
-async def test_dryrun(agent: TestAgent, make_resource_minimal, monkeypatch):
+async def test_dryrun(agent: TestAgent, make_resource_minimal):
     """
     Ensure the simples deploy scenario works: 2 dependant resources
     """

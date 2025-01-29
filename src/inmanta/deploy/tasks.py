@@ -80,8 +80,21 @@ class Task(abc.ABC):
         resource_type: ResourceType,
         version: int,
     ) -> executor.Executor:
-        """Helper method to produce the executor"""
+        """
+        Helper method to produce the executor
+
+        :param task_manager: A reference to the task manager instance.
+        :param agent_spec: agent name and all resource types that live on it.
+        :param resource_type: The resource type that we specifically care about for this resource action.
+            Should also be in the agent's resource types.
+        :param version: The version of the code to load on the executor.
+        """
         agent_name, all_types_for_agent = agent_spec
+
+        if not all_types_for_agent:
+            raise ValueError(
+                f"{self.__class__.__name__}.get_executor() expects at least one resource type in the agent spec parameter"
+            )
 
         code, invalid_resources = await task_manager.code_manager.get_code(
             environment=task_manager.environment,
