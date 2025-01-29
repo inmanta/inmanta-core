@@ -76,13 +76,12 @@ class Task(abc.ABC):
         self,
         *,
         task_manager: "scheduler.TaskManager",
-        # TODO: review this type signature
-        agent: tuple[str, Collection[ResourceType]],
+        agent_spec: tuple[str, Collection[ResourceType]],
         resource_type: ResourceType,
         version: int,
     ) -> executor.Executor:
         """Helper method to produce the executor"""
-        agent_name, all_types_for_agent = agent
+        agent_name, all_types_for_agent = agent_spec
 
         code, invalid_resources = await task_manager.code_manager.get_code(
             environment=task_manager.environment,
@@ -165,7 +164,7 @@ class Deploy(Task):
 
                     my_executor: executor.Executor = await self.get_executor(
                         task_manager=task_manager,
-                        agent=(agent, deploy_intent.all_types_for_agent),
+                        agent_spec=(agent, deploy_intent.all_types_for_agent),
                         resource_type=executor_resource_details.id.entity_type,
                         version=version,
                     )
@@ -238,7 +237,7 @@ class DryRun(Task):
         try:
             my_executor: executor.Executor = await self.get_executor(
                 task_manager=task_manager,
-                agent=(agent, [executor_resource_details.id.entity_type]),
+                agent_spec=(agent, [executor_resource_details.id.entity_type]),
                 resource_type=executor_resource_details.id.entity_type,
                 version=self.version,
             )
@@ -296,7 +295,7 @@ class RefreshFact(Task):
         try:
             my_executor = await self.get_executor(
                 task_manager=task_manager,
-                agent=(agent, version_intent.all_types_for_agent),
+                agent_spec=(agent, version_intent.all_types_for_agent),
                 resource_type=self.id.entity_type,
                 version=version,
             )

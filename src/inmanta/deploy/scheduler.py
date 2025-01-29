@@ -67,7 +67,6 @@ class ResourceVersionIntent:
 
     model_version: int
     intent: ResourceIntent
-    # TODO: name
     all_types_for_agent: Collection[ResourceType]
 
 
