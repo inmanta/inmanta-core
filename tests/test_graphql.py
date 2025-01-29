@@ -17,18 +17,43 @@
 """
 
 
-async def test_test(server, client):
+# async def test_test(server, client):
+#     query = """
+# {
+#   books {
+#     title
+#     author
+#   }
+# }
+#     """
+#     result = await client.graphql(query=query)
+#     assert result.code == 200
+#     assert result.result["data"] == {
+#         "data": {
+#             "books": [{
+#                 "title": "The Great Gatsby",
+#                 "author": "F. Scott Fitzgerald"}]},
+#         "errors": None,
+#         "extensions": {},
+#     }
+
+
+async def test_query_projects(server, client):
     query = """
 {
-  books {
-    title
-    author
+  projects {
+    id
+    name
+    environments {
+      id
+    }
   }
 }
     """
     result = await client.graphql(query=query)
     assert result.code == 200
     assert result.result["data"] == {
+<<<<<<< Updated upstream
         "data": {"books": [{"title": "The Great Gatsby", "author": "F. Scott Fitzgerald"}]},
         "errors": None,
         "extensions": {},
@@ -65,3 +90,30 @@ async def test_get_projects(server, client):
         "errors": None,
         "extensions": {},
     }
+=======
+        'data': {
+            'projects': [
+                {
+                    'id': '00000000-1234-5678-1234-000000000001',
+                    'name': '[get_projects] test-proj-1',
+                    'environments': [
+                        {
+                            'id': '11111111-1234-5678-1234-000000000001'
+                        }
+                    ],
+                },
+                {
+                    'id': '00000000-1234-5678-1234-000000000002',
+                    'name': '[get_projects] test-proj-2',
+                    'environments': [
+                        {
+                            'id': '11111111-1234-5678-1234-000000000002'
+                        }
+                    ]
+                },
+            ]
+        },
+        'errors': None,
+        'extensions': {}
+        }
+>>>>>>> Stashed changes

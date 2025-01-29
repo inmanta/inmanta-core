@@ -15,21 +15,34 @@
 
     Contact: code@inmanta.com
 """
+<<<<<<< Updated upstream
 import datetime
 from typing import List
 
 import inmanta.graphql.schema
 from inmanta.graphql.schema import Notification, Environment, EnvironmentSetting, Project
+=======
 
 
-def get_books() -> List[inmanta.graphql.schema.Book]:
+
+from typing import List
+
+import inmanta.graphql.schema
+# import inmanta.graphql
+>>>>>>> Stashed changes
+
+
+def get_books() -> list["inmanta.graphql.schema.Book"]:
+# def get_books() -> List[inmanta.graphql.schema.Book]:
     return [
         inmanta.graphql.schema.Book(
+        # inmanta.graphql.schema.Book(
             title="The Great Gatsby",
             author="F. Scott Fitzgerald",
         ),
     ]
 
+<<<<<<< Updated upstream
 def get_notifications_for_environment(root) -> list[Notification]:
     notification_map = {
         "11111111-1234-5678-1234-000000000002": [
@@ -112,3 +125,5 @@ def get_environments_for_project(root) -> list[Environment]:
             )
         ]
     return []
+=======
+>>>>>>> Stashed changes
