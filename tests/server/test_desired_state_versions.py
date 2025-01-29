@@ -36,7 +36,13 @@ from inmanta.types import Apireturn
 from utils import retry_limited
 
 
-class BaseAgent(SessionEndpoint):
+class MockAgentThatMarksScheduled(SessionEndpoint):
+    """
+    An agent mock that responds to new versions being released by marking them as scheduled
+
+    it will only mark version lower than `limit`
+
+    """
 
     def __init__(
         self,
@@ -47,8 +53,7 @@ class BaseAgent(SessionEndpoint):
         """
         super().__init__(name="agent", timeout=server_timeout.get(), reconnect_delay=agent_reconnect_delay.get())
         self._env_id = environment
-        self.enabled: dict[str, bool] = {}
-        self.limit = 100
+        self.limit = 100  # only scheduler versions lower than this.
 
     async def start_connected(self) -> None:
         """
@@ -58,8 +63,6 @@ class BaseAgent(SessionEndpoint):
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
-        self.enabled[agent] = enabled
-
         return 200
 
     async def on_reconnect(self) -> None:
@@ -109,11 +112,11 @@ class BaseAgent(SessionEndpoint):
 
 
 @pytest.fixture(scope="function")
-async def base_agent(server, environment):
-    """Construct an agent that does nothing"""
+async def agent_mock_that_schedules(server, environment) -> MockAgentThatMarksScheduled:
+    """Construct an agent that marks versions as scheduled"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
-    a = BaseAgent(environment)
+    a = MockAgentThatMarksScheduled(environment)
 
     await a.start()
 
@@ -125,7 +128,9 @@ async def base_agent(server, environment):
 
 
 @pytest.fixture
-async def environments_with_versions(server, client, base_agent) -> tuple[dict[str, uuid.UUID], list[datetime.datetime]]:
+async def environments_with_versions(
+    server, client, agent_mock_that_schedules: MockAgentThatMarksScheduled
+) -> tuple[dict[str, uuid.UUID], list[datetime.datetime]]:
     project = data.Project(name="test")
     await project.insert()
 
@@ -193,9 +198,9 @@ async def environments_with_versions(server, client, base_agent) -> tuple[dict[s
         "no_versions": env4.id,
     }
 
-    base_agent.limit = 7  # Keep nr 8 waiting to activate
-    await base_agent.read_version(env.id)
-    await base_agent.read_version(env2.id)
+    agent_mock_that_schedules.limit = 7  # Keep nr 8 waiting to activate
+    await agent_mock_that_schedules.read_version(env.id)
+    await agent_mock_that_schedules.read_version(env2.id)
 
     yield environments, cm_timestamps
 
@@ -458,7 +463,7 @@ async def test_promote_no_versions(server, client, environment: str):
     assert result.code == 404
 
 
-async def test_promote_version(server, client, clienthelper, environment: str, base_agent):
+async def test_promote_version(server, client, clienthelper, environment: str, agent_mock_that_schedules):
     version = await clienthelper.get_version()
     resource_id_wov = "test::Resource[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
@@ -469,10 +474,10 @@ async def test_promote_version(server, client, clienthelper, environment: str, b
     result = await client.promote_desired_state_version(environment, version=version)
     assert result.code == 200
 
-    async def is_good():
+    async def is_version_active():
         result = await client.list_desired_state_versions(environment)
         assert result.code == 200
         assert len(result.result["data"]) == 1
         return result.result["data"][0]["status"] == "active"
 
-    await retry_limited(is_good, 50)
+    await retry_limited(is_version_active, 50)

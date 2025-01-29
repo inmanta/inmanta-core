@@ -837,7 +837,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
                     else []
                 ),
                 status=desired_state["status"],
-                released=cast(bool,desired_state["released"]),
+                released=cast(bool, desired_state["released"]),
             )
             for desired_state in records
         ]

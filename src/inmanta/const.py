@@ -331,14 +331,6 @@ class DesiredStateVersionStatus(str, Enum):
     skipped_candidate = "skipped_candidate"
 
 
-class ExtendedDesiredStateVersionStatus(str, Enum):
-    released = "released"
-    active = "active"
-    candidate = "candidate"
-    retired = "retired"
-    skipped_candidate = "skipped_candidate"
-
-
 class NotificationSeverity(str, Enum):
     """
     The possible values determine the styling used by the frontend to show them,
