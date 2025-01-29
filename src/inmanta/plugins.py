@@ -544,18 +544,6 @@ class PluginReturn(PluginValue):
     VALUE_TYPE = "returned value"
     VALUE_NAME = "return value"
 
-    def to_model_domain(
-        self, value: object, resolver: Resolver, queue: QueueScheduler, namespace: Namespace, location: Location
-    ) -> object:
-
-        value = DynamicProxy.unwrap(
-            value,
-            dynamic_context=DynamicUnwrapContext(resolver=resolver, queue=queue, location=location),
-        )
-
-        self.validate(value)
-        return value
-
 
 @dataclasses.dataclass
 class CheckedArgs:
@@ -902,7 +890,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             else:
                 try:
                     result = validate_and_convert_to_python_domain(kwarg.resolved_type, value)
-                except UnsetException | MultiUnsetException:
+                except (UnsetException, MultiUnsetException):
                     raise
                 except RuntimeException as e:
                     raise PluginTypeException(
@@ -965,6 +953,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         # Validate the returned value
         try:
             self.return_type.validate(value)
+        except (UnsetException, MultiUnsetException):
+            raise
         except RuntimeException as e:
             raise PluginTypeException(
                 stmt=None,
@@ -995,8 +985,27 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             warnings.warn(PluginDeprecationWarning(msg))
         self.check_requirements()
         value = self.call(*args, **kwargs)
-        # Validate the returned value
-        return self.return_type.to_model_domain(value, resolver, queue, self.namespace, location)
+
+        value = DynamicProxy.unwrap(
+            value,
+            dynamic_context=DynamicUnwrapContext(resolver=resolver, queue=queue, location=location),
+        )
+
+        try:
+            # Validate the returned value
+            self.return_type.validate(value)
+            return value
+        except (UnsetException, MultiUnsetException):
+            raise
+        except RuntimeException as e:
+            raise PluginTypeException(
+                stmt=None,
+                msg=(
+                    f"Return value {value} of plugin {self.get_full_name()} has incompatible type."
+                    f" Expected type: {self.return_type.resolved_type}"
+                ),
+                cause=e,
+            )
 
     def get_full_name(self) -> str:
         return f"{self.ns.get_full_name()}::{self.__class__.__function_name__}"
