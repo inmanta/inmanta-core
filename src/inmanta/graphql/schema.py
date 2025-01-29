@@ -53,9 +53,9 @@ class Notification:
 class Environment:
 
     @staticmethod
-    def get_environments() -> list["Environment"]:
+    def get_environments(id: str | None = strawberry.UNSET) -> list["Environment"]:
         prefix = "[get_environments]"
-        return [
+        _environments = [
             Environment(
                 id="11111111-1234-5678-1234-000000000001", name=f"{prefix} test-env-1", expert_mode_on=False, halted=False
             ),
@@ -63,6 +63,10 @@ class Environment:
                 id="11111111-1234-5678-1234-000000000002", name=f"{prefix} test-env-2", expert_mode_on=True, halted=False
             ),
         ]
+
+        if id:
+            return [environment for environment in _environments if environment.id == id]
+        return _environments
 
     @strawberry.field
     def settings(self) -> list["EnvironmentSetting"]:
@@ -135,7 +139,7 @@ class Project:
 
     @strawberry.field
     def environments(self) -> list[Environment]:
-        prefix = "[get_environments_for_project]"
+        prefix = "[projects.environments]"
         if self.id == "00000000-1234-5678-1234-000000000001":
             return [
                 Environment(
