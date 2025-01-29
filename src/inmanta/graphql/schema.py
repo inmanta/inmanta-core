@@ -16,8 +16,6 @@
     Contact: code@inmanta.com
 """
 
-<<<<<<< Updated upstream
-=======
 #
 #
 # @strawberry.type
@@ -30,49 +28,11 @@
 #     books: typing.List[Book] = strawberry.field(resolver=inmanta.graphql.resolver.get_books)
 
 
-
->>>>>>> Stashed changes
 import datetime
 import typing
 import uuid
 
 import strawberry
-import inmanta.graphql.resolver
-
-
-#
-#
-#
-#
-# @strawberry.type
-# class Book:
-#     title: str
-#     author: str
-#
-#
-# @strawberry.type
-# class Query:
-#     books: typing.List[Book] = strawberry.field(resolver=inmanta.graphql.resolver.get_books)
-
-"""
-TODO
-add filtering example
-
-"""
-
-# EnvSettingType = Union[str, int] # Cant use union ??
-EnvSettingType = str
-
-@strawberry.type
-class EnvironmentSetting:
-    name: str
-    type: str
-    default: EnvSettingType
-    doc: str
-    recompile: bool
-    update_model: bool
-    agent_restart: bool
-    allowed_values: list[EnvSettingType] | None = None
 
 # """
 # TODO
@@ -150,16 +110,9 @@ class EnvironmentSetting:
 #
 
 
-
-
-
-
-
-
-
-
 # EnvSettingType = Union[str, int] # Cant use union ??
 EnvSettingType = str
+
 
 @strawberry.type
 class EnvironmentSetting:
@@ -184,10 +137,6 @@ class Notification:
     read: bool
     cleared: bool
 
-<<<<<<< Updated upstream
-@strawberry.type
-class Environment:
-=======
 
 @strawberry.type
 class Environment:
@@ -196,11 +145,14 @@ class Environment:
     def get_environments() -> list["Environment"]:
         prefix = "[get_environments]"
         return [
-            Environment(id="11111111-1234-5678-1234-000000000001", name=f"{prefix} test-env-1", expert_mode_on=False,
-                        halted=False),
-            Environment(id="11111111-1234-5678-1234-000000000002", name=f"{prefix} test-env-2", expert_mode_on=True,
-                        halted=False),
+            Environment(
+                id="11111111-1234-5678-1234-000000000001", name=f"{prefix} test-env-1", expert_mode_on=False, halted=False
+            ),
+            Environment(
+                id="11111111-1234-5678-1234-000000000002", name=f"{prefix} test-env-2", expert_mode_on=True, halted=False
+            ),
         ]
+
     @strawberry.field
     def settings(self) -> list["EnvironmentSetting"]:
         return [
@@ -243,30 +195,20 @@ class Environment:
         }
         return notification_map.get(self.id, [])
 
->>>>>>> Stashed changes
     id: uuid.UUID
     name: str
     description: str | None = None
     icon: str | None = None
-<<<<<<< Updated upstream
-    settings: list[EnvironmentSetting] = strawberry.field(resolver=inmanta.graphql.resolver.get_settings_for_environment)
-    notifications: list[Notification] = strawberry.field(resolver=inmanta.graphql.resolver.get_notifications_for_environment)
-=======
->>>>>>> Stashed changes
     expert_mode_on: bool
     halted: bool
 
+
 @strawberry.type
 class Project:
-<<<<<<< Updated upstream
-    id: uuid.UUID
-    name: str
-    environments: list[Environment] = strawberry.field(resolver=inmanta.graphql.resolver.get_environments_for_project)
-=======
     @staticmethod
-    def get_projects() -> list["Project"]:
+    def get_projects(id: str | None = strawberry.UNSET) -> list["Project"]:
         prefix = "[get_projects]"
-        return [
+        _projects = [
             Project(
                 id="00000000-1234-5678-1234-000000000001",
                 name=f"{prefix} test-proj-1",
@@ -276,6 +218,9 @@ class Project:
                 name=f"{prefix} test-proj-2",
             ),
         ]
+        if id:
+            return [project for project in _projects if project.id == id]
+        return _projects
 
     @strawberry.field
     def environments(self) -> list[Environment]:
@@ -293,27 +238,24 @@ class Project:
                     name=f"{prefix} test-env-2",
                     expert_mode_on=True,
                     halted=False,
-                )
+                ),
+                Environment(
+                    id="11111111-1234-5678-1234-000000000003",
+                    name=f"{prefix} test-env-3",
+                    expert_mode_on=True,
+                    halted=False,
+                ),
             ]
         return []
 
     id: uuid.UUID
     name: str
->>>>>>> Stashed changes
 
 
 @strawberry.type
 class Query:
-<<<<<<< Updated upstream
-    environments: typing.List[Environment] = strawberry.field(resolver=inmanta.graphql.resolver.get_environments)
-    projects: typing.List[Project] = strawberry.field(resolver=inmanta.graphql.resolver.get_projects)
-
-
-
-=======
     environments: typing.List[Environment] = strawberry.field(resolver=Environment.get_environments)
     projects: typing.List[Project] = strawberry.field(resolver=Project.get_projects)
 
 
 schema = strawberry.Schema(query=Query)
->>>>>>> Stashed changes
