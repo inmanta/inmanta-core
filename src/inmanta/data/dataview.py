@@ -53,6 +53,7 @@ from inmanta.data import (
     ResourceHistoryOrder,
     ResourceLogOrder,
     ResourceStatusOrder,
+    Scheduler,
     SimpleQueryBuilder,
     VersionedResourceOrder,
     model,
@@ -793,13 +794,30 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
             "version": IntRangeFilter,
             "date": DateRangeFilter,
             "status": ContainsFilter,
+            "released": BooleanEqualityFilter,
         }
 
     def get_base_url(self) -> str:
         return "/api/v2/desiredstate"
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        subquery, subquery_values = ConfigurationModel.desired_state_versions_subquery(self.environment.id)
+        scheduled_version = f"""SELECT last_processed_model_version FROM {Scheduler.table_name()} WHERE environment = $1"""
+        scheduled_version = f"(SELECT COALESCE(({scheduled_version}), 0))"
+        query_builder = SimpleQueryBuilder(
+            select_clause=f"""SELECT cm.version, cm.date, cm.total,
+                                           version_info -> 'export_metadata' ->> 'message' as message,
+                                           version_info -> 'export_metadata' ->> 'type' as type,
+                                          (CASE WHEN cm.version = {scheduled_version} THEN 'active'
+                                              WHEN cm.version > {scheduled_version} THEN 'candidate'
+                                              WHEN cm.version < {scheduled_version} AND cm.released=TRUE THEN 'retired'
+                                              ELSE 'skipped_candidate'
+                                          END) as status,
+                                          cm.released as released""",
+            from_clause=f" FROM {ConfigurationModel.table_name()} as cm",
+            filter_statements=[" environment =  $1"],
+            values=[self.environment.id],
+        )
+        subquery, subquery_values = query_builder.build()
         query_builder = SimpleQueryBuilder(
             select_clause="SELECT *",
             from_clause=f" FROM ({subquery}) as result",
@@ -819,6 +837,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
                     else []
                 ),
                 status=desired_state["status"],
+                released=cast(bool, desired_state["released"]),
             )
             for desired_state in records
         ]

@@ -32,6 +32,7 @@ from inmanta.ast import (
     Location,
     MultiUnsetException,
     Namespace,
+    PluginTypeException,
     RuntimeException,
     TypeReferenceAnchor,
     UnknownException,
@@ -230,6 +231,9 @@ class PluginFunction(Function):
         else:
             try:
                 return self.plugin(*processed_args.args, **processed_args.kwargs)
+            except PluginTypeException:
+                # already has sufficient context, no need to wrap it
+                raise
             except RuntimeException as e:
                 raise WrappingRuntimeException(
                     self.ast_node, "Exception in direct execution for plugin %s" % self.ast_node.name, e
@@ -283,6 +287,9 @@ class PluginFunction(Function):
                 # If it is handled here, the re-queueing can not be done,
                 # leading to very subtle errors such as #2787
                 raise e
+            except PluginTypeException:
+                # already has sufficient context, no need to wrap it
+                raise
             except RuntimeException as e:
                 raise WrappingRuntimeException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
             except inmanta.ast.PluginException as e:

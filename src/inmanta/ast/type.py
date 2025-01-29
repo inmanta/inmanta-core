@@ -21,9 +21,7 @@ import functools
 import numbers
 import typing
 from collections.abc import Mapping, Sequence
-from typing import Callable
-from typing import List as PythonList
-from typing import Optional
+from typing import Callable, Optional
 
 import typing_inspect
 
@@ -832,9 +830,9 @@ class Union(Type):
     Instances of this class represent a union of multiple types.
     """
 
-    def __init__(self, types: PythonList[Type]) -> None:
+    def __init__(self, types: Sequence[Type]) -> None:
         Type.__init__(self)
-        self.types: PythonList[Type] = types
+        self.types: Sequence[Type] = types
 
     def validate(self, value: object) -> bool:
         for typ in self.types:
@@ -863,6 +861,11 @@ class Union(Type):
 
     def corresponds_to(self, pytype: type[object]) -> bool:
         raise NotImplementedError("No unions can be specified on the plugin boundary")
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Union):
+            return NotImplemented
+        return self.types == other.types
 
 
 @stable_api
