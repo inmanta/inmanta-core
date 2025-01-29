@@ -451,7 +451,7 @@ async def test_filter_validation(
         ({"version": "le:42", "total": 1}, 400),
         ({"date": "le:42"}, 400),
         ({"version": ["le:42", "gt: 1"]}, 200),
-        ({"released": True}, 400),
+        ({"released": True}, 200),
     ]
     for filter, expected_status in filter_status_map:
         result = await client.list_desired_state_versions(env, filter=filter)
