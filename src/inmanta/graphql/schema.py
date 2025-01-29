@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-
 import datetime
 import typing
 import uuid
@@ -24,6 +23,7 @@ import uuid
 import strawberry
 
 EnvSettingType = str
+
 
 @strawberry.type
 class EnvironmentSetting:

@@ -40,17 +40,14 @@ async def test_query_projects(server, client):
                 {
                     "id": "00000000-1234-5678-1234-000000000001",
                     "name": "[get_projects] test-proj-1",
-                    "environments": [{
-                        "id": "11111111-1234-5678-1234-000000000001"}],
+                    "environments": [{"id": "11111111-1234-5678-1234-000000000001"}],
                 },
                 {
                     "id": "00000000-1234-5678-1234-000000000002",
                     "name": "[get_projects] test-proj-2",
                     "environments": [
-                        {
-                            "id": "11111111-1234-5678-1234-000000000002"},
-                        {
-                            "id": "11111111-1234-5678-1234-000000000003"},
+                        {"id": "11111111-1234-5678-1234-000000000002"},
+                        {"id": "11111111-1234-5678-1234-000000000003"},
                     ],
                 },
             ]
@@ -71,9 +68,7 @@ async def test_query_projects_with_filtering(server, client):
     }
 }
     """
-    filtered_data = [{
-        "id": "00000000-1234-5678-1234-000000000002"
-    }]
+    filtered_data = [{"id": "00000000-1234-5678-1234-000000000002"}]
 
     query_filter_off = """
     {
@@ -94,9 +89,7 @@ async def test_query_projects_with_filtering(server, client):
         result = await client.graphql(query=query)
         assert result.code == 200
         assert result.result["data"] == {
-            "data": {
-                "projects": expected_data
-            },
+            "data": {"projects": expected_data},
             "errors": None,
             "extensions": {},
         }
@@ -130,16 +123,13 @@ async def test_query_path(server, client):
                 {
                     "id": "00000000-1234-5678-1234-000000000001",
                     "environments": [
-                        {
-                            "id": "11111111-1234-5678-1234-000000000001",
-                            "name": "[projects.environments] test-env-1"
-                        }
-                    ]
+                        {"id": "11111111-1234-5678-1234-000000000001", "name": "[projects.environments] test-env-1"}
+                    ],
                 }
             ]
         },
-        'errors': None,
-        'extensions': {}
+        "errors": None,
+        "extensions": {},
     }
     query_via_environments = """
     {
@@ -150,12 +140,10 @@ async def test_query_path(server, client):
     }
         """
     expected_data_via_environment = {
-        'data': {
-            'environments': [{
-                'id': '11111111-1234-5678-1234-000000000001',
-                'name': '[get_environments] test-env-1'}]},
-        'errors': None,
-        'extensions': {}}
+        "data": {"environments": [{"id": "11111111-1234-5678-1234-000000000001", "name": "[get_environments] test-env-1"}]},
+        "errors": None,
+        "extensions": {},
+    }
     scenarios = [
         (query_via_project, expected_data_via_project),
         (query_via_environments, expected_data_via_environment),
