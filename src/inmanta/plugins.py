@@ -869,7 +869,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 try:
                     # (4) Validate the input value
                     result = validate_and_convert_to_python_domain(arg.resolved_type, value)
-                except UnsetException | MultiUnsetException:
+                except (UnsetException, MultiUnsetException):
                     raise
                 except RuntimeException as e:
                     raise PluginTypeException(
