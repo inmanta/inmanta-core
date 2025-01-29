@@ -71,11 +71,11 @@ async def test_query_projects_with_filtering(server, client):
     filtered_data = [{"id": "00000000-1234-5678-1234-000000000002"}]
 
     query_filter_off = """
-    {
-      projects{
-        id
-        }
+{
+  projects{
+    id
     }
+}
         """
     unfiltered_data = [
         {"id": "00000000-1234-5678-1234-000000000001"},
@@ -132,12 +132,12 @@ async def test_query_path(server, client):
         "extensions": {},
     }
     query_via_environments = """
-    {
-      environments(id: "11111111-1234-5678-1234-000000000001") {
-        id
-        name
-      }
-    }
+{
+  environments(id: "11111111-1234-5678-1234-000000000001") {
+    id
+    name
+  }
+}
         """
     expected_data_via_environment = {
         "data": {"environments": [{"id": "11111111-1234-5678-1234-000000000001", "name": "[get_environments] test-env-1"}]},
