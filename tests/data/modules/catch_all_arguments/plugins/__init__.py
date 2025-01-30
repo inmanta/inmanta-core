@@ -22,8 +22,3 @@ from inmanta.plugins import plugin
 @plugin
 def sum_all(a: "int", *aa: "int", b: "int", **bb: "int") -> "int":
     return a + sum(aa) + b + sum(bb.values())
-
-
-@plugin
-def none_args(a: int | None, b: "int") -> None:
-    return

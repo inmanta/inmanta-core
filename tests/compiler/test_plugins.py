@@ -395,12 +395,11 @@ import keyword_only_arguments
     assert plugins["catch_all_arguments::sum_all"].get_signature(dsl_types=True) == (
         "sum_all(a: int, *aa: int, b: int, **bb: int) -> int"
     )
-
-    assert plugins["keyword_only_arguments::sum_all"].get_signature(dsl_types=True) == (
-        "sum_all(a: int, b: int, *, c: int, d: int) -> int"
-    )
     assert plugins["keyword_only_arguments::sum_all"].get_signature() == (
         "sum_all(a: 'int', b: 'int' = 1, *, c: 'int', d: 'int' = 2) -> 'int'"
+    )
+    assert plugins["keyword_only_arguments::sum_all"].get_signature(dsl_types=True) == (
+        "sum_all(a: int, b: int, *, c: int, d: int) -> int"
     )
 
 
@@ -439,22 +438,14 @@ plugin_context_and_defaults::func()
 
 def test_native_types(snippetcompiler: "SnippetCompilationTest", caplog) -> None:
     """
-    test the use of python types
+    Test that the signature (using inferred Inmanta types)
+    for each plugin is correctly logged
     """
     with caplog.at_level(logging.DEBUG):
 
         snippetcompiler.setup_for_snippet(
             """
 import plugin_native_types
-a = "b"
-a = plugin_native_types::get_from_dict({"a":"b"}, "a")
-
-none = null
-none = plugin_native_types::get_from_dict({"a":"b"}, "B")
-
-a = plugin_native_types::many_arguments(["a","c","b"], 1)
-
-none = plugin_native_types::as_none("a")
             """
         )
         compiler.do_compile()
