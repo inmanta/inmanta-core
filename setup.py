@@ -36,6 +36,8 @@ requires = [
     "toml~=0.10 ",
     "setproctitle~=1.3",
     "strawberry-graphql~=0.258",
+    "aiosqlite==0.20.0",
+    "strawberry-sqlalchemy-mapper==0.5.0",
 ]
 
 
