@@ -485,6 +485,7 @@ class PluginReturn(PluginValue):
         else:
             return str(self.type_expression)
 
+
 class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     """
     This class models a plugin that can be called from the language.

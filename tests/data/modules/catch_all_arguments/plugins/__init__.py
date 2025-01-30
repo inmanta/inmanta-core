@@ -25,5 +25,5 @@ def sum_all(a: "int", *aa: "int", b: "int", **bb: "int") -> "int":
 
 
 @plugin
-def none_args(a: int | None, b: int) -> None:
+def none_args(a: int | None, b: "int") -> None:
     return
