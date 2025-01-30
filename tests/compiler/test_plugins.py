@@ -474,6 +474,8 @@ none = plugin_native_types::as_none("a")
                 level=logging.DEBUG,
                 msg=f"Inmanta type signature inferred from type annotations for plugin plugin_native_types::{plugin_signature}",
             )
+
+
 def test_native_types_2(snippetcompiler: "SnippetCompilationTest", caplog) -> None:
     """
     test the use of python types
@@ -515,7 +517,7 @@ for val in ["test", 123, null]:
     plugin_native_types::union_return_optional_4(value=val)     # type return value: None | Union[int, str]
 end
         """
-    )
+        )
     compiler.do_compile()
 
     # Parameter to plugin has incompatible type

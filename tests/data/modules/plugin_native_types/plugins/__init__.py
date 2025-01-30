@@ -38,9 +38,12 @@ def as_none(value: str) -> None:
 @plugin
 def var_args_test(value: str, *other: list[str]) -> None:
     pass
+
+
 @plugin
 def var_kwargs_test(value: str, *other: list[str], **more: dict[str, int]) -> None:
     pass
+
 
 @plugin
 def all_args_types(
@@ -52,19 +55,24 @@ def all_args_types(
 ) -> None:
     pass
 
+
 @plugin
 def positional_args_ordering_test(c: str, a: str, b: str) -> str:
     return ""
 
+
 @plugin
 def no_collector(pos_arg_1: str, pos_arg_2: str, /, kw_only_123: str, kw_only_2: str, kw_only_3: str) -> None:
     pass
+
+
 @plugin
 def only_kwargs(*, kw_only_1: str, kw_only_2: str, kw_only_3: int) -> None:
     pass
 
 
 # Union types (input parameter)
+
 
 @plugin
 def union_single_type(value: Union[str]) -> None:
@@ -79,6 +87,7 @@ def union_multiple_types(value: Union[int, str]) -> None:
 @plugin
 def union_optional_1(value: Union[None, int, str]) -> None:
     pass
+
 
 @plugin
 def union_optional_2(value: Optional[Union[int, str]]) -> None:
@@ -121,6 +130,7 @@ def union_return_optional_2(value: Any) -> Optional[Union[int, str]]:
 @plugin
 def union_return_optional_3(value: Any) -> Union[int, str] | None:
     return value
+
 
 @plugin
 def union_return_optional_4(value: Any) -> None | Union[int, str]:
