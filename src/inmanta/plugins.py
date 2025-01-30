@@ -24,6 +24,7 @@ import os
 import subprocess
 import typing
 import warnings
+from abc import abstractmethod
 from collections import abc
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Type, TypeVar
@@ -422,6 +423,7 @@ class PluginValue:
         # Validate the value, use custom validate method of the type if it exists
         return self.resolved_type.validate(value)
 
+    @abstractmethod
     def get_signature_display(self, dsl_type: bool = False) -> str:
         """
         Get the string representing the type for this plugin value.
@@ -434,6 +436,7 @@ class PluginValue:
         :return: the string representation for this type in the specified
             language
         """
+        raise NotImplementedError()
 
 
 class PluginArgument(PluginValue):
