@@ -50,12 +50,12 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
+from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceIntent
 from inmanta.moduletool import ModuleTool
-from inmanta.protocol import Client, SessionEndpoint, methods
+from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
 from inmanta.types import Apireturn, ResourceIdStr, ResourceType
@@ -971,6 +971,10 @@ class NullAgent(SessionEndpoint):
     @protocol.handle(methods.get_status)
     async def get_status(self) -> Apireturn:
         return 200, {}
+
+    @protocol.handle(methods_v2.trigger_get_status, env="tid")
+    async def get_scheduler_resource_state(self, env: data.Environment) -> SchedulerStatusReport:
+        return SchedulerStatusReport(scheduler_state={}, db_state={}, resource_states={}, discrepancies=[])
 
 
 def make_requires(resources: Mapping[ResourceIdStr, ResourceIntent]) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:

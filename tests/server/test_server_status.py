@@ -85,7 +85,7 @@ async def test_server_status_timeout(server, client, monkeypatch):
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
-async def test_get_scheduler_status(server, client, environment, null_agent) -> None:
+async def test_get_scheduler_status(server, client, environment) -> None:
     result = await client.get_scheduler_status(tid=environment)
     assert result.code == 200
 
@@ -101,7 +101,7 @@ async def test_get_scheduler_status(server, client, environment, null_agent) -> 
     result = await client.resume_environment(tid=environment)
     assert result.code == 200
 
-    result = await client.halt_environment(tid=environment)
+    result = await client.get_scheduler_status(tid=environment)
     assert result.code == 200
 
     result = await client.get_scheduler_status(tid=uuid.uuid4())
