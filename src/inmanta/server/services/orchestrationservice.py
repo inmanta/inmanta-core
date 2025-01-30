@@ -29,6 +29,7 @@ import asyncpg.connection
 import asyncpg.exceptions
 import pydantic
 
+import inmanta.exceptions
 import inmanta.util
 from inmanta import const, data, tracing
 from inmanta.const import ResourceState
@@ -1313,15 +1314,19 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
     ) -> SchedulerStatusReport:
+        if env.halted:
+            raise NotFound(message=f"No scheduler is running for environment {env.id}, because the environment is halted.")
         try:
             await self.autostarted_agent_manager._ensure_scheduler(env.id)
-        except Exception as e:
-            raise ServerError(f"Scheduler in env {env.id} failed to start.") from e
+        except inmanta.exceptions.EnvironmentNotFound:
+            raise NotFound(message=f"Environment {env.id} doesn't exist.")
+        except Exception:
+            raise ServerError(f"Scheduler in environment {env.id} failed to start.")
         else:
             client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
 
             if client is None:
-                raise ServerError(f"Cannot retrieve session for scheduler in env {env.id}.")
+                raise NotFound(message=f"No scheduler is running for environment {env.id}.")
 
             status = await client.trigger_get_status(env.id)
 
