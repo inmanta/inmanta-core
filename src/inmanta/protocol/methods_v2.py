@@ -944,7 +944,7 @@ def list_desired_state_versions(
     :param end: The upper limit for the order by column (exclusive).
                 Only one of 'start' and 'end' should be specified at the same time.
     :param filter: Filter the list of returned desired state versions.
-                Filtering by 'version' range, 'date' range and 'status' is supported.
+                Filtering by 'version' range, 'date' range, 'status' and `released` are supported.
     :param sort: Return the results sorted according to the parameter value.
                 Only sorting by 'version' is supported.
                 The following orders are supported: 'asc', 'desc'
