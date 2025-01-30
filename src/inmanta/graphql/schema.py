@@ -16,164 +16,65 @@
     Contact: code@inmanta.com
 """
 
-import datetime
 import typing
-import uuid
 
+import inmanta.graphql.models
 import strawberry
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from strawberry.schema.config import StrawberryConfig
+from strawberry.types import Info
+from strawberry.types.info import ContextType
+from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
 
 EnvSettingType = str
+mapper  = StrawberrySQLAlchemyMapper()
+async_engine = create_async_engine("sqlite+aiosqlite:///database.db", echo="debug")
+async_session = async_sessionmaker(async_engine)
+loader = StrawberrySQLAlchemyLoader(async_bind_factory=async_session)
 
 
-@strawberry.type
+class CustomInfo(Info):
+    @property
+    def context(self) -> ContextType:
+        return {
+            "sqlalchemy_loader": loader,
+        }
+
+
+@mapper.type(inmanta.graphql.models.EnvironmentSetting)
 class EnvironmentSetting:
-    name: str
-    type: str
-    default: EnvSettingType
-    doc: str
-    recompile: bool
-    update_model: bool
-    agent_restart: bool
-    allowed_values: list[EnvSettingType] | None = None
+    pass
 
 
-@strawberry.type
+@mapper.type(inmanta.graphql.models.Notification)
 class Notification:
-    id: uuid.UUID
-    created: datetime.datetime
-    title: str
-    message: str
-    severity: str
-    uri: str | None
-    read: bool
-    cleared: bool
+    pass
 
 
-@strawberry.type
+@mapper.type(inmanta.graphql.models.Environment)
 class Environment:
 
     @staticmethod
-    def get_environments(id: uuid.UUID | None = strawberry.UNSET) -> list["Environment"]:
-        prefix = "[get_environments]"
-        _environments = [
-            Environment(
-                id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
-                name=f"{prefix} test-env-1",
-                expert_mode_on=False,
-                halted=False,
-            ),
-            Environment(
-                id=uuid.UUID("11111111-1234-5678-1234-000000000002"),
-                name=f"{prefix} test-env-2",
-                expert_mode_on=True,
-                halted=False,
-            ),
-        ]
-
-        if id:
-            return [environment for environment in _environments if environment.id == id]
-        return _environments
-
-    @strawberry.field
-    def settings(self) -> list["EnvironmentSetting"]:
-        return [
-            EnvironmentSetting(
-                name=f"setting for env {self.name}",
-                type="str",
-                default="default",
-                recompile=False,
-                update_model=False,
-                agent_restart=False,
-                doc="this is env_setting_1",
-            )
-        ]
-
-    @strawberry.field
-    def notifications(self) -> list[Notification]:
-        notification_map = {
-            uuid.UUID("11111111-1234-5678-1234-000000000002"): [
-                Notification(
-                    id=uuid.UUID("22222222-1234-5678-1234-000000000000"),
-                    created=datetime.datetime.now(),
-                    title="New notification",
-                    message="This is a notification",
-                    severity="message",
-                    read=False,
-                    cleared=False,
-                    uri=None,
-                ),
-                Notification(
-                    id=uuid.UUID("22222222-1234-5678-1234-000000000001"),
-                    created=datetime.datetime.now(),
-                    title="Another notification",
-                    message="This is another notification",
-                    severity="error",
-                    read=False,
-                    cleared=False,
-                    uri=None,
-                ),
-            ]
-        }
-        return notification_map.get(self.id, [])
-
-    id: uuid.UUID
-    name: str
-    description: str | None = None
-    icon: str | None = None
-    expert_mode_on: bool
-    halted: bool
+    async def get_environments(id: str | None = strawberry.UNSET) -> typing.Sequence["Environment"]:
+        async with async_session() as session:
+            stmt = select(inmanta.graphql.models.Environment)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            _environments = await session.scalars(stmt)
+            return _environments.all()
 
 
-@strawberry.type
+@mapper.type(inmanta.graphql.models.Project)
 class Project:
     @staticmethod
-    def get_projects(id: uuid.UUID | None = strawberry.UNSET) -> list["Project"]:
-        prefix = "[get_projects]"
-        _projects = [
-            Project(
-                id=uuid.UUID("00000000-1234-5678-1234-000000000001"),
-                name=f"{prefix} test-proj-1",
-            ),
-            Project(
-                id=uuid.UUID("00000000-1234-5678-1234-000000000002"),
-                name=f"{prefix} test-proj-2",
-            ),
-        ]
-        if id:
-            return [project for project in _projects if project.id == id]
-        return _projects
-
-    @strawberry.field
-    def environments(self) -> list[Environment]:
-        prefix = "[projects.environments]"
-        if self.id == uuid.UUID("00000000-1234-5678-1234-000000000001"):
-            return [
-                Environment(
-                    id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
-                    name=f"{prefix} test-env-1",
-                    expert_mode_on=False,
-                    halted=False,
-                ),
-            ]
-        if self.id == uuid.UUID("00000000-1234-5678-1234-000000000002"):
-            return [
-                Environment(
-                    id=uuid.UUID("11111111-1234-5678-1234-000000000002"),
-                    name=f"{prefix} test-env-2",
-                    expert_mode_on=True,
-                    halted=False,
-                ),
-                Environment(
-                    id=uuid.UUID("11111111-1234-5678-1234-000000000003"),
-                    name=f"{prefix} test-env-3",
-                    expert_mode_on=True,
-                    halted=False,
-                ),
-            ]
-        return []
-
-    id: uuid.UUID
-    name: str
+    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Project"]:
+        async with async_session() as session:
+            stmt = select(inmanta.graphql.models.Project)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            projects = await session.scalars(stmt)
+        return projects.all()
 
 
 @strawberry.type
@@ -182,4 +83,4 @@ class Query:
     projects: typing.List[Project] = strawberry.field(resolver=Project.get_projects)
 
 
-schema = strawberry.Schema(query=Query)
+schema = strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
