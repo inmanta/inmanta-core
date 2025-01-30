@@ -20,7 +20,7 @@
 
 import datetime
 import uuid
-from typing import Literal, Optional, Union
+from typing import Any, Literal, Optional, Union
 
 import inmanta.types
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
@@ -1604,3 +1604,14 @@ def discovered_resources_get_batch(
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """
+
+
+@typedmethod(
+    path="/graphql",
+    operation="POST",
+    client_types=[ClientType.api],
+    api_version=2,
+    strict_typing=False,
+)
+def graphql(query: str) -> Any:  # Actual return type: strawberry.types.execution.ExecutionResult
+    pass
