@@ -19,7 +19,6 @@
 import asyncio
 import collections.abc
 import inspect
-import logging
 import numbers
 import os
 import subprocess
@@ -54,7 +53,6 @@ from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
-LOGGER = logging.getLogger(__name__)
 
 
 T = TypeVar("T")
