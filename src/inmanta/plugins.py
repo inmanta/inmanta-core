@@ -489,7 +489,7 @@ class PluginReturn(PluginValue):
         if dsl_types:
             return str(self.resolved_type)
         else:
-            return str(self.type_expression)
+            return repr(self.type_expression)
 
 
 class Plugin(NamedType, WithComment, metaclass=PluginMeta):
