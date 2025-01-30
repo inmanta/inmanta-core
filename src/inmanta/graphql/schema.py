@@ -53,14 +53,20 @@ class Notification:
 class Environment:
 
     @staticmethod
-    def get_environments(id: str | None = strawberry.UNSET) -> list["Environment"]:
+    def get_environments(id: uuid.UUID | None = strawberry.UNSET) -> list["Environment"]:
         prefix = "[get_environments]"
         _environments = [
             Environment(
-                id="11111111-1234-5678-1234-000000000001", name=f"{prefix} test-env-1", expert_mode_on=False, halted=False
+                id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
+                name=f"{prefix} test-env-1",
+                expert_mode_on=False,
+                halted=False,
             ),
             Environment(
-                id="11111111-1234-5678-1234-000000000002", name=f"{prefix} test-env-2", expert_mode_on=True, halted=False
+                id=uuid.UUID("11111111-1234-5678-1234-000000000002"),
+                name=f"{prefix} test-env-2",
+                expert_mode_on=True,
+                halted=False,
             ),
         ]
 
@@ -85,9 +91,9 @@ class Environment:
     @strawberry.field
     def notifications(self) -> list[Notification]:
         notification_map = {
-            "11111111-1234-5678-1234-000000000002": [
+            uuid.UUID("11111111-1234-5678-1234-000000000002"): [
                 Notification(
-                    id="22222222-1234-5678-1234-000000000000",
+                    id=uuid.UUID("22222222-1234-5678-1234-000000000000"),
                     created=datetime.datetime.now(),
                     title="New notification",
                     message="This is a notification",
@@ -97,7 +103,7 @@ class Environment:
                     uri=None,
                 ),
                 Notification(
-                    id="22222222-1234-5678-1234-000000000001",
+                    id=uuid.UUID("22222222-1234-5678-1234-000000000001"),
                     created=datetime.datetime.now(),
                     title="Another notification",
                     message="This is another notification",
@@ -121,15 +127,15 @@ class Environment:
 @strawberry.type
 class Project:
     @staticmethod
-    def get_projects(id: str | None = strawberry.UNSET) -> list["Project"]:
+    def get_projects(id: uuid.UUID | None = strawberry.UNSET) -> list["Project"]:
         prefix = "[get_projects]"
         _projects = [
             Project(
-                id="00000000-1234-5678-1234-000000000001",
+                id=uuid.UUID("00000000-1234-5678-1234-000000000001"),
                 name=f"{prefix} test-proj-1",
             ),
             Project(
-                id="00000000-1234-5678-1234-000000000002",
+                id=uuid.UUID("00000000-1234-5678-1234-000000000002"),
                 name=f"{prefix} test-proj-2",
             ),
         ]
@@ -140,22 +146,25 @@ class Project:
     @strawberry.field
     def environments(self) -> list[Environment]:
         prefix = "[projects.environments]"
-        if self.id == "00000000-1234-5678-1234-000000000001":
+        if self.id == uuid.UUID("00000000-1234-5678-1234-000000000001"):
             return [
                 Environment(
-                    id="11111111-1234-5678-1234-000000000001", name=f"{prefix} test-env-1", expert_mode_on=False, halted=False
+                    id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
+                    name=f"{prefix} test-env-1",
+                    expert_mode_on=False,
+                    halted=False,
                 ),
             ]
-        if self.id == "00000000-1234-5678-1234-000000000002":
+        if self.id == uuid.UUID("00000000-1234-5678-1234-000000000002"):
             return [
                 Environment(
-                    id="11111111-1234-5678-1234-000000000002",
+                    id=uuid.UUID("11111111-1234-5678-1234-000000000002"),
                     name=f"{prefix} test-env-2",
                     expert_mode_on=True,
                     halted=False,
                 ),
                 Environment(
-                    id="11111111-1234-5678-1234-000000000003",
+                    id=uuid.UUID("11111111-1234-5678-1234-000000000003"),
                     name=f"{prefix} test-env-3",
                     expert_mode_on=True,
                     halted=False,
