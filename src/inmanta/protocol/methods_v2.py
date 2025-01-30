@@ -405,7 +405,7 @@ def get_scheduler_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
     Inspect the scheduler state from the given environment.
 
     :param tid: The id of the environment in which to inspect the scheduler.
-
+    :raise NotFound: No scheduler is running. For example because the environment is halted.
     """
 
 
