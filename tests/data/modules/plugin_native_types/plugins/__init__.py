@@ -71,6 +71,11 @@ def only_kwargs(*, kw_only_1: str, kw_only_2: str, kw_only_3: int) -> None:
     pass
 
 
+@plugin
+def optional_arg(a: int | None) -> None:
+    return
+
+
 # Union types (input parameter)
 
 

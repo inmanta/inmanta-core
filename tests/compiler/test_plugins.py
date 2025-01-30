@@ -388,15 +388,14 @@ import keyword_only_arguments
     plugins: dict[str, inmanta.plugins.Plugin] = {
         name: stmt for name, stmt in statements.items() if hasattr(stmt, "get_signature")
     }
-
+    assert (
+        plugins["catch_all_arguments::sum_all"].get_signature()
+        == "sum_all(a: 'int', *aa: 'int', b: 'int', **bb: 'int') -> 'int'"
+    )
     assert plugins["catch_all_arguments::sum_all"].get_signature(dsl_types=True) == (
         "sum_all(a: int, *aa: int, b: int, **bb: int) -> int"
     )
-    assert plugins["catch_all_arguments::sum_all"].get_signature() == (
-        "sum_all(a: 'int', *aa: 'int', b: 'int', **bb: 'int') -> 'int'"
-    )
-    assert plugins["catch_all_arguments::none_args"].get_signature(dsl_types=True) == "none_args(a: int?, b: int)"
-    assert plugins["catch_all_arguments::none_args"].get_signature() == "none_args(a: int | None, b: 'int')"
+
     assert plugins["keyword_only_arguments::sum_all"].get_signature(dsl_types=True) == (
         "sum_all(a: int, b: int, *, c: int, d: int) -> int"
     )
@@ -473,6 +472,7 @@ none = plugin_native_types::as_none("a")
             "positional_args_ordering_test(c: string, a: string, b: string) -> string",
             "no_collector(pos_arg_1: string, pos_arg_2: string, kw_only_123: string, kw_only_2: string, kw_only_3: string)",
             "only_kwargs(*, kw_only_1: string, kw_only_2: string, kw_only_3: int)",
+            "optional_arg(a: int?)",
         ]
         for plugin_signature in expected_signatures:
             log_contains(
