@@ -53,8 +53,6 @@ from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
-
-
 T = TypeVar("T")
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., object])
 
@@ -640,7 +638,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             self.kwargs[arg] = argument
             self.all_args[arg] = argument
 
-    def get_signature(self, dsl_types: bool = True) -> str:
+    def get_signature(self, dsl_types: bool = False) -> str:
         """
         Generate the signature of this plugin. Return a string
         containing the arguments and their types, and the type
@@ -650,8 +648,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         Inmanta DSL.
 
         :param dsl_types: control if the signature should be displayed
-        using Inmanta DSL types or the corresponding inferred python
-        types.
+        using the plain python types (dsl_types=False) as written in the plugin
+        or the corresponding inferred Inmanta DSL types (dsl_types=True).
 
         """
         # Start the list with all positional arguments
