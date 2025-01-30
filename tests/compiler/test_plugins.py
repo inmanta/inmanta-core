@@ -436,7 +436,7 @@ plugin_context_and_defaults::func()
     compiler.do_compile()
 
 
-def test_native_types(snippetcompiler: "SnippetCompilationTest", caplog) -> None:
+def test_inferred_signatures_logging(snippetcompiler: "SnippetCompilationTest", caplog) -> None:
     """
     Test that the signature (using inferred Inmanta types)
     for each plugin is correctly logged
@@ -474,7 +474,7 @@ import plugin_native_types
             )
 
 
-def test_native_types_2(snippetcompiler: "SnippetCompilationTest", caplog) -> None:
+def test_native_types(snippetcompiler: "SnippetCompilationTest", caplog) -> None:
     """
     test the use of python types
     """
