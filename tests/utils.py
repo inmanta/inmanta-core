@@ -996,6 +996,9 @@ class DummyCodeManager(CodeManager):
     async def get_code(
         self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
     ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
+        if not resource_types:
+            raise ValueError(f"{self.__class__.__name__}.get_code() expects at least one resource type")
+
         return ([ResourceInstallSpec(rt, version, dummyblueprint) for rt in resource_types], {})
 
 

@@ -101,10 +101,15 @@ class CodeManager:
         Get the collection of installation specifications (i.e. pip config, python package dependencies,
         Inmanta modules sources) required to deploy a given version for the provided resource types.
 
+        Expects at least one resource type.
+
         :return: Tuple of:
             - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
+        if not resource_types:
+            raise ValueError(f"{self.__class__.__name__}.get_code() expects at least one resource type")
+
         resource_install_specs: list[ResourceInstallSpec] = []
         invalid_resources: executor.FailedResources = {}
         for resource_type in set(resource_types):

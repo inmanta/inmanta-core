@@ -616,10 +616,9 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         :param agent_uri: The name of the host on which the agent is running.
         :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
-            handler code in its venv.
+            handler code in its venv. Must have at least one element.
         :return: An Executor instance
         """
-        pass
 
     @abc.abstractmethod
     async def stop_for_agent(self, agent_name: str) -> list[E]:

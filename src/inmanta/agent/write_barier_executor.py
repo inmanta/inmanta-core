@@ -88,6 +88,8 @@ class WriteBarierExecutorManager(executor.ExecutorManager[WriteBarierExecutor]):
     async def get_executor(
         self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
     ) -> WriteBarierExecutor:
+        if not code:
+            raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
         return WriteBarierExecutor(await self.delegate.get_executor(agent_name, agent_uri, code))
 
     async def stop_for_agent(self, agent_name: str) -> list[WriteBarierExecutor]:

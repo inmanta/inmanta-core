@@ -25,7 +25,7 @@ import json
 import logging
 import typing
 import uuid
-from collections.abc import Awaitable, Callable, Set
+from collections.abc import Awaitable, Callable, Collection, Set
 from concurrent.futures import ThreadPoolExecutor
 from typing import Mapping, Optional, Sequence
 
@@ -43,7 +43,7 @@ from inmanta.deploy.scheduler import ModelVersion, ResourceScheduler
 from inmanta.deploy.state import Blocked, Compliance, DeployResult
 from inmanta.deploy.work import ScheduledWork, TaskPriority
 from inmanta.protocol.common import custom_json_encoder
-from inmanta.types import ResourceIdStr
+from inmanta.types import ResourceIdStr, ResourceType
 from inmanta.util import retry_limited
 from utils import make_requires
 
@@ -102,7 +102,7 @@ async def config(inmanta_config, tmp_path):
 
 
 @pytest.fixture
-async def agent(environment, config, monkeypatch):
+async def agent(environment, config):
     """
     Provide a new agent, with a scheduler that uses the dummy executor
 
@@ -137,6 +137,10 @@ def make_resource_minimal(environment):
         return state.ResourceIntent(resource_id=rid, attributes=attributes, attribute_hash=attribute_hash)
 
     return make_resource_minimal
+
+
+def get_types_for_agent(scheduler: ResourceScheduler, agent: str) -> Collection[ResourceType]:
+    return list(scheduler._state.types_per_agent[agent])
 
 
 async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
@@ -1541,7 +1545,7 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
         [ModelVersion(version=5, resources=resources, requires=make_requires(resources), undefined=set())]
     )
 
-    assert len(agent.scheduler.get_types_for_agent("agent1")) == 2
+    assert len(get_types_for_agent(agent.scheduler, "agent1")) == 2
 
     resources = {
         ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, []),
@@ -1551,11 +1555,11 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
         [ModelVersion(version=6, resources=resources, requires=make_requires(resources), undefined=set())]
     )
 
-    assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
+    assert len(get_types_for_agent(agent.scheduler, "agent1")) == 1
     assert len(agent.scheduler._state.intent) == 1
 
 
-async def test_dryrun(agent: TestAgent, make_resource_minimal, monkeypatch):
+async def test_dryrun(agent: TestAgent, make_resource_minimal):
     """
     Ensure the simples deploy scenario works: 2 dependant resources
     """
@@ -1666,7 +1670,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.intent) == 7
-    assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
+    assert len(get_types_for_agent(agent.scheduler, "agent1")) == 1
 
     # rid1: transitively blocked on rid4
     # rid2: deployed
@@ -1895,7 +1899,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.intent) == 2
-    assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
+    assert len(get_types_for_agent(agent.scheduler, "agent1")) == 1
 
     assert_resource_state(
         rid8,
@@ -1927,7 +1931,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.intent) == 2
-    assert len(agent.scheduler.get_types_for_agent("agent1")) == 1
+    assert len(get_types_for_agent(agent.scheduler, "agent1")) == 1
 
     assert_resource_state(
         rid8,
