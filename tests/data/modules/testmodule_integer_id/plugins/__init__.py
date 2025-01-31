@@ -1,7 +1,7 @@
 """
-    Copyright 2023 Inmanta
-    Contact: code@inmanta.com
-    License: Apache 2.0
+Copyright 2023 Inmanta
+Contact: code@inmanta.com
+License: Apache 2.0
 """
 
 from inmanta.agent.handler import (
