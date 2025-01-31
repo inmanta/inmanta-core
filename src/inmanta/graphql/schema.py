@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import asyncio
 import datetime
 import typing
 import uuid
@@ -53,7 +53,8 @@ class Notification:
 class Environment:
 
     @staticmethod
-    def get_environments(id: uuid.UUID | None = strawberry.UNSET) -> list["Environment"]:
+    async def get_environments(id: uuid.UUID | None = strawberry.UNSET) -> list["Environment"]:
+        await asyncio.sleep(2)
         prefix = "[get_environments]"
         _environments = [
             Environment(
