@@ -16,8 +16,10 @@
     Contact: code@inmanta.com
 """
 
+from typing import Any, Annotated, Protocol, Literal
 from typing import Union, Optional, Any
-from inmanta.plugins import plugin
+from typing import Union, Optional, Any
+from inmanta.plugins import plugin, InmantaType
 
 
 @plugin
@@ -98,4 +100,31 @@ def union_return_optional_3(value: Any) -> Union[int, str] | None:
 
 @plugin
 def union_return_optional_4(value: Any) -> None | Union[int, str]:
+    return value
+
+
+# Annotated values
+
+
+class MyEntity(Protocol):
+    value: int
+
+
+@plugin
+def annotated_arg_entity(value: Annotated[MyEntity, InmantaType("TestEntity")]) -> None:
+    pass
+
+
+@plugin
+def annotated_return_entity(value: Any) -> Annotated[MyEntity, InmantaType("TestEntity")]:
+    return value
+
+
+@plugin
+def annotated_arg_literal(value: Annotated[Literal["yes", "no"], InmantaType("response")]) -> None:
+    pass
+
+
+@plugin
+def annotated_return_literal(value: Any) -> Annotated[Literal["yes", "no"], InmantaType("response")]:
     return value

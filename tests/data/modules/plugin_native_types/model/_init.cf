@@ -1,0 +1,7 @@
+entity TestEntity:
+    int value
+end
+
+typedef response as string matching self in ["yes", "no"]
+
+implement TestEntity using std::none

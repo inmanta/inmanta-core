@@ -439,6 +439,7 @@ def test_native_types(snippetcompiler: "SnippetCompilationTest") -> None:
         """
 import plugin_native_types
 
+test_entity = plugin_native_types::TestEntity(value=2)
 a = "b"
 a = plugin_native_types::get_from_dict({"a":"b"}, "a")
 
@@ -470,7 +471,17 @@ for val in ["test", 123, null]:
     plugin_native_types::union_return_optional_3(value=val)     # type return value: Union[int, str] | None
     plugin_native_types::union_return_optional_4(value=val)     # type return value: None | Union[int, str]
 end
-        """
+
+# Annotated types
+plugin_native_types::annotated_arg_entity(test_entity)     # type value: Annotated[MyEntity, InmantaType("TestEntity")]
+plugin_native_types::annotated_return_entity(test_entity)  # type return value: Annotated[MyEntity, InmantaType("TestEntity")]
+
+for val in ["yes", "no"]:
+    plugin_native_types::annotated_arg_literal(val)        # type value: Annotated[Literal["yes", "no"], InmantaType("response")
+    plugin_native_types::annotated_return_literal(val)   # type value: Annotated[Literal["yes", "no"], InmantaType("response")
+end
+        """,
+        ministd=True,
     )
     compiler.do_compile()
 
@@ -517,7 +528,8 @@ end
             f"""
             import plugin_native_types
             plugin_native_types::{plugin_name}(value={plugin_value})
-            """
+            """,
+            ministd=True,
         )
         with pytest.raises(RuntimeException) as exc_info:
             compiler.do_compile()
@@ -573,7 +585,8 @@ end
             f"""
             import plugin_native_types
             plugin_native_types::{plugin_name}(value={plugin_value})
-            """
+            """,
+            ministd=True,
         )
         with pytest.raises(WrappingRuntimeException) as exc_info:
             compiler.do_compile()
@@ -582,7 +595,8 @@ end
     snippetcompiler.setup_for_snippet(
         """
         import plugin_invalid_union_type
-        """
+        """,
+        ministd=True,
     )
     with pytest.raises(InvalidTypeAnnotation) as exc_info:
         compiler.do_compile()
