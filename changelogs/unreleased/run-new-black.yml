@@ -1,5 +1,5 @@
 ---
-description: "Format code using black 25.1.0" 
+description: "Format code using black 25.1.0"
 issue-nr: 209
 issue-repo: infra-tickets
 change-type: patch
