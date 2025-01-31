@@ -27,7 +27,7 @@ import warnings
 from collections import abc
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Self, Type, TypeVar
 
 import typing_inspect
 
@@ -249,21 +249,14 @@ python_to_model = {
 
 
 @dataclass(frozen=True)
-class InmantaType:
-    """
-    Declaration of an inmanta type for use with typing.Annotated.
-    When a plugin type is declared as typing.Annotated with an `InmantaType` as annotation, the Python type is completely
-    ignored for type validation and conversion to and from the DSL. Instead the string provided to the `InmantaType` is
-    evaluated as a DSL type, extended with "any".
-    For maximum static type coverage, it is recommended to use these only when absolutely necessary, and to use them as deeply
-    in the type as possible, e.g. prefer `Sequence[Annotated[MyEntity, InmantaType("std::Entity")]]` over
-    `Annotated[Sequence[MyEntity], InmantaType("std::Entity[]")]`.
-    """
+class ModelType:
+    model_type: str
 
-    dsl_type: str
+    def __class_getitem__(cls: type[Self], key: str) -> Self:
+        return cls(key)
 
 
-Entity: typing.TypeAlias = typing.Annotated[object, InmantaType("std::Entity")]
+Entity: typing.TypeAlias = typing.Annotated[Any, ModelType["std::Entity"]]
 """
     Alias used to treat std::Entity as an object in Python for type verification
 """
@@ -282,6 +275,10 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
     :param location: The location of this evaluation on the model
     :param resolver: The namespace that can be used to resolve the type annotation of this argument.
     """
+    # Resolve aliases
+    if isinstance(python_type, typing.TypeAliasType):
+        return to_dsl_type(python_type.__value__, location, resolver)
+
     # Any to any
     if python_type is Any:
         return inmanta_type.Type()
@@ -346,14 +343,11 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
 
         # Annotated
         if origin is typing.Annotated:
-            annotated_args = typing.get_args(python_type)
-            inmanta_types: Sequence[InmantaType] = [arg for arg in annotated_args if isinstance(arg, InmantaType)]
-            if inmanta_types:
-                if len(inmanta_types) > 1:
-                    raise TypingException(None, f"invalid type {python_type}, only one InmantaType annotation is supported")
-                return parse_dsl_type(inmanta_types[0].dsl_type, location, resolver)
+            for meta in python_type.__metadata__:  # type: ignore
+                if isinstance(meta, ModelType):
+                    return parse_dsl_type(meta.model_type, location, resolver)
             # the annotation doesn't concern us => use base type
-            return to_dsl_type(annotated_args[0], location, resolver)
+            return to_dsl_type(typing.get_args(python_type)[0], location, resolver)
 
     if python_type in python_to_model:
         return python_to_model[python_type]
@@ -412,7 +406,7 @@ class PluginValue:
         :param resolver: The namespace that can be used to resolve the type annotation of this
             argument.
         """
-        if self.type_expression in PLUGIN_TYPES:
+        if isinstance(self.type_expression, collections.abc.Hashable) and self.type_expression in PLUGIN_TYPES:
             self._resolved_type = PLUGIN_TYPES[self.type_expression]
             return self._resolved_type
 

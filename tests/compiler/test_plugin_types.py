@@ -23,7 +23,7 @@ import pytest
 
 import inmanta.ast.type as inmanta_type
 from inmanta.ast import Namespace, Range, RuntimeException
-from inmanta.plugins import InmantaType, Null, to_dsl_type
+from inmanta.plugins import ModelType, Null, to_dsl_type
 
 
 def test_conversion(caplog):
@@ -40,7 +40,7 @@ def test_conversion(caplog):
 
     assert inmanta_type.NullableType(inmanta_type.Integer()) == to_dsl_type_simple(Annotated[int | None, "something"])
 
-    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type_simple(Annotated[dict[str, int], InmantaType("dict")])
+    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type_simple(Annotated[dict[str, int], ModelType["dict"]])
     assert inmanta_type.Integer() == to_dsl_type_simple(int)
     assert inmanta_type.Float() == to_dsl_type_simple(float)
     assert inmanta_type.NullableType(inmanta_type.Float()) == to_dsl_type_simple(float | None)

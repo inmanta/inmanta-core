@@ -19,7 +19,7 @@
 from typing import Any, Annotated, Protocol, Literal
 from typing import Union, Optional, Any
 from typing import Union, Optional, Any
-from inmanta.plugins import plugin, InmantaType
+from inmanta.plugins import plugin, ModelType
 
 
 @plugin
@@ -111,20 +111,20 @@ class MyEntity(Protocol):
 
 
 @plugin
-def annotated_arg_entity(value: Annotated[MyEntity, InmantaType("TestEntity")]) -> None:
+def annotated_arg_entity(value: Annotated[MyEntity, ModelType["TestEntity"]]) -> None:
     pass
 
 
 @plugin
-def annotated_return_entity(value: Any) -> Annotated[MyEntity, InmantaType("TestEntity")]:
+def annotated_return_entity(value: Any) -> Annotated[MyEntity, ModelType["TestEntity"]]:
     return value
 
 
 @plugin
-def annotated_arg_literal(value: Annotated[Literal["yes", "no"], InmantaType("response")]) -> None:
+def annotated_arg_literal(value: Annotated[Literal["yes", "no"], ModelType["response"]]) -> None:
     pass
 
 
 @plugin
-def annotated_return_literal(value: Any) -> Annotated[Literal["yes", "no"], InmantaType("response")]:
+def annotated_return_literal(value: Any) -> Annotated[Literal["yes", "no"], ModelType["response"]]:
     return value
