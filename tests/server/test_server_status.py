@@ -17,6 +17,9 @@
 """
 
 import asyncio
+import uuid
+
+import pytest
 
 from inmanta import data
 from inmanta.server.server import Server
@@ -79,3 +82,28 @@ async def test_server_status_timeout(server, client, monkeypatch):
             compiler_slice = slice
     assert compiler_slice
     assert "error" in compiler_slice["status"]
+
+
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_get_scheduler_status(server, client, environment) -> None:
+    result = await client.get_scheduler_status(tid=environment)
+    assert result.code == 200
+
+    result = await client.halt_environment(tid=environment)
+    assert result.code == 200
+
+    result = await client.get_scheduler_status(tid=environment)
+    assert result.code == 404
+    assert (
+        f"No scheduler is running for environment {environment}, because the environment is halted." in result.result["message"]
+    )
+
+    result = await client.resume_environment(tid=environment)
+    assert result.code == 200
+
+    result = await client.get_scheduler_status(tid=environment)
+    assert result.code == 200
+
+    result = await client.get_scheduler_status(tid=uuid.uuid4())
+    assert result.code == 404
+    assert "The given environment id does not exist!" in result.result["message"]

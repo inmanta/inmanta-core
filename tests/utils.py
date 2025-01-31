@@ -50,12 +50,12 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
+from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceIntent
 from inmanta.moduletool import ModuleTool
-from inmanta.protocol import Client, SessionEndpoint, methods
+from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
 from inmanta.types import Apireturn, ResourceIdStr, ResourceType
@@ -273,23 +273,6 @@ def assert_no_warning(caplog, loggers_to_allow: list[str] = NOISY_LOGGERS):
     """
     for record in caplog.records:
         assert record.levelname != "WARNING" or (record.name in loggers_to_allow), str(record) + record.getMessage()
-
-
-def configure(unused_tcp_port, database_name, database_port):
-    import inmanta.agent.config  # noqa: F401
-    import inmanta.server.config  # noqa: F401
-    from inmanta.config import Config
-
-    free_port = str(unused_tcp_port)
-    Config.load_config()
-    Config.set("server", "bind-port", free_port)
-    Config.set("agent_rest_transport", "port", free_port)
-    Config.set("compiler_rest_transport", "port", free_port)
-    Config.set("client_rest_transport", "port", free_port)
-    Config.set("cmdline_rest_transport", "port", free_port)
-    Config.set("database", "name", database_name)
-    Config.set("database", "host", "localhost")
-    Config.set("database", "port", str(database_port))
 
 
 def configure_auth(auth: bool, ca: bool, ssl: bool) -> None:
@@ -988,6 +971,10 @@ class NullAgent(SessionEndpoint):
     @protocol.handle(methods.get_status)
     async def get_status(self) -> Apireturn:
         return 200, {}
+
+    @protocol.handle(methods_v2.trigger_get_status, env="tid")
+    async def get_scheduler_resource_state(self, env: data.Environment) -> SchedulerStatusReport:
+        return SchedulerStatusReport(scheduler_state={}, db_state={}, resource_states={}, discrepancies=[])
 
 
 def make_requires(resources: Mapping[ResourceIdStr, ResourceIntent]) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:

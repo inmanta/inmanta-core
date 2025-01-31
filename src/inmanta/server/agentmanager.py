@@ -34,6 +34,7 @@ from uuid import UUID
 import asyncpg.connection
 
 import inmanta.config
+import inmanta.exceptions
 import inmanta.server.services.environmentlistener
 from inmanta import config as global_config
 from inmanta import const, data, tracing
@@ -1162,7 +1163,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 # silently ignore requests if this environment is halted
                 refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env, connection=connection)
                 if refreshed_env is None:
-                    raise Exception("Can't ensure scheduler: environment %s does not exist" % env)
+                    raise inmanta.exceptions.EnvironmentNotFound(f"Can't ensure scheduler: environment {env} does not exist")
                 if refreshed_env.halted:
                     return False
 

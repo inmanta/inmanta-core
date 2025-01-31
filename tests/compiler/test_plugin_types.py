@@ -17,7 +17,7 @@
 """
 
 import collections.abc
-from typing import Any, Mapping, Sequence, Union
+from typing import Any, Mapping, Optional, Sequence, Union
 
 import pytest
 
@@ -26,7 +26,10 @@ from inmanta.ast import RuntimeException
 from inmanta.plugins import Null, to_dsl_type
 
 
-def test_conversion():
+def test_conversion(caplog):
+    """
+    Test behaviour of to_dsl_type function.
+    """
     assert inmanta_type.Integer() == to_dsl_type(int)
     assert inmanta_type.Float() == to_dsl_type(float)
     assert inmanta_type.NullableType(inmanta_type.Float()) == to_dsl_type(float | None)
@@ -42,6 +45,26 @@ def test_conversion():
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(Mapping[str, str])
 
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(collections.abc.Mapping[str, str])
+
+    # Union types
+    assert inmanta_type.Integer() == to_dsl_type(Union[int])
+    assert inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()]) == to_dsl_type(Union[int, str])
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+        Union[None, int, str]
+    )
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+        Optional[Union[int, str]]
+    )
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+        Union[int, str] | None
+    )
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+        None | Union[int, str]
+    )
+    # verify that nested unions are flattened and nested None values are considered for NullableType
+    assert inmanta_type.NullableType(
+        inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String(), inmanta_type.Float()])
+    ) == to_dsl_type(Union[int, Union[str, Union[float, None]]])
 
     assert Null() == to_dsl_type(Union[None])
 
@@ -64,3 +87,13 @@ def test_conversion():
 
     with pytest.raises(RuntimeException):
         to_dsl_type(CustomDict[str, str])
+
+    # Check that a warning is produced when implicit cast to 'Any'
+    caplog.clear()
+    to_dsl_type(complex)
+    warning_message = (
+        "InmantaWarning: Python type <class 'complex'> was implicitly cast to 'Any' because no matching type "
+        "was found in the Inmanta DSL. Please refer to the documentation for an overview of supported types at the "
+        "plugin boundary."
+    )
+    assert warning_message in caplog.messages

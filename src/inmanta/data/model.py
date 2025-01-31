@@ -658,11 +658,16 @@ class DesiredStateLabel(BaseModel):
 
 
 class DesiredStateVersion(BaseModel):
+    """
+    :param released: has this desired state version been released?
+    """
+
     version: int
     date: datetime.datetime
     total: int
     labels: list[DesiredStateLabel]
     status: const.DesiredStateVersionStatus
+    released: bool
 
 
 class PromoteTriggerMethod(StrEnum):

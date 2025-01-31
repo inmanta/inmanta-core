@@ -378,7 +378,7 @@ class PipCommandBuilder:
             "list",
             # we disable pip-version check to prevent the json format from getting other output
             # deeply confusing issue: https://github.com/pypa/pip/issues/10715
-            *(["--disable-pip-version-check", "--no-python-version-warning", "--format", format.value] if format else []),
+            *(["--disable-pip-version-check", "--format", format.value] if format else []),
             *(["--editable"] if only_editable else []),
         ]
 

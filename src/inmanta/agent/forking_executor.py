@@ -276,6 +276,8 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """
         if not self.stopping:
             # detach logger early as we are about to lose the connection
+            if self.venv_cleanup_task:
+                self.venv_cleanup_task.cancel()
             self._detach_log_shipper()
             self.logger.info("Stopping")
             self.stopping = True
@@ -283,7 +285,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             self.transport.close()
 
     def connection_lost(self, exc: Exception | None) -> None:
-        """We lost connection to the controler, bail out"""
+        """We lost connection to the controller, bail out"""
         self._detach_log_shipper()
         self.logger.info("Connection lost", exc_info=exc)
         self.set_status("disconnected")
@@ -297,12 +299,12 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             return
 
         while not self.stopping:
-            await self.touch_inmanta_venv_status()
+            self.touch_inmanta_venv_status()
             if not self.stopping:
 
                 await asyncio.sleep(self.timer_venv_scheduler_interval)
 
-    async def touch_inmanta_venv_status(self) -> None:
+    def touch_inmanta_venv_status(self) -> None:
         """
         Touch the `inmanta_venv_status` file.
         """
