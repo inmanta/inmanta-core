@@ -16,35 +16,27 @@
     Contact: code@inmanta.com
 """
 
+import os
 import typing
 
 import inmanta.graphql.models
 import strawberry
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.info import ContextType
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
 
-EnvSettingType = str
-mapper  = StrawberrySQLAlchemyMapper()
-async_engine = create_async_engine("sqlite+aiosqlite:///database.db", echo="debug")
-async_session = async_sessionmaker(async_engine)
-loader = StrawberrySQLAlchemyLoader(async_bind_factory=async_session)
+mapper = StrawberrySQLAlchemyMapper()
+
+ASYNC_SESSION: typing.Optional[AsyncSession] = None
+SCHEMA = None
 
 
-class CustomInfo(Info):
-    @property
-    def context(self) -> ContextType:
-        return {
-            "sqlalchemy_loader": loader,
-        }
-
-
-@mapper.type(inmanta.graphql.models.EnvironmentSetting)
-class EnvironmentSetting:
-    pass
+# @mapper.type(inmanta.graphql.models.EnvironmentSetting)
+# class EnvironmentSetting:
+#     pass
 
 
 @mapper.type(inmanta.graphql.models.Notification)
@@ -57,7 +49,7 @@ class Environment:
 
     @staticmethod
     async def get_environments(id: str | None = strawberry.UNSET) -> typing.Sequence["Environment"]:
-        async with async_session() as session:
+        async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.Environment)
             if id:
                 stmt = stmt.filter_by(id=id)
@@ -69,7 +61,7 @@ class Environment:
 class Project:
     @staticmethod
     async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Project"]:
-        async with async_session() as session:
+        async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.Project)
             if id:
                 stmt = stmt.filter_by(id=id)
@@ -77,10 +69,36 @@ class Project:
         return projects.all()
 
 
-@strawberry.type
-class Query:
-    environments: typing.List[Environment] = strawberry.field(resolver=Environment.get_environments)
-    projects: typing.List[Project] = strawberry.field(resolver=Project.get_projects)
+def get_async_session(connection_string: typing.Optional[str] = None) -> AsyncSession:
+    if ASYNC_SESSION is None:
+        initialize_schema(connection_string)
+    return ASYNC_SESSION()
 
 
-schema = strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
+def get_schema(connection_string: typing.Optional[str] = None):
+    if SCHEMA is None:
+        initialize_schema(connection_string)
+    return SCHEMA
+
+
+def initialize_schema(connection_string: typing.Optional[str] = None):
+    global ASYNC_SESSION
+    global SCHEMA
+    async_engine = create_async_engine(connection_string or "sqlite+aiosqlite:///database.db", echo="debug")
+    ASYNC_SESSION = async_sessionmaker(async_engine)
+    loader = StrawberrySQLAlchemyLoader(async_bind_factory=ASYNC_SESSION)
+
+    class CustomInfo(Info):
+        @property
+        def context(self) -> ContextType:
+            return {
+                "sqlalchemy_loader": loader,
+            }
+
+    @strawberry.type
+    class Query:
+        environments: typing.List[Environment] = strawberry.field(resolver=Environment.get_environments)
+        projects: typing.List[Project] = strawberry.field(resolver=Project.get_projects)
+
+    SCHEMA = strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
+    return SCHEMA

@@ -30,10 +30,7 @@ class GraphQLSlice(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(name=SLICE_GRAPHQL)
-        self.schema = strawberry.Schema(
-            inmanta.graphql.schema.Query, config=StrawberryConfig(info_class=inmanta.graphql.schema.CustomInfo)
-        )
 
     @handle(methods_v2.graphql)
     async def graphql(self, query: str) -> Any:  # Actual return type: strawberry.types.execution.ExecutionResult
-        return await self.schema.execute(query)
+        return await inmanta.graphql.schema.get_schema().execute(query)

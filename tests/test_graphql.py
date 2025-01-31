@@ -21,190 +21,182 @@ import datetime
 import pytest
 
 import inmanta.graphql.models as models
-from inmanta.graphql.schema import mapper
+import inmanta.graphql.schema as schema
+import strawberry
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
+from strawberry.schema.config import StrawberryConfig
+from strawberry.types import Info
+from strawberry.types.info import ContextType
+from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader
 
 
 @pytest.fixture
-def async_engine() -> AsyncEngine:
-    engine = create_async_engine("sqlite+aiosqlite:///database.db", echo="debug")
-    return engine
-
-
-@pytest.fixture
-def async_session(async_engine):
-    return async_sessionmaker(async_engine)
-
-
-@pytest.fixture
-async def setup_database(async_engine, async_session):
+async def setup_database(postgres_db, database_name):
     # Initialize DB
-    async with async_engine.begin() as conn:
-        await conn.run_sync(models.Base.metadata.drop_all)
-        await conn.run_sync(models.Base.metadata.create_all)
-
-        async with async_session() as session:
-            project_1 = models.Project(
-                id="00000000-1234-5678-1234-000000000001",
-                name="test-proj-1",
-                environments=[
-                    models.Environment(
-                        id="11111111-1234-5678-1234-000000000001",
-                        name="test-env-1",
-                        expert_mode_on=False,
-                        halted=False,
-                        notifications=[
-                            models.Notification(
-                                id="22222222-1234-5678-1234-000000000000",
-                                created=datetime.datetime.now(),
-                                title="New notification",
-                                message="This is a notification",
-                                severity="message",
-                                read=False,
-                                cleared=False,
-                                uri=None,
-                            ),
-                            models.Notification(
-                                id="22222222-1234-5678-1234-000000000001",
-                                created=datetime.datetime.now(),
-                                title="Another notification",
-                                message="This is another notification",
-                                severity="error",
-                                read=False,
-                                cleared=False,
-                                uri=None,
-                            ),
-                        ],
-                        settings=[
-                            models.EnvironmentSetting(
-                                name="setting for env test-env-1",
-                                type="str",
-                                default="default",
-                                recompile=False,
-                                update_model=False,
-                                agent_restart=False,
-                                doc="this is env_setting_1",
-                            ),
-                            models.EnvironmentSetting(
-                                name="another setting for env test-env-1",
-                                type="str",
-                                default="default",
-                                recompile=False,
-                                update_model=False,
-                                agent_restart=False,
-                                doc="this is env_setting_1",
-                            ),
-                        ],
-                    )
-                ],
-            )
-            project_2 = models.Project(
-                id="00000000-1234-5678-1234-100000000001",
-                name="test-proj-2",
-                environments=[
-                    models.Environment(
-                        id="11111111-1234-5678-1234-100000000001",
-                        name="test-env-2",
-                        expert_mode_on=False,
-                        halted=False,
-                        notifications=[
-                            models.Notification(
-                                id="22222222-1234-5678-1234-100000000000",
-                                created=datetime.datetime.now(),
-                                title="New notification",
-                                message="This is a notification 2",
-                                severity="message",
-                                read=False,
-                                cleared=False,
-                                uri=None,
-                            ),
-                            models.Notification(
-                                id="22222222-1234-5678-1234-100000000001",
-                                created=datetime.datetime.now(),
-                                title="Another notification",
-                                message="This is another notification 2",
-                                severity="error",
-                                read=False,
-                                cleared=False,
-                                uri=None,
-                            ),
-                        ],
-                        settings=[
-                            models.EnvironmentSetting(
-                                name="setting for env test-env-2",
-                                type="str",
-                                default="default",
-                                recompile=False,
-                                update_model=False,
-                                agent_restart=False,
-                                doc="this is env_setting_1",
-                            ),
-                            models.EnvironmentSetting(
-                                name="another setting for env test-env-2",
-                                type="str",
-                                default="default",
-                                recompile=False,
-                                update_model=False,
-                                agent_restart=False,
-                                doc="this is env_setting_1",
-                            ),
-                        ],
-                    ),
-                    models.Environment(
-                        id="11111111-1234-5678-1234-100000000002",
-                        name="test-env-2",
-                        expert_mode_on=False,
-                        halted=False,
-                        notifications=[
-                            models.Notification(
-                                id="22222222-1234-5678-1234-200000000000",
-                                created=datetime.datetime.now(),
-                                title="New notification",
-                                message="This is a notification 3",
-                                severity="message",
-                                read=False,
-                                cleared=False,
-                                uri=None,
-                            ),
-                            models.Notification(
-                                id="22222222-1234-5678-1234-200000000001",
-                                created=datetime.datetime.now(),
-                                title="Another notification",
-                                message="This is another notification 4",
-                                severity="error",
-                                read=False,
-                                cleared=False,
-                                uri=None,
-                            ),
-                        ],
-                        settings=[
-                            models.EnvironmentSetting(
-                                name="setting for env test-env-3",
-                                type="str",
-                                default="default",
-                                recompile=False,
-                                update_model=False,
-                                agent_restart=False,
-                                doc="this is env_setting_1",
-                            ),
-                            models.EnvironmentSetting(
-                                name="another setting for env test-env-4",
-                                type="str",
-                                default="default",
-                                recompile=False,
-                                update_model=False,
-                                agent_restart=False,
-                                doc="this is env_setting_1",
-                            ),
-                        ],
-                    ),
-                ],
-            )
-            session.add_all([project_1, project_2])
-            await session.commit()
-            await session.flush()
-        mapper.finalize()
+    conn_string = (
+        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
+    )
+    # Force reinitialization of schema with the correct connection string
+    schema.initialize_schema(conn_string)
+    async with schema.get_async_session(conn_string) as session:
+        project_1 = models.Project(
+            id="00000000-1234-5678-1234-000000000001",
+            name="test-proj-1",
+            environments=[
+                models.Environment(
+                    id="11111111-1234-5678-1234-000000000001",
+                    name="test-env-1",
+                    halted=False,
+                    notifications=[
+                        models.Notification(
+                            id="22222222-1234-5678-1234-000000000000",
+                            created=datetime.datetime.now(),
+                            title="New notification",
+                            message="This is a notification",
+                            severity="message",
+                            read=False,
+                            cleared=False,
+                            uri=None,
+                        ),
+                        models.Notification(
+                            id="22222222-1234-5678-1234-000000000001",
+                            created=datetime.datetime.now(),
+                            title="Another notification",
+                            message="This is another notification",
+                            severity="error",
+                            read=False,
+                            cleared=False,
+                            uri=None,
+                        ),
+                    ],
+                    # settings=[
+                    #     models.EnvironmentSetting(
+                    #         name="setting for env test-env-1",
+                    #         type="str",
+                    #         default="default",
+                    #         recompile=False,
+                    #         update_model=False,
+                    #         agent_restart=False,
+                    #         doc="this is env_setting_1",
+                    #     ),
+                    #     models.EnvironmentSetting(
+                    #         name="another setting for env test-env-1",
+                    #         type="str",
+                    #         default="default",
+                    #         recompile=False,
+                    #         update_model=False,
+                    #         agent_restart=False,
+                    #         doc="this is env_setting_1",
+                    #     ),
+                    # ],
+                )
+            ],
+        )
+        project_2 = models.Project(
+            id="00000000-1234-5678-1234-100000000001",
+            name="test-proj-2",
+            environments=[
+                models.Environment(
+                    id="11111111-1234-5678-1234-100000000001",
+                    name="test-env-2",
+                    halted=False,
+                    notifications=[
+                        models.Notification(
+                            id="22222222-1234-5678-1234-100000000000",
+                            created=datetime.datetime.now(),
+                            title="New notification",
+                            message="This is a notification 2",
+                            severity="message",
+                            read=False,
+                            cleared=False,
+                            uri=None,
+                        ),
+                        models.Notification(
+                            id="22222222-1234-5678-1234-100000000001",
+                            created=datetime.datetime.now(),
+                            title="Another notification",
+                            message="This is another notification 2",
+                            severity="error",
+                            read=False,
+                            cleared=False,
+                            uri=None,
+                        ),
+                    ],
+                    # settings=[
+                    #     models.EnvironmentSetting(
+                    #         name="setting for env test-env-2",
+                    #         type="str",
+                    #         default="default",
+                    #         recompile=False,
+                    #         update_model=False,
+                    #         agent_restart=False,
+                    #         doc="this is env_setting_1",
+                    #     ),
+                    #     models.EnvironmentSetting(
+                    #         name="another setting for env test-env-2",
+                    #         type="str",
+                    #         default="default",
+                    #         recompile=False,
+                    #         update_model=False,
+                    #         agent_restart=False,
+                    #         doc="this is env_setting_1",
+                    #     ),
+                    # ],
+                ),
+                models.Environment(
+                    id="11111111-1234-5678-1234-100000000002",
+                    name="test-env-3",
+                    halted=False,
+                    notifications=[
+                        models.Notification(
+                            id="22222222-1234-5678-1234-200000000000",
+                            created=datetime.datetime.now(),
+                            title="New notification",
+                            message="This is a notification 3",
+                            severity="message",
+                            read=False,
+                            cleared=False,
+                            uri=None,
+                        ),
+                        models.Notification(
+                            id="22222222-1234-5678-1234-200000000001",
+                            created=datetime.datetime.now(),
+                            title="Another notification",
+                            message="This is another notification 4",
+                            severity="error",
+                            read=False,
+                            cleared=False,
+                            uri=None,
+                        ),
+                    ],
+                    # settings=[
+                    #     models.EnvironmentSetting(
+                    #         name="setting for env test-env-3",
+                    #         type="str",
+                    #         default="default",
+                    #         recompile=False,
+                    #         update_model=False,
+                    #         agent_restart=False,
+                    #         doc="this is env_setting_1",
+                    #     ),
+                    #     models.EnvironmentSetting(
+                    #         name="another setting for env test-env-4",
+                    #         type="str",
+                    #         default="default",
+                    #         recompile=False,
+                    #         update_model=False,
+                    #         agent_restart=False,
+                    #         doc="this is env_setting_1",
+                    #     ),
+                    # ],
+                ),
+            ],
+        )
+        session.add_all([project_1, project_2])
+        await session.commit()
+        await session.flush()
+        schema.mapper.finalize()
 
 
 async def test_query_projects(server, client, setup_database):
@@ -220,6 +212,17 @@ async def test_query_projects(server, client, setup_database):
         edges {
             node {
               id
+              projectRelationship {
+                id
+                name
+                environments {
+                    edges {
+                        node {
+                            name
+                        }
+                    }
+                }
+              }
             }
         }
     }
