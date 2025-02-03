@@ -1,0 +1,6 @@
+description: Add support for native types in plugins.
+issue-nr: 8577
+change-type: minor
+destination-branches: [master, iso8, iso7]
+sections:
+  minor-improvement: "{{description}}"

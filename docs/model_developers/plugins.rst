@@ -15,8 +15,36 @@ plugins with the template engine (Jinja2) to use as filters.
 A plugin is a python function, registered with the platform with the :func:`~inmanta.plugins.plugin`
 decorator. This plugin accepts arguments when called from the DSL and can return a value. Both the
 arguments and the return value must by annotated with the allowed types from the orchestration model.
-Type annotations are provided as a string (Python3 style argument annotation). ``any`` is a special
-type that effectively disables type validation.
+These :term:`DSL` type annotations can be either provided as a string (Python3 style argument annotation):
+
+.. code-block:: python
+    :linenos:
+
+    from inmanta.plugins import plugin
+
+    @plugin
+    def foo(value: "string") -> "int[]":
+        ...
+
+
+or, as the python type that corresponds to the term:`DSL` type at hand. e.g. the following snippet
+is equivalent to the one above:
+
+
+.. code-block:: python
+    :linenos:
+
+    from inmanta.plugins import plugin
+
+    @plugin
+    def foo(value: str) -> list[int]:
+        ...
+
+
+
+``any`` is a special type that effectively disables type validation.
+
+For more information regarding typing in the context of a plugin
 
 Through the arguments of the function, the Python code in the plugin can navigate the orchestration
 model. The compiler takes care of scheduling the execution at the correct point in the model
