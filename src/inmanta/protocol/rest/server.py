@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -33,6 +33,7 @@ from urllib import parse
 
 import pydantic
 import tornado
+from pydantic import ValidationError
 from pyformance import timer
 from tornado import httpserver, iostream, routing, web, websocket
 
@@ -40,7 +41,7 @@ import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta import const, tracing
 from inmanta.data import BaseModel
-from inmanta.protocol import common, exceptions, endpoints
+from inmanta.protocol import common, endpoints, exceptions
 from inmanta.protocol.rest import RESTBase
 from inmanta.protocol.rest.client import match_call
 from inmanta.server import config as opt
@@ -254,7 +255,9 @@ class WSMessage(BaseModel):
 
 class OpenSession(WSMessage):
     action: Literal["OPEN_SESSION"] = "OPEN_SESSION"
-    nodename: str
+    environment_id: uuid.UUID
+    session_name: str
+    node_name: str
     endpoint_names: list[str]
 
 
@@ -273,13 +276,30 @@ class RPC_Call(WSMessage):
 
 class RPC_Reply(WSMessage):
     action: Literal["RPC_REPLY"] = "RPC_REPLY"
+    reply_id: uuid.UUID
     result: ReturnTypes
     code: int
 
 
 type WSMessages = Annotated[OpenSession | CloseSession | RPC_Call | RPC_Reply, pydantic.Field(discriminator="action")]
 
-message_parser = pydantic.TypeAdapter(WSMessage)
+message_parser = pydantic.TypeAdapter(WSMessages)
+
+
+class Session:
+    """A session using websockets"""
+
+    def __init__(self, environment_id: uuid.UUID, session_name: str, node_name: str, endpoint_names: list[str]) -> None:
+        self._seen: float = 0
+        self._environment_id = environment_id
+        self._session_name = session_name
+
+        # migration
+        self._node_name = node_name
+        self._endpoint_names = endpoint_names
+
+    def seen(self) -> None:
+        self._seen = time.monotonic()
 
 
 class WebsocketHandler(tornado.websocket.WebSocketHandler):
@@ -288,36 +308,33 @@ class WebsocketHandler(tornado.websocket.WebSocketHandler):
     def initialize(self, transport: "RESTServer") -> None:
         LOGGER.debug("Starting websocket handler")
         self._server: "RESTServer" = transport
-        self.session_id: Optional[uuid.UUID] = None
-        self_environment_id: Optional[uuid.UUID] = None
-        self._seen: float = time.monotonic()
-        self.endpoint_names: Optional[set[str]] = None
-        self.nodename: Optional[str] = None
-
-    async def open(self, *args: str, **kwargs: str) -> None:
-        if "session_id" not in kwargs or "env_id" not in kwargs:
-            raise exceptions.ServerError("No session and environment id provided.")
-
-        self.session_id = uuid.UUID(kwargs["session_id"])
-        self.environment_id = uuid.UUID(kwargs["env_id"])
+        self._session: Optional[Session] = None
 
     async def on_message(self, message: Union[str, bytes]) -> None:
-        msg = message_parser.validate_json(message)
+        try:
+            msg = message_parser.validate_json(message)
+        except ValidationError:
+            # TODO log this
+            LOGGER.exception("Invalid message")
+            return
 
-        self._seen = time.monotonic()
+        if self._session:
+            self._session.seen()
 
         match msg:
             case OpenSession():
-                self.endpoint_names = msg.endpoint_names
-                self.nodename = msg.nodename
+                self._session = Session(msg.environment_id, msg.session_name, msg.node_name, msg.endpoint_names)
+                self._server.register_session(self._session)
 
             case CloseSession():
                 self._server.close_session(self)
                 self.close()
 
             case RPC_Call():
-                # A request from the client on the server
-                self.add_background_task(self.dispatch_method(msg))
+                if self._session:
+                    # A request from the client on the server
+                    self._server.add_background_task(self.dispatch_method(msg))
+                # TODO: if not valid
 
             case RPC_Reply():
                 # A reply to a request send by the server to the client
@@ -377,22 +394,23 @@ class WebsocketHandler(tornado.websocket.WebSocketHandler):
                 msg,
             )
 
-        if self._client is None:
-            raise Exception("AgentEndpoint not started")
-
         # if reply is none, we don't send the reply
         if method_call.reply_id is not None:
-            await self._client.heartbeat_reply(
-                self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
+            await self.write_message(
+                RPC_Reply(
+                    reply_id=msg.reply_id,
+                    code=response.status_code,
+                    result=response.body,
+                ).model_dump_json()
             )
 
     async def on_ping(self, data: bytes) -> None:
         """Called when we get a ping request from the client. The handler will send a pong back."""
-        self._seen = time.monotonic()
 
     async def on_pong(self, data: bytes) -> None:
         """Called when we get a response to our ping"""
-        self._seen = time.monotonic()
+        if self._session:
+            self._session.seen()
 
     async def on_close(self) -> None:
         self._server.close_session(self)
@@ -417,10 +435,8 @@ class RESTServer(RESTBase):
         self.running = False
         self._http_server = None
 
-        # Session management
-        self._sessions: dict[uuid.UUID, session.Session] = {}
-
-        # Listeners
+        # Session handling
+        self._sessions: dict[(uuid.UUID, str)] = {}
         self.listeners: list[common.SessionListener] = []
 
     def start_request(self) -> None:
@@ -431,9 +447,6 @@ class RESTServer(RESTBase):
         self.inflight_counter -= 1
         if self.inflight_counter == 0:
             self.idle_event.set()
-
-    def validate_sid(self, sid: uuid.UUID) -> bool:
-        return self.session_manager.validate_sid(sid)
 
     def get_global_url_map(
         self, targets: list[inmanta.protocol.endpoints.CallTarget]
@@ -455,11 +468,7 @@ class RESTServer(RESTBase):
         """
         global_url_map: dict[str, dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
 
-        rules: list[routing.Rule] = [
-            routing.Rule(
-                routing.PathMatches("/v2/ws/(?P<env_id>[^/]+)/(?P<session_id>[^/]+)"), WebsocketHandler, {"transport": self}
-            )
-        ]
+        rules: list[routing.Rule] = [routing.Rule(routing.PathMatches("/v2/ws"), WebsocketHandler, {"transport": self})]
         rules.extend(additional_rules)
 
         for url, handler_config in global_url_map.items():
@@ -513,7 +522,23 @@ class RESTServer(RESTBase):
     async def get_status(self) -> Mapping[str, ArgumentTypes]:
         return {"hangtime": self.hangtime, "interval": self.interval, "sessions": len(self._sessions)}
 
-    def add_session_listener(self, listener: common.SessionListener) -> None:
-        self.listeners.append(listener)
+    def register_session(self, session: Session) -> None:
+        """Register a session with the server"""
+        key = (session._environment_id, session._session_name)
+        if key in self._sessions:
+            # TODO: correct exception
+            raise Exception("Duplication session")
 
+        self._sessions[key] = session
 
+        for listener in self.listeners:
+            listener.open(session)
+
+    def get_session(self, environment_id: uuid.UUID, session_name: str) -> Session:
+        """Get the requested session"""
+        key = (environment_id, session_name)
+        if key not in self._sessions:
+            # TODO: correct exception
+            raise KeyError("Duplication session")
+
+        return self._sessions[key]

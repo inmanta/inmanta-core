@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -1055,45 +1055,10 @@ class Result:
         """
         self._callback = fnc
 
-
-class SessionManagerInterface:
-    """
-    An interface for a sessionmanager
-    """
-
-    def validate_sid(self, sid: uuid.UUID) -> bool:
-        """
-        Check if the given sid is a valid session
-        :param sid: The session id
-        :return: True if the session is valid
-        """
-        raise NotImplementedError()
+class Session:
+    pass
 
 
 class SessionListener:
-    async def new_session(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
-        """
-        Notify that a new session was created.
-
-        :param session: The session that was created
-        :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
-                                        method was called. This parameter provides a snapshot which will not change.
-        """
-
-    async def expire(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
-        """
-        Notify that a session expired.
-
-        :param session: The session that was created
-        :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
-                                        method was called. This parameter provides a snapshot which will not change.
-        """
-
-    async def seen(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
-        """
-        Notify that a heartbeat was received for an existing session.
-
-        :param session: The session that was created
-        :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
-                                        method was called. This parameter provides a snapshot which will not change.
-        """
+    def open(self, session: Session) -> None:
+        pass

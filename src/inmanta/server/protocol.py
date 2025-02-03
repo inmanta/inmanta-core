@@ -1,19 +1,19 @@
 """
-    Copyright 2022 Inmanta
+Copyright 2022 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -25,6 +25,7 @@ import time
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
+from datetime import timedelta
 from typing import TYPE_CHECKING, Callable, Mapping, Optional, Union
 
 from tornado import gen, queues, routing, web
@@ -33,8 +34,6 @@ import inmanta.protocol.endpoints
 from inmanta import tracing
 from inmanta.data.model import ExtensionStatus
 from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods
-from inmanta.protocol.common import SessionManagerInterface
-from inmanta.protocol.endpoints import typed_process_response
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
@@ -109,9 +108,10 @@ class Server(endpoints.Endpoint):
         self._slice_sequence: Optional[list[ServerSlice]] = None
         self._handlers: list[routing.Rule] = []
         self.connection_timout = connection_timout
+        self.sessions_handler = SessionManager()
+        self.add_slice(self.sessions_handler)
 
-        self.rest_server = server.RESTServer(self, self.id)
-        self._transport = self.rest_server
+        self._transport = server.RESTServer(self, self.id)
         self.add_slice(TransportSlice(self))
         self.running = False
 
@@ -121,6 +121,7 @@ class Server(endpoints.Endpoint):
         """
         self._slices[slice.name] = slice
         self._slice_sequence = None
+        self.add_call_target(slice)
 
     def get_slices(self) -> dict[str, "ServerSlice"]:
         return self._slices
@@ -410,6 +411,191 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | No
         return []
 
 
+class Session:
+    """
+    An environment that segments agents connected to the server. Should only be created in a context with a running event loop.
+    """
+
+    def __init__(
+        self,
+        sessionstore: "SessionManager",
+        sid: uuid.UUID,
+        hang_interval: int,
+        timout: int,
+        tid: uuid.UUID,
+        endpoint_names: set[str],
+        nodename: str,
+        disable_expire_check: bool = False,
+    ) -> None:
+        self._sid = sid
+        self._interval = hang_interval
+        self._timeout = timout
+        self._sessionstore: SessionManager = sessionstore
+        self._seen: float = time.monotonic()
+        self._callhandle: Optional[asyncio.TimerHandle] = None
+        self.expired: bool = False
+
+        self.last_dispatched_call: float = 0
+        self.dispatch_delay = 0.01  # keep at least 10 ms between dispatches
+
+        self.tid: uuid.UUID = tid
+        self.endpoint_names: set[str] = endpoint_names
+        self.nodename: str = nodename
+
+        self._replies: dict[uuid.UUID, asyncio.Future] = {}
+
+        # Disable expiry in certain tests
+        if not disable_expire_check:
+            self.check_expire()
+        self._queue: queues.Queue[Optional[common.Request]] = queues.Queue()
+
+        self.client = ReturnClient(str(sid), self)
+
+    def check_expire(self) -> None:
+        if self.expired:
+            LOGGER.exception("Tried to expire session already expired")
+        now = time.monotonic()
+        ttw = self._timeout + self._seen - now
+        if ttw < 0:
+            expire_coroutine = self.expire(self._seen - now)
+            self._sessionstore.add_background_task(expire_coroutine)
+        else:
+            self._callhandle = asyncio.get_running_loop().call_later(ttw, self.check_expire)
+
+    def get_id(self) -> uuid.UUID:
+        return self._sid
+
+    id = property(get_id)
+
+    async def expire(self, timeout: float) -> None:
+        if self.expired:
+            return
+        self.expired = True
+        if self._callhandle is not None:
+            self._callhandle.cancel()
+        await self._sessionstore.expire(self, timeout)
+
+    def seen(self, endpoint_names: set[str]) -> None:
+        self._seen = time.monotonic()
+        self.endpoint_names = endpoint_names
+
+    async def _handle_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
+        """A function that awaits a future until its value is ready or until timeout. When the call times out, a message is
+        logged. The future itself will be cancelled.
+
+        This method should be called as a background task. Any other exceptions (which should not occur) will be logged in
+        the background task.
+        """
+        try:
+            await asyncio.wait_for(future, timeout)
+        except asyncio.TimeoutError:
+            LOGGER.warning(log_message)
+
+    def put_call(self, call_spec: common.Request, timeout: int = 10, expect_reply: bool = True) -> asyncio.Future:
+        reply_id = uuid.uuid4()
+        future = asyncio.Future()
+
+        LOGGER.debug("Putting call %s: %s %s for agent %s in queue", reply_id, call_spec.method, call_spec.url, self._sid)
+
+        if expect_reply:
+            call_spec.reply_id = reply_id
+            self._sessionstore.add_background_task(
+                self._handle_timeout(
+                    future,
+                    timeout,
+                    f"Call {reply_id}: {call_spec.method} {call_spec.url} for agent {self._sid} timed out.",
+                )
+            )
+            self._replies[reply_id] = future
+        else:
+            future.set_result({"code": 200, "result": None})
+        self._queue.put(call_spec)
+
+        return future
+
+    async def get_calls(self, no_hang: bool) -> Optional[list[common.Request]]:
+        """
+        Get all calls queued for a node. If no work is available, wait until timeout. This method returns none if a call
+        fails.
+        """
+        try:
+            call_list: list[common.Request] = []
+
+            if no_hang:
+                timeout = 0.1
+            else:
+                timeout = self._interval if self._interval > 0.1 else 0.1
+                # We choose to have a minimum of 0.1 as timeout as this is also the value used for no_hang.
+                # Furthermore, the timeout value cannot be zero as this causes an issue with Tornado:
+                # https://github.com/tornadoweb/tornado/issues/3271
+            call = await self._queue.get(timeout=timedelta(seconds=timeout))
+            if call is None:
+                # aborting session
+                return None
+            call_list.append(call)
+            while self._queue.qsize() > 0:
+                call = await self._queue.get()
+                if call is None:
+                    # aborting session
+                    return None
+                call_list.append(call)
+
+            return call_list
+
+        except gen.TimeoutError:
+            return None
+
+    def set_reply(self, reply_id: uuid.UUID, data: JsonType) -> None:
+        LOGGER.log(3, "Received Reply: %s", reply_id)
+        if reply_id in self._replies:
+            future: asyncio.Future = self._replies[reply_id]
+            del self._replies[reply_id]
+            if not future.done():
+                future.set_result(data)
+        else:
+            LOGGER.debug("Received Reply that is unknown: %s", reply_id)
+
+    def get_client(self) -> ReturnClient:
+        return self.client
+
+    def abort(self) -> None:
+        "Send poison pill to signal termination."
+        self._queue.put(None)
+
+    async def expire_and_abort(self, timeout: float) -> None:
+        await self.expire(timeout)
+        self.abort()
+
+
+class SessionListener:
+    async def new_session(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
+        """
+        Notify that a new session was created.
+
+        :param session: The session that was created
+        :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
+                                        method was called. This parameter provides a snapshot which will not change.
+        """
+
+    async def expire(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
+        """
+        Notify that a session expired.
+
+        :param session: The session that was created
+        :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
+                                        method was called. This parameter provides a snapshot which will not change.
+        """
+
+    async def seen(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
+        """
+        Notify that a heartbeat was received for an existing session.
+
+        :param session: The session that was created
+        :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
+                                        method was called. This parameter provides a snapshot which will not change.
+        """
+
+
 # Internals
 class TransportSlice(ServerSlice):
     """Slice to manage the listening socket"""
@@ -455,7 +641,7 @@ class TransportSlice(ServerSlice):
         }
 
 
-class SessionManager(ServerSlice, SessionManagerInterface):
+class SessionManager(ServerSlice):
     """
     A service that receives method calls over one or more transports
     """
@@ -514,8 +700,7 @@ class SessionManager(ServerSlice, SessionManagerInterface):
             if self.is_stopping():
                 raise ShutdownInProgress()
             if sid not in self._sessions:
-                LOGGER.debug(f"New session with id {sid} on node {nodename} for env {tid} with endpoints {endpoint_names}")
-                session = Session(self, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
+                session = self.new_session(sid, tid, endpoint_names, nodename)
                 self._sessions[sid] = session
                 endpoint_names_snapshot = set(session.endpoint_names)
                 await asyncio.gather(*[listener.new_session(session, endpoint_names_snapshot) for listener in self.listeners])
@@ -526,6 +711,10 @@ class SessionManager(ServerSlice, SessionManagerInterface):
                 await asyncio.gather(*[listener.seen(session, endpoint_names_snapshot) for listener in self.listeners])
 
             return session
+
+    def new_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: set[str], nodename: str) -> Session:
+        LOGGER.debug(f"New session with id {sid} on node {nodename} for env {tid} with endpoints {endpoint_names}")
+        return Session(self, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
 
     async def expire(self, session: Session, timeout: float) -> None:
         async with self._sessions_lock:
@@ -611,4 +800,4 @@ class LocalClient(TypedClient):
         spec = method_properties.build_call(args, kwargs)
         method_config = self._get_op_mapping(spec.url, spec.method)
         response = await self._server._transport._execute_call(method_config, spec.body, spec.headers)
-        return typed_process_response(method_properties, common.Result(code=response.status_code, result=response.body))
+        return self._process_response(method_properties, common.Result(code=response.status_code, result=response.body))
