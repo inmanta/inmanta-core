@@ -1,0 +1,8 @@
+---
+description: "Make the `get_scheduler_status` endpoint return a 404 if the scheduler is not running."
+issue-nr: 8516
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso8]
+sections:
+  bugfix: "{{description}}"
