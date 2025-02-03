@@ -135,6 +135,28 @@ class Type(Locatable):
         """
         raise NotImplementedError(f"Not implemented for {self}")
 
+    def issupertype(self, other: "Type") -> bool:
+        """
+        Returns True iff this DSL type is a supertype of the other type in a non-trivial way.
+
+        Raises NotImplementedError if this DSL type has no special supertyping rules (i.e. most types).
+        """
+        # TODO: docstring
+        raise NotImplementedError()
+
+    def issubtype(self, other: "Type") -> bool:
+        """
+        Returns True iff this DSL type is a subtype of the other type.
+
+        False negatives may be unavoidable in complex cases. Does not return false positives.
+        """
+        if self == other:
+            return True
+        try:
+            return other.issupertype(self)
+        except NotImplementedError:
+            return False
+
     def __eq__(self, other: object) -> bool:
         if type(self) != Type:  # noqa: E721
             # Not for children
@@ -224,6 +246,9 @@ class NullableType(Type):
     def has_custom_to_python(self) -> bool:
         return self.element_type.has_custom_to_python()
 
+    def issupertype(self, other: "Type") -> bool:
+        return other == self.element_type
+
 
 class Any(Type):
     """
@@ -240,6 +265,9 @@ class Any(Type):
 
     def has_custom_to_python(self) -> bool:
         return False
+
+    def issupertype(self, other: "Type") -> bool:
+        return True
 
     def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721
@@ -879,6 +907,15 @@ class Union(Type):
     def is_primitive(self) -> bool:
         return all(tp.is_primitive() for tp in self.types)
 
+    def issupertype(self, other: "Type") -> bool:
+        return other in self.types
+
+    def issubtype(self, other: "Type") -> bool:
+        return all(
+            element_type.issubtype(other)
+            for element_type in self.types
+        )
+
 
 @stable_api
 class Literal(Union):
@@ -996,6 +1033,10 @@ class ConstraintType(NamedType):
     def to_python(self, instance: object) -> "object":
         assert self.basetype is not None
         return self.basetype.to_python(instance)
+
+    def issubtype(self, other: "Type") -> bool:
+        assert self.basetype is not None
+        return super().issubtype(other) or self.basetype.issubtype(other)
 
 
 def create_function(tp: ConstraintType, expression: "ExpressionStatement"):

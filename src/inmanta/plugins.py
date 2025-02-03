@@ -231,6 +231,9 @@ class Null(inmanta_type.Type):
         assert instance is None
         return None
 
+    def issubtype(self, other: "Type") -> bool:
+        return super().issubtype(other) or isinstance(other, inmanta_type.NullableType)
+
     def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721
 
@@ -249,13 +252,13 @@ python_to_model = {
     numbers.Number: inmanta_type.Number(),
     int: inmanta_type.Integer(),
     bool: inmanta_type.Bool(),
-    dict: inmanta_type.TypedDict(inmanta_type.Type()),
-    typing.Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
-    Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
+    dict: inmanta_type.TypedDict(inmanta_type.Any()),
+    typing.Mapping: inmanta_type.TypedDict(inmanta_type.Any()),
+    Mapping: inmanta_type.TypedDict(inmanta_type.Any()),
     list: inmanta_type.List(),
     typing.Sequence: inmanta_type.List(),
     Sequence: inmanta_type.List(),
-    object: inmanta_type.Type(),
+    object: inmanta_type.Any(),
 }
 
 
@@ -267,7 +270,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     """
     # Any to any
     if python_type is typing.Any:
-        return inmanta_type.Type()
+        return inmanta_type.Any()
 
     # None to None
     if python_type is type(None) or python_type is None:
@@ -299,7 +302,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
             if origin in [collections.abc.Mapping, dict, typing.Mapping]:
                 args = typing_inspect.get_args(python_type)
                 if not args:
-                    return inmanta_type.TypedDict(inmanta_type.Type())
+                    return inmanta_type.TypedDict(inmanta_type.Any())
 
                 if not issubclass(args[0], str):
                     raise TypingException(
@@ -307,7 +310,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
                     )
 
                 if len(args) == 1:
-                    return inmanta_type.TypedDict(inmanta_type.Type())
+                    return inmanta_type.TypedDict(inmanta_type.Any())
 
                 return inmanta_type.TypedDict(to_dsl_type(args[1]))
             else:
@@ -350,7 +353,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
         )
     )
 
-    return inmanta_type.Type()
+    return inmanta_type.Any()
 
 
 def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, value: object) -> object:

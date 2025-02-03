@@ -16,16 +16,20 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import inspect
 import typing
 from functools import reduce
+from typing import Optional
 
 import pytest
 from more_itertools import pairwise
 
-from inmanta.ast import Location, Namespace, RuntimeException
+import utils
+from inmanta import plugins
+from inmanta.ast import Location, Namespace, RuntimeException, statements
 from inmanta.ast.attribute import Attribute
 from inmanta.ast.entity import Entity
-from inmanta.ast.type import TYPES, Bool, Integer, LiteralDict, LiteralList, NullableType, Number, String, Type, TypedList
+from inmanta.ast.type import TYPES, Any, ConstraintType, Bool, Float, Integer, LiteralDict, LiteralList, NullableType, Number, String, Type, TypedDict, TypedList, Union
 from inmanta.execute.util import NoneValue
 
 
@@ -74,7 +78,7 @@ def create_type(base_type: type[Type], multi: bool = False, nullable: bool = Fal
     return reduce(lambda acc, t: t(acc), transformations, base)
 
 
-@pytest.mark.parametrize("base_type", [Bool, Integer, LiteralDict, LiteralList, Number, String])
+@pytest.mark.parametrize("base_type", [Bool, Integer, Float, LiteralDict, LiteralList, Number, String])
 def test_type_equals_simple(base_type: type[Type]) -> None:
     assert create_type(base_type) == create_type(base_type)
 
@@ -94,3 +98,67 @@ def test_type_equals_transformations() -> None:
     for t1, t2 in pairwise(l1):
         assert t1 != t2
         assert t2 != t1
+
+
+def make_typedef(name: str, base_type: Type, constraint: Optional[statements.ExpressionStatement] = None) -> ConstraintType:
+    tp = ConstraintType(Namespace("mymodule", parent=Namespace("__root__")), name)
+    tp.basetype = base_type
+    tp.constraint = (
+        constraint
+        if constraint is not None
+        # typedef <name> as <base_type> matching true
+        else statements.Literal(True)
+    )
+    return tp
+
+
+def test_issubtype_of_own_python_type() -> None:
+    """
+    Verify round-trip compatibility of tp.issubtype(to_dsl_type(tp.as_python_type_string()))
+    """
+    verified_types: set[type[Type]] = set()
+
+    primitives: Sequence[Type] = [Bool(), Integer(), Float(), String()]
+    for tp in [
+        *primitives,
+        *[NullableType(primitive) for primitive in primitives],
+        *[make_typedef("mytype", primitive) for primitive in primitives],
+        Union(primitives),
+        NullableType(Union(primitives)),
+        Any(),
+        *[TypedList(primitive) for primitive in primitives],
+        *[TypedDict(primitive) for primitive in primitives],
+        plugins.Null(),
+    ]:
+        assert tp.issubtype(plugins.to_dsl_type(eval(tp.as_python_type_string())))
+        verified_types.add(type(tp))
+
+    all_types = {tp_cls for tp_cls in utils.get_all_subclasses(Type) if not inspect.isabstract(tp_cls)}
+    assert verified_types == all_types
+
+
+def test_issubtype_widening() -> None:
+    """
+    Verify issubtype accepts wider types and rejects narrower or unrelated ones.
+    """
+    def verify(narrow: Type, wide: Type) -> None:
+        assert narrow.issubtype(wide)
+        assert not wide.issubtype(narrow)
+
+    verify(Integer(), Union([Integer(), String()]))
+    verify(Integer(), NullableType(Integer()))
+    verify(Integer(), Any())
+
+    assert not Integer().issubtype(String())
+
+    verify(plugins.Null(), NullableType(Integer()))
+
+    verify(Union([Integer(), String()]), Union([Integer(), TypedList(Float()), String()]))
+    verify(Union([Integer(), String()]), Any())
+
+    verify(make_typedef("mytype", Integer()), Integer())
+    verify(make_typedef("mytype", Integer()), NullableType(Integer()))
+    verify(make_typedef("mytype", Integer()), Union([Integer(), String()]))
+    verify(make_typedef("mytype", Integer()), Any())
+    assert not make_typedef("mytype", Integer()).issubtype(String())
+    assert not make_typedef("mytype", Integer()).issubtype(make_typedef("othertype", Integer()))
