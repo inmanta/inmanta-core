@@ -17,18 +17,14 @@
 """
 
 import datetime
+import subprocess
+import sys
+import uuid
 
 import pytest
 
 import inmanta.graphql.models as models
 import inmanta.graphql.schema as schema
-import strawberry
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.ext.asyncio.engine import AsyncEngine
-from strawberry.schema.config import StrawberryConfig
-from strawberry.types import Info
-from strawberry.types.info import ContextType
-from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader
 
 
 @pytest.fixture
@@ -41,16 +37,16 @@ async def setup_database(postgres_db, database_name):
     schema.initialize_schema(conn_string)
     async with schema.get_async_session(conn_string) as session:
         project_1 = models.Project(
-            id="00000000-1234-5678-1234-000000000001",
+            id=uuid.UUID("00000000-1234-5678-1234-000000000001"),
             name="test-proj-1",
-            environments=[
+            environment=[
                 models.Environment(
-                    id="11111111-1234-5678-1234-000000000001",
+                    id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
                     name="test-env-1",
                     halted=False,
-                    notifications=[
+                    notification=[
                         models.Notification(
-                            id="22222222-1234-5678-1234-000000000000",
+                            id=uuid.UUID("22222222-1234-5678-1234-000000000000"),
                             created=datetime.datetime.now(),
                             title="New notification",
                             message="This is a notification",
@@ -60,7 +56,7 @@ async def setup_database(postgres_db, database_name):
                             uri=None,
                         ),
                         models.Notification(
-                            id="22222222-1234-5678-1234-000000000001",
+                            id=uuid.UUID("22222222-1234-5678-1234-000000000001"),
                             created=datetime.datetime.now(),
                             title="Another notification",
                             message="This is another notification",
@@ -94,16 +90,16 @@ async def setup_database(postgres_db, database_name):
             ],
         )
         project_2 = models.Project(
-            id="00000000-1234-5678-1234-100000000001",
+            id=uuid.UUID("00000000-1234-5678-1234-100000000001"),
             name="test-proj-2",
-            environments=[
+            environment=[
                 models.Environment(
-                    id="11111111-1234-5678-1234-100000000001",
+                    id=uuid.UUID("11111111-1234-5678-1234-100000000001"),
                     name="test-env-2",
                     halted=False,
-                    notifications=[
+                    notification=[
                         models.Notification(
-                            id="22222222-1234-5678-1234-100000000000",
+                            id=uuid.UUID("22222222-1234-5678-1234-100000000000"),
                             created=datetime.datetime.now(),
                             title="New notification",
                             message="This is a notification 2",
@@ -113,7 +109,7 @@ async def setup_database(postgres_db, database_name):
                             uri=None,
                         ),
                         models.Notification(
-                            id="22222222-1234-5678-1234-100000000001",
+                            id=uuid.UUID("22222222-1234-5678-1234-100000000001"),
                             created=datetime.datetime.now(),
                             title="Another notification",
                             message="This is another notification 2",
@@ -145,12 +141,12 @@ async def setup_database(postgres_db, database_name):
                     # ],
                 ),
                 models.Environment(
-                    id="11111111-1234-5678-1234-100000000002",
+                    id=uuid.UUID("11111111-1234-5678-1234-100000000002"),
                     name="test-env-3",
                     halted=False,
-                    notifications=[
+                    notification=[
                         models.Notification(
-                            id="22222222-1234-5678-1234-200000000000",
+                            id=uuid.UUID("22222222-1234-5678-1234-200000000000"),
                             created=datetime.datetime.now(),
                             title="New notification",
                             message="This is a notification 3",
@@ -160,7 +156,7 @@ async def setup_database(postgres_db, database_name):
                             uri=None,
                         ),
                         models.Notification(
-                            id="22222222-1234-5678-1234-200000000001",
+                            id=uuid.UUID("22222222-1234-5678-1234-200000000001"),
                             created=datetime.datetime.now(),
                             title="Another notification",
                             message="This is another notification 4",
@@ -199,23 +195,30 @@ async def setup_database(postgres_db, database_name):
         schema.mapper.finalize()
 
 
+async def test_generate_sqlalchemy_models(postgres_db, database_name):
+    conn_string = (
+        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
+    )
+    subprocess.run(["sqlacodegen", conn_string])
+
+
 async def test_query_projects(server, client, setup_database):
     """
-    Display basic querying capabilities
+    Display basic querying capabilities with recursive relationships
     """
     query = """
 {
   projects {
     id
     name
-    environments {
+    environment {
         edges {
             node {
               id
-              projectRelationship {
+              project_ {
                 id
                 name
-                environments {
+                environment {
                     edges {
                         node {
                             name
@@ -235,15 +238,50 @@ async def test_query_projects(server, client, setup_database):
         "data": {
             "projects": [
                 {
-                    "environments": {"edges": [{"node": {"id": "11111111-1234-5678-1234-000000000001"}}]},
+                    "environment": {
+                        "edges": [
+                            {
+                                "node": {
+                                    "id": "11111111-1234-5678-1234-000000000001",
+                                    "project_": {
+                                        "environment": {"edges": [{"node": {"name": "test-env-1"}}]},
+                                        "id": "00000000-1234-5678-1234-000000000001",
+                                        "name": "test-proj-1",
+                                    },
+                                }
+                            }
+                        ]
+                    },
                     "id": "00000000-1234-5678-1234-000000000001",
                     "name": "test-proj-1",
                 },
                 {
-                    "environments": {
+                    "environment": {
                         "edges": [
-                            {"node": {"id": "11111111-1234-5678-1234-100000000001"}},
-                            {"node": {"id": "11111111-1234-5678-1234-100000000002"}},
+                            {
+                                "node": {
+                                    "id": "11111111-1234-5678-1234-100000000001",
+                                    "project_": {
+                                        "environment": {
+                                            "edges": [{"node": {"name": "test-env-2"}}, {"node": {"name": "test-env-3"}}]
+                                        },
+                                        "id": "00000000-1234-5678-1234-100000000001",
+                                        "name": "test-proj-2",
+                                    },
+                                }
+                            },
+                            {
+                                "node": {
+                                    "id": "11111111-1234-5678-1234-100000000002",
+                                    "project_": {
+                                        "environment": {
+                                            "edges": [{"node": {"name": "test-env-2"}}, {"node": {"name": "test-env-3"}}]
+                                        },
+                                        "id": "00000000-1234-5678-1234-100000000001",
+                                        "name": "test-proj-2",
+                                    },
+                                }
+                            },
                         ]
                     },
                     "id": "00000000-1234-5678-1234-100000000001",
@@ -309,7 +347,7 @@ async def test_query_path(server, client, setup_database):
 {
   projects(id: "00000000-1234-5678-1234-000000000001") {
     id
-    environments {
+    environment {
         edges {
             node {
                 id
@@ -324,7 +362,7 @@ async def test_query_path(server, client, setup_database):
         "data": {
             "projects": [
                 {
-                    "environments": {"edges": [{"node": {"id": "11111111-1234-5678-1234-000000000001", "name": "test-env-1"}}]},
+                    "environment": {"edges": [{"node": {"id": "11111111-1234-5678-1234-000000000001", "name": "test-env-1"}}]},
                     "id": "00000000-1234-5678-1234-000000000001",
                 }
             ]

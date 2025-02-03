@@ -1,21 +1,3 @@
-"""
-    Copyright 2025 Inmanta
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-        http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
-
-    Contact: code@inmanta.com
-"""
-
 import datetime
 import uuid
 from typing import List, Optional
@@ -35,9 +17,10 @@ from sqlalchemy import (
     String,
     Table,
     UniqueConstraint,
+    Uuid,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -57,7 +40,7 @@ class InmantaUser(Base):
     __tablename__ = "inmanta_user"
     __table_args__ = (PrimaryKeyConstraint("id", name="user_pkey"), UniqueConstraint("username", name="user_username_key"))
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     username: Mapped[str] = mapped_column(String)
     password_hash: Mapped[str] = mapped_column(String)
     auth_method: Mapped[str] = mapped_column(Enum("database", "oidc", name="auth_method"))
@@ -67,7 +50,7 @@ class Project(Base):
     __tablename__ = "project"
     __table_args__ = (PrimaryKeyConstraint("id", name="project_pkey"), UniqueConstraint("name", name="project_name_key"))
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     name: Mapped[str] = mapped_column(String)
 
     environment: Mapped[List["Environment"]] = relationship("Environment", back_populates="project_")
@@ -89,9 +72,9 @@ class Environment(Base):
         Index("environment_name_project_index", "project", "name", unique=True),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     name: Mapped[str] = mapped_column(String)
-    project: Mapped[uuid.UUID] = mapped_column(UUID)
+    project: Mapped[uuid.UUID] = mapped_column(Uuid)
     halted: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     repo_url: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
     repo_branch: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
@@ -102,27 +85,27 @@ class Environment(Base):
     is_marked_for_deletion: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
     project_: Mapped["Project"] = relationship("Project", back_populates="environment")
-    agentprocess: Mapped[List["AgentProcess"]] = relationship("AgentProcess", back_populates="environment_")
+    agentprocess: Mapped[List["Agentprocess"]] = relationship("Agentprocess", back_populates="environment_")
     code: Mapped[List["Code"]] = relationship("Code", back_populates="environment_")
     compile: Mapped[List["Compile"]] = relationship("Compile", back_populates="environment_")
-    configurationmodel: Mapped[List["ConfigurationModel"]] = relationship("ConfigurationModel", back_populates="environment_")
-    discoveredresource: Mapped[List["DiscoveredResource"]] = relationship("DiscoveredResource", back_populates="environment_")
-    environmentmetricsgauge: Mapped[List["EnvironmentMetricsGauge"]] = relationship(
-        "EnvironmentMetricsGauge", back_populates="environment_"
+    configurationmodel: Mapped[List["Configurationmodel"]] = relationship("Configurationmodel", back_populates="environment_")
+    discoveredresource: Mapped[List["Discoveredresource"]] = relationship("Discoveredresource", back_populates="environment_")
+    environmentmetricsgauge: Mapped[List["Environmentmetricsgauge"]] = relationship(
+        "Environmentmetricsgauge", back_populates="environment_"
     )
-    environmentmetricstimer: Mapped[List["EnvironmentMetricsTimer"]] = relationship(
-        "EnvironmentMetricsTimer", back_populates="environment_"
+    environmentmetricstimer: Mapped[List["Environmentmetricstimer"]] = relationship(
+        "Environmentmetricstimer", back_populates="environment_"
     )
     notification: Mapped[List["Notification"]] = relationship("Notification", back_populates="environment_")
     parameter: Mapped[List["Parameter"]] = relationship("Parameter", back_populates="environment_")
     resource_persistent_state: Mapped[List["ResourcePersistentState"]] = relationship(
         "ResourcePersistentState", back_populates="environment_"
     )
-    unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", back_populates="environment_")
+    unknownparameter: Mapped[List["Unknownparameter"]] = relationship("Unknownparameter", back_populates="environment_")
     agent: Mapped[List["Agent"]] = relationship("Agent", back_populates="environment_")
 
 
-class AgentProcess(Base):
+class Agentprocess(Base):
     __tablename__ = "agentprocess"
     __table_args__ = (
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="agentprocess_environment_fkey"),
@@ -134,14 +117,14 @@ class AgentProcess(Base):
     )
 
     hostname: Mapped[str] = mapped_column(String)
-    environment: Mapped[uuid.UUID] = mapped_column(UUID)
-    sid: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid)
+    sid: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     first_seen: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     last_seen: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     expired: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="agentprocess")
-    agentinstance: Mapped[List["AgentInstance"]] = relationship("AgentInstance", back_populates="agentprocess")
+    agentinstance: Mapped[List["Agentinstance"]] = relationship("Agentinstance", back_populates="agentprocess")
 
 
 class Code(Base):
@@ -151,7 +134,7 @@ class Code(Base):
         PrimaryKeyConstraint("environment", "version", "resource", name="code_pkey"),
     )
 
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     resource: Mapped[str] = mapped_column(String, primary_key=True)
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
     source_refs: Mapped[Optional[dict]] = mapped_column(JSONB)
@@ -175,8 +158,8 @@ class Compile(Base):
         Index("compile_substitute_compile_id_index", "substitute_compile_id"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    environment: Mapped[uuid.UUID] = mapped_column(UUID)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid)
     requested_environment_variables: Mapped[dict] = mapped_column(JSONB)
     mergeable_environment_variables: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     soft_delete: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
@@ -188,9 +171,9 @@ class Compile(Base):
     force_update: Mapped[Optional[bool]] = mapped_column(Boolean)
     success: Mapped[Optional[bool]] = mapped_column(Boolean)
     version: Mapped[Optional[int]] = mapped_column(Integer)
-    remote_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID)
+    remote_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
     handled: Mapped[Optional[bool]] = mapped_column(Boolean)
-    substitute_compile_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID)
+    substitute_compile_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
     compile_data: Mapped[Optional[dict]] = mapped_column(JSONB)
     partial: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
     removed_resource_sets: Mapped[Optional[list]] = mapped_column(
@@ -211,7 +194,7 @@ class Compile(Base):
     report: Mapped[List["Report"]] = relationship("Report", back_populates="compile_")
 
 
-class ConfigurationModel(Base):
+class Configurationmodel(Base):
     __tablename__ = "configurationmodel"
     __table_args__ = (
         ForeignKeyConstraint(
@@ -223,7 +206,7 @@ class ConfigurationModel(Base):
     )
 
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     undeployable: Mapped[list] = mapped_column(ARRAY(String()))
     skipped_for_undeployable: Mapped[list] = mapped_column(ARRAY(String()))
     is_suitable_for_partial_compiles: Mapped[bool] = mapped_column(Boolean)
@@ -237,11 +220,11 @@ class ConfigurationModel(Base):
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="configurationmodel")
     dryrun: Mapped[List["Dryrun"]] = relationship("Dryrun", back_populates="configurationmodel")
     resource: Mapped[List["Resource"]] = relationship("Resource", back_populates="configurationmodel")
-    resourceaction: Mapped[List["ResourceAction"]] = relationship("ResourceAction", back_populates="configurationmodel")
-    unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", back_populates="configurationmodel")
+    resourceaction: Mapped[List["Resourceaction"]] = relationship("Resourceaction", back_populates="configurationmodel")
+    unknownparameter: Mapped[List["Unknownparameter"]] = relationship("Unknownparameter", back_populates="configurationmodel")
 
 
-class DiscoveredResource(Base):
+class Discoveredresource(Base):
     __tablename__ = "discoveredresource"
     __table_args__ = (
         ForeignKeyConstraint(
@@ -250,7 +233,7 @@ class DiscoveredResource(Base):
         PrimaryKeyConstraint("environment", "discovered_resource_id", name="discoveredresource_pkey"),
     )
 
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     discovered_resource_id: Mapped[str] = mapped_column(String, primary_key=True)
     values: Mapped[dict] = mapped_column(JSONB)
     discovered_at: Mapped[datetime.datetime] = mapped_column(DateTime(True))
@@ -259,7 +242,7 @@ class DiscoveredResource(Base):
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="discoveredresource")
 
 
-class EnvironmentMetricsGauge(Base):
+class Environmentmetricsgauge(Base):
     __tablename__ = "environmentmetricsgauge"
     __table_args__ = (
         ForeignKeyConstraint(
@@ -268,7 +251,7 @@ class EnvironmentMetricsGauge(Base):
         PrimaryKeyConstraint("environment", "timestamp", "metric_name", "category", name="environmentmetricsgauge_pkey"),
     )
 
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     metric_name: Mapped[str] = mapped_column(String, primary_key=True)
     timestamp: Mapped[datetime.datetime] = mapped_column(DateTime(True), primary_key=True)
     count: Mapped[int] = mapped_column(Integer)
@@ -277,7 +260,7 @@ class EnvironmentMetricsGauge(Base):
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="environmentmetricsgauge")
 
 
-class EnvironmentMetricsTimer(Base):
+class Environmentmetricstimer(Base):
     __tablename__ = "environmentmetricstimer"
     __table_args__ = (
         ForeignKeyConstraint(
@@ -286,7 +269,7 @@ class EnvironmentMetricsTimer(Base):
         PrimaryKeyConstraint("environment", "timestamp", "metric_name", "category", name="environmentmetricstimer_pkey"),
     )
 
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     metric_name: Mapped[str] = mapped_column(String, primary_key=True)
     timestamp: Mapped[datetime.datetime] = mapped_column(DateTime(True), primary_key=True)
     count: Mapped[int] = mapped_column(Integer)
@@ -304,8 +287,8 @@ class Notification(Base):
         Index("notification_env_created_id_index", "environment", "created", "id"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     created: Mapped[datetime.datetime] = mapped_column(DateTime(True))
     title: Mapped[str] = mapped_column(String)
     message: Mapped[str] = mapped_column(String)
@@ -331,10 +314,10 @@ class Parameter(Base):
         Index("parameter_updated_index", "updated"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     name: Mapped[str] = mapped_column(String)
     value: Mapped[str] = mapped_column(String, server_default=text("''::character varying"))
-    environment: Mapped[uuid.UUID] = mapped_column(UUID)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid)
     source: Mapped[str] = mapped_column(String)
     expires: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     resource_id: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
@@ -358,7 +341,7 @@ class ResourcePersistentState(Base):
         Index("resource_persistent_state_environment_resource_type_resourc_idx", "environment", "resource_type", "resource_id"),
     )
 
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     resource_id: Mapped[str] = mapped_column(String, primary_key=True)
     last_non_deploying_status: Mapped[str] = mapped_column(
         Enum(
@@ -399,11 +382,11 @@ class Scheduler(Environment):
         PrimaryKeyConstraint("environment", name="scheduler_pkey"),
     )
 
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     last_processed_model_version: Mapped[Optional[int]] = mapped_column(Integer)
 
 
-class AgentInstance(Base):
+class Agentinstance(Base):
     __tablename__ = "agentinstance"
     __table_args__ = (
         ForeignKeyConstraint(["process"], ["agentprocess.sid"], ondelete="CASCADE", name="agentinstance_process_fkey"),
@@ -414,13 +397,13 @@ class AgentInstance(Base):
         Index("agentinstance_process_index", "process"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    process: Mapped[uuid.UUID] = mapped_column(UUID)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    process: Mapped[uuid.UUID] = mapped_column(Uuid)
     name: Mapped[str] = mapped_column(String)
-    tid: Mapped[uuid.UUID] = mapped_column(UUID)
+    tid: Mapped[uuid.UUID] = mapped_column(Uuid)
     expired: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
 
-    agentprocess: Mapped["AgentProcess"] = relationship("AgentProcess", back_populates="agentinstance")
+    agentprocess: Mapped["Agentprocess"] = relationship("Agentprocess", back_populates="agentinstance")
     agent: Mapped[List["Agent"]] = relationship("Agent", back_populates="agentinstance")
 
 
@@ -437,15 +420,15 @@ class Dryrun(Base):
         Index("dryrun_env_model_index", "environment", "model"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    environment: Mapped[uuid.UUID] = mapped_column(UUID)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid)
     model: Mapped[int] = mapped_column(Integer)
     date: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     total: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     todo: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     resources: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
 
-    configurationmodel: Mapped["ConfigurationModel"] = relationship("ConfigurationModel", back_populates="dryrun")
+    configurationmodel: Mapped["Configurationmodel"] = relationship("Configurationmodel", back_populates="dryrun")
 
 
 class Report(Base):
@@ -457,11 +440,11 @@ class Report(Base):
         Index("report_started_compile_returncode", "compile", "returncode"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     started: Mapped[datetime.datetime] = mapped_column(DateTime(True))
     command: Mapped[str] = mapped_column(String)
     name: Mapped[str] = mapped_column(String)
-    compile: Mapped[uuid.UUID] = mapped_column(UUID)
+    compile: Mapped[uuid.UUID] = mapped_column(Uuid)
     completed: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     errstream: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
     outstream: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
@@ -493,7 +476,7 @@ class Resource(Base):
         Index("resource_resource_id_index", "resource_id"),
     )
 
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     model: Mapped[int] = mapped_column(Integer, primary_key=True)
     resource_id: Mapped[str] = mapped_column(String, primary_key=True)
     agent: Mapped[str] = mapped_column(String)
@@ -520,13 +503,13 @@ class Resource(Base):
     provides: Mapped[Optional[list]] = mapped_column(ARRAY(String()), server_default=text("ARRAY[]::character varying[]"))
     resource_set: Mapped[Optional[str]] = mapped_column(String)
 
-    configurationmodel: Mapped["ConfigurationModel"] = relationship("ConfigurationModel", back_populates="resource")
-    resource_action: Mapped[List["ResourceAction"]] = relationship(
-        "ResourceAction", secondary="resourceaction_resource", back_populates="resource"
+    configurationmodel: Mapped["Configurationmodel"] = relationship("Configurationmodel", back_populates="resource")
+    resource_action: Mapped[List["Resourceaction"]] = relationship(
+        "Resourceaction", secondary="resourceaction_resource", back_populates="resource"
     )
 
 
-class ResourceAction(Base):
+class Resourceaction(Base):
     __tablename__ = "resourceaction"
     __table_args__ = (
         ForeignKeyConstraint(
@@ -541,16 +524,16 @@ class ResourceAction(Base):
         Index("resourceaction_started_index", "started"),
     )
 
-    action_id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    action_id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     action: Mapped[str] = mapped_column(
         Enum("store", "push", "pull", "deploy", "dryrun", "getfact", "other", name="resourceaction_type")
     )
     started: Mapped[datetime.datetime] = mapped_column(DateTime(True))
-    environment: Mapped[uuid.UUID] = mapped_column(UUID)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid)
     version: Mapped[int] = mapped_column(Integer)
     resource_version_ids: Mapped[list] = mapped_column(ARRAY(String()))
     finished: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
-    messages: Mapped[Optional[list]] = mapped_column(ARRAY(JSONB()))
+    messages: Mapped[Optional[list]] = mapped_column(ARRAY(JSONB(astext_type=Text())))
     status: Mapped[Optional[str]] = mapped_column(
         Enum(
             "unavailable",
@@ -573,10 +556,10 @@ class ResourceAction(Base):
     resource: Mapped[List["Resource"]] = relationship(
         "Resource", secondary="resourceaction_resource", back_populates="resource_action"
     )
-    configurationmodel: Mapped["ConfigurationModel"] = relationship("ConfigurationModel", back_populates="resourceaction")
+    configurationmodel: Mapped["Configurationmodel"] = relationship("Configurationmodel", back_populates="resourceaction")
 
 
-class UnknownParameter(Base):
+class Unknownparameter(Base):
     __tablename__ = "unknownparameter"
     __table_args__ = (
         ForeignKeyConstraint(
@@ -591,16 +574,16 @@ class UnknownParameter(Base):
         Index("unknownparameter_resolved_index", "resolved"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     name: Mapped[str] = mapped_column(String)
-    environment: Mapped[uuid.UUID] = mapped_column(UUID)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid)
     source: Mapped[str] = mapped_column(String)
     version: Mapped[int] = mapped_column(Integer)
     resource_id: Mapped[Optional[str]] = mapped_column(String, server_default=text("''::character varying"))
     metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSONB)
     resolved: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
-    configurationmodel: Mapped["ConfigurationModel"] = relationship("ConfigurationModel", back_populates="unknownparameter")
+    configurationmodel: Mapped["Configurationmodel"] = relationship("Configurationmodel", back_populates="unknownparameter")
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="unknownparameter")
 
 
@@ -613,22 +596,22 @@ class Agent(Base):
         Index("agent_id_primary_index", "id_primary"),
     )
 
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    environment: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     name: Mapped[str] = mapped_column(String, primary_key=True)
     last_failover: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     paused: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
-    id_primary: Mapped[Optional[uuid.UUID]] = mapped_column(UUID)
+    id_primary: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
     unpause_on_resume: Mapped[Optional[bool]] = mapped_column(Boolean)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="agent")
-    agentinstance: Mapped["AgentInstance"] = relationship("AgentInstance", back_populates="agent")
+    agentinstance: Mapped["Agentinstance"] = relationship("Agentinstance", back_populates="agent")
 
 
 t_resourceaction_resource = Table(
     "resourceaction_resource",
     Base.metadata,
-    Column("environment", UUID, primary_key=True, nullable=False),
-    Column("resource_action_id", UUID, primary_key=True, nullable=False),
+    Column("environment", Uuid, primary_key=True, nullable=False),
+    Column("resource_action_id", Uuid, primary_key=True, nullable=False),
     Column("resource_id", String, primary_key=True, nullable=False),
     Column("resource_version", Integer, primary_key=True, nullable=False),
     ForeignKeyConstraint(

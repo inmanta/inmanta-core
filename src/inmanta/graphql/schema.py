@@ -57,6 +57,45 @@ class Environment:
             return _environments.all()
 
 
+@mapper.type(inmanta.graphql.models.AgentProcess)
+class AgentProcess:
+
+    @staticmethod
+    async def get_environments(id: str | None = strawberry.UNSET) -> typing.Sequence["AgentProcess"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.AgentProcess)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            agent_processes = await session.scalars(stmt)
+            return agent_processes.all()
+
+
+@mapper.type(inmanta.graphql.models.AgentInstance)
+class AgentInstance:
+
+    @staticmethod
+    async def get_environments(id: str | None = strawberry.UNSET) -> typing.Sequence["AgentInstance"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.AgentInstance)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+            return results.all()
+
+
+@mapper.type(inmanta.graphql.models.Agent)
+class Agent:
+
+    @staticmethod
+    async def get_environments(id: str | None = strawberry.UNSET) -> typing.Sequence["Agent"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.Agent)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+            return results.all()
+
+
 @mapper.type(inmanta.graphql.models.Project)
 class Project:
     @staticmethod
@@ -67,6 +106,162 @@ class Project:
                 stmt = stmt.filter_by(id=id)
             projects = await session.scalars(stmt)
         return projects.all()
+
+
+@mapper.type(inmanta.graphql.models.Code)
+class Code:
+    @staticmethod
+    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Code"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.Code)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+        return results.all()
+
+
+@mapper.type(inmanta.graphql.models.Compile)
+class Compile:
+    @staticmethod
+    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Compile"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.Compile)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+        return results.all()
+
+
+@mapper.type(inmanta.graphql.models.Report)
+class Report:
+    @staticmethod
+    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Report"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.Report)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+        return results.all()
+
+
+@mapper.type(inmanta.graphql.models.ConfigurationModel)
+class ConfigurationModel:
+    @staticmethod
+    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["ConfigurationModel"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.ConfigurationModel)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+        return results.all()
+
+
+@mapper.type(inmanta.graphql.models.Dryrun)
+class Dryrun:
+    @staticmethod
+    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Dryrun"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.Dryrun)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+        return results.all()
+
+
+@mapper.type(inmanta.graphql.models.Resource)
+class Resource:
+    @staticmethod
+    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Resource"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.Resource)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+        return results.all()
+
+
+@mapper.type(inmanta.graphql.models.ResourceAction)
+class ResourceAction:
+    @staticmethod
+    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["ResourceAction"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.ResourceAction)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+        return results.all()
+
+
+@mapper.type(inmanta.graphql.models.UnknownParameter)
+class UnknownParameter:
+    @staticmethod
+    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["UnknownParameter"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.UnknownParameter)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+        return results.all()
+
+
+@mapper.type(inmanta.graphql.models.DiscoveredResource)
+class DiscoveredResource:
+    @staticmethod
+    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["DiscoveredResource"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.DiscoveredResource)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+        return results.all()
+
+
+@mapper.type(inmanta.graphql.models.EnvironmentMetricsGauge)
+class EnvironmentMetricsGauge:
+    @staticmethod
+    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["EnvironmentMetricsGauge"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.EnvironmentMetricsGauge)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+        return results.all()
+
+
+@mapper.type(inmanta.graphql.models.EnvironmentMetricsTimer)
+class EnvironmentMetricsTimer:
+    @staticmethod
+    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["EnvironmentMetricsTimer"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.EnvironmentMetricsTimer)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+        return results.all()
+
+
+@mapper.type(inmanta.graphql.models.Parameter)
+class Parameter:
+    @staticmethod
+    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Parameter"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.Parameter)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+        return results.all()
+
+
+@mapper.type(inmanta.graphql.models.ResourcePersistentState)
+class ResourcePersistentState:
+    @staticmethod
+    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["ResourcePersistentState"]:
+        async with get_async_session() as session:
+            stmt = select(inmanta.graphql.models.ResourcePersistentState)
+            if id:
+                stmt = stmt.filter_by(id=id)
+            results = await session.scalars(stmt)
+        return results.all()
 
 
 def get_async_session(connection_string: typing.Optional[str] = None) -> AsyncSession:
