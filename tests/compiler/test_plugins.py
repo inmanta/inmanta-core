@@ -392,13 +392,13 @@ import keyword_only_arguments
         plugins["catch_all_arguments::sum_all"].get_signature()
         == "sum_all(a: 'int', *aa: 'int', b: 'int', **bb: 'int') -> 'int'"
     )
-    assert plugins["catch_all_arguments::sum_all"].get_signature(dsl_types=True) == (
+    assert plugins["catch_all_arguments::sum_all"].get_signature(use_dsl_types=True) == (
         "sum_all(a: int, *aa: int, b: int, **bb: int) -> int"
     )
     assert plugins["keyword_only_arguments::sum_all"].get_signature() == (
         "sum_all(a: 'int', b: 'int' = 1, *, c: 'int', d: 'int' = 2) -> 'int'"
     )
-    assert plugins["keyword_only_arguments::sum_all"].get_signature(dsl_types=True) == (
+    assert plugins["keyword_only_arguments::sum_all"].get_signature(use_dsl_types=True) == (
         "sum_all(a: int, b: int, *, c: int, d: int) -> int"
     )
 
