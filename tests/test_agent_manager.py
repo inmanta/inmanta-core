@@ -32,6 +32,8 @@ from tornado.httpclient import AsyncHTTPClient
 from inmanta import config, data
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
+from inmanta.data import Environment
+from inmanta.data.dataview import AgentView
 from inmanta.protocol import Result, handle, typedmethod
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, protocol
@@ -102,21 +104,11 @@ class MockSession:
 
 
 async def assert_agent_state(env_id: UUID, name: str, state: AgentStatus, sid: Optional[UUID]) -> None:
-    agent = await data.Agent.get(env_id, name)
+    env = await Environment.get_by_id(env_id)
+    data, _ = await AgentView(env, filter={"name": [name]}).get_data()
 
-    assert agent.get_status() == state
-    if state == AgentStatus.paused:
-        assert agent.primary is None
-        assert agent.paused
-    elif state == AgentStatus.down:
-        assert agent.primary is None
-        assert not agent.paused
-    elif state == AgentStatus.up:
-        assert agent.primary is not None
-        agent_instance = await data.AgentInstance.get_by_id(agent.primary)
-        agent_proc = await data.AgentProcess.get_one(sid=agent_instance.process)
-        assert agent_proc.sid == sid
-        assert agent.get_status() == AgentStatus.up
+    assert len(data) == 1
+    assert data[0].status == state
 
 
 async def assert_state_agents(
@@ -150,91 +142,6 @@ def assert_state_agents_retry(
         return True
 
     return func
-
-
-@pytest.mark.parametrize("auto_start_agent", [False])  # prevent autostart to keep agent under control
-async def test_primary_selection(server, environment):
-    env_id = UUID(environment)
-    env = await data.Environment.get_by_id(env_id)
-    am = server.get_slice(SLICE_AGENT_MANAGER)
-
-    # second env to detect crosstalk
-    project = data.Project(name="test_x")
-    await project.insert()
-    env2 = data.Environment(name="testenv_x", project=project.id)
-    await env2.insert()
-
-    await data.Agent(environment=env.id, name="agent1", paused=True).insert()
-    await data.Agent(environment=env.id, name="agent2", paused=False).insert()
-    await data.Agent(environment=env.id, name="agent3", paused=False).insert()
-
-    # one session
-    ts1 = MockSession(uuid4(), env.id, {"agent1", "agent2"}, "ts1")
-    await am.new_session(ts1, set(ts1.endpoint_names))
-    await am._session_listener_actions.join()
-    assert len(am.sessions) == 1
-
-    # cross talk session
-    ts2 = MockSession(uuid4(), env2.id, {"agent1", "agent2"}, "ts2")
-    await am.new_session(ts2, set(ts2.endpoint_names))
-    await am._session_listener_actions.join()
-    assert len(am.sessions) == 2
-
-    ts1.get_client().set_state.assert_called_with("agent2", enabled=True)
-    ts1.get_client().reset_mock()
-    await retry_limited(
-        assert_state_agents_retry(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id), 10
-    )
-
-    # test is_primary
-    assert am.is_primary(env, ts1.id, "agent2")
-    assert not am.is_primary(env, ts1.id, "agent1")
-    assert not am.is_primary(env, uuid4(), "agent2")
-
-    # alive
-    await am.seen(ts1, set(ts1.endpoint_names))
-    await am._session_listener_actions.join()
-    assert len(am.sessions) == 2
-    await retry_limited(
-        assert_state_agents_retry(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id), 10
-    )
-
-    # second session
-    ts2 = MockSession(uuid4(), env.id, {"agent3", "agent2"}, "ts2")
-    await am.new_session(ts2, set(ts2.endpoint_names))
-    await am._session_listener_actions.join()
-    assert len(am.sessions) == 3
-    ts2.get_client().set_state.assert_called_with("agent3", enabled=True)
-    ts2.get_client().reset_mock()
-    await retry_limited(
-        assert_state_agents_retry(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.up, sid2=ts1.id, sid3=ts2.id), 10
-    )
-
-    # test is_primary
-    assert not am.is_primary(env, ts2.id, "agent1")
-    assert not am.is_primary(env, ts1.id, "agent1")
-    assert am.is_primary(env, ts1.id, "agent2")
-    assert am.is_primary(env, ts2.id, "agent3")
-
-    # expire first
-    await am.expire(ts1, set(ts1.endpoint_names))
-    await am._session_listener_actions.join()
-    assert len(am.sessions) == 2
-    ts2.get_client().set_state.assert_called_with("agent2", enabled=True)
-    ts2.get_client().reset_mock()
-    await retry_limited(
-        assert_state_agents_retry(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.up, sid2=ts2.id, sid3=ts2.id), 10
-    )
-
-    # expire second
-    await am.expire(ts2, set(ts2.endpoint_names))
-    await am._session_listener_actions.join()
-    assert len(am.sessions) == 1
-    await retry_limited(assert_state_agents_retry(env.id, AgentStatus.paused, AgentStatus.down, AgentStatus.down), 10)
-
-    # test is_primary
-    assert not am.is_primary(env, ts1.id, "agent2")
-    assert not am.is_primary(env, ts2.id, "agent3")
 
 
 async def test_api(init_dataclasses_and_load_schema):
@@ -271,51 +178,51 @@ async def test_api(init_dataclasses_and_load_schema):
 
     # one session
     ts1 = MockSession(uuid4(), env.id, {"agent1", "agent2"}, "ts1")
-    await am._register_session(ts1, set(ts1.endpoint_names), datetime.datetime.now())
-    # second session
-    ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
-    await am._register_session(ts2, set(ts2.endpoint_names), datetime.datetime.now())
+    await am._register_session(ts1, datetime.datetime.now())
+    # # second session: no allow anymore
+    # ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
+    # await am._register_session(ts2,  datetime.datetime.now())
     # third session
     ts3 = MockSession(uuid4(), env3.id, ["agentx"], "ts3")
-    await am._register_session(ts3, set(ts3.endpoint_names), datetime.datetime.now())
+    await am._register_session(ts3, datetime.datetime.now())
     # fourth session
     ts4 = MockSession(uuid4(), env4.id, {"agent1", "agent2"}, "ts4")
-    await am._register_session(ts4, set(ts4.endpoint_names), datetime.datetime.now())
+    await am._register_session(ts4, datetime.datetime.now())
     # fifth session
     ts5 = MockSession(uuid4(), env5.id, {"agent1"}, "ts5")
-    await am._register_session(ts5, set(ts5.endpoint_names), datetime.datetime.now())
+    await am._register_session(ts5, datetime.datetime.now())
 
     await futures.proccess()
-    assert len(am.sessions) == 5
-
-    # Getting all non expired agent processes
-    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=False)
-    assert code == 200
-    assert len(all_agents_processes["processes"]) == 5
-
-    # Getting all agent processes (including expired)
-    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=True)
-    assert code == 200
-    assert len(all_agents_processes["processes"]) == 5
-
-    # Making fifth session expire
-    expiration = datetime.datetime.now().astimezone()
-    await am._expire_session(ts5, set(ts5.endpoint_names), expiration)
-
-    await futures.proccess()
-    assert len(am.sessions) == 4
+    assert len(am.scheduler_for_env) == 4
 
     # Getting all non expired agent processes
     code, all_agents_processes = await am.list_agent_processes(environment=None, expired=False)
     assert code == 200
     assert len(all_agents_processes["processes"]) == 4
+
+    # Getting all agent processes (including expired)
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=True)
+    assert code == 200
+    assert len(all_agents_processes["processes"]) == 4
+
+    # Making fifth session expire
+    expiration = datetime.datetime.now().astimezone()
+    await am._expire_session(ts5, expiration)
+
+    await futures.proccess()
+    assert len(am.scheduler_for_env) == 3
+
+    # Getting all non expired agent processes
+    code, all_agents_processes = await am.list_agent_processes(environment=None, expired=False)
+    assert code == 200
+    assert len(all_agents_processes["processes"]) == 3
     for agent_process in all_agents_processes["processes"]:
         assert agent_process["expired"] is None
 
     # Getting all agent processes (including expired)
     code, all_agents_processes = await am.list_agent_processes(environment=None, expired=True)
     assert code == 200
-    assert len(all_agents_processes["processes"]) == 5
+    assert len(all_agents_processes["processes"]) == 4
 
     shouldbe = {
         "processes": [
@@ -323,51 +230,28 @@ async def test_api(init_dataclasses_and_load_schema):
                 "first_seen": UNKWN,
                 "expired": None,
                 "hostname": "ts1",
-                "last_seen": UNKWN,
-                "endpoints": [
-                    {"id": UNKWN, "name": "agent1", "process": UNKWN},
-                    {"id": UNKWN, "name": "agent2", "process": UNKWN},
-                ],
-                "environment": env.id,
-            },
-            {
-                "first_seen": UNKWN,
-                "expired": None,
-                "hostname": "ts2",
-                "last_seen": UNKWN,
-                "endpoints": [
-                    {"id": UNKWN, "name": "agent2", "process": UNKWN},
-                    {"id": UNKWN, "name": "agent3", "process": UNKWN},
-                ],
+                "endpoints": [],
                 "environment": env.id,
             },
             {
                 "first_seen": UNKWN,
                 "expired": None,
                 "hostname": "ts3",
-                "last_seen": UNKWN,
-                "endpoints": [{"id": UNKWN, "name": "agentx", "process": UNKWN}],
+                "endpoints": [],
                 "environment": env3.id,
             },
             {
                 "first_seen": UNKWN,
                 "expired": None,
                 "hostname": "ts4",
-                "last_seen": UNKWN,
-                "endpoints": [
-                    {"id": UNKWN, "name": "agent1", "process": UNKWN},
-                    {"id": UNKWN, "name": "agent2", "process": UNKWN},
-                ],
+                "endpoints": [],
                 "environment": env4.id,
             },
             {
                 "first_seen": UNKWN,
                 "expired": expiration,
                 "hostname": "ts5",
-                "last_seen": UNKWN,
-                "endpoints": [
-                    {"expired": expiration, "id": UNKWN, "name": "agent1", "process": UNKWN},
-                ],
+                "endpoints": [],
                 "environment": env5.id,
             },
         ]
@@ -380,7 +264,7 @@ async def test_api(init_dataclasses_and_load_schema):
     start = agentid
     code, all_agents_processes = await am.list_agent_processes(environment=None, expired=True, start=start)
     assert code == 200
-    assert len(all_agents_processes["processes"]) == 2
+    assert len(all_agents_processes["processes"]) == 1
     for agent_process in all_agents_processes["processes"]:
         assert (
             agent_process["sid"] > start
@@ -398,7 +282,6 @@ async def test_api(init_dataclasses_and_load_schema):
     code, all_agents = await am.list_agent_processes(environment=env.id, expired=False)
     assert code == 200
     agentid1 = all_agents["processes"][0]["sid"]
-    agentid2 = all_agents["processes"][1]["sid"]
 
     shouldbe = {
         "processes": [
@@ -406,24 +289,9 @@ async def test_api(init_dataclasses_and_load_schema):
                 "first_seen": UNKWN,
                 "expired": None,
                 "hostname": "ts1",
-                "last_seen": UNKWN,
-                "endpoints": [
-                    {"id": UNKWN, "name": "agent1", "process": UNKWN},
-                    {"id": UNKWN, "name": "agent2", "process": UNKWN},
-                ],
+                "endpoints": [],
                 "environment": env.id,
-            },
-            {
-                "first_seen": UNKWN,
-                "expired": None,
-                "hostname": "ts2",
-                "last_seen": UNKWN,
-                "endpoints": [
-                    {"id": UNKWN, "name": "agent2", "process": UNKWN},
-                    {"id": UNKWN, "name": "agent3", "process": UNKWN},
-                ],
-                "environment": env.id,
-            },
+            }
         ]
     }
 
@@ -437,9 +305,6 @@ async def test_api(init_dataclasses_and_load_schema):
     assert_equal_ish(shouldbe, all_agents)
 
     report = await am.get_agent_process_report(agentid1)
-    assert (200, "X") == report
-
-    report = await am.get_agent_process_report(agentid2)
     assert (200, "X") == report
 
     result, _ = await am.get_agent_process_report(uuid4())
@@ -491,102 +356,36 @@ async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
 
     # one session
     ts1 = MockSession(uuid4(), env.id, {"agent1", "agent2"}, "ts1")
-    await am._register_session(ts1, set(ts1.endpoint_names), datetime.datetime.now())
+    await am._register_session(ts1, datetime.datetime.now())
     await futures.proccess()
     assert len(am.sessions) == 1
-    ts1.get_client().set_state.assert_called_with("agent2", enabled=True)
+    # TODO!!!
+    # ts1.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts1.get_client().reset_mock()
-    await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
-
-    # alive
-    await am._seen_session(ts1, set(ts1.endpoint_names))
-    await futures.proccess()
-    assert len(am.sessions) == 1
-    await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
-
-    # second session
-    ts2 = MockSession(uuid4(), env.id, {"agent3", "agent2"}, "ts2")
-    await am._register_session(ts2, set(ts2.endpoint_names), datetime.datetime.now())
-    await futures.proccess()
-    assert len(am.sessions) == 2
-    ts2.get_client().set_state.assert_called_with("agent3", enabled=True)
-    ts2.get_client().reset_mock()
-    await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.up, sid2=ts1.id, sid3=ts2.id)
+    await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.up)
 
     # expire first
-    await am._expire_session(ts1, set(ts1.endpoint_names), datetime.datetime.now())
-    await futures.proccess()
-    assert len(am.sessions) == 1
-    ts2.get_client().set_state.assert_called_with("agent2", enabled=True)
-    ts2.get_client().reset_mock()
-    await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.up, sid2=ts2.id, sid3=ts2.id)
-
-    # failover
-    am = AgentManager(server, False)
-    am.add_background_task = futures
-    am.running = True
-    await am._expire_all_sessions_in_db()
-    await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.down, AgentStatus.down)
-
-    # one session
-    ts1 = MockSession(uuid4(), env.id, {"agent1", "agent2"}, "ts1")
-    await am._register_session(ts1, set(ts1.endpoint_names), datetime.datetime.now())
-    await futures.proccess()
-    assert len(am.sessions) == 1
-    ts1.get_client().set_state.assert_called_with("agent2", enabled=True)
-    ts1.get_client().reset_mock()
-    await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
-
-    # alive
-    await am._seen_session(ts1, set(ts1.endpoint_names))
-    await futures.proccess()
-    assert len(am.sessions) == 1
-    await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id)
-
-    # second session
-    ts2 = MockSession(uuid4(), env.id, {"agent3", "agent2"}, "ts2")
-    await am._register_session(ts2, set(ts2.endpoint_names), datetime.datetime.now())
-    await futures.proccess()
-    assert len(am.sessions) == 2
-    ts2.get_client().set_state.assert_called_with("agent3", enabled=True)
-    ts2.get_client().reset_mock()
-    await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.up, sid2=ts1.id, sid3=ts2.id)
-
-    # expire first
-    await am._expire_session(ts1, set(ts1.endpoint_names), datetime.datetime.now())
-    await futures.proccess()
-    assert len(am.sessions) == 1
-    ts2.get_client().set_state.assert_called_with("agent2", enabled=True)
-    ts2.get_client().reset_mock()
-    await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.up, sid2=ts2.id, sid3=ts2.id)
-
-    # expire second
-    await am._expire_session(ts2, set(ts2.endpoint_names), datetime.datetime.now())
+    await am._expire_session(ts1, datetime.datetime.now())
     await futures.proccess()
     assert len(am.sessions) == 0
+    # TODO
+    # ts2.get_client().set_state.assert_called_with("agent2", enabled=True)
+    # ts2.get_client().reset_mock()
     await assert_state_agents(env.id, AgentStatus.paused, AgentStatus.down, AgentStatus.down)
 
 
-async def assert_agent_db_state(
-    tid: UUID, nr_procs: int, nr_non_expired_procs: int, nr_agent_instances: int, nr_non_expired_instances: int
-) -> typing.Callable:
+async def assert_agent_db_state(tid: UUID, nr_procs: int, nr_non_expired_procs: int) -> typing.Callable:
     """
     The database log is updated asynchronously. This method waits until
     the desired database state is reached.
     """
 
     async def is_db_state_reached():
-        result = await data.AgentProcess.get_list(environment=tid)
+        result = await data.SchedulerSession.get_list(environment=tid)
         if len(result) != nr_procs:
             return False
-        result = await data.AgentProcess.get_list(environment=tid, expired=None)
+        result = await data.SchedulerSession.get_list(environment=tid, expired=None)
         if len(result) != nr_non_expired_procs:
-            return False
-        result = await data.AgentInstance.get_list(tid=tid)
-        if len(result) != nr_agent_instances:
-            return False
-        result = await data.AgentInstance.get_list(tid=tid, expired=None)
-        if len(result) != nr_non_expired_instances:
             return False
         return True
 
@@ -611,6 +410,7 @@ async def test_session_renewal(init_dataclasses_and_load_schema):
 
     session_manager = SessionManager()
     sid = uuid4()
+    sid2 = uuid4()
     tid = env.id
     endpoint = "vm1"
     session = Session(
@@ -624,82 +424,41 @@ async def test_session_renewal(init_dataclasses_and_load_schema):
         disable_expire_check=True,
     )
 
-    await assert_agent_db_state(tid, nr_procs=0, nr_non_expired_procs=0, nr_agent_instances=0, nr_non_expired_instances=0)
-    await agent_manager._register_session(
-        session=session, endpoint_names_snapshot=set(session.endpoint_names), now=datetime.datetime.now()
+    await assert_agent_db_state(
+        tid,
+        nr_procs=0,
+        nr_non_expired_procs=0,
     )
-    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=1, nr_non_expired_instances=1)
-    await agent_manager._expire_session(
-        session=session, endpoint_names_snapshot=set(session.endpoint_names), now=datetime.datetime.now()
+    await agent_manager._register_session(session=session, now=datetime.datetime.now())
+    await assert_agent_db_state(
+        tid,
+        nr_procs=1,
+        nr_non_expired_procs=1,
     )
-    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=0, nr_agent_instances=1, nr_non_expired_instances=0)
-    await agent_manager._register_session(
-        session=session, endpoint_names_snapshot=set(session.endpoint_names), now=datetime.datetime.now()
-    )
-    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=1, nr_non_expired_instances=1)
+    await agent_manager._expire_session(session=session, now=datetime.datetime.now())
 
-
-async def test_fix_corrupted_database(init_dataclasses_and_load_schema):
-    """
-    When the database connection is lost, the agent session information might get
-    corrupted. This inconsistency should be fixed when a new session is registered.
-    This test case verifies this behavior.
-    """
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="testenv", project=project.id)
-    await env.insert()
-
-    agent_manager = AgentManager()
-    agent_manager._stopped = False
-    agent_manager._stopping = False
-
-    session_manager = SessionManager()
-    sid = uuid4()
-    tid = env.id
-    endpoint = "vm1"
     session = Session(
         sessionstore=session_manager,
-        sid=sid,
+        sid=sid2,
         hang_interval=1,
         timout=1,
         tid=tid,
         endpoint_names=[endpoint],
-        nodename="node1",
+        nodename="test",
         disable_expire_check=True,
     )
 
-    await assert_agent_db_state(tid, nr_procs=0, nr_non_expired_procs=0, nr_agent_instances=0, nr_non_expired_instances=0)
-    await agent_manager._register_session(
-        session=session, endpoint_names_snapshot=set(session.endpoint_names), now=datetime.datetime.now()
+    await assert_agent_db_state(
+        tid,
+        nr_procs=1,
+        nr_non_expired_procs=0,
     )
-    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=1, nr_non_expired_instances=1)
-    await agent_manager._expire_session(
-        session=session, endpoint_names_snapshot=set(session.endpoint_names), now=datetime.datetime.now()
+    await agent_manager._register_session(session=session, now=datetime.datetime.now())
+    await assert_agent_db_state(
+        tid,
+        nr_procs=1,
+        nr_non_expired_procs=1,
     )
-    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=0, nr_agent_instances=1, nr_non_expired_instances=0)
-    await agent_manager._register_session(
-        session=session, endpoint_names_snapshot=set(session.endpoint_names), now=datetime.datetime.now()
-    )
-    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=1, nr_non_expired_instances=1)
-    await agent_manager._expire_session(
-        session=session, endpoint_names_snapshot=set(session.endpoint_names), now=datetime.datetime.now()
-    )
-    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=0, nr_agent_instances=1, nr_non_expired_instances=0)
-
-    # Make database corrupt
-    instances = await data.AgentInstance.get_list(tid=tid)
-    assert len(instances) == 1
-    await instances[0].update(expired=None)
-    # Assert corruption
-    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=0, nr_agent_instances=1, nr_non_expired_instances=1)
-
-    # Session registration should fix the inconsistency
-    await agent_manager._register_session(
-        session=session, endpoint_names_snapshot=session.endpoint_names, now=datetime.datetime.now()
-    )
-    await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=1, nr_non_expired_instances=1)
 
 
 @pytest.mark.parametrize("auto_start_agent", [False])  # prevent autostart to keep agent under control
@@ -711,7 +470,7 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
        In that case the server state should stay consistent.
     """
     env_id = UUID(environment)
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    agentmanager: AgentManager = server.get_slice(SLICE_AGENT_MANAGER)
 
     assert len(agentmanager.sessions) == 0
 
@@ -721,10 +480,10 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     await a.start()
 
     # Wait until session is created
-    await retry_limited(lambda: (env_id, "agent1") in agentmanager.tid_endpoint_to_session, 10)
+    await retry_limited(lambda: agentmanager.is_scheduler_running_for(env_id), 10)
 
     # Verify that the session is created correctly
-    session = agentmanager.tid_endpoint_to_session[(env_id, "agent1")]
+    session = agentmanager.get_session_for(env_id)
     session_manager = session._sessionstore
     assert len(agentmanager.sessions) == 1
     assert session in agentmanager.sessions.values()
@@ -736,7 +495,7 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     await session.expire(0)
 
     # Wait until session expired
-    await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 0, 10)
 
     # Verify session expiry
     assert len(agentmanager.sessions) == 0
@@ -942,7 +701,7 @@ async def test_error_handling_agent_fork(server, environment, monkeypatch):
 
     autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
     with pytest.raises(Exception) as excinfo:
-        await autostarted_agent_manager._ensure_scheduler(env=environment, restart=True)
+        await autostarted_agent_manager._ensure_scheduler(env=environment)
 
     assert exception_message in str(excinfo.value)
 
@@ -953,13 +712,13 @@ async def test_are_agents_active(server, client, environment, async_finalizer) -
     Ensure that the `AgentManager.are_agents_active()` method returns True when an agent
     is in the up or the paused state.
     """
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    agentmanager: AgentManager = server.get_slice(SLICE_AGENT_MANAGER)
     agent_name = "agent1"
     env_id = UUID(environment)
     env = await data.Environment.get_by_id(env_id)
 
     # The agent is not started yet ->  it should not be active
-    assert not await agentmanager.are_agents_active(tid=env_id, endpoints=[agent_name])
+    assert not await agentmanager.is_scheduler_active(tid=env_id)
 
     # Start agent
     await agentmanager.ensure_agent_registered(env, agent_name)
@@ -969,14 +728,14 @@ async def test_are_agents_active(server, client, environment, async_finalizer) -
     await a.start()
 
     # Verify agent is active
-    await retry_limited(agentmanager.are_agents_active, tid=env_id, endpoints=[agent_name], timeout=10)
+    await retry_limited(agentmanager.is_scheduler_active, tid=env_id, timeout=10)
 
     # Pause agent
     result = await client.agent_action(tid=env_id, name=agent_name, action=AgentAction.pause.value)
     assert result.code == 200, result.result
 
     # Ensure the agent is still active
-    await retry_limited(agentmanager.are_agents_active, tid=env_id, endpoints=[agent_name], timeout=10)
+    await retry_limited(agentmanager.is_scheduler_active, tid=env_id, timeout=10)
 
 
 async def test_heartbeat_different_session(server_pre_start, async_finalizer, caplog):

@@ -111,12 +111,9 @@ class SessionAction:
     A session update to be executed by the AgentManager.
     """
 
-    def __init__(
-        self, action_type: SessionActionType, session: protocol.Session, endpoint_names_snapshot: set[str], timestamp: datetime
-    ):
+    def __init__(self, action_type: SessionActionType, session: protocol.Session, timestamp: datetime):
         self.action_type = action_type
         self.session = session
-        self.endpoint_names_snapshot = endpoint_names_snapshot
         self.timestamp = timestamp
 
 
@@ -152,10 +149,14 @@ class AgentManager(ServerSlice, SessionListener):
         # per resource time of last fact request
         self._fact_resource_block_set: dict[str, float] = {}
 
+        # session per environment
+        self.scheduler_for_env: dict[uuid.UUID, protocol.Session] = {}
+        # all sessions per ID
+        self.sessions: dict[UUID, protocol.Session] = {}
+
         # session lock
         self.session_lock = asyncio.Lock()
-        # all sessions
-        self.sessions: dict[UUID, protocol.Session] = {}
+
         # live sessions: Sessions to agents which are primary and unpaused
         self.tid_endpoint_to_session: dict[tuple[UUID, str], protocol.Session] = {}
         # All endpoints associated with a sid
@@ -265,11 +266,10 @@ class AgentManager(ServerSlice, SessionListener):
 
     def get_all_schedulers(self) -> list[tuple[uuid.UUID, protocol.Session]]:
         # Linear scan, but every item should be a hit
-        return [
-            (env_id, session)
-            for (env_id, agent_id), session in self.tid_endpoint_to_session.items()
-            if agent_id == AGENT_SCHEDULER_ID
-        ]
+        return list(self.scheduler_for_env.items())
+
+    def is_scheduler_running_for(self, env: uuid.UUID) -> bool:
+        return env in self.scheduler_for_env
 
     async def halt_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
@@ -337,8 +337,7 @@ class AgentManager(ServerSlice, SessionListener):
         # We need this lock otherwise, we would have transaction conflict in DB
         async with self.session_lock:
             await data.Agent.pause(env=env.id, endpoint=endpoint, paused=new_paused_status, connection=connection)
-            key = (env.id, const.AGENT_SCHEDULER_ID)
-            live_session = self.tid_endpoint_to_session.get(key)
+            live_session = self.scheduler_for_env.get(env.id)
             if live_session:
                 await live_session.get_client().set_state(endpoint, enabled=not new_paused_status)
 
@@ -403,11 +402,9 @@ class AgentManager(ServerSlice, SessionListener):
         """
         action_type = action.action_type
         if action_type == SessionActionType.REGISTER_SESSION:
-            await self._register_session(action.session, action.endpoint_names_snapshot, action.timestamp)
-        elif action_type == SessionActionType.SEEN_SESSION:
-            await self._seen_session(action.session, action.endpoint_names_snapshot)
+            await self._register_session(action.session, action.timestamp)
         elif action_type == SessionActionType.EXPIRE_SESSION:
-            await self._expire_session(action.session, action.endpoint_names_snapshot, action.timestamp)
+            await self._expire_session(action.session, action.timestamp)
         else:
             LOGGER.warning("Unknown SessionAction %s", action_type.name)
 
@@ -419,7 +416,6 @@ class AgentManager(ServerSlice, SessionListener):
         session_action = SessionAction(
             action_type=SessionActionType.REGISTER_SESSION,
             session=session,
-            endpoint_names_snapshot=endpoint_names_snapshot,
             timestamp=datetime.now().astimezone(),
         )
         await self._session_listener_actions.put(session_action)
@@ -432,7 +428,6 @@ class AgentManager(ServerSlice, SessionListener):
         session_action = SessionAction(
             action_type=SessionActionType.EXPIRE_SESSION,
             session=session,
-            endpoint_names_snapshot=endpoint_names_snapshot,
             timestamp=datetime.now().astimezone(),
         )
         await self._session_listener_actions.put(session_action)
@@ -442,97 +437,36 @@ class AgentManager(ServerSlice, SessionListener):
         """
         The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
         """
-        session_action = SessionAction(
-            action_type=SessionActionType.SEEN_SESSION,
-            session=session,
-            endpoint_names_snapshot=endpoint_names_snapshot,
-            timestamp=datetime.now().astimezone(),
-        )
-        await self._session_listener_actions.put(session_action)
-
-    # Seen
-    @tracing.instrument("AgentManager.seen_session", extract_args=True)
-    async def _seen_session(self, session: protocol.Session, endpoint_names_snapshot: set[str]) -> None:
-        endpoints_with_new_primary: list[tuple[str, Optional[uuid.UUID]]] = []
-        async with self.session_lock:
-            endpoints_in_agent_manager = self.endpoints_for_sid[session.id]
-            endpoints_in_session = endpoint_names_snapshot
-            endpoints_to_add = endpoints_in_session - endpoints_in_agent_manager
-            LOGGER.debug("Adding endpoints %s to session %s on %s", endpoints_to_add, session.id, session.nodename)
-            endpoints_to_remove = endpoints_in_agent_manager - endpoints_in_session
-            LOGGER.debug("Removing endpoints %s from session %s on %s", endpoints_to_remove, session.id, session.nodename)
-
-            endpoints_with_new_primary += await self._failover_endpoints(session, endpoints_to_remove)
-            endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session, endpoints_to_add)
-            self.endpoints_for_sid[session.id] = endpoints_in_session
-
-        self.add_background_task(
-            self._log_session_seen_to_db(session, endpoints_to_add, endpoints_to_remove, endpoints_with_new_primary)
-        )
-
-    async def _log_session_seen_to_db(
-        self,
-        session: protocol.Session,
-        endpoints_to_add: set[str],
-        endpoints_to_remove: set[str],
-        endpoints_with_new_primary: list[tuple[str, Optional[uuid.UUID]]],
-    ) -> None:
-        """
-        Note: This method call is allowed to fail when the database connection is lost.
-        """
-        now = datetime.now().astimezone()
-        async with data.AgentProcess.get_connection() as connection:
-            async with connection.transaction():
-                await data.AgentProcess.update_last_seen(session.id, now, connection)
-                await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add, connection)
-                await data.AgentInstance.log_instance_expiry(session.id, endpoints_to_remove, now, connection)
-                await data.Agent.update_primary(session.tid, endpoints_with_new_primary, now, connection)
+        pass
 
     # Session registration
-    async def _register_session(self, session: protocol.Session, endpoint_names_snapshot: set[str], now: datetime) -> None:
+    async def _register_session(self, session: protocol.Session, now: datetime) -> None:
         """
         This method registers a new session in memory and asynchronously updates the agent
         session log in the database. When the database connection is lost, the get_statuses()
         call fails and the new session will be refused.
         """
-        LOGGER.debug("New session %s for agents %s on %s", session.id, endpoint_names_snapshot, session.nodename)
+        LOGGER.debug("New session %s for agents %s on %s", session.id, session.tid, session.nodename)
         async with self.session_lock:
-            tid = session.tid
-            sid = session.get_id()
-            self.sessions[sid] = session
-            self.endpoints_for_sid[sid] = endpoint_names_snapshot
-            try:
-                endpoints_with_new_primary = await self._ensure_primary_if_not_exists(session, endpoint_names_snapshot)
-            except Exception as e:
-                # Database connection failed
-                del self.sessions[sid]
-                del self.endpoints_for_sid[sid]
-                self.add_background_task(session.expire(timeout=0))
-                raise e
+            assert session.tid not in self.scheduler_for_env
+            self.scheduler_for_env[session.tid] = session
+            self.sessions[session.id] = session
 
-        self.add_background_task(
-            self._log_session_creation_to_db(tid, session, endpoint_names_snapshot, endpoints_with_new_primary, now)
-        )
+        self.add_background_task(self._log_session_creation_to_db(session.tid, session, now))
 
     async def _log_session_creation_to_db(
         self,
         tid: uuid.UUID,
         session: protocol.Session,
-        endpoint_names: set[str],
-        endpoints_with_new_primary: Sequence[tuple[str, Optional[uuid.UUID]]],
         now: datetime,
     ) -> None:
         """
         Note: This method call is allowed to fail when the database connection is lost.
         """
-        async with data.AgentProcess.get_connection() as connection:
-            async with connection.transaction():
-                await data.AgentProcess.seen(tid, session.nodename, session.id, now, connection)
-                await data.AgentInstance.log_instance_creation(tid, session.id, endpoint_names, connection)
-                await data.Agent.update_primary(tid, endpoints_with_new_primary, now, connection)
+        await data.SchedulerSession.register(tid, session.nodename, session.id, now)
 
     # Session expiry
-    async def _expire_session(self, session: protocol.Session, endpoint_names_snapshot: set[str], now: datetime) -> None:
+    async def _expire_session(self, session: protocol.Session, now: datetime) -> None:
         """
         This method expires the given session and update the in-memory session state.
         The in-database session log is updated asynchronously. These database updates
@@ -541,186 +475,61 @@ class AgentManager(ServerSlice, SessionListener):
         if not self.is_running() or self.is_stopping():
             return
         async with self.session_lock:
-            tid = session.tid
-            sid = session.get_id()
-            if sid not in self.sessions:
-                # The session is already expired
-                return
-            LOGGER.debug("expiring session %s", sid)
-            del self.sessions[sid]
-            del self.endpoints_for_sid[sid]
-            endpoints_with_new_primary = await self._failover_endpoints(session, endpoint_names_snapshot)
+            self.scheduler_for_env.pop(session.tid)
+            self.sessions.pop(session.id)
 
-        self.add_background_task(self._log_session_expiry_to_db(tid, endpoints_with_new_primary, session, now))
+        self.add_background_task(self._log_session_expiry_to_db(session.tid, session, now))
 
     async def _log_session_expiry_to_db(
         self,
         tid: uuid.UUID,
-        endpoints_with_new_primary: Sequence[tuple[str, Optional[uuid.UUID]]],
         session: protocol.Session,
         now: datetime,
     ) -> None:
         """
         Note: This method call is allowed to fail when the database connection is lost.
         """
-        async with data.AgentProcess.get_connection() as connection:
-            async with connection.transaction():
-                # Make sure to access the database tables in the order defined in docs string of inmanta/data/__init__.py
-                # to prevent deadlock issues.
-                await data.AgentProcess.expire_process(session.id, now, connection)
-                await data.AgentInstance.log_instance_expiry(session.id, session.endpoint_names, now, connection)
-                await data.Agent.update_primary(tid, endpoints_with_new_primary, now, connection)
+        async with data.SchedulerSession.get_connection() as connection:
+            await data.SchedulerSession.expire_process(session.id, now, connection)
 
     async def _expire_all_sessions_in_db(self) -> None:
         async with self.session_lock:
             LOGGER.debug("Cleaning server session DB")
-            async with data.AgentProcess.get_connection() as connection:
+            async with data.SchedulerSession.get_connection() as connection:
                 async with connection.transaction():
-                    await data.AgentProcess.expire_all(now=datetime.now().astimezone(), connection=connection)
-                    await data.AgentInstance.expire_all(now=datetime.now().astimezone(), connection=connection)
-                    await data.Agent.mark_all_as_non_primary(connection=connection)
+                    await data.SchedulerSession.expire_all(now=datetime.now().astimezone(), connection=connection)
 
     async def _purge_agent_processes(self) -> None:
         agent_processes_to_keep = opt.agent_processes_to_keep.get()
-        await data.AgentProcess.cleanup(nr_expired_records_to_keep=agent_processes_to_keep)
+        await data.SchedulerSession.cleanup(nr_expired_records_to_keep=agent_processes_to_keep)
 
-    # Util
-    async def _use_new_active_session_for_agent(self, tid: uuid.UUID, endpoint_name: str) -> Optional[protocol.Session]:
-        """
-        This method searches for a new active session for the given agent. If a new active session if found,
-        the in-memory state of the agentmanager is updated to use that new session. No logging is done in the
-        database.
-
-        :return The new active session in use or None if no new active session was found
-
-        Note: Always call under session lock.
-        """
-        key = (tid, endpoint_name)
-        new_active_session = self._get_session_to_failover_agent(tid, endpoint_name)
-        if new_active_session:
-            self.tid_endpoint_to_session[key] = new_active_session
-            set_state_call = new_active_session.get_client().set_state(endpoint_name, enabled=True)
-            self.add_background_task(set_state_call)
-        elif key in self.tid_endpoint_to_session:
-            del self.tid_endpoint_to_session[key]
-        return new_active_session
-
-    async def _ensure_primary_if_not_exists(
-        self, session: protocol.Session, endpoints: set[str]
-    ) -> Sequence[tuple[str, uuid.UUID]]:
-        """
-        Make this session the primary session for the endpoints of this session if no primary exists and the agent is not
-        paused.
-
-        :return: The endpoints that got a new primary.
-
-        Note: Always call under session lock.
-        Note: This call will fail when the database connection is lost.
-        """
-        agent_statuses = await data.Agent.get_statuses(session.tid, endpoints)
-
-        result = []
-        for endpoint in endpoints:
-            key = (session.tid, endpoint)
-            if key not in self.tid_endpoint_to_session and agent_statuses[endpoint] != AgentStatus.paused:
-                LOGGER.debug("set session %s as primary for agent %s in env %s", session.id, endpoint, session.tid)
-                self.tid_endpoint_to_session[key] = session
-                self.add_background_task(session.get_client().set_state(endpoint, enabled=True))
-                result.append((endpoint, session.id))
-        return result
-
-    async def _failover_endpoints(
-        self, session: protocol.Session, endpoints: set[str]
-    ) -> Sequence[tuple[str, Optional[uuid.UUID]]]:
-        """
-        If the given session is the primary for a given endpoint, failover to a new session.
-
-        :return: The endpoints that got a new primary.
-
-        Note: Always call under session lock.
-        """
-        agent_statuses = await data.Agent.get_statuses(session.tid, endpoints)
-        result = []
-        for endpoint_name in endpoints:
-            key = (session.tid, endpoint_name)
-            if key in self.tid_endpoint_to_session and self.tid_endpoint_to_session[key].id == session.id:
-                if agent_statuses[endpoint_name] != AgentStatus.paused:
-                    new_active_session = await self._use_new_active_session_for_agent(session.tid, endpoint_name)
-                    if new_active_session:
-                        result.append((endpoint_name, new_active_session.id))
-                    else:
-                        result.append((endpoint_name, None))
-                else:
-                    # This should never occur. An agent cannot have an active session while its paused,
-                    # given the fact that this method executes under session_lock
-                    LOGGER.warning("Paused agent %s has an active session (sid=%s)", endpoint_name, session.id)
-                    del self.tid_endpoint_to_session[key]
-                    result.append((endpoint_name, None))
-        return result
-
-    def is_primary(self, env: data.Environment, sid: uuid.UUID, agent: str) -> bool:
-        prim = self.tid_endpoint_to_session.get((env.id, agent), None)
-        if not prim:
-            return False
-        return prim.get_id() == sid
-
-    def get_session_for(self, tid: uuid.UUID, endpoint: str) -> Optional[protocol.Session]:
+    def get_session_for(self, tid: uuid.UUID) -> Optional[protocol.Session]:
         """
         Return a session that matches the given environment and endpoint.
         This method also returns session to paused or non-live agents.
         """
-        key = (tid, endpoint)
-        session = self.tid_endpoint_to_session.get(key)
-        if session:
-            # Agent has live session
-            return session
-        else:
-            # Maybe session exists for a paused agent
-            for session in self.sessions.values():
-                if endpoint in session.endpoint_names and session.tid == tid:
-                    return session
-            # Agent is down
-            return None
+        session = self.scheduler_for_env.get(tid)
+        return session
 
-    def _get_session_to_failover_agent(self, tid: uuid.UUID, endpoint: str) -> Optional[protocol.Session]:
-        current_active_session = self.tid_endpoint_to_session[(tid, endpoint)]
-        for session in self.sessions.values():
-            if endpoint in session.endpoint_names and session.tid == tid:
-                if not current_active_session or session.id != current_active_session.id:
-                    return session
-        return None
-
-    def get_agent_client(self, tid: uuid.UUID, endpoint: str, live_agent_only: bool = True) -> Optional[ReturnClient]:
+    def get_agent_client(self, tid: uuid.UUID) -> Optional[ReturnClient]:
         if isinstance(tid, str):
             tid = uuid.UUID(tid)
-        key = (tid, endpoint)
-        session = self.tid_endpoint_to_session.get(key)
-        if session:
-            return session.get_client()
-        elif not live_agent_only:
-            session = self.get_session_for(tid, endpoint)
-            if session:
-                return session.get_client()
-            else:
-                return None
-        else:
-            return None
+        return self.scheduler_for_env.get(tid)
 
-    async def expire_sessions_for_agents(self, env_id: uuid.UUID, endpoints: Set[str]) -> None:
+    async def expire_sessions_for_environment(self, env_id: uuid.UUID) -> None:
         """
         Expire all sessions for any of the requested agent endpoints.
         """
         async with self.session_lock:
-            sessions_to_expire: Iterator[protocol.Session] = (
-                session for session in self.sessions.values() if endpoints & session.endpoint_names and session.tid == env_id
-            )
-            await asyncio.gather(*(s.expire_and_abort(timeout=0) for s in sessions_to_expire))
+            session_to_expire = self.get_session_for(env_id)
+            if session_to_expire is not None:
+                await session_to_expire.expire_and_abort(timeout=0)
 
-    async def are_agents_active(self, tid: uuid.UUID, endpoints: Iterable[str]) -> bool:
+    async def is_scheduler_active(self, tid: uuid.UUID) -> bool:
         """
         Return true iff all the given agents are in the up or the paused state.
         """
-        return all(active for (_, active) in await self.get_agent_active_status(tid, endpoints))
+        return tid in self.scheduler_for_env
 
     async def get_agent_active_status(self, tid: uuid.UUID, endpoints: Iterable[str]) -> list[tuple[str, bool]]:
         """
@@ -819,7 +628,7 @@ class AgentManager(ServerSlice, SessionListener):
         elif limit > APILIMIT:
             raise BadRequest(f"Limit parameter can not exceed {APILIMIT}, got {limit}.")
 
-        aps = await data.AgentProcess.get_list_paged(
+        aps = await data.SchedulerSession.get_list_paged(
             page_by_column="sid",
             limit=limit,
             start=start,
@@ -832,12 +641,7 @@ class AgentManager(ServerSlice, SessionListener):
         processes = []
         for p in aps:
             agent_dict = p.to_dict()
-            ais = await data.AgentInstance.get_list(process=p.sid)
-            oais = []
-            for ai in ais:
-                a = ai.to_dict()
-                oais.append(a)
-            agent_dict["endpoints"] = oais
+            agent_dict["endpoints"] = []  # backward compat
             processes.append(agent_dict)
 
         return 200, {"processes": processes}
@@ -888,7 +692,7 @@ class AgentManager(ServerSlice, SessionListener):
         return 200, {"enabled": False}
 
     async def get_agent_process_report(self, agent_sid: uuid.UUID) -> ReturnTupple:
-        ap = await data.AgentProcess.get_one(sid=agent_sid)
+        ap = await data.SchedulerSession.get_one(sid=agent_sid)
         if ap is None:
             return 404, {"message": "The given AgentProcess id does not exist!"}
         sid = ap.sid
@@ -930,7 +734,7 @@ class AgentManager(ServerSlice, SessionListener):
             ):
                 await self._autostarted_agent_manager._ensure_scheduler(env_id)
                 agent = const.AGENT_SCHEDULER_ID
-                client = self.get_agent_client(env_id, agent)
+                client = self.get_agent_client(env_id)
                 if client is not None:
                     await client.get_parameter(str(env_id), agent, res.to_dict())
 
@@ -977,7 +781,7 @@ class AgentManager(ServerSlice, SessionListener):
 
     @handle(methods_v2.get_agent_process_details, env="tid")
     async def get_agent_process_details(self, env: data.Environment, id: uuid.UUID, report: bool = False) -> model.AgentProcess:
-        agent_process = await data.AgentProcess.get_one(environment=env.id, sid=id)
+        agent_process = await data.SchedulerSession.get_one(environment=env.id, sid=id)
         if not agent_process:
             raise NotFound(f"Agent process with id {id} not found")
         dto = agent_process.to_dto()
@@ -1091,7 +895,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             del self._agent_procs[env.id]
 
         LOGGER.debug("Expiring session for scheduler in environment %s", env.id)
-        await self._agent_manager.expire_sessions_for_agents(env.id, endpoints={AGENT_SCHEDULER_ID})
+        await self._agent_manager.expire_sessions_for_environment(env.id)
 
     def _get_state_dir_for_agent_in_env(self, env_id: uuid.UUID) -> str:
         """
@@ -1132,7 +936,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         self,
         env: uuid.UUID,
         *,
-        restart: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> bool:
         """
@@ -1158,7 +961,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
             #       process, this one brings it back because it reads the agent as unpaused)
             raise Exception("_ensure_scheduler should not be called in a transaction context")
 
-        autostart_scheduler = {const.AGENT_SCHEDULER_ID}
         async with data.Agent.get_connection(connection) as connection:
             async with self.agent_lock:
                 # silently ignore requests if this environment is halted
@@ -1168,8 +970,8 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 if refreshed_env.halted:
                     return False
 
-                are_active = await self._agent_manager.are_agents_active(env, autostart_scheduler)
-                if not restart and are_active:
+                are_active = await self._agent_manager.is_scheduler_active(env)
+                if are_active:
                     # do not start a new agent process if the agents are already active, regardless of whether their session
                     # is with an autostarted process or not.
                     return False
@@ -1177,15 +979,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 start_new_process: bool
                 if env not in self._agent_procs or self._agent_procs[env].returncode is not None:
                     # Start new process if none is currently running for this environment.
-                    LOGGER.info("%s matches agents managed by server, ensuring they are started.", autostart_scheduler)
-                    start_new_process = True
-                elif restart:
-                    LOGGER.info(
-                        "%s matches agents managed by server, forcing restart: stopping process with PID %s.",
-                        autostart_scheduler,
-                        self._agent_procs[env],
-                    )
-                    await self._stop_scheduler(refreshed_env, connection=connection)
+                    LOGGER.info("ensuring the scheduler is started for %s.", env)
                     start_new_process = True
                 else:
                     start_new_process = False
@@ -1195,7 +989,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
                 # Wait for all agents to start
                 try:
-                    await self._wait_for_agents(refreshed_env, autostart_scheduler, connection=connection)
+                    await self._wait_for_scheduler(refreshed_env)
                 except asyncio.TimeoutError:
                     LOGGER.warning("Not all agent instances started successfully")
                 return start_new_process
@@ -1370,8 +1164,9 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
             if errhandle is not None:
                 errhandle.close()
 
-    async def _wait_for_agents(
-        self, env: data.Environment, agents: Set[str], *, connection: Optional[asyncpg.connection.Connection] = None
+    async def _wait_for_scheduler(
+        self,
+        env: data.Environment,
     ) -> None:
         """
         Wait until all requested autostarted agent instances are active, e.g. after starting a new agent process.
@@ -1384,60 +1179,29 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
         :raises TimeoutError: When not all agent instances are active and no new agent instance became active in the last
             5 seconds.
         """
-        agent_statuses: dict[str, Optional[AgentStatus]] = await data.Agent.get_statuses(env.id, agents, connection=connection)
-        # Only wait for agents that are not paused
-        expected_agents_in_up_state: Set[str] = {
-            agent_name
-            for agent_name, status in agent_statuses.items()
-            if status is not None and status is not AgentStatus.paused
-        }
-
         assert env.id in self._agent_procs
         proc = self._agent_procs[env.id]
 
-        actual_agents_in_up_state: set[str] = set()
         started = int(time.time())
-        last_new_agent_seen = started
-        last_log = started
-
-        while len(expected_agents_in_up_state) != len(actual_agents_in_up_state):
-            await asyncio.sleep(0.1)
+        while True:
+            if env.id in self._agent_manager.scheduler_for_env:
+                break
             now = int(time.time())
-            if now - last_new_agent_seen > AUTO_STARTED_AGENT_WAIT:
+            if now - started > AUTO_STARTED_AGENT_WAIT:
                 LOGGER.warning(
-                    "Timeout: agent with PID %s took too long to start: still waiting for agent instances %s",
+                    "Timeout: scheduler with PID %s for environment %s took too long to start: %f",
                     proc.pid,
-                    ",".join(sorted(expected_agents_in_up_state - actual_agents_in_up_state)),
+                    env.id,
+                    now - started,
                 )
 
                 raise asyncio.TimeoutError()
-            if now - last_log > AUTO_STARTED_AGENT_WAIT_LOG_INTERVAL:
-                last_log = now
-                LOGGER.debug(
-                    "Waiting for agent with PID %s, waited %d seconds, %d/%d instances up",
-                    proc.pid,
-                    now - started,
-                    len(actual_agents_in_up_state),
-                    len(expected_agents_in_up_state),
-                )
-            new_actual_agents_in_up_state = {
-                agent_name
-                for agent_name in expected_agents_in_up_state
-                if (
-                    (session := self._agent_manager.tid_endpoint_to_session.get((env.id, agent_name), None)) is not None
-                    # make sure to check for expiry because sessions are unregistered from the agent manager asynchronously
-                    and not session.expired
-                )
-            }
-            if len(new_actual_agents_in_up_state) > len(actual_agents_in_up_state):
-                # Reset timeout timer because a new instance became active
-                last_new_agent_seen = now
-            actual_agents_in_up_state = new_actual_agents_in_up_state
+            await asyncio.sleep(0.1)
 
         LOGGER.debug(
-            "Agent process with PID %s is up for agent instances %s",
+            "Scheduler process with PID %s is up for environment %s",
             proc.pid,
-            ",".join(sorted(expected_agents_in_up_state)),
+            env.id,
         )
 
     async def _wait_for_proc_bounded(
@@ -1463,7 +1227,7 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
             await self._ensure_scheduler(env.id)
 
     async def notify_agent_deploy_timer_update(self, env: data.Environment) -> None:
-        agent_client = self._agent_manager.get_agent_client(tid=env.id, endpoint=AGENT_SCHEDULER_ID, live_agent_only=False)
+        agent_client = self._agent_manager.get_agent_client(tid=env.id)
         if agent_client:
             self.add_background_task(agent_client.notify_timer_update(env.id))
 

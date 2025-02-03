@@ -39,7 +39,7 @@ async def env_with_agents(client, environment: str) -> None:
 
     # create scheduler
     process_sid = uuid.uuid4()
-    await data.AgentProcess(hostname="localhost", environment=env_uuid, sid=process_sid).insert()
+    await data.SchedulerSession(hostname="localhost", environment=env_uuid, sid=process_sid).insert()
     id_primary = uuid.uuid4()
     await data.AgentInstance(id=id_primary, process=process_sid, name="scheduler-instance", tid=env_uuid).insert()
     scheduler_agent = await data.Agent.get_one(environment=env_uuid, name=inmanta.const.AGENT_SCHEDULER_ID)
@@ -250,7 +250,7 @@ async def test_sorting_validation(client, environment: str, env_with_agents: Non
 async def test_agent_process_details(client, environment: str) -> None:
     env_uuid = uuid.UUID(environment)
     process_sid = uuid.uuid4()
-    await data.AgentProcess(
+    await data.SchedulerSession(
         hostname="localhost-dummy", environment=env_uuid, sid=process_sid, last_seen=datetime.datetime.now()
     ).insert()
     id_primary = uuid.uuid4()

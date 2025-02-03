@@ -601,7 +601,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                 }
 
                 for agent, resource_id in waiting_agents:
-                    aclient = self.agentmanager_service.get_agent_client(env.id, agent)
+                    aclient = self.agentmanager_service.get_agent_client(env.id)
                     if aclient is not None:
                         if change is None:
                             my_change = const.Change.nochange
