@@ -382,7 +382,7 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
                         # Check that the executor can still be cleaned up by the time we have acquired the lock
                         if pool_member.can_be_cleaned_up() and pool_member.last_used < oldest_time and pool_member.running:
                             LOGGER.debug(
-                                "%s will be shutdown becuase is inactive for %.2f, which is more than %d",
+                                "%s will be shutdown because it was inactive for %.2f, which is more than %d",
                                 self.member_name(pool_member),
                                 (cleanup_start - pool_member.last_used).total_seconds(),
                                 self.retention_time,
