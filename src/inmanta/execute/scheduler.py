@@ -269,12 +269,6 @@ class Scheduler:
             ),
         ):
             t.normalize()
-            if isinstance(t, plugins.Plugin):
-                LOGGER.debug(
-                    "Inmanta type signature inferred from type annotations for plugin %s::%s",
-                    t.namespace,
-                    t.get_signature(dsl_types=True),
-                )
 
         # normalize root blocks
         for block in blocks:

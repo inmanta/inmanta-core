@@ -19,6 +19,7 @@
 import asyncio
 import collections.abc
 import inspect
+import logging
 import numbers
 import os
 import subprocess
@@ -61,6 +62,9 @@ if TYPE_CHECKING:
     from inmanta.ast.statements import DynamicStatement
     from inmanta.ast.statements.call import FunctionCall
     from inmanta.compiler import Compiler
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class PluginDeprecationWarning(InmantaWarning):
@@ -557,6 +561,12 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         self.return_type.resolve_type(self, self.resolver)
 
+        LOGGER.debug(
+            "Found plugin %s::%s",
+            self.namespace,
+            self.get_signature(dsl_types=True),
+        )
+
     def _load_signature(self, function: Callable[..., object]) -> None:
         """
         Load the signature from the given python function, and update the relevant attributes
@@ -654,7 +664,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             self.kwargs[arg] = argument
             self.all_args[arg] = argument
 
-    def get_signature(self, dsl_types: bool = False) -> str:
+    def get_signature(self, *, dsl_types: bool = False) -> str:
         """
         Generate the signature of this plugin. Return a string
         containing the arguments and their types, and the type

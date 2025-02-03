@@ -451,14 +451,14 @@ import plugin_native_types
         compiler.do_compile()
 
         expected_signatures = [
-            "get_from_dict(value: dict[string], key: string) -> string?",
+            "get_from_dict(value: dict[string, string], key: string) -> string?",
             "many_arguments(il: string[], idx: int) -> string",
             "as_none(value: string)",
             "var_args_test(value: string, *other: string[])",
-            "var_kwargs_test(value: string, *other: string[], **more: dict[int])",
+            "var_kwargs_test(value: string, *other: string[], **more: dict[string, int])",
             (
                 "all_args_types(positional_arg: string, *star_args_collector: string[], "
-                "key_word_arg: string?, **star_star_args_collector: dict[string])"
+                "key_word_arg: string?, **star_star_args_collector: dict[string, string])"
             ),
             "positional_args_ordering_test(c: string, a: string, b: string) -> string",
             "no_collector(pos_arg_1: string, pos_arg_2: string, kw_only_123: string, kw_only_2: string, kw_only_3: string)",
@@ -468,9 +468,9 @@ import plugin_native_types
         for plugin_signature in expected_signatures:
             log_contains(
                 caplog=caplog,
-                loggerpart="inmanta.execute.scheduler",
+                loggerpart="inmanta.plugins",
                 level=logging.DEBUG,
-                msg=f"Inmanta type signature inferred from type annotations for plugin plugin_native_types::{plugin_signature}",
+                msg=f"Found plugin plugin_native_types::{plugin_signature}",
             )
 
 
