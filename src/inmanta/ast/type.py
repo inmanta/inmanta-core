@@ -82,7 +82,7 @@ class Type(Locatable):
 
     def is_primitive(self) -> bool:
         """
-        Returns true iff this type is a primitive type, i.e. number, string, bool.
+        Returns true iff this type is a primitive type, i.e. number, string, bool or a collection of only primitives.
         """
         return False
 
@@ -130,6 +130,7 @@ class Type(Locatable):
         Convert an instance of this type to its python form
 
         should only be called if has_custom_to_python is True
+        the instance must be valid according to the validate method
         """
         raise NotImplementedError(f"Not implemented for {self}")
 
@@ -224,6 +225,11 @@ class NullableType(Type):
 
 
 class Any(Type):
+    """
+    this type represents the any type, similar to Python's
+
+    the Any class itself is neither the top nor the bottom type in the type hierarchy.
+    """
 
     def corresponds_to(self, pytype: type[object]) -> bool:
         return True
@@ -277,7 +283,7 @@ class Primitive(Type):
 
     def has_custom_to_python(self) -> bool:
         # All primitives can be trivially converted
-        return True
+        return False
 
 
 @stable_api
@@ -639,7 +645,9 @@ class TypedList(List):
         return f"list[{self.element_type.as_python_type_string()}]"
 
     def to_python(self, instance: object) -> "object":
-        assert isinstance(instance, Sequence), f"This method can only be called on iterables, not on {type(instance)}"
+        if not isinstance(instance, Sequence):
+            # should not happen, pre-condition
+            raise TypeError(f"This method can only be called on iterables, not on {type(instance)}")
         return [self.element_type.to_python(element) for element in instance]
 
     def has_custom_to_python(self) -> bool:
@@ -860,12 +868,15 @@ class Union(Type):
         return False
 
     def corresponds_to(self, pytype: type[object]) -> bool:
-        raise NotImplementedError("No unions can be specified on the plugin boundary")
+        raise NotImplementedError("No unions can be specified at attributes, unexpected usage")
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Union):
             return NotImplemented
         return self.types == other.types
+
+    def is_primitive(self) -> bool:
+        return all(tp.is_primitive() for tp in self.types)
 
 
 @stable_api
@@ -968,22 +979,22 @@ class ConstraintType(NamedType):
     def get_double_defined_exception(self, other: "NamedType") -> DuplicateException:
         return DuplicateException(self, other, "TypeConstraint %s is already defined" % (self.get_full_name()))
 
-    def get_base_type(self) -> "Type":
-        assert self.basetype is not None
-        return self.basetype
-
     def has_custom_to_python(self) -> bool:
         # Substitute for base type for now
-        return self.get_base_type().has_custom_to_python()
+        assert self.basetype is not None
+        return self.basetype.has_custom_to_python()
 
     def corresponds_to(self, pytype: type[object]) -> bool:
-        return self.get_base_type().corresponds_to(pytype)
+        assert self.basetype is not None
+        return self.basetype.corresponds_to(pytype)
 
     def as_python_type_string(self) -> "str | None":
-        return self.get_base_type().as_python_type_string()
+        assert self.basetype is not None
+        return self.basetype.as_python_type_string()
 
     def to_python(self, instance: object) -> "object":
-        return self.get_base_type().to_python(instance)
+        assert self.basetype is not None
+        return self.basetype.to_python(instance)
 
 
 def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
