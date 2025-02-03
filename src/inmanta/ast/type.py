@@ -123,7 +123,8 @@ class Type(Locatable):
 
         Used only on the plugin boundary
         """
-        return False
+        base_type = self.get_base_type()
+        return False if base_type is self else base_type.has_custom_to_python()
 
     def to_python(self, instance: object) -> "object":
         """
