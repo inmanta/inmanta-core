@@ -27,9 +27,11 @@ defined below can be used in a model, in a context where the following signature
     :linenos:
 
     from inmanta.plugins import plugin
+    from collections.abc import Sequence
+
 
     @plugin
-    def foo(value: str) -> list[int]:
+    def foo(value: str) -> Sequence[int]:
         ...
 
 This approach is the recommended way of adding type information to plugins as it allows you to leverage
@@ -42,21 +44,21 @@ or a return value, that can be of either type).
 The table below shows correspondence between types from the Inmanta DSL and their respective python counterpart:
 
 
-+------------------+-------------------+
-| Inmanta DSL type | Python type       |
-+==================+===================+
-| string           | str               |
-+------------------+-------------------+
-| int              | int               |
-+------------------+-------------------+
-| float            | float             |
-+------------------+-------------------+
-| int[]            | Sequence[int]     |
-+------------------+-------------------+
-| dict[int]        | Mapping[str, int] |
-+------------------+-------------------+
-| string?          | str | None        |
-+------------------+-------------------+
++------------------+-----------------------------------+
+| Inmanta DSL type | Python type                       |
++==================+===================================+
+| string           | str                               |
++------------------+-----------------------------------+
+| int              | int                               |
++------------------+-----------------------------------+
+| float            | float                             |
++------------------+-----------------------------------+
+| int[]            | collections.abc.Sequence[int]     |
++------------------+-----------------------------------+
+| dict[int]        | collections.abc.Mapping[str, int] |
++------------------+-----------------------------------+
+| string?          | str | None                        |
++------------------+-----------------------------------+
 
 
 
