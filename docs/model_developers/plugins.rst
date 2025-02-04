@@ -19,7 +19,7 @@ arguments and the return value must be annotated with the allowed types from the
 To provide this DSL typing information, you can either:
 
 
-Pass the native python type that corresponds to the term:`DSL` type at hand. e.g. the ``foo`` plugin
+Pass the native python type that corresponds to the :term:`DSL` type at hand. e.g. the ``foo`` plugin
 defined below can be used in a model, in a context where the following signature is expected ``string -> int[]``:
 
 
