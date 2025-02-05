@@ -64,8 +64,6 @@ The table below shows correspondence between types from the Inmanta DSL and thei
 
 
 Alternatively, the Inmanta :term:`DSL` type annotations can be provided as a string (Python3 style argument annotation).
-The snippet below is equivalent (typing-wise) to the previous one, but this style is discouraged as type-checkers
-won't work out-of-the-box alongside it, and it also doesn't support more elaborate typing constructs such as ``Union``.
 
 
 .. code-block:: python
