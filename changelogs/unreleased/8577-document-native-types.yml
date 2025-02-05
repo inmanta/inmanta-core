@@ -1,6 +1,6 @@
 description: >
   Add support for native python types in plugins.
-  Plugin developers can now leverage static type-checkers during development.
+  Plugin developers can now use mypy on inmanta plugins.
   Union types are now supported as typing annotations in plugins.
 
   For more information, please refer to the [plugins](module-plugins) documentation.
