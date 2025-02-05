@@ -70,6 +70,8 @@ class ResourceVersionIntent:
 
     model_version: int
     intent: ResourceIntent
+    # All types that live on this agent. Should be dropped once this functionality moves to the code manager.
+    # At that point, the state's types_per_agent can be dropped as well
     all_types_for_agent: Collection[ResourceType]
 
 
