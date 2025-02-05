@@ -95,7 +95,7 @@ evaluation.
 
     A module's Python code lives in the ``inmanta_plugins.<module_name>`` namespace.
 
-A simple plugin that accepts no arguments, prints out "hello world" and returns no value requires
+A simple plugin that accepts no arguments, prints out "Hello world!" and returns no value requires
 the following code:
 
 .. code-block:: python
