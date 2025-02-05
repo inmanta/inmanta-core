@@ -68,6 +68,8 @@ The table below shows correspondence between types from the Inmanta DSL and thei
 +------------------+---------------------------------------+
 
 
+``any`` is a special type that effectively disables type validation.
+
 Type hinting using Inmanta DSL types
 ------------------------------------
 
@@ -84,7 +86,6 @@ Alternatively, the Inmanta :term:`DSL` type annotations can be provided as a str
         ...
 
 
-``any`` is a special type that effectively disables type validation.
 
 Through the arguments of the function, the Python code in the plugin can navigate the orchestration
 model. The compiler takes care of scheduling the execution at the correct point in the model
