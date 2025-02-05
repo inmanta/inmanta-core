@@ -16,7 +16,9 @@ A plugin is a python function, registered with the platform with the :func:`~inm
 decorator. This plugin accepts arguments when called from the DSL and can return a value. Both the
 arguments and the return value must be annotated with the allowed types from the orchestration model.
 
-To provide this DSL typing information, you can either:
+To provide this DSL typing information, you can use either:
+     -  inmanta types (such as 'string`)
+     -  python type (such as `str`)
 
 
 Pass the native python type that corresponds to the :term:`DSL` type at hand. e.g. the ``foo`` plugin
