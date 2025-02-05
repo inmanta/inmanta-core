@@ -34,8 +34,7 @@ defined below can be used in a model, in a context where the following signature
     def foo(value: str) -> Sequence[int]:
         ...
 
-This approach is the recommended way of adding type information to plugins as it allows you to leverage
-type checkers (e.g. mypy) when writing plugin code.
+This approach is the recommended way of adding type information to plugins as it allows you to use mypy when writing plugin code.
 
 This approach also fully supports the use of ``Union`` types (e.g. ``Union[str, int]`` for an argument
 or a return value, that can be of either type).
