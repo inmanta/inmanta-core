@@ -481,7 +481,7 @@ class String(Primitive):
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [str]
+        self.cast_function = str
 
     def validate(self, value: Optional[object]) -> bool:
         """

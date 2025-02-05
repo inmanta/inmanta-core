@@ -39,8 +39,8 @@ def test_conversion(caplog):
     assert inmanta_type.List() == to_dsl_type(Sequence)
     assert inmanta_type.List() == to_dsl_type(collections.abc.Sequence)
     assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(collections.abc.Sequence[str])
-    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type(dict)
-    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type(Mapping)
+    assert inmanta_type.TypedDict(inmanta_type.Any()) == to_dsl_type(dict)
+    assert inmanta_type.TypedDict(inmanta_type.Any()) == to_dsl_type(Mapping)
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(dict[str, str])
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(Mapping[str, str])
 

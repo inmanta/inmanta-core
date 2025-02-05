@@ -270,7 +270,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     """
     # Any to any
     if python_type is typing.Any:
-        return inmanta_type.Type()
+        return inmanta_type.Any()
 
     # None to None
     if python_type is type(None) or python_type is None:
@@ -302,7 +302,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
             if origin in [collections.abc.Mapping, dict, typing.Mapping]:
                 args = typing_inspect.get_args(python_type)
                 if not args:
-                    return inmanta_type.TypedDict(inmanta_type.Type())
+                    return inmanta_type.TypedDict(inmanta_type.Any())
 
                 if not issubclass(args[0], str):
                     raise TypingException(
@@ -353,7 +353,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
         )
     )
 
-    return inmanta_type.Type()
+    return inmanta_type.Any()
 
 
 def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, value: object) -> object:
