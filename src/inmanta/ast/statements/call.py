@@ -218,7 +218,7 @@ class PluginFunction(Function):
 
     def call_direct(self, args: list[object], kwargs: dict[str, object]) -> object:
         processed_args = self.plugin.check_args(args, kwargs)
-        no_unknows = not processed_args.unknows
+        no_unknows = not processed_args.unknowns
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
             raise RuntimeException(self.ast_node, "Received unknown value during direct execution")
@@ -255,7 +255,7 @@ class PluginFunction(Function):
     ) -> None:
 
         processed_args = self.plugin.check_args(args, kwargs)
-        no_unknows = not processed_args.unknows
+        no_unknows = not processed_args.unknowns
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
             result.set_value(Unknown(self), self.ast_node.location)
@@ -272,7 +272,7 @@ class PluginFunction(Function):
             self.plugin(*args, **kwargs)
         else:
             try:
-                value = self.plugin.call_in_context(args, kwargs, resolver, queue, self.ast_node.location)
+                value = self.plugin.call_in_context(processed_args, resolver, queue, self.ast_node.location)
                 result.set_value(value if value is not None else NoneValue(), self.ast_node.location)
             except UnknownException as e:
                 result.set_value(e.unknown, self.ast_node.location)

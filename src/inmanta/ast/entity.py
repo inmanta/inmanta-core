@@ -584,7 +584,7 @@ class Entity(NamedType, WithComment):
             match rel_or_attr:
                 case inmanta.ast.attribute.RelationAttribute() as rel:
                     # No relations except for requires and provides
-                    if not rel.entity.get_full_name() == "std::Entity":
+                    if not (rel.entity.get_full_name() == "std::Entity" and rel.name in ["requires", "provides"]):
                         failures.append(
                             f"a relation called {rel_or_attr_name} is defined at {rel.location}. "
                             "Dataclasses are not allowed to have relations"

@@ -375,35 +375,6 @@ def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, valu
     return DynamicProxy.return_value(value)
 
 
-def primitive_python_type_to_model_domain(intype: type) -> inmanta_type.Type:
-    """
-    Convert a primtive python type to the model domain
-
-    Currently only used to construct explainer messages
-    """
-    if typing_inspect.is_union_type(intype):
-        # only Optional should reach this
-        assert any(typing_inspect.is_optional_type(tt) for tt in typing_inspect.get_args(intype, evaluate=True))
-        other_types = [tt for tt in typing_inspect.get_args(intype, evaluate=True) if not typing_inspect.is_optional_type(tt)]
-        assert len(other_types) == 1
-        return inmanta_type.NullableType(primitive_python_type_to_model_domain(other_types[0]))
-    if typing_inspect.is_generic_type(intype):
-        orig = typing_inspect.get_origin(intype)
-        assert orig is not None  # Make mypy happy
-
-        if issubclass(orig, dict):
-            args = typing_inspect.get_args(intype, evaluate=True)
-            assert len(args) == 2
-            assert issubclass(args[0], str)  # TODO
-            return inmanta_type.TypedDict(primitive_python_type_to_model_domain(args[1]))
-        else:
-            assert issubclass(orig, list)  # Only one type of generic should get here
-            args = typing_inspect.get_args(intype, evaluate=True)
-            assert len(args) == 1
-            return inmanta_type.TypedList(primitive_python_type_to_model_domain(args[0]))
-    return python_to_model[intype]
-
-
 class PluginCallContext:
     """
     Internal state of a plugin call
@@ -553,7 +524,7 @@ class CheckedArgs:
 
     args: list[object]
     kwargs: Mapping[str, object]
-    unknows: bool
+    unknowns: bool
 
 
 class Plugin(NamedType, WithComment, metaclass=PluginMeta):
@@ -907,7 +878,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                     )
             converted_kwargs[name] = result
 
-        return CheckedArgs(args=converted_args, kwargs=converted_kwargs, unknows=is_unknown)
+        return CheckedArgs(args=converted_args, kwargs=converted_kwargs, unknowns=is_unknown)
 
     def emit_statement(self) -> "DynamicStatement":
         """
@@ -949,7 +920,18 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             warnings.warn(PluginDeprecationWarning(msg))
         self.check_requirements()
 
-        value = self.call(*args, **kwargs)
+        def new_arg(arg: object) -> object:
+            if isinstance(arg, Context):
+                return arg
+            elif isinstance(arg, Unknown) and self.is_accept_unknowns():
+                return arg
+            else:
+                return DynamicProxy.return_value(arg)
+
+        new_args = [new_arg(arg) for arg in args]
+        new_kwargs = {k: new_arg(v) for k, v in kwargs.items()}
+
+        value = self.call(*new_args, **new_kwargs)
 
         value = DynamicProxy.unwrap(value)
 
@@ -972,8 +954,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
     def call_in_context(
         self,
-        args: Sequence[object],
-        kwargs: Mapping[str, object],
+        processed_args: CheckedArgs,
         resolver: Resolver,
         queue: QueueScheduler,
         location: Location,
@@ -987,6 +968,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 msg += f" It should be replaced by '{self.replaced_by}'."
             warnings.warn(PluginDeprecationWarning(msg))
         self.check_requirements()
+        args = processed_args.args
+        kwargs = processed_args.kwargs
         value = self.call(*args, **kwargs)
 
         value = DynamicProxy.unwrap(

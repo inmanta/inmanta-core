@@ -52,6 +52,7 @@ class DynamicUnwrapContext:
 
 
 # this is here to avoid import loops
+# It would be nicer to have it as class method on entity, but that would cause proxy to import the entire compiler
 def get_inmanta_type_for_dataclass(for_type: type[object]) -> "Entity | None":
     if hasattr(for_type, "_paired_inmanta_entity"):
         return for_type._paired_inmanta_entity

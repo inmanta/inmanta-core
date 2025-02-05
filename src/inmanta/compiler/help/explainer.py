@@ -32,7 +32,7 @@ from inmanta.ast.statements import AssignStatement
 from inmanta.ast.statements.generator import Constructor, IndexCollisionException
 from inmanta.execute.runtime import OptionVariable
 from inmanta.module import ModuleV2InV1PathException
-from inmanta.plugins import primitive_python_type_to_model_domain
+from inmanta.plugins import to_dsl_type
 
 
 def bold(content: Optional[str] = None) -> str:
@@ -243,13 +243,20 @@ class {problem.entity.name}:
             for field in sorted(dataclasses.fields(problem.dataclass), key=lambda x: x.name):
                 type = hints[field.name]
                 try:
-                    type_str = primitive_python_type_to_model_domain(type).type_string()
+                    type_str = to_dsl_type(type).type_string()
                 except Exception:
                     logging.info(
                         "Could not construct inmanta type for field %s with python type %s",
                         field.name,
                         str(type),
                         exc_info=True,
+                    )
+                    type_str = "ERROR"
+                if not type_str:
+                    logging.info(
+                        "Could not construct inmanta type for field %s with python type %s",
+                        field.name,
+                        str(type),
                     )
                     type_str = "ERROR"
                 model += f"   {type_str} {field.name}\n"

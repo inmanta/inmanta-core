@@ -108,9 +108,13 @@ class Type(Locatable):
 
     def corresponds_to(self, type: "Type") -> bool:
         """
-        Return if the python type corresponds to this inmanta type
+        Determine if the given 'type' is a good approximation to `self` given that `type` is derived from a python type
 
-        Used only on the plugin boundary
+        Intended specifically for type correspondence for dataclasses.
+        This brings specific assumptions
+        - `self` is the native inmanta type
+        - `type` is translated form the python domain
+        - 'Any' means: trust me, it will be fine (i.e. always corresponds)
         """
         raise NotImplementedError()
 
@@ -276,7 +280,7 @@ class Primitive(Type):
         try:
             return self.cast_function(value)
         except (ValueError, TypeError):
-            raise  RuntimeException(None, f"Failed to cast '{value}' to {self}")
+            raise RuntimeException(None, f"Failed to cast '{value}' to {self}")
 
     def type_string_internal(self) -> str:
         return "Primitive"
@@ -831,7 +835,7 @@ class Union(Type):
         return False
 
     def corresponds_to(self, type: Type) -> bool:
-        raise NotImplementedError("No unions can be specified at attributes, unexpected usage")
+        raise NotImplementedError("No unions can be specified as attributes, unexpected usage")
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Union):
@@ -959,6 +963,7 @@ class ConstraintType(NamedType):
         if isinstance(type, Any):
             return True
         assert self.basetype is not None
+        # Same basetype is sufficiently close
         return self.basetype.corresponds_to(type)
 
     def as_python_type_string(self) -> "str | None":
