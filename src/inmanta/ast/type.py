@@ -25,7 +25,8 @@ from typing import Callable, Optional
 
 import typing_inspect
 
-from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException
+from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException, \
+    Location
 from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.stable_api import stable_api
 
@@ -291,6 +292,8 @@ class Primitive(Type):
         # All primitives can be trivially converted
         return False
 
+    def is_primitive(self) -> bool:
+        return True
 
 @stable_api
 class Number(Primitive):
@@ -324,9 +327,6 @@ class Number(Primitive):
 
         return True  # allow this function to be called from a lambda function
 
-    def is_primitive(self) -> bool:
-        return True
-
     def get_location(self) -> None:
         return None
 
@@ -343,7 +343,7 @@ class Number(Primitive):
         return instance
 
     def corresponds_to(self, type: "Type") -> bool:
-        return isinstance(type,(Any, Float, Integer))
+        return isinstance(type,(Any, Float, Integer, Number))
 
 
 @stable_api
@@ -369,9 +369,6 @@ class Float(Primitive):
             raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
         return True  # allow this function to be called from a lambda function
 
-    def is_primitive(self) -> bool:
-        return True
-
     def get_location(self) -> None:
         return None
 
@@ -389,7 +386,7 @@ class Float(Primitive):
 
 
 @stable_api
-class Integer(Number):
+class Integer(Primitive):
     """
     An instance of this class represents the int type in the configuration model.
     """
@@ -450,9 +447,6 @@ class Bool(Primitive):
     def type_string_internal(self) -> str:
         return self.type_string()
 
-    def is_primitive(self) -> bool:
-        return True
-
     def get_location(self) -> None:
         return None
 
@@ -497,9 +491,6 @@ class String(Primitive):
 
     def type_string_internal(self) -> str:
         return self.type_string()
-
-    def is_primitive(self) -> bool:
-        return True
 
     def get_location(self) -> None:
         return None

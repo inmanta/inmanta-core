@@ -34,17 +34,14 @@ def type_corresponds(
 
     for pyt in does_correspond:
         tp = to_dsl_type(pyt)
-        print(it.type_string_internal(), tp.type_string_internal())
         assert it.corresponds_to(tp)
         assert inm_type.NullableType(it).corresponds_to(inm_type.NullableType(tp))
-    print("NEG")
     for pyt in does_not_correspond:
         try:
             tp = to_dsl_type(pyt)
         except TypingException:
             # type is invalid
             continue
-        print(it.type_string_internal(), tp.type_string_internal())
         assert not it.corresponds_to(tp)
         assert not inm_type.NullableType(it).corresponds_to(inm_type.NullableType(tp ))
 
