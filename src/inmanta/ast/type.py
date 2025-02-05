@@ -99,7 +99,7 @@ class Type(Locatable):
         """
         return base_type
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
+    def corresponds_to(self, type: "Type") -> bool:
         """
         Return if the python type corresponds to this inmanta type
 
@@ -205,13 +205,12 @@ class NullableType(Type):
     def is_primitive(self) -> bool:
         return self.element_type.is_primitive()
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
-        if not typing_inspect.is_optional_type(pytype):
+    def corresponds_to(self, type: Type) -> bool:
+        if isinstance(type, Any):
+            return True
+        if not isinstance(type, NullableType):
             return False
-        # remove options from union
-        other_types = [tp for tp in typing_inspect.get_args(pytype) if not typing_inspect.is_optional_type(tp)]
-        # Typing union conveniently returns the base type if that is the only element
-        return self.element_type.corresponds_to(typing.Union[*other_types])
+        return self.element_type.corresponds_to(type.element_type)
 
     def as_python_type_string(self) -> "str | None":
         return f"{self.element_type.as_python_type_string()} | None"
@@ -232,7 +231,7 @@ class Any(Type):
     the Any class itself is neither the top nor the bottom type in the type hierarchy.
     """
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
+    def corresponds_to(self, type: Type) -> bool:
         return True
 
     def as_python_type_string(self) -> "str | None":
@@ -240,6 +239,7 @@ class Any(Type):
 
     def has_custom_to_python(self) -> bool:
         return False
+
 
     def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721
@@ -276,6 +276,11 @@ class Primitive(Type):
 
     def type_string_internal(self) -> str:
         return "Primitive"
+
+    def corresponds_to(self, type: "Type") -> bool:
+        if isinstance(type, Any):
+            return True
+        return type == self
 
     def __eq__(self, other: object) -> bool:
         if other.__class__ != self.__class__:
@@ -331,14 +336,14 @@ class Number(Primitive):
     def type_string_internal(self) -> str:
         return self.type_string()
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
-        return pytype in [int, float, numbers.Number]
-
     def as_python_type_string(self) -> "str | None":
         return "numbers.Number"
 
     def to_python(self, instance: object) -> "object":
         return instance
+
+    def corresponds_to(self, type: "Type") -> bool:
+        return isinstance(type,(Any, Float, Integer))
 
 
 @stable_api
@@ -376,9 +381,6 @@ class Float(Primitive):
     def type_string_internal(self) -> str:
         return self.type_string()
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
-        return pytype is float
-
     def as_python_type_string(self) -> "str | None":
         return "float"
 
@@ -410,9 +412,6 @@ class Integer(Number):
 
     def type_string(self) -> str:
         return "int"
-
-    def corresponds_to(self, pytype: type[object]) -> bool:
-        return pytype is int
 
     def as_python_type_string(self) -> "str | None":
         return "int"
@@ -456,9 +455,6 @@ class Bool(Primitive):
 
     def get_location(self) -> None:
         return None
-
-    def corresponds_to(self, pytype: type[object]) -> bool:
-        return pytype is bool
 
     def as_python_type_string(self) -> "str | None":
         return "bool"
@@ -508,9 +504,6 @@ class String(Primitive):
     def get_location(self) -> None:
         return None
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
-        return pytype is str
-
     def as_python_type_string(self) -> "str | None":
         return "str"
 
@@ -553,15 +546,11 @@ class List(Type):
     def get_location(self) -> None:
         return None
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
-        if typing_inspect.is_union_type(pytype):
-            return False
+    def corresponds_to(self, type: Type) -> bool:
+        if isinstance(type, Any):
+            return True
 
-        if not typing_inspect.is_generic_type(pytype):
-            return issubclass(pytype, Sequence)
-
-        origin = typing_inspect.get_origin(pytype)
-        return issubclass(origin, Sequence)
+        return isinstance(type, List)
 
     def as_python_type_string(self) -> "str | None":
         return "list[object]"
@@ -626,21 +615,19 @@ class TypedList(List):
     def is_primitive(self) -> bool:
         return self.get_base_type().is_primitive()
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
-        if typing_inspect.is_union_type(pytype):
+    def corresponds_to(self, type: Type) -> bool:
+        if isinstance(type, Any):
+            return True
+
+        if not isinstance(type, List):
+            # Not a list at all
             return False
 
-        if not typing_inspect.is_generic_type(pytype):
-            return issubclass(pytype, Sequence)
+        if not isinstance(type, TypedList):
+            # The other list is untyped, so we are equivalent
+            return True
 
-        origin = typing_inspect.get_origin(pytype)
-        if not issubclass(origin, Sequence):
-            return False
-
-        args = typing_inspect.get_args(pytype, True)
-        if len(args) != 1:
-            return False
-        return self.element_type.corresponds_to(args[0])
+        return self.element_type.corresponds_to(type.element_type)
 
     def as_python_type_string(self) -> "str | None":
         return f"list[{self.element_type.as_python_type_string()}]"
@@ -718,27 +705,10 @@ class Dict(Type):
     def as_python_type_string(self) -> "str | None":
         return "dict"
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
-        if typing_inspect.is_union_type(pytype):
-            return False
-
-        if not typing_inspect.is_generic_type(pytype):
-            # None generic dict is fine
-            return issubclass(pytype, Mapping)
-
-        # Generic dict
-        origin = typing_inspect.get_origin(pytype)
-        if not issubclass(origin, Mapping):
-            return False
-
-        args = typing_inspect.get_args(pytype, True)
-        if len(args) != 2:
-            return False
-
-        # always require dict[str,
-        if args[0] != str:
-            return False
-        return True
+    def corresponds_to(self, type: Type) -> bool:
+        if isinstance(type, Any):
+            return True
+        return isinstance(type, Dict)
 
 
 @stable_api
@@ -770,29 +740,18 @@ class TypedDict(Dict):
     def get_location(self) -> None:
         return None
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
-        if typing_inspect.is_union_type(pytype):
+    def corresponds_to(self, type: Type) -> bool:
+        if isinstance(type, Any):
+            return True
+
+        if not isinstance(type, Dict):
             return False
 
-        if not typing_inspect.is_generic_type(pytype):
-            # None generic dict is fine
-            return issubclass(pytype, Mapping)
+        if not isinstance(type, TypedDict):
+            # Untyped dict is fine
+            return True
 
-        # generic dict
-        origin = typing_inspect.get_origin(pytype)
-        if not issubclass(origin, Mapping):
-            return False
-
-        args = typing_inspect.get_args(pytype, True)
-        if len(args) != 2:
-            return False
-
-        # first argument is always str
-        if args[0] != str:
-            return False
-
-        # second is base type
-        return self.element_type.corresponds_to(args[1])
+        return self.element_type.corresponds_to(type.element_type)
 
     def as_python_type_string(self) -> "str | None":
         return f"dict[str, {self.element_type.as_python_type_string()}]"
@@ -868,7 +827,7 @@ class Union(Type):
         # If we mix convertible and non convertible, it won't work, so we avoid it
         return False
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
+    def corresponds_to(self, type: Type) -> bool:
         raise NotImplementedError("No unions can be specified at attributes, unexpected usage")
 
     def __eq__(self, other: object) -> bool:
@@ -897,15 +856,19 @@ class Literal(Union):
         # Keep it simple
         return "object"
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
+    def is_primitive(self) -> bool:
+        return True
+
+    def corresponds_to(self, type: Type) -> bool:
+        if isinstance(type, Any):
+            return True
+
         # Infinite recursive type, avoid the mess
-        if pytype in [int, float, bool, str]:
-            return True
-        if List.corresponds_to(self, pytype):
-            return True
-        if Dict.corresponds_to(self, pytype):
-            return True
-        return False
+        # We allow any primitive
+        return type.is_primitive()
+
+
+
 
 
 @stable_api
@@ -985,9 +948,14 @@ class ConstraintType(NamedType):
         assert self.basetype is not None
         return self.basetype.has_custom_to_python()
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
+    def corresponds_to(self, type: Type) -> bool:
+        if self is type:
+            # To avoid comparing the expression, we evaluate on exact equality, as typedefs are uniquely defined
+            return True
+        if isinstance(type, Any):
+            return True
         assert self.basetype is not None
-        return self.basetype.corresponds_to(pytype)
+        return self.basetype.corresponds_to(type)
 
     def as_python_type_string(self) -> "str | None":
         assert self.basetype is not None

@@ -38,9 +38,10 @@ from inmanta.ast import (
 )
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast.type import Float, NamedType, NullableType, Type
+from inmanta.ast.type import Float, NamedType, NullableType, Type, Any as inm_Any
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
+from inmanta.plugins import to_dsl_type
 from inmanta.types import DataclassProtocol
 
 # pylint: disable-msg=R0902,R0904
@@ -605,7 +606,7 @@ class Entity(NamedType, WithComment):
 
                     dc_fields.pop(rel_or_attr_name)
                     # Type correspondence
-                    if not inm_type.corresponds_to(dc_types[rel_or_attr_name]):
+                    if not inm_type.corresponds_to(to_dsl_type(dc_types[rel_or_attr_name])):
                         failures.append(
                             f"The attribute {rel_or_attr_name} does not have the same type as "
                             "the associated field in the python domain. "
@@ -656,8 +657,10 @@ class Entity(NamedType, WithComment):
     def get_paired_dataclass(self) -> Optional[type[object]]:
         return self._paired_dataclass
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
-        return self._paired_dataclass == pytype
+    def corresponds_to(self, type: Type) -> bool:
+        if isinstance(type, inm_Any):
+            return True
+        return type is self
 
     def as_python_type_string(self) -> "str | None":
         if self._paired_dataclass is None:

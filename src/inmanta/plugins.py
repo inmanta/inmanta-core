@@ -249,13 +249,13 @@ python_to_model = {
     numbers.Number: inmanta_type.Number(),
     int: inmanta_type.Integer(),
     bool: inmanta_type.Bool(),
-    dict: inmanta_type.TypedDict(inmanta_type.Type()),
-    typing.Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
-    Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
+    dict: inmanta_type.TypedDict(inmanta_type.Any()),
+    typing.Mapping: inmanta_type.TypedDict(inmanta_type.Any()),
+    Mapping: inmanta_type.TypedDict(inmanta_type.Any()),
     list: inmanta_type.List(),
     typing.Sequence: inmanta_type.List(),
     Sequence: inmanta_type.List(),
-    object: inmanta_type.Type(),
+    object: inmanta_type.Any(),
 }
 
 
@@ -307,7 +307,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
                     )
 
                 if len(args) == 1:
-                    return inmanta_type.TypedDict(inmanta_type.Type())
+                    return inmanta_type.TypedDict(inmanta_type.Any())
 
                 return inmanta_type.TypedDict(to_dsl_type(args[1]))
             else:

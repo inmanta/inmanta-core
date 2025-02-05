@@ -20,6 +20,8 @@ import numbers
 import typing as py_type
 
 import inmanta.ast.type as inm_type
+from inmanta.ast import TypingException
+from inmanta.plugins import to_dsl_type
 
 
 def type_corresponds(
@@ -31,12 +33,20 @@ def type_corresponds(
     """
 
     for pyt in does_correspond:
-        assert it.corresponds_to(pyt)
-        assert inm_type.NullableType(it).corresponds_to(pyt | None)
-
+        tp = to_dsl_type(pyt)
+        print(it.type_string_internal(), tp.type_string_internal())
+        assert it.corresponds_to(tp)
+        assert inm_type.NullableType(it).corresponds_to(inm_type.NullableType(tp))
+    print("NEG")
     for pyt in does_not_correspond:
-        assert not it.corresponds_to(pyt)
-        assert not inm_type.NullableType(it).corresponds_to(pyt | None)
+        try:
+            tp = to_dsl_type(pyt)
+        except TypingException:
+            # type is invalid
+            continue
+        print(it.type_string_internal(), tp.type_string_internal())
+        assert not it.corresponds_to(tp)
+        assert not inm_type.NullableType(it).corresponds_to(inm_type.NullableType(tp ))
 
 
 def test_type_correspondence():
@@ -63,15 +73,15 @@ def test_type_correspondence():
     typed_dict = inm_type.TypedDict(inm_type.Integer())
     type_corresponds(
         typed_dict,
-        [dict, dict[str, int]],
-        [dict[str, object], dict[str, list[list[list[str]]]]] + never_dict,
+        [dict, dict[str, int], dict[str, object]],
+        [dict[str, list[list[list[str]]]]] + never_dict,
     )
 
     lang_dict = inm_type.LiteralDict()
     type_corresponds(
         lang_dict,
-        [dict, dict[str, int], dict[str, list[list[list[str]]]]],
-        [dict[str, object]] + never_dict,
+        [dict, dict[str, int], dict[str, list[list[list[str]]]], dict[str, object]],
+        never_dict,
     )
 
     # Lists
@@ -80,10 +90,10 @@ def test_type_correspondence():
     type_corresponds(plain_list, [list, list[str], list[int], list[object]], never_list)
 
     typed_list = inm_type.TypedList(inm_type.Integer())
-    type_corresponds(typed_list, [list, list[int]], [list[str], list[object]] + never_list)
+    type_corresponds(typed_list, [list, list[int], list[object]], [list[str]] + never_list)
 
     lang_list = inm_type.LiteralList()
-    type_corresponds(lang_list, [list, list[str], list[int]], [list[object]] + never_list)
+    type_corresponds(lang_list, [list, list[str], list[int], list[object]], never_list)
 
     # Primtive cross check:
     # Have pairs of inmanta-python types that correspond, but not with any of the others
@@ -96,13 +106,13 @@ def test_type_correspondence():
     for it, pyt in primitive_types:
         for oit, opyt in primitive_types:
             if it is oit:
-                assert it.corresponds_to(pyt)
+                assert it.corresponds_to(to_dsl_type(pyt))
             else:
-                assert not it.corresponds_to(opyt)
+                assert not it.corresponds_to(to_dsl_type(opyt))
 
     # Number
     inm_number = inm_type.Number()
-    assert inm_number.corresponds_to(int)
-    assert inm_number.corresponds_to(float)
-    assert inm_number.corresponds_to(numbers.Number)
-    assert not inm_number.corresponds_to(str)
+    assert inm_number.corresponds_to(to_dsl_type(int))
+    assert inm_number.corresponds_to(to_dsl_type(float))
+    assert inm_number.corresponds_to(to_dsl_type(numbers.Number))
+    assert not inm_number.corresponds_to(to_dsl_type(str))
