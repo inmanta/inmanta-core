@@ -17,9 +17,13 @@ decorator. This plugin accepts arguments when called from the DSL and can return
 arguments and the return value must be annotated with the allowed types from the orchestration model.
 
 To provide this DSL typing information, you can use either:
-     -  inmanta types (such as 'string`)
-     -  python type (such as `str`)
 
+-  python types (e.g. ``str``)
+-  inmanta types (e.g. ``string``)
+
+
+Type hinting using python types
+-------------------------------
 
 Pass the native python type that corresponds to the :term:`DSL` type at hand. e.g. the ``foo`` plugin
 defined below can be used in a model, in a context where the following signature is expected ``string -> int[]``:
@@ -45,25 +49,27 @@ or a return value, that can be of either type).
 The table below shows correspondence between types from the Inmanta DSL and their respective python counterpart:
 
 
-+------------------+-----------------------------------+
-| Inmanta DSL type | Python type                       |
-+==================+===================================+
-| string           | str                               |
-+------------------+-----------------------------------+
-| int              | int                               |
-+------------------+-----------------------------------+
-| float            | float                             |
-+------------------+-----------------------------------+
-| int[]            | collections.abc.Sequence[int]     |
-+------------------+-----------------------------------+
-| dict[int]        | collections.abc.Mapping[str, int] |
-+------------------+-----------------------------------+
-| string?          | str | None                        |
-+------------------+-----------------------------------+
++------------------+---------------------------------------+
+| Inmanta DSL type | Python type                           |
++==================+=======================================+
+| ``string``       | ``str``                               |
++------------------+---------------------------------------+
+| ``int``          | ``int``                               |
++------------------+---------------------------------------+
+| ``float``        | ``float``                             |
++------------------+---------------------------------------+
+| ``int[]``        | ``collections.abc.Sequence[int]``     |
++------------------+---------------------------------------+
+| ``dict[int]``    | ``collections.abc.Mapping[str, int]`` |
++------------------+---------------------------------------+
+| ``string?``      | ``str | None``                        |
++------------------+---------------------------------------+
+| ``any``          | ``typing.Any``                        |
++------------------+---------------------------------------+
 
 
-
-
+Type hinting using Inmanta DSL types
+------------------------------------
 
 Alternatively, the Inmanta :term:`DSL` type annotations can be provided as a string (Python3 style argument annotation).
 
@@ -76,9 +82,6 @@ Alternatively, the Inmanta :term:`DSL` type annotations can be provided as a str
     @plugin
     def foo(value: "string") -> "int[]":
         ...
-
-
-
 
 
 ``any`` is a special type that effectively disables type validation.
