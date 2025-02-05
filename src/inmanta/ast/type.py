@@ -44,8 +44,6 @@ except ImportError:
 if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement
 
-inmantaLiteral = typing.Union[str, int, float, bool, Sequence["inmantaLiteral"], dict[str, "inmantaLiteral"]]
-
 
 @stable_api
 class Type(Locatable):
@@ -134,8 +132,7 @@ class Type(Locatable):
 
         Used only on the plugin boundary
         """
-        base_type = self.get_base_type()
-        return False if base_type is self else base_type.has_custom_to_python()
+        return False
 
     def to_python(self, instance: object) -> "object":
         """
@@ -351,9 +348,6 @@ class Number(Primitive):
     def as_python_type_string(self) -> "str | None":
         return "numbers.Number"
 
-    def to_python(self, instance: object) -> "object":
-        return instance
-
     def corresponds_to(self, type: "Type") -> bool:
         return isinstance(type, (Any, Float, Integer, Number))
 
@@ -393,9 +387,6 @@ class Float(Primitive):
     def as_python_type_string(self) -> "str | None":
         return "float"
 
-    def to_python(self, instance: object) -> "object":
-        return instance
-
 
 @stable_api
 class Integer(Primitive):
@@ -427,9 +418,6 @@ class Integer(Primitive):
 
     def as_python_type_string(self) -> "str | None":
         return "int"
-
-    def to_python(self, instance: object) -> "object":
-        return instance
 
 
 @stable_api
@@ -468,9 +456,6 @@ class Bool(Primitive):
 
     def as_python_type_string(self) -> "str | None":
         return "bool"
-
-    def to_python(self, instance: object) -> "object":
-        return instance
 
 
 @stable_api
@@ -514,9 +499,6 @@ class String(Primitive):
     def as_python_type_string(self) -> "str | None":
         return "str"
 
-    def to_python(self, instance: object) -> "object":
-        return instance
-
     def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721
 
@@ -554,6 +536,7 @@ class List(Type):
         return None
 
     def corresponds_to(self, type: Type) -> bool:
+        # Unreachable, the model can't specify this
         if isinstance(type, Any):
             return True
 
@@ -561,10 +544,6 @@ class List(Type):
 
     def as_python_type_string(self) -> "str | None":
         return "list[object]"
-
-    def has_custom_to_python(self) -> bool:
-        # Any can not be converted
-        return False
 
     def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721
@@ -889,6 +868,9 @@ class ConstraintType(NamedType):
     def __init__(self, namespace: Namespace, name: str) -> None:
         NamedType.__init__(self)
 
+        # It is easy to assume that get_base_type return self.basetype
+        # It doesn't and shouldn't
+        # This field would better be called element_type, but that would break backward compatibility
         self.basetype: Optional[Type] = None  # : ConstrainableType
         self._constraint = None
         self.name: str = name

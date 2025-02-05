@@ -225,11 +225,7 @@ class Null(inmanta_type.Type):
         return isinstance(type, (Null, inmanta_type.Any))
 
     def has_custom_to_python(self) -> bool:
-        return True
-
-    def to_python(self, instance: object) -> "object":
-        assert instance is None
-        return None
+        return False
 
     def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721
