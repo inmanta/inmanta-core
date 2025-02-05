@@ -34,11 +34,13 @@ from inmanta.ast import (
     Namespace,
     NotFoundException,
     RuntimeException,
+    TypingException,
     WithComment,
 )
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast.type import Float, NamedType, NullableType, Type, Any as inm_Any
+from inmanta.ast.type import Any as inm_Any
+from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
 from inmanta.plugins import to_dsl_type
@@ -606,7 +608,16 @@ class Entity(NamedType, WithComment):
 
                     dc_fields.pop(rel_or_attr_name)
                     # Type correspondence
-                    if not inm_type.corresponds_to(to_dsl_type(dc_types[rel_or_attr_name])):
+                    try:
+                        dsl_type = to_dsl_type(dc_types[rel_or_attr_name])
+                        if not inm_type.corresponds_to(dsl_type):
+                            failures.append(
+                                f"The attribute {rel_or_attr_name} does not have the same type as "
+                                "the associated field in the python domain. "
+                                "All attributes of a dataclasses must be identical in both the python and inmanta domain.",
+                            )
+                    except TypingException:
+                        # Can't even convert the type
                         failures.append(
                             f"The attribute {rel_or_attr_name} does not have the same type as "
                             "the associated field in the python domain. "
@@ -774,7 +785,7 @@ class Implementation(NamedType):
     def as_python_type_string(self) -> "str | None":
         raise NotImplementedError("Implementations should not be arguments to plugins, this code is not expected to be called")
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
+    def corresponds_to(self, type: Type) -> bool:
         raise NotImplementedError("Implementations should not be arguments to plugins, this code is not expected to be called")
 
     def to_python(self, instance: object) -> "object":

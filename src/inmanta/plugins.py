@@ -221,8 +221,8 @@ class Null(inmanta_type.Type):
     def as_python_type_string(self) -> "str | None":
         return "None"
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
-        return pytype is type(None)
+    def corresponds_to(self, type: inmanta_type.Type) -> bool:
+        return isinstance(type, (Null, inmanta_type.Any))
 
     def has_custom_to_python(self) -> bool:
         return True
@@ -233,6 +233,9 @@ class Null(inmanta_type.Type):
 
     def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721
+
+    def get_location(self) -> Optional[Location]:
+        return None
 
 
 # Define some types which are used in the context of plugins.
@@ -1016,7 +1019,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     def as_python_type_string(self) -> "str | None":
         raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
 
-    def corresponds_to(self, pytype: type[object]) -> bool:
+    def corresponds_to(self, type: inmanta_type.Type) -> bool:
         raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
 
     def to_python(self, instance: object) -> "object":

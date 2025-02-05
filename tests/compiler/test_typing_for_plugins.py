@@ -43,7 +43,7 @@ def type_corresponds(
             # type is invalid
             continue
         assert not it.corresponds_to(tp)
-        assert not inm_type.NullableType(it).corresponds_to(inm_type.NullableType(tp ))
+        assert not inm_type.NullableType(it).corresponds_to(inm_type.NullableType(tp))
 
 
 def test_type_correspondence():

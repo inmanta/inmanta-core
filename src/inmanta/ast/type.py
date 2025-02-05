@@ -20,13 +20,19 @@ import copy
 import functools
 import numbers
 import typing
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Callable, Optional
 
-import typing_inspect
-
-from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException, \
-    Location
+from inmanta.ast import (
+    DuplicateException,
+    Locatable,
+    LocatableString,
+    Location,
+    Named,
+    Namespace,
+    NotFoundException,
+    RuntimeException,
+)
 from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.stable_api import stable_api
 
@@ -241,9 +247,12 @@ class Any(Type):
     def has_custom_to_python(self) -> bool:
         return False
 
-
     def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721
+
+
+def cast_not_implemented(value: Optional[object]) -> object:
+    raise NotImplementedError("Can not cast to Primitive")
 
 
 @stable_api
@@ -254,26 +263,20 @@ class Primitive(Type):
 
     def __init__(self) -> None:
         Type.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = []
+        self.cast_function: Callable[[Optional[object]], object] = cast_not_implemented
 
     def cast(self, value: Optional[object]) -> object:
         """
         Cast a value to this type. If the value can not be cast, raises a :py:class:`inmanta.ast.RuntimeException`.
         """
-        exception: RuntimeException = RuntimeException(None, f"Failed to cast '{value}' to {self}")
-
         if isinstance(value, Unknown):
             # propagate unknowns
             return value
 
-        for cast in self.try_cast_functions:
-            try:
-                return cast(value)
-            except ValueError:
-                continue
-            except TypeError:
-                raise exception
-        raise exception
+        try:
+            return self.cast_function(value)
+        except (ValueError, TypeError):
+            raise  RuntimeException(None, f"Failed to cast '{value}' to {self}")
 
     def type_string_internal(self) -> str:
         return "Primitive"
@@ -295,6 +298,11 @@ class Primitive(Type):
     def is_primitive(self) -> bool:
         return True
 
+    def get_location(self) -> Optional[Location]:
+        # Override to skip the null check in the parent class
+        return None
+
+
 @stable_api
 class Number(Primitive):
     """
@@ -303,7 +311,7 @@ class Number(Primitive):
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [float]
+        self.cast_function = float
 
     def cast(self, value: Optional[object]) -> object:
         """
@@ -343,7 +351,7 @@ class Number(Primitive):
         return instance
 
     def corresponds_to(self, type: "Type") -> bool:
-        return isinstance(type,(Any, Float, Integer, Number))
+        return isinstance(type, (Any, Float, Integer, Number))
 
 
 @stable_api
@@ -355,7 +363,7 @@ class Float(Primitive):
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [float]
+        self.cast_function = float
 
     def validate(self, value: Optional[object]) -> bool:
         """
@@ -392,8 +400,8 @@ class Integer(Primitive):
     """
 
     def __init__(self) -> None:
-        Number.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [int]
+        super().__init__()
+        self.cast_function = int
 
     def validate(self, value: Optional[object]) -> bool:
         """
@@ -408,6 +416,9 @@ class Integer(Primitive):
         return True  # allow this function to be called from a lambda function
 
     def type_string(self) -> str:
+        return "int"
+
+    def type_string_internal(self) -> str:
         return "int"
 
     def as_python_type_string(self) -> "str | None":
@@ -425,7 +436,7 @@ class Bool(Primitive):
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [bool]
+        self.cast_function = bool
 
     def validate(self, value: Optional[object]) -> bool:
         """
@@ -439,6 +450,7 @@ class Bool(Primitive):
         raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
     def cast(self, value: Optional[object]) -> object:
+        # TODO: this is a bit odd, in that is accepts None?
         return super().cast(value if not isinstance(value, NoneValue) else None)
 
     def type_string(self) -> str:
@@ -534,7 +546,7 @@ class List(Type):
     def type_string_internal(self) -> str:
         return "List"
 
-    def get_location(self) -> None:
+    def get_location(self) -> None | Location:
         return None
 
     def corresponds_to(self, type: Type) -> bool:
@@ -589,8 +601,8 @@ class TypedList(List):
     def type_string_internal(self) -> str:
         return self._wrap_type_string(self.element_type.type_string_internal())
 
-    def get_location(self) -> None:
-        return None
+    def get_location(self) -> Location | None:
+        return self.element_type.get_location()
 
     def get_base_type(self) -> Type:
         return self.element_type
@@ -690,7 +702,7 @@ class Dict(Type):
     def type_string(self) -> str:
         return "dict"
 
-    def get_location(self) -> None:
+    def get_location(self) -> None | Location:
         return None
 
     def as_python_type_string(self) -> "str | None":
@@ -728,8 +740,8 @@ class TypedDict(Dict):
     def type_string_internal(self) -> str:
         return "dict[%s]" % self.element_type.type_string_internal()
 
-    def get_location(self) -> None:
-        return None
+    def get_location(self) -> Location | None:
+        return self.element_type.get_location()
 
     def corresponds_to(self, type: Type) -> bool:
         if isinstance(type, Any):
@@ -829,6 +841,10 @@ class Union(Type):
     def is_primitive(self) -> bool:
         return all(tp.is_primitive() for tp in self.types)
 
+    def get_location(self) -> Optional[Location]:
+        # We don't know what location to use...
+        return None
+
 
 @stable_api
 class Literal(Union):
@@ -857,9 +873,6 @@ class Literal(Union):
         # Infinite recursive type, avoid the mess
         # We allow any primitive
         return type.is_primitive()
-
-
-
 
 
 @stable_api
