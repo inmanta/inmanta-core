@@ -599,7 +599,7 @@ class Entity(NamedType, WithComment):
                     inm_type = attr.get_type()
 
                     # all own fields are primitive
-                    if not inm_type.is_primitive():
+                    if not inm_type.is_attribute_type():
                         failures.append(
                             f"The attribute {rel_or_attr_name} of type `{inm_type}` is not primitive. "
                             "All attributes of a dataclasses have to be of a primitive type.",
