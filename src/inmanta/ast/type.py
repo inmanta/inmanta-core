@@ -19,7 +19,6 @@ Contact: code@inmanta.com
 import copy
 import functools
 import numbers
-import typing
 from collections.abc import Sequence
 from typing import Callable, Optional
 
@@ -604,10 +603,6 @@ class TypedList(List):
     def corresponds_to(self, type: Type) -> bool:
         if isinstance(type, Any):
             return True
-
-        if not isinstance(type, List):
-            # Not a list at all
-            return False
 
         if not isinstance(type, TypedList):
             # The other list is untyped, so we are not equivalent

@@ -87,10 +87,10 @@ def test_type_correspondence():
     type_corresponds(plain_list, [list, list[str], list[int], list[object]], never_list)
 
     typed_list = inm_type.TypedList(inm_type.Integer())
-    type_corresponds(typed_list, [list, list[int], list[object]], [list[str]] + never_list)
+    type_corresponds(typed_list, [list[int], list[object]], [list, list[str]] + never_list)
 
     lang_list = inm_type.LiteralList()
-    type_corresponds(lang_list, [list, list[str], list[int], list[object]], never_list)
+    type_corresponds(lang_list, [list[str], list[int], list[object]], [list] + never_list)
 
     # Primtive cross check:
     # Have pairs of inmanta-python types that correspond, but not with any of the others
