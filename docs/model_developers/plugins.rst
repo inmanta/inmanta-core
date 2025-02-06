@@ -133,7 +133,7 @@ When used in a plugin, it is a normal python object, when used in the model, it 
         cpus: int
 
     @plugin
-    def make_virtual_machine() -> "dataclasses::Virtualmachine":
+    def make_virtual_machine() -> Virtualmachine:
         return Virtualmachine(name="Test", ram=5, cpus=12)
 
 .. code-block:: inmanta
