@@ -46,7 +46,7 @@ from inmanta.ast import (
     UnsetException,
     WithComment,
 )
-from inmanta.ast.type import NamedType
+from inmanta.ast.type import NamedType, OrReferenceType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
@@ -545,6 +545,13 @@ class PluginReturn(PluginValue):
             return str(self.resolved_type)
         else:
             return repr(self.type_expression)
+
+    def resolve_type(self, plugin: "Plugin", resolver: Namespace) -> inmanta_type.Type:
+        out = super().resolve_type(plugin, resolver)
+        out = OrReferenceType(out)
+        self._resolved_type = out
+        return out
+
 
 
 @dataclasses.dataclass

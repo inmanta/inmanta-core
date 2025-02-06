@@ -34,6 +34,7 @@ from inmanta.ast import (
     RuntimeException,
 )
 from inmanta.execute.util import AnyType, NoneValue, Unknown
+from inmanta.references import Reference
 from inmanta.stable_api import stable_api
 
 try:
@@ -151,6 +152,79 @@ class Type(Locatable):
 
     def __hash__(self) -> int:
         return hash(type(self))
+
+
+class ReferenceType(Type):
+    """ A reference object """
+
+    def __init__(self, element_type: Type) -> None:
+        super().__init__()
+        self.element_type = element_type
+
+    def validate(self, value: Optional[object]) -> bool:
+        if isinstance(value, Reference):
+            # TODO: subtype check
+            return True
+
+        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+
+    def type_string(self) -> Optional[str]:
+        return self.element_type.type_string()
+
+    def type_string_internal(self) -> str:
+        return f"Reference[{self.element_type.type_string()}]"
+
+    def is_primitive(self) -> bool:
+        # TODO: reconsider this
+        return False
+
+    def get_base_type(self) -> "Type":
+        # TODO: reconsider this
+        return self
+
+    def with_base_type(self, base_type: "Type") -> "Type":
+        # TODO: can we remove this method?
+        return super().with_base_type(base_type)
+
+    def corresponds_to(self, type: "Type") -> bool:
+        # Can't be expressed in the model
+        # TODO???
+        raise NotImplementedError()
+
+    def as_python_type_string(self) -> "str | None":
+        # Can't be expressed in the model
+        # TODO???
+        raise NotImplementedError()
+
+    def has_custom_to_python(self) -> bool:
+        return True
+
+    def to_python(self, instance: object) -> "object":
+        # TODO???
+        raise NotImplementedError()
+
+    def __eq__(self, other: object) -> bool:
+        return super().__eq__(other)
+
+    def __hash__(self) -> int:
+        return super().__hash__()
+
+class OrReferenceType(ReferenceType):
+
+    def validate(self, value: Optional[object]) -> bool:
+        try:
+            return  self.element_type.validate(value)
+        except RuntimeException:
+            pass
+
+        return super().validate(value)
+
+    def type_string(self) -> Optional[str]:
+        return self.element_type.type_string()
+
+    def type_string_internal(self) -> str:
+        element = self.element_type.type_string()
+        return f"Reference[{element}] | {element}"
 
 
 class NamedType(Type, Named):
