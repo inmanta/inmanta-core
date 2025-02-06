@@ -14,9 +14,78 @@ plugins with the template engine (Jinja2) to use as filters.
 
 A plugin is a python function, registered with the platform with the :func:`~inmanta.plugins.plugin`
 decorator. This plugin accepts arguments when called from the DSL and can return a value. Both the
-arguments and the return value must by annotated with the allowed types from the orchestration model.
-Type annotations are provided as a string (Python3 style argument annotation). ``any`` is a special
-type that effectively disables type validation.
+arguments and the return value must be annotated with the allowed types from the orchestration model.
+
+To provide this DSL typing information, you can use either:
+
+-  python types (e.g. ``str``)
+-  inmanta types (e.g. ``string``)
+
+
+Type hinting using python types
+-------------------------------
+
+Pass the native python type that corresponds to the :term:`DSL` type at hand. e.g. the ``foo`` plugin
+defined below can be used in a model, in a context where the following signature is expected ``string -> int[]``:
+
+
+.. code-block:: python
+    :linenos:
+
+    from inmanta.plugins import plugin
+    from collections.abc import Sequence
+
+
+    @plugin
+    def foo(value: str) -> Sequence[int]:
+        ...
+
+This approach is the recommended way of adding type information to plugins as it allows you to use mypy when writing plugin code.
+
+This approach also fully supports the use of ``Union`` types (e.g. ``Union[str, int]`` for an argument
+or a return value, that can be of either type).
+
+
+The table below shows correspondence between types from the Inmanta DSL and their respective python counterpart:
+
+
++------------------+---------------------------------------+
+| Inmanta DSL type | Python type                           |
++==================+=======================================+
+| ``string``       | ``str``                               |
++------------------+---------------------------------------+
+| ``int``          | ``int``                               |
++------------------+---------------------------------------+
+| ``float``        | ``float``                             |
++------------------+---------------------------------------+
+| ``int[]``        | ``collections.abc.Sequence[int]``     |
++------------------+---------------------------------------+
+| ``dict[int]``    | ``collections.abc.Mapping[str, int]`` |
++------------------+---------------------------------------+
+| ``string?``      | ``str | None``                        |
++------------------+---------------------------------------+
+| ``any``          | ``typing.Any``                        |
++------------------+---------------------------------------+
+
+
+``any`` is a special type that effectively disables type validation.
+
+Type hinting using Inmanta DSL types
+------------------------------------
+
+Alternatively, the Inmanta :term:`DSL` type annotations can be provided as a string (Python3 style argument annotation).
+
+
+.. code-block:: python
+    :linenos:
+
+    from inmanta.plugins import plugin
+
+    @plugin
+    def foo(value: "string") -> "int[]":
+        ...
+
+
 
 Through the arguments of the function, the Python code in the plugin can navigate the orchestration
 model. The compiler takes care of scheduling the execution at the correct point in the model
@@ -26,7 +95,7 @@ evaluation.
 
     A module's Python code lives in the ``inmanta_plugins.<module_name>`` namespace.
 
-A simple plugin that accepts no arguments, prints out "hello world" and returns no value requires
+A simple plugin that accepts no arguments, prints out "Hello world!" and returns no value requires
 the following code:
 
 .. code-block:: python
