@@ -16,19 +16,23 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import dataclasses
+import logging
 import os
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
-from typing import Generic, Optional, TypeVar
+from typing import Generic, Optional, TypeVar, get_type_hints
 
 from jinja2 import Environment, PackageLoader
 
-from inmanta.ast import CompilerException, ModifiedAfterFreezeException
+import inmanta
+from inmanta.ast import CompilerException, DataClassMismatchException, ModifiedAfterFreezeException
 from inmanta.ast.statements import AssignStatement
 from inmanta.ast.statements.generator import Constructor, IndexCollisionException
 from inmanta.execute.runtime import OptionVariable
 from inmanta.module import ModuleV2InV1PathException
+from inmanta.plugins import to_dsl_type
 
 
 def bold(content: Optional[str] = None) -> str:
@@ -205,6 +209,65 @@ class IndexCollisionExplainer(JinjaExplainer[IndexCollisionException]):
         }
 
 
+class DataclassExplainer(Explainer[DataClassMismatchException]):
+
+    explainable_type: type[DataClassMismatchException] = DataClassMismatchException
+
+    def do_explain(self, problem: DataClassMismatchException) -> str:
+        out = ""
+        python = f"To update the python class, add the following code to {problem.dataclass_python_name}:\n\n"
+
+        python += f"""import dataclasses
+
+@dataclasses.dataclass(frozen=True)
+class {problem.entity.name}:
+"""
+        if problem.entity.comment:
+            python += f"""   \"""{problem.entity.comment}\"""\n"""
+        for rel_or_attr_name in sorted(problem.entity.get_all_attribute_names()):
+            rel_or_attr = problem.entity.get_attribute(rel_or_attr_name)
+            match rel_or_attr:
+                case inmanta.ast.attribute.RelationAttribute():
+                    pass
+                case inmanta.ast.attribute.Attribute() as attr:
+                    python += f"   {attr.name}: {attr.type.as_python_type_string()}\n"
+        out += python
+
+        if problem.dataclass is not None:
+            # make inmanta presentation
+            hints = get_type_hints(problem.dataclass)
+            model = f"\n\nAlternatively, to update the inmanta entity replace following code at {problem.entity.location}\n\n"
+            model += f"entity {problem.entity.name} extends std::Dataclass:\n"
+            if problem.dataclass.__doc__:
+                model += f"""   \"""{problem.dataclass.__doc__}\"""\n"""
+            for field in sorted(dataclasses.fields(problem.dataclass), key=lambda x: x.name):
+                type = hints[field.name]
+                try:
+                    type_str = to_dsl_type(type).type_string()
+                except Exception:
+                    logging.info(
+                        "Could not construct inmanta type for field %s with python type %s",
+                        field.name,
+                        str(type),
+                        exc_info=True,
+                    )
+                    type_str = "ERROR"
+                if not type_str:
+                    logging.info(
+                        "Could not construct inmanta type for field %s with python type %s",
+                        field.name,
+                        str(type),
+                    )
+                    type_str = "ERROR"
+                model += f"   {type_str} {field.name}\n"
+
+            model += "end\n"
+
+            out += model
+
+        return out
+
+
 def escape_ansi(line: str) -> str:
     ansi_escape = re.compile(r"(\x9B|\x1B\[)[0-?]*[ -/]*[@-~]")
     return ansi_escape.sub("", line)
@@ -212,7 +275,7 @@ def escape_ansi(line: str) -> str:
 
 class ExplainerFactory:
     def get_explainers(self) -> Sequence[ExplainerABC]:
-        return [ModifiedAfterFreezeExplainer(), ModuleV2InV1PathExplainer(), IndexCollisionExplainer()]
+        return [ModifiedAfterFreezeExplainer(), ModuleV2InV1PathExplainer(), IndexCollisionExplainer(), DataclassExplainer()]
 
     def explain(self, problem: CompilerException) -> list[str]:
         return [explanation for explainer in self.get_explainers() for explanation in explainer.explain(problem)]

@@ -621,7 +621,7 @@ end
         )
         with pytest.raises(WrappingRuntimeException) as exc_info:
             compiler.do_compile()
-        assert error_message in str(exc_info)
+        assert error_message in str(exc_info.value)
 
     snippetcompiler.setup_for_snippet(
         """
