@@ -971,8 +971,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         def new_arg(arg: object) -> object:
             if isinstance(arg, Context):
+                # Not expected to happen, as the compiler itself now uses call_in_context
                 return arg
             elif isinstance(arg, Unknown) and self.is_accept_unknowns():
+                # If false, DynamicProxy.return_value wil raise an exception
                 return arg
             else:
                 return DynamicProxy.return_value(arg)

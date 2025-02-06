@@ -610,8 +610,8 @@ class TypedList(List):
             return False
 
         if not isinstance(type, TypedList):
-            # The other list is untyped, so we are equivalent
-            return True
+            # The other list is untyped, so we are not equivalent
+            return False
 
         return self.element_type.corresponds_to(type.element_type)
 
