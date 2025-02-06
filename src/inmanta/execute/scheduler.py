@@ -55,7 +55,6 @@ from inmanta.execute.runtime import (
     Waiter,
     WaiterSet,
 )
-from inmanta.plugins import Plugin
 
 if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, NamedType, Statement  # noqa: F401
@@ -261,7 +260,7 @@ class Scheduler:
 
         # give type info to all types (excluding plugins), to normalize blocks inside them
         for t in sorted(
-            (t for t in self.types.values() if not isinstance(t, Plugin)),
+            (t for t in self.types.values() if not isinstance(t, plugins.Plugin)),
             key=lambda t: (
                 # normalize implementations last because they have subblocks that might depend on other type information
                 isinstance(t, Implementation),
