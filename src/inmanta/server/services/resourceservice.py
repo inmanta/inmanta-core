@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -403,7 +403,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
     ) -> Apireturn:
         def convert_legacy_state(
-            status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]]
+            status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
         ) -> Optional[const.ResourceState]:
             if status is None or isinstance(status, const.ResourceState):
                 return status
@@ -493,6 +493,8 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                         LOGGER.error("Attempting to set undeployable resource to deployable state")
                         raise AssertionError("Attempting to set undeployable resource to deployable state")
 
+                version = Id.parse_id(resource_ids[0]).version
+
                 # get instance
                 resource_action = await data.ResourceAction.get(action_id=action_id, connection=inner_connection)
                 if resource_action is None:
@@ -500,7 +502,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                     if started is None:
                         raise ServerError(message="A resource action can only be created with a start datetime.")
 
-                    version = Id.parse_id(resource_ids[0]).version
                     resource_action = data.ResourceAction(
                         environment=env.id,
                         version=version,
@@ -575,10 +576,11 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                             }:
                                 extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
                                 extra_fields["last_deployed_attribute_hash"] = res.attribute_hash
+                                extra_fields["last_deploy"] = finished
+                                extra_fields["last_deployed_version"] = version
 
                             await res.update_persistent_state(
                                 **extra_fields,
-                                last_deploy=finished,
                                 connection=inner_connection,
                             )
 

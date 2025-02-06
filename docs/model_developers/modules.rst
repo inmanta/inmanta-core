@@ -251,10 +251,10 @@ The Inmanta Python SDK offers several extension mechanism:
 * Resource handlers
 * Dependency managers
 
-Only the compiler and agents load code included in modules (See :doc:`/architecture`). A module can include external
-dependencies. Both the compiler and the agent will install this dependencies with ``pip install`` in an virtual
-environment dedicated to the compiler or agent. By default this is in `.env` of the project for the compiler and in
-`/var/lib/inmanta/agent/env` for the agent.
+Only the compiler and executors load code included in modules (See :doc:`/architecture`). A module can include external
+dependencies. Both the compiler and the executors will install these dependencies with ``pip install``, each in a
+dedicated virtual environment. By default this is in `.env` of the project for the compiler and in
+`/var/lib/inmanta/server/<environment>/executors/venvs/` for the executors.
 
 Inmanta uses a special format of requirements that was defined in python PEP440 but never fully
 implemented in all python tools (setuptools and pip). Inmanta rewrites this to the syntax pip
@@ -353,23 +353,3 @@ You will also need to specify the url of the repository in the ``project.yml`` f
 
 By following the previous steps, the Inmanta server will be able to install modules from a private Python package repository.
 
-
-Inter-module dependencies
-#########################
-
-The plugins code of a module mod-a can have a dependency on the plugins code of another V2 module mod-b. When doing this,
-care should be taken that the module(s) you depend on, do not define any resources or providers. Otherwise the
-python environment of the agent can get corrupt in the following way:
-
-1. The configuration model (in the project or one of the modules) constructs resources from both modules
-   mod-a and mod-b.
-2. mod-a-1.0 and mod-b-1.0 are exported: The exporter exports the x.py file to the server and the agent puts
-   the x.py file in its code directory.
-3. The configuration model is changed to only construct resources from module mod-a.
-4. mod-a-1.0 is exported again. mod-b-1.0 is no longer exported because it doesn't have any resources.
-   The x.py file still exists in the agent code directory.
-5. A new version of module mod-b (mod-b-2.0) is released and included in the project. The project is re-exported:
-   mod-a-1.0 is exported again, mod-b-2.0 is not (again because it doesn't have any resources). The old x.py file still
-   exists in the agent code directory. It is loaded by the agent instead of the one from mod-b-2.0.
-
-This issue will be resolved by a restart of the agent process.

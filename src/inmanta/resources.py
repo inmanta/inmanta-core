@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import json
@@ -53,13 +53,12 @@ class resource:  # noqa: N801
     A decorator that registers a new resource. The decorator must be applied to classes that inherit from
     :class:`~inmanta.resources.Resource`
 
-    :param name: The name of the entity in the configuration model it creates a resources from. For example
-                 :inmanta:entity:`std::testing::NullResource`
-    :param id_attribute: The attribute of `this` resource that uniquely identifies a resource on an agent. This attribute
-                         can be mapped.
+    :param name: The name of the entity in the configuration model it creates a resource from. For example
+        :inmanta:entity:`std::testing::NullResource`
+    :param id_attribute: The attribute of `this` resource that uniquely identifies a resource on a logical agent.
+        This attribute can be mapped.
     :param agent: This string indicates how the agent of this resource is determined. This string points to an attribute,
-                  but it can navigate relations (this value cannot be mapped). For example, the agent argument could be
-                  ``host.name``
+        but it can navigate relations (this value cannot be mapped). For example, the agent argument could be ``host.name``.
     """
 
     # The _resources dict is accessed by the compile function in pytest-inmanta.

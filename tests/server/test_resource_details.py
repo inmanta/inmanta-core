@@ -1,19 +1,19 @@
 """
-    Copyright 2021 Inmanta
+Copyright 2021 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import datetime
@@ -590,12 +590,13 @@ async def test_move_to_available_state(server, environment, client, clienthelper
     for i in range(1, 3):
         action_id = uuid.uuid4()
         rvid = ResourceVersionIdStr(f"test::Resource[agent1,key=test{i}],v={version1}")
+        start_time: datetime.datetime = datetime.datetime.now().astimezone()
         await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid))
         await update_manager.send_deploy_done(
             attribute_hash=util.make_attribute_hash(
                 resource_id=ResourceIdStr(f"test::Resource[agent1,key=test{i}]"), attributes=resources_v1[0]
             ),
-            result=executor.DeployResult(
+            result=executor.DeployReport(
                 rvid=rvid,
                 action_id=action_id,
                 resource_state=const.HandlerResourceState.deployed,
@@ -604,10 +605,13 @@ async def test_move_to_available_state(server, environment, client, clienthelper
                 change=None,
             ),
             state=state.ResourceState(
-                status=state.ComplianceStatus.COMPLIANT,
-                deployment_result=state.DeploymentResult.DEPLOYED,
-                blocked=state.BlockedStatus.NO,
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
+                last_deployed=datetime.datetime.now().astimezone(),
             ),
+            started=start_time,
+            finished=datetime.datetime.now().astimezone(),
         )
 
     # Create a new version containing:

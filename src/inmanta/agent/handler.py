@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import base64
@@ -52,7 +52,7 @@ T = TypeVar("T")
 TDiscovery = TypeVar("TDiscovery", bound=resources.DiscoveryResource)
 # The type of elements produced by the resource discovery process.
 TDiscovered = TypeVar("TDiscovered", bound=BaseModel)
-T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
+T_FUNC = TypeVar("T_FUNC", bound=Callable[..., object])
 TResource = TypeVar("TResource", bound=resources.Resource)
 
 
@@ -107,6 +107,34 @@ class InvalidOperation(Exception):
     """
     This exception is raised by the context or handler methods when an invalid operation is performed.
     """
+
+
+@typing.overload
+def cache(
+    func: None = None,
+    ignore: list[str] = [],
+    timeout: Optional[int] = None,
+    for_version: Optional[bool] = None,
+    cache_none: bool = True,
+    cacheNone: Optional[bool] = None,  # noqa: N803
+    call_on_delete: Optional[Callable[[Any], None]] = None,
+    evict_after_creation: float = 0.0,
+    evict_after_last_access: float = 0.0,
+) -> Callable[[T_FUNC], T_FUNC]: ...
+
+
+@typing.overload
+def cache(
+    func: T_FUNC,
+    ignore: list[str] = [],
+    timeout: Optional[int] = None,
+    for_version: Optional[bool] = None,
+    cache_none: bool = True,
+    cacheNone: Optional[bool] = None,  # noqa: N803
+    call_on_delete: Optional[Callable[[Any], None]] = None,
+    evict_after_creation: float = 0.0,
+    evict_after_last_access: float = 0.0,
+) -> T_FUNC: ...
 
 
 @stable_api
@@ -551,28 +579,49 @@ class HandlerAPI(ABC, Generic[TResource]):
                 raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
             return result.result["data"]
 
-        def filter_resources_in_unexpected_state(
-            reqs: abc.Mapping[ResourceIdStr, ResourceState]
+        def filter_resources_by_state(
+            reqs: abc.Mapping[ResourceIdStr, ResourceState], states: typing.Set[ResourceState]
         ) -> abc.Mapping[ResourceIdStr, ResourceState]:
             """
-            Return a sub-dictionary of reqs with only those resources that are in an unexpected state.
+            Return a sub-dictionary of dependencies of this resource.
+            Only keeping dependencies that are in a state that is in the provided set.
+
+            :param reqs: The list of requirements of this resource
+            :param states: The list of states that we want to keep in this sub-dictionary
             """
-            unexpected_states = {
-                const.ResourceState.available,
+
+            return {rid: state for rid, state in reqs.items() if state in states}
+
+        # Check if any dependencies got into any unexpected state
+        dependencies_in_unexpected_state = filter_resources_by_state(
+            requires,
+            {
                 const.ResourceState.dry,
                 const.ResourceState.undefined,
                 const.ResourceState.skipped_for_undefined,
-                const.ResourceState.deploying,
-            }
-            return {rid: state for rid, state in reqs.items() if state in unexpected_states}
-
-        resources_in_unexpected_state = filter_resources_in_unexpected_state(requires)
-        if resources_in_unexpected_state:
+            },
+        )
+        if dependencies_in_unexpected_state:
             ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
             ctx.warning(
                 "Resource %(resource)s skipped because a dependency is in an unexpected state: %(unexpected_states)s",
                 resource=resource.id.resource_version_str(),
-                unexpected_states=str({rid: state.value for rid, state in resources_in_unexpected_state.items()}),
+                unexpected_states=str({rid: state.value for rid, state in dependencies_in_unexpected_state.items()}),
+            )
+            return
+
+        # Check if any dependencies got a new desired state while this resource was waiting to deploy
+        dependencies_waiting_to_be_deployed = filter_resources_by_state(
+            requires, {const.ResourceState.available, const.ResourceState.deploying}
+        )
+        if dependencies_waiting_to_be_deployed:
+            ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
+            ctx.info(
+                "Resource %(resource)s skipped because some dependencies %(reqs)s "
+                "got a new desired state while we were preparing to deploy."
+                " We will retry when all dependencies get deployed successfully",
+                resource=resource.id.resource_version_str(),
+                reqs=str({rid for rid in dependencies_waiting_to_be_deployed.keys()}),
             )
             return
 

@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import datetime
@@ -51,7 +51,7 @@ class HandlerResourceState(str, Enum):
     dry = "dry"
     # A resource indicates it wants to skip its deployment, because one of its dependencies wasn't deployed
     # and that it should only be redeployed once its dependencies are deployed successfully. Resources with this
-    # HandlerResourceState will get the TRANSIENT blocked status.
+    # HandlerResourceState will get the TEMPORARILY_BLOCKED blocked status.
     skipped_for_dependency = "skipped_for_dependency"
     unavailable = "unavailable"
 
@@ -393,11 +393,6 @@ RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: typing.Final[str] = "receive_events"
 # resource attributes for references
 RESOURCE_ATTRIBUTE_REFERENCES: typing.Final[str] = "references"
 RESOURCE_ATTRIBUTE_MUTATORS: typing.Final[str] = "mutators"
-
-# Field in an instance to link it to the associated dataclass
-# Because it starts with a space, it can never collide with a valid attribute defined in the model
-DATACLASS_SELF_FIELD = " dataclass"
-
 
 # Per component log variables
 LOG_CONTEXT_VAR_ENVIRONMENT = "environment"

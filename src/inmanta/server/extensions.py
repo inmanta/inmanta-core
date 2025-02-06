@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import importlib.metadata
@@ -24,6 +24,7 @@ from typing import Any, Generic, Optional, TypeVar
 
 import yaml
 
+import inmanta.logging
 from inmanta import data
 from inmanta.config import feature_file_config
 from inmanta.data.model import ExtensionStatus
@@ -192,6 +193,7 @@ class ApplicationContext:
     def __init__(self) -> None:
         self._slices: list[ServerSlice] = []
         self._feature_manager: Optional[FeatureManager] = None
+        self._log_config_extenders: list[inmanta.logging.LoggingConfigBuilderExtension] = []
 
     def register_slice(self, slice: ServerSlice) -> None:
         assert slice is not None
@@ -226,3 +228,9 @@ class ApplicationContext:
         Returns the list of all available environment settings
         """
         return sorted(data.Environment._settings.values(), key=lambda x: x.name)
+
+    def get_default_log_config_extenders(self) -> list[inmanta.logging.LoggingConfigBuilderExtension]:
+        return self._log_config_extenders
+
+    def register_default_logging_config(self, log_config_extender: inmanta.logging.LoggingConfigBuilderExtension) -> None:
+        self._log_config_extenders.append(log_config_extender)

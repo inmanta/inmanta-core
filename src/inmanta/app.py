@@ -1,33 +1,33 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
-
-
-    Command line development guidelines
-    ###################################
-
-    do's and don'ts
-    ----------------
-    MUST NOT: sys.exit => use command.CLIException
-    SHOULD NOT: print( => use logger for messages, only print for final output
+Contact: code@inmanta.com
 
 
-    Entry points
-    ------------
-    @command annotation to register new command
+Command line development guidelines
+###################################
+
+do's and don'ts
+----------------
+MUST NOT: sys.exit => use command.CLIException
+SHOULD NOT: print( => use logger for messages, only print for final output
+
+
+Entry points
+------------
+@command annotation to register new command
 """
 
 import argparse
@@ -63,7 +63,7 @@ from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import ALL_LOG_CONTEXT_VARS, EXIT_START_FAILED, LOG_CONTEXT_VAR_ENVIRONMENT
 from inmanta.export import cfg_env
-from inmanta.logging import FullLoggingConfig, InmantaLoggerConfig, LoggingConfigBuilder, _is_on_tty
+from inmanta.logging import InmantaLoggerConfig, _is_on_tty
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.databaseservice import initialize_database_connection_pool
@@ -100,6 +100,7 @@ def start_server(options: argparse.Namespace) -> None:
     util.ensure_event_loop()
 
     ibl = InmantaBootloader()
+
     setup_signal_handlers(ibl.stop)
 
     ioloop = IOLoop.current()
@@ -375,25 +376,6 @@ def project(options: argparse.Namespace) -> None:
     tool.execute(options.cmd, options)
 
 
-def deploy_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
-    parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
-    parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
-
-
-@command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
-def deploy(options: argparse.Namespace) -> None:
-    module.Project.get(options.main_file)
-    from inmanta import deploy_project
-
-    run = deploy_project.Deploy(options)
-    try:
-        if not run.setup():
-            raise Exception("Failed to setup an embedded Inmanta orchestrator.")
-        run.run()
-    finally:
-        run.stop()
-
-
 def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     """
     Configure the compiler of the export function
@@ -617,6 +599,73 @@ def export(options: argparse.Namespace) -> None:
 
     LOGGER.debug("The entire export command took %0.03f seconds", time.time() - t1)
     summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
+
+
+def validate_logging_config_parser_config(
+    parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]
+) -> None:
+    """
+    Config parser for the validate-logging-config command.
+    """
+    parser.add_argument(
+        "-e",
+        dest="environment",
+        help="The environment id to be used as context variable in logging config templates. If not specified,"
+        " 0c111d30-feaf-4f5b-b2d6-83d589480a4a will be used.",
+        default="0c111d30-feaf-4f5b-b2d6-83d589480a4a",
+    )
+
+    sub_parsers = parser.add_subparsers(title="subcommand", dest="cmd")
+    for component_name in ["server", "scheduler", "compiler"]:
+        sub_parser = sub_parsers.add_parser(
+            component_name, help=f"Validate the logging config for the {component_name}", parents=parent_parsers
+        )
+        sub_parser.set_defaults(component=component_name)
+
+
+@command(
+    "validate-logging-config",
+    help_msg="This command loads the logging config like other CLI commands would (taking into account"
+    " the precedence rules for logging configuration) and produces log lines. It serves as a tool to validate whether"
+    " a logging config file is syntactically correct and behaves as expected. Optionally, a sub-command can be specified"
+    " to indicate the component for which the logging config file should be loaded.",
+    parser_config=validate_logging_config_parser_config,
+)
+def validate_logging_config(options: argparse.Namespace) -> None:
+    logging_config = InmantaLoggerConfig.get_current_instance()
+    if logging_config.logging_config_source is None:
+        raise Exception("No logging configuration found.")
+    print(f"Using logging config from {logging_config.logging_config_source.source()}", file=sys.stderr)
+    env_id = options.environment
+    logger_and_message = [
+        (logging.getLogger("inmanta.protocol.rest.server"), "Log line from Inmanta server"),
+        (logging.getLogger("inmanta.server.services.compilerservice"), "Log line from compiler service"),
+        (logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER).getChild(env_id), "Log line for resource action log"),
+        (logging.getLogger("inmanta_lsm.callback"), "Log line from callback"),
+        (logging.getLogger("inmanta.scheduler"), "Log line from the resource scheduler"),
+        (logging.getLogger(const.LOGGER_NAME_EXECUTOR), "Log line from the executor"),
+        (logging.getLogger(f"{const.LOGGER_NAME_EXECUTOR}.test"), "Log line from a sub-logger of the executor"),
+        (logging.getLogger("performance"), "Performance log line"),
+        (logging.getLogger("inmanta.warnings"), "Warning log line"),
+        (logging.getLogger("tornado.access"), "tornado access log"),
+        (logging.getLogger("tornado.general"), "tornado general log"),
+    ]
+    log_levels = [
+        logging.DEBUG,
+        logging.INFO,
+        logging.WARNING,
+        logging.ERROR,
+        logging.CRITICAL,
+    ]
+    print(
+        "Each of the log lines mentioned below will be emitted at the following log levels:"
+        f" {[logging.getLevelName(level) for level in log_levels]}:",
+        file=sys.stderr,
+    )
+    for logger, msg in logger_and_message:
+        print(f" * Emitting log line '{msg} at level <LEVEL>' using logger '{logger.name}'", file=sys.stderr)
+        for log_level in log_levels:
+            logger.log(log_level, f"{msg} at level {logging.getLevelName(log_level)}")
 
 
 class Color(enum.Enum):
@@ -847,33 +896,31 @@ def cmd_parser() -> argparse.ArgumentParser:
 
 
 def default_log_config_parser(parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
-    subparser = parser.add_subparsers(title="subcommand", dest="cmd")
-
-    subparser.add_parser(
-        "server",
-        help="Output default log file for the server, given the current configuration file and options",
-        parents=parent_parsers,
+    parser.add_argument(
+        "--component",
+        dest="config_for_component",
+        choices=["server", "scheduler", "compiler"],
+        help="The component for which the logging configuration has to be generated.",
     )
-    subparser.add_parser(
-        "scheduler",
-        help="Output default log file template for the scheduler, "
-        "given the current configuration file and options. Store in a file ending with `.tmpl`",
-        parents=parent_parsers,
-    )
-    subparser.add_parser(
-        "compiler",
-        help="Output default log file template for the compiler, given the current configuration file and options",
-        parents=parent_parsers,
+    parser.add_argument(
+        "output_file",
+        help="The file where the logging config should be saved. For the scheduler component, this file must end with a .tmpl"
+        " suffix, because a logging configuration template will be generated.",
     )
 
 
 @command(
-    "print_default_logging_config",
-    help_msg="Print the default log config for the provided component",
+    "output-default-logging-config",
+    help_msg="Write the default log config for the provided component to file",
     parser_config=default_log_config_parser,
 )
 def default_logging_config(options: argparse.Namespace) -> None:
-    config_builder = LoggingConfigBuilder()
+    if os.path.exists(options.output_file):
+        raise Exception(f"The requested output location already exists: {options.output_file}")
+    if options.config_for_component == "scheduler" and not options.output_file.endswith(".tmpl"):
+        raise Exception(
+            "The config being generated will be a template, but the given filename doesn't end with the .tmpl suffix."
+        )
 
     # Because we want to have contex vars in the files,
     #   but the file can also contain other f-string formatters, this is a bit tricky.
@@ -896,23 +943,38 @@ def default_logging_config(options: argparse.Namespace) -> None:
 
     context = {var: f"{place_holder}{var}{place_holder}" for var in context_vars}
 
-    logging_config: FullLoggingConfig = config_builder.get_logging_config_from_options(
-        sys.stdout, options, options.cmd, context
-    )
+    # Force TTY so that this command outputs the same config when piping to a file
+    original_force_tty = os.environ.get(const.ENVIRON_FORCE_TTY, None)
+    if original_force_tty is None:
+        os.environ[const.ENVIRON_FORCE_TTY] = "yes"
+    try:
+        component_config = InmantaLoggerConfig(stream=sys.stdout, no_install=True)
+        component_config.apply_options(options, options.config_for_component, context)
 
-    raw_dump = logging_config.to_string()
+        if options.config_for_component == "server":
+            # Upgrade with extensions
+            ibl = InmantaBootloader()
+            ibl.start_loggers_for_extensions(component_config)
 
-    # 2. if we detect the placeholder
-    if place_holder in raw_dump:
-        # 3. escape all '{' and '}'
-        # i.e. we could be a template of a template
-        raw_dump = raw_dump.replace("{", "{{")
-        raw_dump = raw_dump.replace("}", "}}")
-        # 4. replace placeholder with `{`
-        for context_var in context_vars:
-            raw_dump = raw_dump.replace(f"{place_holder}{context_var}{place_holder}", "{" + context_var + "}")
+        assert component_config._loaded_config is not None  # make mypy happy
+        raw_dump = component_config._loaded_config.to_string()
 
-    print(raw_dump)
+        # 2. if we detect the placeholder
+        if place_holder in raw_dump:
+            # 3. escape all '{' and '}'
+            # i.e. we could be a template of a template
+            raw_dump = raw_dump.replace("{", "{{")
+            raw_dump = raw_dump.replace("}", "}}")
+            # 4. replace placeholder with `{`
+            for context_var in context_vars:
+                raw_dump = raw_dump.replace(f"{place_holder}{context_var}{place_holder}", "{" + context_var + "}")
+
+        with open(options.output_file, "w") as fh:
+            fh.write(raw_dump)
+    finally:
+        # Revert this env var back to its original state
+        if original_force_tty is None:
+            del os.environ[const.ENVIRON_FORCE_TTY]
 
 
 def print_versions_installed_components_and_exit() -> None:
@@ -959,21 +1021,21 @@ def app() -> None:
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
     # Load the configuration
-    Config.load_config(options.config_file, options.config_dir)
+    Config.load_config(min_c_config_file=options.config_file, config_dir=options.config_dir)
 
     # Collect potential log context
-    log_context = {}
-    env = None
+    log_context: dict[str, str] = {}
+    env: str | None = None
     if hasattr(options, "environment"):
         env = options.environment
     if not env:
-        env = agent_config.environment.get()
+        env = str(agent_config.environment.get())
     if env:
         log_context[LOG_CONTEXT_VAR_ENVIRONMENT] = env
 
     # Log config
     component = options.component if hasattr(options, "component") else None
-    log_config.apply_options(options, component, log_context)
+    log_config.apply_options(options, component=component, context=log_context)
     logging.captureWarnings(True)
 
     if options.inmanta_version:

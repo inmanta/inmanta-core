@@ -1,19 +1,19 @@
 """
-    Copyright 2022 Inmanta
+Copyright 2022 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import abc
@@ -28,6 +28,7 @@ from typing import Optional, Union
 
 import asyncpg
 
+from inmanta import const
 from inmanta.data import (
     ENVIRONMENT_METRICS_RETENTION,
     Agent,
@@ -520,12 +521,21 @@ WITH agent_counts AS (
     SELECT
         environment,
         CASE
-            WHEN paused THEN 'paused'
-            WHEN id_primary IS NOT NULL THEN 'up'
-            ELSE 'down'
+            WHEN a.paused
+                THEN 'paused'
+            WHEN EXISTS(
+                SELECT 1
+                FROM {Agent.table_name()} AS a_inner
+                WHERE a_inner.environment=a.environment
+                    AND a_inner.name=$1
+                    AND a_inner.id_primary IS NOT NULL
+            )
+                THEN 'up'
+                ELSE 'down'
         END AS status,
         COUNT(*)
     FROM {Agent.table_name()} AS a
+    WHERE a.name!=$1
     GROUP BY environment, status
 )
 -- inject zeroes for missing values in the environment - status matrix
@@ -537,7 +547,7 @@ LEFT JOIN agent_counts AS a
 ORDER BY environment, s.status
         """
         metric_values: list[MetricValue] = []
-        result: Sequence[asyncpg.Record] = await connection.fetch(query)
+        result: Sequence[asyncpg.Record] = await connection.fetch(query, const.AGENT_SCHEDULER_ID)
         for record in result:
             assert isinstance(record["count"], int)
             assert isinstance(record["environment"], uuid.UUID)

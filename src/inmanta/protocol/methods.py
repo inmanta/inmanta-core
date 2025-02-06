@@ -1,21 +1,21 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 
-    Module defining the v1 rest api
+Module defining the v1 rest api
 """
 
 import datetime
@@ -64,7 +64,7 @@ async def convert_resource_version_id(rvid: inmanta.types.ResourceVersionIdStr, 
 ENV_OPTS: dict[str, ArgOption] = {
     "tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=convert_environment)
 }
-AGENT_ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=add_env)}
+AGENT_ENV_OPTS: dict[str, ArgOption] = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=add_env)}
 RVID_OPTS = {"rvid": ArgOption(getter=convert_resource_version_id)}
 
 
@@ -950,6 +950,8 @@ def list_agents(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] 
     """
     List all agent for an environment
 
+    [DEPRECATED] use the V2 `get_agents` or `/agents` endpoint instead
+
     :param tid: The environment the agents are defined in
     :param start: Optional. Agent after start (sorted by name in ASC)
     :param end: Optional. Agent before end (sorted by name in ASC)
@@ -987,7 +989,7 @@ def set_state(agent: Optional[str], enabled: bool):
 
 
 @method(
-    path="/agentstate/<id>",
+    path="/deploy",
     operation="POST",
     server_agent=True,
     enforce_auth=False,
@@ -995,9 +997,10 @@ def set_state(agent: Optional[str], enabled: bool):
     arg_options=AGENT_ENV_OPTS,
     client_types=[],
 )
-def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
+def trigger(tid: uuid.UUID, id: None | str, incremental_deploy: bool):
     """
-    Request an agent to reload resources
+    When the <id> parameter is set: request this specific agent to reload resources.
+    Otherwise, request ALL agents in the environment to reload resources.
 
     :param tid: The environment this agent is defined in
     :param id: The name of the agent

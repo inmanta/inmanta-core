@@ -1,19 +1,19 @@
 """
-    Copyright 2021 Inmanta
+Copyright 2021 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import base64
@@ -108,7 +108,7 @@ async def test_logging_error(resource_container, environment, client, agent, cli
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment, version=version)
     result = await client.resource_details(tid=environment, rid=rid_1)
     assert result.code == 200
     assert result.result["data"]["status"] == "failed"
@@ -188,18 +188,19 @@ async def test_format_token_in_logline(server, agent, client, environment, resou
     assert result.code == 200
 
     # do a deploy
-    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
-    assert result.code == 200
-    assert result.result["model"]["released"]
+    with caplog.at_level("INFO"):
+        result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+        assert result.code == 200
+        assert result.result["model"]["released"]
 
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-    await wait_until_deployment_finishes(client, environment)
+        result = await client.get_version(environment, version)
+        assert result.code == 200
+        await wait_until_deployment_finishes(client, environment)
 
-    assert await clienthelper.done_count() == 1
+        assert await clienthelper.done_count() == 1
 
-    log_string = "Set key '%(key)s' to value '%(value)s'" % dict(key=resource["key"], value=resource["value"])
-    assert log_string in caplog.text
+        log_string = "Set key '%(key)s' to value '%(value)s'" % dict(key=resource["key"], value=resource["value"])
+        assert log_string in caplog.text
 
 
 async def test_deploy_handler_method(server, client, environment, agent, clienthelper, resource_container):

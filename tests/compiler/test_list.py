@@ -1,19 +1,19 @@
 """
-    Copyright 2018 Inmanta
+Copyright 2018 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import textwrap
@@ -584,7 +584,10 @@ def test_error_list_validation(snippetcompiler):
         """,
         autostd=True,
     )
-    with pytest.raises(RuntimeException, match="Invalid value 'hello', expected list"):
+    with pytest.raises(
+        RuntimeException,
+        match="Value 'hello' for argument item_list of plugin std::count has incompatible type. Expected type: list",
+    ):
         (_, scopes) = compiler.do_compile()
 
 
@@ -595,7 +598,10 @@ def test_error_dict_validation(snippetcompiler):
         """,
         autostd=True,
     )
-    with pytest.raises(RuntimeException, match="Invalid value 'hello1', expected dict"):
+    with pytest.raises(
+        RuntimeException,
+        match="Value 'hello1' for argument dct of plugin std::dict_get has incompatible type. Expected type: dict",
+    ):
         (_, scopes) = compiler.do_compile()
 
 

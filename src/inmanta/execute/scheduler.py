@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import itertools
@@ -256,28 +256,35 @@ class Scheduler:
             implement.evaluate()
 
         compiler.plugins = {k: v for k, v in types_and_impl.items() if isinstance(v, plugins.Plugin)}
-        types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
+        self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
-        # normalize plugins
-        for p in compiler.plugins.values():
-            p.normalize()
-
-        # give type info to all types, to normalize blocks inside them
-        # normalize implementations last because they have subblocks that might depend on other type information
-        for t in sorted(types.values(), key=lambda t: isinstance(t, Implementation)):
+        # give type info to all types (includes plugins), to normalize blocks inside them
+        for t in sorted(
+            self.types.values(),
+            key=lambda t: (
+                # normalize implementations last because they have subblocks that might depend on other type information
+                isinstance(t, Implementation),
+                # normalize entities second last because it may call validate on its attribute types to validate defaults
+                isinstance(t, Entity),
+            ),
+        ):
             t.normalize()
 
         # normalize root blocks
         for block in blocks:
             block.normalize()
 
-        self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
-
         # Dataclass validation
-        data_class_root = self.types["std::Dataclass"]
-        assert isinstance(data_class_root, Entity)
-        for dataclass in data_class_root.get_all_child_entities():
-            dataclass.pair_dataclass()
+        data_class_root = self.types.get("std::Dataclass")
+        if data_class_root is not None:
+            assert isinstance(data_class_root, Entity)
+            for dataclass in data_class_root.get_all_child_entities():
+                dataclass.pair_dataclass()
+        else:
+            # we have no dataclasses, std is too old!
+            # We don't warn because if they are used they will produce a warning (class not found)
+            # If not, all is fine
+            pass
 
     def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]

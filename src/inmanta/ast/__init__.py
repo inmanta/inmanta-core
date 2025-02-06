@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import traceback
@@ -716,7 +716,9 @@ class MissingImportException(TypeNotFoundException):
 
 
 class AmbiguousTypeException(TypeNotFoundException):
-    """Exception raised when a type is referenced that does not exist"""
+    """
+    Exception raised when a type is referenced in an unqualified manner in a context where it can not be unambiguously resolved.
+    """
 
     def __init__(self, type: LocatableString, candidates: list["Entity"]) -> None:
         candidates = sorted(candidates, key=lambda x: x.get_full_name())
@@ -825,6 +827,15 @@ class AttributeException(WrappingRuntimeException):
         self.instance = instance
 
 
+class PluginTypeException(WrappingRuntimeException):
+    """
+    Raised when an argument or return value of a plugin is not in-line with the type
+    annotation of that plugin. Wraps the validation error.
+    """
+
+    pass
+
+
 class OptionalValueException(RuntimeException):
     """Exception raised when an optional value is accessed that has no value (and is frozen)"""
 
@@ -851,6 +862,12 @@ class TypingException(RuntimeException):
 
     def importantance(self) -> int:
         return 10
+
+
+class InvalidTypeAnnotation(TypingException):
+    """
+    Invalid type annotation, e.g. for a plugin.
+    """
 
 
 class DirectExecuteException(TypingException):

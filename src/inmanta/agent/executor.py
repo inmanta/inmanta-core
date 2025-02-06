@@ -1,19 +1,19 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import abc
@@ -66,13 +66,14 @@ class AgentInstance(abc.ABC):
 
 
 @dataclass
-class DryrunResult:
+class DryrunReport:
     rvid: ResourceVersionIdStr
     dryrun_id: uuid.UUID
     changes: dict[str, AttributeStateChange]
     started: datetime.datetime
     finished: datetime.datetime
     messages: list[LogLine]
+    resource_state: Optional[const.ResourceState] = None
 
 
 class ResourceDetails:
@@ -470,7 +471,7 @@ class VirtualEnvironmentManager(resourcepool.TimeBasedPoolManager[EnvBlueprint, 
 
 
 @dataclass
-class FactResult:
+class GetFactReport:
     resource_id: ResourceVersionIdStr
     # Failed fact checks may have empty action_id
     action_id: Optional[uuid.UUID]
@@ -480,10 +481,11 @@ class FactResult:
     parameters: list[dict[str, Any]]
     messages: list[LogLine]
     error_msg: Optional[str] = None
+    resource_state: Optional[const.ResourceState] = None
 
 
 @dataclass
-class DeployResult:
+class DeployReport:
     rvid: ResourceVersionIdStr
     resource_id: ResourceIdStr = dataclasses.field(init=False)
     action_id: uuid.UUID
@@ -508,13 +510,13 @@ class DeployResult:
         return const.ResourceState(self.resource_state)
 
     @classmethod
-    def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext) -> "DeployResult":
+    def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext) -> "DeployReport":
         if ctx.status is None:
             ctx.warning("Deploy status field is None, failing!")
             ctx.set_resource_state(const.HandlerResourceState.failed)
         # Make mypy happy
         assert ctx.resource_state is not None
-        return DeployResult(
+        return DeployReport(
             rvid=rvid,
             action_id=ctx.action_id,
             resource_state=ctx.resource_state or const.HandlerResourceState.failed,
@@ -524,8 +526,8 @@ class DeployResult:
         )
 
     @classmethod
-    def undeployable(cls, rvid: ResourceVersionIdStr, action_id: UUID, message: LogLine) -> "DeployResult":
-        return DeployResult(
+    def undeployable(cls, rvid: ResourceVersionIdStr, action_id: UUID, message: LogLine) -> "DeployReport":
+        return DeployReport(
             rvid=rvid,
             action_id=action_id,
             resource_state=const.HandlerResourceState.unavailable,
@@ -555,7 +557,7 @@ class Executor(abc.ABC):
         resource_details: ResourceDetails,
         reason: str,
         requires: Mapping[ResourceIdStr, const.ResourceState],
-    ) -> DeployResult:
+    ) -> DeployReport:
         """
         Perform the actual deployment of the resource by calling the loaded handler code
 
@@ -570,7 +572,7 @@ class Executor(abc.ABC):
         self,
         resource: ResourceDetails,
         dry_run_id: uuid.UUID,
-    ) -> DryrunResult:
+    ) -> DryrunReport:
         """
         Perform a dryrun for the given resources
 
@@ -580,7 +582,7 @@ class Executor(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def get_facts(self, resource: ResourceDetails) -> FactResult:
+    async def get_facts(self, resource: ResourceDetails) -> GetFactReport:
         """
         Get facts for a given resource
         :param resource: The resource for which to get facts.

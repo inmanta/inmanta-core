@@ -1,19 +1,19 @@
 """
-    Copyright 2022 Inmanta
+Copyright 2022 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import inmanta.types
@@ -173,7 +173,7 @@ async def test_docs_snippets_unmanaged_resources_basic(
     version, _ = await snippetcompiler.do_export_and_deploy()
 
     await clienthelper.wait_for_released(version)
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment, version=version)
 
     result = await client.discovered_resources_get_batch(tid=environment)
     assert result.code == 200
@@ -234,7 +234,7 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
 
     await clienthelper.wait_for_released(version)
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment, version=version)
 
     result = await client.discovered_resources_get_batch(tid=environment)
     assert result.code == 200

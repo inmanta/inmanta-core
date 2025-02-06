@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import logging
@@ -32,6 +32,7 @@ from inmanta.ast import (
     Location,
     MultiUnsetException,
     Namespace,
+    PluginTypeException,
     RuntimeException,
     TypeReferenceAnchor,
     UnknownException,
@@ -217,7 +218,7 @@ class PluginFunction(Function):
 
     def call_direct(self, args: list[object], kwargs: dict[str, object]) -> object:
         processed_args = self.plugin.check_args(args, kwargs)
-        no_unknows = not processed_args.unknows
+        no_unknows = not processed_args.unknowns
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
             raise RuntimeException(self.ast_node, "Received unknown value during direct execution")
@@ -230,6 +231,9 @@ class PluginFunction(Function):
         else:
             try:
                 return self.plugin(*processed_args.args, **processed_args.kwargs)
+            except PluginTypeException:
+                # already has sufficient context, no need to wrap it
+                raise
             except RuntimeException as e:
                 raise WrappingRuntimeException(
                     self.ast_node, "Exception in direct execution for plugin %s" % self.ast_node.name, e
@@ -251,7 +255,7 @@ class PluginFunction(Function):
     ) -> None:
 
         processed_args = self.plugin.check_args(args, kwargs)
-        no_unknows = not processed_args.unknows
+        no_unknows = not processed_args.unknowns
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
             result.set_value(Unknown(self), self.ast_node.location)
@@ -268,7 +272,7 @@ class PluginFunction(Function):
             self.plugin(*args, **kwargs)
         else:
             try:
-                value = self.plugin.call_in_context(args, kwargs, resolver, queue, self.ast_node.location)
+                value = self.plugin.call_in_context(processed_args, resolver, queue, self.ast_node.location)
                 result.set_value(value if value is not None else NoneValue(), self.ast_node.location)
             except UnknownException as e:
                 result.set_value(e.unknown, self.ast_node.location)
@@ -283,6 +287,9 @@ class PluginFunction(Function):
                 # If it is handled here, the re-queueing can not be done,
                 # leading to very subtle errors such as #2787
                 raise e
+            except PluginTypeException:
+                # already has sufficient context, no need to wrap it
+                raise
             except RuntimeException as e:
                 raise WrappingRuntimeException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
             except inmanta.ast.PluginException as e:

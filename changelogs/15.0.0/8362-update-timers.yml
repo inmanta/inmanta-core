@@ -1,0 +1,4 @@
+description: Update scheduler timers when changed via API
+issue-nr: 8362
+change-type: minor
+destination-branches: [master]

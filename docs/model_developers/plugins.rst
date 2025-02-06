@@ -8,7 +8,7 @@ Adding new plugins
 ========================
 
 Plugins provide :ref:`functions<lang-plugins>` that can be called from the :term:`DSL`. This is the
-primary mechanism to interface Python code with the orchestration model at compile time. For Example,
+primary mechanism to interface Python code with the orchestration model at compile time. For example,
 this mechanism is also used for std::template and std::file. In addition to this, Inmanta also registers all
 plugins with the template engine (Jinja2) to use as filters.
 
@@ -112,6 +112,65 @@ see :ref:`moddev-module`.
 .. todo:: new statements
 
 
+Dataclasses
+========================
+
+When you want to construct entities in a plugin, you can use dataclasses.
+
+An inmanta dataclass is an entity that has a python counterpart.
+When used in a plugin, it is a normal python object, when used in the model, it is a normal Entity.
+
+.. code-block:: python
+
+    import dataclasses
+
+    from inmanta.plugins import plugin
+
+    @dataclasses.dataclass(frozen=True)
+    class Virtualmachine:
+        name: str
+        ram: int
+        cpus: int
+
+    @plugin
+    def make_virtual_machine() -> "dataclasses::Virtualmachine":
+        return Virtualmachine(name="Test", ram=5, cpus=12)
+
+.. code-block:: inmanta
+
+    entity Virtualmachine extends std::Dataclass:
+        string name
+        int ram
+        int cpus
+    end
+
+    implement Virtualmachine using std::none
+
+    vm = make_virtual_machine()
+    std::print(vm.name)
+
+When using dataclasses, the object can be passed around freely into and out of plugins.
+
+However, some restrictions apply:
+The python class is expect to be:
+
+* a frozen dataclass
+* with the same name
+* in the plugins package of this module
+* in the corresponding submodule
+* with the exact same fields
+
+The Inmanta entity is expect to:
+
+* have no relations
+* have no indexes
+* have only std::none as implementation
+* extend std::Dataclass
+
+.. note::
+
+    When the inmanta entity and python class don't match, the compiler will print out a correction for both.
+    This means you only ever have to write the Entity, because the compiler will print the python class for you to copy paste.
 
 
 Deprecate plugins
@@ -122,7 +181,7 @@ decorator. Using this decorator will log a warning message when the function is 
 optional argument ``replaced_by`` which can be used to potentially improve the warning message by telling which other
 plugin should be used in the place of the current one.
 
-for example if the plugin below is called:
+For example if the plugin below is called:
 
 .. code-block:: python
     :linenos:

@@ -1,22 +1,23 @@
 """
-    Copyright 2022 Inmanta
+Copyright 2022 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
+import datetime
 import uuid
 from collections import abc
 from typing import Optional
@@ -1268,9 +1269,11 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     update_manager = persistence.ToDbUpdateManager(client, env_id)
 
     # set key2 to deploying
+    start_time: datetime.datetime = datetime.datetime.now().astimezone()
     await update_manager.send_in_progress(
         action_id=uuid.uuid4(), resource_id=Id.parse_id(f"test::Resource[agent1,key=key2],v={version}")
     )
+    end_time: datetime.datetime = datetime.datetime.now().astimezone()
 
     # Set key 3 to deployed
     action_id = uuid.uuid4()
@@ -1278,7 +1281,7 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     await update_manager.send_in_progress(action_id=action_id, resource_id=Id.parse_id(rvid3))
     await update_manager.send_deploy_done(
         attribute_hash=util.make_attribute_hash(ResourceIdStr("test::Resource[agent1,key=key3]"), attributes=resources[2]),
-        result=executor.DeployResult(
+        result=executor.DeployReport(
             rvid=rvid3,
             action_id=action_id,
             resource_state=const.HandlerResourceState.deployed,
@@ -1287,10 +1290,13 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
             change=const.Change.nochange,
         ),
         state=state.ResourceState(
-            status=state.ComplianceStatus.COMPLIANT,
-            deployment_result=state.DeploymentResult.DEPLOYED,
-            blocked=state.BlockedStatus.NO,
+            compliance=state.Compliance.COMPLIANT,
+            last_deploy_result=state.DeployResult.DEPLOYED,
+            blocked=state.Blocked.NOT_BLOCKED,
+            last_deployed=datetime.datetime.now().astimezone(),
         ),
+        started=start_time,
+        finished=end_time,
     )
 
     # Partial compile

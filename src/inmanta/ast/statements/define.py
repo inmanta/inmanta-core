@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 # pylint: disable-msg=R0923,W0613
@@ -479,8 +479,16 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         constraint_type.comment = self.comment
         constraint_type.basetype = basetype
         constraint_type.constraint = self.expression
-        self.expression.normalize()
-        self.anchors.extend(self.expression.get_anchors())
+
+    def get_anchors(self) -> list[Anchor]:
+        """
+        This method overrides the default get_anchors() to accommodate the two-stage normalization process.
+        DefineTypeConstraint registers anchors for its condition expression. However, these anchors only come into existence
+        after the type normalization phase.
+        This implementation ensures that anchors are correctly gathered from both the condition expression and
+        the statement itself.
+        """
+        return [*self.anchors, *self.expression.get_anchors()]
 
 
 Relationside = tuple[LocatableString, Optional[LocatableString], Optional[tuple[int, Optional[int]]]]

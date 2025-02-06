@@ -1,26 +1,26 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import datetime
 import pickle
 import uuid
 
-from inmanta.agent.executor import DeployResult, DryrunResult
+from inmanta.agent.executor import DeployReport, DryrunReport
 from inmanta.const import Change, HandlerResourceState
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange
@@ -35,7 +35,7 @@ def test_risky_objects():
 
         pass
 
-    dryrun = DryrunResult(
+    dryrun = DryrunReport(
         "std::Test[a1,k=v],v=3",
         uuid.uuid4(),
         {"a": AttributeStateChange(current="a", desired=EvilString("B"))},
@@ -45,12 +45,12 @@ def test_risky_objects():
     )
     out = pickle.loads(pickle.dumps(dryrun))
 
-    assert isinstance(out, DryrunResult)
+    assert isinstance(out, DryrunReport)
     assert isinstance(out.changes["a"], AttributeStateChange)
     assert isinstance(out.changes["a"].desired, str)
     assert isinstance(out.messages[0], LogLine)
 
-    deploy = DeployResult(
+    deploy = DeployReport(
         "std::Test[a1,k=v],v=3",
         uuid.uuid4(),
         HandlerResourceState.deployed,
@@ -60,7 +60,7 @@ def test_risky_objects():
     )
 
     deploy_out = pickle.loads(pickle.dumps(deploy))
-    assert isinstance(deploy_out, DeployResult)
+    assert isinstance(deploy_out, DeployReport)
     assert isinstance(deploy_out.changes["a"], AttributeStateChange)
     assert isinstance(deploy_out.changes["a"].desired, str)
     assert isinstance(deploy_out.messages[0], LogLine)

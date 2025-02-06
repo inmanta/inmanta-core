@@ -1,19 +1,19 @@
 """
-    Copyright 2022 Inmanta
+Copyright 2022 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import abc
@@ -33,9 +33,7 @@ from inmanta.data import (
     APILIMIT,
     PRIMITIVE_SQL_TYPES,
     Agent,
-    AgentInstance,
     AgentOrder,
-    AgentProcess,
     CompileReportOrder,
     ConfigurationModel,
     DatabaseOrderV2,
@@ -55,6 +53,7 @@ from inmanta.data import (
     ResourceHistoryOrder,
     ResourceLogOrder,
     ResourceStatusOrder,
+    Scheduler,
     SimpleQueryBuilder,
     VersionedResourceOrder,
     model,
@@ -795,13 +794,30 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
             "version": IntRangeFilter,
             "date": DateRangeFilter,
             "status": ContainsFilter,
+            "released": BooleanEqualityFilter,
         }
 
     def get_base_url(self) -> str:
         return "/api/v2/desiredstate"
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        subquery, subquery_values = ConfigurationModel.desired_state_versions_subquery(self.environment.id)
+        scheduled_version = f"""SELECT last_processed_model_version FROM {Scheduler.table_name()} WHERE environment = $1"""
+        scheduled_version = f"(SELECT COALESCE(({scheduled_version}), 0))"
+        query_builder = SimpleQueryBuilder(
+            select_clause=f"""SELECT cm.version, cm.date, cm.total,
+                                           version_info -> 'export_metadata' ->> 'message' as message,
+                                           version_info -> 'export_metadata' ->> 'type' as type,
+                                          (CASE WHEN cm.version = {scheduled_version} THEN 'active'
+                                              WHEN cm.version > {scheduled_version} THEN 'candidate'
+                                              WHEN cm.version < {scheduled_version} AND cm.released=TRUE THEN 'retired'
+                                              ELSE 'skipped_candidate'
+                                          END) as status,
+                                          cm.released as released""",
+            from_clause=f" FROM {ConfigurationModel.table_name()} as cm",
+            filter_statements=[" environment =  $1"],
+            values=[self.environment.id],
+        )
+        subquery, subquery_values = query_builder.build()
         query_builder = SimpleQueryBuilder(
             select_clause="SELECT *",
             from_clause=f" FROM ({subquery}) as result",
@@ -821,6 +837,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
                     else []
                 ),
                 status=desired_state["status"],
+                released=cast(bool, desired_state["released"]),
             )
             for desired_state in records
         ]
@@ -1235,31 +1252,31 @@ class AgentView(DataView[AgentOrder, model.Agent]):
 
     def get_base_query(self) -> SimpleQueryBuilder:
         base = SimpleQueryBuilder(
-            select_clause="""SELECT a.name,
-                                    a.environment,
-                                    a.last_failover,
-                                    a.paused,
-                                    a.unpause_on_resume,
-                                    sa_join.hostname as process_name,
-                                    sa_join.process as process_id,
-                                    (CASE
-                                        WHEN a.paused THEN 'paused'
-                                        WHEN NOT a.paused AND sa_join.id_primary IS NULL THEN 'down'
-                                        ELSE 'up'
-                                    END) as status""",
+            select_clause=f"""SELECT a.name,
+                                     a.environment,
+                                     a.last_failover,
+                                     a.paused,
+                                     a.unpause_on_resume,
+                                     NULL AS process_name,
+                                     NULL AS process_id,
+                                     (
+                                         CASE
+                                             WHEN a.paused
+                                                 THEN 'paused'
+                                             WHEN EXISTS(
+                                                 SELECT 1
+                                                 FROM {data.Agent.table_name()} AS a_inner
+                                                 WHERE a_inner.environment=$1
+                                                       AND a_inner.name=$2
+                                                       AND a_inner.id_primary IS NOT NULL
+                                             )
+                                                 THEN 'up'
+                                                 ELSE 'down'
+                                         END
+                                     ) AS status
+                          """,
             from_clause=f"""
                             FROM {Agent.table_name()} a
-                            CROSS JOIN (
-                                SELECT
-                                    sa.name,
-                                    sa.id_primary,
-                                    ap.hostname,
-                                    ai.process
-                                FROM {Agent.table_name()} sa
-                                LEFT JOIN {AgentInstance.table_name()} ai ON sa.id_primary=ai.id
-                                LEFT JOIN {AgentProcess.table_name()} ap ON ai.process = ap.sid
-                                WHERE sa.environment = $1 AND sa.name = $2
-                            ) sa_join
                             """,
             filter_statements=[" a.environment = $1 ", " a.name <> $2 "],
             values=[self.environment.id, const.AGENT_SCHEDULER_ID],

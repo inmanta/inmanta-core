@@ -1,19 +1,19 @@
 """
-    Copyright 2022 Inmanta
+Copyright 2022 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import functools
@@ -650,7 +650,6 @@ async def test_resource_count_empty_datapoint(client, server):
     assert all(hasattr(res, "category") and res.category != "__None__" and res.count == 0 for res in result_gauge)
 
 
-@pytest.mark.skip("To be fixed with agent view")
 async def test_agent_count_metric(clienthelper, client, server):
     project = data.Project(name="test")
     await project.insert()
@@ -673,7 +672,7 @@ async def test_agent_count_metric(clienthelper, client, server):
     agent3 = data.Agent(environment=env2.id, name="agent3", paused=True)
     await agent3.insert()
 
-    agents = await data.Agent.get_list()
+    agents = [a for a in await data.Agent.get_list() if a.name != const.AGENT_SCHEDULER_ID]
     assert len(agents) == 3
 
     # Add dummy resources that use some (but not all) of the agents
