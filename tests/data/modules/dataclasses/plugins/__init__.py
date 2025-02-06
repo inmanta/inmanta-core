@@ -46,7 +46,7 @@ def make_virtual_machine() -> "dataclasses::Virtualmachine":
 
 
 @plugin
-def select_vm(inp: "dataclasses::Virtualmachine[]", name: "string") -> "dataclasses::Virtualmachine?":
+def select_vm(inp: "dataclasses::Virtualmachine[]", name: "string") -> Virtualmachine | None:
     for vm in inp:
         if vm.name == name:
             return vm
