@@ -562,6 +562,14 @@ class CheckedArgs:
     unknowns: bool
 
 
+@dataclasses.dataclass
+class CheckedArgs:
+
+    args: list[object]
+    kwargs: Mapping[str, object]
+    unknowns: bool
+
+
 class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     """
     This class models a plugin that can be called from the language.
@@ -978,8 +986,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         def new_arg(arg: object) -> object:
             if isinstance(arg, Context):
+                # Not expected to happen, as the compiler itself now uses call_in_context
                 return arg
             elif isinstance(arg, Unknown) and self.is_accept_unknowns():
+                # If false, DynamicProxy.return_value wil raise an exception
                 return arg
             else:
                 return DynamicProxy.return_value(arg)

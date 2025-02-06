@@ -19,9 +19,8 @@ Contact: code@inmanta.com
 import copy
 import functools
 import numbers
-import typing
-from collections.abc import Sequence
-from typing import Callable, Optional
+from collections.abc import Callable, Sequence
+from typing import Optional
 
 from inmanta.ast import (
     DuplicateException,
@@ -86,9 +85,9 @@ class Type(Locatable):
     def normalize(self) -> None:
         pass
 
-    def is_primitive(self) -> bool:
+    def is_attribute_type(self) -> bool:
         """
-        Returns true iff this type is a primitive type, i.e. number, string, bool or a collection of only primitives.
+        Returns true iff this type is valid in the model as an attribute type
         """
         return False
 
@@ -174,7 +173,7 @@ class ReferenceType(Type):
     def type_string_internal(self) -> str:
         return f"Reference[{self.element_type.type_string()}]"
 
-    def is_primitive(self) -> bool:
+    def is_attribute_type(self) -> bool:
         # TODO: reconsider this
         return False
 
@@ -284,8 +283,8 @@ class NullableType(Type):
             return NotImplemented
         return self.element_type == other.element_type
 
-    def is_primitive(self) -> bool:
-        return self.element_type.is_primitive()
+    def is_attribute_type(self) -> bool:
+        return self.element_type.is_attribute_type()
 
     def corresponds_to(self, type: Type) -> bool:
         if isinstance(type, Any):
@@ -370,7 +369,7 @@ class Primitive(Type):
         # All primitives can be trivially converted
         return False
 
-    def is_primitive(self) -> bool:
+    def is_attribute_type(self) -> bool:
         return True
 
     def get_location(self) -> Optional[Location]:
@@ -672,20 +671,16 @@ class TypedList(List):
             return NotImplemented
         return self.element_type == other.element_type
 
-    def is_primitive(self) -> bool:
-        return self.get_base_type().is_primitive()
+    def is_attribute_type(self) -> bool:
+        return self.get_base_type().is_attribute_type()
 
     def corresponds_to(self, type: Type) -> bool:
         if isinstance(type, Any):
             return True
 
-        if not isinstance(type, List):
-            # Not a list at all
-            return False
-
         if not isinstance(type, TypedList):
-            # The other list is untyped, so we are equivalent
-            return True
+            # The other list is untyped, so we are not equivalent
+            return False
 
         return self.element_type.corresponds_to(type.element_type)
 
@@ -848,7 +843,7 @@ class LiteralDict(TypedDict):
             return NotImplemented
         return True
 
-    def is_primitive(self) -> bool:
+    def is_attribute_type(self) -> bool:
         return True
 
 
@@ -895,8 +890,10 @@ class Union(Type):
             return NotImplemented
         return self.types == other.types
 
-    def is_primitive(self) -> bool:
-        return all(tp.is_primitive() for tp in self.types)
+    def is_attribute_type(self) -> bool:
+        # It can not strictly speaking be used as an attribute type
+        # But, if all member are is_attribute_type this is equivalent to either Nullable or Literal
+        return all(tp.is_attribute_type() for tp in self.types)
 
     def get_location(self) -> Optional[Location]:
         # We don't know what location to use...
@@ -920,7 +917,7 @@ class Literal(Union):
         # Keep it simple
         return "object"
 
-    def is_primitive(self) -> bool:
+    def is_attribute_type(self) -> bool:
         return True
 
     def corresponds_to(self, type: Type) -> bool:
@@ -929,7 +926,7 @@ class Literal(Union):
 
         # Infinite recursive type, avoid the mess
         # We allow any primitive
-        return type.is_primitive()
+        return type.is_attribute_type()
 
 
 @stable_api
