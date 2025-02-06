@@ -48,7 +48,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.type import NamedType, OrReferenceType
 from inmanta.config import Config
-from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext
+from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext, get_inmanta_type_for_dataclass
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
@@ -293,6 +293,12 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
         else:
             bases = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
             return inmanta_type.Union(bases)
+
+    if dataclasses.is_dataclass(python_type):
+        entity = get_inmanta_type_for_dataclass(python_type)
+        if entity:
+            return entity
+        raise TypingException(None, f"invalid type {python_type}, this dataclass has no associated inmanta entity")
 
     # Lists and dicts
     if typing_inspect.is_generic_type(python_type):

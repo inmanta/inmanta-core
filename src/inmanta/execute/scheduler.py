@@ -258,9 +258,9 @@ class Scheduler:
         compiler.plugins = {k: v for k, v in types_and_impl.items() if isinstance(v, plugins.Plugin)}
         self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
-        # give type info to all types (includes plugins), to normalize blocks inside them
+        # give type info to all types (excluding plugins), to normalize blocks inside them
         for t in sorted(
-            self.types.values(),
+            (t for t in self.types.values() if not isinstance(t, plugins.Plugin)),
             key=lambda t: (
                 # normalize implementations last because they have subblocks that might depend on other type information
                 isinstance(t, Implementation),
@@ -269,10 +269,6 @@ class Scheduler:
             ),
         ):
             t.normalize()
-
-        # normalize root blocks
-        for block in blocks:
-            block.normalize()
 
         # Dataclass validation
         data_class_root = self.types.get("std::Dataclass")
@@ -285,6 +281,14 @@ class Scheduler:
             # We don't warn because if they are used they will produce a warning (class not found)
             # If not, all is fine
             pass
+
+        # normalize plugins (can use dataclasses)
+        for plugin in compiler.plugins.values():
+            plugin.normalize()
+
+        # normalize root blocks
+        for block in blocks:
+            block.normalize()
 
     def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
