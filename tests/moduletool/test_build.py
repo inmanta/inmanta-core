@@ -46,12 +46,13 @@ def run_module_build_soft(
     output_dir: Optional[str] = None,
     dev_build: bool = False,
     byte_code: bool = False,
-    distribution: Literal["wheel", "sdist", "wheel_and_sdist"] = "wheel",
+    wheel: bool = False,
+    sdist: bool = False,
 ) -> str:
     if not set_path_argument:
         module_path = None
     return moduletool.ModuleTool().build(
-        module_path, output_dir, dev_build=dev_build, byte_code=byte_code, distribution=distribution
+        module_path, output_dir, dev_build=dev_build, byte_code=byte_code, wheel=wheel, sdist=sdist
     )
 
 
@@ -59,7 +60,8 @@ def run_module_build(
     module_path: str,
     set_path_argument: bool,
     output_dir: Optional[str] = None,
-    distribution: Optional[Literal["wheel", "sdist", "wheel_and_sdist"]] = None,
+    wheel: bool = False,
+    sdist: bool = False,
 ) -> None:
     """
     Build the Inmanta module using the `inmanta module build` command.
@@ -69,8 +71,10 @@ def run_module_build(
     :param output_dir: The output directory where the resulting Python package will be stored.
     """
     cmd = [sys.executable, "-m", "inmanta.app", "module", "build"]
-    if distribution:
-        cmd.extend(["-d", distribution])
+    if wheel:
+        cmd.append("--wheel")
+    if sdist:
+        cmd.append("--sdist")
     if output_dir:
         cmd.extend(["-o", output_dir])
     if set_path_argument:
@@ -81,20 +85,20 @@ def run_module_build(
 
 
 @pytest.mark.parametrize_any(
-    "module_name, is_v2_module, set_path_argument, byte_code, distribution",
+    "module_name, is_v2_module, set_path_argument, byte_code, wheel, sdist",
     [
-        ("minimalv2module", True, True, False, "wheel"),
-        ("minimalv2module", True, True, False, "sdist"),
-        ("minimalv2module", True, False, False, "wheel"),
-        ("minimalv2module", True, False, False, "sdist"),
-        ("elaboratev2module", True, True, False, "wheel"),
-        ("elaboratev2module", True, True, False, "sdist"),
-        ("elaboratev2module", True, False, False, "wheel"),
-        ("elaboratev2module", True, False, False, "sdist"),
-        ("elaboratev1module", False, False, False, "wheel"),
-        ("elaboratev1module", False, False, False, "sdist"),
-        ("elaboratev1module", False, False, True, "wheel"),
-        ("elaboratev1module", False, False, True, "sdist"),
+        ("minimalv2module", True, True, False, True, False),
+        ("minimalv2module", True, True, False, False, True),
+        ("minimalv2module", True, False, False, True, False),
+        ("minimalv2module", True, False, False, False, True),
+        ("elaboratev2module", True, True, False, True, False),
+        ("elaboratev2module", True, True, False, False, True),
+        ("elaboratev2module", True, False, False, True, False),
+        ("elaboratev2module", True, False, False, False, True),
+        ("elaboratev1module", False, False, False, True, False),
+        ("elaboratev1module", False, False, False, False, True),
+        ("elaboratev1module", False, False, True, True, False),
+        ("elaboratev1module", False, False, True, False, True),
     ],
 )
 def test_build_v2_module(
@@ -107,11 +111,13 @@ def test_build_v2_module(
     byte_code: bool,
     monkeypatch: MonkeyPatch,
     disable_isolated_env_builder_cache: None,  # Test the code path used in production
-    distribution: Literal["wheel", "sdist"],
+    wheel: bool,
+    sdist: bool,
 ) -> None:
     """
     Build a V2 package and verify that the required files are present in the resulting artifact.
     """
+    assert wheel is not sdist and (wheel or sdist)
     module_dir: str
     if is_v2_module:
         module_dir = os.path.join(modules_v2_dir, module_name)
@@ -123,28 +129,26 @@ def test_build_v2_module(
 
     if not set_path_argument:
         monkeypatch.chdir(module_copy_dir)
-    run_module_build_soft(module_copy_dir, set_path_argument, byte_code=byte_code, distribution=distribution)
+    run_module_build_soft(module_copy_dir, set_path_argument, byte_code=byte_code, wheel=wheel, sdist=sdist)
 
     dist_dir = os.path.join(module_copy_dir, "dist")
     dist_dir_content = os.listdir(dist_dir)
     assert len(dist_dir_content) == 1
     package_file = os.path.join(dist_dir, dist_dir_content[0])
-    if distribution == "wheel":
+    if wheel:
         assert package_file.endswith(".whl")
     else:
         assert package_file.endswith(".tar.gz")
 
     extract_dir = os.path.join(tmpdir, "extract")
-    if distribution == "wheel":
+    if wheel:
         with zipfile.ZipFile(package_file) as zip:
             zip.extractall(extract_dir)
     else:
         with tarfile.open(package_file) as tar:
             tar.extractall(extract_dir)
-            # member_path = pathlib.Path(tar.getnames()[0])
-            # extract_dir = str(pathlib.Path(extract_dir).relative_to(member_path.parts[0]))
 
-    if distribution == "wheel":
+    if wheel:
         plugins_dir = os.path.join(extract_dir, "inmanta_plugins")
     else:
         # In a sdist package, all files are present under a shared root directory.
@@ -152,7 +156,7 @@ def test_build_v2_module(
         assert len(dirs_in_extract_dir) == 1
         plugins_dir = os.path.join(extract_dir, dirs_in_extract_dir[0], "inmanta_plugins")
 
-    if distribution == "wheel":
+    if wheel:
         if byte_code:
             assert "linux_x86_64" in package_file
         else:
@@ -174,8 +178,7 @@ def test_build_v2_module(
         assert os.path.exists(os.path.join(plugins_dir, module_name, "subpkg", "__init__.pyc")) == byte_code
 
 
-@pytest.mark.parametrize_any("distribution", ["wheel", "sdist"])
-def test_build_v2_module_set_output_directory(tmpdir, modules_v2_dir: str, distribution: Literal["wheel", "sdist"]) -> None:
+def test_build_v2_module_set_output_directory(tmpdir, modules_v2_dir: str) -> None:
     """
     Verify that the output_dir argument of the `inmanta module build` command works correctly.
     """
@@ -185,10 +188,10 @@ def test_build_v2_module_set_output_directory(tmpdir, modules_v2_dir: str, distr
     assert os.path.isdir(module_copy_dir)
 
     output_dir = os.path.join(tmpdir, "output")
-    run_module_build(module_copy_dir, set_path_argument=True, output_dir=output_dir, distribution=distribution)
+    run_module_build(module_copy_dir, set_path_argument=True, output_dir=output_dir, wheel=True, sdist=True)
 
     assert os.path.exists(output_dir)
-    assert len(os.listdir(output_dir)) == 1
+    assert len(os.listdir(output_dir)) == 2
     assert not os.path.exists(os.path.join(module_copy_dir, "dist"))
 
 
@@ -297,8 +300,7 @@ def test_build_with_existing_model_directory(tmpdir, modules_v2_dir: str, distri
         assert not os.path.exists(problematic_dir_path)  # Ensure the directory doesn't exist
 
 
-@pytest.mark.parametrize_any("distribution", ["wheel", "sdist"])
-def test_create_dev_build_of_v2_module(tmpdir, modules_v2_dir: str, distribution: Literal["wheel", "sdist"]) -> None:
+def test_create_dev_build_of_v2_module(tmpdir, modules_v2_dir: str) -> None:
     """
     Test whether the functionality to create a development build of a module, works correctly.
     """
@@ -306,23 +308,21 @@ def test_create_dev_build_of_v2_module(tmpdir, modules_v2_dir: str, distribution
     module_dir = os.path.join(modules_v2_dir, module_name)
     module_copy_dir = os.path.join(tmpdir, module_name)
     shutil.copytree(module_dir, module_copy_dir)
-    artifacts = run_module_build_soft(module_copy_dir, set_path_argument=True, dev_build=True, distribution=distribution)
-    assert len(artifacts) == 1
-    assert re.search(r"\.dev[0-9]{14}", artifacts[0])
+    artifacts = run_module_build_soft(module_copy_dir, set_path_argument=True, dev_build=True, wheel=True, sdist=True)
+    assert len(artifacts) == 2
+    for artifact in artifacts:
+        assert re.search(r"\.dev[0-9]{14}", artifact)
+
+    # Verify that both artifacts have the same timestamp in their dev version.
+    wheel_filename = next(os.path.basename(path) for path in artifacts if path.endswith(".whl"))
+    wheel_version_number = wheel_filename[0:-4].split("-")[1]
+    sdist_filename = next(os.path.basename(path) for path in artifacts if path.endswith(".tar.gz"))
+    sdist_version_number = sdist_filename[0:-7].split("-")[1]
+    assert wheel_version_number == sdist_version_number
 
 
-@pytest.mark.parametrize_any(
-    "explicit, distribution",
-    [
-        (True, "wheel"),
-        (True, "sdist"),
-        (False, "wheel"),
-        (False, "sdist"),
-    ],
-)
-def test_create_dev_build_of_pre_tagged_module(
-    tmpdir, modules_dir: str, explicit: bool, distribution: Literal["wheel", "sdist"]
-) -> None:
+@pytest.mark.parametrize_any("explicit", [True, False])
+def test_create_dev_build_of_pre_tagged_module(tmpdir, modules_dir: str, explicit: bool) -> None:
     """
     Test whether the functionality to create a development build of a module that already has a dev tag, works correctly.
     """
@@ -335,12 +335,14 @@ def test_create_dev_build_of_pre_tagged_module(
         new_name=module_name,
         new_version=version.Version("1.2.3.dev0"),
     )
-    artifacts = run_module_build_soft(new_mod_dir, set_path_argument=True, dev_build=explicit, distribution=distribution)
-    assert len(artifacts) == 1
+    artifacts = run_module_build_soft(new_mod_dir, set_path_argument=True, dev_build=explicit, wheel=True, sdist=True)
+    assert len(artifacts) == 2
     if explicit:
-        assert re.search(r"1.2.3\.dev[0-9]{14}", artifacts[0])
+        for artifact in artifacts:
+            assert re.search(r"1.2.3\.dev[0-9]{14}", artifact)
     else:
-        assert "1.2.3.dev0" in artifacts[0]
+        for artifact in artifacts:
+            assert "1.2.3.dev0" in artifact
 
 
 @pytest.mark.slowtest
@@ -404,26 +406,3 @@ def test_build_v1_module_existing_plugin_dir(tmpdir, modules_dir: str, module_na
             assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "py.typed"))
             assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "other_module.py"))
             assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "subpkg", "__init__.py"))
-
-
-def test_wheel_and_sdist_build(tmpdir, modules_v2_dir: str):
-    """
-    Test whether the `module build` works correctly when the -d option is set to `wheel_and_sdist`.
-    """
-    module_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
-    module_copy_dir = os.path.join(tmpdir, "module")
-    shutil.copytree(module_dir, module_copy_dir)
-    assert os.path.isdir(module_copy_dir)
-
-    run_module_build_soft(module_copy_dir, set_path_argument=True, dev_build=True, distribution="wheel_and_sdist")
-
-    dist_dir = os.path.join(module_copy_dir, "dist")
-    dist_dir_content = os.listdir(dist_dir)
-    assert len(dist_dir_content) == 2
-
-    # Verify that both artifacts have the same timestamp in their dev version.
-    wheel_filename = next(f for f in dist_dir_content if f.endswith(".whl"))
-    wheel_version_number = wheel_filename[0:-4].split("-")[1]
-    sdist_filename = next(f for f in dist_dir_content if f.endswith(".tar.gz"))
-    sdist_version_number = sdist_filename[0:-7].split("-")[1]
-    assert wheel_version_number == sdist_version_number

@@ -639,12 +639,22 @@ class ModuleTool(ModuleLikeTool):
             dest="byte_code",
         )
         build.add_argument(
-            "-d",
-            "--distribution",
-            help="Which type of distribution package should be built.",
-            choices=["wheel", "sdist", "wheel_and_sdist"],
-            dest="distribution",
+            "-w",
+            "--wheel",
+            help="Build a wheel.",
+            action="store_true",
+            default=False,
+            dest="wheel",
         )
+        build.add_argument(
+            "-s",
+            "--sdist",
+            help="Build a sdist.",
+            action="store_true",
+            default=False,
+            dest="sdist",
+        )
+
         subparser.add_parser(
             "v1tov2",
             help="Convert a V1 module to a V2 module in place",
@@ -766,16 +776,20 @@ When a development release is done using the \--dev option, this command:
         output_dir: Optional[str] = None,
         dev_build: bool = False,
         byte_code: bool = False,
-        distribution: Literal["wheel", "sdist", "wheel_and_sdist"] | None = None,
-    ) -> str | list[str]:
+        wheel: bool = False,
+        sdist: bool = False,
+    ) -> list[str]:
         """
-        Build a v2 module and return the path to the build artifact.
+        Build a v2 module and return the path to the build artifact(s).
 
-        :param distribution: The distribution package that should be built. If None, build a wheel.
-        :returns: The paths to the distribution packages that were built. If distribution=None,
-                  this method returns a str for backwards compatibility. In all other situations
-                  this method returns a list.
+        :param wheel: True iff build a wheel package.
+        :param sdist: True iff build a sdist package.
+        :returns: A list of paths to the distribution packages that were built.
         """
+        if not wheel and not sdist:
+            # Only build wheels by default for backwards compatibility.
+            wheel = True
+
         if path is not None:
             path = os.path.abspath(path)
         else:
@@ -786,15 +800,13 @@ When a development release is done using the \--dev option, this command:
         if output_dir is None:
             output_dir = os.path.join(path, "dist")
 
-        distributions_to_build: Sequence[Literal["wheel", "sdist"]]
-        if distribution is None:
-            distributions_to_build = ["wheel"]
-        elif distribution == "wheel_and_sdist":
-            distributions_to_build = ["wheel", "sdist"]
-        else:
-            distributions_to_build = [distribution]
-
         timestamp = datetime.datetime.now(datetime.timezone.utc)
+
+        distributions_to_build = []
+        if wheel:
+            distributions_to_build.append("wheel")
+        if sdist:
+            distributions_to_build.append("sdist")
 
         def _build_distribution_packages(module_dir: str) -> list[str]:
             return [
@@ -811,9 +823,6 @@ When a development release is done using the \--dev option, this command:
         else:
             artifacts = _build_distribution_packages(path)
 
-        if distribution is None:
-            # Only return first element (wheel) for backwards compatibility.
-            return artifacts[0]
         return artifacts
 
     def get_project_for_module(self, module: str) -> Project:
