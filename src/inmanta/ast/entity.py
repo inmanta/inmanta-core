@@ -694,7 +694,7 @@ class Entity(NamedType, WithComment):
         return dataclass_name
 
     def has_custom_to_python(self) -> bool:
-        return False
+        return self._paired_dataclass is not None
 
     def to_python(self, instance: object) -> "object":
         if self._paired_dataclass is None:

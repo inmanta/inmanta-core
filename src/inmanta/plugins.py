@@ -240,7 +240,10 @@ class Null(inmanta_type.Type):
         return None
 
 
-class ConvertibleEntity(inmanta_type.Type):
+class UnConvertibleEntity(inmanta_type.Type):
+    """
+    Entity that does not convert to a dataclass.
+    """
 
     # TODO: cache
     def __init__(self, base_entity: "Entity") -> None:
@@ -275,7 +278,7 @@ class ConvertibleEntity(inmanta_type.Type):
         return self.base_entity.as_python_type_string()
 
     def has_custom_to_python(self) -> bool:
-        return self.base_entity._paired_dataclass is not None
+        return False
 
     def to_python(self, instance: object) -> "object":
         return self.base_entity.to_python(instance)
@@ -342,7 +345,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     if dataclasses.is_dataclass(python_type):
         entity = get_inmanta_type_for_dataclass(python_type)
         if entity:
-            return ConvertibleEntity(entity)
+            return entity
         raise TypingException(None, f"invalid type {python_type}, this dataclass has no associated inmanta entity")
 
     # Lists and dicts
