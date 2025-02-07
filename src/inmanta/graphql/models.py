@@ -70,7 +70,7 @@ class Project(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     name: Mapped[str] = mapped_column(String)
 
-    environment: Mapped[List["Environment"]] = relationship("Environment", back_populates="project_")
+    environments: Mapped[List["Environment"]] = relationship("Environment", back_populates="project_")
 
 
 class Schemamanager(Base):
@@ -101,7 +101,7 @@ class Environment(Base):
     icon: Mapped[Optional[str]] = mapped_column(String(65535), server_default=text("''::character varying"))
     is_marked_for_deletion: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
-    project_: Mapped["Project"] = relationship("Project", back_populates="environment")
+    project_: Mapped["Project"] = relationship("Project", back_populates="environments")
     agentprocess: Mapped[List["AgentProcess"]] = relationship("AgentProcess", back_populates="environment_")
     code: Mapped[List["Code"]] = relationship("Code", back_populates="environment_")
     compile: Mapped[List["Compile"]] = relationship("Compile", back_populates="environment_")

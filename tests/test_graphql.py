@@ -17,6 +17,7 @@
 """
 
 import datetime
+import logging
 import subprocess
 import sys
 import uuid
@@ -26,7 +27,21 @@ import pytest
 import inmanta.graphql.models as models
 import inmanta.graphql.schema as schema
 
+from sqlalchemy import select, insert
 
+from inmanta.graphql.models import Environment, Project
+from inmanta.graphql.schema import get_async_session
+
+LOGGER = logging.getLogger(__name__)
+
+@pytest.fixture
+async def setup_database_no_data(postgres_db, database_name):
+    # Initialize DB
+    conn_string = (
+        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
+    )
+    # Force reinitialization of schema with the correct connection string
+    schema.initialize_schema(conn_string)
 @pytest.fixture
 async def setup_database(postgres_db, database_name):
     # Initialize DB
@@ -195,11 +210,11 @@ async def setup_database(postgres_db, database_name):
         schema.mapper.finalize()
 
 
-async def test_generate_sqlalchemy_models(postgres_db, database_name):
-    conn_string = (
-        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
-    )
-    subprocess.run(["sqlacodegen", conn_string])
+# async def test_generate_sqlalchemy_models(postgres_db, database_name):
+#     conn_string = (
+#         f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
+#     )
+#     subprocess.run(["sqlacodegen", conn_string])
 
 
 async def test_query_projects(server, client, setup_database):
@@ -391,3 +406,97 @@ async def test_query_path(server, client, setup_database):
         result = await client.graphql(query=query)
         assert result.code == 200
         assert result.result["data"] == expected_data
+
+
+async def test_sql_alchemy_read(client, server, setup_database_no_data):
+    """
+    Create project and envs using regular endpoints
+    Read using sql alchemy capabilities
+    """
+
+    # Create project
+    result = await client.create_project("test_project")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    # Create environments
+    env_1_name = "env_1"
+    result = await client.create_environment(project_id=project_id, name=env_1_name)
+    assert result.code == 200
+    env_1_id = result.result["environment"]["id"]
+
+    env_2_name = "env_2"
+    result = await client.create_environment(project_id=project_id, name=env_2_name)
+    assert result.code == 200
+    env_2_id = result.result["environment"]["id"]
+
+    stmt = select(Environment.id, Environment.name).order_by(Environment.name)
+    async with get_async_session() as session:
+        result_execute = await session.execute(stmt)
+        assert result_execute.all() == [
+            (uuid.UUID(env_1_id), env_1_name),
+            (uuid.UUID(env_2_id), env_2_name),
+        ]
+
+
+async def test_sql_alchemy_write(client, server, setup_database_no_data):
+    """
+    Create projects and envs using sql alchemy
+    Read using regular endpoints
+    """
+    proj_id = uuid.uuid4()
+    stmt = insert(Project)
+    data = [
+        {
+            "id": proj_id,
+            "name": "proj_1"
+        }
+    ]
+
+    async with get_async_session() as session:
+        result_execute = await session.execute(stmt, data)
+        await session.commit()
+
+    stmt = insert(Environment).returning(Environment.id)
+    data = [
+        {
+            "id": uuid.uuid4(),
+            "name": "env_1",
+            "project": proj_id
+        }
+    ]
+
+    async with get_async_session() as session:
+        result_execute = await session.execute(stmt, data)
+        await session.commit()
+        env_id = result_execute.scalars().all()[0]
+
+    result = await client.list_environments()
+    assert result.code == 200
+    assert "environments" in result.result
+    assert result.result["environments"] == [
+        {
+             'description': '',
+             'halted': False,
+             'icon': '',
+             'id': str(env_id),
+             'is_marked_for_deletion': False,
+             'name': 'env_1',
+             'project': str(proj_id),
+             'repo_branch': '',
+             'repo_url': '',
+             'settings': {}
+        }
+    ]
+
+    result = await client.list_projects()
+    assert result.code == 200
+    assert "projects" in result.result
+    assert result.result["projects"] == [
+        {
+            'environments': [str(env_id)],
+            'id': str(proj_id),
+            'name': 'proj_1'
+        }
+    ]
+
