@@ -225,6 +225,22 @@ class OrReferenceType(ReferenceType):
         element = self.element_type.type_string()
         return f"Reference[{element}] | {element}"
 
+    def __eq__(self, other):
+        if not isinstance(other, OrReferenceType):
+            return False
+        return other.element_type == self.element_type
+
+    def is_attribute_type(self) -> bool:
+        return self.element_type.is_attribute_type()
+
+    def corresponds_to(self, type: "Type") -> bool:
+        # The model always allow reference, we allow the type in the python domain to be tighter
+        if isinstance(type, Any):
+            return True
+        if self.element_type.corresponds_to(type):
+            return True
+        if isinstance(type, ReferenceType):
+            return self.element_type.corresponds_to(type.element_type)
 
 class NamedType(Type, Named):
     def get_double_defined_exception(self, other: "NamedType") -> "DuplicateException":

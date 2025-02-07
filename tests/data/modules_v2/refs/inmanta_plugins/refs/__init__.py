@@ -58,7 +58,7 @@ def create_bool_reference_cycle(name: "any") -> "bool":
 
 @dataclasses.dataclass(frozen=True)
 class Test:
-    value: str
+    value: str | Reference[str]
 
 
 @reference("refs::TestReference")
@@ -78,5 +78,5 @@ class TestReference(DataclassReference[Test]):
 
 
 @plugin
-def create_test(value: "string") -> "refs::Test":
+def create_test(value: str | Reference[str]) -> TestReference:
     return TestReference(value=value)

@@ -19,7 +19,7 @@ Contact: code@inmanta.com
 from typing import Optional, Tuple
 
 from inmanta.ast import CompilerException, Locatable, Location, RuntimeException, TypingException
-from inmanta.ast.type import NullableType, TypedList
+from inmanta.ast.type import NullableType, TypedList, OrReferenceType
 from inmanta.execute import runtime
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
@@ -54,7 +54,8 @@ class Attribute(Locatable):
         self.__multi = multi
         self.__nullable = nullable
 
-        self.__type: Type = value_type
+        # TODO: creates many identical types, not nice, memoize
+        self.__type: Type = OrReferenceType(value_type)
         if multi:
             self.__type = TypedList(self.__type)
         if nullable:
