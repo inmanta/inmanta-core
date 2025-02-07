@@ -769,7 +769,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
             )
             assert result.code == 200
             version = result.result["data"]
-        await utils.wait_until_version_is_released(client, environment, version)
+        await clienthelper.wait_for_released(version)
 
         # Get all resources
         result = await client.get_version(tid=environment, id=version)

@@ -315,25 +315,31 @@ async def report_db_index_usage(min_precent=100):
     for row in result:
         print(row)
 
+async def is_version_released(client, environment: uuid.UUID, version: int | None = None) -> bool:
+        if version is not None:
+            versions = await client.list_desired_state_versions(
+                tid=environment,
+                start=version-1,
+                limit=1,
+            )
+        else:
+            versions = await client.list_desired_state_versions(
+                tid=environment,
+                limit=1,
+            )
+
+        assert versions.code == 200
+        version_obj = versions.result["data"][0]
+        assert version_obj["version"] == version
+        return version_obj["status"] == "active"
+
 
 async def wait_until_version_is_released(client, environment: uuid.UUID, version: int) -> None:
     """
     Wait until the configurationmodel with the given version and environment is released and scheduled.
     """
 
-    async def _is_version_released() -> bool:
-        versions = await client.list_desired_state_versions(
-            tid=self.envid,
-            start=version-1,
-            limit=1,
-        )
-        assert versions.code == 200
-        lookup = {
-            int(v["version"]): v["status"] == "active" for v in versions.result["data"]
-        }
-        return lookup[int(version)]
-
-    await retry_limited(_is_version_released, timeout=10)
+    await retry_limited(is_version_released, client=client, environment=environment, version=version, timeout=10)
 
 
 async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
@@ -496,12 +502,7 @@ class ClientHelper:
 
     async def is_released(self, version: int | None = None) -> bool:
         """Version None means latest"""
-        versions = await self.client.list_versions(tid=self.environment)
-        assert versions.code == 200
-        if version is None:
-            return versions.result["versions"][0]["released"]
-        lookup = {v["version"]: v["released"] for v in versions.result["versions"]}
-        return lookup[version]
+        return await is_version_released(self.client, self.environment, version)
 
     async def wait_for_deployed(self, version: int = -1, timeout=10) -> None:
         await wait_until_deployment_finishes(self.client, str(self.environment), version=version, timeout=timeout)
