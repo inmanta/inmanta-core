@@ -39,9 +39,10 @@ def test_conversion(caplog):
         return to_dsl_type(python_type, location, namespace)
 
     assert inmanta_type.NullableType(inmanta_type.Integer()) == to_dsl_type_simple(Annotated[int | None, "something"])
-    # Union type should be ignored in favor of our InmantaType
-    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type_simple(Annotated[int | None, InmantaType("dict")])
-
+    assert inmanta_type.Union(
+        [inmanta_type.Integer(), inmanta_type.Union([inmanta_type.String(), inmanta_type.Float()])]
+    ) == to_dsl_type_simple(int | Annotated[str | float, "some-annotation"])
+    # Union type should be ignored in favor of our ModelType
     assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type_simple(Annotated[dict[str, int], ModelType["dict"]])
     assert inmanta_type.Integer() == to_dsl_type_simple(int)
     assert inmanta_type.Float() == to_dsl_type_simple(float)
@@ -52,8 +53,8 @@ def test_conversion(caplog):
     assert inmanta_type.List() == to_dsl_type_simple(Sequence)
     assert inmanta_type.List() == to_dsl_type_simple(collections.abc.Sequence)
     assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type_simple(collections.abc.Sequence[str])
-    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type_simple(dict)
-    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type_simple(Mapping)
+    assert inmanta_type.TypedDict(inmanta_type.Any()) == to_dsl_type_simple(dict)
+    assert inmanta_type.TypedDict(inmanta_type.Any()) == to_dsl_type_simple(Mapping)
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type_simple(dict[str, str])
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type_simple(Mapping[str, str])
 

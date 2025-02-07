@@ -518,20 +518,20 @@ for val in ["test", 123, null]:
 end
 
 # Annotated types
-plugin_native_types::annotated_arg_entity(test_entity)     # type value: Annotated[MyEntity, InmantaType("TestEntity")]
-plugin_native_types::annotated_return_entity(test_entity)  # type return value: Annotated[MyEntity, InmantaType("TestEntity")]
+plugin_native_types::annotated_arg_entity(test_entity)     # type value: Annotated[MyEntity, ModelType["TestEntity"]]
+plugin_native_types::annotated_return_entity(test_entity)  # type return value: Annotated[MyEntity, ModelType["TestEntity"]]
 plugin_native_types::nested_annotated_arg_entity(test_entity)
-    # type value: Annotated[AnotherEntity, InmantaType("plugin_native_types::TestEntity")]
+    # type value: Annotated[AnotherEntity, ModelType["plugin_native_types::TestEntity"]]
 plugin_native_types::nested_annotated_return_entity(test_entity)
-    # type return value: Annotated[AnotherEntity, InmantaType("plugin_native_types::TestEntity")]
+    # type return value: Annotated[AnotherEntity, ModelType["plugin_native_types::TestEntity"]]
 
 for val in ["yes", "no"]:
-    plugin_native_types::annotated_arg_literal(val)        # type value: Annotated[Literal["yes", "no"], InmantaType("response")
-    plugin_native_types::annotated_return_literal(val)   # type value: Annotated[Literal["yes", "no"], InmantaType("response")
+    plugin_native_types::annotated_arg_literal(val)        # type value: Annotated[Literal["yes", "no"], ModelType["response"]]
+    plugin_native_types::annotated_return_literal(val)   # type value: Annotated[Literal["yes", "no"], ModelType["response"]]
 end
         """,
-        ministd=True,
-    )
+            ministd=True,
+        )
     compiler.do_compile()
 
     main_dir = snippetcompiler.main
