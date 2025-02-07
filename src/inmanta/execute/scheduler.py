@@ -32,6 +32,7 @@ from inmanta.ast import (
     CycleException,
     Location,
     MultiException,
+    MultiUnsetException,
     RuntimeException,
     UnsetException,
 )
@@ -54,7 +55,6 @@ from inmanta.execute.runtime import (
     Waiter,
     WaiterSet,
 )
-from inmanta.execute.tracking import ModuleTracker
 
 if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, NamedType, Statement  # noqa: F401
@@ -274,6 +274,18 @@ class Scheduler:
         for block in blocks:
             block.normalize()
 
+        # Dataclass validation
+        data_class_root = self.types.get("std::Dataclass")
+        if data_class_root is not None:
+            assert isinstance(data_class_root, Entity)
+            for dataclass in data_class_root.get_all_child_entities():
+                dataclass.pair_dataclass()
+        else:
+            # we have no dataclasses, std is too old!
+            # We don't warn because if they are used they will produce a warning (class not found)
+            # If not, all is fine
+            pass
+
     def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
     ) -> Sequence[tuple[Location, AnchorTarget]]:
@@ -397,7 +409,7 @@ class Scheduler:
 
         # emit all top level statements
         for block in blocks:
-            block.context.emit(queue.for_tracker(ModuleTracker(block)))
+            block.context.emit(queue)
 
         # start an evaluation loop
         i = 0
@@ -434,6 +446,10 @@ class Scheduler:
                 except UnsetException as e:
                     # some statements don't know all their dependencies up front,...
                     next.requeue_with_additional_requires(object(), e.get_result_variable())
+                except MultiUnsetException as e:
+                    # some statements don't know all their dependencies up front,...
+                    for rv in e.result_variables:
+                        next.requeue_with_additional_requires(object(), rv)
 
             # all safe stmts are done
             progress = False

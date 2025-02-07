@@ -25,6 +25,7 @@ from inmanta import warnings
 from inmanta.ast import export
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
+from inmanta.types import DataclassProtocol
 from inmanta.warnings import InmantaWarning
 
 try:
@@ -876,6 +877,38 @@ class DirectExecuteException(TypingException):
         return 11
 
 
+class DataClassException(TypingException):
+    """Exception in relation to dataclasses"""
+
+    def __init__(self, entity: "Entity", msg: str) -> None:
+        super().__init__(entity, msg)
+        self.entity = entity
+
+    def importantance(self) -> int:
+        return 9
+
+
+class DataClassMismatchException(DataClassException):
+    """
+    Exception due to a mismatch between both version of a dataclass
+
+    """
+
+    def __init__(
+        self,
+        entity: "Entity",
+        dataclass: DataclassProtocol | None,
+        dataclass_python_name: str,
+        msg: str,
+    ) -> None:
+        """
+        :param dataclass python dataclass, None if absent
+        """
+        super().__init__(entity, msg)
+        self.dataclass = dataclass
+        self.dataclass_python_name = dataclass_python_name
+
+
 class KeyException(RuntimeException):
     pass
 
@@ -1029,6 +1062,17 @@ class UnsetException(RuntimeException):
 
     def get_result_variable(self) -> Optional["Instance"]:
         return self.instance
+
+
+class MultiUnsetException(RuntimeException):
+    """
+    This exception is thrown when multiple attributes are accessed that were not yet
+    available (i.e. it has not been frozen yet).
+    """
+
+    def __init__(self, msg: str, result_variables: "list[ResultVariable[object]]") -> None:
+        RuntimeException.__init__(self, None, msg)
+        self.result_variables = result_variables
 
 
 class UnknownException(Exception):

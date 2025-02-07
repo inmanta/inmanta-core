@@ -1053,9 +1053,12 @@ class MPManager(
         :param agent_uri: The name of the host on which the agent is running.
         :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
-            handler code in its venv.
+            handler code in its venv. Must have at least one element.
         :return: An Executor instance
         """
+        if not code:
+            raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
+
         blueprint = executor.ExecutorBlueprint.from_specs(code)
         executor_id = executor.ExecutorId(agent_name, agent_uri, blueprint)
 
