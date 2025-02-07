@@ -2,6 +2,11 @@ entity TestEntity:
     int value
 end
 
+entity AnotherEntity:
+    int another_value
+end
+
 typedef response as string matching self in ["yes", "no"]
 
 implement TestEntity using std::none
+implement AnotherEntity using std::none

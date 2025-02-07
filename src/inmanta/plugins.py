@@ -292,7 +292,7 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
         # Optional type
         bases: Sequence[inmanta_type.Type]
         if typing_inspect.is_optional_type(python_type):
-            other_types = [tt for tt in typing_inspect.get_args(python_type) if not typing_inspect.is_optional_type(tt)]
+            other_types = [tt for tt in typing.get_args(python_type) if not typing_inspect.is_optional_type(tt)]
             if len(other_types) == 0:
                 # Probably not possible
                 return Null()
@@ -311,7 +311,7 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
         # dict
         if issubclass(origin, Mapping):
             if origin in [collections.abc.Mapping, dict, Mapping]:
-                args = typing_inspect.get_args(python_type)
+                args = typing.get_args(python_type)
                 if not args:
                     return inmanta_type.TypedDict(inmanta_type.Type())
 

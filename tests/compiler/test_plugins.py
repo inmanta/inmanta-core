@@ -475,6 +475,10 @@ end
 # Annotated types
 plugin_native_types::annotated_arg_entity(test_entity)     # type value: Annotated[MyEntity, InmantaType("TestEntity")]
 plugin_native_types::annotated_return_entity(test_entity)  # type return value: Annotated[MyEntity, InmantaType("TestEntity")]
+plugin_native_types::nested_annotated_arg_entity(test_entity)
+    # type value: Annotated[AnotherEntity, InmantaType("plugin_native_types::TestEntity")]
+plugin_native_types::nested_annotated_return_entity(test_entity)
+    # type return value: Annotated[AnotherEntity, InmantaType("plugin_native_types::TestEntity")]
 
 for val in ["yes", "no"]:
     plugin_native_types::annotated_arg_literal(val)        # type value: Annotated[Literal["yes", "no"], InmantaType("response")
@@ -485,6 +489,7 @@ end
     )
     compiler.do_compile()
 
+    main_dir = snippetcompiler.main
     # Parameter to plugin has incompatible type
     ns = "plugin_native_types"
     for plugin_name, plugin_value, error_message in [
@@ -522,6 +527,23 @@ end
             1.2,
             f"Value 1.2 for argument value of plugin {ns}::union_optional_4 has incompatible type."
             f" Expected type: Union[int,string]?",
+        ),
+        (
+            "annotated_arg_entity",
+            "plugin_native_types::AnotherEntity(another_value=1)",
+            (
+                f"Value {ns}::AnotherEntity (instantiated at {main_dir}:3) for argument value of plugin "
+                f"{ns}::annotated_arg_entity has incompatible type. Expected type: {ns}::TestEntity "
+                f"(reported in {ns}::annotated_arg_entity(value=Construct({ns}::AnotherEntity)) ({main_dir}:3))"
+            ),
+        ),
+        (
+            "annotated_arg_literal",
+            "'maybe'",
+            (
+                f"Value maybe for argument value of plugin {ns}::annotated_arg_literal has incompatible type. "
+                f"Expected type: {ns}::response (reported in plugin_native_types::annotated_arg_literal(value='maybe')"
+            ),
         ),
     ]:
         snippetcompiler.setup_for_snippet(
@@ -578,6 +600,22 @@ end
             (
                 f"Return value 1.2 of plugin {ns}::union_return_optional_4 has incompatible type."
                 " Expected type: Union[int,string]?"
+            ),
+        ),
+        (
+            "annotated_return_entity",
+            "plugin_native_types::AnotherEntity(another_value=1)",
+            (
+                f"Return value {ns}::AnotherEntity (instantiated at {main_dir}:3) of plugin {ns}::annotated_return_entity "
+                f"has incompatible type. Expected type: {ns}::TestEntity"
+            ),
+        ),
+        (
+            "annotated_return_literal",
+            "'maybe'",
+            (
+                f"Return value maybe of plugin {ns}::annotated_return_literal has incompatible type. "
+                f"Expected type: {ns}::response"
             ),
         ),
     ]:
