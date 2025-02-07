@@ -120,34 +120,12 @@ When you want to construct entities in a plugin, you can use dataclasses.
 An inmanta dataclass is an entity that has a python counterpart.
 When used in a plugin, it is a normal python object, when used in the model, it is a normal Entity.
 
-.. code-block:: python
+.. literalinclude:: examples/dataclass_1.py
+   :language: python
 
-    import dataclasses
 
-    from inmanta.plugins import plugin
-
-    @dataclasses.dataclass(frozen=True)
-    class Virtualmachine:
-        name: str
-        ram: int
-        cpus: int
-
-    @plugin
-    def make_virtual_machine() -> Virtualmachine:
-        return Virtualmachine(name="Test", ram=5, cpus=12)
-
-.. code-block:: inmanta
-
-    entity Virtualmachine extends std::Dataclass:
-        string name
-        int ram
-        int cpus
-    end
-
-    implement Virtualmachine using std::none
-
-    vm = make_virtual_machine()
-    std::print(vm.name)
+.. literalinclude:: examples/dataclass_1.cf
+   :language: inmanta
 
 When using dataclasses, the object can be passed around freely into and out of plugins.
 
@@ -171,6 +149,16 @@ The Inmanta entity is expect to:
 
     When the inmanta entity and python class don't match, the compiler will print out a correction for both.
     This means you only ever have to write the Entity, because the compiler will print the python class for you to copy paste.
+
+Dataclasses can also be passed into plugins. When the type is declared as a python type, a python instance will be passed into the plugin.
+When declared as an inmanta type (i.e. a string), a `DynamicProxy` will be returned
+
+.. literalinclude:: examples/dataclass_2.py
+   :language: python
+
+
+.. literalinclude:: examples/dataclass_2.cf
+   :language: inmanta
 
 
 Deprecate plugins
