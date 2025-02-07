@@ -46,11 +46,12 @@ from inmanta.ast import (
     UnsetException,
     WithComment,
 )
-from inmanta.ast.type import NamedType, OrReferenceType
+from inmanta.ast.type import NamedType, OrReferenceType, ReferenceType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext, get_inmanta_type_for_dataclass
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
+from inmanta.references import Reference
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
@@ -310,6 +311,48 @@ python_to_model = {
     object: inmanta_type.Any(),
 }
 
+def _convert_to_reference(python_type: type[object], origin: type[object]) -> inmanta_type.Type | None:
+    if issubclass(origin, Reference):
+        args = typing.get_args(python_type)
+        return ReferenceType(to_dsl_type(args[0]))
+    return None
+
+def _convert_origin_to_dsl_type(python_type: type[object], origin: type[object]) -> inmanta_type.Type | None:
+    # dict
+    if issubclass(origin, Mapping):
+        if origin in [collections.abc.Mapping, dict, typing.Mapping]:
+            args = typing_inspect.get_args(python_type)
+            if not args:
+                return inmanta_type.TypedDict(inmanta_type.Any())
+
+            if not issubclass(args[0], str):
+                raise TypingException(
+                    None, f"invalid type {python_type}, the keys of any dict should be 'str', got {args[0]} instead"
+                )
+
+            if len(args) == 1:
+                return inmanta_type.TypedDict(inmanta_type.Any())
+
+            return inmanta_type.TypedDict(to_dsl_type(args[1]))
+        else:
+            raise TypingException(None, f"invalid type {python_type}, dictionary types should be Mapping or dict")
+
+    # List
+    if issubclass(origin, Sequence):
+        if origin in [collections.abc.Sequence, list, typing.Sequence]:
+            args = typing.get_args(python_type)
+            if not args:
+                return inmanta_type.List()
+            return inmanta_type.TypedList(to_dsl_type(args[0]))
+        else:
+            raise TypingException(None, f"invalid type {python_type}, list types should be Sequence or list")
+
+    # Set
+    if issubclass(origin, collections.abc.Set):
+        raise TypingException(None, f"invalid type {python_type}, set is not supported on the plugin boundary")
+
+    return _convert_to_reference(python_type, origin)
+
 
 def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     """
@@ -351,39 +394,36 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     # Lists and dicts
     if typing_inspect.is_generic_type(python_type):
         origin = typing.get_origin(python_type)
+        if origin is not None:
+            out =  _convert_origin_to_dsl_type(python_type, origin)
+            if out is not None:
+                return out
+        else:
+            # We are not or the form Reference[T] but possibly a class that inherits from ...
+            # TODO: this doesn't handle cases where type parameters are shifted around
+            all_bases = list(typing_inspect.get_generic_bases(python_type))
+            seen = set()
+            while all_bases:
+                base = all_bases.pop()
+                # prevent loops
+                if base in seen:
+                    continue
+                seen.add(base)
 
-        # dict
-        if issubclass(origin, Mapping):
-            if origin in [collections.abc.Mapping, dict, typing.Mapping]:
-                args = typing_inspect.get_args(python_type)
-                if not args:
-                    return inmanta_type.TypedDict(inmanta_type.Any())
+                if not typing_inspect.is_generic_type(base):
+                    # Not generic, not interesting
+                    continue
 
-                if not issubclass(args[0], str):
-                    raise TypingException(
-                        None, f"invalid type {python_type}, the keys of any dict should be 'str', got {args[0]} instead"
-                    )
+                origin = typing.get_origin(base)
+                if origin is None:
+                    # no origin, see if we have any other bases higher up
+                    all_bases.extend(typing_inspect.get_generic_bases(base))
+                    continue
 
-                if len(args) == 1:
-                    return inmanta_type.TypedDict(inmanta_type.Any())
+                out = _convert_to_reference(base, origin)
+                if out is not None:
+                    return out
 
-                return inmanta_type.TypedDict(to_dsl_type(args[1]))
-            else:
-                raise TypingException(None, f"invalid type {python_type}, dictionary types should be Mapping or dict")
-
-        # List
-        if issubclass(origin, Sequence):
-            if origin in [collections.abc.Sequence, list, typing.Sequence]:
-                args = typing.get_args(python_type)
-                if not args:
-                    return inmanta_type.List()
-                return inmanta_type.TypedList(to_dsl_type(args[0]))
-            else:
-                raise TypingException(None, f"invalid type {python_type}, list types should be Sequence or list")
-
-        # Set
-        if issubclass(origin, collections.abc.Set):
-            raise TypingException(None, f"invalid type {python_type}, set is not supported on the plugin boundary")
 
     # TODO annotated types
     # if typing.get_origin(t) is typing.Annotated:

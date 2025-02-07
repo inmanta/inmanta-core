@@ -239,6 +239,13 @@ class OrReferenceType(ReferenceType):
             return True
         if self.element_type.corresponds_to(type):
             return True
+        if isinstance(type, Union):
+            # todo: bit sloppy?
+            if not any(self.element_type.corresponds_to(sub_type) for sub_type in type.types):
+                return False
+            if not any(isinstance(sub_type, ReferenceType) and self.element_type.corresponds_to(sub_type.element_type) for sub_type in type.types):
+                return False
+            return True
         if isinstance(type, ReferenceType):
             return self.element_type.corresponds_to(type.element_type)
 
