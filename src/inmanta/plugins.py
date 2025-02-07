@@ -1,29 +1,32 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
 import collections.abc
+import dataclasses
 import inspect
+import logging
 import numbers
 import os
 import subprocess
 import typing
 import warnings
+from abc import abstractmethod
 from collections import abc
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -33,22 +36,20 @@ import typing_inspect
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
-from inmanta.ast import (  # noqa: F401 PluginException is part of the stable api
-    InvalidTypeAnnotation,
-    LocatableString,
-    Location,
-    Namespace,
-    PluginException,
+from inmanta.ast import InvalidTypeAnnotation, LocatableString, Location, MultiUnsetException, Namespace
+from inmanta.ast import PluginException as PluginException  # noqa: F401 Plugin exception is part of the stable api
+from inmanta.ast import (
     PluginTypeException,
     Range,
     RuntimeException,
     TypeNotFoundException,
     TypingException,
+    UnsetException,
     WithComment,
 )
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
-from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
@@ -61,6 +62,9 @@ if TYPE_CHECKING:
     from inmanta.ast.statements import DynamicStatement
     from inmanta.ast.statements.call import FunctionCall
     from inmanta.compiler import Compiler
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class PluginDeprecationWarning(InmantaWarning):
@@ -220,14 +224,26 @@ class Null(inmanta_type.Type):
     def type_string_internal(self) -> str:
         return self.type_string()
 
+    def as_python_type_string(self) -> "str | None":
+        return "None"
+
+    def corresponds_to(self, type: inmanta_type.Type) -> bool:
+        return isinstance(type, (Null, inmanta_type.Any))
+
+    def has_custom_to_python(self) -> bool:
+        return False
+
     def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721
+
+    def get_location(self) -> Optional[Location]:
+        return None
 
 
 # Define some types which are used in the context of plugins.
 PLUGIN_TYPES = {
-    "any": inmanta_type.Type(),  # Any value will pass validation
-    "expression": inmanta_type.Type(),  # Any value will pass validation
+    "any": inmanta_type.Any(),  # Any value will pass validation
+    "expression": inmanta_type.Any(),  # Any value will pass validation
     "null": Null(),  # Only NoneValue will pass validation
     None: Null(),  # Only NoneValue will pass validation
 }
@@ -238,13 +254,13 @@ python_to_model = {
     numbers.Number: inmanta_type.Number(),
     int: inmanta_type.Integer(),
     bool: inmanta_type.Bool(),
-    dict: inmanta_type.TypedDict(inmanta_type.Type()),
-    typing.Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
-    Mapping: inmanta_type.TypedDict(inmanta_type.Type()),
+    dict: inmanta_type.TypedDict(inmanta_type.Any()),
+    typing.Mapping: inmanta_type.TypedDict(inmanta_type.Any()),
+    Mapping: inmanta_type.TypedDict(inmanta_type.Any()),
     list: inmanta_type.List(),
     typing.Sequence: inmanta_type.List(),
     Sequence: inmanta_type.List(),
-    object: inmanta_type.Type(),
+    object: inmanta_type.Any(),
 }
 
 
@@ -280,8 +296,8 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
         return to_dsl_type(python_type.__value__, location, resolver)
 
     # Any to any
-    if python_type is Any:
-        return inmanta_type.Type()
+    if python_type is typing.Any:
+        return inmanta_type.Any()
 
     # None to None
     if python_type is type(None) or python_type is None:
@@ -313,7 +329,7 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
             if origin in [collections.abc.Mapping, dict, Mapping]:
                 args = typing.get_args(python_type)
                 if not args:
-                    return inmanta_type.TypedDict(inmanta_type.Type())
+                    return inmanta_type.TypedDict(inmanta_type.Any())
 
                 if not issubclass(args[0], str):
                     raise TypingException(
@@ -321,7 +337,7 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
                     )
 
                 if len(args) == 1:
-                    return inmanta_type.TypedDict(inmanta_type.Type())
+                    return inmanta_type.TypedDict(inmanta_type.Any())
 
                 return inmanta_type.TypedDict(to_dsl_type(args[1], location, resolver))
             else:
@@ -359,7 +375,35 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
         )
     )
 
-    return inmanta_type.Type()
+    return inmanta_type.Any()
+
+
+def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, value: object) -> object:
+    """
+    Given a model domain value and an inmanta type, produce the corresponding python object
+
+    Unknowns are not handled by this method!
+    """
+    expected_type.validate(value)
+
+    if isinstance(value, NoneValue):
+        # if the type is not nullable, it will fail when validating
+        # if the value is None, it becomes None
+        return None
+
+    if expected_type.has_custom_to_python():
+        return expected_type.to_python(value)
+
+    return DynamicProxy.return_value(value)
+
+
+class PluginCallContext:
+    """
+    Internal state of a plugin call
+
+    Used to carry state from the argument validation to the return validation
+
+    """
 
 
 class PluginValue:
@@ -443,6 +487,21 @@ class PluginValue:
         # Validate the value, use custom validate method of the type if it exists
         return self.resolved_type.validate(value)
 
+    @abstractmethod
+    def get_signature_display(self, *, use_dsl_types: bool = False) -> str:
+        """
+        Get the string representing the type for this plugin value.
+        The dsl_type argument controls if this type should be returned
+        as the plain python type (as it is defined in the plugin e.g. list[str])
+        or as the corresponding inferred Inmanta DSL type (e.g. string[]).
+
+        :param use_dsl_types: Display this value's type as the inferred Inmanta DSL
+            type or as plain python.
+        :return: the string representation for this type in the specified
+            language
+        """
+        raise NotImplementedError()
+
 
 class PluginArgument(PluginValue):
     """
@@ -481,6 +540,12 @@ class PluginArgument(PluginValue):
         """
         return self._default_value is not self.NO_DEFAULT_VALUE_SET
 
+    def get_signature_display(self, *, use_dsl_types: bool = False) -> str:
+        if use_dsl_types:
+            return "%s: %s" % (self.arg_name, self.resolved_type.type_string_internal())
+
+        return str(self)
+
     def __str__(self) -> str:
         if self.has_default_value():
             return "%s: %s = %s" % (self.arg_name, repr(self.arg_type), str(self.default_value))
@@ -495,6 +560,20 @@ class PluginReturn(PluginValue):
 
     VALUE_TYPE = "returned value"
     VALUE_NAME = "return value"
+
+    def get_signature_display(self, *, use_dsl_types: bool = False) -> str:
+        if use_dsl_types:
+            return str(self.resolved_type)
+        else:
+            return repr(self.type_expression)
+
+
+@dataclasses.dataclass
+class CheckedArgs:
+
+    args: list[object]
+    kwargs: Mapping[str, object]
+    unknowns: bool
 
 
 class Plugin(NamedType, WithComment, metaclass=PluginMeta):
@@ -549,6 +628,12 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             self.var_kwargs.resolve_type(self, self.resolver)
 
         self.return_type.resolve_type(self, self.resolver)
+
+        LOGGER.debug(
+            "Found plugin %s::%s",
+            self.namespace,
+            self.get_signature(use_dsl_types=True),
+        )
 
     def _load_signature(self, function: Callable[..., object]) -> None:
         """
@@ -647,19 +732,30 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             self.kwargs[arg] = argument
             self.all_args[arg] = argument
 
-    def get_signature(self) -> str:
+    def get_signature(self, *, use_dsl_types: bool = False) -> str:
         """
-        Generate the signature of this plugin.  The signature is a string representing the the function
-        as it can be called as a plugin in the model.
+        Generate the signature of this plugin. Return a string
+        containing the arguments and their types, and the type
+        of the returned value.  The `dsl_types` argument controls
+        whether to display the types in the signature as python
+        types, or as the corresponding inferred types from the
+        Inmanta DSL.
+
+        :param use_dsl_types: control if the signature should be displayed
+        using the plain python types (dsl_types=False) as written in the plugin
+        or the corresponding inferred Inmanta DSL types (dsl_types=True).
+
         """
         # Start the list with all positional arguments
-        arg_list = [str(arg) for arg in self.args]
+        arg_list = [arg.get_signature_display(use_dsl_types=use_dsl_types) for arg in self.args]
 
         # Filter all positional arguments out of the kwargs list
-        kwargs = [str(arg) for _, arg in self.kwargs.items() if arg.is_kw_only_argument]
+        kwargs = [
+            arg.get_signature_display(use_dsl_types=use_dsl_types) for _, arg in self.kwargs.items() if arg.is_kw_only_argument
+        ]
 
         if self.var_args is not None:
-            arg_list.append("*" + str(self.var_args))
+            arg_list.append("*" + self.var_args.get_signature_display(use_dsl_types=use_dsl_types))
         elif kwargs:
             # For keyword only arguments, we need a marker if we don't have a catch-all
             # positional argument
@@ -669,14 +765,18 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         arg_list.extend(kwargs)
 
         if self.var_kwargs is not None:
-            arg_list.append("**" + str(self.var_kwargs))
+            arg_list.append("**" + self.var_kwargs.get_signature_display(use_dsl_types=use_dsl_types))
 
         # Join all arguments, separated by a comma
         args_string = ", ".join(arg_list)
 
         if self.return_type.type_expression is None:
             return "%s(%s)" % (self.__class__.__function_name__, args_string)
-        return "%s(%s) -> %s" % (self.__class__.__function_name__, args_string, repr(self.return_type.type_expression))
+        return "%s(%s) -> %s" % (
+            self.__class__.__function_name__,
+            args_string,
+            self.return_type.get_signature_display(use_dsl_types=use_dsl_types),
+        )
 
     def get_arg(self, position: int) -> PluginArgument:
         """
@@ -742,7 +842,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # would have raised as exception
             raise RuntimeException(None, f"{func}() missing {len(missing_args)} required {args_sort} arguments: {arg_names}")
 
-    def check_args(self, args: Sequence[object], kwargs: Mapping[str, object]) -> bool:
+    def check_args(self, args: Sequence[object], kwargs: Mapping[str, object]) -> CheckedArgs:
         """
         Check if the arguments of the call match the function signature.
 
@@ -786,27 +886,36 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         ]
         self.report_missing_arguments(missing_keyword_arguments, "keyword-only")
 
+        converted_args = []
+        is_unknown = False
+
         # Validate all positional arguments
         for position, value in enumerate(args):
             # (1) Get the corresponding argument, fails if we don't have one
             arg = self.get_arg(position)
-
-            # (4) Validate the input value
-            try:
-                no_unknowns = arg.validate(value)
-            except RuntimeException as e:
-                raise PluginTypeException(
-                    stmt=None,
-                    msg=(
-                        f"Value {value!r} for argument {arg.arg_name} of plugin {self.get_full_name()} has incompatible type."
-                        f" Expected type: {arg.resolved_type}"
-                    ),
-                    cause=e,
-                )
+            result: object
+            if isinstance(value, Unknown):
+                result = value
+                is_unknown = True
             else:
-                if not no_unknowns:
-                    return False
+                try:
+                    # (4) Validate the input value
+                    result = validate_and_convert_to_python_domain(arg.resolved_type, value)
+                except (UnsetException, MultiUnsetException):
+                    raise
+                except RuntimeException as e:
+                    raise PluginTypeException(
+                        stmt=None,
+                        msg=(
+                            f"Value {value!r} for argument {arg.arg_name} of plugin "
+                            f"{self.get_full_name()} has incompatible type."
+                            f" Expected type: {arg.resolved_type}"
+                        ),
+                        cause=e,
+                    )
+            converted_args.append(result)
 
+        converted_kwargs = {}
         # Validate all kw arguments
         for name, value in kwargs.items():
             # (1) Get the corresponding kwarg, fails if we don't have one
@@ -819,21 +928,27 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 raise RuntimeException(None, f"{self.get_full_name()}() got multiple values for argument '{name}'")
 
             # (4) Validate the input value
-            try:
-                no_unknowns = kwarg.validate(value)
-            except RuntimeException as e:
-                raise PluginTypeException(
-                    stmt=None,
-                    msg=(
-                        f"Value {value} for argument {kwarg.arg_name} of plugin {self.get_full_name()} has incompatible type."
-                        f" Expected type: {kwarg.resolved_type}"
-                    ),
-                    cause=e,
-                )
+            if isinstance(value, Unknown):
+                result = value
+                is_unknown = True
             else:
-                if not no_unknowns:
-                    return False
-        return True
+                try:
+                    result = validate_and_convert_to_python_domain(kwarg.resolved_type, value)
+                except (UnsetException, MultiUnsetException):
+                    raise
+                except RuntimeException as e:
+                    raise PluginTypeException(
+                        stmt=None,
+                        msg=(
+                            f"Value {value} for argument {kwarg.arg_name} of plugin"
+                            f" {self.get_full_name()} has incompatible type."
+                            f" Expected type: {kwarg.resolved_type}"
+                        ),
+                        cause=e,
+                    )
+            converted_kwargs[name] = result
+
+        return CheckedArgs(args=converted_args, kwargs=converted_kwargs, unknowns=is_unknown)
 
     def emit_statement(self) -> "DynamicStatement":
         """
@@ -865,6 +980,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     def __call__(self, *args: object, **kwargs: object) -> object:
         """
         The function call itself
+
+        As a call, for backward compact
         """
         if self.deprecated:
             msg: str = f"Plugin '{self.get_full_name()}' is deprecated."
@@ -875,8 +992,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         def new_arg(arg: object) -> object:
             if isinstance(arg, Context):
+                # Not expected to happen, as the compiler itself now uses call_in_context
                 return arg
             elif isinstance(arg, Unknown) and self.is_accept_unknowns():
+                # If false, DynamicProxy.return_value wil raise an exception
                 return arg
             else:
                 return DynamicProxy.return_value(arg)
@@ -891,6 +1010,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         # Validate the returned value
         try:
             self.return_type.validate(value)
+        except (UnsetException, MultiUnsetException):
+            raise
         except RuntimeException as e:
             raise PluginTypeException(
                 stmt=None,
@@ -903,11 +1024,61 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         return value
 
+    def call_in_context(
+        self,
+        processed_args: CheckedArgs,
+        resolver: Resolver,
+        queue: QueueScheduler,
+        location: Location,
+    ) -> object:
+        """
+        The function call itself, with compiler context
+        """
+        if self.deprecated:
+            msg: str = f"Plugin '{self.get_full_name()}' is deprecated."
+            if self.replaced_by:
+                msg += f" It should be replaced by '{self.replaced_by}'."
+            warnings.warn(PluginDeprecationWarning(msg))
+        self.check_requirements()
+        args = processed_args.args
+        kwargs = processed_args.kwargs
+        value = self.call(*args, **kwargs)
+
+        value = DynamicProxy.unwrap(
+            value,
+            dynamic_context=DynamicUnwrapContext(resolver=resolver, queue=queue, location=location),
+        )
+
+        try:
+            # Validate the returned value
+            self.return_type.validate(value)
+            return value
+        except (UnsetException, MultiUnsetException):
+            raise
+        except RuntimeException as e:
+            raise PluginTypeException(
+                stmt=None,
+                msg=(
+                    f"Return value {value} of plugin {self.get_full_name()} has incompatible type."
+                    f" Expected type: {self.return_type.resolved_type}"
+                ),
+                cause=e,
+            )
+
     def get_full_name(self) -> str:
         return f"{self.ns.get_full_name()}::{self.__class__.__function_name__}"
 
     def type_string(self) -> str:
         return self.get_full_name()
+
+    def as_python_type_string(self) -> "str | None":
+        raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
+
+    def corresponds_to(self, type: inmanta_type.Type) -> bool:
+        raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
+
+    def to_python(self, instance: object) -> "object":
+        raise NotImplementedError("Plugins should not be arguments to plugins, this code is not expected to be called")
 
 
 @typing.overload

@@ -1,62 +1,62 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 
 
-    Remote executor framework:
-    - spawns executor processes, each for a specific set of code
-    - each executor process can run several executors
+Remote executor framework:
+- spawns executor processes, each for a specific set of code
+- each executor process can run several executors
 
-    Major components:
-    - IPC mechanism based on inmanta.protocol.ipc_light
-       - ExecutorContext is the remote state store, keeps track of the different executors and connection to the server
-       - ExecutorServer main driver of the remote process:
-            - handles IPC,
-            - manages the connection
-            - controls the remote process shutdown
-       - ExecutorClient agent side handle of the IPC connection, also receives logs from the remote side
-       - Commands: every IPC command has its own class
+Major components:
+- IPC mechanism based on inmanta.protocol.ipc_light
+   - ExecutorContext is the remote state store, keeps track of the different executors and connection to the server
+   - ExecutorServer main driver of the remote process:
+        - handles IPC,
+        - manages the connection
+        - controls the remote process shutdown
+   - ExecutorClient agent side handle of the IPC connection, also receives logs from the remote side
+   - Commands: every IPC command has its own class
 
-    - Client/agent side pool management, based on inmanta.agent.resourcepool
-        - MPExecutor: agent side representation of
-            - an executor
-            - implements the external executor.Executor interface
-            - dispaches calls to the actual executor on the remote side (via the MPProcess)
-            - inhibits shutdown if calls are in flight
-        - MPProcess: agent side representation of
-            - an executor process
-            - contains a multi-processing process that runs an ExecutorServer
-                - it ensure proper shutdown and cleanup of the process
-            - contains the ExecutorClient that connects to the ExecutorServer
-            - it handles a pool of MPExecutor
-                - if the pool becomes empty, it shuts itself down
-                - if the connection drops, it closes all MPExecutors
-        - MPPool: agent side representation of
-            - pool of MPProcess
-            - handles the creation of executor processes via multi-processing fork-server
-                - boots the process into the IPC
-                - sends IPC commands to load code
-            - wrap result in an MPProcess
-        - MPManager: agent side
-            - implementation of the external interface executor.ExecutorManager-
-            - uses a MPPool to hand out MPExecutors
-            - it shuts down old MPExecutors (expiry timer)
-            - it keeps the number of executor per agent below a certain number
+- Client/agent side pool management, based on inmanta.agent.resourcepool
+    - MPExecutor: agent side representation of
+        - an executor
+        - implements the external executor.Executor interface
+        - dispaches calls to the actual executor on the remote side (via the MPProcess)
+        - inhibits shutdown if calls are in flight
+    - MPProcess: agent side representation of
+        - an executor process
+        - contains a multi-processing process that runs an ExecutorServer
+            - it ensure proper shutdown and cleanup of the process
+        - contains the ExecutorClient that connects to the ExecutorServer
+        - it handles a pool of MPExecutor
+            - if the pool becomes empty, it shuts itself down
+            - if the connection drops, it closes all MPExecutors
+    - MPPool: agent side representation of
+        - pool of MPProcess
+        - handles the creation of executor processes via multi-processing fork-server
+            - boots the process into the IPC
+            - sends IPC commands to load code
+        - wrap result in an MPProcess
+    - MPManager: agent side
+        - implementation of the external interface executor.ExecutorManager-
+        - uses a MPPool to hand out MPExecutors
+        - it shuts down old MPExecutors (expiry timer)
+        - it keeps the number of executor per agent below a certain number
 
-      A mock up of this structure is in `test_resource_pool_stacking`
+  A mock up of this structure is in `test_resource_pool_stacking`
 """
 
 import asyncio
@@ -276,6 +276,8 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         """
         if not self.stopping:
             # detach logger early as we are about to lose the connection
+            if self.venv_cleanup_task:
+                self.venv_cleanup_task.cancel()
             self._detach_log_shipper()
             self.logger.info("Stopping")
             self.stopping = True
@@ -283,7 +285,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             self.transport.close()
 
     def connection_lost(self, exc: Exception | None) -> None:
-        """We lost connection to the controler, bail out"""
+        """We lost connection to the controller, bail out"""
         self._detach_log_shipper()
         self.logger.info("Connection lost", exc_info=exc)
         self.set_status("disconnected")
@@ -297,12 +299,12 @@ class ExecutorServer(IPCServer[ExecutorContext]):
             return
 
         while not self.stopping:
-            await self.touch_inmanta_venv_status()
+            self.touch_inmanta_venv_status()
             if not self.stopping:
 
                 await asyncio.sleep(self.timer_venv_scheduler_interval)
 
-    async def touch_inmanta_venv_status(self) -> None:
+    def touch_inmanta_venv_status(self) -> None:
         """
         Touch the `inmanta_venv_status` file.
         """
@@ -1051,9 +1053,12 @@ class MPManager(
         :param agent_uri: The name of the host on which the agent is running.
         :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
-            handler code in its venv.
+            handler code in its venv. Must have at least one element.
         :return: An Executor instance
         """
+        if not code:
+            raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
+
         blueprint = executor.ExecutorBlueprint.from_specs(code)
         executor_id = executor.ExecutorId(agent_name, agent_uri, blueprint)
 

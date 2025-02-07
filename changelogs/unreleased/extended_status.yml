@@ -1,0 +1,8 @@
+description: Add released field to /api/v2/desiredstate
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"
+  bugfix: "Only report the desired state as active when the new version is loaded by the scheduler"
+
+

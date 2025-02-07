@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 # pylint: disable-msg=W0613,R0201
@@ -73,7 +73,6 @@ from inmanta.execute.runtime import (
     VariableResolver,
     WrappedValueVariable,
 )
-from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
 
 try:
@@ -151,15 +150,13 @@ class SubConstructor(RequiresEmitStatement):
         if not condition:
             return None
 
-        myqueue = queue.for_tracker(ImplementsTracker(self, instance))
-
         implementations = self.implements.implementations
 
         for impl in implementations:
             if instance.add_implementation(impl):
                 # generate a subscope/namespace for each loop
                 xc = ExecutionContext(impl.statements, instance.for_namespace(impl.statements.namespace))
-                xc.emit(myqueue)
+                xc.emit(queue)
 
         return None
 
@@ -1182,8 +1179,6 @@ class Constructor(ExpressionStatement):
         # generate an implementation
         for stmt in type_class.get_sub_constructor():
             stmt.emit(object_instance, queue)
-
-        object_instance.trackers.append(queue.get_tracker())
 
         return object_instance
 
