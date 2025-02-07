@@ -31,7 +31,7 @@ from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberryS
 mapper = StrawberrySQLAlchemyMapper()
 
 ASYNC_SESSION: typing.Optional[AsyncSession] = None
-SCHEMA = None
+SCHEMA: strawberry.Schema | None = None
 
 
 # @mapper.type(inmanta.graphql.models.EnvironmentSetting)
@@ -276,10 +276,10 @@ def get_schema(connection_string: typing.Optional[str] = None):
     return SCHEMA
 
 
-def initialize_schema(connection_string: typing.Optional[str] = None):
+def initialize_schema(connection_string: typing.Optional[str] = None) -> strawberry.Schema:
     global ASYNC_SESSION
     global SCHEMA
-    async_engine = create_async_engine(connection_string or "sqlite+aiosqlite:///database.db", echo="debug")
+    async_engine = create_async_engine(connection_string or "sqlite+aiosqlite:///database.db", echo=True)
     ASYNC_SESSION = async_sessionmaker(async_engine)
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=ASYNC_SESSION)
 
