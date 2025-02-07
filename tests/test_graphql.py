@@ -54,7 +54,7 @@ async def setup_database(postgres_db, database_name):
         project_1 = models.Project(
             id=uuid.UUID("00000000-1234-5678-1234-000000000001"),
             name="test-proj-1",
-            environment=[
+            environments=[
                 models.Environment(
                     id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
                     name="test-env-1",
@@ -107,7 +107,7 @@ async def setup_database(postgres_db, database_name):
         project_2 = models.Project(
             id=uuid.UUID("00000000-1234-5678-1234-100000000001"),
             name="test-proj-2",
-            environment=[
+            environments=[
                 models.Environment(
                     id=uuid.UUID("11111111-1234-5678-1234-100000000001"),
                     name="test-env-2",
@@ -226,14 +226,14 @@ async def test_query_projects(server, client, setup_database):
   projects {
     id
     name
-    environment {
+    environments {
         edges {
             node {
               id
               project_ {
                 id
                 name
-                environment {
+                environments {
                     edges {
                         node {
                             name
@@ -253,13 +253,13 @@ async def test_query_projects(server, client, setup_database):
         "data": {
             "projects": [
                 {
-                    "environment": {
+                    "environments": {
                         "edges": [
                             {
                                 "node": {
                                     "id": "11111111-1234-5678-1234-000000000001",
                                     "project_": {
-                                        "environment": {"edges": [{"node": {"name": "test-env-1"}}]},
+                                        "environments": {"edges": [{"node": {"name": "test-env-1"}}]},
                                         "id": "00000000-1234-5678-1234-000000000001",
                                         "name": "test-proj-1",
                                     },
@@ -271,13 +271,13 @@ async def test_query_projects(server, client, setup_database):
                     "name": "test-proj-1",
                 },
                 {
-                    "environment": {
+                    "environments": {
                         "edges": [
                             {
                                 "node": {
                                     "id": "11111111-1234-5678-1234-100000000001",
                                     "project_": {
-                                        "environment": {
+                                        "environments": {
                                             "edges": [{"node": {"name": "test-env-2"}}, {"node": {"name": "test-env-3"}}]
                                         },
                                         "id": "00000000-1234-5678-1234-100000000001",
@@ -289,7 +289,7 @@ async def test_query_projects(server, client, setup_database):
                                 "node": {
                                     "id": "11111111-1234-5678-1234-100000000002",
                                     "project_": {
-                                        "environment": {
+                                        "environments": {
                                             "edges": [{"node": {"name": "test-env-2"}}, {"node": {"name": "test-env-3"}}]
                                         },
                                         "id": "00000000-1234-5678-1234-100000000001",
@@ -362,7 +362,7 @@ async def test_query_path(server, client, setup_database):
 {
   projects(id: "00000000-1234-5678-1234-000000000001") {
     id
-    environment {
+    environments {
         edges {
             node {
                 id
@@ -377,7 +377,7 @@ async def test_query_path(server, client, setup_database):
         "data": {
             "projects": [
                 {
-                    "environment": {"edges": [{"node": {"id": "11111111-1234-5678-1234-000000000001", "name": "test-env-1"}}]},
+                    "environments": {"edges": [{"node": {"id": "11111111-1234-5678-1234-000000000001", "name": "test-env-1"}}]},
                     "id": "00000000-1234-5678-1234-000000000001",
                 }
             ]
