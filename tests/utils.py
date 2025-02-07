@@ -318,15 +318,20 @@ async def report_db_index_usage(min_precent=100):
 
 async def wait_until_version_is_released(client, environment: uuid.UUID, version: int) -> None:
     """
-    Wait until the configurationmodel with the given version and environment is released.
+    Wait until the configurationmodel with the given version and environment is released and scheduled.
     """
 
     async def _is_version_released() -> bool:
-        result = await client.get_version(tid=environment, id=version)
-        if result.code == 404:
-            return False
-        assert result.code == 200
-        return result.result["model"]["released"]
+        versions = await client.list_desired_state_versions(
+            tid=self.envid,
+            start=version-1,
+            limit=1,
+        )
+        assert versions.code == 200
+        lookup = {
+            int(v["version"]): v["status"] == "active" for v in versions.result["data"]
+        }
+        return lookup[int(version)]
 
     await retry_limited(_is_version_released, timeout=10)
 
