@@ -17,7 +17,9 @@ Contact: code@inmanta.com
 """
 
 import dataclasses
+from collections.abc import Sequence
 
+from inmanta.execute.proxy import DynamicProxy
 from inmanta.plugins import plugin
 
 
@@ -32,8 +34,15 @@ class Virtualmachine:
 
 
 @plugin
-def eat_vm(inp: "dataclasses::Virtualmachine") -> None:
+def eat_vm(inp: Virtualmachine) -> None:
     assert isinstance(inp, Virtualmachine)
+    print(inp)
+    return None
+
+
+@plugin
+def eat_vm_dynamic(inp: "Virtualmachine") -> None:
+    assert isinstance(inp, DynamicProxy)
     print(inp)
     return None
 
@@ -46,7 +55,7 @@ def make_virtual_machine() -> "dataclasses::Virtualmachine":
 
 
 @plugin
-def select_vm(inp: "dataclasses::Virtualmachine[]", name: "string") -> Virtualmachine | None:
+def select_vm(inp: Sequence[Virtualmachine], name: str) -> Virtualmachine | None:
     for vm in inp:
         if vm.name == name:
             return vm
@@ -55,7 +64,7 @@ def select_vm(inp: "dataclasses::Virtualmachine[]", name: "string") -> Virtualma
 
 
 @plugin
-def make_vms() -> "dataclasses::Virtualmachine[]?":
+def make_vms() -> Sequence[Virtualmachine] | None:
     return [
         Virtualmachine(name="Test", os={"X": "x"}, ram=5, cpus={"s": 5}, disk=[15], slots=[6]),
         Virtualmachine(name="Test", os={"X": "x"}, ram=5, cpus={"s": 5}, disk=[15], slots=[7]),
@@ -64,7 +73,7 @@ def make_vms() -> "dataclasses::Virtualmachine[]?":
 
 
 @plugin
-def make_bad_virtual_machine() -> "dataclasses::Virtualmachine":
+def make_bad_virtual_machine() -> Virtualmachine:
     # Disks should be int
     out = Virtualmachine(name="Test", os={"X": "x"}, ram=5, cpus={"s": 5}, disk=["root"], slots=None)
 

@@ -528,23 +528,38 @@ class Entity(NamedType, WithComment):
     def get_location(self) -> Location:
         return self.location
 
-    def pair_dataclass(self) -> None:
+    def pair_dataclass_stage1(self) -> None:
         """
         Attach the associated dataclass in the python domain
+
+        should only be called on children of std::Dataclass
+
+        Called early to make plugins able to resolve this type from python domain
+        """
+        # Find the dataclass name
+        namespace = self.namespace.get_full_name()
+        module_name = "inmanta_plugins." + namespace.replace("::", ".")
+        # Find the dataclass
+        dataclass_module = importlib.import_module(module_name)
+        dataclass_raw = getattr(dataclass_module, self.name, None)
+        self._paired_dataclass = dataclass_raw
+        if dataclass_raw is not None:
+            dataclass_raw._paired_inmanta_entity = self
+
+    def pair_dataclass(self) -> None:
+        """
+        Validate the associated dataclass in the python domain
 
         should only be called on children of std::Dataclass
         should be called after normalization
         """
         assert self.normalized
 
-        # Find the dataclass name
         namespace = self.namespace.get_full_name()
         module_name = "inmanta_plugins." + namespace.replace("::", ".")
         dataclass_name = module_name + "." + self.name
 
-        # Find the dataclass
-        dataclass_module = importlib.import_module(module_name)
-        dataclass_raw = getattr(dataclass_module, self.name, None)
+        dataclass_raw = self._paired_dataclass
         if dataclass_raw is None:
             raise DataClassMismatchException(
                 self,
@@ -662,9 +677,6 @@ class Entity(NamedType, WithComment):
                 f"defined at {index_locations}. Dataclasses can not have any indexes.",
             )
 
-        self._paired_dataclass = dataclass
-        dataclass._paired_inmanta_entity = self
-
     def get_paired_dataclass(self) -> Optional[type[object]]:
         return self._paired_dataclass
 
@@ -682,7 +694,7 @@ class Entity(NamedType, WithComment):
         return dataclass_name
 
     def has_custom_to_python(self) -> bool:
-        return self._paired_dataclass is not None
+        return False
 
     def to_python(self, instance: object) -> "object":
         if self._paired_dataclass is None:
