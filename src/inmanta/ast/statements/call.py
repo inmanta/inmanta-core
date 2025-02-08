@@ -30,6 +30,7 @@ from inmanta.ast import (
     ExternalException,
     LocatableString,
     Location,
+    MultiUnsetException,
     Namespace,
     PluginTypeException,
     RuntimeException,
@@ -216,7 +217,8 @@ class PluginFunction(Function):
         self.plugin: plugins.Plugin = plugin
 
     def call_direct(self, args: list[object], kwargs: dict[str, object]) -> object:
-        no_unknows = self.plugin.check_args(args, kwargs)
+        processed_args = self.plugin.check_args(args, kwargs)
+        no_unknows = not processed_args.unknowns
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
             raise RuntimeException(self.ast_node, "Received unknown value during direct execution")
@@ -228,7 +230,7 @@ class PluginFunction(Function):
             raise RuntimeException(self.ast_node, "emits_statements functions are not allowed in direct execution")
         else:
             try:
-                return self.plugin(*args, **kwargs)
+                return self.plugin(*processed_args.args, **processed_args.kwargs)
             except PluginTypeException:
                 # already has sufficient context, no need to wrap it
                 raise
@@ -252,27 +254,29 @@ class PluginFunction(Function):
         result: ResultVariable,
     ) -> None:
 
-        no_unknows = self.plugin.check_args(args, kwargs)
+        processed_args = self.plugin.check_args(args, kwargs)
+        no_unknows = not processed_args.unknowns
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
             result.set_value(Unknown(self), self.ast_node.location)
             return
 
+        args = processed_args.args
+        kwargs = processed_args.kwargs
+
         if self.plugin._context != -1:
             # Don't mutate the arguments!
-            new_args = list(args)
-            new_args.insert(self.plugin._context, plugins.Context(resolver, queue, self.ast_node, self.plugin, result))
-            args = new_args
+            args.insert(self.plugin._context, plugins.Context(resolver, queue, self.ast_node, self.plugin, result))
 
         if self.plugin.opts["emits_statements"]:
             self.plugin(*args, **kwargs)
         else:
             try:
-                value = self.plugin(*args, **kwargs)
+                value = self.plugin.call_in_context(processed_args, resolver, queue, self.ast_node.location)
                 result.set_value(value if value is not None else NoneValue(), self.ast_node.location)
             except UnknownException as e:
                 result.set_value(e.unknown, self.ast_node.location)
-            except UnsetException as e:
+            except (UnsetException, MultiUnsetException) as e:
                 call: str = str(self.plugin)
                 location: str = str(self.ast_node.location)
                 LOGGER.debug(
