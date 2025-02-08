@@ -1055,6 +1055,7 @@ class Result:
         """
         self._callback = fnc
 
+
 class Session:
     pass
 

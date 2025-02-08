@@ -333,6 +333,7 @@ class WebsocketHandler(tornado.websocket.WebSocketHandler):
             case RPC_Call():
                 if self._session:
                     # A request from the client on the server
+                    # model_dump_json()
                     self._server.add_background_task(self.dispatch_method(msg))
                 # TODO: if not valid
 
@@ -340,7 +341,7 @@ class WebsocketHandler(tornado.websocket.WebSocketHandler):
                 # A reply to a request send by the server to the client
                 pass
 
-    async def dispatch_method(self, msg: RPC_Call) -> None:
+    async def dispatch_method(self, msg: RPC_Call) -> Optional[RPC_Reply]:
         """Dispatch a request from the server into the RPC code so the requests gets executed. The call results is send back
         to the server using a heartbeat reply.
         """
@@ -352,17 +353,21 @@ class WebsocketHandler(tornado.websocket.WebSocketHandler):
         if config is None:
             # We cannot match the call to method on this endpoint. We send a reply to report this + ensure that the session
             # does not time out
-            msg = "An error occurred during heartbeat method call ({} {} {}): {}".format(
+            error = "An error occurred during heartbeat method call ({} {} {}): {}".format(
                 method_call.reply_id,
                 method_call.method,
                 method_call.url,
                 "No such method",
             )
-            LOGGER.error(msg)
+            LOGGER.error(error)
             # if reply_id is none, we don't send the reply
             if method_call.reply_id is not None:
-                await self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500})
-            return
+                return RPC_Reply(
+                    reply_id=msg.reply_id,
+                    code=500,
+                    result={"error": error}, # TODO verify
+                )
+            return None
 
         # rebuild a request so that the RPC layer can process it as if it came from a proper HTTP call
         body = method_call.body or {}
@@ -396,13 +401,11 @@ class WebsocketHandler(tornado.websocket.WebSocketHandler):
 
         # if reply is none, we don't send the reply
         if method_call.reply_id is not None:
-            await self.write_message(
-                RPC_Reply(
+            return RPC_Reply(
                     reply_id=msg.reply_id,
                     code=response.status_code,
                     result=response.body,
-                ).model_dump_json()
-            )
+                )
 
     async def on_ping(self, data: bytes) -> None:
         """Called when we get a ping request from the client. The handler will send a pong back."""
@@ -507,9 +510,9 @@ class RESTServer(RESTBase):
         LOGGER.debug("Stopping Server Rest Endpoint")
 
         # terminate all sessions cleanly (do we need to hold the lock?)
-        for session in self._sessions.copy().values():
-            await session.expire(0)
-            session.abort()
+        # for session in self._sessions.copy().values():
+        #     await session.expire(0)
+        #     session.abort()
 
         if self._http_server is not None:
             self._http_server.stop()

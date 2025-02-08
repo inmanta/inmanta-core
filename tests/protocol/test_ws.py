@@ -24,7 +24,7 @@ from tornado import websocket
 
 from inmanta import tracing
 from inmanta.protocol import common, handle, typedmethod
-from inmanta.protocol.rest.server import OpenSession, RPC_Call, RESTServer
+from inmanta.protocol.rest.server import OpenSession, RESTServer, RPC_Call
 from inmanta.server.protocol import Server, ServerSlice, SessionListener
 
 LOGGER = logging.getLogger(__name__)
@@ -134,11 +134,10 @@ async def test_ws_2way(inmanta_config, server_config) -> None:
     # build a call
     method = min(common.MethodProperties.methods["get_server_status"], key=lambda x: x.api_version)
     call_spec = method.build_call([], {})
+    call_spec.reply_id = uuid.uuid4()
     call_spec.headers.update(tracing.get_context())
 
-    await ws_conn.write_message(
-        RPC_Call(**call_spec.to_dict()).model_dump_json()
-    )
+    await ws_conn.write_message(RPC_Call(**call_spec.to_dict()).model_dump_json())
 
     while True:
         msg = await ws_conn.read_message()
