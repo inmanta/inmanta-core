@@ -17,77 +17,25 @@ Contact: code@inmanta.com
 """
 
 import asyncio
-import inspect
 import logging
 import socket
 import uuid
 from asyncio import CancelledError, run_coroutine_threadsafe, sleep
-from collections import abc, defaultdict
+from collections import abc
 from collections.abc import Coroutine
 from enum import Enum
 from typing import Any, Callable, Optional
-from urllib import parse
 
 import pydantic
+from tornado.websocket import WebSocketClientConnection, websocket_connect
 
 from inmanta import config as inmanta_config
-from inmanta import const, tracing, types, util
+from inmanta import types, util
 from inmanta.protocol import common, exceptions
+from inmanta.protocol.rest import client
 from inmanta.util import TaskHandler
 
-from .rest import client
-
 LOGGER: logging.Logger = logging.getLogger(__name__)
-
-
-class CallTarget:
-    """
-    A baseclass for all classes that are target for protocol calls / methods
-    """
-
-    def _get_endpoint_metadata(self) -> dict[str, list[tuple[str, Callable]]]:
-        total_dict = {
-            method_name: method
-            for method_name, method in inspect.getmembers(self)
-            if callable(method) and method_name[0] != "_"
-        }
-
-        methods: dict[str, list[tuple[str, Callable]]] = defaultdict(list)
-        for name, attr in total_dict.items():
-            if hasattr(attr, "__protocol_method__"):
-                methods[attr.__protocol_method__.__name__].append((name, attr))
-
-        return methods
-
-    def get_op_mapping(self) -> dict[str, dict[str, common.UrlMethod]]:
-        """
-        Build a mapping between urls, ops and methods
-        """
-        url_map: dict[str, dict[str, common.UrlMethod]] = defaultdict(dict)
-
-        # Loop over all methods in this class that have a handler annotation. The handler annotation refers to a method
-        # definition. This method definition defines how the handler is invoked.
-        for method, handler_list in self._get_endpoint_metadata().items():
-            for method_handlers in handler_list:
-                # Go over all method annotation on the method associated with the handler
-                for properties in common.MethodProperties.methods[method]:
-                    url = properties.get_listen_url()
-
-                    # Associate the method with the handler if:
-                    # - the handler does not specific a method version
-                    # - the handler specifies a method version and the method version matches the method properties
-                    if method_handlers[1].__api_version__ is None or (
-                        method_handlers[1].__api_version__ is not None
-                        and properties.api_version == method_handlers[1].__api_version__
-                    ):
-                        # there can only be one
-                        if url in url_map and properties.operation in url_map[url]:
-                            raise Exception(f"A handler is already registered for {properties.operation} {url}. ")
-
-                        url_map[url][properties.operation] = common.UrlMethod(
-                            properties, self, method_handlers[1], method_handlers[0]
-                        )
-        return url_map
 
 
 class Endpoint(TaskHandler[None]):
@@ -100,13 +48,13 @@ class Endpoint(TaskHandler[None]):
         self._name: str = name
         self._node_name: str = inmanta_config.nodename.get()
         self._end_point_names: set[str] = set()
-        self._targets: list[CallTarget] = []
+        self._targets: list[common.CallTarget] = []
 
-    def add_call_target(self, target: CallTarget) -> None:
+    def add_call_target(self, target: common.CallTarget) -> None:
         self._targets.append(target)
 
     @property
-    def call_targets(self) -> list[CallTarget]:
+    def call_targets(self) -> list[common.CallTarget]:
         return self._targets
 
     def get_end_point_names(self) -> set[str]:
@@ -114,7 +62,7 @@ class Endpoint(TaskHandler[None]):
 
     async def add_end_point_name(self, name: str) -> None:
         """
-        Add an additional name to this endpoint to which it reacts and sends out in heartbeats
+        Add a name to this endpoint to which it reacts and sends out in heartbeats
         """
         LOGGER.debug("Adding '%s' as endpoint", name)
         self._end_point_names.add(name)
@@ -144,7 +92,7 @@ class Endpoint(TaskHandler[None]):
     node_name = property(get_node_name)
 
 
-class SessionEndpoint(Endpoint, CallTarget):
+class SessionEndpoint(Endpoint, common.CallTarget):
     """
     An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
     """
@@ -152,11 +100,11 @@ class SessionEndpoint(Endpoint, CallTarget):
     _client: "SessionClient"
     _heartbeat_client: "SessionClient"
 
-    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
+    def __init__(self, name: str, environment: uuid.UUID, timeout: int = 120, reconnect_delay: int = 5):
         super().__init__(name)
         self._sched = util.Scheduler("session endpoint")
 
-        self._env_id: Optional[uuid.UUID] = None
+        self._env_id: uuid.UUID = environment
 
         self.sessionid: uuid.UUID = uuid.uuid1()
         self.running: bool = True
@@ -168,21 +116,27 @@ class SessionEndpoint(Endpoint, CallTarget):
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
         self._heartbeat_client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout, force_instance=True)
 
-    def get_environment(self) -> Optional[uuid.UUID]:
+        self._ws_client: Optional[WebSocketClientConnection] = None
+
+    def get_environment(self) -> uuid.UUID:
         return self._env_id
+
+    def get_websocket_url(self) -> str:
+        """Build the websocket url based on the configuration file"""
+        client_id = f"{self.name}_rest_transport"
+        port: int = inmanta_config.Config.get(client_id, "port", 8888)
+        host: str = inmanta_config.Config.get(client_id, "host", "localhost")
+
+        if inmanta_config.Config.getboolean(client_id, "ssl", False):
+            protocol = "wss"
+        else:
+            protocol = "ws"
+
+        return f"{protocol}://{host}:{port}/v2/ws"
 
     @property
-    def environment(self) -> Optional[uuid.UUID]:
+    def environment(self) -> uuid.UUID:
         return self._env_id
-
-    def set_environment(self, environment_id: uuid.UUID) -> None:
-        """
-        Set the environment of this agent
-        """
-        if isinstance(environment_id, str):
-            self._env_id = uuid.UUID(environment_id)
-        else:
-            self._env_id = environment_id
 
     async def start_connected(self) -> None:
         """
@@ -195,8 +149,18 @@ class SessionEndpoint(Endpoint, CallTarget):
         """
         assert self._env_id is not None
         LOGGER.info("Starting agent for %s", str(self.sessionid))
+
+        self._ws_client = await websocket_connect(
+            self.get_websocket_url(),
+            ping_interval=1,
+            on_message_callback=self._on_message,
+        )
+
         await self.start_connected()
         self.add_background_task(self.perform_heartbeat())
+
+    def _on_message(self, msg: Optional[str | bytes]) -> None:
+        pass
 
     async def stop(self) -> None:
         self._heartbeat_client.close()
@@ -213,6 +177,24 @@ class SessionEndpoint(Endpoint, CallTarget):
         """
         Called when the connection is lost unexpectedly (not on shutdown)
         """
+
+    async def _process_messages(self) -> None:
+        """Process incoming messages"""
+        try:
+            while True:
+                if self._ws_client is not None:
+                    msg = await self._ws_client.read_message()
+                    if msg is None:
+                        # we are disconnected
+                        # TODO: handle this
+                        pass
+                    else:
+                        pass
+                else:
+                    # TODO handle this
+                    pass
+        except CancelledError:
+            pass
 
     async def perform_heartbeat(self) -> None:
         """
@@ -245,7 +227,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                             rest_client = client.RESTClient(self)
                             for method_call in method_calls:
                                 self.add_background_task(self.dispatch_method(rest_client, method_call))
-                    # Always wait a bit between calls. This encourage call batching.
+                    # Always wait a bit between calls. This encourages call batching.
                     await asyncio.sleep(self.dispatch_delay)
                 else:
                     LOGGER.warning(
@@ -260,70 +242,6 @@ class SessionEndpoint(Endpoint, CallTarget):
         except CancelledError:
             pass
 
-    async def dispatch_method(self, rest_client: client.RESTClient, method_call: common.Request) -> None:
-        """Dispatch a request from the server into the RPC code so the requests gets executed. The call results is send back
-        to the server using a heartbeat reply.
-        """
-        if self._client is None:
-            raise Exception("AgentEndpoint not started")
-
-        LOGGER.debug("Received call through heartbeat: %s %s %s", method_call.reply_id, method_call.method, method_call.url)
-        kwargs, config = rest_client.match_call(method_call.url, method_call.method)
-
-        if config is None:
-            # We cannot match the call to method on this endpoint. We send a reply to report this + ensure that the session
-            # does not time out
-            msg = "An error occurred during heartbeat method call ({} {} {}): {}".format(
-                method_call.reply_id,
-                method_call.method,
-                method_call.url,
-                "No such method",
-            )
-            LOGGER.error(msg)
-            # if reply_id is none, we don't send the reply
-            if method_call.reply_id is not None:
-                await self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500})
-            return
-
-        # rebuild a request so that the RPC layer can process it as if it came from a proper HTTP call
-        body = method_call.body or {}
-        query_string = parse.urlparse(method_call.url).query
-        for key, value in parse.parse_qs(query_string, keep_blank_values=True):
-            if len(value) == 1:
-                body[key] = value[0].decode("latin-1")
-            else:
-                body[key] = [v.decode("latin-1") for v in value]
-
-        body.update(kwargs)
-
-        with tracing.attach_context(
-            {const.TRACEPARENT: method_call.headers[const.TRACEPARENT]} if const.TRACEPARENT in method_call.headers else {}
-        ):
-            # do the dispatch
-            response: common.Response = await rest_client._execute_call(config, body, method_call.headers)
-
-        # report the result back
-        if response.status_code == 500:
-            msg = ""
-            if response.body is not None and "message" in response.body:
-                msg = response.body["message"]
-            LOGGER.error(
-                "An error occurred during heartbeat method call (%s %s %s): %s",
-                method_call.reply_id,
-                method_call.method,
-                method_call.url,
-                msg,
-            )
-
-        if self._client is None:
-            raise Exception("AgentEndpoint not started")
-
-        # if reply is none, we don't send the reply
-        if method_call.reply_id is not None:
-            await self._client.heartbeat_reply(
-                self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
-            )
-
 
 class VersionMatch(str, Enum):
     lowest = "lowest"
@@ -337,11 +255,38 @@ class VersionMatch(str, Enum):
     """
 
 
-class BaseClient(Endpoint):
-    """A base client that implements the virtual methods from protocol"""
+class Client(Endpoint):
+    """
+    A client that communicates with end-point based on its configuration
+    """
+
+    def __init__(
+        self,
+        name: str,
+        timeout: int = 120,
+        version_match: VersionMatch = VersionMatch.lowest,
+        exact_version: int = 0,
+        with_rest_client: bool = True,
+        force_instance: bool = False,
+    ) -> None:
+        super().__init__(name)
+        assert isinstance(timeout, int), "Timeout needs to be an integer value."
+        LOGGER.debug("Start transport for client %s", self.name)
+        if with_rest_client:
+            self._transport_instance = client.RESTClient(self, connection_timout=timeout, force_instance=force_instance)
+        else:
+            self._transport_instance = None
+        self._version_match = version_match
+        self._exact_version = exact_version
+
+    def close(self):
+        """
+        Closes the RESTclient instance manually. This is only needed when it is started with force_instance set to true
+        """
+        self._transport_instance.close()
 
     async def _call(
-        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
+        self, method_properties: common.MethodProperties, args: tuple[object, ...], kwargs: dict[str, object]
     ) -> common.Result:
         """
         Execute a call and return the result
@@ -379,37 +324,6 @@ class BaseClient(Endpoint):
             return self._call(method_properties=method, args=args, kwargs=kwargs)
 
         return wrap
-
-
-class Client(BaseClient):
-    """
-    A client that communicates with end-point based on its configuration
-    """
-
-    def __init__(
-        self,
-        name: str,
-        timeout: int = 120,
-        version_match: VersionMatch = VersionMatch.lowest,
-        exact_version: int = 0,
-        with_rest_client: bool = True,
-        force_instance: bool = False,
-    ) -> None:
-        super().__init__(name)
-        assert isinstance(timeout, int), "Timeout needs to be an integer value."
-        LOGGER.debug("Start transport for client %s", self.name)
-        if with_rest_client:
-            self._transport_instance = client.RESTClient(self, connection_timout=timeout, force_instance=force_instance)
-        else:
-            self._transport_instance = None
-        self._version_match = version_match
-        self._exact_version = exact_version
-
-    def close(self):
-        """
-        Closes the RESTclient instance manually. This is only needed when it is started with force_instance set to true
-        """
-        self._transport_instance.close()
 
 
 class SyncClient:
@@ -555,10 +469,3 @@ class TypedClient(Client):
     ) -> types.ReturnTypes:
         """Execute a call and return the result"""
         return typed_process_response(method_properties, await super()._call(method_properties, args, kwargs))
-
-
-class WSClient(BaseClient):
-    """A websocket based client"""
-
-    def __init__(self, name: str) -> None:
-        super().__init__(name=name)

@@ -52,22 +52,26 @@ class Agent(SessionEndpoint):
         """
         :param environment: environment id
         """
-        super().__init__(name="agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
+        if environment is None:
+            environment = cfg.environment.get()
+
+        if environment is None:
+            raise Exception("The agent requires an environment to be set.")
+
+        super().__init__(
+            name="agent",
+            environment=environment,
+            timeout=cfg.server_timeout.get(),
+            reconnect_delay=cfg.agent_reconnect_delay.get(),
+        )
 
         self.thread_pool = ThreadPoolExecutor(1, thread_name_prefix="mainpool")
         self._storage = self.check_storage()
 
-        if environment is None:
-            environment = cfg.environment.get()
-            if environment is None:
-                raise Exception("The agent requires an environment to be set.")
-        self.set_environment(environment)
-
-        assert self._env_id is not None
-
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
         self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self._client)
         self.working = False
+        self.add_end_point_name(AGENT_SCHEDULER_ID)
 
     async def start(self) -> None:
         # Make mypy happy
@@ -103,12 +107,6 @@ class Agent(SessionEndpoint):
         self.thread_pool.shutdown(wait=False)
         await join_threadpools(threadpools_to_join)
         await super().stop()
-
-    async def start_connected(self) -> None:
-        """
-        Setup our single endpoint
-        """
-        await self.add_end_point_name(AGENT_SCHEDULER_ID)
 
     async def start_working(self) -> None:
         """Start working, once we have a session"""

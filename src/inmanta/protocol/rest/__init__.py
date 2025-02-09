@@ -19,9 +19,10 @@ Contact: code@inmanta.com
 import inspect
 import json
 import logging
-import uuid
+import re
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
+from typing import Any, AnyStr, Optional, Type, cast
+from urllib import parse
 
 import pydantic
 import typing_inspect
@@ -29,7 +30,7 @@ from tornado import escape
 
 from inmanta import const, tracing, util
 from inmanta.data.model import BaseModel
-from inmanta.protocol import auth, common, exceptions
+from inmanta.protocol import auth, common, endpoints, exceptions
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import config as server_config
 from inmanta.types import Apireturn, JsonType
@@ -595,53 +596,68 @@ class RESTBase(util.TaskHandler[None]):
 
         return result
 
-    def validate_sid(self, sid: uuid.UUID) -> bool:
-        raise NotImplementedError()
 
-    async def _execute_call(
-        self,
-        config: common.UrlMethod,
-        message: dict[str, object],
-        request_headers: Mapping[str, str],
-    ) -> common.Response:
-        try:
-            if config is None:
-                raise Exception("This method is unknown! This should not occur!")
+async def execute_call(
+    config: common.UrlMethod,
+    message: dict[str, object],
+    request_headers: Mapping[str, str],
+) -> common.Response:
+    try:
+        if config is None:
+            raise Exception("This method is unknown! This should not occur!")
 
-            if config.properties.validate_sid:
-                if "sid" not in message or not isinstance(message["sid"], str):
-                    raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
+        # if config.properties.validate_sid:
+        #     if "sid" not in message or not isinstance(message["sid"], str):
+        #         raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
+        #
+        #     if not self.validate_sid(uuid.UUID(str(message["sid"]))):
+        #         raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 
-                if not self.validate_sid(uuid.UUID(str(message["sid"]))):
-                    raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
+        # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
+        # Authorization might need data from the request but we do not want to process it before we are sure the call
+        # is authenticated.
+        arguments = CallArguments(config, message, request_headers)
+        arguments.authenticate(server_config.server_enable_auth.get())
+        await arguments.process()
+        arguments.authorize_request(server_config.server_enable_auth.get())
 
-            # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
-            # Authorization might need data from the request but we do not want to process it before we are sure the call
-            # is authenticated.
-            arguments = CallArguments(config, message, request_headers)
-            arguments.authenticate(server_config.server_enable_auth.get())
-            await arguments.process()
-            arguments.authorize_request(server_config.server_enable_auth.get())
+        LOGGER.debug(
+            "Calling method %s(%s) user=%s",
+            config.method_name,
+            ", ".join([f"{name}={common.shorten(str(value))}" for name, value in arguments.call_args.items()]),
+            arguments.auth_username if arguments.auth_username else "<>",
+        )
 
-            LOGGER.debug(
-                "Calling method %s(%s) user=%s",
-                config.method_name,
-                ", ".join([f"{name}={common.shorten(str(value))}" for name, value in arguments.call_args.items()]),
-                arguments.auth_username if arguments.auth_username else "<>",
-            )
+        with tracing.span("Calling method " + config.method_name, arguments=arguments.call_args):
+            result = await config.handler(**arguments.call_args)
 
-            with tracing.span("Calling method " + config.method_name, arguments=arguments.call_args):
-                result = await config.handler(**arguments.call_args)
+        return await arguments.process_return(result)
+    except pydantic.ValidationError:
+        LOGGER.exception(f"The handler {config.handler} caused a validation error in a data model (pydantic).")
+        raise exceptions.ServerError("data validation error.")
 
-            return await arguments.process_return(result)
-        except pydantic.ValidationError:
-            LOGGER.exception(f"The handler {config.handler} caused a validation error in a data model (pydantic).")
-            raise exceptions.ServerError("data validation error.")
+    except exceptions.BaseHttpException:
+        LOGGER.debug("An HTTP Error occurred", exc_info=True)
+        raise
 
-        except exceptions.BaseHttpException:
-            LOGGER.debug("An HTTP Error occurred", exc_info=True)
-            raise
+    except Exception as e:
+        LOGGER.exception("An exception occurred during the request.")
+        raise exceptions.ServerError(str(e.args))
 
-        except Exception as e:
-            LOGGER.exception("An exception occurred during the request.")
-            raise exceptions.ServerError(str(e.args))
+
+def match_call(
+    call_targets: list[common.CallTarget], url: str, method: str
+) -> tuple[Optional[dict[str, AnyStr]], Optional[common.UrlMethod]]:
+    """
+    Get the method call for the given url and http method. This method is used for return calls over long poll
+    """
+    for target in call_targets:
+        url_map = target.get_op_mapping()
+        for url_re, handlers in url_map.items():
+            if not url_re.endswith("$"):
+                url_re += "$"
+            match = re.match(url_re, url)
+            if match and method in handlers:
+                return {parse.unquote(k): parse.unquote(v) for k, v in match.groupdict().items()}, handlers[method]
+
+    return None, None

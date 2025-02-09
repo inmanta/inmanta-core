@@ -218,7 +218,7 @@ class Server(endpoints.Endpoint):
             await endpoint.stop()
 
 
-class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | None]):
+class ServerSlice(inmanta.protocol.common.CallTarget, TaskHandler[Result | None]):
     """
     Base class for server extensions offering zero or more api endpoints
 

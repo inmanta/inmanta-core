@@ -17,37 +17,30 @@ Contact: code@inmanta.com
 """
 
 import asyncio
-import dataclasses
-import enum
 import logging
 import ssl
-import time
 import uuid
 from asyncio import CancelledError
 from collections import defaultdict
-from collections.abc import Mapping, MutableMapping, Sequence
-from datetime import timedelta
+from collections.abc import MutableMapping, Sequence
 from json import JSONDecodeError
-from typing import Annotated, Literal, Optional, Union
-from urllib import parse
+from typing import Any, Dict, Optional, Union
 
 import pydantic
 import tornado
 from pydantic import ValidationError
 from pyformance import timer
-from tornado import httpserver, iostream, routing, web, websocket
+from tornado import httpserver, httputil, iostream, routing, web
+from tornado import websocket as tornado_websocket
 
 import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta import const, tracing
-from inmanta.data import BaseModel
-from inmanta.protocol import common, endpoints, exceptions
-from inmanta.protocol.rest import RESTBase
-from inmanta.protocol.rest.client import match_call
-from inmanta.server import config as opt
+from inmanta.protocol import common, endpoints, exceptions, websocket
+from inmanta.protocol.rest import RESTBase, execute_call
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
-from inmanta.types import ArgumentTypes, JsonType, ReturnTypes
+from inmanta.types import ReturnTypes
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -142,7 +135,7 @@ class RESTHandler(tornado.web.RequestHandler):
                             else:
                                 message[key] = [v.decode("latin-1") for v in value]
 
-                        result = await self._transport._execute_call(call_config, message, self.request.headers)
+                        result = await execute_call(call_config, message, self.request.headers)
                         self.respond(result.body, result.headers, result.status_code)
                     except JSONDecodeError as e:
                         error_message = f"The request body couldn't be decoded as a JSON: {e}"
@@ -240,183 +233,35 @@ class StaticContentHandler(tornado.web.RequestHandler):
         self.set_status(200)
 
 
-class WSAction(enum.StrEnum):
-    OPEN_SESSION = "OPEN_SESSION"
-    CLOSE_SESSION = "CLOSE_SESSION"
-    RPC_CALL = "RPC_CALL"
-    RPC_REPLY = "RPC_REPLY"
-
-
-class WSMessage(BaseModel):
-    """A websocket message"""
-
-    action: WSAction
-
-
-class OpenSession(WSMessage):
-    action: Literal["OPEN_SESSION"] = "OPEN_SESSION"
-    environment_id: uuid.UUID
-    session_name: str
-    node_name: str
-    endpoint_names: list[str]
-
-
-class CloseSession(WSMessage):
-    action: Literal["CLOSE_SESSION"] = "CLOSE_SESSION"
-
-
-class RPC_Call(WSMessage):
-    action: Literal["RPC_CALL"] = "RPC_CALL"
-    url: str
-    method: str
-    headers: dict[str, str]
-    body: Optional[JsonType]
-    reply_id: Optional[uuid.UUID] = None
-
-
-class RPC_Reply(WSMessage):
-    action: Literal["RPC_REPLY"] = "RPC_REPLY"
-    reply_id: uuid.UUID
-    result: ReturnTypes
-    code: int
-
-
-type WSMessages = Annotated[OpenSession | CloseSession | RPC_Call | RPC_Reply, pydantic.Field(discriminator="action")]
-
-message_parser = pydantic.TypeAdapter(WSMessages)
-
-
-class Session:
-    """A session using websockets"""
-
-    def __init__(self, environment_id: uuid.UUID, session_name: str, node_name: str, endpoint_names: list[str]) -> None:
-        self._seen: float = 0
-        self._environment_id = environment_id
-        self._session_name = session_name
-
-        # migration
-        self._node_name = node_name
-        self._endpoint_names = endpoint_names
-
-    def seen(self) -> None:
-        self._seen = time.monotonic()
-
-
-class WebsocketHandler(tornado.websocket.WebSocketHandler):
+class WebsocketHandler(tornado_websocket.WebSocketHandler, websocket.WebsocketFrameDecoder):
     """A handler for websocket based 2-way communication"""
 
     def initialize(self, transport: "RESTServer") -> None:
         LOGGER.debug("Starting websocket handler")
         self._server: "RESTServer" = transport
-        self._session: Optional[Session] = None
+
+        self.set_call_targets(self._server.endpoint.call_targets)
 
     async def on_message(self, message: Union[str, bytes]) -> None:
-        try:
-            msg = message_parser.validate_json(message)
-        except ValidationError:
-            # TODO log this
-            LOGGER.exception("Invalid message")
-            return
+        """The tornado handler calls this method. Delegate it to the decoder"""
+        await websocket.WebsocketFrameDecoder.on_message(self, message)
 
-        if self._session:
-            self._session.seen()
+    async def write_message(self, message: str | bytes, binary: bool = False) -> None:
+        await tornado_websocket.WebSocketHandler.write_message(self, message, binary)
 
-        match msg:
-            case OpenSession():
-                self._session = Session(msg.environment_id, msg.session_name, msg.node_name, msg.endpoint_names)
-                self._server.register_session(self._session)
+    async def on_open_session(self, session: common.Session) -> None:
+        self._server.register_session(session)
 
-            case CloseSession():
-                self._server.close_session(self)
-                self.close()
-
-            case RPC_Call():
-                if self._session:
-                    # A request from the client on the server
-                    # model_dump_json()
-                    self._server.add_background_task(self.dispatch_method(msg))
-                # TODO: if not valid
-
-            case RPC_Reply():
-                # A reply to a request send by the server to the client
-                pass
-
-    async def dispatch_method(self, msg: RPC_Call) -> Optional[RPC_Reply]:
-        """Dispatch a request from the server into the RPC code so the requests gets executed. The call results is send back
-        to the server using a heartbeat reply.
-        """
-        method_call = common.Request(url=msg.url, method=msg.method, headers=msg.headers, body=msg.body, reply_id=msg.reply_id)
-
-        LOGGER.debug("Received call through websocket: %s %s %s", method_call.reply_id, method_call.method, method_call.url)
-        kwargs, config = match_call(self._server.endpoint, method_call.url, method_call.method)
-
-        if config is None:
-            # We cannot match the call to method on this endpoint. We send a reply to report this + ensure that the session
-            # does not time out
-            error = "An error occurred during heartbeat method call ({} {} {}): {}".format(
-                method_call.reply_id,
-                method_call.method,
-                method_call.url,
-                "No such method",
-            )
-            LOGGER.error(error)
-            # if reply_id is none, we don't send the reply
-            if method_call.reply_id is not None:
-                return RPC_Reply(
-                    reply_id=msg.reply_id,
-                    code=500,
-                    result={"error": error}, # TODO verify
-                )
-            return None
-
-        # rebuild a request so that the RPC layer can process it as if it came from a proper HTTP call
-        body = method_call.body or {}
-        query_string = parse.urlparse(method_call.url).query
-        for key, value in parse.parse_qs(query_string, keep_blank_values=True):
-            if len(value) == 1:
-                body[key] = value[0].decode("latin-1")
-            else:
-                body[key] = [v.decode("latin-1") for v in value]
-
-        body.update(kwargs)
-
-        with tracing.attach_context(
-            {const.TRACEPARENT: method_call.headers[const.TRACEPARENT]} if const.TRACEPARENT in method_call.headers else {}
-        ):
-            # do the dispatch
-            response: common.Response = await self._server._execute_call(config, body, method_call.headers)
-
-        # report the result back
-        if response.status_code == 500:
-            msg = ""
-            if response.body is not None and "message" in response.body:
-                msg = response.body["message"]
-            LOGGER.error(
-                "An error occurred during heartbeat method call (%s %s %s): %s",
-                method_call.reply_id,
-                method_call.method,
-                method_call.url,
-                msg,
-            )
-
-        # if reply is none, we don't send the reply
-        if method_call.reply_id is not None:
-            return RPC_Reply(
-                    reply_id=msg.reply_id,
-                    code=response.status_code,
-                    result=response.body,
-                )
-
-    async def on_ping(self, data: bytes) -> None:
-        """Called when we get a ping request from the client. The handler will send a pong back."""
+    async def on_close_session(self, session: common.Session) -> None:
+        self._server.close_session(session)
 
     async def on_pong(self, data: bytes) -> None:
         """Called when we get a response to our ping"""
-        if self._session:
-            self._session.seen()
+        self.seen()
 
     async def on_close(self) -> None:
-        self._server.close_session(self)
+        """Called when the websocket closes"""
+        await self.close_session()
 
 
 class RESTServer(RESTBase):
@@ -439,7 +284,7 @@ class RESTServer(RESTBase):
         self._http_server = None
 
         # Session handling
-        self._sessions: dict[(uuid.UUID, str)] = {}
+        self._sessions: dict[(uuid.UUID, str) : common.Session] = {}
         self.listeners: list[common.SessionListener] = []
 
     def start_request(self) -> None:
@@ -451,9 +296,7 @@ class RESTServer(RESTBase):
         if self.inflight_counter == 0:
             self.idle_event.set()
 
-    def get_global_url_map(
-        self, targets: list[inmanta.protocol.endpoints.CallTarget]
-    ) -> dict[str, dict[str, common.UrlMethod]]:
+    def get_global_url_map(self, targets: list[common.CallTarget]) -> dict[str, dict[str, common.UrlMethod]]:
         global_url_map: dict[str, dict[str, common.UrlMethod]] = defaultdict(dict)
         for slice in targets:
             url_map = slice.get_op_mapping()
@@ -463,9 +306,7 @@ class RESTServer(RESTBase):
                     handler_config[op] = cfg
         return global_url_map
 
-    async def start(
-        self, targets: Sequence[inmanta.protocol.endpoints.CallTarget], additional_rules: list[routing.Rule] = []
-    ) -> None:
+    async def start(self, targets: Sequence[common.CallTarget], additional_rules: list[routing.Rule] = []) -> None:
         """
         Start the server on the current ioloop
         """
@@ -522,22 +363,27 @@ class RESTServer(RESTBase):
         if self._http_server is not None:
             await self._http_server.close_all_connections()
 
-    async def get_status(self) -> Mapping[str, ArgumentTypes]:
-        return {"hangtime": self.hangtime, "interval": self.interval, "sessions": len(self._sessions)}
-
-    def register_session(self, session: Session) -> None:
+    def register_session(self, session: common.Session) -> None:
         """Register a session with the server"""
-        key = (session._environment_id, session._session_name)
-        if key in self._sessions:
+        if session.session_key in self._sessions:
             # TODO: correct exception
             raise Exception("Duplication session")
 
-        self._sessions[key] = session
+        self._sessions[session.session_key] = session
 
         for listener in self.listeners:
             listener.open(session)
 
-    def get_session(self, environment_id: uuid.UUID, session_name: str) -> Session:
+    def close_session(self, session: common.Session) -> None:
+        if session.session_key not in self._sessions:
+            return
+
+        del self._sessions[session.session_key]
+
+        for listener in self.listeners:
+            listener.close(session)
+
+    def get_session(self, environment_id: uuid.UUID, session_name: str) -> common.Session:
         """Get the requested session"""
         key = (environment_id, session_name)
         if key not in self._sessions:

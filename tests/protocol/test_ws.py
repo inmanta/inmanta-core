@@ -24,7 +24,7 @@ from tornado import websocket
 
 from inmanta import tracing
 from inmanta.protocol import common, handle, typedmethod
-from inmanta.protocol.rest.server import OpenSession, RESTServer, RPC_Call
+from inmanta.protocol.websocket import OpenSession, RPC_Call
 from inmanta.server.protocol import Server, ServerSlice, SessionListener
 
 LOGGER = logging.getLogger(__name__)

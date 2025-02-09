@@ -17,40 +17,21 @@ Contact: code@inmanta.com
 """
 
 import logging
-import re
 from asyncio import CancelledError
 from typing import TYPE_CHECKING, Any, AnyStr, Optional
-from urllib.parse import unquote
 
 import tornado.simple_httpclient
-from tornado import websocket
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
 
 from inmanta import config as inmanta_config
 from inmanta import tracing
 from inmanta.protocol import common
-from inmanta.protocol.rest import RESTBase
+from inmanta.protocol.rest import RESTBase, match_call
 
 if TYPE_CHECKING:
     from inmanta.protocol.endpoints import Endpoint
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
-
-
-def match_call(endpoint: "Endpoint", url: str, method: str) -> tuple[Optional[dict[str, AnyStr]], Optional[common.UrlMethod]]:
-    """
-    Get the method call for the given url and http method. This method is used for return calls over long poll
-    """
-    for target in endpoint.call_targets:
-        url_map = target.get_op_mapping()
-        for url_re, handlers in url_map.items():
-            if not url_re.endswith("$"):
-                url_re += "$"
-            match = re.match(url_re, url)
-            if match and method in handlers:
-                return {unquote(k): unquote(v) for k, v in match.groupdict().items()}, handlers[method]
-
-    return None, None
 
 
 class RESTClient(RESTBase):
@@ -86,7 +67,7 @@ class RESTClient(RESTBase):
         """
         Get the method call for the given url and http method. This method is used for return calls over long poll
         """
-        return match_call(self.endpoint, url, method)
+        return match_call(self.endpoint.call_targets, url, method)
 
     def _get_client_config(self) -> str:
         """

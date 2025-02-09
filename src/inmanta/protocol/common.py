@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import asyncio
 import enum
 import gzip
 import importlib
@@ -33,7 +32,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, Tuple, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
@@ -50,10 +49,6 @@ from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
-
-if TYPE_CHECKING:
-    from .endpoints import CallTarget
-
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -1056,9 +1051,93 @@ class Result:
 
 
 class Session:
-    pass
+    """A session using websockets"""
+
+    def __init__(self, environment_id: uuid.UUID, session_name: str, node_name: str, endpoint_names: list[str]) -> None:
+        self._seen: float = 0
+        self._environment_id = environment_id
+        self._session_name = session_name
+        self._closed = False
+        self._confirmed = False
+
+        # migration
+        self._node_name = node_name
+        self._endpoint_names = endpoint_names
+
+    @property
+    def active(self) -> bool:
+        """Can this session be used? It is confirmed and not closed"""
+        return not self._closed and self._confirmed
+
+    def confirm_open(self) -> None:
+        self._confirmed = True
+
+    @property
+    def session_key(self) -> Tuple[uuid.UUID, str]:
+        """Return a key that uniquely identifies a session"""
+        return self._environment_id, self._session_name
+
+    def seen(self) -> None:
+        self._seen = time.monotonic()
+
+    def close_session(self) -> None:
+        self._closed = True
+
+    def is_closed(self) -> bool:
+        return self._closed
 
 
 class SessionListener:
     def open(self, session: Session) -> None:
         pass
+
+    def close(self, session: Session) -> None:
+        pass
+
+
+class CallTarget:
+    """
+    A baseclass for all classes that are target for protocol calls / methods
+    """
+
+    def _get_endpoint_metadata(self) -> dict[str, list[tuple[str, Callable]]]:
+        total_dict = {
+            method_name: method
+            for method_name, method in inspect.getmembers(self)
+            if callable(method) and method_name[0] != "_"
+        }
+
+        methods: dict[str, list[tuple[str, Callable]]] = defaultdict(list)
+        for name, attr in total_dict.items():
+            if hasattr(attr, "__protocol_method__"):
+                methods[attr.__protocol_method__.__name__].append((name, attr))
+
+        return methods
+
+    def get_op_mapping(self) -> dict[str, dict[str, UrlMethod]]:
+        """
+        Build a mapping between urls, ops and methods
+        """
+        url_map: dict[str, dict[str, UrlMethod]] = defaultdict(dict)
+
+        # Loop over all methods in this class that have a handler annotation. The handler annotation refers to a method
+        # definition. This method definition defines how the handler is invoked.
+        for method, handler_list in self._get_endpoint_metadata().items():
+            for method_handlers in handler_list:
+                # Go over all method annotation on the method associated with the handler
+                for properties in MethodProperties.methods[method]:
+                    url = properties.get_listen_url()
+
+                    # Associate the method with the handler if:
+                    # - the handler does not specific a method version
+                    # - the handler specifies a method version and the method version matches the method properties
+                    if method_handlers[1].__api_version__ is None or (
+                        method_handlers[1].__api_version__ is not None
+                        and properties.api_version == method_handlers[1].__api_version__
+                    ):
+                        # there can only be one
+                        if url in url_map and properties.operation in url_map[url]:
+                            raise Exception(f"A handler is already registered for {properties.operation} {url}. ")
+
+                        url_map[url][properties.operation] = UrlMethod(properties, self, method_handlers[1], method_handlers[0])
+        return url_map
