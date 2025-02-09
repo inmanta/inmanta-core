@@ -182,8 +182,8 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         schedulers = self.get_all_schedulers()
         deadline = 0.9 * Server.GET_SERVER_STATUS_TIMEOUT
 
-        async def get_report(env: uuid.UUID, session: protocol_common.Session) -> tuple[uuid.UUID, DataBaseReport]:
-            result = await asyncio.wait_for(session.client.get_db_status(), deadline)
+        async def get_report(env: uuid.UUID, session: websocket.Session) -> tuple[uuid.UUID, DataBaseReport]:
+            result = await asyncio.wait_for(session.get_client().get_db_status(), deadline)
             assert result.code == 200
             # Mypy can't help here, ....
             return (env, DataBaseReport(**result.result["data"]))
@@ -243,7 +243,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         assert isinstance(autostarted_agent_manager, AutostartedAgentManager)
         self._autostarted_agent_manager = autostarted_agent_manager
 
-        server.rest_server.add_session_listener(self)
+        server._transport.add_session_listener(self)
 
     async def start(self) -> None:
         await super().start()
@@ -414,14 +414,14 @@ class AgentManager(ServerSlice, websocket.SessionListener):
             LOGGER.warning("Unknown SessionAction %s", action_type.name)
 
     # Notify from session listener
-    async def new_session(self, session: websocket.Session, endpoint_names_snapshot: set[str]) -> None:
+    async def open(self, session: websocket.Session) -> None:
         """
         The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
         """
         session_action = SessionAction(
             action_type=SessionActionType.REGISTER_SESSION,
             session=session,
-            endpoint_names_snapshot=endpoint_names_snapshot,
+            endpoint_names_snapshot=session._endpoint_names,
             timestamp=datetime.now().astimezone(),
         )
         await self._session_listener_actions.put(session_action)
@@ -497,9 +497,9 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         session log in the database. When the database connection is lost, the get_statuses()
         call fails and the new session will be refused.
         """
-        LOGGER.debug("New session %s for agents %s on %s", session.id, endpoint_names_snapshot, session.nodename)
+        LOGGER.debug("New session %s for agents %s on %s", session.session_key, endpoint_names_snapshot, session.nodename)
         async with self.session_lock:
-            tid = session.tid
+            tid = session.environment
             sid = session.get_id()
             self.sessions[sid] = session
             self.endpoints_for_sid[sid] = endpoint_names_snapshot

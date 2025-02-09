@@ -58,6 +58,14 @@ class Session:
         self.websocket_protocol = websocket_protocol
 
     @property
+    def nodename(self) -> str:
+        return self._node_name
+
+    @property
+    def environment(self) -> uuid.UUID:
+        return self._environment_id
+
+    @property
     def active(self) -> bool:
         """Can this session be used? It is confirmed and not closed"""
         return not self._closed and self._confirmed
@@ -130,10 +138,10 @@ class _SessionClient:
 
 
 class SessionListener:
-    def open(self, session: Session) -> None:
+    async def open(self, session: Session) -> None:
         pass
 
-    def close(self, session: Session) -> None:
+    async def close(self, session: Session) -> None:
         pass
 
 
@@ -409,11 +417,10 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
     async def write_message(self, message: str | bytes, binary: bool = False) -> None:
         """Write the message in the correct transport"""
 
-    async def create_session(
+    def create_session(
         self, environment_id: uuid.UUID, session_name: str, node_name: str, endpoint_names: list[str]
     ) -> None:
         self._session = Session(environment_id, session_name, node_name, endpoint_names, websocket_protocol=self)
-        await self._session.open()
 
 
 class WebSocketClientConnection(websocket.WebSocketClientConnection):
@@ -448,6 +455,13 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
 
         self._ws_client: Optional[websocket.WebSocketClientConnection] = None
         self.set_call_targets(self.call_targets)
+
+        self.create_session(
+            environment_id=self.environment,
+            session_name="test",
+            node_name="localhost",
+            endpoint_names=list(self.end_point_names),
+        )
 
     def get_environment(self) -> uuid.UUID:
         return self._env_id
@@ -491,14 +505,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
         )
 
         self._ws_client = await conn.connect_future
-
-        await self.create_session(
-            environment_id=self.environment,
-            session_name="test",
-            node_name="localhost",
-            endpoint_names=list(self.end_point_names),
-        )
-
+        await self.session.open()
         await self.start_connected()
         self.add_background_task(self._process_messages())
 

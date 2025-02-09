@@ -56,14 +56,14 @@ class Endpoint(TaskHandler[None]):
     def get_end_point_names(self) -> set[str]:
         return self._end_point_names
 
-    async def add_end_point_name(self, name: str) -> None:
+    def add_end_point_name(self, name: str) -> None:
         """
         Add a name to this endpoint to which it reacts and sends out in heartbeats
         """
         LOGGER.debug("Adding '%s' as endpoint", name)
         self._end_point_names.add(name)
 
-    async def remove_end_point_name(self, name: str) -> None:
+    def remove_end_point_name(self, name: str) -> None:
         LOGGER.debug("Removing '%s' as endpoint", name)
         self._end_point_names.discard(name)
 

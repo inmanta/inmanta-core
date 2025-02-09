@@ -834,7 +834,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
     def __init__(
         self,
         thread_pool: concurrent.futures.thread.ThreadPoolExecutor,
-        session_gid: uuid.UUID,
         environment: uuid.UUID,
         log_folder: str,
         storage_folder: str,
@@ -860,7 +859,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         self.thread_pool = thread_pool
 
         self.environment = environment
-        self.session_gid = session_gid
 
         # on disk
         self.log_folder = log_folder
@@ -998,7 +996,6 @@ class MPManager(
     def __init__(
         self,
         thread_pool: concurrent.futures.thread.ThreadPoolExecutor,
-        session_gid: uuid.UUID,
         environment: uuid.UUID,
         log_folder: str,
         storage_folder: str,
@@ -1007,7 +1004,6 @@ class MPManager(
     ) -> None:
         """
         :param thread_pool:  threadpool to perform work on
-        :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
         :param environment: the inmanta environment we are deploying for
         :param log_folder: folder to place log files for the executors
         :param storage_folder: folder to place code files and venvs
@@ -1019,7 +1015,7 @@ class MPManager(
             retention_time=inmanta.agent.config.agent_executor_retention_time.get(),
         )
 
-        self.process_pool = MPPool(thread_pool, session_gid, environment, log_folder, storage_folder, log_level, cli_log)
+        self.process_pool = MPPool(thread_pool, environment, log_folder, storage_folder, log_level, cli_log)
 
         self.environment = environment
 

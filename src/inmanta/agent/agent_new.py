@@ -69,9 +69,11 @@ class Agent(SessionEndpoint):
         self._storage = self.check_storage()
 
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
-        self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self._client)
+        self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self.session.get_client())
         self.working = False
         self.add_end_point_name(AGENT_SCHEDULER_ID)
+
+        self._client = self.session.get_client()
 
     async def start(self) -> None:
         # Make mypy happy
@@ -89,7 +91,6 @@ class Agent(SessionEndpoint):
         assert self._env_id is not None
         return forking_executor.MPManager(
             self.thread_pool,
-            self.sessionid,
             self._env_id,
             config.log_dir.get(),
             self._storage["executors"],

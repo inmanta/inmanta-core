@@ -247,10 +247,10 @@ class WebsocketHandler(tornado_websocket.WebSocketHandler, websocket.WebsocketFr
         await tornado_websocket.WebSocketHandler.write_message(self, message, binary)
 
     async def on_open_session(self, session: websocket.Session) -> None:
-        self._server.register_session(session)
+        await self._server.register_session(session)
 
     async def on_close_session(self, session: websocket.Session) -> None:
-        self._server.close_session(session)
+        await self._server.close_session(session)
 
     async def on_pong(self, data: bytes) -> None:
         """Called when we get a response to our ping"""
@@ -360,7 +360,10 @@ class RESTServer(RESTBase):
         if self._http_server is not None:
             await self._http_server.close_all_connections()
 
-    def register_session(self, session: websocket.Session) -> None:
+    def add_session_listener(self, session_listener: websocket.SessionListener) -> None:
+        self.listeners.append(session_listener)
+
+    async def register_session(self, session: websocket.Session) -> None:
         """Register a session with the server"""
         if session.session_key in self._sessions:
             # TODO: correct exception
@@ -369,16 +372,16 @@ class RESTServer(RESTBase):
         self._sessions[session.session_key] = session
 
         for listener in self.listeners:
-            listener.open(session)
+            await listener.open(session)
 
-    def close_session(self, session: websocket.Session) -> None:
+    async def close_session(self, session: websocket.Session) -> None:
         if session.session_key not in self._sessions:
             return
 
         del self._sessions[session.session_key]
 
         for listener in self.listeners:
-            listener.close(session)
+            await listener.close(session)
 
     def get_session(self, environment_id: uuid.UUID, session_name: str) -> websocket.Session:
         """Get the requested session"""
