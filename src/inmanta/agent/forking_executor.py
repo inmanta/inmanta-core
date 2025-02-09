@@ -116,7 +116,7 @@ LOGGER = logging.getLogger(LOGGER_NAME_EXECUTOR)
 class ExecutorContext:
     """The context object used by the executor to expose state to the incoming calls"""
 
-    client: typing.Optional[inmanta.protocol.SessionClient]
+    client: typing.Optional[inmanta.protocol.Client]
     venv: typing.Optional[inmanta.env.VirtualEnv]
     environment: uuid.UUID
     executors: dict[str, "inmanta.agent.in_process_executor.InProcessExecutor"] = {}

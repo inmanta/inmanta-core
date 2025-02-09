@@ -20,87 +20,39 @@ import asyncio
 import logging
 import uuid
 
-from tornado import websocket
-
-from inmanta import tracing
-from inmanta.protocol import common, handle, typedmethod
-from inmanta.protocol.websocket import OpenSession, RPC_Call
-from inmanta.server.protocol import Server, ServerSlice, SessionListener
+from inmanta.protocol import SessionEndpoint, handle, typedmethod, websocket
+from inmanta.server.protocol import Server, ServerSlice
 
 LOGGER = logging.getLogger(__name__)
 
 
 @typedmethod(path="/server_status", operation="GET")
-def get_server_status() -> str:
+def get_current_server_status() -> str:
     """Get the status of the server"""
 
 
 @typedmethod(path="/agent_status", operation="GET")
-def get_agent_status() -> str:
+def get_current_agent_status() -> str:
     """Get the status of the agent"""
 
 
-class WSServer(SessionListener, ServerSlice):
+class WSServer(websocket.SessionListener, ServerSlice):
     def __init__(self) -> None:
         ServerSlice.__init__(self, "wsserver")
 
-    @handle(get_server_status)
-    async def get_server_status(self) -> str:
+    @handle(get_current_server_status)
+    async def get_current_server_status(self) -> str:
         LOGGER.error("Got status call")
         return "server status"
 
 
-# class WSAgent(WebsocketEndpoint):
-#     def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5) -> None:
-#         super().__init__(name, timeout, reconnect_delay)
-#
-#     @handle(get_agent_status)
-#     async def get_agent_status(self) -> str:
-#         return "agent status"
+class WSAgent(SessionEndpoint):
+    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5) -> None:
+        super().__init__(name, uuid.uuid4(), timeout, reconnect_delay)
 
-
-async def _call(method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]) -> dict[str, object]:
-    with tracing.span(f"return_rpc.{method_properties.function.__name__}"):
-        call_spec = method_properties.build_call(args, kwargs)
-        call_spec.headers.update(tracing.get_context())
-
-        return call_spec.to_dict()
-
-        expect_reply = method_properties.reply
-        try:
-            if method_properties.timeout:
-                return_value = await self.session.put_call(
-                    call_spec, timeout=method_properties.timeout, expect_reply=expect_reply
-                )
-            else:
-                return_value = await self.session.put_call(call_spec, expect_reply=expect_reply)
-        except asyncio.CancelledError:
-            return common.Result(code=500, result={"message": "Call timed out"})
-
-        return common.Result(code=return_value["code"], result=return_value["result"])
-
-
-def put_call(call_spec: common.Request, timeout: int = 10, expect_reply: bool = True) -> asyncio.Future:
-    reply_id = uuid.uuid4()
-    future = asyncio.Future()
-
-    LOGGER.debug("Putting call %s: %s %s for agent %s in queue", reply_id, call_spec.method, call_spec.url, self._sid)
-
-    if expect_reply:
-        call_spec.reply_id = reply_id
-        _sessionstore.add_background_task(
-            _handle_timeout(
-                future,
-                timeout,
-                f"Call {reply_id}: {call_spec.method} {call_spec.url} for agent {self._sid} timed out.",
-            )
-        )
-        _replies[reply_id] = future
-    else:
-        future.set_result({"code": 200, "result": None})
-    _queue.put(call_spec)
-
-    return future
+    @handle(get_current_agent_status)
+    async def get_current_agent_status(self) -> str:
+        return "agent status"
 
 
 async def test_ws_2way(inmanta_config, server_config) -> None:
@@ -110,44 +62,19 @@ async def test_ws_2way(inmanta_config, server_config) -> None:
     rs.add_slice(server)
     await rs.start()
 
-    # agent = WSAgent("agent")
-    # await agent.add_end_point_name("agent")
-    # # await agent.start()
-    #
-    # await asyncio.sleep(1000)
+    agent = WSAgent("agent")
+    await agent.start()
 
-    port = int(server_config.Config.get("server", "bind-port"))
+    while not agent.session or not agent.session.active:
+        await asyncio.sleep(0.01)
 
-    ws_conn = await websocket.websocket_connect(
-        f"ws://localhost:{port}/v2/ws",
-        ping_interval=1,
-        on_message_callback=None,
-    )
-    # on_pong exists on the ws_conn class -> subclass and instantiate ourselves if we need the on_pong
+    client_a2s = agent.session.get_typed_client()
+    result = await client_a2s.get_current_server_status()
+    assert result == "server status"
 
-    await ws_conn.write_message(
-        OpenSession(
-            environment_id=uuid.uuid4(), session_name="test", node_name="localhost", endpoint_names=["scheduler"]
-        ).model_dump_json()
-    )
-
-    # build a call
-    method = min(common.MethodProperties.methods["get_server_status"], key=lambda x: x.api_version)
-    call_spec = method.build_call([], {})
-    call_spec.reply_id = uuid.uuid4()
-    call_spec.headers.update(tracing.get_context())
-
-    await ws_conn.write_message(RPC_Call(**call_spec.to_dict()).model_dump_json())
-
-    while True:
-        msg = await ws_conn.read_message()
-        if msg is None:
-            break
-        else:
-            print(msg)
-            break
-
-    ws_conn.close()
+    client_s2a = rs._transport.get_session(*agent.session.session_key).get_typed_client()
+    result = await client_s2a.get_current_agent_status()
+    assert result == "agent status"
 
     await rs.stop()
-    # await agent.stop()
+    await agent.stop()

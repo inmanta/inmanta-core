@@ -24,16 +24,13 @@ from asyncio import CancelledError
 from collections import defaultdict
 from collections.abc import MutableMapping, Sequence
 from json import JSONDecodeError
-from typing import Any, Dict, Optional, Union
+from typing import Optional, Union
 
-import pydantic
 import tornado
-from pydantic import ValidationError
 from pyformance import timer
-from tornado import httpserver, httputil, iostream, routing, web
+from tornado import httpserver, iostream, routing, web
 from tornado import websocket as tornado_websocket
 
-import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta import const, tracing
 from inmanta.protocol import common, endpoints, exceptions, websocket
@@ -249,10 +246,10 @@ class WebsocketHandler(tornado_websocket.WebSocketHandler, websocket.WebsocketFr
     async def write_message(self, message: str | bytes, binary: bool = False) -> None:
         await tornado_websocket.WebSocketHandler.write_message(self, message, binary)
 
-    async def on_open_session(self, session: common.Session) -> None:
+    async def on_open_session(self, session: websocket.Session) -> None:
         self._server.register_session(session)
 
-    async def on_close_session(self, session: common.Session) -> None:
+    async def on_close_session(self, session: websocket.Session) -> None:
         self._server.close_session(session)
 
     async def on_pong(self, data: bytes) -> None:
@@ -284,8 +281,8 @@ class RESTServer(RESTBase):
         self._http_server = None
 
         # Session handling
-        self._sessions: dict[(uuid.UUID, str) : common.Session] = {}
-        self.listeners: list[common.SessionListener] = []
+        self._sessions: dict[(uuid.UUID, str) : websocket.Session] = {}
+        self.listeners: list[websocket.SessionListener] = []
 
     def start_request(self) -> None:
         self.idle_event.clear()
@@ -363,7 +360,7 @@ class RESTServer(RESTBase):
         if self._http_server is not None:
             await self._http_server.close_all_connections()
 
-    def register_session(self, session: common.Session) -> None:
+    def register_session(self, session: websocket.Session) -> None:
         """Register a session with the server"""
         if session.session_key in self._sessions:
             # TODO: correct exception
@@ -374,7 +371,7 @@ class RESTServer(RESTBase):
         for listener in self.listeners:
             listener.open(session)
 
-    def close_session(self, session: common.Session) -> None:
+    def close_session(self, session: websocket.Session) -> None:
         if session.session_key not in self._sessions:
             return
 
@@ -383,7 +380,7 @@ class RESTServer(RESTBase):
         for listener in self.listeners:
             listener.close(session)
 
-    def get_session(self, environment_id: uuid.UUID, session_name: str) -> common.Session:
+    def get_session(self, environment_id: uuid.UUID, session_name: str) -> websocket.Session:
         """Get the requested session"""
         key = (environment_id, session_name)
         if key not in self._sessions:

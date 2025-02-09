@@ -30,7 +30,7 @@ from tornado import escape
 
 from inmanta import const, tracing, util
 from inmanta.data.model import BaseModel
-from inmanta.protocol import auth, common, endpoints, exceptions
+from inmanta.protocol import auth, common, exceptions
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import config as server_config
 from inmanta.types import Apireturn, JsonType

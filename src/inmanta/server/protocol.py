@@ -16,29 +16,22 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import asyncio
 import importlib.metadata
 import logging
 import re
 import socket
-import time
-import uuid
 from collections import defaultdict
 from collections.abc import Sequence
-from datetime import timedelta
-from typing import TYPE_CHECKING, Callable, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Mapping, Optional
 
-from tornado import gen, queues, routing, web
+from tornado import routing, web
 
 import inmanta.protocol.endpoints
-from inmanta import tracing
 from inmanta.data.model import ExtensionStatus
-from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods
-from inmanta.protocol.exceptions import ShutdownInProgress
+from inmanta.protocol import Result, TypedClient, common, endpoints
 from inmanta.protocol.rest import server
-from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
-from inmanta.server import config as opt
-from inmanta.types import ArgumentTypes, JsonType
+from inmanta.server import SLICE_TRANSPORT
+from inmanta.types import ArgumentTypes
 from inmanta.util import (
     CronSchedule,
     CycleException,
@@ -70,36 +63,6 @@ class SliceStartupException(ServerStartFailure):
         return f"Slice {self.in_slice} failed to start because: {str(self.__cause__)}"
 
 
-class ReturnClient(Client):
-    """
-    A client that uses a return channel to connect to its destination. This client is used by the server to communicate
-    back to clients over the heartbeat channel.
-    """
-
-    def __init__(self, name: str, session: "Session") -> None:
-        super().__init__(name, with_rest_client=False)
-        self.session = session
-
-    async def _call(
-        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
-    ) -> common.Result:
-        with tracing.span(f"return_rpc.{method_properties.function.__name__}"):
-            call_spec = method_properties.build_call(args, kwargs)
-            call_spec.headers.update(tracing.get_context())
-            expect_reply = method_properties.reply
-            try:
-                if method_properties.timeout:
-                    return_value = await self.session.put_call(
-                        call_spec, timeout=method_properties.timeout, expect_reply=expect_reply
-                    )
-                else:
-                    return_value = await self.session.put_call(call_spec, expect_reply=expect_reply)
-            except asyncio.CancelledError:
-                return common.Result(code=500, result={"message": "Call timed out"})
-
-            return common.Result(code=return_value["code"], result=return_value["result"])
-
-
 # Server Side
 class Server(endpoints.Endpoint):
     def __init__(self, connection_timout: int = 120) -> None:
@@ -108,8 +71,6 @@ class Server(endpoints.Endpoint):
         self._slice_sequence: Optional[list[ServerSlice]] = None
         self._handlers: list[routing.Rule] = []
         self.connection_timout = connection_timout
-        self.sessions_handler = SessionManager()
-        self.add_slice(self.sessions_handler)
 
         self._transport = server.RESTServer(self, self.id)
         self.add_slice(TransportSlice(self))
@@ -411,191 +372,6 @@ class ServerSlice(inmanta.protocol.common.CallTarget, TaskHandler[Result | None]
         return []
 
 
-class Session:
-    """
-    An environment that segments agents connected to the server. Should only be created in a context with a running event loop.
-    """
-
-    def __init__(
-        self,
-        sessionstore: "SessionManager",
-        sid: uuid.UUID,
-        hang_interval: int,
-        timout: int,
-        tid: uuid.UUID,
-        endpoint_names: set[str],
-        nodename: str,
-        disable_expire_check: bool = False,
-    ) -> None:
-        self._sid = sid
-        self._interval = hang_interval
-        self._timeout = timout
-        self._sessionstore: SessionManager = sessionstore
-        self._seen: float = time.monotonic()
-        self._callhandle: Optional[asyncio.TimerHandle] = None
-        self.expired: bool = False
-
-        self.last_dispatched_call: float = 0
-        self.dispatch_delay = 0.01  # keep at least 10 ms between dispatches
-
-        self.tid: uuid.UUID = tid
-        self.endpoint_names: set[str] = endpoint_names
-        self.nodename: str = nodename
-
-        self._replies: dict[uuid.UUID, asyncio.Future] = {}
-
-        # Disable expiry in certain tests
-        if not disable_expire_check:
-            self.check_expire()
-        self._queue: queues.Queue[Optional[common.Request]] = queues.Queue()
-
-        self.client = ReturnClient(str(sid), self)
-
-    def check_expire(self) -> None:
-        if self.expired:
-            LOGGER.exception("Tried to expire session already expired")
-        now = time.monotonic()
-        ttw = self._timeout + self._seen - now
-        if ttw < 0:
-            expire_coroutine = self.expire(self._seen - now)
-            self._sessionstore.add_background_task(expire_coroutine)
-        else:
-            self._callhandle = asyncio.get_running_loop().call_later(ttw, self.check_expire)
-
-    def get_id(self) -> uuid.UUID:
-        return self._sid
-
-    id = property(get_id)
-
-    async def expire(self, timeout: float) -> None:
-        if self.expired:
-            return
-        self.expired = True
-        if self._callhandle is not None:
-            self._callhandle.cancel()
-        await self._sessionstore.expire(self, timeout)
-
-    def seen(self, endpoint_names: set[str]) -> None:
-        self._seen = time.monotonic()
-        self.endpoint_names = endpoint_names
-
-    async def _handle_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
-        """A function that awaits a future until its value is ready or until timeout. When the call times out, a message is
-        logged. The future itself will be cancelled.
-
-        This method should be called as a background task. Any other exceptions (which should not occur) will be logged in
-        the background task.
-        """
-        try:
-            await asyncio.wait_for(future, timeout)
-        except asyncio.TimeoutError:
-            LOGGER.warning(log_message)
-
-    def put_call(self, call_spec: common.Request, timeout: int = 10, expect_reply: bool = True) -> asyncio.Future:
-        reply_id = uuid.uuid4()
-        future = asyncio.Future()
-
-        LOGGER.debug("Putting call %s: %s %s for agent %s in queue", reply_id, call_spec.method, call_spec.url, self._sid)
-
-        if expect_reply:
-            call_spec.reply_id = reply_id
-            self._sessionstore.add_background_task(
-                self._handle_timeout(
-                    future,
-                    timeout,
-                    f"Call {reply_id}: {call_spec.method} {call_spec.url} for agent {self._sid} timed out.",
-                )
-            )
-            self._replies[reply_id] = future
-        else:
-            future.set_result({"code": 200, "result": None})
-        self._queue.put(call_spec)
-
-        return future
-
-    async def get_calls(self, no_hang: bool) -> Optional[list[common.Request]]:
-        """
-        Get all calls queued for a node. If no work is available, wait until timeout. This method returns none if a call
-        fails.
-        """
-        try:
-            call_list: list[common.Request] = []
-
-            if no_hang:
-                timeout = 0.1
-            else:
-                timeout = self._interval if self._interval > 0.1 else 0.1
-                # We choose to have a minimum of 0.1 as timeout as this is also the value used for no_hang.
-                # Furthermore, the timeout value cannot be zero as this causes an issue with Tornado:
-                # https://github.com/tornadoweb/tornado/issues/3271
-            call = await self._queue.get(timeout=timedelta(seconds=timeout))
-            if call is None:
-                # aborting session
-                return None
-            call_list.append(call)
-            while self._queue.qsize() > 0:
-                call = await self._queue.get()
-                if call is None:
-                    # aborting session
-                    return None
-                call_list.append(call)
-
-            return call_list
-
-        except gen.TimeoutError:
-            return None
-
-    def set_reply(self, reply_id: uuid.UUID, data: JsonType) -> None:
-        LOGGER.log(3, "Received Reply: %s", reply_id)
-        if reply_id in self._replies:
-            future: asyncio.Future = self._replies[reply_id]
-            del self._replies[reply_id]
-            if not future.done():
-                future.set_result(data)
-        else:
-            LOGGER.debug("Received Reply that is unknown: %s", reply_id)
-
-    def get_client(self) -> ReturnClient:
-        return self.client
-
-    def abort(self) -> None:
-        "Send poison pill to signal termination."
-        self._queue.put(None)
-
-    async def expire_and_abort(self, timeout: float) -> None:
-        await self.expire(timeout)
-        self.abort()
-
-
-class SessionListener:
-    async def new_session(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
-        """
-        Notify that a new session was created.
-
-        :param session: The session that was created
-        :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
-                                        method was called. This parameter provides a snapshot which will not change.
-        """
-
-    async def expire(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
-        """
-        Notify that a session expired.
-
-        :param session: The session that was created
-        :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
-                                        method was called. This parameter provides a snapshot which will not change.
-        """
-
-    async def seen(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
-        """
-        Notify that a heartbeat was received for an existing session.
-
-        :param session: The session that was created
-        :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
-                                        method was called. This parameter provides a snapshot which will not change.
-        """
-
-
 # Internals
 class TransportSlice(ServerSlice):
     """Slice to manage the listening socket"""
@@ -639,133 +415,6 @@ class TransportSlice(ServerSlice):
             "running": self.server._transport.running,
             "sockets": sockets,
         }
-
-
-class SessionManager(ServerSlice):
-    """
-    A service that receives method calls over one or more transports
-    """
-
-    __methods__: dict[str, tuple[str, Callable]] = {}
-
-    def __init__(self) -> None:
-        super().__init__(SLICE_SESSION_MANAGER)
-
-        # Config
-        interval: int = opt.agent_timeout.get()
-        hangtime: Optional[int] = opt.agent_hangtime.get()
-
-        if hangtime is None:
-            hangtime = int(interval * 3 / 4)
-
-        self.hangtime: int = hangtime
-        self.interval: int = interval
-
-        # Session management
-        self._sessions: dict[uuid.UUID, Session] = {}
-        self._sessions_lock = asyncio.Lock()
-
-        # Listeners
-        self.listeners: list[SessionListener] = []
-
-    async def get_status(self) -> Mapping[str, ArgumentTypes]:
-        return {"hangtime": self.hangtime, "interval": self.interval, "sessions": len(self._sessions)}
-
-    def add_listener(self, listener: SessionListener) -> None:
-        self.listeners.append(listener)
-
-    async def prestop(self) -> None:
-        async with self._sessions_lock:
-            # Keep the super call in the session_lock to make sure that no additional sessions are created
-            # while the server is shutting down. This call sets the is_stopping() flag to true.
-            await super().prestop()
-        # terminate all sessions cleanly
-        for session in self._sessions.copy().values():
-            await session.expire(0)
-            session.abort()
-
-    def get_depended_by(self) -> list[str]:
-        return [SLICE_TRANSPORT]
-
-    def validate_sid(self, sid: uuid.UUID) -> bool:
-        if isinstance(sid, str):
-            sid = uuid.UUID(sid)
-        return sid in self._sessions
-
-    async def get_or_create_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: set[str], nodename: str) -> Session:
-        if isinstance(sid, str):
-            sid = uuid.UUID(sid)
-
-        async with self._sessions_lock:
-            if self.is_stopping():
-                raise ShutdownInProgress()
-            if sid not in self._sessions:
-                session = self.new_session(sid, tid, endpoint_names, nodename)
-                self._sessions[sid] = session
-                endpoint_names_snapshot = set(session.endpoint_names)
-                await asyncio.gather(*[listener.new_session(session, endpoint_names_snapshot) for listener in self.listeners])
-            else:
-                session = self._sessions[sid]
-                self.seen(session, endpoint_names)
-                endpoint_names_snapshot = set(session.endpoint_names)
-                await asyncio.gather(*[listener.seen(session, endpoint_names_snapshot) for listener in self.listeners])
-
-            return session
-
-    def new_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: set[str], nodename: str) -> Session:
-        LOGGER.debug(f"New session with id {sid} on node {nodename} for env {tid} with endpoints {endpoint_names}")
-        return Session(self, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
-
-    async def expire(self, session: Session, timeout: float) -> None:
-        async with self._sessions_lock:
-            LOGGER.debug("Expired session with id %s, last seen %d seconds ago" % (session.get_id(), timeout))
-            if session.id in self._sessions:
-                del self._sessions[session.id]
-            endpoint_names_snapshot = set(session.endpoint_names)
-            await asyncio.gather(*[listener.expire(session, endpoint_names_snapshot) for listener in self.listeners])
-
-    def seen(self, session: Session, endpoint_names: set[str]) -> None:
-        LOGGER.debug("Seen session with id %s; endpoints: %s", session.get_id(), endpoint_names)
-        session.seen(endpoint_names)
-
-    @handle(methods.heartbeat, env="tid")
-    async def heartbeat(
-        self, sid: uuid.UUID, env: "inmanta.data.Environment", endpoint_names: list[str], nodename: str, no_hang: bool = False
-    ) -> Union[int, tuple[int, dict[str, str]]]:
-        LOGGER.debug("Received heartbeat from %s for agents %s in %s", nodename, ",".join(endpoint_names), env.id)
-
-        session: Session = await self.get_or_create_session(sid, env.id, set(endpoint_names), nodename)
-
-        LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
-
-        # keep a minimal timeout between sending out calls to allow them to batch up
-        now = time.monotonic()
-        wait_time = session.dispatch_delay - (now - session.last_dispatched_call)
-        if wait_time > 0:
-            await asyncio.sleep(wait_time)
-
-        call_list = await session.get_calls(no_hang=no_hang)
-
-        if call_list is not None:
-            LOGGER.debug("Pushing %d method calls to node %s", len(call_list), nodename)
-            session.last_dispatched_call = time.monotonic()
-            return 200, {"method_calls": call_list}
-        else:
-            LOGGER.debug("Heartbeat wait expired for %s, returning. (long poll)", nodename)
-
-        return 200
-
-    @handle(methods.heartbeat_reply)
-    async def heartbeat_reply(
-        self, sid: uuid.UUID, reply_id: uuid.UUID, data: JsonType
-    ) -> Union[int, tuple[int, dict[str, str]]]:
-        try:
-            env = self._sessions[sid]
-            env.set_reply(reply_id, data)
-            return 200
-        except Exception:
-            LOGGER.warning(f"could not deliver agent reply with sid={sid} and reply_id={reply_id}", exc_info=True)
-            return 500
 
 
 class LocalClient(TypedClient):

@@ -32,7 +32,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, Tuple, TypeVar, Union, cast, get_type_hints
+from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
@@ -44,8 +44,7 @@ from tornado import web
 
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
-from inmanta.protocol import auth
-from inmanta.protocol.exceptions import BadRequest, BaseHttpException
+from inmanta.protocol import auth, exceptions
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
@@ -333,6 +332,18 @@ VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
 VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime, bytes, pydantic.AnyUrl)
 
 
+class VersionMatch(str, Enum):
+    lowest = "lowest"
+    """ Select the lowest available version of the method
+    """
+    highest = "highest"
+    """ Select the highest available version of the method
+    """
+    exact = "exact"
+    """ Select the exact version of the method
+    """
+
+
 class MethodProperties:
     """
     This class stores the information from a method definition
@@ -354,6 +365,30 @@ class MethodProperties:
             )
 
         cls.methods[properties.function.__name__].append(properties)
+
+    @classmethod
+    def select_method(
+        cls, name: str, match_constraint: VersionMatch = VersionMatch.lowest, exact_version: int = 0
+    ) -> Optional["MethodProperties"]:
+        """Select a method to call with the given name and using the given match constraint
+
+        :param name: The name of the method to select
+        :param match_constraint: How to decide which version to match against
+        :param exact_version: The exact version to match against in case of VersionMatch.exact
+        """
+        if name not in cls.methods:
+            return None
+
+        methods = cls.methods[name]
+
+        if match_constraint is VersionMatch.lowest:
+            return min(methods, key=lambda x: x.api_version)
+        elif match_constraint is VersionMatch.highest:
+            return max(methods, key=lambda x: x.api_version)
+        elif match_constraint is VersionMatch.exact:
+            return next((m for m in methods if m.api_version == exact_version), None)
+
+        return None
 
     def __init__(
         self,
@@ -471,7 +506,7 @@ class MethodProperties:
         except ValidationError as e:
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
-            raise BadRequest(error_msg, {"validation_errors": e.errors()})
+            raise exceptions.BadRequest(error_msg, {"validation_errors": e.errors()})
 
     def arguments_to_pydantic(self) -> type[pydantic.BaseModel]:
         """
@@ -769,7 +804,7 @@ class MethodProperties:
         try:
             module = importlib.import_module(module_path)
             cls = module.__getattribute__(cls_name)
-            if not inspect.isclass(cls) or BaseHttpException not in cls.mro():
+            if not inspect.isclass(cls) or exceptions.BaseHttpException not in cls.mro():
                 return 500
             cls_instance = cls()
             return cls_instance.to_status()
@@ -1050,51 +1085,6 @@ class Result:
         self._callback = fnc
 
 
-class Session:
-    """A session using websockets"""
-
-    def __init__(self, environment_id: uuid.UUID, session_name: str, node_name: str, endpoint_names: list[str]) -> None:
-        self._seen: float = 0
-        self._environment_id = environment_id
-        self._session_name = session_name
-        self._closed = False
-        self._confirmed = False
-
-        # migration
-        self._node_name = node_name
-        self._endpoint_names = endpoint_names
-
-    @property
-    def active(self) -> bool:
-        """Can this session be used? It is confirmed and not closed"""
-        return not self._closed and self._confirmed
-
-    def confirm_open(self) -> None:
-        self._confirmed = True
-
-    @property
-    def session_key(self) -> Tuple[uuid.UUID, str]:
-        """Return a key that uniquely identifies a session"""
-        return self._environment_id, self._session_name
-
-    def seen(self) -> None:
-        self._seen = time.monotonic()
-
-    def close_session(self) -> None:
-        self._closed = True
-
-    def is_closed(self) -> bool:
-        return self._closed
-
-
-class SessionListener:
-    def open(self, session: Session) -> None:
-        pass
-
-    def close(self, session: Session) -> None:
-        pass
-
-
 class CallTarget:
     """
     A baseclass for all classes that are target for protocol calls / methods
@@ -1141,3 +1131,60 @@ class CallTarget:
 
                         url_map[url][properties.operation] = UrlMethod(properties, self, method_handlers[1], method_handlers[0])
         return url_map
+
+
+def typed_process_response(method_properties: MethodProperties, response: Result) -> types.ReturnTypes:
+    """Convert the response into a proper type and restore exception if any"""
+
+    def _raise_exception(exception_class: type[exceptions.BaseHttpException], result: Optional[types.JsonType]) -> None:
+        """Raise an exception based on the provided status"""
+        if result is None:
+            raise exception_class()
+
+        message = result.get("message", None)
+        details = result.get("error_details", None)
+
+        raise exception_class(message=message, details=details)
+
+    match response.code:
+        case 200:
+            # typed methods always require an envelope key
+            if response.result is None or method_properties.envelope_key not in response.result:
+                raise exceptions.BadRequest("No data was provided in the body. Make sure to only use typed methods.")
+
+            if method_properties.return_type is None:
+                return None
+
+            try:
+                ta = pydantic.TypeAdapter(method_properties.return_type)
+            except InvalidMethodDefinition:
+                raise exceptions.BadRequest("Typed client can only be used with typed methods.")
+
+            return ta.validate_python(response.result[method_properties.envelope_key])
+
+        case 400:
+            _raise_exception(exceptions.BadRequest, response.result)
+
+        case 401:
+            _raise_exception(exceptions.UnauthorizedException, response.result)
+
+        case 403:
+            _raise_exception(exceptions.Forbidden, response.result)
+
+        case 404:
+            _raise_exception(exceptions.NotFound, response.result)
+
+        case 409:
+            _raise_exception(exceptions.Conflict, response.result)
+
+        case 500:
+            _raise_exception(exceptions.ServerError, response.result)
+
+        case 503:
+            _raise_exception(exceptions.ShutdownInProgress, response.result)
+
+        case _:
+            _raise_exception(exceptions.ServerError, response.result)
+
+    # make mypy happy, it cannot deduce that all the cases will always raise an exception
+    return None
