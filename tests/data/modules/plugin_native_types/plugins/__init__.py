@@ -16,10 +16,8 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-from typing import Any, Annotated, Protocol, Literal
-from typing import Union, Optional, Any
-from typing import Union, Optional, Any
-from inmanta.plugins import plugin, ModelType
+from typing import Annotated, Protocol, Literal, Any, Union, Optional
+from inmanta.plugins import plugin, ModelType, Entity
 
 
 @plugin
@@ -92,22 +90,22 @@ def union_multiple_types(value: Union[int, str]) -> None:
 
 
 @plugin
-def union_optional_1(value: Union[None, int, str]) -> None:
+def union_optional_1(value: Union[None, int, str, Entity]) -> None:
     pass
 
 
 @plugin
-def union_optional_2(value: Optional[Union[int, str]]) -> None:
+def union_optional_2(value: Optional[Union[int, str, Entity]]) -> None:
     pass
 
 
 @plugin
-def union_optional_3(value: Union[int, str] | None) -> None:
+def union_optional_3(value: Union[int, str, Entity] | None) -> None:
     pass
 
 
 @plugin
-def union_optional_4(value: None | Union[int, str]) -> None:
+def union_optional_4(value: None | Union[int, str, Entity]) -> None:
     pass
 
 
@@ -125,22 +123,22 @@ def union_return_multiple_types(value: Any) -> Union[str, int]:
 
 
 @plugin
-def union_return_optional_1(value: Any) -> Union[None, int, str]:
+def union_return_optional_1(value: Any) -> Union[None, int, str, Entity]:
     return value
 
 
 @plugin
-def union_return_optional_2(value: Any) -> Optional[Union[int, str]]:
+def union_return_optional_2(value: Any) -> Optional[Union[int, str, Entity]]:
     return value
 
 
 @plugin
-def union_return_optional_3(value: Any) -> Union[int, str] | None:
+def union_return_optional_3(value: Any) -> Union[int, str, Entity] | None:
     return value
 
 
 @plugin
-def union_return_optional_4(value: Any) -> None | Union[int, str]:
+def union_return_optional_4(value: Any) -> None | Union[int, str, Entity]:
     return value
 
 
@@ -168,4 +166,14 @@ def annotated_arg_literal(value: Annotated[Literal["yes", "no"], ModelType["resp
 
 @plugin
 def annotated_return_literal(value: Any) -> Annotated[Literal["yes", "no"], ModelType["response"]]:
+    return value
+
+
+@plugin
+def type_entity_arg(value: Entity) -> None:
+    pass
+
+
+@plugin
+def type_entity_return(value: Any) -> Entity:
     return value

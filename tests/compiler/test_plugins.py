@@ -500,27 +500,30 @@ none = plugin_native_types::as_none("a")
 plugin_native_types::union_single_type(value="test")     # type value: Union[str]
 plugin_native_types::union_multiple_types(value="test")  # type value: Union[int, str]
 plugin_native_types::union_multiple_types(value=123)     # type value: Union[int, str]
-for val in ["test", 123, null]:
-    plugin_native_types::union_optional_1(value=val)     # type value: Union[None, int, str]
-    plugin_native_types::union_optional_2(value=val)     # type value: Optional[Union[int, str]]
-    plugin_native_types::union_optional_3(value=val)     # type value: Union[int, str] | None
-    plugin_native_types::union_optional_4(value=val)     # type value: None | Union[int, str]
+for val in ["test", 123, null, test_entity]:
+    plugin_native_types::union_optional_1(value=val)     # type value: Union[None, int, str, Entity]
+    plugin_native_types::union_optional_2(value=val)     # type value: Optional[Union[int, str, Entity]]
+    plugin_native_types::union_optional_3(value=val)     # type value: Union[int, str, Entity] | None
+    plugin_native_types::union_optional_4(value=val)     # type value: None | Union[int, str, Entity]
 end
 
 # Union types (return value)
 plugin_native_types::union_return_single_type(value="test")     # type return value: Union[str]
 plugin_native_types::union_return_multiple_types(value="test")  # type return value: Union[str, int]
 plugin_native_types::union_return_multiple_types(value=123)     # type return value: Union[str, int]
-for val in ["test", 123, null]:
-    plugin_native_types::union_return_optional_1(value=val)     # type return value: Union[None, int, str]
-    plugin_native_types::union_return_optional_2(value=val)     # type return value: Optional[Union[int, str]]
-    plugin_native_types::union_return_optional_3(value=val)     # type return value: Union[int, str] | None
-    plugin_native_types::union_return_optional_4(value=val)     # type return value: None | Union[int, str]
+for val in ["test", 123, null, test_entity]:
+    plugin_native_types::union_return_optional_1(value=val)     # type return value: Union[None, int, str, Entity]
+    plugin_native_types::union_return_optional_2(value=val)     # type return value: Optional[Union[int, str, Entity]]
+    plugin_native_types::union_return_optional_3(value=val)     # type return value: Union[int, str, Entity] | None
+    plugin_native_types::union_return_optional_4(value=val)     # type return value: None | Union[int, str, Entity]
 end
 
 # Annotated types
 plugin_native_types::annotated_arg_entity(test_entity)     # type value: Annotated[MyEntity, ModelType["TestEntity"]]
 plugin_native_types::annotated_return_entity(test_entity)  # type return value: Annotated[MyEntity, ModelType["TestEntity"]]
+# Entity: typing.TypeAlias = typing.Annotated[Any, ModelType["std::Entity"]]
+plugin_native_types::type_entity_arg(test_entity)          # type value: Entity
+plugin_native_types::type_entity_return(test_entity)       # type return value: Entity
 
 for val in ["yes", "no"]:
     plugin_native_types::annotated_arg_literal(val)        # type value: Annotated[Literal["yes", "no"], ModelType["response"]]
@@ -550,25 +553,25 @@ end
             "union_optional_1",
             1.2,
             f"Value 1.2 for argument value of plugin {ns}::union_optional_1 has incompatible type."
-            f" Expected type: Union[int,string]?",
+            f" Expected type: Union[int,string,Type]?",
         ),
         (
             "union_optional_2",
             1.2,
             f"Value 1.2 for argument value of plugin {ns}::union_optional_2 has incompatible type."
-            f" Expected type: Union[int,string]?",
+            f" Expected type: Union[int,string,Type]?",
         ),
         (
             "union_optional_3",
             1.2,
             f"Value 1.2 for argument value of plugin {ns}::union_optional_3 has incompatible type."
-            f" Expected type: Union[int,string]?",
+            f" Expected type: Union[int,string,Type]?",
         ),
         (
             "union_optional_4",
             1.2,
             f"Value 1.2 for argument value of plugin {ns}::union_optional_4 has incompatible type."
-            f" Expected type: Union[int,string]?",
+            f" Expected type: Union[int,string,Type]?",
         ),
         (
             "annotated_arg_entity",
@@ -617,7 +620,7 @@ end
             1.2,
             (
                 f"Return value 1.2 of plugin {ns}::union_return_optional_1 has incompatible type."
-                " Expected type: Union[int,string]?"
+                " Expected type: Union[int,string,Type]?"
             ),
         ),
         (
@@ -625,7 +628,7 @@ end
             1.2,
             (
                 f"Return value 1.2 of plugin {ns}::union_return_optional_2 has incompatible type."
-                " Expected type: Union[int,string]?"
+                " Expected type: Union[int,string,Type]?"
             ),
         ),
         (
@@ -633,7 +636,7 @@ end
             1.2,
             (
                 f"Return value 1.2 of plugin {ns}::union_return_optional_3 has incompatible type."
-                " Expected type: Union[int,string]?"
+                " Expected type: Union[int,string,Type]?"
             ),
         ),
         (
@@ -641,7 +644,7 @@ end
             1.2,
             (
                 f"Return value 1.2 of plugin {ns}::union_return_optional_4 has incompatible type."
-                " Expected type: Union[int,string]?"
+                " Expected type: Union[int,string,Type]?"
             ),
         ),
         (
