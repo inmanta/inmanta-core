@@ -446,7 +446,8 @@ def test_inferred_signatures_logging(snippetcompiler: "SnippetCompilationTest", 
         snippetcompiler.setup_for_snippet(
             """
 import plugin_native_types
-            """
+            """,
+            ministd=True,
         )
         compiler.do_compile()
 
@@ -520,10 +521,6 @@ end
 # Annotated types
 plugin_native_types::annotated_arg_entity(test_entity)     # type value: Annotated[MyEntity, ModelType["TestEntity"]]
 plugin_native_types::annotated_return_entity(test_entity)  # type return value: Annotated[MyEntity, ModelType["TestEntity"]]
-plugin_native_types::nested_annotated_arg_entity(test_entity)
-    # type value: Annotated[AnotherEntity, ModelType["plugin_native_types::TestEntity"]]
-plugin_native_types::nested_annotated_return_entity(test_entity)
-    # type return value: Annotated[AnotherEntity, ModelType["plugin_native_types::TestEntity"]]
 
 for val in ["yes", "no"]:
     plugin_native_types::annotated_arg_literal(val)        # type value: Annotated[Literal["yes", "no"], ModelType["response"]]

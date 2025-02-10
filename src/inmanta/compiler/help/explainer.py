@@ -27,7 +27,7 @@ from typing import Generic, Optional, TypeVar, get_type_hints
 from jinja2 import Environment, PackageLoader
 
 import inmanta
-from inmanta.ast import CompilerException, DataClassMismatchException, ModifiedAfterFreezeException, Range
+from inmanta.ast import CompilerException, DataClassMismatchException, ModifiedAfterFreezeException
 from inmanta.ast.statements import AssignStatement
 from inmanta.ast.statements.generator import Constructor, IndexCollisionException
 from inmanta.execute.runtime import OptionVariable
