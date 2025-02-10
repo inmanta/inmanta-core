@@ -786,10 +786,6 @@ When a development release is done using the \--dev option, this command:
         :param sdist: True iff build a sdist package.
         :returns: A list of paths to the distribution packages that were built.
         """
-        if not wheel and not sdist:
-            # Only build wheels by default for backwards compatibility.
-            wheel = True
-
         if path is not None:
             path = os.path.abspath(path)
         else:
@@ -804,6 +800,7 @@ When a development release is done using the \--dev option, this command:
 
         distributions_to_build: Sequence[Literal["wheel", "sdist"]]
         if wheel is sdist:
+            # Build sdist and wheel by default or if both wheel and sdist are set.
             distributions_to_build = ["wheel", "sdist"]
         elif wheel:
             distributions_to_build = ["wheel"]
