@@ -727,7 +727,8 @@ class Entity(NamedType, WithComment):
          i.e. instances of the associated dataclass
         """
         assert self._paired_dataclass is not None  # make mypy happy
-        assert isinstance(value, self._paired_dataclass)
+        # TODO: or reference!
+        #        assert isinstance(value, self._paired_dataclass)
 
         def convert_none(x: object | None) -> object:
             return x if x is not None else NoneValue()

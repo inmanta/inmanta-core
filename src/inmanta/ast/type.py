@@ -31,7 +31,9 @@ from inmanta.ast import (
     Namespace,
     NotFoundException,
     RuntimeException,
+    TypingException,
 )
+from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.references import Reference
 from inmanta.stable_api import stable_api
@@ -141,7 +143,7 @@ class Type(Locatable):
         should only be called if has_custom_to_python is True
         the instance must be valid according to the validate method
         """
-        raise NotImplementedError(f"Not implemented for {self}")
+        return instance
 
     def __eq__(self, other: object) -> bool:
         if type(self) != Type:  # noqa: E721
@@ -154,10 +156,11 @@ class Type(Locatable):
 
 
 class ReferenceType(Type):
-    """ A reference object """
+    """A reference object"""
 
     def __init__(self, element_type: Type) -> None:
         super().__init__()
+        assert not isinstance(element_type, ReferenceType)
         self.element_type = element_type
 
     def validate(self, value: Optional[object]) -> bool:
@@ -165,7 +168,12 @@ class ReferenceType(Type):
             # TODO: subtype check
             return True
 
-        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+        try:
+            # ClEANUP" added for instances
+
+            return self.element_type.validate(value)
+        except RuntimeException:
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
     def type_string(self) -> Optional[str]:
         return self.element_type.type_string()
@@ -200,7 +208,9 @@ class ReferenceType(Type):
 
     def to_python(self, instance: object) -> "object":
         # TODO???
-        raise NotImplementedError()
+        if isinstance(instance, Reference):
+            return instance
+        return DynamicProxy.return_value(instance)
 
     def __eq__(self, other: object) -> bool:
         return super().__eq__(other)
@@ -208,11 +218,12 @@ class ReferenceType(Type):
     def __hash__(self) -> int:
         return super().__hash__()
 
+
 class OrReferenceType(ReferenceType):
 
     def validate(self, value: Optional[object]) -> bool:
         try:
-            return  self.element_type.validate(value)
+            return self.element_type.validate(value)
         except RuntimeException:
             pass
 
@@ -243,11 +254,15 @@ class OrReferenceType(ReferenceType):
             # todo: bit sloppy?
             if not any(self.element_type.corresponds_to(sub_type) for sub_type in type.types):
                 return False
-            if not any(isinstance(sub_type, ReferenceType) and self.element_type.corresponds_to(sub_type.element_type) for sub_type in type.types):
+            if not any(
+                isinstance(sub_type, ReferenceType) and self.element_type.corresponds_to(sub_type.element_type)
+                for sub_type in type.types
+            ):
                 return False
             return True
         if isinstance(type, ReferenceType):
             return self.element_type.corresponds_to(type.element_type)
+
 
 class NamedType(Type, Named):
     def get_double_defined_exception(self, other: "NamedType") -> "DuplicateException":
@@ -902,8 +917,20 @@ class Union(Type):
         return " | ".join(effective_types)
 
     def has_custom_to_python(self) -> bool:
-        # If we mix convertible and non convertible, it won't work, so we avoid it
-        return False
+        # TODO: this will be pain
+        return any(tp.has_custom_to_python() for tp in self.types)
+
+    def to_python(self, instance: object) -> "object":
+        for tp in self.types:
+            try:
+                if tp.validate(instance):
+                    if tp.has_custom_to_python():
+                        return tp.to_python(instance)
+                    else:
+                        return DynamicProxy.return_value(instance)
+            except RuntimeException:
+                pass
+        assert False
 
     def corresponds_to(self, type: Type) -> bool:
         raise NotImplementedError("No unions can be specified as attributes, unexpected usage")

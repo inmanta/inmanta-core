@@ -38,12 +38,12 @@ class StringReference(Reference[str]):
 
 
 @plugin
-def create_bool_reference(name: "any") -> "bool":
+def create_bool_reference(name: Reference[str] | str) -> Reference[bool]:
     return BoolReference(name=name)
 
 
 @plugin
-def create_string_reference(name: "any") -> "string":
+def create_string_reference(name: Reference[str] | str) -> Reference[str]:
     return StringReference(name=name)
 
 

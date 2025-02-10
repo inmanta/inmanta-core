@@ -311,11 +311,13 @@ python_to_model = {
     object: inmanta_type.Any(),
 }
 
+
 def _convert_to_reference(python_type: type[object], origin: type[object]) -> inmanta_type.Type | None:
     if issubclass(origin, Reference):
         args = typing.get_args(python_type)
         return ReferenceType(to_dsl_type(args[0]))
     return None
+
 
 def _convert_origin_to_dsl_type(python_type: type[object], origin: type[object]) -> inmanta_type.Type | None:
     # dict
@@ -395,7 +397,7 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     if typing_inspect.is_generic_type(python_type):
         origin = typing.get_origin(python_type)
         if origin is not None:
-            out =  _convert_origin_to_dsl_type(python_type, origin)
+            out = _convert_origin_to_dsl_type(python_type, origin)
             if out is not None:
                 return out
         else:
@@ -423,7 +425,6 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
                 out = _convert_to_reference(base, origin)
                 if out is not None:
                     return out
-
 
     # TODO annotated types
     # if typing.get_origin(t) is typing.Annotated:
@@ -642,10 +643,8 @@ class PluginReturn(PluginValue):
 
     def resolve_type(self, plugin: "Plugin", resolver: Namespace) -> inmanta_type.Type:
         out = super().resolve_type(plugin, resolver)
-        out = OrReferenceType(out)
         self._resolved_type = out
         return out
-
 
 
 @dataclasses.dataclass

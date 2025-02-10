@@ -251,7 +251,14 @@ def collect_references(value_reference_collector: ReferenceCollector, value: obj
             value_reference_collector.add_reference(path, value)
             return None
 
-        case proxy.DynamicProxy() | util.Unknown():
+        case proxy.DynamicProxy():
+            inner_value = proxy.DynamicProxy.unwrap(value)
+            if isinstance(inner_value, references.Reference):
+                value_reference_collector.add_reference(path, inner_value)
+                return None
+            else:
+                raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
+        case util.Unknown():
             raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
 
         case _:

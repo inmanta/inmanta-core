@@ -1,19 +1,19 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import abc
@@ -32,6 +32,7 @@ import typing_inspect
 
 import inmanta
 from inmanta import util
+from inmanta.execute import proxy
 from inmanta.util import dict_path
 
 ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z0-9_]+::)+[A-Z][A-z0-9_-]*$")]
@@ -186,26 +187,25 @@ class Base:
 
     def serialize_arguments(self) -> Tuple[uuid.UUID, list[ArgumentTypes]]:
         """Serialize the arguments to this class"""
-        parameters = inspect.get_annotations(type(self).__init__, eval_str=True)
         arguments: list[ArgumentTypes] = []
         for name, value in self._arguments.items():
-            param_type = parameters.get(name)
-            match name, value, param_type:
-                case _, str() | int() | float() | bool(), _:
+            match name, value:
+                case _, str() | int() | float() | bool():
                     arguments.append(LiteralArgument(name=name, value=value))
 
-                case _, Reference(), _:
+                case _, Reference():
                     model = value.serialize()
                     arguments.append(ReferenceArgument(name=name, id=model.id))
 
-                case "resource", _, inmanta.resources.Resource:
+                case "resource", inmanta.resources.Resource():
+                    # TODO: ensure which resource
                     arguments.append(ResourceArgument(name=name))
 
-                case _, type(), _ if value in [str, float, int, bool]:
+                case _, type() if value in [str, float, int, bool]:
                     arguments.append(PythonTypeArgument(name=name, value=value.__name__))
 
                 case _:
-                    raise TypeError(f"Unable to serialize argument `{name}` of `{self}`")
+                    raise TypeError(f"Unable to serialize argument `{name}` of `{self}` with value {value}")
 
         data = json.dumps({"type": self.type, "args": arguments}, default=util.api_boundary_json_encoder, sort_keys=True)
         hasher = hashlib.md5()
@@ -280,6 +280,7 @@ class DataclassReference[T: DataclassProtocol](Reference[T], metaclass=Dataclass
     @classmethod
     def get_dataclass_type(cls) -> type[DataclassProtocol]:
         """Get the dataclass type that the reference points to"""
+        # TODO....
         for g in cls.__orig_bases__:  # type: ignore
             if typing_inspect.is_generic_type(g):
                 for arg in typing.get_args(g):
@@ -299,12 +300,18 @@ class DataclassReference[T: DataclassProtocol](Reference[T], metaclass=Dataclass
         if name == DATACLASS_FIELDS:
             return getattr(dc_type, DATACLASS_FIELDS)
 
+        # IF we are in the compiler
+        dc_type_inm = proxy.get_inmanta_type_for_dataclass(dc_type)
+        if not dc_type_inm:
+            # TODO: is this what we want?
+            raise AttributeError(name=name, obj=self)
+
         fields = {f.name: f for f in dataclasses.fields(dc_type)}
         if name in fields:
             return AttributeReference(
                 reference=self,
                 attribute_name=name,
-                attribute_type=typing.cast(type[PrimitiveTypes], fields[name].type),
+                attribute_type=dc_type_inm.get_attribute(name).get_type(),
             )
 
         raise AttributeError(name=name, obj=self)
@@ -401,9 +408,13 @@ class AttributeReference[T: PrimitiveTypes](Reference[T]):
         self,
         reference: DataclassProtocol | DataclassReference[DataclassProtocol],
         attribute_name: str,
-        attribute_type: typing.Type[T],
+        attribute_type: "inm_type.Type | str",  # TODO
     ) -> None:
-        super().__init__(reference=reference, attribute_name=attribute_name, attribute_type=attribute_type)
+        if not isinstance(attribute_type, str):
+            attr_str = attribute_type.type_string()
+        else:
+            attr_str = attribute_type
+        super().__init__(reference=reference, attribute_name=attribute_name, attribute_type=attr_str)
         self.attribute_name = attribute_name
         self.attribute_type = attribute_type
         self.reference = reference

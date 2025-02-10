@@ -19,7 +19,7 @@ Contact: code@inmanta.com
 from typing import Optional, Tuple
 
 from inmanta.ast import CompilerException, Locatable, Location, RuntimeException, TypingException
-from inmanta.ast.type import NullableType, TypedList, OrReferenceType
+from inmanta.ast.type import NullableType, OrReferenceType, TypedList
 from inmanta.execute import runtime
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api

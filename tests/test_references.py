@@ -1,19 +1,19 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import json
@@ -63,9 +63,9 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
     serialized = res_dict.popitem()[1].serialize()
 
     # validate that our UUID is stable
-    assert_id(serialized["references"], "refs::Bool", "207f236b-43ea-36e3-b5a2-998117929c04")
+    assert_id(serialized["references"], "refs::Bool", "df48aeb8-0534-3ddc-b288-f1aefe929c7f")
     assert_id(serialized["references"], "refs::TestReference", "78d7ff5f-6309-3011-bfff-8068471d5761")
-    assert_id(serialized["references"], "core::AttributeReference", "a2a6c977-699f-3294-8e53-9d4d101b6b72")
+    assert_id(serialized["references"], "core::AttributeReference", "111aa3be-c79b-3bb7-9097-7568031357fc")
     assert_id(serialized["references"], "refs::String", "a8ed8c4f-204a-3f7e-a630-e21cb20e9209")
 
     data = json.dumps(serialized, default=util.api_boundary_json_encoder)
@@ -99,7 +99,7 @@ def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_d
 
 
 def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
-    """Test that references are rejected in expressions """
+    """Test that references are rejected in expressions"""
     refs_module = os.path.join(modules_v2_dir, "refs")
 
     snippetcompiler.setup_for_snippet(
