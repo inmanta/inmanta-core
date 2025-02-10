@@ -1007,7 +1007,7 @@ def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Type:
     :param resolver: The namespace that can be used to resolve the type expression
     """
     # quickfix issue #1774
-    allowed_element_type: Type = Type()
+    allowed_element_type: Type = Any()
     if locatable_type.value == "list":
         return List()
     if locatable_type.value == "dict":
