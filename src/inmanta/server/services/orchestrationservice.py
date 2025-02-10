@@ -1185,7 +1185,7 @@ class OrchestrationService(protocol.ServerSlice):
             await self.autostarted_agent_manager._ensure_scheduler(env.id)
             agent = const.AGENT_SCHEDULER_ID
 
-            client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
+            client = self.agentmanager_service.get_agent_client(env.id)
             if client is not None:
                 self.add_background_task(client.trigger_read_version(env.id))
             else:
@@ -1228,7 +1228,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         await self.autostarted_agent_manager._ensure_scheduler(env.id)
 
-        client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
+        client = self.agentmanager_service.get_agent_client(env.id)
         if not client:
             return attach_warnings(404, {"message": "Scheduler could not be reached"}, warnings)
 
@@ -1323,7 +1323,7 @@ class OrchestrationService(protocol.ServerSlice):
         except Exception:
             raise ServerError(f"Scheduler in environment {env.id} failed to start.")
         else:
-            client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
+            client = self.agentmanager_service.get_agent_client(env.id)
 
             if client is None:
                 raise NotFound(message=f"No scheduler is running for environment {env.id}.")

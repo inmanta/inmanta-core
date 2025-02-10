@@ -1214,7 +1214,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         self,
         environment: data.Environment,
         limit: Optional[int] = None,
-        sort: str = "resource_type.desc",
+        sort: str = "name.desc",
         start: Optional[Union[datetime, bool, str]] = None,
         end: Optional[Union[datetime, bool, str]] = None,
         first_id: Optional[str] = None,
@@ -1265,10 +1265,9 @@ class AgentView(DataView[AgentOrder, model.Agent]):
                                                  THEN 'paused'
                                              WHEN EXISTS(
                                                  SELECT 1
-                                                 FROM {data.Agent.table_name()} AS a_inner
+                                                 FROM {data.SchedulerSession.table_name()} AS a_inner
                                                  WHERE a_inner.environment=$1
-                                                       AND a_inner.name=$2
-                                                       AND a_inner.id_primary IS NOT NULL
+                                                       AND a_inner.expired IS NULL
                                              )
                                                  THEN 'up'
                                                  ELSE 'down'

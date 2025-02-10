@@ -36,7 +36,7 @@ async def test_agent_process_cleanup(server, environment, agent_factory):
     await a2.stop()
 
     async def _wait_until_expire_is_finished():
-        result = await data.AgentProcess.get_list()
+        result = await data.SchedulerSession.get_list()
         return len([r for r in result if r.expired is not None]) == 2
 
     await retry_limited(_wait_until_expire_is_finished, timeout=10)
@@ -44,7 +44,7 @@ async def test_agent_process_cleanup(server, environment, agent_factory):
     agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
     await agent_manager._purge_agent_processes()
     # Assert cleanup
-    result = await data.AgentProcess.get_list()
+    result = await data.SchedulerSession.get_list()
     assert len(result) == 1
 
 
