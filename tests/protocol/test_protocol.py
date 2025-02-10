@@ -302,7 +302,7 @@ async def test_call_arguments_defaults():
 
     method = protocol.common.UrlMethod(
         protocol.common.MethodProperties.methods["test_method"][0],
-        protocol.endpoints.CallTarget(),
+        protocol.common.CallTarget(),
         test_method,
         "test_method",
     )
@@ -338,7 +338,7 @@ async def test_pydantic():
 
     method = protocol.common.UrlMethod(
         protocol.common.MethodProperties.methods["test_method"][0],
-        protocol.endpoints.CallTarget(),
+        protocol.common.CallTarget(),
         test_method,
         "test_method",
     )

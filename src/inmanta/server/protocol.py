@@ -448,5 +448,5 @@ class LocalClient(TypedClient):
     ) -> common.Result:
         spec = method_properties.build_call(args, kwargs)
         method_config = self._get_op_mapping(spec.url, spec.method)
-        response = await self._server._transport._execute_call(method_config, spec.body, spec.headers)
-        return self._process_response(method_properties, common.Result(code=response.status_code, result=response.body))
+        response = await inmanta.protocol.rest.execute_call(method_config, spec.body, spec.headers)
+        return common.typed_process_response(method_properties, common.Result(code=response.status_code, result=response.body))

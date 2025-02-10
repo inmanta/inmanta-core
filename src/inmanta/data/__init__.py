@@ -3107,7 +3107,7 @@ class SchedulerSession(BaseDocument):
     async def register(
         cls,
         env: uuid.UUID,
-        nodename: str,
+        hostname: str,
         sid: uuid.UUID,
         now: datetime.datetime,
         connection: Optional[asyncpg.connection.Connection] = None,
@@ -3115,7 +3115,7 @@ class SchedulerSession(BaseDocument):
         """
         Update the last_seen parameter of the process and mark as not expired.
         """
-        proc = cls(hostname=nodename, environment=env, first_seen=now, sid=sid)
+        proc = cls(hostname=hostname, environment=env, first_seen=now, sid=sid)
         await proc.insert(connection=connection)
 
     @classmethod
@@ -3186,7 +3186,6 @@ class SchedulerSession(BaseDocument):
             hostname=self.hostname,
             environment=self.environment,
             first_seen=self.first_seen,
-            last_seen=self.last_seen,
             expired=self.expired,
         )
 

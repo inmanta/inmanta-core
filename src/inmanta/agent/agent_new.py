@@ -71,8 +71,6 @@ class Agent(SessionEndpoint):
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
         self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self.session.get_client())
         self.working = False
-        self.add_end_point_name(AGENT_SCHEDULER_ID)
-
         self._client = self.session.get_client()
 
     async def start(self) -> None:

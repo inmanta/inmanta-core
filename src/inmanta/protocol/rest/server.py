@@ -250,7 +250,7 @@ class WebsocketHandler(tornado_websocket.WebSocketHandler, websocket.WebsocketFr
         await self._server.register_session(session)
 
     async def on_close_session(self, session: websocket.Session) -> None:
-        await self._server.close_session(session)
+        await self._server.notify_close_session(session)
 
     async def on_pong(self, data: bytes) -> None:
         """Called when we get a response to our ping"""
@@ -259,6 +259,11 @@ class WebsocketHandler(tornado_websocket.WebSocketHandler, websocket.WebsocketFr
     async def on_close(self) -> None:
         """Called when the websocket closes"""
         await self.close_session()
+
+    async def close_connection(self) -> None:
+        """ Close the connection that is linked to a session """
+        await super().close_connection()
+        self.close()
 
 
 class RESTServer(RESTBase):
@@ -293,7 +298,7 @@ class RESTServer(RESTBase):
         if self.inflight_counter == 0:
             self.idle_event.set()
 
-    def get_global_url_map(self, targets: list[common.CallTarget]) -> dict[str, dict[str, common.UrlMethod]]:
+    def get_global_url_map(self, targets: Sequence[common.CallTarget]) -> dict[str, dict[str, common.UrlMethod]]:
         global_url_map: dict[str, dict[str, common.UrlMethod]] = defaultdict(dict)
         for slice in targets:
             url_map = slice.get_op_mapping()
@@ -309,6 +314,7 @@ class RESTServer(RESTBase):
         """
         global_url_map: dict[str, dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
 
+        # TODO: add constant for url
         rules: list[routing.Rule] = [routing.Rule(routing.PathMatches("/v2/ws"), WebsocketHandler, {"transport": self})]
         rules.extend(additional_rules)
 
@@ -372,16 +378,16 @@ class RESTServer(RESTBase):
         self._sessions[session.session_key] = session
 
         for listener in self.listeners:
-            await listener.open(session)
+            await listener.session_opened(session)
 
-    async def close_session(self, session: websocket.Session) -> None:
+    async def notify_close_session(self, session: websocket.Session) -> None:
         if session.session_key not in self._sessions:
             return
 
         del self._sessions[session.session_key]
 
         for listener in self.listeners:
-            await listener.close(session)
+            await listener.session_closed(session)
 
     def get_session(self, environment_id: uuid.UUID, session_name: str) -> websocket.Session:
         """Get the requested session"""

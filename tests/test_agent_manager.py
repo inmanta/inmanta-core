@@ -37,9 +37,9 @@ from inmanta.data.dataview import AgentView
 from inmanta.protocol import Result, handle, typedmethod
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, protocol
-from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager, SessionAction, SessionManager
+from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager, SessionAction
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import ServerSlice, Session
+from inmanta.server.protocol import ServerSlice
 from utils import UNKWN, NullAgent, assert_equal_ish, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -81,19 +81,16 @@ class MockSession:
     An environment that segments agents connected to the server
     """
 
-    def __init__(self, sid, tid, endpoint_names: set[str], nodename):
-        self._sid = sid
-        self.tid = tid
-        self.endpoint_names = endpoint_names
-        self.nodename = nodename
+    def __init__(self, tid, session_name, hostname):
+        self.id = uuid4()
+        self.environment = tid
+        self.session_name = session_name
+        self.hostname = hostname
+        self.session_key = (self.environment, self.session_name)
         self.client = Mock()
         self.client.set_state.side_effect = empty_future
         self.client.get_status = api_call_future
 
-    def get_id(self):
-        return self._sid
-
-    id = property(get_id)
 
     def get_client(self):
         return self.client
@@ -177,19 +174,19 @@ async def test_api(init_dataclasses_and_load_schema):
     am.running = True
 
     # one session
-    ts1 = MockSession(uuid4(), env.id, {"agent1", "agent2"}, "ts1")
+    ts1 = MockSession(env.id, "agent1", "localhost")
     await am._register_session(ts1, datetime.datetime.now())
     # # second session: no allow anymore
     # ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
     # await am._register_session(ts2,  datetime.datetime.now())
     # third session
-    ts3 = MockSession(uuid4(), env3.id, ["agentx"], "ts3")
+    ts3 = MockSession(env3.id, "agentx", "localhost")
     await am._register_session(ts3, datetime.datetime.now())
     # fourth session
-    ts4 = MockSession(uuid4(), env4.id, {"agent1", "agent2"}, "ts4")
+    ts4 = MockSession(env4.id, "agent2", "localhost")
     await am._register_session(ts4, datetime.datetime.now())
     # fifth session
-    ts5 = MockSession(uuid4(), env5.id, {"agent1"}, "ts5")
+    ts5 = MockSession(env5.id, "agent1", "localhost")
     await am._register_session(ts5, datetime.datetime.now())
 
     await futures.proccess()
@@ -229,28 +226,28 @@ async def test_api(init_dataclasses_and_load_schema):
             {
                 "first_seen": UNKWN,
                 "expired": None,
-                "hostname": "ts1",
+                "hostname": "localhost",
                 "endpoints": [],
                 "environment": env.id,
             },
             {
                 "first_seen": UNKWN,
                 "expired": None,
-                "hostname": "ts3",
+                "hostname": "localhost",
                 "endpoints": [],
                 "environment": env3.id,
             },
             {
                 "first_seen": UNKWN,
                 "expired": None,
-                "hostname": "ts4",
+                "hostname": "localhost",
                 "endpoints": [],
                 "environment": env4.id,
             },
             {
                 "first_seen": UNKWN,
                 "expired": expiration,
-                "hostname": "ts5",
+                "hostname": "localhost",
                 "endpoints": [],
                 "environment": env5.id,
             },
@@ -288,7 +285,7 @@ async def test_api(init_dataclasses_and_load_schema):
             {
                 "first_seen": UNKWN,
                 "expired": None,
-                "hostname": "ts1",
+                "hostname": "localhost",
                 "endpoints": [],
                 "environment": env.id,
             }

@@ -15,9 +15,10 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
-
+import abc
 import asyncio
 import logging
+import socket
 import time
 import uuid
 from typing import Annotated, Any, Callable, Coroutine, Literal, Optional, Tuple
@@ -41,29 +42,30 @@ class Session:
         self,
         environment_id: uuid.UUID,
         session_name: str,
-        node_name: str,
-        endpoint_names: list[str],
+        hostname: str,
         websocket_protocol: "WebsocketFrameDecoder",
     ) -> None:
         self._seen: float = 0
         self._environment_id = environment_id
         self._session_name = session_name
+        self._hostname = hostname
         self._closed = False
         self._confirmed = False
-
-        # migration
-        self._node_name = node_name
-        self._endpoint_names = endpoint_names
+        self._id = uuid.uuid4()
 
         self.websocket_protocol = websocket_protocol
 
     @property
-    def nodename(self) -> str:
-        return self._node_name
-
-    @property
     def environment(self) -> uuid.UUID:
         return self._environment_id
+
+    @property
+    def hostname(self) -> str:
+        return self._hostname
+
+    @property
+    def id(self) -> uuid.UUID:
+        return self._id
 
     @property
     def active(self) -> bool:
@@ -78,8 +80,7 @@ class Session:
             OpenSession(
                 environment_id=self._environment_id,
                 session_name=self._session_name,
-                node_name=self._node_name,
-                endpoint_names=self._endpoint_names,
+                hostname=self._hostname,
             ).model_dump_json()
         )
 
@@ -104,6 +105,9 @@ class Session:
     def get_typed_client(self) -> endpoints.TypedClient:
         """Get a typed client to communicate with the endpoint on the other side of the session"""
         return _SessionClient(self, True)
+
+    async def close_connection(self) -> None:
+        await self.websocket_protocol.close_connection()
 
 
 class _SessionClient:
@@ -138,10 +142,10 @@ class _SessionClient:
 
 
 class SessionListener:
-    async def open(self, session: Session) -> None:
+    async def session_opened(self, session: Session) -> None:
         pass
 
-    async def close(self, session: Session) -> None:
+    async def session_closed(self, session: Session) -> None:
         pass
 
 
@@ -155,8 +159,7 @@ class OpenSession(WSMessage):
     action: Literal["OPEN_SESSION"] = "OPEN_SESSION"
     environment_id: uuid.UUID
     session_name: str
-    node_name: str
-    endpoint_names: list[str]
+    hostname: str
 
 
 class SessionOpened(WSMessage):
@@ -342,7 +345,10 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                 # session open request: normally only initiated by the client and received by the server
                 # TODO: handle duplicate sessions
                 self._session = Session(
-                    msg.environment_id, msg.session_name, msg.node_name, msg.endpoint_names, websocket_protocol=self
+                    environment_id=msg.environment_id,
+                    session_name=msg.session_name,
+                    hostname=msg.hostname,
+                    websocket_protocol=self,
                 )
                 await self.on_open_session(self._session)
                 self._session.confirm_open()
@@ -393,7 +399,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                     future.set_result(common.Result(code=msg.code, result=msg.result))
 
     async def close_session(self):
-        """Close the session linked with the decoder. Call this method when the connection closes."""
+        """Close the session linked with the decoder. Call this method when the connection closes. """
         if self._session is None or self._session.is_closed():
             return
 
@@ -417,8 +423,15 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
     async def write_message(self, message: str | bytes, binary: bool = False) -> None:
         """Write the message in the correct transport"""
 
-    def create_session(self, environment_id: uuid.UUID, session_name: str, node_name: str, endpoint_names: list[str]) -> None:
-        self._session = Session(environment_id, session_name, node_name, endpoint_names, websocket_protocol=self)
+    def create_session(self, environment_id: uuid.UUID, session_name: str) -> None:
+        self._session = Session(
+            environment_id=environment_id, session_name=session_name, hostname=socket.gethostname(), websocket_protocol=self
+        )
+
+    async def close_connection(self) -> None:
+        """ Close the connection that belongs to this session and the session itself """
+        await self.close_session()
+        await self.write_message(CloseSession().model_dump_json())
 
 
 class WebSocketClientConnection(websocket.WebSocketClientConnection):
@@ -456,9 +469,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
 
         self.create_session(
             environment_id=self.environment,
-            session_name="test",
-            node_name="localhost",
-            endpoint_names=list(self.end_point_names),
+            session_name=self.name,
         )
 
     def get_environment(self) -> uuid.UUID:
@@ -553,3 +564,7 @@ class SessionEndpoint(endpoints.Endpoint, common.CallTarget, WebsocketFrameDecod
                     pass
         except asyncio.CancelledError:
             pass
+
+    async def close_connection(self) -> None:
+        await super().close_connection()
+        self._ws_client.close()

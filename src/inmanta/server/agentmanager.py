@@ -24,12 +24,11 @@ import sys
 import time
 import uuid
 from asyncio import queues, subprocess
-from collections.abc import Iterable, Iterator, Mapping, Sequence, Set
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from enum import Enum
 from functools import reduce
 from typing import Any, Optional, Union, cast
-from uuid import UUID
 
 import asyncpg.connection
 
@@ -40,10 +39,10 @@ from inmanta import config as global_config
 from inmanta import const, data, tracing
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config, config_map_to_str, scheduler_log_config
-from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
+from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction
 from inmanta.data import APILIMIT, Environment, InvalidSort, model
 from inmanta.data.model import DataBaseReport
-from inmanta.protocol import encode_token, handle, methods, methods_v2, websocket, common
+from inmanta.protocol import common, encode_token, endpoints, handle, methods, methods_v2, websocket
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -151,15 +150,13 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         # session per environment
         self.scheduler_for_env: dict[uuid.UUID, websocket.Session] = {}
         # all sessions per ID
-        self.sessions: dict[UUID, websocket.Session] = {}
+        self.sessions: dict[uuid.UUID, websocket.Session] = {}
 
         # session lock
         self.session_lock = asyncio.Lock()
 
         # live sessions: Sessions to agents which are primary and unpaused
-        self.tid_endpoint_to_session: dict[tuple[UUID, str], protocol.Session] = {}
-        # All endpoints associated with a sid
-        self.endpoints_for_sid: dict[uuid.UUID, set[str]] = {}
+        self.tid_endpoint_to_session: dict[tuple[uuid.UUID, str], websocket.Session] = {}
 
         # This queue ensures that notifications from the SessionManager are processed in the same order
         # in which they arrive in the SessionManager, without blocking the SessionManager.
@@ -179,7 +176,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         schedulers = self.get_all_schedulers()
         deadline = 0.9 * Server.GET_SERVER_STATUS_TIMEOUT
 
-        async def get_report(env: uuid.UUID, session: protocol.Session) -> tuple[uuid.UUID, DataBaseReport]:
+        async def get_report(env: uuid.UUID, session: websocket.Session) -> tuple[uuid.UUID, DataBaseReport]:
             result = await asyncio.wait_for(session.client.get_db_status(), deadline)
             assert result.code == 200
             # Mypy can't help here, ....
@@ -239,9 +236,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
         assert isinstance(autostarted_agent_manager, AutostartedAgentManager)
         self._autostarted_agent_manager = autostarted_agent_manager
-        presession = server.get_slice(SLICE_SESSION_MANAGER)
-        assert isinstance(presession, SessionManager)
-        presession.add_listener(self)
+        server._transport.add_session_listener(self)
 
     async def start(self) -> None:
         await super().start()
@@ -263,7 +258,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
     async def stop(self) -> None:
         await super().stop()
 
-    def get_all_schedulers(self) -> list[tuple[uuid.UUID, protocol.Session]]:
+    def get_all_schedulers(self) -> list[tuple[uuid.UUID, websocket.Session]]:
         # Linear scan, but every item should be a hit
         return list(self.scheduler_for_env.items())
 
@@ -385,7 +380,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
                 LOGGER.exception(
                     "An exception occurred while handling session action %s on session id %s.",
                     session_action.action_type.name,
-                    session_action.session.id,
+                    session_action.session.session_key,
                     exc_info=True,
                 )
             finally:
@@ -408,7 +403,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
             LOGGER.warning("Unknown SessionAction %s", action_type.name)
 
     # Notify from session listener
-    async def new_session(self, session: protocol.Session, endpoint_names_snapshot: set[str]) -> None:
+    async def session_opened(self, session: websocket.Session) -> None:
         """
         The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
         """
@@ -420,7 +415,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         await self._session_listener_actions.put(session_action)
 
     # Notify from session listener
-    async def expire(self, session: protocol.Session, endpoint_names_snapshot: set[str]) -> None:
+    async def session_closed(self, session: websocket.Session) -> None:
         """
         The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
         """
@@ -431,41 +426,33 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         )
         await self._session_listener_actions.put(session_action)
 
-    # Notify from session listener
-    async def seen(self, session: protocol.Session, endpoint_names_snapshot: set[str]) -> None:
-        """
-        The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
-        """
-        pass
-
     # Session registration
-    async def _register_session(self, session: protocol.Session, now: datetime) -> None:
+    async def _register_session(self, session: websocket.Session, now: datetime) -> None:
         """
         This method registers a new session in memory and asynchronously updates the agent
         session log in the database. When the database connection is lost, the get_statuses()
         call fails and the new session will be refused.
         """
-        LOGGER.debug("New session %s for agents %s on %s", session.id, session.tid, session.nodename)
+        LOGGER.debug("New session %s", session.session_key)
         async with self.session_lock:
-            assert session.tid not in self.scheduler_for_env
-            self.scheduler_for_env[session.tid] = session
+            assert session.id not in self.scheduler_for_env
+            self.scheduler_for_env[session.environment] = session
             self.sessions[session.id] = session
 
-        self.add_background_task(self._log_session_creation_to_db(session.tid, session, now))
+        self.add_background_task(self._log_session_creation_to_db(session, now))
 
     async def _log_session_creation_to_db(
         self,
-        tid: uuid.UUID,
-        session: protocol.Session,
+        session: websocket.Session,
         now: datetime,
     ) -> None:
         """
         Note: This method call is allowed to fail when the database connection is lost.
         """
-        await data.SchedulerSession.register(tid, session.nodename, session.id, now)
+        await data.SchedulerSession.register(session.environment, session.hostname, session.id, now)
 
     # Session expiry
-    async def _expire_session(self, session: protocol.Session, now: datetime) -> None:
+    async def _expire_session(self, session: websocket.Session, now: datetime) -> None:
         """
         This method expires the given session and update the in-memory session state.
         The in-database session log is updated asynchronously. These database updates
@@ -474,15 +461,14 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         if not self.is_running() or self.is_stopping():
             return
         async with self.session_lock:
-            self.scheduler_for_env.pop(session.tid)
+            self.scheduler_for_env.pop(session.environment)
             self.sessions.pop(session.id)
 
-        self.add_background_task(self._log_session_expiry_to_db(session.tid, session, now))
+        self.add_background_task(self._log_session_expiry_to_db(session, now))
 
     async def _log_session_expiry_to_db(
         self,
-        tid: uuid.UUID,
-        session: protocol.Session,
+        session: websocket.Session,
         now: datetime,
     ) -> None:
         """
@@ -502,7 +488,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         agent_processes_to_keep = opt.agent_processes_to_keep.get()
         await data.SchedulerSession.cleanup(nr_expired_records_to_keep=agent_processes_to_keep)
 
-    def get_session_for(self, tid: uuid.UUID) -> Optional[protocol.Session]:
+    def get_session_for(self, tid: uuid.UUID) -> Optional[websocket.Session]:
         """
         Return a session that matches the given environment and endpoint.
         This method also returns session to paused or non-live agents.
@@ -510,10 +496,10 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         session = self.scheduler_for_env.get(tid)
         return session
 
-    def get_agent_client(self, tid: uuid.UUID) -> Optional[common.ReturnClient]:
+    def get_agent_client(self, tid: uuid.UUID) -> Optional[endpoints.Client]:
         if isinstance(tid, str):
             tid = uuid.UUID(tid)
-        return self.scheduler_for_env.get(tid)
+        return self.scheduler_for_env.get(tid).get_client()
 
     async def expire_sessions_for_environment(self, env_id: uuid.UUID) -> None:
         """
@@ -522,7 +508,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         async with self.session_lock:
             session_to_expire = self.get_session_for(env_id)
             if session_to_expire is not None:
-                await session_to_expire.expire_and_abort(timeout=0)
+                await session_to_expire.close_connection()
 
     async def is_scheduler_active(self, tid: uuid.UUID) -> bool:
         """
@@ -530,22 +516,13 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         """
         return tid in self.scheduler_for_env
 
-    async def get_agent_active_status(self, tid: uuid.UUID, endpoints: Iterable[str]) -> list[tuple[str, bool]]:
-        """
-        Return a list of tuples where the first element of the tuple contains the name of an endpoint
-        and the second a boolean indicating where there is an active (up or paused) agent for that endpoint.
-        """
-        all_sids_for_env = [sid for (sid, session) in self.sessions.items() if session.tid == tid]
-        all_active_endpoints_for_env = {ep for sid in all_sids_for_env for ep in self.endpoints_for_sid[sid]}
-        return [(ep, ep in all_active_endpoints_for_env) for ep in endpoints]
-
     async def expire_all_sessions_for_environment(self, env_id: uuid.UUID) -> None:
         async with self.session_lock:
-            await asyncio.gather(*[s.expire_and_abort(timeout=0) for s in self.sessions.values() if s.tid == env_id])
+            await asyncio.gather(*[s.close_connection() for s in self.sessions.values() if s.environment == env_id])
 
     async def expire_all_sessions(self) -> None:
         async with self.session_lock:
-            await asyncio.gather(*[s.expire_and_abort(timeout=0) for s in self.sessions.values()])
+            await asyncio.gather(*[s.close_connection() for s in self.sessions.values()])
 
     # Agent Management
     @tracing.instrument("AgentManager.ensure_agent_registered")
@@ -590,16 +567,16 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         return await self.get_agent_process_report(agent_sid)
 
     @handle(methods.trigger_agent, agent_id="id", env="tid")
-    async def trigger_agent(self, env: UUID, agent_id: str) -> Apireturn:
+    async def trigger_agent(self, env: uuid.UUID, agent_id: str) -> Apireturn:
         raise NotImplementedError()
 
     @handle(methods.list_agent_processes)
     async def list_agent_processes(
         self,
-        environment: Optional[UUID],
+        environment: Optional[uuid.UUID],
         expired: bool,
-        start: Optional[UUID] = None,
-        end: Optional[UUID] = None,
+        start: Optional[uuid.UUID] = None,
+        end: Optional[uuid.UUID] = None,
         limit: Optional[int] = None,
     ) -> Apireturn:
         """List all agent processes whose sid is after start and before end
@@ -681,7 +658,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
 
     @handle(methods.get_state, env="tid")
     async def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str) -> Apireturn:
-        tid: UUID = env.id
+        tid: uuid.UUID = env.id
         if isinstance(tid, str):
             tid = uuid.UUID(tid)
         key = (tid, agent)
@@ -800,7 +777,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
     def __init__(self) -> None:
         super().__init__(SLICE_AUTOSTARTED_AGENT_MANAGER)
-        self._agent_procs: dict[UUID, subprocess.Process] = {}  # env uuid -> subprocess.Process
+        self._agent_procs: dict[uuid.UUID, subprocess.Process] = {}  # env uuid -> subprocess.Process
         self.agent_lock = asyncio.Lock()  # Prevent concurrent updates on _agent_procs
 
     async def get_status(self) -> Mapping[str, ArgumentTypes]:

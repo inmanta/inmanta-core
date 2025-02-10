@@ -42,8 +42,6 @@ class Endpoint(TaskHandler[None]):
     def __init__(self, name: str):
         super().__init__()
         self._name: str = name
-        self._node_name: str = inmanta_config.nodename.get()
-        self._end_point_names: set[str] = set()
         self._targets: list[common.CallTarget] = []
 
     def add_call_target(self, target: common.CallTarget) -> None:
@@ -53,39 +51,13 @@ class Endpoint(TaskHandler[None]):
     def call_targets(self) -> list[common.CallTarget]:
         return self._targets
 
-    def get_end_point_names(self) -> set[str]:
-        return self._end_point_names
-
-    def add_end_point_name(self, name: str) -> None:
-        """
-        Add a name to this endpoint to which it reacts and sends out in heartbeats
-        """
-        LOGGER.debug("Adding '%s' as endpoint", name)
-        self._end_point_names.add(name)
-
-    def remove_end_point_name(self, name: str) -> None:
-        LOGGER.debug("Removing '%s' as endpoint", name)
-        self._end_point_names.discard(name)
-
-    def clear_end_points(self) -> None:
-        """
-        Clear all endpoints
-        """
-        self._end_point_names = set()
-
     name = property(lambda self: self._name)
-    end_point_names = property(get_end_point_names)
 
     def _get_hostname(self) -> str:
         """
         Determine the hostname of this machine
         """
         return socket.gethostname()
-
-    def get_node_name(self) -> str:
-        return self._node_name
-
-    node_name = property(get_node_name)
 
 
 class Client(Endpoint):
