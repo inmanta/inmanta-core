@@ -158,11 +158,11 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         # session lock
         self.session_lock = asyncio.Lock()
         # all sessions
-        self.sessions: dict[UUID, websocket.Session] = {}
+        self.sessions: dict[tuple[str, UUID], websocket.Session] = {}
         # live sessions: Sessions to agents which are primary and unpaused
-        self.tid_endpoint_to_session: dict[tuple[UUID, str], websocket.Session] = {}
+        self.tid_endpoint_to_session: dict[tuple[tuple[str, UUID], str], websocket.Session] = {}
         # All endpoints associated with a sid
-        self.endpoints_for_sid: dict[uuid.UUID, set[str]] = {}
+        self.endpoints_for_sid: dict[tuple[str, UUID], set[str]] = {}
 
         # This queue ensures that notifications from the SessionManager are processed in the same order
         # in which they arrive in the SessionManager, without blocking the SessionManager.
@@ -500,7 +500,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         LOGGER.debug("New session %s for agents %s on %s", session.session_key, endpoint_names_snapshot, session.nodename)
         async with self.session_lock:
             tid = session.environment
-            sid = session.get_id()
+            sid = session.session_key
             self.sessions[sid] = session
             self.endpoints_for_sid[sid] = endpoint_names_snapshot
             try:

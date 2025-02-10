@@ -417,9 +417,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
     async def write_message(self, message: str | bytes, binary: bool = False) -> None:
         """Write the message in the correct transport"""
 
-    def create_session(
-        self, environment_id: uuid.UUID, session_name: str, node_name: str, endpoint_names: list[str]
-    ) -> None:
+    def create_session(self, environment_id: uuid.UUID, session_name: str, node_name: str, endpoint_names: list[str]) -> None:
         self._session = Session(environment_id, session_name, node_name, endpoint_names, websocket_protocol=self)
 
 
