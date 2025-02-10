@@ -381,9 +381,9 @@ def test_build_v1_module_existing_plugin_dir(tmpdir, modules_dir: str, module_na
             ModuleBuildFailedError,
             match=f"Could not build module: inmanta_plugins/{module_name} directory already exists and is not empty",
         ):
-            moduletool.ModuleTool().build(module_copy_dir)
+            moduletool.ModuleTool().build(module_copy_dir, wheel=True)
     else:
-        moduletool.ModuleTool().build(module_copy_dir)
+        moduletool.ModuleTool().build(module_copy_dir, wheel=True)
 
         dist_dir = os.path.join(module_copy_dir, "dist")
         dist_dir_content = os.listdir(dist_dir)
