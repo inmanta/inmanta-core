@@ -802,11 +802,13 @@ When a development release is done using the \--dev option, this command:
 
         timestamp = datetime.datetime.now(datetime.timezone.utc)
 
-        distributions_to_build = []
-        if wheel:
-            distributions_to_build.append("wheel")
-        if sdist:
-            distributions_to_build.append("sdist")
+        distributions_to_build: Sequence[Literal["wheel", "sdist"]]
+        if wheel is sdist:
+            distributions_to_build = ["wheel", "sdist"]
+        elif wheel:
+            distributions_to_build = ["wheel"]
+        elif sdist:
+            distributions_to_build = ["sdist"]
 
         def _build_distribution_packages(module_dir: str) -> list[str]:
             return [
