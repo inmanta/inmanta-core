@@ -607,7 +607,7 @@ class ModuleTool(ModuleLikeTool):
 
         build = subparser.add_parser(
             "build",
-            help="Build a Python package from a V2 module.",
+            help="Build a Python package from a V2 module. By default, a wheel and a sdist package is built.",
             parents=parent_parsers,
         )
         build.add_argument(
