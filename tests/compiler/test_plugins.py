@@ -553,25 +553,25 @@ end
             "union_optional_1",
             1.2,
             f"Value 1.2 for argument value of plugin {ns}::union_optional_1 has incompatible type."
-            f" Expected type: Union[int,string,Type]?",
+            f" Expected type: Union[int,string,std::Entity]?",
         ),
         (
             "union_optional_2",
             1.2,
             f"Value 1.2 for argument value of plugin {ns}::union_optional_2 has incompatible type."
-            f" Expected type: Union[int,string,Type]?",
+            f" Expected type: Union[int,string,std::Entity]?",
         ),
         (
             "union_optional_3",
             1.2,
             f"Value 1.2 for argument value of plugin {ns}::union_optional_3 has incompatible type."
-            f" Expected type: Union[int,string,Type]?",
+            f" Expected type: Union[int,string,std::Entity]?",
         ),
         (
             "union_optional_4",
             1.2,
             f"Value 1.2 for argument value of plugin {ns}::union_optional_4 has incompatible type."
-            f" Expected type: Union[int,string,Type]?",
+            f" Expected type: Union[int,string,std::Entity]?",
         ),
         (
             "annotated_arg_entity",
@@ -620,7 +620,7 @@ end
             1.2,
             (
                 f"Return value 1.2 of plugin {ns}::union_return_optional_1 has incompatible type."
-                " Expected type: Union[int,string,Type]?"
+                " Expected type: Union[int,string,std::Entity]?"
             ),
         ),
         (
@@ -628,7 +628,7 @@ end
             1.2,
             (
                 f"Return value 1.2 of plugin {ns}::union_return_optional_2 has incompatible type."
-                " Expected type: Union[int,string,Type]?"
+                " Expected type: Union[int,string,std::Entity]?"
             ),
         ),
         (
@@ -636,7 +636,7 @@ end
             1.2,
             (
                 f"Return value 1.2 of plugin {ns}::union_return_optional_3 has incompatible type."
-                " Expected type: Union[int,string,Type]?"
+                " Expected type: Union[int,string,std::Entity]?"
             ),
         ),
         (
@@ -644,7 +644,7 @@ end
             1.2,
             (
                 f"Return value 1.2 of plugin {ns}::union_return_optional_4 has incompatible type."
-                " Expected type: Union[int,string,Type]?"
+                " Expected type: Union[int,string,std::Entity]?"
             ),
         ),
         (

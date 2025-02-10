@@ -160,6 +160,9 @@ class NamedType(Type, Named):
     def type_string(self) -> str:
         return self.get_full_name()
 
+    def type_string_internal(self) -> str:
+        return self.type_string()
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, NamedType):
             return False
@@ -246,6 +249,9 @@ class Any(Type):
 
     def has_custom_to_python(self) -> bool:
         return False
+
+    def type_string_internal(self) -> str:
+        return "Any"
 
     def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721

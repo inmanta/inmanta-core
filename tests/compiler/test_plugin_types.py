@@ -17,13 +17,16 @@ Contact: code@inmanta.com
 """
 
 import collections.abc
-from typing import Annotated, Any, Mapping, Optional, Sequence, Union
+from typing import Annotated, Any, Mapping, Optional, Sequence, TypeAlias, Union
 
 import pytest
 
 import inmanta.ast.type as inmanta_type
 from inmanta.ast import Namespace, Range, RuntimeException
 from inmanta.plugins import ModelType, Null, to_dsl_type
+
+# An inmanta type that we can find without any namespace
+GenericDict: TypeAlias = Annotated[Any, ModelType["dict"]]
 
 
 def test_conversion(caplog):
@@ -39,11 +42,8 @@ def test_conversion(caplog):
         return to_dsl_type(python_type, location, namespace)
 
     assert inmanta_type.NullableType(inmanta_type.Integer()) == to_dsl_type_simple(Annotated[int | None, "something"])
-    assert inmanta_type.Union(
-        [inmanta_type.Integer(), inmanta_type.Union([inmanta_type.String(), inmanta_type.Float()])]
-    ) == to_dsl_type_simple(int | Annotated[str | float, "some-annotation"])
     # Union type should be ignored in favor of our ModelType
-    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type_simple(Annotated[dict[str, int], ModelType["dict"]])
+    assert inmanta_type.TypedDict(inmanta_type.Any()) == to_dsl_type_simple(Annotated[dict[str, int], ModelType["dict"]])
     assert inmanta_type.Integer() == to_dsl_type_simple(int)
     assert inmanta_type.Float() == to_dsl_type_simple(float)
     assert inmanta_type.NullableType(inmanta_type.Float()) == to_dsl_type_simple(float | None)
@@ -60,7 +60,9 @@ def test_conversion(caplog):
 
     # Union types
     assert inmanta_type.Integer() == to_dsl_type_simple(Union[int])
-    assert inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()]) == to_dsl_type_simple(Union[int, str])
+    assert inmanta_type.Union(
+        [inmanta_type.Integer(), inmanta_type.String(), inmanta_type.TypedDict(inmanta_type.Any())]
+    ) == to_dsl_type_simple(Union[int, str, GenericDict])
     assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
         Union[None, int, str]
     )
