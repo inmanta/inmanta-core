@@ -266,16 +266,33 @@ python_to_model = {
 
 @dataclass(frozen=True)
 class ModelType:
+    """
+    Dataclass used with typing.Annotated to represent Inmanta model types in Python code.
+
+    If we want to represent "std::Entity" as "typing.Any" in our plugins we could define the following type:
+
+    Entity: typing.TypeAlias = typing.Annotated[typing.Any, ModelType["std::Entity"]]
+
+    or even
+
+    type Entity = typing.Annotated[typing.Any, ModelType["std::Entity"]]
+
+    and then use it on our plugin:
+
+    @plugin
+    def my_plugin(value: Entity) -> None:
+        pass
+
+    We will validate the argument as "std::Entity", while presenting
+    a proper Python type (typing.Any) for IDE and static typing purposes.
+
+    :param model_type: The fully qualified name of the Inmanta model type
+    """
+
     model_type: str
 
     def __class_getitem__(cls: type[Self], key: str) -> Self:
         return cls(key)
-
-
-Entity: typing.TypeAlias = typing.Annotated[Any, ModelType["std::Entity"]]
-"""
-    Alias used to treat std::Entity as an object in Python for type verification
-"""
 
 
 def parse_dsl_type(dsl_type: str, location: Range, resolver: Namespace) -> inmanta_type.Type:
@@ -361,7 +378,7 @@ def to_dsl_type(
 
         # Annotated
         if origin is typing.Annotated:
-            for meta in python_type.__metadata__:  # type: ignore
+            for meta in reversed(python_type.__metadata__):  # type: ignore
                 if isinstance(meta, ModelType):
                     if location is None or resolver is None:
                         raise TypingException(
@@ -466,7 +483,10 @@ class PluginValue:
             if typing_inspect.is_union_type(self.type_expression) and not typing.get_args(self.type_expression):
                 # If typing.Union is not subscripted, isinstance(self.type_expression, type) evaluates to False.
                 raise InvalidTypeAnnotation(stmt=None, msg=f"Union type must be subscripted, got {self.type_expression}")
-            if isinstance(self.type_expression, type) or typing.get_origin(self.type_expression) is not None:
+            if (
+                isinstance(self.type_expression, (type, typing.TypeAliasType))
+                or typing.get_origin(self.type_expression) is not None
+            ):
                 self._resolved_type = to_dsl_type(self.type_expression, plugin_line, resolver)
             else:
                 raise InvalidTypeAnnotation(

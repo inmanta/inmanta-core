@@ -16,8 +16,11 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-from typing import Annotated, Protocol, Literal, Any, Union, Optional
-from inmanta.plugins import plugin, ModelType, Entity
+from typing import Annotated, Protocol, Literal, Any, Union, Optional, TypeAlias
+from inmanta.plugins import plugin, ModelType
+
+type Entity = Annotated[Any, ModelType["std::Entity"]]
+EntityAlias: TypeAlias = Annotated[Any, ModelType["std::Entity"]]
 
 
 @plugin
@@ -176,4 +179,14 @@ def type_entity_arg(value: Entity) -> None:
 
 @plugin
 def type_entity_return(value: Any) -> Entity:
+    return value
+
+
+@plugin
+def type_entity_alias_arg(value: EntityAlias) -> None:
+    pass
+
+
+@plugin
+def type_entity_alias_return(value: Any) -> EntityAlias:
     return value

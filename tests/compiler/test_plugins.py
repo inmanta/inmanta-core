@@ -524,6 +524,8 @@ plugin_native_types::annotated_return_entity(test_entity)  # type return value: 
 # Entity: typing.TypeAlias = typing.Annotated[Any, ModelType["std::Entity"]]
 plugin_native_types::type_entity_arg(test_entity)          # type value: Entity
 plugin_native_types::type_entity_return(test_entity)       # type return value: Entity
+plugin_native_types::type_entity_alias_arg(test_entity)          # type value: EntityAlias
+plugin_native_types::type_entity_alias_return(test_entity)       # type return value: EntityAlias
 
 for val in ["yes", "no"]:
     plugin_native_types::annotated_arg_literal(val)        # type value: Annotated[Literal["yes", "no"], ModelType["response"]]
