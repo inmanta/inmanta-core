@@ -35,7 +35,8 @@ from inmanta.ast import (
 )
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.util import AnyType, NoneValue, Unknown
-from inmanta.references import Reference
+from inmanta.model import Entity
+from inmanta.references import DataclassReference, Reference
 from inmanta.stable_api import stable_api
 
 try:

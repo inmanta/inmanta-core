@@ -53,6 +53,8 @@ else:
 
     DataclassProtocol = _typeshed.DataclassInstance
 
+    import inmanta.ast.type as inm_type
+
 
 type RefValue = PrimitiveTypes | DataclassProtocol
 
@@ -162,9 +164,12 @@ class Base:
 
     type: typing.ClassVar[ReferenceType]
 
-    def __init__(self, **kwargs: object) -> None:
-        self._arguments: typing.Mapping[str, object] = kwargs
+    def __init__(self) -> None:
         self._model: typing.Optional[BaseModel] = None
+
+        # Only present in compiler
+        self._model_type: typing.Optional["inm_type.Type"] = None
+
         # TODO: do we want to enforce type correctness when creating a reference? This also has impact on how arguments are
         #       are serialized: based on instance types or on static types
 
@@ -188,7 +193,7 @@ class Base:
     def serialize_arguments(self) -> Tuple[uuid.UUID, list[ArgumentTypes]]:
         """Serialize the arguments to this class"""
         arguments: list[ArgumentTypes] = []
-        for name, value in self._arguments.items():
+        for name, value in self.arguments.items():
             match name, value:
                 case _, str() | int() | float() | bool():
                     arguments.append(LiteralArgument(name=name, value=value))
@@ -214,7 +219,7 @@ class Base:
 
     @property
     def arguments(self) -> collections.abc.Mapping[str, object]:
-        return self._arguments
+        return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
 
 class Mutator(Base):
@@ -249,14 +254,19 @@ class DataclassRefeferenMeta(type):
 class Reference[T: RefValue](Base):
     """Instances of this class can create references to a value and resolve them."""
 
-    def __init__(self, **kwargs: object) -> None:
-        super().__init__(**kwargs)
+    def __init__(self) -> None:
+        super().__init__()
         self._reference_value: T
         self._reference_value_cached: bool = False
 
     @abc.abstractmethod
     def resolve(self) -> T:
         """This method resolves the reference and returns the object that it refers to"""
+
+    def resolve_other[S: RefValue](self, value: "Reference[S] | S") -> S:
+        if isinstance(value, Reference):
+            return value.resolve()
+        return value
 
     def get(self) -> T:
         """Get the value. If we have already resolved it a cached value is returned, otherwise resolve() is called"""
@@ -288,33 +298,6 @@ class DataclassReference[T: DataclassProtocol](Reference[T], metaclass=Dataclass
                         return arg
 
         raise TypeError("A dataclass reference requires a typevar that is bound to the dataclass it references.")
-
-    def __getattr__(self, name: str) -> object:
-        """If our reference is a subclass of Value (dataclass), we return a reference to the
-        attribute instead of the attribute itself.
-
-        :param name: The name of the attribute to fetch
-        :return: A reference to the attribute
-        """
-        dc_type = self.get_dataclass_type()
-        if name == DATACLASS_FIELDS:
-            return getattr(dc_type, DATACLASS_FIELDS)
-
-        # IF we are in the compiler
-        dc_type_inm = proxy.get_inmanta_type_for_dataclass(dc_type)
-        if not dc_type_inm:
-            # TODO: is this what we want?
-            raise AttributeError(name=name, obj=self)
-
-        fields = {f.name: f for f in dataclasses.fields(dc_type)}
-        if name in fields:
-            return AttributeReference(
-                reference=self,
-                attribute_name=name,
-                attribute_type=dc_type_inm.get_attribute(name).get_type(),
-            )
-
-        raise AttributeError(name=name, obj=self)
 
 
 # TODO: we need to make sure that the executor knows it should load the mutator and executor code before running the handler
@@ -408,15 +391,9 @@ class AttributeReference[T: PrimitiveTypes](Reference[T]):
         self,
         reference: DataclassProtocol | DataclassReference[DataclassProtocol],
         attribute_name: str,
-        attribute_type: "inm_type.Type | str",  # TODO
     ) -> None:
-        if not isinstance(attribute_type, str):
-            attr_str = attribute_type.type_string()
-        else:
-            attr_str = attribute_type
-        super().__init__(reference=reference, attribute_name=attribute_name, attribute_type=attr_str)
+        super().__init__()
         self.attribute_name = attribute_name
-        self.attribute_type = attribute_type
         self.reference = reference
 
     def resolve(self) -> T:
@@ -434,7 +411,7 @@ class ReplaceValue(Mutator):
         :param value: The value to replace in `resource` at `destination`
         :param destination: A dictpath expression where to replace the value
         """
-        super().__init__(resource=resource, value=value, destination=destination)
+        super().__init__()
         self.resource = resource
         self.value = value
         self.destination = destination
@@ -447,6 +424,9 @@ class ReplaceValue(Mutator):
 
 def is_reference_of(instance: typing.Optional[object], type_class: type[object]) -> bool:
     """Is the given instance a reference to the given type."""
+
+    # TODO!!!!
+
     if instance is None or not isinstance(instance, Reference):
         return False
 

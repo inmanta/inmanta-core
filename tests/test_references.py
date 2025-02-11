@@ -63,9 +63,9 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
     serialized = res_dict.popitem()[1].serialize()
 
     # validate that our UUID is stable
-    assert_id(serialized["references"], "refs::Bool", "df48aeb8-0534-3ddc-b288-f1aefe929c7f")
+    assert_id(serialized["references"], "refs::Bool", "ed26b59b-a567-392e-8626-f89d821532b7")
     assert_id(serialized["references"], "refs::TestReference", "78d7ff5f-6309-3011-bfff-8068471d5761")
-    assert_id(serialized["references"], "core::AttributeReference", "111aa3be-c79b-3bb7-9097-7568031357fc")
+    assert_id(serialized["references"], "core::AttributeReference", "81cc3241-2368-3b6d-8807-6755bd27b2fa")
     assert_id(serialized["references"], "refs::String", "a8ed8c4f-204a-3f7e-a630-e21cb20e9209")
 
     data = json.dumps(serialized, default=util.api_boundary_json_encoder)

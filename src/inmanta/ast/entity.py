@@ -44,6 +44,7 @@ from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
 from inmanta.plugins import to_dsl_type
+from inmanta.references import AttributeReference, DataclassReference
 from inmanta.types import DataclassProtocol
 
 # pylint: disable-msg=R0902,R0904
@@ -727,19 +728,35 @@ class Entity(NamedType, WithComment):
          i.e. instances of the associated dataclass
         """
         assert self._paired_dataclass is not None  # make mypy happy
-        # TODO: or reference!
-        #        assert isinstance(value, self._paired_dataclass)
 
         def convert_none(x: object | None) -> object:
             return x if x is not None else NoneValue()
 
-        instance = self.get_instance(
-            {k.name: convert_none(getattr(value, k.name)) for k in dataclasses.fields(value)},
-            resolver,
-            queue,
-            location,
-            None,
-        )
+        def convert_to_attr_ref(name) -> object:
+            ar = AttributeReference(
+                reference=value,
+                attribute_name=name,
+            )
+            ar._model_type = self.get_attribute(name).get_type()
+            return ar
+
+        if isinstance(value, DataclassReference):
+            instance = self.get_instance(
+                {k.name: convert_to_attr_ref(k.name) for k in dataclasses.fields(self._paired_dataclass)},
+                resolver,
+                queue,
+                location,
+                None,
+            )
+        else:
+            instance = self.get_instance(
+                {k.name: convert_none(getattr(value, k.name)) for k in dataclasses.fields(value)},
+                resolver,
+                queue,
+                location,
+                None,
+            )
+
         instance.dataclass_self = value
         # generate an implementation
         for stmt in self.get_sub_constructor():

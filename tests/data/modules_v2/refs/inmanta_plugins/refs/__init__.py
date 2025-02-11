@@ -1,7 +1,7 @@
 import os
 import dataclasses
 
-from inmanta.references import reference, Reference, DataclassReference
+from inmanta.references import reference, Reference, DataclassReference, RefValue
 from inmanta.plugins import plugin
 
 
@@ -9,32 +9,32 @@ from inmanta.plugins import plugin
 class BoolReference(Reference[bool]):
     """A reference to fetch environment variables"""
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str | Reference[str]) -> None:
         """
         :param name: The name of the environment variable.
         """
-        super().__init__(name=name)
+        super().__init__()
         self.name = name
 
     def resolve(self) -> bool:
         """Resolve the reference"""
-        return os.getenv(self.name) == "true"
+        return os.getenv(self.resolve_other(self.name)) == "true"
 
 
 @reference("refs::String")
 class StringReference(Reference[str]):
     """A reference to fetch environment variables"""
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str | Reference[str]) -> None:
         """
         :param name: The name of the environment variable.
         """
-        super().__init__(name=name)
+        super().__init__()
         self.name = name
 
     def resolve(self) -> str:
         """Resolve the reference"""
-        return self.name
+        return self.resolve_other(self.name)
 
 
 @plugin
@@ -48,10 +48,10 @@ def create_string_reference(name: Reference[str] | str) -> Reference[str]:
 
 
 @plugin
-def create_bool_reference_cycle(name: "any") -> "bool":
+def create_bool_reference_cycle(name: str) -> Reference[bool]:
     # create a reference with a cycle
     ref_cycle = StringReference(name)
-    ref_cycle._arguments["name"] = ref_cycle
+    ref_cycle.name = ref_cycle
 
     return BoolReference(name=ref_cycle)
 
@@ -65,16 +65,16 @@ class Test:
 class TestReference(DataclassReference[Test]):
     """A reference that returns a dataclass"""
 
-    def __init__(self, value: str) -> None:
+    def __init__(self, value: str | Reference[str]) -> None:
         """
         :param value: The value
         """
-        super().__init__(value=value)
-        self._value = value
+        super().__init__()
+        self.value = value
 
     def resolve(self) -> Test:
         """Resolve test references"""
-        return Test(value=self._value)
+        return Test(value=self.resolve_other(self.value))
 
 
 @plugin
