@@ -20,8 +20,17 @@ import numbers
 import typing as py_type
 
 import inmanta.ast.type as inm_type
-from inmanta.ast import TypingException
+from inmanta.ast import Namespace, Range, TypingException
 from inmanta.plugins import to_dsl_type
+
+namespace = Namespace("dummy-namespace")
+namespace.primitives = inm_type.TYPES
+
+location: Range = Range("test", 1, 1, 2, 1)
+
+
+def to_dsl_type_simple(python_type: type[object]) -> inm_type.Type:
+    return to_dsl_type(python_type, location, namespace)
 
 
 def type_corresponds(
@@ -33,12 +42,12 @@ def type_corresponds(
     """
 
     for pyt in does_correspond:
-        tp = to_dsl_type(pyt)
+        tp = to_dsl_type_simple(pyt)
         assert it.corresponds_to(tp)
         assert inm_type.NullableType(it).corresponds_to(inm_type.NullableType(tp))
     for pyt in does_not_correspond:
         try:
-            tp = to_dsl_type(pyt)
+            tp = to_dsl_type_simple(pyt)
         except TypingException:
             # type is invalid
             continue
@@ -103,13 +112,13 @@ def test_type_correspondence():
     for it, pyt in primitive_types:
         for oit, opyt in primitive_types:
             if it is oit:
-                assert it.corresponds_to(to_dsl_type(pyt))
+                assert it.corresponds_to(to_dsl_type_simple(pyt))
             else:
-                assert not it.corresponds_to(to_dsl_type(opyt))
+                assert not it.corresponds_to(to_dsl_type_simple(opyt))
 
     # Number
     inm_number = inm_type.Number()
-    assert inm_number.corresponds_to(to_dsl_type(int))
-    assert inm_number.corresponds_to(to_dsl_type(float))
-    assert inm_number.corresponds_to(to_dsl_type(numbers.Number))
-    assert not inm_number.corresponds_to(to_dsl_type(str))
+    assert inm_number.corresponds_to(to_dsl_type_simple(int))
+    assert inm_number.corresponds_to(to_dsl_type_simple(float))
+    assert inm_number.corresponds_to(to_dsl_type_simple(numbers.Number))
+    assert not inm_number.corresponds_to(to_dsl_type_simple(str))
