@@ -22,7 +22,7 @@ import typing
 import inmanta.graphql.models
 import strawberry
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine, AsyncEngine
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.info import ContextType
@@ -32,7 +32,7 @@ mapper = StrawberrySQLAlchemyMapper()
 
 ASYNC_SESSION: typing.Optional[AsyncSession] = None
 SCHEMA: strawberry.Schema | None = None
-
+ENGINE: AsyncEngine | None = None
 
 # @mapper.type(inmanta.graphql.models.EnvironmentSetting)
 # class EnvironmentSetting:
@@ -48,7 +48,7 @@ class Notification:
 class Environment:
 
     @staticmethod
-    async def get_environments(id: str | None = strawberry.UNSET) -> typing.Sequence["Environment"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["Environment"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.Environment)
             if id:
@@ -61,7 +61,7 @@ class Environment:
 class AgentProcess:
 
     @staticmethod
-    async def get_environments(id: str | None = strawberry.UNSET) -> typing.Sequence["AgentProcess"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["AgentProcess"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.AgentProcess)
             if id:
@@ -74,7 +74,7 @@ class AgentProcess:
 class AgentInstance:
 
     @staticmethod
-    async def get_environments(id: str | None = strawberry.UNSET) -> typing.Sequence["AgentInstance"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["AgentInstance"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.AgentInstance)
             if id:
@@ -87,7 +87,7 @@ class AgentInstance:
 class Agent:
 
     @staticmethod
-    async def get_environments(id: str | None = strawberry.UNSET) -> typing.Sequence["Agent"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["Agent"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.Agent)
             if id:
@@ -99,7 +99,7 @@ class Agent:
 @mapper.type(inmanta.graphql.models.Project)
 class Project:
     @staticmethod
-    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Project"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["Project"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.Project)
             if id:
@@ -111,7 +111,7 @@ class Project:
 @mapper.type(inmanta.graphql.models.Code)
 class Code:
     @staticmethod
-    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Code"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["Code"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.Code)
             if id:
@@ -123,7 +123,7 @@ class Code:
 @mapper.type(inmanta.graphql.models.Compile)
 class Compile:
     @staticmethod
-    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Compile"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["Compile"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.Compile)
             if id:
@@ -135,7 +135,7 @@ class Compile:
 @mapper.type(inmanta.graphql.models.Report)
 class Report:
     @staticmethod
-    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Report"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["Report"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.Report)
             if id:
@@ -147,7 +147,7 @@ class Report:
 @mapper.type(inmanta.graphql.models.ConfigurationModel)
 class ConfigurationModel:
     @staticmethod
-    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["ConfigurationModel"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["ConfigurationModel"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.ConfigurationModel)
             if id:
@@ -159,7 +159,7 @@ class ConfigurationModel:
 @mapper.type(inmanta.graphql.models.Dryrun)
 class Dryrun:
     @staticmethod
-    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Dryrun"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["Dryrun"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.Dryrun)
             if id:
@@ -171,7 +171,7 @@ class Dryrun:
 @mapper.type(inmanta.graphql.models.Resource)
 class Resource:
     @staticmethod
-    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Resource"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["Resource"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.Resource)
             if id:
@@ -183,7 +183,7 @@ class Resource:
 @mapper.type(inmanta.graphql.models.ResourceAction)
 class ResourceAction:
     @staticmethod
-    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["ResourceAction"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["ResourceAction"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.ResourceAction)
             if id:
@@ -195,7 +195,7 @@ class ResourceAction:
 @mapper.type(inmanta.graphql.models.UnknownParameter)
 class UnknownParameter:
     @staticmethod
-    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["UnknownParameter"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["UnknownParameter"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.UnknownParameter)
             if id:
@@ -207,7 +207,7 @@ class UnknownParameter:
 @mapper.type(inmanta.graphql.models.DiscoveredResource)
 class DiscoveredResource:
     @staticmethod
-    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["DiscoveredResource"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["DiscoveredResource"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.DiscoveredResource)
             if id:
@@ -219,7 +219,7 @@ class DiscoveredResource:
 @mapper.type(inmanta.graphql.models.EnvironmentMetricsGauge)
 class EnvironmentMetricsGauge:
     @staticmethod
-    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["EnvironmentMetricsGauge"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["EnvironmentMetricsGauge"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.EnvironmentMetricsGauge)
             if id:
@@ -231,7 +231,7 @@ class EnvironmentMetricsGauge:
 @mapper.type(inmanta.graphql.models.EnvironmentMetricsTimer)
 class EnvironmentMetricsTimer:
     @staticmethod
-    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["EnvironmentMetricsTimer"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["EnvironmentMetricsTimer"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.EnvironmentMetricsTimer)
             if id:
@@ -243,7 +243,7 @@ class EnvironmentMetricsTimer:
 @mapper.type(inmanta.graphql.models.Parameter)
 class Parameter:
     @staticmethod
-    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["Parameter"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["Parameter"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.Parameter)
             if id:
@@ -255,7 +255,7 @@ class Parameter:
 @mapper.type(inmanta.graphql.models.ResourcePersistentState)
 class ResourcePersistentState:
     @staticmethod
-    async def get_projects(id: str | None = strawberry.UNSET) -> typing.Sequence["ResourcePersistentState"]:
+    async def fetch_all(id: str | None = strawberry.UNSET) -> typing.Sequence["ResourcePersistentState"]:
         async with get_async_session() as session:
             stmt = select(inmanta.graphql.models.ResourcePersistentState)
             if id:
@@ -265,8 +265,12 @@ class ResourcePersistentState:
 
 
 def get_async_session(connection_string: typing.Optional[str] = None) -> AsyncSession:
+    if ENGINE is None:
+        raise Exception("Cannot get session because engine wasn't started. Make sure to call start_engine() first.")
     if ASYNC_SESSION is None:
-        initialize_schema(connection_string)
+        # should not happen
+        raise Exception("Engine is started but session factory wasn't initialized properly.")
+
     return ASYNC_SESSION()
 
 
@@ -274,6 +278,27 @@ def get_schema(connection_string: typing.Optional[str] = None):
     if SCHEMA is None:
         initialize_schema(connection_string)
     return SCHEMA
+
+def start_engine(
+        url: str,
+        pool_size: int,
+        max_overflow: int,
+        pool_timeout:float,
+        echo:bool,
+    ):
+    global ENGINE
+    global ASYNC_SESSION
+
+    if ENGINE is not None:
+        raise Exception("Engine already running: cannot call start_engine twice.")
+    ENGINE = create_async_engine(
+        url=url,
+        pool_size=pool_size,
+        max_overflow=max_overflow,
+        pool_timeout=pool_timeout,
+        echo=echo,
+    )
+    ASYNC_SESSION = async_sessionmaker(ENGINE)
 
 
 def initialize_schema(connection_string: typing.Optional[str] = None) -> strawberry.Schema:
@@ -292,8 +317,8 @@ def initialize_schema(connection_string: typing.Optional[str] = None) -> strawbe
 
     @strawberry.type
     class Query:
-        environments: typing.List[Environment] = strawberry.field(resolver=Environment.get_environments)
-        projects: typing.List[Project] = strawberry.field(resolver=Project.get_projects)
+        environments: typing.List[Environment] = strawberry.field(resolver=Environment.fetch_all)
+        projects: typing.List[Project] = strawberry.field(resolver=Project.fetch_all)
 
     SCHEMA = strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
     return SCHEMA

@@ -131,7 +131,8 @@ class EnvironmentService(protocol.ServerSlice):
         Schedules appropriate actions for schedule-related settings for all environments. Overrides old schedules.
         """
         env: data.Environment
-        for env in await data.Environment.get_list(details=False):
+        # for env in await data.Environment.get_list(details=False):
+        for env in await data.Environment.get_list_gql():
             await self._enable_schedules(env)
 
     async def _enable_schedules(self, env: data.Environment, setting: Optional[data.Setting] = None) -> None:
@@ -214,7 +215,7 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods.list_environments)
     async def list_environments(self) -> Apireturn:
-        return 200, {"environments": [rename_fields(env) for env in await self.environment_list()]}
+        return 200, {"environments":  [await self.environment_list()]}
 
     @handle(methods.delete_environment, environment_id="id")
     async def delete_environment(self, environment_id: uuid.UUID) -> Apireturn:
@@ -460,8 +461,9 @@ class EnvironmentService(protocol.ServerSlice):
         # data access framework does not support multi-column order by, but multi-environment projects are rare
         # (and discouraged)
         # => sort by primary column in SQL, then do full sort in Python, cheap because mostly sorted already by this point
-        env_list = await data.Environment.get_list(details=details, order_by_column="project")
-        return sorted((env.to_dto() for env in env_list), key=lambda e: (e.project_id, e.name, e.id))
+        env_list = await data.Environment.get_list_gql(details=details, order_by_column="project")
+        return env_list
+        # return sorted((env.to_dto() for env in env_list), key=lambda e: (e.project_id, e.name, e.id))
 
     @handle(methods_v2.environment_delete, environment_id="id")
     async def environment_delete(self, environment_id: uuid.UUID) -> None:

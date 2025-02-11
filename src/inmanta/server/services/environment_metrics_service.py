@@ -205,7 +205,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         Clean up metrics that are older than the retention time specified in the environment_metrics_retention
         environment setting.
         """
-        async with Environment.get_connection() as con:
+        async with Compile.get_connection() as con:
             query = f"""
             WITH env_and_retention_time_in_hours AS (
                 SELECT id, (CASE WHEN e.settings ? $1 THEN (e.settings->>$1)::integer ELSE $2 END) AS retention_time_in_hours

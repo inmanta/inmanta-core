@@ -22,7 +22,7 @@ import inmanta.graphql.schema
 import strawberry
 from inmanta.protocol import methods_v2
 from inmanta.protocol.decorators import handle
-from inmanta.server import SLICE_GRAPHQL, protocol
+from inmanta.server import SLICE_GRAPHQL, protocol, SLICE_DATABASE, SLICE_SERVER
 from strawberry.schema.config import StrawberryConfig
 
 
@@ -30,6 +30,9 @@ class GraphQLSlice(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(name=SLICE_GRAPHQL)
+
+    def get_dependencies(self) -> list[str]:
+        return [SLICE_SERVER, SLICE_DATABASE]
 
     @handle(methods_v2.graphql)
     async def graphql(self, query: str) -> Any:  # Actual return type: strawberry.types.execution.ExecutionResult

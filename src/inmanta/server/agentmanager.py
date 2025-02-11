@@ -61,6 +61,8 @@ from inmanta.server.server import Server
 from inmanta.server.services import environmentservice
 from inmanta.types import Apireturn, ArgumentTypes, ResourceIdStr, ReturnTupple
 
+from inmanta.graphql.models import Environment as EnvironmentGQL
+
 from ..data.dataview import AgentView
 from . import config as server_config
 from .validate_filter import InvalidFilter
@@ -1038,7 +1040,16 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         Ensure that a scheduler is started for each environment having AUTOSTART_ON_START is true. This method
         is called on server start.
         """
-        environments = await data.Environment.get_list()
+        environments = await data.Environment.get_list_gql()
+
+        # stmt = select(Environment.id, Environment.name).order_by(Environment.name)
+        # async with get_async_session() as session:
+        #     result_execute = await session.execute(stmt)
+        #     assert result_execute.all() == [
+        #         (uuid.UUID(env_1_id), env_1_name),
+        #         (uuid.UUID(env_2_id), env_2_name),
+        #     ]
+
         for env in environments:
             autostart = await env.get(data.AUTOSTART_ON_START)
             if not autostart:
@@ -1074,8 +1085,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
     async def _stop_scheduler(
         self,
         env: data.Environment,
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
         Stop the scheduler for this environment and expire all its sessions.
@@ -1184,7 +1193,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                         autostart_scheduler,
                         self._agent_procs[env],
                     )
-                    await self._stop_scheduler(refreshed_env, connection=connection)
+                    await self._stop_scheduler(refreshed_env)
                     start_new_process = True
                 else:
                     start_new_process = False

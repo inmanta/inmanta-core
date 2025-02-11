@@ -500,3 +500,104 @@ async def test_sql_alchemy_write(client, server, setup_database_no_data):
         }
     ]
 
+
+async def test_sql_alchemy_connection_pool(client, server, setup_database_no_data):
+    """
+    Create projects and envs using sql alchemy
+    Read using regular endpoints
+    """
+    proj_id = uuid.uuid4()
+    stmt = insert(Project)
+    data = [
+        {
+            "id": proj_id,
+            "name": "proj_1"
+        }
+    ]
+
+    async with get_async_session() as session:
+        result_execute = await session.execute(stmt, data)
+        await session.commit()
+
+    stmt = insert(Environment).returning(Environment.id)
+    data = [
+        {
+            "id": uuid.uuid4(),
+            "name": "env_1",
+            "project": proj_id
+        }
+    ]
+
+    async with get_async_session() as session:
+        result_execute = await session.execute(stmt, data)
+        await session.commit()
+        env_id = result_execute.scalars().all()[0]
+
+    result = await client.list_environments()
+    assert result.code == 200
+    assert "environments" in result.result
+    assert result.result["environments"] == [
+        {
+             'description': '',
+             'halted': False,
+             'icon': '',
+             'id': str(env_id),
+             'is_marked_for_deletion': False,
+             'name': 'env_1',
+             'project': str(proj_id),
+             'repo_branch': '',
+             'repo_url': '',
+             'settings': {}
+        }
+    ]
+
+    result = await client.list_projects()
+    assert result.code == 200
+    assert "projects" in result.result
+    assert result.result["projects"] == [
+        {
+            'environments': [str(env_id)],
+            'id': str(proj_id),
+            'name': 'proj_1'
+        }
+    ]
+
+
+async def test_sql_alchemy_project_create(client, server):
+    """
+    Create project and envs using regular endpoints
+    Read using sql alchemy capabilities
+    """
+
+    # Create project
+    ids = []
+    names = []
+    project_name: str = "test_project0"
+    result = await client.create_project(project_name)
+    assert result.code == 200
+    ids.append(result.result["project"]["id"])
+    names.append(project_name)
+
+    project_name: str = "test_project1"
+    result = await client.create_project(project_name)
+    assert result.code == 200
+    ids.append(result.result["project"]["id"])
+    names.append(project_name)
+
+    project_name: str = "test_project2"
+    result = await client.create_project(project_name)
+    assert result.code == 200
+    ids.append(result.result["project"]["id"])
+    names.append(project_name)
+
+
+    result = await client.list_projects()
+    assert result.code == 200
+    assert "projects" in result.result
+    assert result.result["projects"] == [
+        {
+            'id': str(project_id),
+            'name': project_name
+        }
+        for (project_id, project_name) in zip(ids, names)
+    ]

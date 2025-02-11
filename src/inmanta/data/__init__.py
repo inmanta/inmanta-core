@@ -1222,8 +1222,9 @@ class BaseDocument(metaclass=DocumentMeta):
         if connection is not None:
             return util.nullcontext(connection)
         # Make mypy happy
-        assert cls._connection_pool is not None
-        return cls._connection_pool.acquire()
+        if cls not in [Environment, Project]:
+            assert cls._connection_pool is not None
+            return cls._connection_pool.acquire()
 
     @classmethod
     def table_name(cls) -> str:
@@ -2747,6 +2748,22 @@ RETURNING last_version;
         if setting.name in cls._settings:
             raise KeyError()
         cls._settings[setting.name] = setting
+
+    @classmethod
+    async def get_list_gql(
+        cls: type[TBaseDocument],
+        *,
+        order_by_column: Optional[str] = None,
+        order: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        no_obj: Optional[bool] = None,
+        lock: Optional[RowLockMode] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        details: bool = True,
+        **query: object,
+    ) -> list[TBaseDocument]:
+        return await inmanta.graphql.schema.Environment.fetch_all()
 
     @classmethod
     async def get_list(
@@ -6670,6 +6687,9 @@ _classes = [
 def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
     LOGGER.debug("Connecting data classes")
     for cls in _classes:
+        if cls.__name__ in ["Environment", "Project"]:
+            continue
+        LOGGER.debug(f"Connecting {cls}")
         cls.set_connection_pool(pool)
 
 
