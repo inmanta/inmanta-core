@@ -271,10 +271,6 @@ class ModelType:
 
     If we want to represent "std::Entity" as "typing.Any" in our plugins we could define the following type:
 
-    Entity: typing.TypeAlias = typing.Annotated[typing.Any, ModelType["std::Entity"]]
-
-    or even
-
     type Entity = typing.Annotated[typing.Any, ModelType["std::Entity"]]
 
     and then use it on our plugin:
@@ -285,6 +281,7 @@ class ModelType:
 
     We will validate the argument as "std::Entity", while presenting
     a proper Python type (typing.Any) for IDE and static typing purposes.
+    It is the user's responsibility to ensure that the validation type sufficiently matches the Python type.
 
     :param model_type: The fully qualified name of the Inmanta model type
     """
@@ -300,9 +297,7 @@ def parse_dsl_type(dsl_type: str, location: Range, resolver: Namespace) -> inman
     return inmanta_type.resolve_type(locatable_type, resolver)
 
 
-def to_dsl_type(
-    python_type: type[object], location: Optional[Range] = None, resolver: Optional[Namespace] = None
-) -> inmanta_type.Type:
+def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace) -> inmanta_type.Type:
     """
     Convert a python type annotation to an Inmanta DSL type annotation.
 
@@ -380,11 +375,6 @@ def to_dsl_type(
         if origin is typing.Annotated:
             for meta in reversed(python_type.__metadata__):  # type: ignore
                 if isinstance(meta, ModelType):
-                    if location is None or resolver is None:
-                        raise TypingException(
-                            None,
-                            f"Cannot parse {meta.model_type}, location or resolver were not provided to `to_dsl_type`",
-                        )
                     return parse_dsl_type(meta.model_type, location, resolver)
             # the annotation doesn't concern us => use base type
             return to_dsl_type(typing.get_args(python_type)[0], location, resolver)

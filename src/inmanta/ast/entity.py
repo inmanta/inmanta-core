@@ -610,8 +610,7 @@ class Entity(NamedType, WithComment):
                     dc_fields.pop(rel_or_attr_name)
                     # Type correspondence
                     try:
-                        plugin_line: Range = Range(self.location.file, self.location.lnr, 1, self.location.lnr + 1, 1)
-                        dsl_type = to_dsl_type(dc_types[rel_or_attr_name], plugin_line, self.namespace)
+                        dsl_type = to_dsl_type(dc_types[rel_or_attr_name], self.location, self.namespace)
                         if not inm_type.corresponds_to(dsl_type):
                             failures.append(
                                 f"The attribute {rel_or_attr_name} does not have the same type as "
