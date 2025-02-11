@@ -33,7 +33,6 @@ from inmanta.ast import (
     Named,
     Namespace,
     NotFoundException,
-    Range,
     RuntimeException,
     TypingException,
     WithComment,
