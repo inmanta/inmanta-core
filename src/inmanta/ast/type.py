@@ -250,7 +250,7 @@ class Any(Type):
     def has_custom_to_python(self) -> bool:
         return False
 
-    def type_string(self) -> Optional[str]:
+    def type_string(self) -> str:
         return "any"
 
     def type_string_internal(self) -> str:
