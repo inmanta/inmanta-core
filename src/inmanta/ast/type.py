@@ -250,8 +250,11 @@ class Any(Type):
     def has_custom_to_python(self) -> bool:
         return False
 
+    def type_string(self) -> Optional[str]:
+        return "any"
+
     def type_string_internal(self) -> str:
-        return "Any"
+        return self.type_string()
 
     def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721
