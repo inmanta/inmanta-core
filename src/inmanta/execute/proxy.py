@@ -16,11 +16,14 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import abc
 import dataclasses
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from dataclasses import is_dataclass
 from typing import Callable, Union
+
+from graphql.type.introspection import TypeResolvers
 
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
 from inmanta.ast import AttributeNotFound as AttributeNotFound
@@ -28,6 +31,7 @@ from inmanta.ast import Location, NotFoundException, RuntimeException
 from inmanta.ast import UnknownException as UnknownException
 from inmanta.ast import UnsetException as UnsetException  # noqa F401
 from inmanta.execute.util import NoneValue, Unknown
+from inmanta.references import Reference
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
 from inmanta.util import JSONSerializable
@@ -39,7 +43,13 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Entity
+    from inmanta.ast.type import Type as inm_Type
     from inmanta.execute.runtime import Instance, QueueScheduler, Resolver
+
+    TypeResolver = Callable[[type[object]], inm_Type]
+else:
+    # TODO: is there a cleaner way?
+    TypeResolver = ""
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -49,6 +59,8 @@ class DynamicUnwrapContext:
     resolver: "Resolver"
     queue: "QueueScheduler"
     location: Location
+    # this last one is purely there to prevent import loops
+    type_resolver: TypeResolver
 
 
 # this is here to avoid import loops
@@ -100,25 +112,22 @@ class DynamicProxy:
 
             return dict(map(recurse_dict_item, item.items()))
 
-        # TODO: cycle
-        from inmanta.references import DataclassReference
-
-        if isinstance(item, DataclassReference):
-            # TODO: cleanup
-            from inmanta.plugins import to_dsl_type
-
-            dataclass_type = to_dsl_type(item.get_dataclass_type())
-            if dataclass_type:
-                if dynamic_context is not None:
-                    return dataclass_type.from_python(
-                        item, dynamic_context.resolver, dynamic_context.queue, dynamic_context.location
-                    )
-                else:
+        if isinstance(item, Reference):
+            ref_type = item.get_reference_type()
+            if dataclasses.is_dataclass(ref_type):
+                if dynamic_context is None:
                     raise RuntimeException(
                         None,
-                        f"{item} is a dataclass of type {dataclass_type.get_full_name()}. "
+                        f"{item} is a dataclass of type {ref_type}. "
                         "It can only be converted to an inmanta entity at the plugin boundary",
                     )
+                dataclass_type = dynamic_context.type_resolver(ref_type)
+
+                return dataclass_type.from_python(
+                    item, dynamic_context.resolver, dynamic_context.queue, dynamic_context.location
+                )
+            else:
+                return item
 
         if is_dataclass(item) and not isinstance(item, type):
             # dataclass instance

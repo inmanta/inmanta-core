@@ -44,7 +44,7 @@ from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
 from inmanta.plugins import to_dsl_type
-from inmanta.references import AttributeReference, DataclassReference
+from inmanta.references import AttributeReference, DataclassReference, Reference
 from inmanta.types import DataclassProtocol
 
 # pylint: disable-msg=R0902,R0904
@@ -740,7 +740,7 @@ class Entity(NamedType, WithComment):
             ar._model_type = self.get_attribute(name).get_type()
             return ar
 
-        if isinstance(value, DataclassReference):
+        if isinstance(value, Reference):
             instance = self.get_instance(
                 {k.name: convert_to_attr_ref(k.name) for k in dataclasses.fields(self._paired_dataclass)},
                 resolver,

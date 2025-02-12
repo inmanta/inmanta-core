@@ -21,7 +21,6 @@ import builtins
 import collections
 import dataclasses
 import hashlib
-import inspect
 import json
 import typing
 import uuid
@@ -32,7 +31,6 @@ import typing_inspect
 
 import inmanta
 from inmanta import util
-from inmanta.execute import proxy
 from inmanta.util import dict_path
 
 ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z0-9_]+::)+[A-Z][A-z0-9_-]*$")]
@@ -173,6 +171,11 @@ class Base:
         # TODO: do we want to enforce type correctness when creating a reference? This also has impact on how arguments are
         #       are serialized: based on instance types or on static types
 
+    def resolve_other[S: RefValue](self, value: "Reference[S] | S") -> S:
+        if isinstance(value, Reference):
+            return value.get()
+        return value
+
     @classmethod
     def deserialize(
         cls: typing.Type[C],
@@ -239,18 +242,6 @@ class Mutator(Base):
         return self._model
 
 
-class DataclassRefeferenMeta(type):
-    """A metaclass to make Reference work with dataclasses"""
-
-    def __getattr__(cls, name: str) -> object:
-        """Act as a dataclass if required and this metaclass is used on a DataclassReference"""
-        if name == DATACLASS_FIELDS and isinstance(cls, DataclassReference):
-            dct = cls.get_dataclass_type()
-            return getattr(dct, DATACLASS_FIELDS)
-
-        return type.__getattr__(cls)  # type: ignore
-
-
 class Reference[T: RefValue](Base):
     """Instances of this class can create references to a value and resolve them."""
 
@@ -259,14 +250,21 @@ class Reference[T: RefValue](Base):
         self._reference_value: T
         self._reference_value_cached: bool = False
 
+    @classmethod
+    def get_reference_type(cls) -> type[T] | None:
+        # TODO: this will work only when directly extending Reference[T[
+        # TODO: Add tests and docs
+        for g in cls.__orig_bases__:  # type: ignore
+            if typing_inspect.is_generic_type(g) and typing.get_origin(g) in [Reference, DataclassReference]:
+                return typing.get_args(g)[0]
+
+    @classmethod
+    def is_dataclass_reference(cls):
+        return dataclasses.is_dataclass(cls.get_reference_type())
+
     @abc.abstractmethod
     def resolve(self) -> T:
         """This method resolves the reference and returns the object that it refers to"""
-
-    def resolve_other[S: RefValue](self, value: "Reference[S] | S") -> S:
-        if isinstance(value, Reference):
-            return value.resolve()
-        return value
 
     def get(self) -> T:
         """Get the value. If we have already resolved it a cached value is returned, otherwise resolve() is called"""
@@ -286,22 +284,8 @@ class Reference[T: RefValue](Base):
         return self._model
 
 
-class DataclassReference[T: DataclassProtocol](Reference[T], metaclass=DataclassRefeferenMeta):
-    @classmethod
-    def get_dataclass_type(cls) -> type[DataclassProtocol]:
-        """Get the dataclass type that the reference points to"""
-        # TODO....
-        for g in cls.__orig_bases__:  # type: ignore
-            if typing_inspect.is_generic_type(g):
-                for arg in typing.get_args(g):
-                    if dataclasses.is_dataclass(arg) and isinstance(arg, type):
-                        return arg
-
-        raise TypeError("A dataclass reference requires a typevar that is bound to the dataclass it references.")
-
-
-# TODO: we need to make sure that the executor knows it should load the mutator and executor code before running the handler
-#       of a resource that uses references.
+class DataclassReference[T: DataclassProtocol](Reference[T]):
+    pass
 
 
 class reference:

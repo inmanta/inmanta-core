@@ -1133,7 +1133,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         value = DynamicProxy.unwrap(
             value,
-            dynamic_context=DynamicUnwrapContext(resolver=resolver, queue=queue, location=location),
+            dynamic_context=DynamicUnwrapContext(resolver=resolver, queue=queue, location=location, type_resolver=to_dsl_type),
         )
 
         try:
