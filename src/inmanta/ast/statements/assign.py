@@ -21,7 +21,7 @@ import typing
 from collections import abc
 from itertools import chain
 from string import Formatter
-from typing import Optional, TypeVar
+from typing import Optional, TypeVar, TYPE_CHECKING
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
@@ -61,11 +61,6 @@ from inmanta.execute.runtime import (
 from inmanta.execute.util import Unknown
 
 from . import ReferenceStatement
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
 
 
 if TYPE_CHECKING:

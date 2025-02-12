@@ -40,7 +40,7 @@ from enum import Enum
 from functools import reduce
 from importlib.abc import Loader
 from importlib.metadata import PackageNotFoundError
-from io import BytesIO, TextIOBase
+from io import BytesIO, TextIOWrapper
 from itertools import chain
 from subprocess import CalledProcessError
 from tarfile import TarFile
@@ -72,10 +72,6 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from ruamel.yaml.comments import CommentedMap
 
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1123,7 +1119,7 @@ class YamlParser(RawParser):
         try:
             return yaml.safe_load(source)
         except yaml.YAMLError as e:
-            if isinstance(source, TextIOBase):
+            if isinstance(source, TextIOWrapper):
                 raise InvalidMetadata(msg=f"Invalid yaml syntax in {source.name}:\n{str(e)}") from e
             else:
                 raise InvalidMetadata(msg=str(e)) from e
@@ -1142,12 +1138,12 @@ class CfgParser(RawParser):
             version_tag: str = config.get("egg_info", "tag_build", fallback="")
             return {**config["metadata"], "install_requires": install_requires, "version_tag": version_tag}
         except configparser.Error as e:
-            if isinstance(source, TextIOBase):
+            if isinstance(source, TextIOWrapper):
                 raise InvalidMetadata(msg=f"Invalid syntax in {source.name}:\n{str(e)}") from e
             else:
                 raise InvalidMetadata(msg=str(e)) from e
         except KeyError as e:
-            if isinstance(source, TextIOBase):
+            if isinstance(source, TextIOWrapper):
                 raise InvalidMetadata(msg=f"Metadata file {source.name} doesn't have a metadata section.") from e
             else:
                 raise InvalidMetadata(msg="Metadata file doesn't have a metadata section.") from e
@@ -1236,7 +1232,7 @@ class Metadata(BaseModel):
                 **raw,
             )
         except ValidationError as e:
-            if isinstance(source, TextIOBase):
+            if isinstance(source, TextIOWrapper):
                 raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid:", validation_error=e) from e
             else:
                 raise InvalidMetadata(msg=str(e), validation_error=e) from e

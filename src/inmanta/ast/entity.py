@@ -20,7 +20,7 @@ import dataclasses
 import importlib
 import inspect
 import typing
-from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
+from typing import Any, Dict, List, Optional, Set, Tuple, Union, TYPE_CHECKING  # noqa: F401
 
 from inmanta.ast import (
     CompilerException,
@@ -49,10 +49,7 @@ from inmanta.types import DataclassProtocol
 # pylint: disable-msg=R0902,R0904
 
 
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
+
 
 if TYPE_CHECKING:
     from inmanta.ast import Namespaced
