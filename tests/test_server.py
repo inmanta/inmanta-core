@@ -1557,7 +1557,9 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
         assert result.code == 200
 
     process_sid = uuid.uuid4()
-    await data.AgentProcess(hostname="localhost-dummy", environment=env1.id, sid=process_sid, last_seen=datetime.now()).insert()
+    await data.SchedulerSession(
+        hostname="localhost-dummy", environment=env1.id, sid=process_sid, last_seen=datetime.now()
+    ).insert()
 
     id_primary = uuid.uuid4()
     await data.AgentInstance(id=id_primary, process=process_sid, name="dummy-instance", tid=env1.id).insert()
