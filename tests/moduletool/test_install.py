@@ -60,10 +60,10 @@ def run_module_install(module_path: str, editable: bool = False) -> None:
             config=PipConfig(use_system_config=True),
         )
     else:
-        mod_artifact_path = ModuleTool().build(path=module_path)
+        mod_artifact_paths = ModuleTool().build(path=module_path, wheel=True)
         env.process_env.install_for_config(
             requirements=[],
-            paths=[env.LocalPackagePath(path=mod_artifact_path)],
+            paths=[env.LocalPackagePath(path=mod_artifact_paths[0])],
             config=PipConfig(use_system_config=True),
         )
 

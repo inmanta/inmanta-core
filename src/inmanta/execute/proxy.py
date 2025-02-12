@@ -16,13 +16,15 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import dataclasses
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
-from typing import Callable, Union
+from dataclasses import is_dataclass
+from typing import TYPE_CHECKING, Callable, Union
 
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
 from inmanta.ast import AttributeNotFound as AttributeNotFound
-from inmanta.ast import NotFoundException, RuntimeException
+from inmanta.ast import Location, NotFoundException, RuntimeException
 from inmanta.ast import UnknownException as UnknownException
 from inmanta.ast import UnsetException as UnsetException  # noqa F401
 from inmanta.execute.util import NoneValue, Unknown
@@ -30,14 +32,26 @@ from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
 from inmanta.util import JSONSerializable
 
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
-
 if TYPE_CHECKING:
     from inmanta.ast.entity import Entity
-    from inmanta.execute.runtime import Instance
+    from inmanta.execute.runtime import Instance, QueueScheduler, Resolver
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class DynamicUnwrapContext:
+    """A set of context information that allows dynamic proxy unwrapping to construct instances"""
+
+    resolver: "Resolver"
+    queue: "QueueScheduler"
+    location: Location
+
+
+# this is here to avoid import loops
+# It would be nicer to have it as class method on entity, but that would cause proxy to import the entire compiler
+def get_inmanta_type_for_dataclass(for_type: type[object]) -> "Entity | None":
+    if hasattr(for_type, "_paired_inmanta_entity"):
+        return for_type._paired_inmanta_entity
+    return None
 
 
 @stable_api
@@ -54,9 +68,11 @@ class DynamicProxy:
         return object.__getattribute__(self, "__instance")
 
     @classmethod
-    def unwrap(cls, item: object) -> object:
+    def unwrap(cls, item: object, *, dynamic_context: DynamicUnwrapContext | None = None) -> object:
         """
         Converts a value from the plugin domain to the internal domain.
+
+        :param dynamic_context: a type resolver context. When passed in, dataclasses are converted as well.
         """
         if item is None:
             return NoneValue()
@@ -65,7 +81,7 @@ class DynamicProxy:
             return item._get_instance()
 
         if isinstance(item, list):
-            return [cls.unwrap(x) for x in item]
+            return [cls.unwrap(x, dynamic_context=dynamic_context) for x in item]
 
         if isinstance(item, dict):
 
@@ -75,9 +91,24 @@ class DynamicProxy:
                     raise RuntimeException(
                         None, f"dict keys should be strings, got {key} of type {type(key)} with dict value {value}"
                     )
-                return (key, cls.unwrap(value))
+                return (key, cls.unwrap(value, dynamic_context=dynamic_context))
 
             return dict(map(recurse_dict_item, item.items()))
+
+        if is_dataclass(item) and not isinstance(item, type):
+            # dataclass instance
+            dataclass_type = get_inmanta_type_for_dataclass(type(item))
+            if dataclass_type:
+                if dynamic_context is not None:
+                    return dataclass_type.from_python(
+                        item, dynamic_context.resolver, dynamic_context.queue, dynamic_context.location
+                    )
+                else:
+                    raise RuntimeException(
+                        None,
+                        f"{item} is a dataclass of type {dataclass_type.get_full_name()}. "
+                        "It can only be converted to an inmanta entity at the plugin boundary",
+                    )
 
         return item
 

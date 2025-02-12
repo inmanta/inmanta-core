@@ -181,6 +181,65 @@ see :ref:`moddev-module`.
 .. todo:: new statements
 
 
+Dataclasses
+========================
+
+When you want to construct entities in a plugin, you can use dataclasses.
+
+An inmanta dataclass is an entity that has a python counterpart.
+When used in a plugin, it is a normal python object, when used in the model, it is a normal Entity.
+
+.. code-block:: python
+
+    import dataclasses
+
+    from inmanta.plugins import plugin
+
+    @dataclasses.dataclass(frozen=True)
+    class Virtualmachine:
+        name: str
+        ram: int
+        cpus: int
+
+    @plugin
+    def make_virtual_machine() -> "dataclasses::Virtualmachine":
+        return Virtualmachine(name="Test", ram=5, cpus=12)
+
+.. code-block:: inmanta
+
+    entity Virtualmachine extends std::Dataclass:
+        string name
+        int ram
+        int cpus
+    end
+
+    implement Virtualmachine using std::none
+
+    vm = make_virtual_machine()
+    std::print(vm.name)
+
+When using dataclasses, the object can be passed around freely into and out of plugins.
+
+However, some restrictions apply:
+The python class is expect to be:
+
+* a frozen dataclass
+* with the same name
+* in the plugins package of this module
+* in the corresponding submodule
+* with the exact same fields
+
+The Inmanta entity is expect to:
+
+* have no relations
+* have no indexes
+* have only std::none as implementation
+* extend std::Dataclass
+
+.. note::
+
+    When the inmanta entity and python class don't match, the compiler will print out a correction for both.
+    This means you only ever have to write the Entity, because the compiler will print the python class for you to copy paste.
 
 
 Deprecate plugins

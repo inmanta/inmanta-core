@@ -17,64 +17,101 @@ Contact: code@inmanta.com
 """
 
 import collections.abc
-from typing import Any, Mapping, Optional, Sequence, Union
+from typing import Annotated, Any, Mapping, Optional, Sequence, TypeAlias, Union
 
 import pytest
 
 import inmanta.ast.type as inmanta_type
-from inmanta.ast import RuntimeException
-from inmanta.plugins import Null, to_dsl_type
+from inmanta.ast import Namespace, Range, RuntimeException
+from inmanta.plugins import ModelType, Null, to_dsl_type
+
+# An inmanta type that we can find without any namespace
+GenericDict: TypeAlias = Annotated[Any, ModelType["dict"]]
 
 
 def test_conversion(caplog):
     """
     Test behaviour of to_dsl_type function.
     """
-    assert inmanta_type.Integer() == to_dsl_type(int)
-    assert inmanta_type.Float() == to_dsl_type(float)
-    assert inmanta_type.NullableType(inmanta_type.Float()) == to_dsl_type(float | None)
-    assert inmanta_type.List() == to_dsl_type(list)
-    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(list[str])
-    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(Sequence[str])
-    assert inmanta_type.List() == to_dsl_type(Sequence)
-    assert inmanta_type.List() == to_dsl_type(collections.abc.Sequence)
-    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type(collections.abc.Sequence[str])
-    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type(dict)
-    assert inmanta_type.TypedDict(inmanta_type.Type()) == to_dsl_type(Mapping)
-    assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(dict[str, str])
-    assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(Mapping[str, str])
+    namespace = Namespace("dummy-namespace")
+    namespace.primitives = inmanta_type.TYPES
 
-    assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type(collections.abc.Mapping[str, str])
+    location: Range = Range("test", 1, 1, 2, 1)
+
+    def to_dsl_type_simple(python_type: type[object]) -> inmanta_type.Type:
+        return to_dsl_type(python_type, location, namespace)
+
+    assert inmanta_type.NullableType(inmanta_type.Integer()) == to_dsl_type_simple(Annotated[int | None, "something"])
+    # Union type should be ignored in favor of our ModelType
+    assert inmanta_type.TypedDict(inmanta_type.Any()) == to_dsl_type_simple(Annotated[dict[str, int], ModelType["dict"]])
+    assert inmanta_type.Integer() == to_dsl_type_simple(int)
+    assert inmanta_type.Float() == to_dsl_type_simple(float)
+    assert inmanta_type.NullableType(inmanta_type.Float()) == to_dsl_type_simple(float | None)
+    assert inmanta_type.List() == to_dsl_type_simple(list)
+    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type_simple(list[str])
+    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type_simple(Sequence[str])
+    assert inmanta_type.List() == to_dsl_type_simple(Sequence)
+    assert inmanta_type.List() == to_dsl_type_simple(collections.abc.Sequence)
+    assert inmanta_type.TypedList(inmanta_type.String()) == to_dsl_type_simple(collections.abc.Sequence[str])
+    assert inmanta_type.TypedDict(inmanta_type.Any()) == to_dsl_type_simple(dict)
+    assert inmanta_type.TypedDict(inmanta_type.Any()) == to_dsl_type_simple(Mapping)
+    assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type_simple(dict[str, str])
+    assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type_simple(Mapping[str, str])
 
     # Union types
-    assert inmanta_type.Integer() == to_dsl_type(Union[int])
-    assert inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()]) == to_dsl_type(Union[int, str])
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+    assert inmanta_type.Integer() == to_dsl_type_simple(Union[int])
+    assert inmanta_type.Union(
+        [inmanta_type.Integer(), inmanta_type.String(), inmanta_type.TypedDict(inmanta_type.Any())]
+    ) == to_dsl_type_simple(Union[int, str, GenericDict])
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
         Union[None, int, str]
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
         Optional[Union[int, str]]
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
         Union[int, str] | None
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type(
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
         None | Union[int, str]
     )
     # verify that nested unions are flattened and nested None values are considered for NullableType
     assert inmanta_type.NullableType(
         inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String(), inmanta_type.Float()])
-    ) == to_dsl_type(Union[int, Union[str, Union[float, None]]])
+    ) == to_dsl_type_simple(Union[int, Union[str, Union[float, None]]])
 
-    assert Null() == to_dsl_type(Union[None])
+    # Union types
+    assert inmanta_type.Integer() == to_dsl_type_simple(Union[int])
+    assert inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()]) == to_dsl_type_simple(Union[int, str])
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
+        Union[None, int, str]
+    )
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
+        Optional[Union[int, str]]
+    )
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
+        Union[int, str] | None
+    )
+    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
+        None | Union[int, str]
+    )
+    # verify that nested unions are flattened and nested None values are considered for NullableType
+    assert inmanta_type.NullableType(
+        inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String(), inmanta_type.Float()])
+    ) == to_dsl_type_simple(Union[int, Union[str, Union[float, None]]])
 
-    assert isinstance(to_dsl_type(Any), inmanta_type.Type)
+    assert Null() == to_dsl_type_simple(Union[None])
+    assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type_simple(collections.abc.Mapping[str, str])
+
+    assert Null() == to_dsl_type_simple(Union[None])
+
+    assert isinstance(to_dsl_type_simple(Any), inmanta_type.Type)
 
     with pytest.raises(RuntimeException):
-        to_dsl_type(dict[int, int])
+        to_dsl_type_simple(dict[int, int])
 
     with pytest.raises(RuntimeException):
-        to_dsl_type(set[str])
+        to_dsl_type_simple(set[str])
 
     class CustomList[T](list[T]):
         pass
@@ -83,14 +120,14 @@ def test_conversion(caplog):
         pass
 
     with pytest.raises(RuntimeException):
-        to_dsl_type(CustomList[str])
+        to_dsl_type_simple(CustomList[str])
 
     with pytest.raises(RuntimeException):
-        to_dsl_type(CustomDict[str, str])
+        to_dsl_type_simple(CustomDict[str, str])
 
     # Check that a warning is produced when implicit cast to 'Any'
     caplog.clear()
-    to_dsl_type(complex)
+    to_dsl_type_simple(complex)
     warning_message = (
         "InmantaWarning: Python type <class 'complex'> was implicitly cast to 'Any' because no matching type "
         "was found in the Inmanta DSL. Please refer to the documentation for an overview of supported types at the "
