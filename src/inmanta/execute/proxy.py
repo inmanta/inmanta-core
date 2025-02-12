@@ -20,7 +20,7 @@ import dataclasses
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from dataclasses import is_dataclass
-from typing import Callable, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Union
 
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
 from inmanta.ast import AttributeNotFound as AttributeNotFound
@@ -31,8 +31,6 @@ from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
 from inmanta.util import JSONSerializable
-
-
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Entity
