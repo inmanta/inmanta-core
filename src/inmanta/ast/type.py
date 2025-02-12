@@ -38,6 +38,7 @@ from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.model import Entity
 from inmanta.references import DataclassReference, Reference
 from inmanta.stable_api import stable_api
+from sqlalchemy import false
 
 try:
     from typing import TYPE_CHECKING
@@ -146,6 +147,26 @@ class Type(Locatable):
         """
         return instance
 
+    def issupertype(self, other: "Type") -> bool:
+        """
+        Returns True iff this DSL type is a supertype of the other type in a non-trivial way.
+        Raises NotImplementedError if this DSL type has no special supertyping rules (i.e. most types).
+        """
+        # TODO: docstring
+        raise NotImplementedError()
+
+    def issubtype(self, other: "Type") -> bool:
+        """
+        Returns True iff this DSL type is a subtype of the other type.
+        False negatives may be unavoidable in complex cases. Does not return false positives.
+        """
+        if self == other:
+            return True
+        try:
+            return other.issupertype(self)
+        except NotImplementedError:
+            return False
+
     def __eq__(self, other: object) -> bool:
         if type(self) != Type:  # noqa: E721
             # Not for children
@@ -170,7 +191,7 @@ class ReferenceType(Type):
             return True
 
         try:
-            # ClEANUP" added for instances
+            # TODO ClEANUP" added for instances
 
             return self.element_type.validate(value)
         except RuntimeException:
@@ -183,8 +204,7 @@ class ReferenceType(Type):
         return f"Reference[{self.element_type.type_string()}]"
 
     def is_attribute_type(self) -> bool:
-        # TODO: reconsider this
-        return False
+        return self.element_type.is_attribute_type()
 
     def get_base_type(self) -> "Type":
         # TODO: reconsider this
@@ -195,14 +215,14 @@ class ReferenceType(Type):
         return super().with_base_type(base_type)
 
     def corresponds_to(self, type: "Type") -> bool:
-        # Can't be expressed in the model
-        # TODO???
-        raise NotImplementedError()
+        if not isinstance(type, ReferenceType):
+            return False
+        return self.element_type.corresponds_to(type.element_type)
 
     def as_python_type_string(self) -> "str | None":
         # Can't be expressed in the model
         # TODO???
-        raise NotImplementedError()
+        return f"Reference[{self.element_type.as_python_type_string()}]"
 
     def has_custom_to_python(self) -> bool:
         return True
@@ -214,55 +234,75 @@ class ReferenceType(Type):
         return DynamicProxy.return_value(instance)
 
     def __eq__(self, other: object) -> bool:
-        return super().__eq__(other)
+        if not isinstance(other, ReferenceType):
+            return False
+        return other.element_type == self.element_type
 
     def __hash__(self) -> int:
         return super().__hash__()
 
-
-class OrReferenceType(ReferenceType):
-
-    def validate(self, value: Optional[object]) -> bool:
-        try:
-            return self.element_type.validate(value)
-        except RuntimeException:
-            pass
-
-        return super().validate(value)
-
-    def type_string(self) -> Optional[str]:
-        return self.element_type.type_string()
-
-    def type_string_internal(self) -> str:
-        element = self.element_type.type_string()
-        return f"Reference[{element}] | {element}"
-
-    def __eq__(self, other):
-        if not isinstance(other, OrReferenceType):
+    def issupertype(self, other: "Type") -> bool:
+        if not isinstance(other, ReferenceType):
             return False
-        return other.element_type == self.element_type
+        return self.element_type.issupertype(other.element_type)
 
-    def is_attribute_type(self) -> bool:
-        return self.element_type.is_attribute_type()
 
-    def corresponds_to(self, type: "Type") -> bool:
-        # The model always allow reference, we allow the type in the python domain to be tighter
-        if isinstance(type, Any):
-            return True
-        if self.element_type.corresponds_to(type):
-            return True
-        if isinstance(type, Union):
-            # todo: bit sloppy?
-            if not any(self.element_type.corresponds_to(sub_type) for sub_type in type.types):
-                return False
-            if not any(
-                isinstance(sub_type, ReferenceType) and self.element_type.corresponds_to(sub_type.element_type)
-                for sub_type in type.types
-            ):
-                return False
-            return True
-        if isinstance(type, ReferenceType):
-            return self.element_type.corresponds_to(type.element_type)
+def OrReferenceType(element_type: Type) -> Type:
+    return Union(types=[element_type, ReferenceType(element_type)])
+
+
+# class OrReferenceType(ReferenceType):
+#
+#     def validate(self, value: Optional[object]) -> bool:
+#         try:
+#             return self.element_type.validate(value)
+#         except RuntimeException:
+#             pass
+#
+#         return super().validate(value)
+#
+#     def type_string(self) -> Optional[str]:
+#         return self.element_type.type_string()
+#
+#     def type_string_internal(self) -> str:
+#         element = self.element_type.type_string()
+#         return f"Reference[{element}] | {element}"
+#
+#     def __eq__(self, other):
+#         if not isinstance(other, OrReferenceType):
+#             return False
+#         return other.element_type == self.element_type
+#
+#     def is_attribute_type(self) -> bool:
+#         return self.element_type.is_attribute_type()
+#
+#     def corresponds_to(self, type: "Type") -> bool:
+#         # The model always allow reference, we allow the type in the python domain to be tighter
+#         if isinstance(type, Any):
+#             return True
+#         if self.element_type.corresponds_to(type):
+#             return True
+#         if isinstance(type, Union):
+#             # todo: bit sloppy?
+#             if not any(self.element_type.corresponds_to(sub_type) for sub_type in type.types):
+#                 return False
+#             if not any(
+#                 isinstance(sub_type, ReferenceType) and self.element_type.corresponds_to(sub_type.element_type)
+#                 for sub_type in type.types
+#             ):
+#                 return False
+#             return True
+#         if isinstance(type, ReferenceType):
+#             return self.element_type.corresponds_to(type.element_type)
+#
+#     def as_python_type_string(self) -> "str | None":
+#         # Can't be expressed in the model
+#         return f"Reference[{self.element_type.as_python_type_string()}] | {self.element_type.as_python_type_string()}"
+#
+#     def issupertype(self, other: "Type") -> bool:
+#         if not isinstance(other, ReferenceType):
+#             return self.element_type.issupertype(other)
+#         return self.element_type.issupertype(other.element_type)
 
 
 class NamedType(Type, Named):
@@ -280,6 +320,40 @@ class NamedType(Type, Named):
 
     def __hash__(self) -> int:
         return hash(self.get_full_name())
+
+
+class Null(Type):
+    """
+    This custom type is used for the validation of plugins which only
+    accept null as an argument or return value.
+    """
+
+    def validate(self, value: Optional[object]) -> bool:
+        if isinstance(value, NoneValue):
+            return True
+
+        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+
+    def type_string(self) -> str:
+        return "null"
+
+    def type_string_internal(self) -> str:
+        return self.type_string()
+
+    def as_python_type_string(self) -> "str | None":
+        return "None"
+
+    def corresponds_to(self, type: Type) -> bool:
+        return isinstance(type, (Null, Any))
+
+    def has_custom_to_python(self) -> bool:
+        return False
+
+    def __eq__(self, other: object) -> bool:
+        return type(self) == type(other)  # noqa: E721
+
+    def get_location(self) -> Optional[Location]:
+        return None
 
 
 @stable_api
@@ -343,6 +417,9 @@ class NullableType(Type):
     def has_custom_to_python(self) -> bool:
         return self.element_type.has_custom_to_python()
 
+    def issupertype(self, other: "Type") -> bool:
+        return other == self.element_type or isinstance(other, Null)
+
 
 class Any(Type):
     """
@@ -362,6 +439,9 @@ class Any(Type):
 
     def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721
+
+    def issupertype(self, other: "Type") -> bool:
+        return True
 
 
 def cast_not_implemented(value: Optional[object]) -> object:
@@ -660,6 +740,12 @@ class List(Type):
     def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721
 
+    def issubtype(self, other: "Type") -> bool:
+        return isinstance(other, List)
+
+    def issupertype(self, other: "Type") -> bool:
+        return other != self and other.issubtype(self)
+
 
 @stable_api
 class TypedList(List):
@@ -735,6 +821,11 @@ class TypedList(List):
     def has_custom_to_python(self) -> bool:
         return self.element_type.has_custom_to_python()
 
+    def issubtype(self, other: "Type") -> bool:
+        if not isinstance(other, TypedList):
+            return False
+        return self.element_type.issubtype(other.element_type)
+
 
 @stable_api
 class LiteralList(TypedList):
@@ -804,6 +895,12 @@ class Dict(Type):
             return True
         return isinstance(type, Dict)
 
+    def issubtype(self, other: "Type") -> bool:
+        return isinstance(other, Dict)
+
+    def issupertype(self, other: "Type") -> bool:
+        return other != self and other.issubtype(self)
+
 
 @stable_api
 class TypedDict(Dict):
@@ -862,6 +959,11 @@ class TypedDict(Dict):
         if not isinstance(other, TypedDict):
             return NotImplemented
         return self.element_type == other.element_type
+
+    def issubtype(self, other: "Type") -> bool:
+        if not isinstance(other, TypedDict):
+            return False
+        return self.element_type.issubtype(other.element_type)
 
 
 @stable_api
@@ -934,7 +1036,21 @@ class Union(Type):
         assert False
 
     def corresponds_to(self, type: Type) -> bool:
-        raise NotImplementedError("No unions can be specified as attributes, unexpected usage")
+        if isinstance(type, Union):
+            types = list(type.types)
+        else:
+            types = [type]
+
+        unmatched = list(types)
+        for type in self.types:
+            for other_type in types:
+                if type.corresponds_to(other_type):
+                    unmatched.remove(other_type)
+                    break
+            else:
+                # type did not match anything
+                return False
+        return not unmatched
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Union):
@@ -949,6 +1065,13 @@ class Union(Type):
     def get_location(self) -> Optional[Location]:
         # We don't know what location to use...
         return None
+
+    def issupertype(self, other: "Type") -> bool:
+        # TODO: what if other is a sub-type?
+        return other in self.types
+
+    def issubtype(self, other: "Type") -> bool:
+        return all(element_type.issubtype(other) for element_type in self.types)
 
 
 @stable_api
@@ -978,6 +1101,12 @@ class Literal(Union):
         # Infinite recursive type, avoid the mess
         # We allow any primitive
         return type.is_attribute_type()
+
+    def issupertype(self, other: "Type") -> bool:
+        return other.is_attribute_type()
+
+    def issubtype(self, other: "Type") -> bool:
+        return Type.issubtype(self, other)
 
 
 @stable_api
@@ -1077,6 +1206,10 @@ class ConstraintType(NamedType):
     def to_python(self, instance: object) -> "object":
         assert self.basetype is not None
         return self.basetype.to_python(instance)
+
+    def issubtype(self, other: "Type") -> bool:
+        assert self.basetype is not None
+        return super().issubtype(other) or self.basetype.issubtype(other)
 
 
 def create_function(tp: ConstraintType, expression: "ExpressionStatement"):

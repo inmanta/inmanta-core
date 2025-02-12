@@ -46,7 +46,9 @@ from inmanta.ast import (
     UnsetException,
     WithComment,
 )
-from inmanta.ast.type import NamedType, OrReferenceType, ReferenceType
+from inmanta.ast.type import NamedType
+from inmanta.ast.type import Null as Null  # Moved, part of stable api
+from inmanta.ast.type import OrReferenceType, ReferenceType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext, get_inmanta_type_for_dataclass
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
@@ -205,40 +207,6 @@ class PluginMeta(type):
             }
         else:
             cls.__functions = {}
-
-
-class Null(inmanta_type.Type):
-    """
-    This custom type is used for the validation of plugins which only
-    accept null as an argument or return value.
-    """
-
-    def validate(self, value: Optional[object]) -> bool:
-        if isinstance(value, NoneValue):
-            return True
-
-        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
-
-    def type_string(self) -> str:
-        return "null"
-
-    def type_string_internal(self) -> str:
-        return self.type_string()
-
-    def as_python_type_string(self) -> "str | None":
-        return "None"
-
-    def corresponds_to(self, type: inmanta_type.Type) -> bool:
-        return isinstance(type, (Null, inmanta_type.Any))
-
-    def has_custom_to_python(self) -> bool:
-        return False
-
-    def __eq__(self, other: object) -> bool:
-        return type(self) == type(other)  # noqa: E721
-
-    def get_location(self) -> Optional[Location]:
-        return None
 
 
 class UnConvertibleEntity(inmanta_type.Type):
