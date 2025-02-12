@@ -1,0 +1,8 @@
+---
+description: Fix bug where configuration options with a dot in their section name could not be read from an environment variable.
+issue-nr: 1995
+issue-repo: inmanta-lsm
+change-type: patch
+destination-branches: [master, iso8, iso7]
+sections:
+  bugfix: "{{description}}"
