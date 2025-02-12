@@ -20,7 +20,7 @@ import copy
 import functools
 import numbers
 from collections.abc import Sequence
-from typing import Callable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Optional
 
 from inmanta.ast import (
     DuplicateException,
@@ -34,7 +34,6 @@ from inmanta.ast import (
 )
 from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.stable_api import stable_api
-
 
 if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement

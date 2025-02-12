@@ -72,7 +72,6 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from ruamel.yaml.comments import CommentedMap
 
-
 LOGGER = logging.getLogger(__name__)
 
 Path = NewType("Path", str)
