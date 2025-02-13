@@ -79,6 +79,21 @@ The deactive_venv autouse fixture cleans up all venv activation and resets inman
 environment.
 """
 
+"""
+About the fixtures that control the behavior related to the scheduler:
+
+* Default behavior: We expect the test case to not (auto)start a schduler. Any attempt to autostart the scheduler
+                    will result in an AssertionError.
+* `auto_start_agent` fixture: Indicates we expect scheduler to be autostart.
+                    => Usage: Add the `@pytest.mark.parametrize("auto_start_agent", [True])` annotation on the test case.
+* `null_agent` fixture: Create an agent that doesn't do anything. The test case just expects the agent to exists and be up.
+                    => Usage: Regular fixture instantiation.
+* `agent` fixture: Create an full in-process agent that fully works.
+                    => Usage: Regular fixture instantiation
+* `no_agent` fixture: Disables the scheduler autostart functionality, any attempt to start the scheduler is ignored.
+                    => Usage: Add the `@pytest.mark.parametrize("no_agent", [True])` annotation on the test case.
+"""
+
 import asyncio
 import concurrent
 import csv
