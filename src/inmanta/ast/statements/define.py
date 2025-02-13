@@ -184,6 +184,7 @@ class DefineEntity(TypeDefinitionStatement):
         try:
             entity_type = self.type
             entity_type.comment = self.comment
+            is_dataclass = False
 
             add_attributes: dict[str, Attribute] = {}
             attribute: DefineAttribute
@@ -226,6 +227,7 @@ class DefineEntity(TypeDefinitionStatement):
 
                 entity_type.parent_entities.append(parent_type)
                 parent_type.child_entities.append(entity_type)
+                is_dataclass |= parent_type.get_full_name() == "std::Dataclass"
 
             for parent_type in entity_type.get_all_parent_entities():
                 for attr_name, other_attr in parent_type.attributes.items():
@@ -239,6 +241,9 @@ class DefineEntity(TypeDefinitionStatement):
                             add_attributes[attr_name] = other_attr
                         else:
                             raise DuplicateException(my_attr, other_attr, "Incompatible attributes")
+
+            if is_dataclass:
+                entity_type.pair_dataclass_stage1()
             # verify all attribute compatibility
         except TypeNotFoundException as e:
             e.set_statement(self)

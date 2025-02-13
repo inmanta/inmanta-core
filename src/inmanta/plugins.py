@@ -49,7 +49,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
-from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext
+from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext, get_inmanta_type_for_dataclass
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
@@ -59,6 +59,7 @@ T = TypeVar("T")
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., object])
 
 if TYPE_CHECKING:
+    from inmanta.ast.entity import Entity
     from inmanta.ast.statements import DynamicStatement
     from inmanta.ast.statements.call import FunctionCall
     from inmanta.compiler import Compiler
@@ -240,6 +241,53 @@ class Null(inmanta_type.Type):
         return None
 
 
+class UnConvertibleEntity(inmanta_type.Type):
+    """
+    Entity that does not convert to a dataclass.
+    """
+
+    # TODO: cache
+    def __init__(self, base_entity: "Entity") -> None:
+        super().__init__()
+        self.base_entity = base_entity
+
+    def validate(self, value: Optional[object]) -> bool:
+        return self.base_entity.validate(value)
+
+    def type_string(self) -> Optional[str]:
+        return self.base_entity.type_string()
+
+    def type_string_internal(self) -> str:
+        return self.base_entity.type_string_internal()
+
+    def normalize(self) -> None:
+        pass
+
+    def is_attribute_type(self) -> bool:
+        return False
+
+    def get_base_type(self) -> "inmanta_type.Type":
+        return self.base_entity.get_base_type()
+
+    def with_base_type(self, base_type: "inmanta_type.Type") -> "inmanta_type.Type":
+        return self.base_entity.with_base_type(base_type)
+
+    def corresponds_to(self, type: "inmanta_type.Type") -> bool:
+        raise NotImplementedError()
+
+    def as_python_type_string(self) -> "str | None":
+        return self.base_entity.as_python_type_string()
+
+    def has_custom_to_python(self) -> bool:
+        return False
+
+    def to_python(self, instance: object) -> "object":
+        return self.base_entity.to_python(instance)
+
+    def get_location(self) -> Optional[Location]:
+        return self.base_entity.get_location()
+
+
 # Define some types which are used in the context of plugins.
 PLUGIN_TYPES = {
     "any": inmanta_type.Any(),  # Any value will pass validation
@@ -333,6 +381,12 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
         else:
             bases = [to_dsl_type(arg, location, resolver) for arg in typing.get_args(python_type)]
             return inmanta_type.Union(bases)
+
+    if dataclasses.is_dataclass(python_type):
+        entity = get_inmanta_type_for_dataclass(python_type)
+        if entity:
+            return entity
+        raise TypingException(None, f"invalid type {python_type}, this dataclass has no associated inmanta entity")
 
     # Lists and dicts
     if typing_inspect.is_generic_type(python_type):

@@ -16,6 +16,8 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import os.path
+
 import pytest
 
 from inmanta import compiler
@@ -39,6 +41,9 @@ two = dataclasses::Virtualmachine(name="A", os={}, ram=1, cpus={"a":5}, disk=[10
 
 # from python into plugin
 dataclasses::eat_vm(two)
+
+# from python into plugin
+dataclasses::eat_vm_dynamic(two)
 
 # Construct in python
 one=dataclasses::make_virtual_machine()
@@ -226,3 +231,21 @@ a= "Test"
         ministd=True,
     )
     compiler.do_compile()
+
+
+def test_docs(snippetcompiler):
+    base_path = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "model_developers", "examples")
+    if not os.path.exists(base_path):
+        pytest.skip("Documentation not found")
+
+    def read_file(name: str) -> str:
+        with open(os.path.join(base_path, name), "r") as fh:
+            return fh.read()
+
+    def run_for_example(name: str) -> None:
+        snippetcompiler.create_module(f"datatest{name}", read_file(f"dataclass_{name}.cf"), read_file(f"dataclass_{name}.py"))
+        snippetcompiler.setup_for_snippet(f"import datatest{name}", autostd=True)
+        compiler.do_compile()
+
+    run_for_example("1")
+    run_for_example("2")
