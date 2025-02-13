@@ -45,6 +45,7 @@ import typing_inspect
 from asyncpg import Connection
 from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
+from sqlalchemy import AsyncAdaptedQueuePool
 
 import inmanta.db.versions
 import inmanta.protocol
@@ -63,6 +64,7 @@ from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
+from inmanta.graphql.schema import POOL, get_pool, get_async_session, get_raw_connection, connection_fairy
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -1211,7 +1213,7 @@ class BaseDocument(metaclass=DocumentMeta):
         self.__process_kwargs(from_postgres, kwargs)
 
     @classmethod
-    def get_connection(
+    async def get_connection(
         cls, connection: Optional[asyncpg.connection.Connection] = None
     ) -> AbstractAsyncContextManager[asyncpg.connection.Connection]:
         """
@@ -1219,12 +1221,14 @@ class BaseDocument(metaclass=DocumentMeta):
         wrapped around that connection instance. This allows for transparent usage, regardless of whether a connection has
         already been acquired.
         """
-        if connection is not None:
-            return util.nullcontext(connection)
+        if connection is None:
+            connection = await connection_fairy()
+
+        return util.nullcontext(connection)
         # Make mypy happy
-        if cls not in [Environment, Project]:
-            assert cls._connection_pool is not None
-            return cls._connection_pool.acquire()
+        # return util.nullcontext()
+        # assert cls._connection_pool is not None
+        # return cls._connection_pool.acquire()
 
     @classmethod
     def table_name(cls) -> str:

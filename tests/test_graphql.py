@@ -30,18 +30,31 @@ import inmanta.graphql.schema as schema
 from sqlalchemy import select, insert
 
 from inmanta.graphql.models import Environment, Project
-from inmanta.graphql.schema import get_async_session
+from inmanta.graphql.schema import get_async_session, start_engine, get_pool, get_raw_connection
+
+from sqlalchemy import text
 
 LOGGER = logging.getLogger(__name__)
 
 @pytest.fixture
-async def setup_database_no_data(postgres_db, database_name):
+def sql_alchemy_connection_string(postgres_db, database_name):
+    yield f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
+
+@pytest.fixture
+async def setup_database_no_data(sql_alchemy_connection_string):
     # Initialize DB
-    conn_string = (
-        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
-    )
     # Force reinitialization of schema with the correct connection string
-    schema.initialize_schema(conn_string)
+    schema.initialize_schema(sql_alchemy_connection_string)
+
+@pytest.fixture
+def start_sqlalchemy_engine(sql_alchemy_connection_string):
+    start_engine(
+        url=sql_alchemy_connection_string,
+        pool_size=2,
+        max_overflow=4,
+        pool_timeout=60,
+        echo=True,
+    )
 @pytest.fixture
 async def setup_database(postgres_db, database_name):
     # Initialize DB
@@ -601,3 +614,38 @@ async def test_sql_alchemy_project_create(client, server):
         }
         for (project_id, project_name) in zip(ids, names)
     ]
+
+
+async def test_sql_alchemy_pool_reuse(client, server, setup_database_no_data):
+    # https://docs.sqlalchemy.org/en/20/core/engines.html#custom-dbapi-connect-arguments-on-connect-routines
+    pass
+
+    async with get_async_session() as session:
+
+        pass
+
+
+
+async def test_sql_alchemy_pool_reuse(start_sqlalchemy_engine):
+    pass
+    # https://docs.sqlalchemy.org/en/20/core/engines.html#custom-dbapi-connect-arguments-on-connect-routines
+
+
+
+    # async with get_async_session() as session:
+    #     pass
+    #     res = await session.execute(text("select 2"))
+    #     print("go", res.scalar())
+        # result_execute = await session.execute(stmt, data)
+        # await session.commit()
+
+
+    # pool = get_pool()
+    # with pool.connect() as conn:
+    #     pass
+    #     res = await session.execute(text("select 2"))
+    #     print("go", res.scalar())
+
+    # conn = await get_raw_connection()
+    # pass
+    # print(conn.dbapi_connection)

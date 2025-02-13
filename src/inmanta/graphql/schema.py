@@ -15,24 +15,30 @@
 
     Contact: code@inmanta.com
 """
-
+import logging
 import os
 import typing
 
+from sqlalchemy.engine.interfaces import DBAPIConnection
+
 import inmanta.graphql.models
 import strawberry
-from sqlalchemy import select
+from sqlalchemy import select, AsyncAdaptedQueuePool
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine, AsyncEngine
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.info import ContextType
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
+from sqlalchemy import event
 
 mapper = StrawberrySQLAlchemyMapper()
 
 ASYNC_SESSION: typing.Optional[AsyncSession] = None
 SCHEMA: strawberry.Schema | None = None
 ENGINE: AsyncEngine | None = None
+POOL: AsyncAdaptedQueuePool | None = None
+
+LOGGER = logging.getLogger(__name__)
 
 # @mapper.type(inmanta.graphql.models.EnvironmentSetting)
 # class EnvironmentSetting:
@@ -278,6 +284,11 @@ def get_schema(connection_string: typing.Optional[str] = None):
     if SCHEMA is None:
         initialize_schema(connection_string)
     return SCHEMA
+def my_on_checkout(dbapi_conn, connection_rec, connection_proxy):
+    LOGGER.debug()
+
+
+
 
 def start_engine(
         url: str,
@@ -288,9 +299,11 @@ def start_engine(
     ):
     global ENGINE
     global ASYNC_SESSION
+    global POOL
 
     if ENGINE is not None:
         raise Exception("Engine already running: cannot call start_engine twice.")
+    LOGGER.debug("Creating engine...")
     ENGINE = create_async_engine(
         url=url,
         pool_size=pool_size,
@@ -298,9 +311,49 @@ def start_engine(
         pool_timeout=pool_timeout,
         echo=echo,
     )
+    POOL = ENGINE.pool
     ASYNC_SESSION = async_sessionmaker(ENGINE)
 
+    @event.listens_for(ENGINE.sync_engine, "do_connect")
+    def do_connect(dialect, conn_rec, cargs, cparams):
+        print("some-function")
+        print(dialect, conn_rec, cargs, cparams)
 
+    @event.listens_for(ENGINE.sync_engine, "engine_connect")
+    def engine_connect(conn, branch):
+        # print("engine_connect", conn.exec_driver_sql("select 1").scalar())
+        print("engine_connect")
+        print(branch)
+
+    @event.listens_for(ENGINE.sync_engine, "checkout")
+    def my_on_checkout(dbapi_conn, connection_rec, connection_proxy):
+        print("pool checkout")
+        print(dbapi_conn, connection_rec, connection_proxy)
+
+
+def get_pool():
+    return POOL
+
+async def get_raw_connection() -> DBAPIConnection:
+    proxy_connection = await ENGINE.raw_connection()
+    return proxy_connection.dbapi_connection
+
+async def connection_fairy():
+    """
+    adapted from https://docs.sqlalchemy.org/en/20/faq/connections.html#accessing-the-underlying-connection-for-an-asyncio-driver
+    :return:
+    """
+
+    async with ENGINE.connect() as conn:
+        # pep-249 style ConnectionFairy connection pool proxy object
+        # presents a sync interface
+
+        connection_fairy = await conn.get_raw_connection()
+
+        # the really-real innermost driver connection is available
+        # from the .driver_connection attribute
+        raw_asyncio_connection = connection_fairy.driver_connection
+        return raw_asyncio_connection
 def initialize_schema(connection_string: typing.Optional[str] = None) -> strawberry.Schema:
     global ASYNC_SESSION
     global SCHEMA

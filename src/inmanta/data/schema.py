@@ -91,6 +91,7 @@ class DBSchema:
         await self.ensure_self_update()
         await self._update_db_schema()
 
+
     async def ensure_self_update(self) -> None:
         """
         Ensures the table exists and is up to date with respect to the current schema.

@@ -66,6 +66,7 @@ from inmanta.graphql.models import Environment as EnvironmentGQL
 from ..data.dataview import AgentView
 from . import config as server_config
 from .validate_filter import InvalidFilter
+from ..graphql.schema import get_raw_connection, connection_fairy
 
 LOGGER = logging.getLogger(__name__)
 
@@ -575,11 +576,14 @@ class AgentManager(ServerSlice, SessionListener):
     async def _expire_all_sessions_in_db(self) -> None:
         async with self.session_lock:
             LOGGER.debug("Cleaning server session DB")
-            async with data.AgentProcess.get_connection() as connection:
-                async with connection.transaction():
-                    await data.AgentProcess.expire_all(now=datetime.now().astimezone(), connection=connection)
-                    await data.AgentInstance.expire_all(now=datetime.now().astimezone(), connection=connection)
-                    await data.Agent.mark_all_as_non_primary(connection=connection)
+            # async with data.AgentProcess.get_connection() as connection:
+            # with connection.driver_connection as dc:
+            connection = await connection_fairy()
+            async with connection.transaction():
+
+                await data.AgentProcess.expire_all(now=datetime.now().astimezone(), connection=connection)
+                await data.AgentInstance.expire_all(now=datetime.now().astimezone(), connection=connection)
+                await data.Agent.mark_all_as_non_primary(connection=connection)
 
     async def _purge_agent_processes(self) -> None:
         agent_processes_to_keep = opt.agent_processes_to_keep.get()

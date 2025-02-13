@@ -26,8 +26,9 @@ from sqlalchemy import AsyncAdaptedQueuePool, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from inmanta import data
+from inmanta.data import schema, CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
 from inmanta.data.model import DataBaseReport
-from inmanta.graphql.schema import start_engine, get_async_session
+from inmanta.graphql.schema import start_engine, get_async_session, POOL, get_pool, connection_fairy
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
@@ -41,7 +42,7 @@ class DatabaseMonitor:
 
     def __init__(
         self,
-        pool: asyncpg.pool.Pool,
+        pool: AsyncAdaptedQueuePool,
         db_name: str,
         db_host: str,
     ) -> None:
@@ -70,9 +71,13 @@ class DatabaseMonitor:
         """
         Checks if the database pool is exhausted
         """
-        pool_exhausted: bool = (self._pool.get_size() == self._pool.get_max_size()) and self._pool.get_idle_size() == 0
-        if pool_exhausted:
-            self._exhausted_pool_events_count += 1
+        pass
+
+        # Disable monitoring for now, can maybe be replaced by events / adding a pool watcher ??
+        #
+        # pool_exhausted: bool = (self._pool.get_size() == self._pool.get_max_size()) and self._pool.get_idle_size() == 0
+        # if pool_exhausted:
+        #     self._exhausted_pool_events_count += 1
 
     def start(self) -> None:
         self.start_monitor()
@@ -179,7 +184,7 @@ class DatabaseService(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(SLICE_DATABASE)
-        self._pool: Optional[asyncpg.pool.Pool] = None
+        self._pool: Optional[AsyncAdaptedQueuePool] = None
         self._db_monitor: Optional[DatabaseMonitor] = None
 
     async def start(self) -> None:
@@ -202,17 +207,17 @@ class DatabaseService(protocol.ServerSlice):
 
     async def connect_database(self) -> None:
         """Connect to the database"""
-        self._pool = await initialize_database_connection_pool(
-            database_host=opt.db_host.get(),
-            database_port=opt.db_port.get(),
-            database_name=opt.db_name.get(),
-            database_username=opt.db_username.get(),
-            database_password=opt.db_password.get(),
-            create_db_schema=True,
-            connection_pool_min_size=opt.server_db_connection_pool_min_size.get(),
-            connection_pool_max_size=opt.server_db_connection_pool_max_size.get(),
-            connection_timeout=opt.server_db_connection_timeout.get(),
-        )
+        # self._pool = await initialize_database_connection_pool(
+        #     database_host=opt.db_host.get(),
+        #     database_port=opt.db_port.get(),
+        #     database_name=opt.db_name.get(),
+        #     database_username=opt.db_username.get(),
+        #     database_password=opt.db_password.get(),
+        #     create_db_schema=True,
+        #     connection_pool_min_size=opt.server_db_connection_pool_min_size.get(),
+        #     connection_pool_max_size=opt.server_db_connection_pool_max_size.get(),
+        #     connection_timeout=opt.server_db_connection_timeout.get(),
+        # )
         await initialize_sql_alchemy_engine(
             database_host=opt.db_host.get(),
             database_port=opt.db_port.get(),
@@ -223,13 +228,15 @@ class DatabaseService(protocol.ServerSlice):
             connection_pool_max_size=opt.server_db_connection_pool_max_size.get(),
             connection_timeout=opt.server_db_connection_timeout.get(),
         )
-
+        connection = await connection_fairy()
+        # async with connection:
+        await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, connection).ensure_db_schema()
+        # self._pool = get_pool()
         # Check if JIT is enabled
-        async with get_async_session() as session:
-            jit_available = await session.execute(text("SELECT pg_jit_available();"))
+        jit_available = await connection.execute("SELECT pg_jit_available();")
+        if jit_available:
+            LOGGER.warning("JIT is enabled in the PostgreSQL database. This might result in poor query performance.")
 
-            if jit_available:
-                LOGGER.warning("JIT is enabled in the PostgreSQL database. This might result in poor query performance.")
 
     async def disconnect_database(self) -> None:
         """Disconnect the database"""
@@ -302,17 +309,7 @@ async def initialize_sql_alchemy_engine(
     :param connection_timeout: Connection timeout (in seconds) when interacting with the database.
     """
 
-    # out = await data.connect(
-    #     host=database_host,
-    #     port=database_port,
-    #     database=database_name,
-    #     username=database_username,
-    #     password=database_password,
-    #     create_db_schema=create_db_schema,
-    #     connection_pool_min_size=connection_pool_min_size,
-    #     connection_pool_max_size=connection_pool_max_size,
-    #     connection_timeout=connection_timeout,
-    # )
+
 
 
     start_engine(
@@ -324,3 +321,7 @@ async def initialize_sql_alchemy_engine(
     )
 
     LOGGER.info("Connected to PostgreSQL database %s on %s:%d", database_name, database_host, database_port)
+
+    # out = await data.connect(
+    #
+    # )
