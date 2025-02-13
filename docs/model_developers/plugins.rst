@@ -76,13 +76,12 @@ This is done by combining ``typing.Annotated`` with ``inmanta.plugins.ModelType`
 will be the python type we want to assume for typechecking and the second will be the ``inmanta.plugins.ModelType``
 with the Inmanta DSL type that we want the compiler to validate.
 
-For example, if we want to pass a ``std::Entity`` to our plugins and have python validate it's type as ``typing.Any``, we could do this:
+For example, if we want to pass a ``std::Entity`` to our plugins and have python validate its type as ``typing.Any``, we could do this:
 
 .. code-block:: python
     :linenos:
 
     from inmanta.plugins import plugin, ModelType
-    from collections.abc import Sequence
     from typing import Annotated, Any
 
     type Entity = Annotated[Any, ModelType["std::Entity"]]
@@ -92,7 +91,7 @@ For example, if we want to pass a ``std::Entity`` to our plugins and have python
         ...
 
 
-Our compiler will validate ``my_entity`` as ``std::Entity`` meaning that we will only be able to provide a ``std::Entity``
+Our compiler will validate ``my_entity`` as ``std::Entity``, meaning that we will only be able to provide a ``std::Entity``
 as an argument to this plugin, but for IDE and static typing purposes it will be treated as ``typing.Any``.
 
 
