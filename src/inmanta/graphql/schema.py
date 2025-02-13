@@ -330,6 +330,24 @@ def start_engine(
         print("pool checkout")
         print(dbapi_conn, connection_rec, connection_proxy)
 
+class Adapter:
+    def __init__(self):
+        pass
+
+    async def __aenter__(self):
+        async with ENGINE.connect() as conn:
+            connection_fairy = await conn.get_raw_connection()
+
+            # the really-real innermost driver connection is available
+            # from the .driver_connection attribute
+            raw_asyncio_connection = connection_fairy.driver_connection
+            return await raw_asyncio_connection
+        return self
+def get_connection():
+
+    # presents a sync interface
+
+
 
 def get_pool():
     return POOL

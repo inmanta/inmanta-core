@@ -206,7 +206,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         Clean up metrics that are older than the retention time specified in the environment_metrics_retention
         environment setting.
         """
-        async with get_engine().connect() as con:
+        async with get_engine().connect() as conn:
             query = f"""
             WITH env_and_retention_time_in_hours AS (
                 SELECT id, (CASE WHEN e.settings ? $1 THEN (e.settings->>$1)::integer ELSE $2 END) AS retention_time_in_hours
@@ -231,7 +231,12 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 environment_metrics_retention_setting.default,
                 datetime.now().astimezone(),
             ]
-            await con.execute(query, *values)
+            connection_fairy = await conn.get_raw_connection()
+
+            # the really-real innermost driver connection is available
+            # from the .driver_connection attribute
+            raw_asyncio_connection = connection_fairy.driver_connection
+            return await raw_asyncio_connection.execute(query, *values)
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
         """

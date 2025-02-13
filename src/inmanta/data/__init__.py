@@ -64,7 +64,8 @@ from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
-from inmanta.graphql.schema import POOL, get_pool, get_async_session, get_raw_connection, connection_fairy, ENGINE, get_engine
+from inmanta.graphql.schema import POOL, get_pool, get_async_session, get_raw_connection, connection_fairy, ENGINE, get_engine, \
+    get_connection
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -1222,7 +1223,7 @@ class BaseDocument(metaclass=DocumentMeta):
         already been acquired.
         """
         if connection is None:
-            return get_engine().connect()
+            return get_connection()
             # connection = await connection_fairy()
 
         return util.nullcontext(connection)
