@@ -16,14 +16,11 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import abc
 import dataclasses
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from dataclasses import is_dataclass
 from typing import Callable, Union
-
-from graphql.type.introspection import TypeResolvers
 
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
 from inmanta.ast import AttributeNotFound as AttributeNotFound
@@ -114,6 +111,13 @@ class DynamicProxy:
 
         if isinstance(item, Reference):
             ref_type = item.get_reference_type()
+            if ref_type is None:
+                raise RuntimeException(
+                    None,
+                    f"Could not determine the reference type of {item}, "
+                    f"make sure the reference extends Reference[concrete_type] or override `get_reference_type`",
+                )
+
             if dataclasses.is_dataclass(ref_type):
                 if dynamic_context is None:
                     raise RuntimeException(
@@ -121,18 +125,28 @@ class DynamicProxy:
                         f"{item} is a dataclass of type {ref_type}. "
                         "It can only be converted to an inmanta entity at the plugin boundary",
                     )
-                dataclass_type = dynamic_context.type_resolver(ref_type)
-
-                return dataclass_type.from_python(
+                dataclass_ref_type = dynamic_context.type_resolver(ref_type)
+                # Can not be typed correctly due to import loops
+                return dataclass_ref_type.from_python(
                     item, dynamic_context.resolver, dynamic_context.queue, dynamic_context.location
                 )
             else:
+                if item._model_type is None:
+                    if dynamic_context is None:
+                        raise RuntimeException(
+                            None,
+                            f"{item} is a reference of type {ref_type}. "
+                            "It can only be typed at the plugin boundary or "
+                            "by explicitly setting `_model_type` to the relevant inmanta type",
+                        )
+                    reference_type = dynamic_context.type_resolver(ref_type)
+                    item._model_type = reference_type
                 return item
 
         if is_dataclass(item) and not isinstance(item, type):
             # dataclass instance
             dataclass_type = get_inmanta_type_for_dataclass(type(item))
-            if dataclass_type:
+            if dataclass_type is not None:
                 if dynamic_context is not None:
                     return dataclass_type.from_python(
                         item, dynamic_context.resolver, dynamic_context.queue, dynamic_context.location

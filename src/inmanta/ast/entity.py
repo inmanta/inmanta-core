@@ -44,7 +44,7 @@ from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
 from inmanta.plugins import to_dsl_type
-from inmanta.references import AttributeReference, DataclassReference, Reference
+from inmanta.references import AttributeReference, PrimitiveTypes, Reference
 from inmanta.types import DataclassProtocol
 
 # pylint: disable-msg=R0902,R0904
@@ -458,6 +458,7 @@ class Entity(NamedType, WithComment):
             """
             Coerce float-typed values to float (e.g. 1 -> 1.0)
             """
+            t = t.get_no_reference()
             match t:
                 case Float():
                     return t.cast(v)
@@ -732,12 +733,12 @@ class Entity(NamedType, WithComment):
         def convert_none(x: object | None) -> object:
             return x if x is not None else NoneValue()
 
-        def convert_to_attr_ref(name) -> object:
-            ar = AttributeReference(
+        def convert_to_attr_ref(name: str) -> AttributeReference[PrimitiveTypes]:
+            ar: AttributeReference[PrimitiveTypes] = AttributeReference(
                 reference=value,
                 attribute_name=name,
             )
-            ar._model_type = self.get_attribute(name).get_type()
+            ar._model_type = self.get_attribute(name).get_type().get_no_reference()
             return ar
 
         if isinstance(value, Reference):

@@ -48,7 +48,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.type import NamedType
 from inmanta.ast.type import Null as Null  # Moved, part of stable api
-from inmanta.ast.type import OrReferenceType, ReferenceType
+from inmanta.ast.type import ReferenceType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext, get_inmanta_type_for_dataclass
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
@@ -349,11 +349,10 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
                 return Null()
             if len(other_types) == 1:
                 return inmanta_type.NullableType(to_dsl_type(other_types[0]))
-            bases = [to_dsl_type(arg) for arg in other_types]
-            return inmanta_type.NullableType(inmanta_type.Union(bases))
+            return inmanta_type.create_union([to_dsl_type(arg) for arg in other_types] + [Null()])
         else:
             bases = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
-            return inmanta_type.Union(bases)
+            return inmanta_type.create_union(bases)
 
     if dataclasses.is_dataclass(python_type):
         entity = get_inmanta_type_for_dataclass(python_type)
@@ -613,14 +612,6 @@ class PluginReturn(PluginValue):
         out = super().resolve_type(plugin, resolver)
         self._resolved_type = out
         return out
-
-
-@dataclasses.dataclass
-class CheckedArgs:
-
-    args: list[object]
-    kwargs: Mapping[str, object]
-    unknowns: bool
 
 
 @dataclasses.dataclass

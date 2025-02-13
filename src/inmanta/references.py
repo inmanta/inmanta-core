@@ -166,6 +166,7 @@ class Base:
         self._model: typing.Optional[BaseModel] = None
 
         # Only present in compiler
+        # Will be set by DynamicProxy.unwrap at the plugin boundary
         self._model_type: typing.Optional["inm_type.Type"] = None
 
         # TODO: do we want to enforce type correctness when creating a reference? This also has impact on how arguments are
@@ -257,9 +258,10 @@ class Reference[T: RefValue](Base):
         for g in cls.__orig_bases__:  # type: ignore
             if typing_inspect.is_generic_type(g) and typing.get_origin(g) in [Reference, DataclassReference]:
                 return typing.get_args(g)[0]
+        return None
 
     @classmethod
-    def is_dataclass_reference(cls):
+    def is_dataclass_reference(cls) -> bool:
         return dataclasses.is_dataclass(cls.get_reference_type())
 
     @abc.abstractmethod
@@ -408,18 +410,8 @@ class ReplaceValue(Mutator):
 
 def is_reference_of(instance: typing.Optional[object], type_class: type[object]) -> bool:
     """Is the given instance a reference to the given type."""
-
-    # TODO!!!!
-
+    # TODO: test
     if instance is None or not isinstance(instance, Reference):
         return False
 
-    if isinstance(instance, AttributeReference):
-        return instance.attribute_type is type_class
-
-    if hasattr(instance, "__orig_bases__"):
-        generic_args = [typing.get_args(base)[0] for base in instance.__orig_bases__]
-        if len(generic_args) == 1:
-            return generic_args[0] is type_class
-
-    return False
+    return instance.get_reference_type() == type_class
