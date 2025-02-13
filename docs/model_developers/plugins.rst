@@ -219,8 +219,9 @@ The Inmanta entity is expect to:
     When the inmanta entity and python class don't match, the compiler will print out a correction for both.
     This means you only ever have to write the Entity, because the compiler will print the python class for you to copy paste.
 
-Dataclasses can also be passed into plugins. When the type is declared as a python type, a python instance will be passed into the plugin.
-When declared as an inmanta type (i.e. a string), a `DynamicProxy` will be returned
+Dataclasses can also be passed into plugins.
+When the type is a dataclass, it will always be converted to the python dataclass form.
+When you want pass it in as a normal entity, you have to use annotated types and declare the python type to be 'DynamicProxy`.
 
 .. literalinclude:: examples/dataclass_2.py
    :language: python

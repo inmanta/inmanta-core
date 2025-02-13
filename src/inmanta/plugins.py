@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Self, Type, 
 
 import typing_inspect
 
+import inmanta.ast.entity
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
 from inmanta.ast import InvalidTypeAnnotation, LocatableString, Location, MultiUnsetException, Namespace
@@ -429,7 +430,13 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
         if origin is typing.Annotated:
             for meta in reversed(python_type.__metadata__):  # type: ignore
                 if isinstance(meta, ModelType):
-                    return parse_dsl_type(meta.model_type, location, resolver)
+                    dsl_type = parse_dsl_type(meta.model_type, location, resolver)
+                    # override for specific case of a dataclass we don't want to convert
+                    # TODO: type check for entity won't work as we can't import it here
+                    if typing.get_args(python_type)[0] is DynamicProxy and isinstance(dsl_type, inmanta.ast.entity.Entity):
+                        return UnConvertibleEntity(dsl_type)
+                    return dsl_type
+
             # the annotation doesn't concern us => use base type
             return to_dsl_type(typing.get_args(python_type)[0], location, resolver)
 

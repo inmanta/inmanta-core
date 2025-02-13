@@ -22,6 +22,7 @@ import inspect
 import typing
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
+from inmanta import plugins
 from inmanta.ast import (
     CompilerException,
     DataClassException,
@@ -43,7 +44,6 @@ from inmanta.ast.type import Any as inm_Any
 from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
-from inmanta.plugins import to_dsl_type
 from inmanta.types import DataclassProtocol
 
 # pylint: disable-msg=R0902,R0904
@@ -619,7 +619,7 @@ class Entity(NamedType, WithComment):
                     dc_fields.pop(rel_or_attr_name)
                     # Type correspondence
                     try:
-                        dsl_type = to_dsl_type(dc_types[rel_or_attr_name], self.location, self.namespace)
+                        dsl_type = plugins.to_dsl_type(dc_types[rel_or_attr_name], self.location, self.namespace)
                         if not inm_type.corresponds_to(dsl_type):
                             failures.append(
                                 f"The attribute {rel_or_attr_name} does not have the same type as "
