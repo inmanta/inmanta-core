@@ -333,6 +333,8 @@ def start_engine(
 
 def get_pool():
     return POOL
+def get_engine():
+    return ENGINE
 
 async def get_raw_connection() -> DBAPIConnection:
     proxy_connection = await ENGINE.raw_connection()

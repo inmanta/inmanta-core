@@ -64,7 +64,7 @@ from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
-from inmanta.graphql.schema import POOL, get_pool, get_async_session, get_raw_connection, connection_fairy
+from inmanta.graphql.schema import POOL, get_pool, get_async_session, get_raw_connection, connection_fairy, ENGINE, get_engine
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -1213,7 +1213,7 @@ class BaseDocument(metaclass=DocumentMeta):
         self.__process_kwargs(from_postgres, kwargs)
 
     @classmethod
-    async def get_connection(
+    def get_connection(
         cls, connection: Optional[asyncpg.connection.Connection] = None
     ) -> AbstractAsyncContextManager[asyncpg.connection.Connection]:
         """
@@ -1222,7 +1222,8 @@ class BaseDocument(metaclass=DocumentMeta):
         already been acquired.
         """
         if connection is None:
-            connection = await connection_fairy()
+            return get_engine().connect()
+            # connection = await connection_fairy()
 
         return util.nullcontext(connection)
         # Make mypy happy
@@ -1511,8 +1512,18 @@ class BaseDocument(metaclass=DocumentMeta):
 
     @classmethod
     async def _fetchval(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> object:
-        async with cls.get_connection(connection) as con:
-            return await con.fetchval(query, *values)
+        # async with cls.get_connection(connection) as con:
+        #     return await con.fetchval(query, *values)
+        async with get_engine().connect() as conn:
+            # pep-249 style ConnectionFairy connection pool proxy object
+            # presents a sync interface
+
+            connection_fairy = await conn.get_raw_connection()
+
+            # the really-real innermost driver connection is available
+            # from the .driver_connection attribute
+            raw_asyncio_connection = connection_fairy.driver_connection
+            return await raw_asyncio_connection.fetchval(query, *values)
 
     @classmethod
     async def _fetch_int(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> int:
@@ -1539,9 +1550,19 @@ class BaseDocument(metaclass=DocumentMeta):
     async def _execute_query(
         cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
     ) -> str:
-        async with cls.get_connection(connection) as con:
-            return await con.execute(query, *values)
+        # async with cls.get_connection(connection) as con:
+        #     return await con.execute(query, *values)
 
+        async with get_engine().connect() as conn:
+            # pep-249 style ConnectionFairy connection pool proxy object
+            # presents a sync interface
+
+            connection_fairy = await conn.get_raw_connection()
+
+            # the really-real innermost driver connection is available
+            # from the .driver_connection attribute
+            raw_asyncio_connection = connection_fairy.driver_connection
+            return await raw_asyncio_connection.execute(query, *values)
     @classmethod
     async def lock_table(cls, mode: TableLockMode, connection: asyncpg.connection.Connection) -> None:
         """

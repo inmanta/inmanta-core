@@ -626,7 +626,7 @@ async def test_sql_alchemy_pool_reuse(client, server, setup_database_no_data):
 
 
 
-async def test_sql_alchemy_pool_reuse(start_sqlalchemy_engine):
+async def test_sql_alchemy_pool_reusedd(start_sqlalchemy_engine):
     pass
     # https://docs.sqlalchemy.org/en/20/core/engines.html#custom-dbapi-connect-arguments-on-connect-routines
 
