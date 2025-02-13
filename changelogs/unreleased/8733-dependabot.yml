@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump cryptography from 44.0.0 to 44.0.1
+destination-branches:
+- master
+- iso8
+sections: {}

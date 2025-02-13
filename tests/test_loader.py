@@ -310,10 +310,10 @@ def test_plugin_module_finder(
         str(venv_module_dir),
         new_content_init_py="where = 'venv'",
     )
-    mod_artifact_path = moduletool.ModuleTool().build(path=str(venv_module_dir))
+    mod_artifact_paths = moduletool.ModuleTool().build(path=str(venv_module_dir), wheel=True)
     env.process_env.install_for_config(
         requirements=[],
-        paths=[env.LocalPackagePath(path=mod_artifact_path)],
+        paths=[env.LocalPackagePath(path=mod_artifact_paths[0])],
         config=PipConfig(use_system_config=True),
     )
 

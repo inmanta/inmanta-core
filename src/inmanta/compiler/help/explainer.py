@@ -243,7 +243,7 @@ class {problem.entity.name}:
             for field in sorted(dataclasses.fields(problem.dataclass), key=lambda x: x.name):
                 type = hints[field.name]
                 try:
-                    type_str = to_dsl_type(type).type_string()
+                    type_str = to_dsl_type(type, problem.entity.location, problem.entity.namespace).type_string()
                 except Exception:
                     logging.info(
                         "Could not construct inmanta type for field %s with python type %s",

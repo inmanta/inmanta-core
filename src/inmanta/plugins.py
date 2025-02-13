@@ -29,7 +29,8 @@ import warnings
 from abc import abstractmethod
 from collections import abc
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Type, TypeVar
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Self, Type, TypeVar
 
 import typing_inspect
 
@@ -311,12 +312,51 @@ python_to_model = {
 }
 
 
-def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
+@dataclass(frozen=True)
+class ModelType:
+    """
+    Dataclass used with typing.Annotated to represent Inmanta model types in Python code.
+
+    If we want to represent "std::Entity" as "typing.Any" in our plugins we could define the following type:
+
+    type Entity = typing.Annotated[typing.Any, ModelType["std::Entity"]]
+
+    and then use it on our plugin:
+
+    @plugin
+    def my_plugin(value: Entity) -> None:
+        pass
+
+    We will validate the argument as "std::Entity", while presenting
+    a proper Python type (typing.Any) for IDE and static typing purposes.
+    It is the user's responsibility to ensure that the validation type sufficiently matches the Python type.
+
+    :param model_type: The fully qualified name of the Inmanta model type
+    """
+
+    model_type: str
+
+    def __class_getitem__(cls: type[Self], key: str) -> Self:
+        return cls(key)
+
+
+def parse_dsl_type(dsl_type: str, location: Range, resolver: Namespace) -> inmanta_type.Type:
+    locatable_type: LocatableString = LocatableString(dsl_type, location, 0, resolver)
+    return inmanta_type.resolve_type(locatable_type, resolver)
+
+
+def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace) -> inmanta_type.Type:
     """
     Convert a python type annotation to an Inmanta DSL type annotation.
 
     :param python_type: The evaluated python type as provided in the Python type annotation.
+    :param location: The location of this evaluation on the model
+    :param resolver: The namespace that can be used to resolve the type annotation of this argument.
     """
+    # Resolve aliases
+    if isinstance(python_type, typing.TypeAliasType):
+        return to_dsl_type(python_type.__value__, location, resolver)
+
     # Any to any
     if python_type is typing.Any:
         return inmanta_type.Any()
@@ -335,11 +375,11 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
                 # Probably not possible
                 return Null()
             if len(other_types) == 1:
-                return inmanta_type.NullableType(to_dsl_type(other_types[0]))
-            bases = [to_dsl_type(arg) for arg in other_types]
+                return inmanta_type.NullableType(to_dsl_type(other_types[0], location, resolver))
+            bases = [to_dsl_type(arg, location, resolver) for arg in other_types]
             return inmanta_type.NullableType(inmanta_type.Union(bases))
         else:
-            bases = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
+            bases = [to_dsl_type(arg, location, resolver) for arg in typing.get_args(python_type)]
             return inmanta_type.Union(bases)
 
     if dataclasses.is_dataclass(python_type):
@@ -354,8 +394,8 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
 
         # dict
         if issubclass(origin, Mapping):
-            if origin in [collections.abc.Mapping, dict, typing.Mapping]:
-                args = typing_inspect.get_args(python_type)
+            if origin in [collections.abc.Mapping, dict, Mapping]:
+                args = typing.get_args(python_type)
                 if not args:
                     return inmanta_type.TypedDict(inmanta_type.Any())
 
@@ -367,17 +407,17 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
                 if len(args) == 1:
                     return inmanta_type.TypedDict(inmanta_type.Any())
 
-                return inmanta_type.TypedDict(to_dsl_type(args[1]))
+                return inmanta_type.TypedDict(to_dsl_type(args[1], location, resolver))
             else:
                 raise TypingException(None, f"invalid type {python_type}, dictionary types should be Mapping or dict")
 
         # List
         if issubclass(origin, Sequence):
-            if origin in [collections.abc.Sequence, list, typing.Sequence]:
+            if origin in [collections.abc.Sequence, list, Sequence]:
                 args = typing.get_args(python_type)
                 if not args:
                     return inmanta_type.List()
-                return inmanta_type.TypedList(to_dsl_type(args[0]))
+                return inmanta_type.TypedList(to_dsl_type(args[0], location, resolver))
             else:
                 raise TypingException(None, f"invalid type {python_type}, list types should be Sequence or list")
 
@@ -385,19 +425,14 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
         if issubclass(origin, collections.abc.Set):
             raise TypingException(None, f"invalid type {python_type}, set is not supported on the plugin boundary")
 
-    # TODO annotated types
-    # if typing.get_origin(t) is typing.Annotated:
-    #     args: Sequence[object] = typing.get_args(python_type)
-    #     inmanta_types: Sequence[plugin_typing.InmantaType] =
-    #     [arg if isinstance(arg, plugin_typing.InmantaType) for arg in args]
-    #     if inmanta_types:
-    #         if len(inmanta_types) > 1:
-    #             # TODO
-    #             raise Exception()
-    #         # TODO
-    #         return parse_dsl_type(inmanta_types[0].dsl_type)
-    #     # the annotation doesn't concern us => use base type
-    #     return to_dsl_type(args[0])
+        # Annotated
+        if origin is typing.Annotated:
+            for meta in reversed(python_type.__metadata__):  # type: ignore
+                if isinstance(meta, ModelType):
+                    return parse_dsl_type(meta.model_type, location, resolver)
+            # the annotation doesn't concern us => use base type
+            return to_dsl_type(typing.get_args(python_type)[0], location, resolver)
+
     if python_type in python_to_model:
         return python_to_model[python_type]
 
@@ -483,16 +518,20 @@ class PluginValue:
         :param resolver: The namespace that can be used to resolve the type annotation of this
             argument.
         """
-        if self.type_expression in PLUGIN_TYPES:
+        if isinstance(self.type_expression, collections.abc.Hashable) and self.type_expression in PLUGIN_TYPES:
             self._resolved_type = PLUGIN_TYPES[self.type_expression]
             return self._resolved_type
 
+        plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
         if not isinstance(self.type_expression, str):
             if typing_inspect.is_union_type(self.type_expression) and not typing.get_args(self.type_expression):
                 # If typing.Union is not subscripted, isinstance(self.type_expression, type) evaluates to False.
                 raise InvalidTypeAnnotation(stmt=None, msg=f"Union type must be subscripted, got {self.type_expression}")
-            if isinstance(self.type_expression, type) or typing.get_origin(self.type_expression) is not None:
-                self._resolved_type = to_dsl_type(self.type_expression)
+            if (
+                isinstance(self.type_expression, (type, typing.TypeAliasType))
+                or typing.get_origin(self.type_expression) is not None
+            ):
+                self._resolved_type = to_dsl_type(self.type_expression, plugin_line, resolver)
             else:
                 raise InvalidTypeAnnotation(
                     stmt=None,
@@ -500,7 +539,6 @@ class PluginValue:
                     % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression),
                 )
         else:
-            plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
             locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, resolver)
             self._resolved_type = inmanta_type.resolve_type(locatable_type, resolver)
         return self._resolved_type

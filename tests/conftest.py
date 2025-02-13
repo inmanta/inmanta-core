@@ -1336,7 +1336,7 @@ class SnippetCompilationTest(KeepOnFail):
                 if mod.editable:
                     install_path = mod.path
                 else:
-                    install_path = module_tool.build(mod.path, build_dir)
+                    install_path = module_tool.build(mod.path, build_dir, wheel=True)[0]
                 self.project.virtualenv.install_for_config(
                     requirements=[],
                     paths=[LocalPackagePath(path=install_path, editable=mod.editable)],
@@ -1905,7 +1905,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         # Build modules
         for module_dir in os.listdir(modules_v2_dir):
             path: str = os.path.join(modules_v2_dir, module_dir)
-            ModuleTool().build(path=path, output_dir=build_dir)
+            ModuleTool().build(path=path, output_dir=build_dir, wheel=True)
         # Download bare necessities
         CommandRunner(logging.getLogger(__name__)).run_command_and_log_output(
             ["pip", "download", "setuptools", "wheel"], cwd=build_dir

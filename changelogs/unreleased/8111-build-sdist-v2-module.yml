@@ -1,0 +1,8 @@
+---
+description: "Added support to build sdist of V2 module."
+issue-nr: 8111
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"
