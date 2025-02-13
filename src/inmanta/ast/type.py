@@ -228,15 +228,12 @@ class ReferenceType(Type):
         return self.element_type.corresponds_to(type.element_type)
 
     def as_python_type_string(self) -> "str | None":
-        # Can't be expressed in the model
-        # TODO???
         return f"Reference[{self.element_type.as_python_type_string()}]"
 
     def has_custom_to_python(self) -> bool:
         return True
 
     def to_python(self, instance: object) -> "object":
-        # TODO???
         if isinstance(instance, Reference):
             return instance
         return DynamicProxy.return_value(instance)
@@ -1116,7 +1113,6 @@ class Union(Type):
         return " | ".join(effective_types)
 
     def has_custom_to_python(self) -> bool:
-        # TODO: this will be pain
         return any(tp.has_custom_to_python() for tp in self.types)
 
     def to_python(self, instance: object) -> "object":
