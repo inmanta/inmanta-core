@@ -82,7 +82,7 @@ environment.
 """
 About the fixtures that control the behavior related to the scheduler:
 
-* Default behavior: We expect the test case to not (auto)start a schduler. Any attempt to autostart the scheduler
+* Default behavior: We expect the test case to not (auto)start a scheduler. Any attempt to autostart the scheduler
                     will result in an AssertionError.
 * `auto_start_agent` fixture: Indicates we expect scheduler to be autostart.
                     => Usage: Add the `@pytest.mark.parametrize("auto_start_agent", [True])` annotation on the test case.
