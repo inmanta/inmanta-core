@@ -2195,10 +2195,17 @@ class BaseDocument(metaclass=DocumentMeta):
         no_obj: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Sequence[Union[Record, TBaseDocument]]:
-        async with cls.get_connection(connection) as con:
-            async with con.transaction():
+        async with get_engine().connect() as con:
+            # self.connection =
+            connection_fairy = await con.get_raw_connection()
+
+            # the really-real innermost driver connection is available
+            # from the .driver_connection attribute
+            raw_asyncio_connection = connection_fairy.driver_connection
+
+            async with raw_asyncio_connection.transaction():
                 result: list[Union[Record, TBaseDocument]] = []
-                async for record in con.cursor(query, *values):
+                async for record in raw_asyncio_connection.cursor(query, *values):
                     if no_obj:
                         result.append(record)
                     else:

@@ -421,7 +421,7 @@ async def test_query_path(server, client, setup_database):
         assert result.result["data"] == expected_data
 
 
-async def test_sql_alchemy_read(client, server, setup_database_no_data):
+async def test_sql_alchemy_read(client, server):
     """
     Create project and envs using regular endpoints
     Read using sql alchemy capabilities
@@ -514,7 +514,7 @@ async def test_sql_alchemy_write(client, server, setup_database_no_data):
     ]
 
 
-async def test_sql_alchemy_connection_pool(client, server, setup_database_no_data):
+async def test_sql_alchemy_connection_pool(client, server):
     """
     Create projects and envs using sql alchemy
     Read using regular endpoints

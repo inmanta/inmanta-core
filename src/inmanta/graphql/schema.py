@@ -343,10 +343,33 @@ class Adapter:
             raw_asyncio_connection = connection_fairy.driver_connection
             return await raw_asyncio_connection
         return self
+class ConnectionAcquireContext:
+
+    __slots__ = ('connection', 'done')
+
+    def __init__(self):
+        self.connection = None
+        self.done = False
+
+    async def __aenter__(self):
+        if self.connection is not None or self.done:
+            raise Exception('a connection is already acquired')
+
+        self.connection =  ENGINE.connect()
+        connection_fairy = await self.connection.get_raw_connection()
+
+        # the really-real innermost driver connection is available
+        # from the .driver_connection attribute
+        raw_asyncio_connection = connection_fairy.driver_connection
+        return raw_asyncio_connection
+
+    async def __aexit__(self, *exc):
+        self.done = True
+        self.connection.close()
+
+
 def get_connection():
-
-    # presents a sync interface
-
+    return ConnectionAcquireContext()
 
 
 def get_pool():
