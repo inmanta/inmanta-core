@@ -1,0 +1,5 @@
+description: >
+  Add support for Annotated types in plugins
+issue-nr: 8577
+change-type: patch
+destination-branches: [master, iso8]
