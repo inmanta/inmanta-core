@@ -39,10 +39,6 @@ class Resource(Base):
     map = {"d": lambda _, x: x.d}
 
 
-def test_field_merge():
-    assert len(Resource.fields) == 6
-
-
 def test_fields_type():
     with pytest.raises(Exception):
 

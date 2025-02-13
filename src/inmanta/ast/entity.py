@@ -44,6 +44,7 @@ from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
 from inmanta.plugins import to_dsl_type
+from inmanta.references import AttributeReference, PrimitiveTypes, Reference
 from inmanta.types import DataclassProtocol
 
 # pylint: disable-msg=R0902,R0904
@@ -457,6 +458,7 @@ class Entity(NamedType, WithComment):
             """
             Coerce float-typed values to float (e.g. 1 -> 1.0)
             """
+            t = t.get_no_reference()
             match t:
                 case Float():
                     return t.cast(v)
@@ -727,18 +729,35 @@ class Entity(NamedType, WithComment):
          i.e. instances of the associated dataclass
         """
         assert self._paired_dataclass is not None  # make mypy happy
-        assert isinstance(value, self._paired_dataclass)
 
         def convert_none(x: object | None) -> object:
             return x if x is not None else NoneValue()
 
-        instance = self.get_instance(
-            {k.name: convert_none(getattr(value, k.name)) for k in dataclasses.fields(value)},
-            resolver,
-            queue,
-            location,
-            None,
-        )
+        def convert_to_attr_ref(name: str) -> AttributeReference[PrimitiveTypes]:
+            ar: AttributeReference[PrimitiveTypes] = AttributeReference(
+                reference=value,
+                attribute_name=name,
+            )
+            ar._model_type = self.get_attribute(name).get_type().get_no_reference()
+            return ar
+
+        if isinstance(value, Reference):
+            instance = self.get_instance(
+                {k.name: convert_to_attr_ref(k.name) for k in dataclasses.fields(self._paired_dataclass)},
+                resolver,
+                queue,
+                location,
+                None,
+            )
+        else:
+            instance = self.get_instance(
+                {k.name: convert_none(getattr(value, k.name)) for k in dataclasses.fields(value)},
+                resolver,
+                queue,
+                location,
+                None,
+            )
+
         instance.dataclass_self = value
         # generate an implementation
         for stmt in self.get_sub_constructor():

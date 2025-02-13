@@ -47,10 +47,13 @@ from inmanta.ast import (
     WithComment,
 )
 from inmanta.ast.type import NamedType
+from inmanta.ast.type import Null as Null  # Moved, part of stable api
+from inmanta.ast.type import ReferenceType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext, get_inmanta_type_for_dataclass
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
+from inmanta.references import Reference
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
@@ -206,40 +209,6 @@ class PluginMeta(type):
             cls.__functions = {}
 
 
-class Null(inmanta_type.Type):
-    """
-    This custom type is used for the validation of plugins which only
-    accept null as an argument or return value.
-    """
-
-    def validate(self, value: Optional[object]) -> bool:
-        if isinstance(value, NoneValue):
-            return True
-
-        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
-
-    def type_string(self) -> str:
-        return "null"
-
-    def type_string_internal(self) -> str:
-        return self.type_string()
-
-    def as_python_type_string(self) -> "str | None":
-        return "None"
-
-    def corresponds_to(self, type: inmanta_type.Type) -> bool:
-        return isinstance(type, (Null, inmanta_type.Any))
-
-    def has_custom_to_python(self) -> bool:
-        return False
-
-    def __eq__(self, other: object) -> bool:
-        return type(self) == type(other)  # noqa: E721
-
-    def get_location(self) -> Optional[Location]:
-        return None
-
-
 class UnConvertibleEntity(inmanta_type.Type):
     """
     Entity that does not convert to a dataclass.
@@ -311,6 +280,50 @@ python_to_model = {
 }
 
 
+def _convert_to_reference(python_type: type[object], origin: type[object]) -> inmanta_type.Type | None:
+    if issubclass(origin, Reference):
+        args = typing.get_args(python_type)
+        return ReferenceType(to_dsl_type(args[0]))
+    return None
+
+
+def _convert_origin_to_dsl_type(python_type: type[object], origin: type[object]) -> inmanta_type.Type | None:
+    # dict
+    if issubclass(origin, Mapping):
+        if origin in [collections.abc.Mapping, dict, typing.Mapping]:
+            args = typing_inspect.get_args(python_type)
+            if not args:
+                return inmanta_type.TypedDict(inmanta_type.Any())
+
+            if not issubclass(args[0], str):
+                raise TypingException(
+                    None, f"invalid type {python_type}, the keys of any dict should be 'str', got {args[0]} instead"
+                )
+
+            if len(args) == 1:
+                return inmanta_type.TypedDict(inmanta_type.Any())
+
+            return inmanta_type.TypedDict(to_dsl_type(args[1]))
+        else:
+            raise TypingException(None, f"invalid type {python_type}, dictionary types should be Mapping or dict")
+
+    # List
+    if issubclass(origin, Sequence):
+        if origin in [collections.abc.Sequence, list, typing.Sequence]:
+            args = typing.get_args(python_type)
+            if not args:
+                return inmanta_type.List()
+            return inmanta_type.TypedList(to_dsl_type(args[0]))
+        else:
+            raise TypingException(None, f"invalid type {python_type}, list types should be Sequence or list")
+
+    # Set
+    if issubclass(origin, collections.abc.Set):
+        raise TypingException(None, f"invalid type {python_type}, set is not supported on the plugin boundary")
+
+    return _convert_to_reference(python_type, origin)
+
+
 def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     """
     Convert a python type annotation to an Inmanta DSL type annotation.
@@ -336,11 +349,10 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
                 return Null()
             if len(other_types) == 1:
                 return inmanta_type.NullableType(to_dsl_type(other_types[0]))
-            bases = [to_dsl_type(arg) for arg in other_types]
-            return inmanta_type.NullableType(inmanta_type.Union(bases))
+            return inmanta_type.create_union([to_dsl_type(arg) for arg in other_types] + [Null()])
         else:
             bases = [to_dsl_type(arg) for arg in typing.get_args(python_type)]
-            return inmanta_type.Union(bases)
+            return inmanta_type.create_union(bases)
 
     if dataclasses.is_dataclass(python_type):
         entity = get_inmanta_type_for_dataclass(python_type)
@@ -351,39 +363,35 @@ def to_dsl_type(python_type: type[object]) -> inmanta_type.Type:
     # Lists and dicts
     if typing_inspect.is_generic_type(python_type):
         origin = typing.get_origin(python_type)
+        if origin is not None:
+            out = _convert_origin_to_dsl_type(python_type, origin)
+            if out is not None:
+                return out
+        else:
+            # We are not or the form Reference[T] but possibly a class that inherits from ...
+            # TODO: this doesn't handle cases where type parameters are shifted around
+            all_bases = list(typing_inspect.get_generic_bases(python_type))
+            seen = set()
+            while all_bases:
+                base = all_bases.pop()
+                # prevent loops
+                if base in seen:
+                    continue
+                seen.add(base)
 
-        # dict
-        if issubclass(origin, Mapping):
-            if origin in [collections.abc.Mapping, dict, typing.Mapping]:
-                args = typing_inspect.get_args(python_type)
-                if not args:
-                    return inmanta_type.TypedDict(inmanta_type.Any())
+                if not typing_inspect.is_generic_type(base):
+                    # Not generic, not interesting
+                    continue
 
-                if not issubclass(args[0], str):
-                    raise TypingException(
-                        None, f"invalid type {python_type}, the keys of any dict should be 'str', got {args[0]} instead"
-                    )
+                origin = typing.get_origin(base)
+                if origin is None:
+                    # no origin, see if we have any other bases higher up
+                    all_bases.extend(typing_inspect.get_generic_bases(base))
+                    continue
 
-                if len(args) == 1:
-                    return inmanta_type.TypedDict(inmanta_type.Any())
-
-                return inmanta_type.TypedDict(to_dsl_type(args[1]))
-            else:
-                raise TypingException(None, f"invalid type {python_type}, dictionary types should be Mapping or dict")
-
-        # List
-        if issubclass(origin, Sequence):
-            if origin in [collections.abc.Sequence, list, typing.Sequence]:
-                args = typing.get_args(python_type)
-                if not args:
-                    return inmanta_type.List()
-                return inmanta_type.TypedList(to_dsl_type(args[0]))
-            else:
-                raise TypingException(None, f"invalid type {python_type}, list types should be Sequence or list")
-
-        # Set
-        if issubclass(origin, collections.abc.Set):
-            raise TypingException(None, f"invalid type {python_type}, set is not supported on the plugin boundary")
+                out = _convert_to_reference(base, origin)
+                if out is not None:
+                    return out
 
     # TODO annotated types
     # if typing.get_origin(t) is typing.Annotated:
@@ -599,6 +607,11 @@ class PluginReturn(PluginValue):
             return str(self.resolved_type)
         else:
             return repr(self.type_expression)
+
+    def resolve_type(self, plugin: "Plugin", resolver: Namespace) -> inmanta_type.Type:
+        out = super().resolve_type(plugin, resolver)
+        self._resolved_type = out
+        return out
 
 
 @dataclasses.dataclass
@@ -1079,7 +1092,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         value = DynamicProxy.unwrap(
             value,
-            dynamic_context=DynamicUnwrapContext(resolver=resolver, queue=queue, location=location),
+            dynamic_context=DynamicUnwrapContext(resolver=resolver, queue=queue, location=location, type_resolver=to_dsl_type),
         )
 
         try:

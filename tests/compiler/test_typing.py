@@ -333,27 +333,27 @@ end
     attrs: dict[str, Attribute] = entity.get_attributes()
 
     assert "n" in attrs
-    assert isinstance(attrs["n"].type, Number)
+    assert isinstance(attrs["n"].type.get_no_reference(), Number)
 
     assert "ns" in attrs
     ns_type: inmanta_type.Type = attrs["ns"].type
-    assert isinstance(ns_type, inmanta_type.TypedList)
-    assert isinstance(ns_type.element_type, Number)
+    assert isinstance(ns_type.get_no_reference(), inmanta_type.TypedList)
+    assert isinstance(ns_type.get_no_reference().element_type, Number)
 
     assert "maybe_n" in attrs
     maybe_n_type: inmanta_type.Type = attrs["maybe_n"].type
-    assert isinstance(maybe_n_type, inmanta_type.NullableType)
-    assert isinstance(maybe_n_type.element_type, Number)
+    assert isinstance(maybe_n_type.get_no_reference(), inmanta_type.NullableType)
+    assert isinstance(maybe_n_type.get_no_reference().element_type, Number)
 
     assert "maybe_ns" in attrs
     maybe_ns_type: inmanta_type.Type = attrs["maybe_ns"].type
-    assert isinstance(maybe_ns_type, inmanta_type.NullableType)
+    assert isinstance(maybe_ns_type.get_no_reference(), inmanta_type.NullableType)
     maybe_ns_element_type: inmanta_type.Type = maybe_ns_type.element_type
-    assert isinstance(maybe_ns_element_type, inmanta_type.TypedList)
-    assert isinstance(maybe_ns_element_type.element_type, Number)
+    assert isinstance(maybe_ns_element_type.get_no_reference(), inmanta_type.TypedList)
+    assert isinstance(maybe_ns_element_type.get_no_reference().element_type, Number)
 
     assert "lst" in attrs
-    assert isinstance(attrs["lst"].type, inmanta_type.List)
+    assert isinstance(attrs["lst"].type.get_no_reference(), inmanta_type.List)
 
 
 @pytest.mark.parametrize("base_type", inmanta_type.TYPES.values())

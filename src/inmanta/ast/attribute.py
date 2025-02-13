@@ -54,6 +54,7 @@ class Attribute(Locatable):
         self.__multi = multi
         self.__nullable = nullable
 
+        # TODO: creates many identical types, not nice, memoize
         self.__type: Type = value_type
         if multi:
             self.__type = TypedList(self.__type)
