@@ -81,20 +81,15 @@ class ProjectService(protocol.ServerSlice):
     @handle(methods.list_projects)
     async def list_projects(self) -> Apireturn:
         async with get_async_session() as session:
-            # stmt = select(Project)
-            stmt = select(Project.id, Project.name, Environment.id).join(Project.environments)
-            # stmt = select(Project.id, Project.name, Project.environments)
+            stmt = select(Project.id, Project.name)
             rt = await session.execute(stmt)
-            # project_list: list[JsonType] = [row._mapping for row in rt.all()]
 
             project_list: list[JsonType] = rt.all()
-            # project_list: list[JsonType] = [rst.to_dict() for rst in rt.mappings().all()]
 
         def to_dict(pj_row_result):
             return {
                 "id": str(pj_row_result.id),
                 "name": str(pj_row_result.name),
-                # 'environments': [str(pj_row_result.name),
             }
 
         return 200, {"projects": [to_dict(pj) for pj in project_list]}

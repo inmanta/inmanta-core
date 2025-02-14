@@ -63,7 +63,7 @@ from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
-from inmanta.graphql.schema import get_connection, get_engine
+from inmanta.graphql.schema import get_connection, get_engine, get_connection_ctx_mgr
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -1221,14 +1221,10 @@ class BaseDocument(metaclass=DocumentMeta):
         already been acquired.
         """
         if connection is None:
-            return get_connection()
-            # connection = await connection_fairy()
+            return get_connection_ctx_mgr()
 
         return util.nullcontext(connection)
-        # Make mypy happy
-        # return util.nullcontext()
-        # assert cls._connection_pool is not None
-        # return cls._connection_pool.acquire()
+
 
     @classmethod
     def table_name(cls) -> str:
@@ -1511,18 +1507,8 @@ class BaseDocument(metaclass=DocumentMeta):
 
     @classmethod
     async def _fetchval(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> object:
-        # async with cls.get_connection(connection) as con:
-        #     return await con.fetchval(query, *values)
-        async with get_engine().connect() as conn:
-            # pep-249 style ConnectionFairy connection pool proxy object
-            # presents a sync interface
-
-            connection_fairy = await conn.get_raw_connection()
-
-            # the really-real innermost driver connection is available
-            # from the .driver_connection attribute
-            raw_asyncio_connection = connection_fairy.driver_connection
-            return await raw_asyncio_connection.fetchval(query, *values)
+        async with cls.get_connection(connection) as con:
+            return await con.fetchval(query, *values)
 
     @classmethod
     async def _fetch_int(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> int:
@@ -1549,19 +1535,9 @@ class BaseDocument(metaclass=DocumentMeta):
     async def _execute_query(
         cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
     ) -> str:
-        # async with cls.get_connection(connection) as con:
-        #     return await con.execute(query, *values)
+        async with cls.get_connection(connection) as con:
+            return await con.execute(query, *values)
 
-        async with get_engine().connect() as conn:
-            # pep-249 style ConnectionFairy connection pool proxy object
-            # presents a sync interface
-
-            connection_fairy = await conn.get_raw_connection()
-
-            # the really-real innermost driver connection is available
-            # from the .driver_connection attribute
-            raw_asyncio_connection = connection_fairy.driver_connection
-            return await raw_asyncio_connection.execute(query, *values)
 
     @classmethod
     async def lock_table(cls, mode: TableLockMode, connection: asyncpg.connection.Connection) -> None:
@@ -2194,17 +2170,10 @@ class BaseDocument(metaclass=DocumentMeta):
         no_obj: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Sequence[Union[Record, TBaseDocument]]:
-        async with get_engine().connect() as con:
-            # self.connection =
-            connection_fairy = await con.get_raw_connection()
-
-            # the really-real innermost driver connection is available
-            # from the .driver_connection attribute
-            raw_asyncio_connection = connection_fairy.driver_connection
-
-            async with raw_asyncio_connection.transaction():
+        async with cls.get_connection(connection) as con:
+            async with con.transaction():
                 result: list[Union[Record, TBaseDocument]] = []
-                async for record in raw_asyncio_connection.cursor(query, *values):
+                async for record in con.cursor(query, *values):
                     if no_obj:
                         result.append(record)
                     else:
@@ -2781,21 +2750,6 @@ RETURNING last_version;
             raise KeyError()
         cls._settings[setting.name] = setting
 
-    @classmethod
-    async def get_list_gql(
-        cls: type[TBaseDocument],
-        *,
-        order_by_column: Optional[str] = None,
-        order: Optional[str] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-        no_obj: Optional[bool] = None,
-        lock: Optional[RowLockMode] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        details: bool = True,
-        **query: object,
-    ) -> list[TBaseDocument]:
-        return await inmanta.graphql.schema.Environment.fetch_all()
 
     @classmethod
     async def get_list(
@@ -6716,23 +6670,7 @@ _classes = [
 ]
 
 
-def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
-    LOGGER.debug("Connecting data classes")
-    for cls in _classes:
-        if cls.__name__ in ["Environment", "Project"]:
-            continue
-        LOGGER.debug(f"Connecting {cls}")
-        cls.set_connection_pool(pool)
 
-
-async def disconnect() -> None:
-    LOGGER.debug("Disconnecting data classes")
-    # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
-    # or until the gather itself is cancelled.
-    result = await asyncio.gather(*[cls.close_connection_pool() for cls in _classes], return_exceptions=True)
-    exceptions = [r for r in result if r is not None and isinstance(r, Exception)]
-    if exceptions:
-        raise exceptions[0]
 
 
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
@@ -6742,36 +6680,4 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
-async def connect(
-    host: str,
-    port: int,
-    database: str,
-    username: str,
-    password: str,
-    create_db_schema: bool = True,
-    connection_pool_min_size: int = 10,
-    connection_pool_max_size: int = 10,
-    connection_timeout: float = 60,
-) -> asyncpg.pool.Pool:
-    pool = await asyncpg.create_pool(
-        host=host,
-        port=port,
-        database=database,
-        user=username,
-        password=password,
-        min_size=connection_pool_min_size,
-        max_size=connection_pool_max_size,
-        timeout=connection_timeout,
-    )
-    try:
-        set_connection_pool(pool)
-        if create_db_schema:
-            async with pool.acquire() as con:
-                await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, con).ensure_db_schema()
-            # expire connections after db schema migration to ensure cache consistency
-            await pool.expire_connections()
-        return pool
-    except Exception as e:
-        await pool.close()
-        await disconnect()
-        raise e
+

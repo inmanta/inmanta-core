@@ -18,6 +18,7 @@
 
 import logging
 import typing
+from contextlib import contextmanager, asynccontextmanager
 
 import inmanta.graphql.models
 import strawberry
@@ -377,6 +378,16 @@ class ConnectionAcquireContext:
 
 def get_connection():
     return ConnectionAcquireContext()
+
+@asynccontextmanager
+async def get_connection_ctx_mgr():
+    async with ENGINE.connect() as connection:
+        connection_fairy = await connection.get_raw_connection()
+
+        # the really-real innermost driver connection is available
+        # from the .driver_connection attribute
+        raw_asyncio_connection = connection_fairy.driver_connection
+        yield raw_asyncio_connection
 
 
 def get_pool():

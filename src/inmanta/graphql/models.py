@@ -70,7 +70,7 @@ class Project(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     name: Mapped[str] = mapped_column(String)
 
-    environments: Mapped[Optional[List["Environment"]]] = relationship("Environment", back_populates="project_")
+    environments: Mapped[List["Environment"]] = relationship("Environment", back_populates="project_")
 
 
 class Schemamanager(Base):

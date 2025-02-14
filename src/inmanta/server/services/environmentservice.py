@@ -131,8 +131,7 @@ class EnvironmentService(protocol.ServerSlice):
         Schedules appropriate actions for schedule-related settings for all environments. Overrides old schedules.
         """
         env: data.Environment
-        # for env in await data.Environment.get_list(details=False):
-        for env in await data.Environment.get_list_gql():
+        for env in await data.Environment.get_list(details=False):
             await self._enable_schedules(env)
 
     async def _enable_schedules(self, env: data.Environment, setting: Optional[data.Setting] = None) -> None:

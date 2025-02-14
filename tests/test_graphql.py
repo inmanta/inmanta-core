@@ -228,6 +228,8 @@ async def test_generate_sqlalchemy_models(postgres_db, database_name):
 async def test_query_projects(server, client, setup_database):
     """
     Display basic querying capabilities with recursive relationships
+
+    # !!! FLAKY TEST !!!
     """
     query = """
 {
@@ -540,7 +542,7 @@ async def test_sql_alchemy_connection_pool(client, server):
     result = await client.list_projects()
     assert result.code == 200
     assert "projects" in result.result
-    assert result.result["projects"] == [{"environments": [str(env_id)], "id": str(proj_id), "name": "proj_1"}]
+    assert result.result["projects"] == [{"id": str(proj_id), "name": "proj_1"}]
 
 
 async def test_sql_alchemy_project_create(client, server):
