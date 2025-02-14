@@ -50,7 +50,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         agent_name: str,
         agent_uri: str,
         environment: uuid.UUID,
-        client: inmanta.protocol.SessionClient,
+        client: inmanta.protocol.Client,
         eventloop: asyncio.AbstractEventLoop,
         parent_logger: logging.Logger,
     ):
@@ -462,7 +462,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
     def __init__(
         self,
         environment: uuid.UUID,
-        client: inmanta.protocol.SessionClient,
+        client: inmanta.protocol.Client,
         eventloop: asyncio.AbstractEventLoop,
         parent_logger: logging.Logger,
         thread_pool: ThreadPoolExecutor,

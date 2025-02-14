@@ -399,6 +399,7 @@ async def wait_until_deployment_finishes(
 
         if version >= 0:
             scheduler = await data.Scheduler.get_one(environment=environment)
+            assert scheduler is not None
             if scheduler.last_processed_model_version is None or scheduler.last_processed_model_version < version:
                 return False
 
@@ -931,15 +932,9 @@ class NullAgent(SessionEndpoint):
         """
         :param environment: environment id
         """
-        super().__init__(name="agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
+        super().__init__(name="agent", environment=environment, timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
         self._env_id = environment
         self.enabled: dict[str, bool] = {}
-
-    async def start_connected(self) -> None:
-        """
-        Setup our single endpoint
-        """
-        await self.add_end_point_name(AGENT_SCHEDULER_ID)
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:

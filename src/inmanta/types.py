@@ -56,7 +56,7 @@ def issubclass(sub: type, super: Union[type, tuple[type, ...]]) -> bool:
 
 
 PrimitiveTypes = Optional[uuid.UUID | bool | int | float | datetime | str]
-SimpleTypes = Union["BaseModel", PrimitiveTypes]
+SimpleTypes = Union[pydantic.BaseModel, PrimitiveTypes]
 
 JsonType = dict[str, Any]
 ReturnTupple = tuple[int, Optional[JsonType]]
