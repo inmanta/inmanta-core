@@ -15,21 +15,20 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 import os
 import typing
 
-from sqlalchemy.engine.interfaces import DBAPIConnection
-
 import inmanta.graphql.models
 import strawberry
-from sqlalchemy import select, AsyncAdaptedQueuePool
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine, AsyncEngine
+from sqlalchemy import AsyncAdaptedQueuePool, event, select
+from sqlalchemy.engine.interfaces import DBAPIConnection
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.info import ContextType
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
-from sqlalchemy import event
 
 mapper = StrawberrySQLAlchemyMapper()
 
@@ -284,6 +283,8 @@ def get_schema():
     if SCHEMA is None:
         initialize_schema()
     return SCHEMA
+
+
 def my_on_checkout(dbapi_conn, connection_rec, connection_proxy):
     LOGGER.debug()
 
@@ -293,13 +294,14 @@ async def stop_engine():
     await ENGINE.dispose()
     ENGINE = None
 
+
 def start_engine(
-        url: str,
-        pool_size: int,
-        max_overflow: int,
-        pool_timeout:float,
-        echo:bool,
-    ):
+    url: str,
+    pool_size: int,
+    max_overflow: int,
+    pool_timeout: float,
+    echo: bool,
+):
     global ENGINE
     global ASYNC_SESSION
     global POOL
@@ -333,6 +335,7 @@ def start_engine(
         print("pool checkout")
         print(dbapi_conn, connection_rec, connection_proxy)
 
+
 class Adapter:
     def __init__(self):
         pass
@@ -346,9 +349,11 @@ class Adapter:
             raw_asyncio_connection = connection_fairy.driver_connection
             return await raw_asyncio_connection
         return self
+
+
 class ConnectionAcquireContext:
 
-    __slots__ = ('connection', 'done')
+    __slots__ = ("connection", "done")
 
     def __init__(self):
         self.connection = None
@@ -356,9 +361,9 @@ class ConnectionAcquireContext:
 
     async def __aenter__(self):
         if self.connection is not None or self.done:
-            raise Exception('a connection is already acquired')
+            raise Exception("a connection is already acquired")
 
-        self.connection =  ENGINE.connect()
+        self.connection = ENGINE.connect()
         connection_fairy = await self.connection.get_raw_connection()
 
         # the really-real innermost driver connection is available
@@ -377,12 +382,16 @@ def get_connection():
 
 def get_pool():
     return POOL
+
+
 def get_engine():
     return ENGINE
+
 
 async def get_raw_connection() -> DBAPIConnection:
     proxy_connection = await ENGINE.raw_connection()
     return proxy_connection.dbapi_connection
+
 
 async def connection_fairy():
     """
@@ -400,6 +409,7 @@ async def connection_fairy():
         # from the .driver_connection attribute
         raw_asyncio_connection = connection_fairy.driver_connection
         return raw_asyncio_connection
+
 
 def initialize_schema() -> strawberry.Schema:
     global SCHEMA

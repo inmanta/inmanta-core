@@ -150,7 +150,6 @@ def start_scheduler(options: argparse.Namespace) -> None:
 
     async def start() -> None:
 
-
         await initialize_sql_alchemy_engine(
             database_host=opt.db_host.get(),
             database_port=opt.db_port.get(),

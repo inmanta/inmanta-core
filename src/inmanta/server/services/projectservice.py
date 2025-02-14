@@ -21,11 +21,10 @@ import uuid
 from typing import Optional, cast
 
 import asyncpg
-from sqlalchemy import insert, select
 
 from inmanta import data
 from inmanta.data import model
-from inmanta.graphql.models import Project
+from inmanta.graphql.models import Environment, Project
 from inmanta.graphql.schema import get_async_session
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import Conflict, NotFound, ServerError
@@ -40,6 +39,7 @@ from inmanta.server import (
 from inmanta.server.agentmanager import AutostartedAgentManager
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType
+from sqlalchemy import insert, select
 
 LOGGER = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ class ProjectService(protocol.ServerSlice):
     async def list_projects(self) -> Apireturn:
         async with get_async_session() as session:
             # stmt = select(Project)
-            stmt = select(Project.id, Project.name)
+            stmt = select(Project.id, Project.name, Environment.id).join(Project.environments)
             # stmt = select(Project.id, Project.name, Project.environments)
             rt = await session.execute(stmt)
             # project_list: list[JsonType] = [row._mapping for row in rt.all()]
@@ -93,7 +93,7 @@ class ProjectService(protocol.ServerSlice):
         def to_dict(pj_row_result):
             return {
                 "id": str(pj_row_result.id),
-                'name': str(pj_row_result.name),
+                "name": str(pj_row_result.name),
                 # 'environments': [str(pj_row_result.name),
             }
 
@@ -112,16 +112,11 @@ class ProjectService(protocol.ServerSlice):
             project_id = uuid.uuid4()
 
         stmt = insert(Project)
-        data = {
-            "id": project_id,
-            "name": name
-        }
-
+        data = {"id": project_id, "name": name}
 
         async with get_async_session() as session:
             await session.execute(stmt, data)
             await session.commit()
-
 
         return data
 

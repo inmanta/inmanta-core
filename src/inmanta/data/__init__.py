@@ -45,7 +45,6 @@ import typing_inspect
 from asyncpg import Connection
 from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
-from sqlalchemy import AsyncAdaptedQueuePool
 
 import inmanta.db.versions
 import inmanta.protocol
@@ -64,13 +63,22 @@ from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
-from inmanta.graphql.schema import POOL, get_pool, get_async_session, get_raw_connection, connection_fairy, ENGINE, get_engine, \
-    get_connection
+from inmanta.graphql.schema import (
+    ENGINE,
+    POOL,
+    connection_fairy,
+    get_async_session,
+    get_connection,
+    get_engine,
+    get_pool,
+    get_raw_connection,
+)
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
+from sqlalchemy import AsyncAdaptedQueuePool
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1564,6 +1572,7 @@ class BaseDocument(metaclass=DocumentMeta):
             # from the .driver_connection attribute
             raw_asyncio_connection = connection_fairy.driver_connection
             return await raw_asyncio_connection.execute(query, *values)
+
     @classmethod
     async def lock_table(cls, mode: TableLockMode, connection: asyncpg.connection.Connection) -> None:
         """

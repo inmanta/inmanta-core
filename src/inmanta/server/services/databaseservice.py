@@ -17,23 +17,23 @@
 """
 
 import logging
-from typing import Mapping, Optional, Any
+from typing import Any, Mapping, Optional
 
 import asyncpg
 from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
-from sqlalchemy import AsyncAdaptedQueuePool, text
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from inmanta import data
-from inmanta.data import schema, CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
+from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, schema
 from inmanta.data.model import DataBaseReport
-from inmanta.graphql.schema import start_engine, get_async_session, POOL, get_pool, connection_fairy, stop_engine
+from inmanta.graphql.schema import POOL, connection_fairy, get_async_session, get_pool, start_engine, stop_engine
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.types import ArgumentTypes
 from inmanta.util import IntervalSchedule, Scheduler
+from sqlalchemy import AsyncAdaptedQueuePool, text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 LOGGER = logging.getLogger(__name__)
 
@@ -227,7 +227,6 @@ class DatabaseService(protocol.ServerSlice):
         if jit_available:
             LOGGER.warning("JIT is enabled in the PostgreSQL database. This might result in poor query performance.")
 
-
     async def disconnect_database(self) -> None:
         """Disconnect the database"""
         await data.disconnect()
@@ -276,6 +275,8 @@ async def initialize_database_connection_pool(
     )
     LOGGER.info("Connected to PostgreSQL database %s on %s:%d", database_name, database_host, database_port)
     return out
+
+
 async def initialize_sql_alchemy_engine(
     database_host: str,
     database_port: int,
@@ -298,9 +299,6 @@ async def initialize_sql_alchemy_engine(
     :param connection_pool_max_size: Limit the size of the pool to this number of connections .
     :param connection_timeout: Connection timeout (in seconds) when interacting with the database.
     """
-
-
-
 
     start_engine(
         url=f"postgresql+asyncpg://{database_username}:{database_password}@{database_host}:{database_port}/{database_name}",

@@ -22,7 +22,7 @@ import inmanta.graphql.schema
 import strawberry
 from inmanta.protocol import methods_v2
 from inmanta.protocol.decorators import handle
-from inmanta.server import SLICE_GRAPHQL, protocol, SLICE_DATABASE, SLICE_SERVER
+from inmanta.server import SLICE_DATABASE, SLICE_GRAPHQL, SLICE_SERVER, protocol
 from strawberry.schema.config import StrawberryConfig
 
 
