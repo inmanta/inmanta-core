@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from inmanta import data
 from inmanta.data import schema, CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
 from inmanta.data.model import DataBaseReport
-from inmanta.graphql.schema import start_engine, get_async_session, POOL, get_pool, connection_fairy
+from inmanta.graphql.schema import start_engine, get_async_session, POOL, get_pool, connection_fairy, stop_engine
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
@@ -200,6 +200,7 @@ class DatabaseService(protocol.ServerSlice):
         if self._db_monitor is not None:
             await self._db_monitor.stop()
         await self.disconnect_database()
+        await stop_engine()
         self._pool = None
 
     def get_dependencies(self) -> list[str]:
@@ -207,17 +208,6 @@ class DatabaseService(protocol.ServerSlice):
 
     async def connect_database(self) -> None:
         """Connect to the database"""
-        # self._pool = await initialize_database_connection_pool(
-        #     database_host=opt.db_host.get(),
-        #     database_port=opt.db_port.get(),
-        #     database_name=opt.db_name.get(),
-        #     database_username=opt.db_username.get(),
-        #     database_password=opt.db_password.get(),
-        #     create_db_schema=True,
-        #     connection_pool_min_size=opt.server_db_connection_pool_min_size.get(),
-        #     connection_pool_max_size=opt.server_db_connection_pool_max_size.get(),
-        #     connection_timeout=opt.server_db_connection_timeout.get(),
-        # )
         await initialize_sql_alchemy_engine(
             database_host=opt.db_host.get(),
             database_port=opt.db_port.get(),

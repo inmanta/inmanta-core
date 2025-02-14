@@ -280,15 +280,18 @@ def get_async_session(connection_string: typing.Optional[str] = None) -> AsyncSe
     return ASYNC_SESSION()
 
 
-def get_schema(connection_string: typing.Optional[str] = None):
+def get_schema():
     if SCHEMA is None:
-        initialize_schema(connection_string)
+        initialize_schema()
     return SCHEMA
 def my_on_checkout(dbapi_conn, connection_rec, connection_proxy):
     LOGGER.debug()
 
 
-
+async def stop_engine():
+    global ENGINE
+    await ENGINE.dispose()
+    ENGINE = None
 
 def start_engine(
         url: str,
@@ -397,11 +400,9 @@ async def connection_fairy():
         # from the .driver_connection attribute
         raw_asyncio_connection = connection_fairy.driver_connection
         return raw_asyncio_connection
-def initialize_schema(connection_string: typing.Optional[str] = None) -> strawberry.Schema:
-    global ASYNC_SESSION
+
+def initialize_schema() -> strawberry.Schema:
     global SCHEMA
-    async_engine = create_async_engine(connection_string or "sqlite+aiosqlite:///database.db", echo=True)
-    ASYNC_SESSION = async_sessionmaker(async_engine)
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=ASYNC_SESSION)
 
     class CustomInfo(Info):

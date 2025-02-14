@@ -58,12 +58,7 @@ def start_sqlalchemy_engine(sql_alchemy_connection_string):
 @pytest.fixture
 async def setup_database(postgres_db, database_name):
     # Initialize DB
-    conn_string = (
-        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
-    )
-    # Force reinitialization of schema with the correct connection string
-    schema.initialize_schema(conn_string)
-    async with schema.get_async_session(conn_string) as session:
+    async with schema.get_async_session() as session:
         project_1 = models.Project(
             id=uuid.UUID("00000000-1234-5678-1234-000000000001"),
             name="test-proj-1",
@@ -220,14 +215,14 @@ async def setup_database(postgres_db, database_name):
         session.add_all([project_1, project_2])
         await session.commit()
         await session.flush()
-        schema.mapper.finalize()
 
 
-# async def test_generate_sqlalchemy_models(postgres_db, database_name):
-#     conn_string = (
-#         f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
-#     )
-#     subprocess.run(["sqlacodegen", conn_string])
+@pytest.mark.xfail
+async def test_generate_sqlalchemy_models(postgres_db, database_name):
+    conn_string = (
+        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
+    )
+    subprocess.run(["sqlacodegen", conn_string])
 
 
 async def test_query_projects(server, client, setup_database):
@@ -360,7 +355,11 @@ async def test_query_projects_with_filtering(server, client, setup_database):
         }
 
 
-async def test_query_path(server, client, setup_database):
+async def test_query_path(
+    server,
+    client,
+    setup_database
+):
     """
     This test shows capabilities to trigger different sql queries
     based on the graphql input query
@@ -452,7 +451,7 @@ async def test_sql_alchemy_read(client, server):
         ]
 
 
-async def test_sql_alchemy_write(client, server, setup_database_no_data):
+async def test_sql_alchemy_write(client, server):
     """
     Create projects and envs using sql alchemy
     Read using regular endpoints
@@ -616,7 +615,7 @@ async def test_sql_alchemy_project_create(client, server):
     ]
 
 
-async def test_sql_alchemy_pool_reuse(client, server, setup_database_no_data):
+async def test_sql_alchemy_pool_reuse(client, server):
     # https://docs.sqlalchemy.org/en/20/core/engines.html#custom-dbapi-connect-arguments-on-connect-routines
     pass
 
@@ -626,7 +625,7 @@ async def test_sql_alchemy_pool_reuse(client, server, setup_database_no_data):
 
 
 
-async def test_sql_alchemy_pool_reusedd(start_sqlalchemy_engine):
+async def test_sql_alchemy_pool_reusedd():
     pass
     # https://docs.sqlalchemy.org/en/20/core/engines.html#custom-dbapi-connect-arguments-on-connect-routines
 
