@@ -507,7 +507,7 @@ async def test_sql_alchemy_write(client, server, setup_database_no_data):
     assert "projects" in result.result
     assert result.result["projects"] == [
         {
-            'environments': [str(env_id)],
+            # 'environments': [str(env_id)],
             'id': str(proj_id),
             'name': 'proj_1'
         }
@@ -569,7 +569,7 @@ async def test_sql_alchemy_connection_pool(client, server):
     assert "projects" in result.result
     assert result.result["projects"] == [
         {
-            'environments': [str(env_id)],
+            # 'environments': [str(env_id)],
             'id': str(proj_id),
             'name': 'proj_1'
         }

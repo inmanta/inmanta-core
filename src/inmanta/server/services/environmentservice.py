@@ -215,7 +215,7 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods.list_environments)
     async def list_environments(self) -> Apireturn:
-        return 200, {"environments":  [await self.environment_list()]}
+        return 200, {"environments":  [rename_fields(env) for env in await self.environment_list()]}
 
     @handle(methods.delete_environment, environment_id="id")
     async def delete_environment(self, environment_id: uuid.UUID) -> Apireturn:
