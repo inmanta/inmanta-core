@@ -345,6 +345,48 @@ You should be able to reach the orchestrator at this address: `http://127.0.0.1:
             # sudo -i -u inmanta -- systemctl --user enable inmanta-orchestrator-db.service
             # sudo -i -u inmanta -- systemctl --user enable inmanta-orchestrator-server.service
 
+Troubleshooting
+###############
+
+If the orchestrator doesn't seem to come up, the first thing to check are its logs.
+
+In this setup, the container is managed by systemd, and the logs of the container process are saved in the journal.  To access them, simply use ``journalctl``:
+
+.. tab-set::
+
+    .. tab-item:: User setup
+        :sync: rootless-setup
+
+        .. code-block:: console
+
+            $ journalctl --user-unit inmanta-orchestrator-server.service
+
+    .. tab-item:: Root setup
+        :sync: rootful-setup
+
+        .. code-block:: console
+
+            # sudo -i -u inmanta -- journalctl --user-unit inmanta-orchestrator-server.service
+
+If the user running the container can not access the journal, because it is not part of any of the authorized groups, the alternative is to check the logs directly using ``podman logs``:
+
+.. tab-set::
+
+    .. tab-item:: User setup
+        :sync: rootless-setup
+
+        .. code-block:: console
+
+            $ systemctl --user start inmanta-orchestrator-server.service; podman logs -f inmanta-orchestrator
+
+    .. tab-item:: Root setup
+        :sync: rootful-setup
+
+        .. code-block:: console
+
+            # sudo -i -u inmanta
+            $ systemctl --user start inmanta-orchestrator-server.service; podman logs -f inmanta-orchestrator
+
 Overwrite default server configuration
 ######################################
 
