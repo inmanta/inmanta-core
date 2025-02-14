@@ -156,8 +156,10 @@ To learn more about quadlet and how podman integrates nicely with systemd, pleas
 Step 1: Install the required files
 ----------------------------------
 
-We need to create two files: two containers, one for the database and one for the orchestrator.
-    
+We need to create three files: two containers and one network.
+The two container files are for the orchestrator an its database.
+The network file is to setup a bridge that both containers can use to communicate with each other.
+
 .. tab-set::
 
     .. tab-item:: User setup
@@ -169,6 +171,7 @@ We need to create two files: two containers, one for the database and one for th
 
             .config/containers/systemd/
             ├── inmanta-orchestrator-db.container
+            ├── inmanta-orchestrator-net.network
             └── inmanta-orchestrator-server.container
 
     .. tab-item:: Root setup
@@ -180,7 +183,19 @@ We need to create two files: two containers, one for the database and one for th
 
             /etc/containers/systemd/users/
             ├── inmanta-orchestrator-db.container
+            ├── inmanta-orchestrator-net.network
             └── inmanta-orchestrator-server.container
+
+The file ``inmanta-orchestrator-net.network`` defines the bridge.  We keep all the defaults provided by podman and pick an explicit name for the network.
+
+.. code-block:: systemd
+
+    [Unit]
+    Description=Inmanta orchestrator network
+    Documentation=https://docs.inmanta.com
+
+    [Network]
+    NetworkName=inmanta-orchestrator-net
 
 The file ``inmanta-orchestrator-db.container`` defines the database container, its storage is persisted in a volume named ``inmanta-db-data``.
 
@@ -193,6 +208,7 @@ The file ``inmanta-orchestrator-db.container`` defines the database container, i
     [Container]
     ContainerName=inmanta-db
     Image=docker.io/library/postgres:16
+    Network=inmanta-orchestrator-net.network
     Environment=POSTGRES_USER=inmanta
     Environment=POSTGRES_PASSWORD=inmanta
     # The following mappings allow you to use bind mounts instead of volumes
@@ -202,6 +218,7 @@ The file ``inmanta-orchestrator-db.container`` defines the database container, i
     # UIDMap=+999:0:1
     # GIDMap=+999:0:1
     Volume=inmanta-db-data:/var/lib/postgresql/data:z
+    Exec=postgres -c jit=off
 
 The file ``inmanta-orchestrator-server.container`` defines the orchestrator containers, its storage is persisted in a volume named ``inmanta-server-data``
 and its logs in a volume named ``inmanta-server-logs``.
@@ -218,6 +235,7 @@ and its logs in a volume named ``inmanta-server-logs``.
         ContainerName=inmanta-orchestrator
         Image=ghcr.io/inmanta/orchestrator:latest
         PublishPort=127.0.0.1:8888:8888
+        Network=inmanta-orchestrator-net.network
         Environment=INMANTA_DATABASE_HOST=inmanta-db
         Environment=INMANTA_DATABASE_USERNAME=inmanta
         Environment=INMANTA_DATABASE_PASSWORD=inmanta
@@ -246,6 +264,7 @@ and its logs in a volume named ``inmanta-server-logs``.
         ContainerName=inmanta-orchestrator
         Image=containers.inmanta.com/containers/service-orchestrator:|version_major|
         PublishPort=127.0.0.1:8888:8888
+        Network=inmanta-orchestrator-net.network
         Environment=INMANTA_DATABASE_HOST=inmanta-db
         Environment=INMANTA_DATABASE_USERNAME=inmanta
         Environment=INMANTA_DATABASE_PASSWORD=inmanta
