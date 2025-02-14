@@ -70,6 +70,32 @@ The table below shows correspondence between types from the Inmanta DSL and thei
 
 ``any`` is a special type that effectively disables type validation.
 
+We also give some liberty to the user to define python types for Inmanta DSL types that are not present on this table.
+
+This is done by combining ``typing.Annotated`` with ``inmanta.plugins.ModelType``. The first parameter of ``typing.Annotated``
+will be the python type we want to assume for typechecking and the second will be the ``inmanta.plugins.ModelType``
+with the Inmanta DSL type that we want the compiler to validate.
+
+For example, if we want to pass a ``std::Entity`` to our plugins and have python validate its type as ``typing.Any``, we could do this:
+
+.. code-block:: python
+    :linenos:
+
+    from inmanta.plugins import plugin, ModelType
+    from typing import Annotated, Any
+
+    type Entity = Annotated[Any, ModelType["std::Entity"]]
+
+    @plugin
+    def my_plugin(my_entity: Entity) -> None:
+        ...
+
+
+Our compiler will validate ``my_entity`` as ``std::Entity``, meaning that we will only be able to provide a ``std::Entity``
+as an argument to this plugin, but for IDE and static typing purposes it will be treated as ``typing.Any``.
+
+
+
 Type hinting using Inmanta DSL types
 ------------------------------------
 
