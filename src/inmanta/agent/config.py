@@ -109,6 +109,7 @@ scheduler_db_connection_pool_min_size: Option[int] = Option(
     "the resource scheduler.",
     is_lower_bounded_int(0),
 )
+
 scheduler_db_connection_pool_max_size: Option[int] = Option(
     "scheduler",
     "db-connection-pool-max-size",
@@ -117,6 +118,7 @@ scheduler_db_connection_pool_max_size: Option[int] = Option(
     "the resource scheduler.",
     is_lower_bounded_int(1),
 )
+
 scheduler_db_connection_timeout: Option[float] = Option(
     "scheduler",
     "db-connection-timeout",
@@ -125,19 +127,6 @@ scheduler_db_connection_timeout: Option[float] = Option(
     " (in seconds).",
     is_float,
 )
-
-
-class AgentExecutorMode(str, enum.Enum):
-    threaded = "threaded"
-    forking = "forking"
-
-
-def is_executor_mode(value: str | AgentExecutorMode) -> AgentExecutorMode:
-    """threaded | forking"""
-    if isinstance(value, AgentExecutorMode):
-        return value
-    return AgentExecutorMode(value)
-
 
 agent_executor_cap = Option[int](
     "agent",

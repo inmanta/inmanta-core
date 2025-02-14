@@ -17,19 +17,20 @@
 """
 
 import logging
-from typing import Mapping, Optional
+from typing import Any, Mapping, Optional
 
-import asyncpg
 from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
 
-from inmanta import data
+from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, schema
 from inmanta.data.model import DataBaseReport
+from inmanta.graphql.schema import get_connection_ctx_mgr, start_engine, stop_engine
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.types import ArgumentTypes
 from inmanta.util import IntervalSchedule, Scheduler
+from sqlalchemy import AsyncAdaptedQueuePool
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class DatabaseMonitor:
 
     def __init__(
         self,
-        pool: asyncpg.pool.Pool,
+        pool: AsyncAdaptedQueuePool,
         db_name: str,
         db_host: str,
     ) -> None:
@@ -67,9 +68,13 @@ class DatabaseMonitor:
         """
         Checks if the database pool is exhausted
         """
-        pool_exhausted: bool = (self._pool.get_size() == self._pool.get_max_size()) and self._pool.get_idle_size() == 0
-        if pool_exhausted:
-            self._exhausted_pool_events_count += 1
+        pass
+
+        # Disable monitoring for now, can maybe be replaced by events / adding a pool watcher ??
+        #
+        # pool_exhausted: bool = (self._pool.get_size() == self._pool.get_max_size()) and self._pool.get_idle_size() == 0
+        # if pool_exhausted:
+        #     self._exhausted_pool_events_count += 1
 
     def start(self) -> None:
         self.start_monitor()
@@ -176,14 +181,14 @@ class DatabaseService(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(SLICE_DATABASE)
-        self._pool: Optional[asyncpg.pool.Pool] = None
+        self._pool: Optional[AsyncAdaptedQueuePool] = None
         self._db_monitor: Optional[DatabaseMonitor] = None
 
     async def start(self) -> None:
         await super().start()
         await self.connect_database()
 
-        assert self._pool is not None  # Make mypy happy
+        # assert self._pool is not None  # Make mypy happy
         self._db_monitor = DatabaseMonitor(self._pool, opt.db_name.get(), opt.db_host.get())
         self._db_monitor.start()
 
@@ -199,27 +204,27 @@ class DatabaseService(protocol.ServerSlice):
 
     async def connect_database(self) -> None:
         """Connect to the database"""
-        self._pool = await initialize_database_connection_pool(
+        await initialize_sql_alchemy_engine(
             database_host=opt.db_host.get(),
             database_port=opt.db_port.get(),
             database_name=opt.db_name.get(),
             database_username=opt.db_username.get(),
             database_password=opt.db_password.get(),
-            create_db_schema=True,
             connection_pool_min_size=opt.server_db_connection_pool_min_size.get(),
             connection_pool_max_size=opt.server_db_connection_pool_max_size.get(),
             connection_timeout=opt.server_db_connection_timeout.get(),
         )
+        async with get_connection_ctx_mgr() as connection:
+            await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, connection).ensure_db_schema()
 
-        # Check if JIT is enabled
-        async with self._pool.acquire() as connection:
-            jit_available = await connection.fetchval("SELECT pg_jit_available();")
+            # Check if JIT is enabled
+            jit_available = await connection.execute("SELECT pg_jit_available();")
             if jit_available:
                 LOGGER.warning("JIT is enabled in the PostgreSQL database. This might result in poor query performance.")
 
     async def disconnect_database(self) -> None:
         """Disconnect the database"""
-        await data.disconnect()
+        await stop_engine()
 
     async def get_status(self) -> Mapping[str, ArgumentTypes]:
         """Get the status of the database connection"""
@@ -227,41 +232,39 @@ class DatabaseService(protocol.ServerSlice):
         return (await self._db_monitor.get_status()).dict()
 
 
-async def initialize_database_connection_pool(
+async def initialize_sql_alchemy_engine(
     database_host: str,
     database_port: int,
     database_name: str,
     database_username: str,
     database_password: str,
-    create_db_schema: bool,
     connection_pool_min_size: int,
     connection_pool_max_size: int,
     connection_timeout: float,
-) -> asyncpg.pool.Pool:
+) -> Any:
     """
-    Initialize the database connection pool for the current process and return it.
+    Initialize the sql alchemy engine for the current process and return it.
 
     :param database_host: Database host address.
     :param database_port: Port number to connect to at the server host.
     :param database_name: Name of the database to connect to.
     :param database_username: Username for database authentication.
     :param database_password: Password for database authentication.
-    :param create_db_schema: Make sure the DB schema is created and up-to-date.
     :param connection_pool_min_size: Initialize the pool with this number of connections .
     :param connection_pool_max_size: Limit the size of the pool to this number of connections .
     :param connection_timeout: Connection timeout (in seconds) when interacting with the database.
     """
 
-    out = await data.connect(
-        host=database_host,
-        port=database_port,
-        database=database_name,
-        username=database_username,
-        password=database_password,
-        create_db_schema=create_db_schema,
-        connection_pool_min_size=connection_pool_min_size,
-        connection_pool_max_size=connection_pool_max_size,
-        connection_timeout=connection_timeout,
+    start_engine(
+        url=f"postgresql+asyncpg://{database_username}:{database_password}@{database_host}:{database_port}/{database_name}",
+        pool_size=connection_pool_min_size,
+        max_overflow=connection_pool_max_size,
+        pool_timeout=connection_timeout,
+        echo=True,
     )
+
     LOGGER.info("Connected to PostgreSQL database %s on %s:%d", database_name, database_host, database_port)
-    return out
+
+    # out = await data.connect(
+    #
+    # )

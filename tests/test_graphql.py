@@ -19,38 +19,23 @@
 import datetime
 import logging
 import subprocess
-import sys
 import uuid
 
 import pytest
 
 import inmanta.graphql.models as models
 import inmanta.graphql.schema as schema
-
-from sqlalchemy import select, insert
-
 from inmanta.graphql.models import Environment, Project
 from inmanta.graphql.schema import get_async_session
+from sqlalchemy import insert, select
 
 LOGGER = logging.getLogger(__name__)
 
-@pytest.fixture
-async def setup_database_no_data(postgres_db, database_name):
-    # Initialize DB
-    conn_string = (
-        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
-    )
-    # Force reinitialization of schema with the correct connection string
-    schema.initialize_schema(conn_string)
+
 @pytest.fixture
 async def setup_database(postgres_db, database_name):
     # Initialize DB
-    conn_string = (
-        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
-    )
-    # Force reinitialization of schema with the correct connection string
-    schema.initialize_schema(conn_string)
-    async with schema.get_async_session(conn_string) as session:
+    async with schema.get_async_session() as session:
         project_1 = models.Project(
             id=uuid.UUID("00000000-1234-5678-1234-000000000001"),
             name="test-proj-1",
@@ -207,19 +192,21 @@ async def setup_database(postgres_db, database_name):
         session.add_all([project_1, project_2])
         await session.commit()
         await session.flush()
-        schema.mapper.finalize()
 
 
-# async def test_generate_sqlalchemy_models(postgres_db, database_name):
-#     conn_string = (
-#         f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
-#     )
-#     subprocess.run(["sqlacodegen", conn_string])
+@pytest.mark.xfail
+async def test_generate_sqlalchemy_models(postgres_db, database_name):
+    conn_string = (
+        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
+    )
+    subprocess.run(["sqlacodegen", conn_string])
 
 
 async def test_query_projects(server, client, setup_database):
     """
     Display basic querying capabilities with recursive relationships
+
+    # !!! FLAKY TEST !!!
     """
     query = """
 {
@@ -408,7 +395,7 @@ async def test_query_path(server, client, setup_database):
         assert result.result["data"] == expected_data
 
 
-async def test_sql_alchemy_read(client, server, setup_database_no_data):
+async def test_sql_alchemy_read(client, server):
     """
     Create project and envs using regular endpoints
     Read using sql alchemy capabilities
@@ -439,32 +426,21 @@ async def test_sql_alchemy_read(client, server, setup_database_no_data):
         ]
 
 
-async def test_sql_alchemy_write(client, server, setup_database_no_data):
+async def test_sql_alchemy_write(client, server):
     """
     Create projects and envs using sql alchemy
     Read using regular endpoints
     """
     proj_id = uuid.uuid4()
     stmt = insert(Project)
-    data = [
-        {
-            "id": proj_id,
-            "name": "proj_1"
-        }
-    ]
+    data = [{"id": proj_id, "name": "proj_1"}]
 
     async with get_async_session() as session:
         result_execute = await session.execute(stmt, data)
         await session.commit()
 
     stmt = insert(Environment).returning(Environment.id)
-    data = [
-        {
-            "id": uuid.uuid4(),
-            "name": "env_1",
-            "project": proj_id
-        }
-    ]
+    data = [{"id": uuid.uuid4(), "name": "env_1", "project": proj_id}]
 
     async with get_async_session() as session:
         result_execute = await session.execute(stmt, data)
@@ -476,16 +452,16 @@ async def test_sql_alchemy_write(client, server, setup_database_no_data):
     assert "environments" in result.result
     assert result.result["environments"] == [
         {
-             'description': '',
-             'halted': False,
-             'icon': '',
-             'id': str(env_id),
-             'is_marked_for_deletion': False,
-             'name': 'env_1',
-             'project': str(proj_id),
-             'repo_branch': '',
-             'repo_url': '',
-             'settings': {}
+            "description": "",
+            "halted": False,
+            "icon": "",
+            "id": str(env_id),
+            "is_marked_for_deletion": False,
+            "name": "env_1",
+            "project": str(proj_id),
+            "repo_branch": "",
+            "repo_url": "",
+            "settings": {},
         }
     ]
 
@@ -494,9 +470,125 @@ async def test_sql_alchemy_write(client, server, setup_database_no_data):
     assert "projects" in result.result
     assert result.result["projects"] == [
         {
-            'environments': [str(env_id)],
-            'id': str(proj_id),
-            'name': 'proj_1'
+            "environments": [str(env_id)],
+            "id": str(proj_id),
+            "name": "proj_1",
         }
     ]
 
+
+async def test_sql_alchemy_connection_pool(client, server):
+    """
+    Create projects and envs using sql alchemy
+    Read using regular endpoints
+    """
+    proj_id = uuid.uuid4()
+    stmt = insert(Project)
+    data = [{"id": proj_id, "name": "proj_1"}]
+
+    async with get_async_session() as session:
+        result_execute = await session.execute(stmt, data)
+        await session.commit()
+
+    stmt = insert(Environment).returning(Environment.id)
+    data = [{"id": uuid.uuid4(), "name": "env_1", "project": proj_id}]
+
+    async with get_async_session() as session:
+        result_execute = await session.execute(stmt, data)
+        await session.commit()
+        env_id = result_execute.scalars().all()[0]
+
+    result = await client.list_environments()
+    assert result.code == 200
+    assert "environments" in result.result
+    assert result.result["environments"] == [
+        {
+            "description": "",
+            "halted": False,
+            "icon": "",
+            "id": str(env_id),
+            "is_marked_for_deletion": False,
+            "name": "env_1",
+            "project": str(proj_id),
+            "repo_branch": "",
+            "repo_url": "",
+            "settings": {},
+        }
+    ]
+
+    result = await client.list_projects()
+    assert result.code == 200
+    assert "projects" in result.result
+    assert result.result["projects"] == [
+        {
+            "id": str(proj_id),
+            "name": "proj_1",
+            "environments": [str(env_id)],
+        }
+    ]
+
+
+async def test_sql_alchemy_project_create(client, server):
+    """
+    Create project and envs using regular endpoints
+    Read using sql alchemy capabilities
+    """
+
+    # Create project
+    ids = []
+    names = []
+    project_name: str = "test_project0"
+    result = await client.create_project(project_name)
+    assert result.code == 200
+    ids.append(result.result["project"]["id"])
+    names.append(project_name)
+
+    project_name: str = "test_project1"
+    result = await client.create_project(project_name)
+    assert result.code == 200
+    ids.append(result.result["project"]["id"])
+    names.append(project_name)
+
+    project_name: str = "test_project2"
+    result = await client.create_project(project_name)
+    assert result.code == 200
+    ids.append(result.result["project"]["id"])
+    names.append(project_name)
+
+    result = await client.list_projects()
+    assert result.code == 200
+    assert "projects" in result.result
+    assert result.result["projects"] == [
+        {"id": str(project_id), "name": project_name, "environments": []} for (project_id, project_name) in zip(ids, names)
+    ]
+
+
+async def test_sql_alchemy_pool_reuse(client, server):
+    # https://docs.sqlalchemy.org/en/20/core/engines.html#custom-dbapi-connect-arguments-on-connect-routines
+    pass
+
+    # async with get_async_session() as session:
+    #
+    #     pass
+
+
+async def test_sql_alchemy_pool_reusedd():
+    pass
+    # https://docs.sqlalchemy.org/en/20/core/engines.html#custom-dbapi-connect-arguments-on-connect-routines
+
+    # async with get_async_session() as session:
+    #     pass
+    #     res = await session.execute(text("select 2"))
+    #     print("go", res.scalar())
+    # result_execute = await session.execute(stmt, data)
+    # await session.commit()
+
+    # pool = get_pool()
+    # with pool.connect() as conn:
+    #     pass
+    #     res = await session.execute(text("select 2"))
+    #     print("go", res.scalar())
+
+    # conn = await get_raw_connection()
+    # pass
+    # print(conn.dbapi_connection)

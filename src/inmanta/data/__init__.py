@@ -63,6 +63,7 @@ from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
+from inmanta.graphql.schema import get_connection_ctx_mgr
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -1219,11 +1220,10 @@ class BaseDocument(metaclass=DocumentMeta):
         wrapped around that connection instance. This allows for transparent usage, regardless of whether a connection has
         already been acquired.
         """
-        if connection is not None:
-            return util.nullcontext(connection)
-        # Make mypy happy
-        assert cls._connection_pool is not None
-        return cls._connection_pool.acquire()
+        if connection is None:
+            return get_connection_ctx_mgr()
+
+        return util.nullcontext(connection)
 
     @classmethod
     def table_name(cls) -> str:
@@ -6667,59 +6667,8 @@ _classes = [
 ]
 
 
-def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
-    LOGGER.debug("Connecting data classes")
-    for cls in _classes:
-        cls.set_connection_pool(pool)
-
-
-async def disconnect() -> None:
-    LOGGER.debug("Disconnecting data classes")
-    # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
-    # or until the gather itself is cancelled.
-    result = await asyncio.gather(*[cls.close_connection_pool() for cls in _classes], return_exceptions=True)
-    exceptions = [r for r in result if r is not None and isinstance(r, Exception)]
-    if exceptions:
-        raise exceptions[0]
-
-
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 
 # Name of core schema in the DB schema verions
 # prevent import loop
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
-
-
-async def connect(
-    host: str,
-    port: int,
-    database: str,
-    username: str,
-    password: str,
-    create_db_schema: bool = True,
-    connection_pool_min_size: int = 10,
-    connection_pool_max_size: int = 10,
-    connection_timeout: float = 60,
-) -> asyncpg.pool.Pool:
-    pool = await asyncpg.create_pool(
-        host=host,
-        port=port,
-        database=database,
-        user=username,
-        password=password,
-        min_size=connection_pool_min_size,
-        max_size=connection_pool_max_size,
-        timeout=connection_timeout,
-    )
-    try:
-        set_connection_pool(pool)
-        if create_db_schema:
-            async with pool.acquire() as con:
-                await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, con).ensure_db_schema()
-            # expire connections after db schema migration to ensure cache consistency
-            await pool.expire_connections()
-        return pool
-    except Exception as e:
-        await pool.close()
-        await disconnect()
-        raise e
