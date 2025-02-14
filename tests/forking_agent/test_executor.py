@@ -249,7 +249,7 @@ def test():
             caplog,
             "inmanta.agent.resourcepool",
             logging.DEBUG,
-            ("Executor for agent2 will be shutdown because it was inactive for "),
+            ("executor for agent2 will be shutdown because it was inactive for "),
         )
 
     # We can get `Caught subprocess termination from unknown pid: %d -> %d`

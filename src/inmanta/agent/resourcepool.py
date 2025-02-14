@@ -191,7 +191,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
         return "PoolMember"
 
     def member_name(self, member: TPoolMember) -> str:
-        """Method to improve logging output by naming the members, best kept consitent with render_id"""
+        """Method to improve logging output by naming the members, best kept consistent with render_id"""
         return self.render_id(member.get_id())
 
     def get_lock_name_for(self, member_id: TIntPoolID) -> str:
@@ -271,6 +271,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
 
         my_executor = await self.create_member(member_id)
         assert my_executor.id == internal_id
+
         self.pool[internal_id] = my_executor
         my_executor.termination_listeners.append(self.notify_member_shutdown)
 
