@@ -872,7 +872,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
                 self._env_to_compile_task[compile.environment] = self.add_background_task(self._run(compile))
 
         # acquire connection before lock to ensure lock contention remains short lived
-        async with data.Compile.get_connection(connection) as con:
+        async with data.Environment.get_connection(connection) as con:
             async with self._write_lock_env_to_compile_task:
                 # only inspect state and fetch compile details under the global lock to protect against race conditions
                 if not self.fully_ready or self.is_stopping():

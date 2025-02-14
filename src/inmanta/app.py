@@ -64,7 +64,7 @@ from inmanta.config import Config, Option
 from inmanta.const import ALL_LOG_CONTEXT_VARS, EXIT_START_FAILED, LOG_CONTEXT_VAR_ENVIRONMENT
 from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, schema
 from inmanta.export import cfg_env
-from inmanta.graphql.schema import connection_fairy, get_connection_ctx_mgr
+from inmanta.graphql.schema import get_connection_ctx_mgr
 from inmanta.logging import InmantaLoggerConfig, _is_on_tty
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader

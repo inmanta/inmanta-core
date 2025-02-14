@@ -15,18 +15,16 @@
 
     Contact: code@inmanta.com
 """
-import asyncio
+
 import logging
 from typing import Any, Mapping, Optional
 
-import asyncpg
 from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
 
-from inmanta import data
 from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, schema
 from inmanta.data.model import DataBaseReport
-from inmanta.graphql.schema import connection_fairy, start_engine, stop_engine, get_connection_ctx_mgr
+from inmanta.graphql.schema import get_connection_ctx_mgr, start_engine, stop_engine
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
@@ -227,8 +225,6 @@ class DatabaseService(protocol.ServerSlice):
     async def disconnect_database(self) -> None:
         """Disconnect the database"""
         await stop_engine()
-        await asyncio.sleep(0)
-
 
     async def get_status(self) -> Mapping[str, ArgumentTypes]:
         """Get the status of the database connection"""

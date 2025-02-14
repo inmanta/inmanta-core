@@ -1042,15 +1042,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         Ensure that a scheduler is started for each environment having AUTOSTART_ON_START is true. This method
         is called on server start.
         """
-        environments = await data.Environment.get_list_gql()
-
-        # stmt = select(Environment.id, Environment.name).order_by(Environment.name)
-        # async with get_async_session() as session:
-        #     result_execute = await session.execute(stmt)
-        #     assert result_execute.all() == [
-        #         (uuid.UUID(env_1_id), env_1_name),
-        #         (uuid.UUID(env_2_id), env_2_name),
-        #     ]
+        environments = await data.Environment.get_list()
 
         for env in environments:
             autostart = await env.get(data.AUTOSTART_ON_START)

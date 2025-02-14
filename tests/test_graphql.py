@@ -26,33 +26,10 @@ import pytest
 import inmanta.graphql.models as models
 import inmanta.graphql.schema as schema
 from inmanta.graphql.models import Environment, Project
-from inmanta.graphql.schema import get_async_session, start_engine
+from inmanta.graphql.schema import get_async_session
 from sqlalchemy import insert, select
 
 LOGGER = logging.getLogger(__name__)
-
-
-@pytest.fixture
-def sql_alchemy_connection_string(postgres_db, database_name):
-    yield f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"  # noqa: E501
-
-
-@pytest.fixture
-async def setup_database_no_data(sql_alchemy_connection_string):
-    # Initialize DB
-    # Force reinitialization of schema with the correct connection string
-    schema.initialize_schema(sql_alchemy_connection_string)
-
-
-@pytest.fixture
-def start_sqlalchemy_engine(sql_alchemy_connection_string):
-    start_engine(
-        url=sql_alchemy_connection_string,
-        pool_size=2,
-        max_overflow=4,
-        pool_timeout=60,
-        echo=True,
-    )
 
 
 @pytest.fixture
@@ -493,7 +470,7 @@ async def test_sql_alchemy_write(client, server):
     assert "projects" in result.result
     assert result.result["projects"] == [
         {
-            # 'environments': [str(env_id)],
+            "environments": [str(env_id)],
             "id": str(proj_id),
             "name": "proj_1",
         }
@@ -542,7 +519,13 @@ async def test_sql_alchemy_connection_pool(client, server):
     result = await client.list_projects()
     assert result.code == 200
     assert "projects" in result.result
-    assert result.result["projects"] == [{"id": str(proj_id), "name": "proj_1"}]
+    assert result.result["projects"] == [
+        {
+            "id": str(proj_id),
+            "name": "proj_1",
+            "environments": [str(env_id)],
+        }
+    ]
 
 
 async def test_sql_alchemy_project_create(client, server):
@@ -576,7 +559,7 @@ async def test_sql_alchemy_project_create(client, server):
     assert result.code == 200
     assert "projects" in result.result
     assert result.result["projects"] == [
-        {"id": str(project_id), "name": project_name} for (project_id, project_name) in zip(ids, names)
+        {"id": str(project_id), "name": project_name, "environments": []} for (project_id, project_name) in zip(ids, names)
     ]
 
 

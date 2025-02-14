@@ -63,7 +63,7 @@ from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
-from inmanta.graphql.schema import get_connection, get_engine, get_connection_ctx_mgr
+from inmanta.graphql.schema import get_connection_ctx_mgr
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -1225,7 +1225,6 @@ class BaseDocument(metaclass=DocumentMeta):
 
         return util.nullcontext(connection)
 
-
     @classmethod
     def table_name(cls) -> str:
         """
@@ -1537,7 +1536,6 @@ class BaseDocument(metaclass=DocumentMeta):
     ) -> str:
         async with cls.get_connection(connection) as con:
             return await con.execute(query, *values)
-
 
     @classmethod
     async def lock_table(cls, mode: TableLockMode, connection: asyncpg.connection.Connection) -> None:
@@ -2749,7 +2747,6 @@ RETURNING last_version;
         if setting.name in cls._settings:
             raise KeyError()
         cls._settings[setting.name] = setting
-
 
     @classmethod
     async def get_list(
@@ -6670,14 +6667,8 @@ _classes = [
 ]
 
 
-
-
-
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 
 # Name of core schema in the DB schema verions
 # prevent import loop
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
-
-
-

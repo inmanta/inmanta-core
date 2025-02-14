@@ -18,7 +18,7 @@
 
 import logging
 import typing
-from contextlib import contextmanager, asynccontextmanager
+from contextlib import asynccontextmanager
 
 import inmanta.graphql.models
 import strawberry
@@ -378,6 +378,7 @@ class ConnectionAcquireContext:
 
 def get_connection():
     return ConnectionAcquireContext()
+
 
 @asynccontextmanager
 async def get_connection_ctx_mgr():

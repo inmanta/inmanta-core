@@ -24,8 +24,6 @@ import asyncpg
 
 from inmanta import data
 from inmanta.data import model
-from inmanta.graphql.models import Environment, Project
-from inmanta.graphql.schema import get_async_session
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import Conflict, NotFound, ServerError
 from inmanta.server import (
@@ -39,7 +37,6 @@ from inmanta.server import (
 from inmanta.server.agentmanager import AutostartedAgentManager
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType
-from sqlalchemy import insert, select
 
 LOGGER = logging.getLogger(__name__)
 
@@ -80,19 +77,10 @@ class ProjectService(protocol.ServerSlice):
 
     @handle(methods.list_projects)
     async def list_projects(self) -> Apireturn:
-        async with get_async_session() as session:
-            stmt = select(Project.id, Project.name)
-            rt = await session.execute(stmt)
-
-            project_list: list[JsonType] = rt.all()
-
-        def to_dict(pj_row_result):
-            return {
-                "id": str(pj_row_result.id),
-                "name": str(pj_row_result.name),
-            }
-
-        return 200, {"projects": [to_dict(pj) for pj in project_list]}
+        project_list: list[JsonType] = [x.model_dump() for x in await self.project_list()]
+        for project in project_list:
+            project["environments"] = [x["id"] for x in project["environments"]]
+        return 200, {"projects": project_list}
 
     @handle(methods.get_project, project_id="id")
     async def get_project(self, project_id: uuid.UUID) -> Apireturn:
@@ -106,14 +94,13 @@ class ProjectService(protocol.ServerSlice):
         if project_id is None:
             project_id = uuid.uuid4()
 
-        stmt = insert(Project)
-        data = {"id": project_id, "name": name}
+        try:
+            project = data.Project(id=project_id, name=name)
+            await project.insert()
+        except asyncpg.exceptions.UniqueViolationError:
+            raise ServerError(f"A project with name {name} already exists.")
 
-        async with get_async_session() as session:
-            await session.execute(stmt, data)
-            await session.commit()
-
-        return data
+        return project.to_dto()
 
     @handle(methods_v2.project_delete, project_id="id", api_version=2)
     async def project_delete(self, project_id: uuid.UUID) -> None:
