@@ -68,7 +68,7 @@ from inmanta.graphql.schema import connection_fairy
 from inmanta.logging import InmantaLoggerConfig, _is_on_tty
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.services.databaseservice import initialize_database_connection_pool, initialize_sql_alchemy_engine
+from inmanta.server.services.databaseservice import initialize_sql_alchemy_engine
 from inmanta.server.services.metricservice import MetricsService
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.util import get_compiler_version

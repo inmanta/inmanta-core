@@ -42,7 +42,6 @@ from inmanta.config import Config, config_map_to_str, scheduler_log_config
 from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
 from inmanta.data import APILIMIT, Environment, InvalidSort, model
 from inmanta.data.model import DataBaseReport
-from inmanta.graphql.models import Environment as EnvironmentGQL
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
@@ -63,7 +62,7 @@ from inmanta.server.services import environmentservice
 from inmanta.types import Apireturn, ArgumentTypes, ResourceIdStr, ReturnTupple
 
 from ..data.dataview import AgentView
-from ..graphql.schema import connection_fairy, get_raw_connection
+from ..graphql.schema import connection_fairy
 from . import config as server_config
 from .validate_filter import InvalidFilter
 

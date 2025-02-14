@@ -26,14 +26,13 @@ from pyformance.meters import CallbackGauge
 from inmanta import data
 from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, schema
 from inmanta.data.model import DataBaseReport
-from inmanta.graphql.schema import POOL, connection_fairy, get_async_session, get_pool, start_engine, stop_engine
+from inmanta.graphql.schema import connection_fairy, start_engine, stop_engine
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.types import ArgumentTypes
 from inmanta.util import IntervalSchedule, Scheduler
-from sqlalchemy import AsyncAdaptedQueuePool, text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import AsyncAdaptedQueuePool
 
 LOGGER = logging.getLogger(__name__)
 

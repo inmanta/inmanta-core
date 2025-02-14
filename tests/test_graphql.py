@@ -19,7 +19,6 @@
 import datetime
 import logging
 import subprocess
-import sys
 import uuid
 
 import pytest
@@ -27,15 +26,15 @@ import pytest
 import inmanta.graphql.models as models
 import inmanta.graphql.schema as schema
 from inmanta.graphql.models import Environment, Project
-from inmanta.graphql.schema import get_async_session, get_pool, get_raw_connection, start_engine
-from sqlalchemy import insert, select, text
+from inmanta.graphql.schema import get_async_session, start_engine
+from sqlalchemy import insert, select
 
 LOGGER = logging.getLogger(__name__)
 
 
 @pytest.fixture
 def sql_alchemy_connection_string(postgres_db, database_name):
-    yield f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
+    yield f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"  # noqa: E501
 
 
 @pytest.fixture
@@ -583,9 +582,9 @@ async def test_sql_alchemy_pool_reuse(client, server):
     # https://docs.sqlalchemy.org/en/20/core/engines.html#custom-dbapi-connect-arguments-on-connect-routines
     pass
 
-    async with get_async_session() as session:
-
-        pass
+    # async with get_async_session() as session:
+    #
+    #     pass
 
 
 async def test_sql_alchemy_pool_reusedd():

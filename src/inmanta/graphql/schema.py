@@ -17,7 +17,6 @@
 """
 
 import logging
-import os
 import typing
 
 import inmanta.graphql.models
@@ -395,7 +394,8 @@ async def get_raw_connection() -> DBAPIConnection:
 
 async def connection_fairy():
     """
-    adapted from https://docs.sqlalchemy.org/en/20/faq/connections.html#accessing-the-underlying-connection-for-an-asyncio-driver
+    adapted from
+    https://docs.sqlalchemy.org/en/20/faq/connections.html#accessing-the-underlying-connection-for-an-asyncio-driver
     :return:
     """
 

@@ -63,22 +63,12 @@ from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
-from inmanta.graphql.schema import (
-    ENGINE,
-    POOL,
-    connection_fairy,
-    get_async_session,
-    get_connection,
-    get_engine,
-    get_pool,
-    get_raw_connection,
-)
+from inmanta.graphql.schema import get_connection, get_engine
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-from sqlalchemy import AsyncAdaptedQueuePool
 
 LOGGER = logging.getLogger(__name__)
 
