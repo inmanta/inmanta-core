@@ -117,6 +117,10 @@ Glossary
         a cloud provider will not be known upfront. Inmanta marks this parameters as **unknown**.
         The state of any resource that uses such an unknown parameter becomes undefined.
 
+        For more context, see
+        :ref:`how unknowns propagate through the configuration model <language_unknowns>` and
+        :ref:`how the exporter deals with them <model_export_format>`.
+
     entity
         Concepts in the infrastructure are modelled in the configuration with entities. An entity
         defines a new type in the configuration model. See :ref:`lang-entity`.
