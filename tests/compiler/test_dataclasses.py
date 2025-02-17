@@ -210,7 +210,8 @@ two = dataclasses::eat_vm("test")""",
 
     with pytest.raises(
         PluginTypeException,
-        match="Value 'test' for argument inp of plugin dataclasses::eat_vm has incompatible type. Expected type: dataclasses::Virtualmachine",
+        match="Value 'test' for argument inp of plugin dataclasses::eat_vm has incompatible type. "
+              "Expected type: dataclasses::Virtualmachine",
     ):
         compiler.do_compile()
 
