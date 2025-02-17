@@ -302,6 +302,10 @@ def start_engine(
     pool_timeout: float,
     echo: bool,
 ):
+    """
+    engine vs connection vs session overview
+    https://stackoverflow.com/questions/34322471/sqlalchemy-engine-connection-and-session-difference
+    """
     global ENGINE
     global ASYNC_SESSION
     global POOL
@@ -353,30 +357,6 @@ def get_pool():
 
 def get_engine():
     return ENGINE
-
-
-async def get_raw_connection() -> DBAPIConnection:
-    proxy_connection = await ENGINE.raw_connection()
-    return proxy_connection.dbapi_connection
-
-
-async def connection_fairy():
-    """
-    adapted from
-    https://docs.sqlalchemy.org/en/20/faq/connections.html#accessing-the-underlying-connection-for-an-asyncio-driver
-    :return:
-    """
-
-    async with ENGINE.connect() as conn:
-        # pep-249 style ConnectionFairy connection pool proxy object
-        # presents a sync interface
-
-        connection_fairy = await conn.get_raw_connection()
-
-        # the really-real innermost driver connection is available
-        # from the .driver_connection attribute
-        raw_asyncio_connection = connection_fairy.driver_connection
-        return raw_asyncio_connection
 
 
 def initialize_schema() -> strawberry.Schema:
