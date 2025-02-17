@@ -458,6 +458,10 @@ class Any(Type):
     def issupertype(self, other: "Type") -> bool:
         return True
 
+    def __hash__(self):
+        # Could be any unique value
+        return 3141156432848106867
+
 
 def cast_not_implemented(value: Optional[object]) -> object:
     raise NotImplementedError("Can not cast to Primitive")
