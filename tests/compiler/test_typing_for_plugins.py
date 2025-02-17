@@ -197,7 +197,11 @@ def test_issubtype_of_own_python_type() -> None:
         assert tp.issubtype(rt_ed)
         verified_types.add(type(tp))
 
-    all_types = {tp_cls for tp_cls in utils.get_all_subclasses(inm_type.Type) if not inspect.isabstract(tp_cls)}
+    all_types = {
+        tp_cls
+        for tp_cls in utils.get_all_subclasses(inm_type.Type)
+        if not inspect.isabstract(tp_cls) and not issubclass(tp_cls, Plugin)
+    }
     except_types = {
         Plugin,  # not relevant
         inm_type.NamedType,  # abstract

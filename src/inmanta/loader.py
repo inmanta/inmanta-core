@@ -143,7 +143,7 @@ class CodeManager:
         """
         file_name = self.get_object_source(instance)
         if file_name is None:
-            raise SourceNotFoundException(f"Unable to locate source code of instance {inspect} for entity {type_name}")
+            raise SourceNotFoundException(f"Unable to locate source code of instance {instance} for entity {type_name}")
 
         if type_name not in self.__type_file:
             self.__type_file[type_name] = set()
