@@ -120,7 +120,7 @@ def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", mod
     with pytest.raises(
         RuntimeException,
         match=r"Invalid value `\<inmanta_plugins\.refs\.BoolReference object at 0x[0-9a-f]*\>`: "
-              "the condition for an if statement can only be a boolean expression",
+        "the condition for an if statement can only be a boolean expression",
     ):
         snippetcompiler.do_export()
 
