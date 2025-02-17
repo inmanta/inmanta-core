@@ -59,6 +59,29 @@ type RefValue = PrimitiveTypes | DataclassProtocol
 T = typing.TypeVar("T", bound=RefValue)
 
 
+class ReferenceCycleException(Exception):
+    """Exception raised when a reference refers to itself"""
+
+    def __init__(self, first_ref: "Reference[RefValue]") -> None:
+        self.references: list[Reference[RefValue]] = [first_ref]
+        self.complete = False
+
+    def add(self, element: "Reference[RefValue]") -> None:
+        """Collect parent entities while traveling up the stack"""
+        if self.complete:
+            return
+        if element in self.references:
+            self.complete = True
+        self.references.append(element)
+
+    def get_message(self) -> str:
+        trace = " -> ".join([str(x) for x in self.references])
+        return "Reference cycle detected: %s" % (trace)
+
+    def __str__(self):
+        return self.get_message()
+
+
 class Argument(pydantic.BaseModel):
     """Base class for reference (resolver) arguments"""
 
@@ -243,6 +266,10 @@ class Mutator(Base):
         return self._model
 
 
+CYCLE_TOKEN = object()
+# Token to perform cycle detection when serializing
+
+
 class Reference[T: RefValue](Base):
     """Instances of this class can create references to a value and resolve them."""
 
@@ -278,8 +305,15 @@ class Reference[T: RefValue](Base):
 
     def serialize(self) -> ReferenceModel:
         """Emit the correct pydantic objects to serialize the reference in the exporter."""
+        if self._model is CYCLE_TOKEN:
+            raise ReferenceCycleException(self)
         if not self._model:
-            argument_id, arguments = self.serialize_arguments()
+            self._model = CYCLE_TOKEN
+            try:
+                argument_id, arguments = self.serialize_arguments()
+            except ReferenceCycleException as e:
+                e.add(self)
+                raise
             self._model = ReferenceModel(id=argument_id, type=self.type, args=arguments)
 
         assert isinstance(self._model, ReferenceModel)

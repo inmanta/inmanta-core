@@ -401,7 +401,17 @@ class Entity(NamedType, WithComment):
         Update indexes based on the instance and the attribute that has
         been set
         """
-        attributes = {k: repr(v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
+
+        def index_value_gate(key: str, value: object) -> str:
+            if isinstance(value, Reference):
+                raise TypingException(
+                    None,
+                    f"Invalid value {value} in index for attribute {key} on instance {instance}: "
+                    f"references can not be used in indexes.",
+                )
+            return repr(value.get_value())
+
+        attributes = {k: index_value_gate(k, v) for (k, v) in instance.slots.items() if v.is_ready()}
 
         # check if an index entry can be added
         for index_attributes in self.get_indices():
@@ -455,6 +465,10 @@ class Entity(NamedType, WithComment):
             """
             t = t.get_no_reference()
             match t:
+                case Reference():
+                    raise TypingException(
+                        None, f"Invalid value {v} in index lookup for attribute {key}: references can not be used in indexes."
+                    )
                 case Float():
                     return t.cast(v)
                 case NullableType(element_type=Float() as float):

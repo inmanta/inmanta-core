@@ -23,6 +23,8 @@ import typing
 import pytest
 
 from inmanta import env, references, resources, util
+from inmanta.ast import ExternalException, RuntimeException
+from inmanta.references import ReferenceCycleException
 
 if typing.TYPE_CHECKING:
     from conftest import SnippetCompilationTest
@@ -93,9 +95,12 @@ def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_d
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
     )
 
-    with pytest.raises(Exception):
-        # TODO: catch correct exception!
+    with pytest.raises(
+        ExternalException, match="Failed to get attribute 'fail' for export on 'std::testing::NullResource'"
+    ) as e:
         snippetcompiler.do_export()
+    assert isinstance(e.value.__cause__, ReferenceCycleException)
+    assert "Reference cycle detected: StringReference -> StringReference" in str(e.value.__cause__)
 
 
 def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
@@ -105,11 +110,42 @@ def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", mod
     snippetcompiler.setup_for_snippet(
         snippet="""
         import refs
-        if refs::create_bool_reference_cycle(name="CWD") == true:
+        if refs::create_bool_reference_cycle(name="CWD"):
         end
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+        autostd=True,
+    )
+
+    with pytest.raises(
+        RuntimeException,
+        match=r"Invalid value `\<inmanta_plugins\.refs\.BoolReference object at 0x[0-9a-f]*\>`: "
+              "the condition for an if statement can only be a boolean expression",
+    ):
+        snippetcompiler.do_export()
+
+
+def test_references_in_index(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """Test that references are rejected in expressions"""
+    refs_module = os.path.join(modules_v2_dir, "refs")
+
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import refs
+
+        mystr = create_string_reference("test")
+
+        entity Test:
+           string value
+        end
+
+        implement Test using std::none
+
+        index Test(value)
+
+        Test(value=mystr)
         """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
     )
 
-    with pytest.raises(Exception):
-        snippetcompiler.do_export()
+    snippetcompiler.do_export()

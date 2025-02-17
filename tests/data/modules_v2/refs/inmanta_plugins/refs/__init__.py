@@ -36,6 +36,9 @@ class StringReference(Reference[str]):
         """Resolve the reference"""
         return self.resolve_other(self.name)
 
+    def __str__(self) -> str:
+        return f"StringReference"
+
 
 @plugin
 def create_bool_reference(name: Reference[str] | str) -> Reference[bool]:
