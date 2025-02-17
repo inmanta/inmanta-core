@@ -1569,6 +1569,28 @@ class SnippetCompilationTest(KeepOnFail):
         os.symlink(self.env, venv)
         return self._load_project(autostd=False, install_project=True, main_file=main_file)
 
+    def create_module(self, name: str, initcf: str = "", initpy: str = "") -> None:
+        module_dir = os.path.join(self.libs, name)
+        os.mkdir(module_dir)
+        os.mkdir(os.path.join(module_dir, "model"))
+        os.mkdir(os.path.join(module_dir, "files"))
+        os.mkdir(os.path.join(module_dir, "templates"))
+        os.mkdir(os.path.join(module_dir, "plugins"))
+
+        with open(os.path.join(module_dir, "model", "_init.cf"), "w+") as fd:
+            fd.write(initcf)
+
+        with open(os.path.join(module_dir, "plugins", "__init__.py"), "w+") as fd:
+            fd.write(initpy)
+
+        with open(os.path.join(module_dir, "module.yml"), "w+") as fd:
+            fd.write(
+                f"""name: {name}
+version: 0.1
+license: Test License
+                """
+            )
+
 
 @pytest.fixture(scope="session")
 def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
