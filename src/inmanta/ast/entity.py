@@ -459,16 +459,18 @@ class Entity(NamedType, WithComment):
                 stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params)
             )
 
-        def coerce(t: Type, v: object) -> object:
+        def coerce(key: str, t: Type, v: object) -> object:
             """
             Coerce float-typed values to float (e.g. 1 -> 1.0)
             """
             t = t.get_no_reference()
+
+            if isinstance(v, Reference):
+                raise TypingException(
+                    None, f"Invalid value {v} in index lookup for attribute {key}: " f"references can not be used in indexes."
+                )
+
             match t:
-                case Reference():
-                    raise TypingException(
-                        None, f"Invalid value {v} in index lookup for attribute {key}: references can not be used in indexes."
-                    )
                 case Float():
                     return t.cast(v)
                 case NullableType(element_type=Float() as float):
@@ -481,7 +483,7 @@ class Entity(NamedType, WithComment):
                 "%s=%s"
                 % (
                     k,
-                    repr(coerce(self.get_attribute(k).type, v)),
+                    repr(coerce(k, self.get_attribute(k).type, v)),
                 )
                 for k, v in sorted(params, key=lambda x: x[0])
             ]

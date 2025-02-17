@@ -23,7 +23,7 @@ import typing
 import pytest
 
 from inmanta import env, references, resources, util
-from inmanta.ast import ExternalException, RuntimeException
+from inmanta.ast import ExternalException, RuntimeException, TypingException
 from inmanta.references import ReferenceCycleException
 
 if typing.TYPE_CHECKING:
@@ -133,7 +133,7 @@ def test_references_in_index(snippetcompiler: "SnippetCompilationTest", modules_
         snippet="""
         import refs
 
-        mystr = create_string_reference("test")
+        mystr = refs::create_string_reference("test")
 
         entity Test:
            string value
@@ -146,6 +146,10 @@ def test_references_in_index(snippetcompiler: "SnippetCompilationTest", modules_
         Test(value=mystr)
         """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+        autostd=True,
     )
-
-    snippetcompiler.do_export()
+    with pytest.raises(
+        TypingException,
+        match="Invalid value StringReference in index lookup for attribute value: references can not be used in indexes",
+    ):
+        snippetcompiler.do_export()
