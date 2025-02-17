@@ -25,6 +25,7 @@ from collections import defaultdict, deque
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Optional
 
+import inmanta.ast.entity
 from inmanta.ast import (
     DuplicateException,
     Locatable,
@@ -185,8 +186,21 @@ class ReferenceType(Type):
         super().__init__()
         assert not isinstance(element_type, ReferenceType)
         self.element_type = element_type
+        self.is_dataclass = False
+        if isinstance(element_type, inmanta.ast.entity.Entity):
+            if element_type.get_paired_dataclass() is None:
+                raise TypingException(
+                    None,
+                    f"References to entities must always be reference to dataclasses."
+                    f"Got {element_type}, which is not a dataclass",
+                )
+
+            self.is_dataclass = True
 
     def validate(self, value: Optional[object]) -> bool:
+        if self.is_dataclass:
+            return self.element_type.validate(value)
+
         if isinstance(value, Reference):
             assert value._model_type is not None
             if value._model_type.issubtype(self.element_type):
