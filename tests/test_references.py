@@ -150,6 +150,31 @@ def test_references_in_index(snippetcompiler: "SnippetCompilationTest", modules_
     )
     with pytest.raises(
         TypingException,
-        match="Invalid value StringReference in index lookup for attribute value: references can not be used in indexes",
+        match="Invalid value `StringReference` in index for attribute value: references can not be used in indexes",
+    ):
+        snippetcompiler.do_export()
+
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+          import refs
+
+          mystr = refs::create_string_reference("test")
+
+          entity Test:
+             string value
+          end
+
+          implement Test using std::none
+
+          index Test(value)
+
+          a = Test[value=mystr]
+          """,
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+        autostd=True,
+    )
+    with pytest.raises(
+        TypingException,
+        match="Invalid value `StringReference` in index for attribute value: references can not be used in indexes",
     ):
         snippetcompiler.do_export()

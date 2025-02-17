@@ -139,6 +139,9 @@ class Entity(NamedType, WithComment):
         for sub in self.subc:
             sub.normalize()
 
+        if self._paired_dataclass:
+            self.pair_dataclass()
+
     def get_sub_constructor(self) -> list[SubConstructor]:
         return self.subc
 
@@ -406,7 +409,7 @@ class Entity(NamedType, WithComment):
             if isinstance(value, Reference):
                 raise TypingException(
                     None,
-                    f"Invalid value {value} in index for attribute {key} on instance {instance}: "
+                    f"Invalid value `{value}` in index for attribute {key} on instance {instance}: "
                     f"references can not be used in indexes.",
                 )
             return repr(value.get_value())
@@ -467,7 +470,7 @@ class Entity(NamedType, WithComment):
 
             if isinstance(v, Reference):
                 raise TypingException(
-                    None, f"Invalid value {v} in index lookup for attribute {key}: " f"references can not be used in indexes."
+                    None, f"Invalid value `{v}` in index for attribute {key}: " f"references can not be used in indexes."
                 )
 
             match t:

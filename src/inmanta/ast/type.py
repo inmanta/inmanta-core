@@ -154,7 +154,6 @@ class Type(Locatable):
         Returns True iff this DSL type is a supertype of the other type in a non-trivial way.
         Raises NotImplementedError if this DSL type has no special supertyping rules (i.e. most types).
         """
-        # TODO: docstring
         raise NotImplementedError()
 
     def issubtype(self, other: "Type") -> bool:
@@ -202,7 +201,6 @@ class ReferenceType(Type):
         return f"Reference[{self.element_type.type_string()}]"
 
     def is_attribute_type(self) -> bool:
-        # TODO ???
         return self.element_type.is_attribute_type()
 
     def get_base_type(self) -> "Type":
@@ -638,7 +636,8 @@ class Bool(Primitive):
         raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
     def cast(self, value: Optional[object]) -> object:
-        # TODO: this is a bit odd, in that is accepts None?
+        # TODO: this is a bit odd, in that is accepts None
+        # But it has always been so
         return super().cast(value if not isinstance(value, NoneValue) else None)
 
     def type_string(self) -> str:
@@ -1045,17 +1044,18 @@ def create_union(types: Sequence[Type]) -> Type:
         if current in seen:
             continue
         seen.add(current)
-        if isinstance(current, Union):
-            worklist.extend(current.types)
-        elif isinstance(current, NullableType):
-            nullable = True
-            worklist.append(current.element_type)
-        elif isinstance(current, Null):
-            nullable = True
-        elif isinstance(current, ReferenceType):
-            sorted_types[current.element_type].has_ref = current
-        else:
-            sorted_types[current].has_base = current
+        match current:
+            case Union():
+                worklist.extend(current.types)
+            case NullableType():
+                nullable = True
+                worklist.append(current.element_type)
+            case Null():
+                nullable = True
+            case ReferenceType():
+                sorted_types[current.element_type].has_ref = current
+            case _:
+                sorted_types[current].has_base = current
 
     bases = [bor.convert() for bor in sorted_types.values()]
     if len(bases) == 1:
