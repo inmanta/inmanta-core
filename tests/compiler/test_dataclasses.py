@@ -25,6 +25,7 @@ from inmanta.ast import (
     AttributeException,
     DataClassException,
     DataClassMismatchException,
+    PluginTypeException,
     RuntimeException,
     WrappingRuntimeException,
 )
@@ -195,6 +196,24 @@ class Virtualmachine:
 end"""
         in explanation
     )
+
+
+def test_dataclass_type_check(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import dataclasses
+
+# Construct in model
+two = dataclasses::eat_vm("test")""",
+        ministd=True,
+    )
+
+    with pytest.raises(
+        PluginTypeException,
+        match="Value 'test' for argument inp of plugin dataclasses::eat_vm has incompatible type. "
+        "Expected type: dataclasses::Virtualmachine",
+    ):
+        compiler.do_compile()
 
 
 def test_dataclass_instance_failure(snippetcompiler):

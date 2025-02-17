@@ -1,7 +1,9 @@
 import dataclasses
+from typing import Annotated
 
 from inmanta.execute.proxy import DynamicProxy
-from inmanta.plugins import plugin
+from inmanta.plugins import plugin, ModelType
+
 
 @dataclasses.dataclass(frozen=True)
 class Virtualmachine:
@@ -16,6 +18,6 @@ def is_virtual_machine(vm: Virtualmachine) -> None:
     assert isinstance(vm, Virtualmachine)
 
 @plugin
-def is_dynamic_proxy(vm: "Virtualmachine") -> None:
-    # The declared type is an inmanta type, so we receive a DynamicProxy
+def is_dynamic_proxy(vm: Annotated[DynamicProxy, ModelType["Virtualmachine"]]) -> None:
+    # Explicitly request DynamicProxy to prevent the dataclass from being converted
     assert isinstance(vm, DynamicProxy)

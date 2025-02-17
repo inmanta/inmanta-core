@@ -24,7 +24,7 @@ from typing import Sequence, Type
 import inmanta.ast.type as inm_type
 import utils
 from inmanta import plugins
-from inmanta.ast import Namespace, TypingException, statements
+from inmanta.ast import Namespace, Range, TypingException, statements
 from inmanta.ast.entity import Entity, Implementation
 from inmanta.ast.type import (
     Any,
@@ -43,6 +43,15 @@ from inmanta.ast.type import (
 from inmanta.plugins import Plugin, UnConvertibleEntity, to_dsl_type
 from inmanta.references import Reference
 
+namespace = Namespace("dummy-namespace")
+namespace.primitives = inm_type.TYPES
+
+location: Range = Range("test", 1, 1, 2, 1)
+
+
+def to_dsl_type_simple(python_type: type[object]) -> inm_type.Type:
+    return to_dsl_type(python_type, location, namespace)
+
 
 def type_corresponds(
     it: inm_type.Type, does_correspond: py_type.Sequence[py_type.Type], does_not_correspond: py_type.Sequence[py_type.Type]
@@ -53,12 +62,12 @@ def type_corresponds(
     """
 
     for pyt in does_correspond:
-        tp = to_dsl_type(pyt)
+        tp = to_dsl_type_simple(pyt)
         assert it.corresponds_to(tp)
         assert inm_type.NullableType(it).corresponds_to(inm_type.NullableType(tp))
     for pyt in does_not_correspond:
         try:
-            tp = to_dsl_type(pyt)
+            tp = to_dsl_type_simple(pyt)
         except TypingException:
             # type is invalid
             continue
@@ -123,23 +132,23 @@ def test_type_correspondence():
     for it, pyt in primitive_types:
         for oit, opyt in primitive_types:
             if it is oit:
-                assert it.corresponds_to(to_dsl_type(pyt))
+                assert it.corresponds_to(to_dsl_type_simple(pyt))
             else:
-                assert not it.corresponds_to(to_dsl_type(opyt))
+                assert not it.corresponds_to(to_dsl_type_simple(opyt))
 
     # Number
     inm_number = inm_type.Number()
-    assert inm_number.corresponds_to(to_dsl_type(int))
-    assert inm_number.corresponds_to(to_dsl_type(float))
-    assert inm_number.corresponds_to(to_dsl_type(numbers.Number))
-    assert not inm_number.corresponds_to(to_dsl_type(str))
+    assert inm_number.corresponds_to(to_dsl_type_simple(int))
+    assert inm_number.corresponds_to(to_dsl_type_simple(float))
+    assert inm_number.corresponds_to(to_dsl_type_simple(numbers.Number))
+    assert not inm_number.corresponds_to(to_dsl_type_simple(str))
 
     # Reference
-    assert ReferenceType(String()).corresponds_to(to_dsl_type(Reference[str]))
-    assert OrReferenceType(String()).corresponds_to(to_dsl_type(Reference[str] | str))
+    assert ReferenceType(String()).corresponds_to(to_dsl_type_simple(Reference[str]))
+    assert OrReferenceType(String()).corresponds_to(to_dsl_type_simple(Reference[str] | str))
     assert not ReferenceType(String()).corresponds_to(OrReferenceType(String()))
     assert not OrReferenceType(String()).corresponds_to(ReferenceType(String()))
-    assert not OrReferenceType(String()).corresponds_to(to_dsl_type(Reference[str] | int))
+    assert not OrReferenceType(String()).corresponds_to(to_dsl_type_simple(Reference[str] | int))
 
 
 def make_typedef(
@@ -183,7 +192,7 @@ def test_issubtype_of_own_python_type() -> None:
         inm_type.Literal(),
         # Entity("test", Namespace("__root__"), ""), TODO: too complex to set up for now
     ]:
-        rt_ed = plugins.to_dsl_type(eval(tp.as_python_type_string()))
+        rt_ed = to_dsl_type_simple(eval(tp.as_python_type_string()))
         # Round trip makes the type less strict
         assert tp.issubtype(rt_ed)
         verified_types.add(type(tp))

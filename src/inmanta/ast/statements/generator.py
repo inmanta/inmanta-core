@@ -24,7 +24,7 @@ import uuid
 from collections import abc
 from collections.abc import Iterator
 from itertools import chain
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import inmanta.ast.entity
 import inmanta.ast.type as inmanta_type
@@ -74,11 +74,6 @@ from inmanta.execute.runtime import (
     WrappedValueVariable,
 )
 from inmanta.execute.util import Unknown
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Entity, Implement  # noqa: F401

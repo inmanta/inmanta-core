@@ -752,14 +752,14 @@ def module_from_template(
                 config=PipConfig(use_system_config=True),
             )
         else:
-            mod_artifact_path = ModuleTool().build(path=dest_dir)
+            mod_artifact_paths = ModuleTool().build(path=dest_dir, wheel=True)
             env.process_env.install_for_config(
                 requirements=[],
-                paths=[env.LocalPackagePath(path=mod_artifact_path)],
+                paths=[env.LocalPackagePath(path=mod_artifact_paths[0])],
                 config=PipConfig(use_system_config=True),
             )
     if publish_index is not None:
-        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
+        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir, wheel=True)
         publish_index.publish()
     with open(config_file) as fh:
         return module.ModuleV2Metadata.parse(fh)

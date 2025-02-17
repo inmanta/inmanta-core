@@ -18,9 +18,10 @@ Contact: code@inmanta.com
 
 import dataclasses
 from collections.abc import Sequence
+from typing import Annotated
 
 from inmanta.execute.proxy import DynamicProxy
-from inmanta.plugins import plugin
+from inmanta.plugins import plugin, ModelType
 
 
 @dataclasses.dataclass(frozen=True)
@@ -41,9 +42,8 @@ def eat_vm(inp: Virtualmachine) -> None:
 
 
 @plugin
-def eat_vm_dynamic(inp: "Virtualmachine") -> None:
-    # TODO: re-enable
-    # assert isinstance(inp, DynamicProxy)
+def eat_vm_dynamic(inp: Annotated[DynamicProxy, ModelType["dataclasses::Virtualmachine"]]) -> None:
+    assert isinstance(inp, DynamicProxy)
     print(inp)
     return None
 

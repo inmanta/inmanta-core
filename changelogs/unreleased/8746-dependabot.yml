@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump myst-parser from 4.0.0 to 4.0.1
+destination-branches:
+- master
+- iso8
+sections: {}
