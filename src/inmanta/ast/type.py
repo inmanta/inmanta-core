@@ -1042,6 +1042,7 @@ class LiteralDict(TypedDict):
 
 @dataclasses.dataclass
 class BaseOrRef:
+    """Small helper to sort types and their associated reference"""
 
     has_base: Type | None = None
     has_ref: ReferenceType | None = None
@@ -1061,7 +1062,7 @@ def create_union(types: Sequence[Type]) -> Type:
      - Nullable is the outer type if applicable
      - Nested unions are flattened
      - Reference[T] | T becomes OrReference[T] (for cleaner output)
-     - Single item union return just Union
+     - Single item union return just the item
     """
     worklist = deque(types)
     sorted_types: dict[Type, BaseOrRef] = defaultdict(BaseOrRef)

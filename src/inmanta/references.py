@@ -200,6 +200,17 @@ class Base:
         #       are serialized: based on instance types or on static types
 
     def resolve_other[S: RefValue](self, value: "Reference[S] | S") -> S:
+        """
+        Given a reference or a value, either return the value or the value obtained by resolving the reference.
+
+        This method is intended to be used by mutators and reference to resolve their own parameters
+        (which could be references as well.
+
+        When resolving references on the handler side, all parameters will already be resolved
+        and this method only serves to ensure correct typing.
+
+        When resolving reference on the compiler side, not all references will be resolved and using this method is required.
+        """
         if isinstance(value, Reference):
             return value.get()
         return value

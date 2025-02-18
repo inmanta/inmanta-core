@@ -23,7 +23,7 @@ class BoolReference(Reference[bool]):
 
 @reference("refs::String")
 class StringReference(Reference[str]):
-    """A reference to fetch environment variables"""
+    """A dummy reference to a string"""
 
     def __init__(self, name: str | Reference[str]) -> None:
         """

@@ -328,6 +328,9 @@ def _convert_to_reference(
 def _convert_origin_to_dsl_type(
     python_type: type[object], origin: type[object], location: Range, resolver: Namespace
 ) -> inmanta_type.Type | None:
+    """
+    Take a `python_type` of the form `origin[args]` and try to convert it
+    """
     # dict
     if issubclass(origin, Mapping):
         if origin in [collections.abc.Mapping, dict, typing.Mapping]:

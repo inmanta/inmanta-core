@@ -42,14 +42,6 @@ class Unknown(AnyType):
         return iter([])
 
 
-@stable_api
-class Reference(AnyType):
-    """
-    An instance of this class is used to indicate that this value is a reference and can only be resolved
-    at execution time in agent.
-    """
-
-
 class NoneValue:
     def __eq__(self, other: object) -> bool:
         return isinstance(other, NoneValue)
