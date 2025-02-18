@@ -1,5 +1,5 @@
 """
-Copyright 2024 Inmanta
+Copyright 2025 Inmanta
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -78,7 +78,7 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
-    """Test the use of references in the model and if they produce the correct serialized form."""
+    """Test the correct detection of reference cycles."""
     refs_module = os.path.join(modules_v2_dir, "refs")
 
     snippetcompiler.setup_for_snippet(
@@ -126,7 +126,7 @@ def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", mod
 
 
 def test_references_in_index(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
-    """Test that references are rejected in expressions"""
+    """Test that references are rejected in indexes"""
     refs_module = os.path.join(modules_v2_dir, "refs")
 
     snippetcompiler.setup_for_snippet(
