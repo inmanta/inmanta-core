@@ -1248,7 +1248,7 @@ class ConstraintType(NamedType):
         # This field would better be called element_type, but that would break backward compatibility
         # Is it also assumed to NEVER be a reference type
         self.basetype: Optional[Type] = None  # : ConstrainableType
-        self._constraint: Callable[[object],object] | None = None
+        self._constraint: Callable[[object], object] | None = None
         self.name: str = name
         self.namespace: Namespace = namespace
         self.comment: Optional[str] = None

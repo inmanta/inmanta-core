@@ -41,6 +41,7 @@ from utils import PipIndex, create_python_package, module_from_template, v1_modu
 def test_module_update_with_install_mode_master(
     tmpdir: py.path.local,
     modules_repo: str,
+    tmpvenv_active,
     kwargs_update_method: dict[str, str],
     mod2_should_be_updated: bool,
     mod8_should_be_updated: bool,

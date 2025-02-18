@@ -24,7 +24,7 @@ import hashlib
 import json
 import typing
 import uuid
-from typing import Tuple, Literal
+from typing import Literal, Tuple
 
 import pydantic
 import typing_inspect
@@ -190,7 +190,7 @@ class Base:
     type: typing.ClassVar[ReferenceType]
 
     def __init__(self) -> None:
-        self._model: typing.Optional[BaseModel] | Literal[CYCLE_TOKEN]= None
+        self._model: typing.Optional[BaseModel] | Literal[CYCLE_TOKEN] = None
 
         # Only present in compiler
         # Will be set by DynamicProxy.unwrap at the plugin boundary
@@ -268,7 +268,6 @@ class Mutator(Base):
 
         assert isinstance(self._model, MutatorModel)
         return self._model
-
 
 
 class Reference[T: RefValue](Base):
