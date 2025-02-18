@@ -417,7 +417,7 @@ class Entity(NamedType, WithComment):
                 )
             return repr(value)
 
-        attributes = {k: v for (k, v) in instance.slots.items() if v.is_ready()}
+        attributes = {k: v for k, v in instance.slots.items() if v.is_ready()}
 
         # check if an index entry can be added
         for index_attributes in self.get_indices():
@@ -427,7 +427,7 @@ class Entity(NamedType, WithComment):
                 if attribute not in attributes:
                     index_ok = False
                 else:
-                    key.append(f"{attribute}={index_value_gate(attribute, attributes[attribute])}")
+                    key.append(f"{attribute}={index_value_gate(attribute, attributes[attribute].get_value())}")
 
             if index_ok:
                 keys = ", ".join(key)

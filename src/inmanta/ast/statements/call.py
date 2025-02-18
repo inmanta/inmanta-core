@@ -74,7 +74,7 @@ class FunctionCall(ReferenceStatement):
         self.name: LocatableString = name
         self.arguments: list[ExpressionStatement] = arguments
         self.wrapped_kwargs: list[WrappedKwargs] = wrapped_kwargs
-        self._location: Range = name.get_location()
+        self.location: Range = name.get_location()
         self.namespace: Namespace = namespace
         self.kwargs: dict[str, ExpressionStatement] = {}
         for loc_name, expr in kwargs:

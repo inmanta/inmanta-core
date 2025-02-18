@@ -132,8 +132,8 @@ def test_compile_plugin_typing_invalid(setup_project_for):
     print(text)
     assert text == (
         "Return value ['a', 'b', 'c'] of plugin test::badtype has incompatible type. Expected type: test::Item[]"
-        " (reported in test::badtype(c1.items) ({dir}/invalid.cf:16))"
+        " (reported in test::badtype(c1.items) ({dir}/invalid.cf:16:5))"
         "\ncaused by:"
         "\n  Invalid type for value 'a', should be type test::Item (reported in test::badtype(c1.items)"
-        " ({dir}/invalid.cf:16))"
+        " ({dir}/invalid.cf:16:5))"
     ).format(dir=project.project_path)
