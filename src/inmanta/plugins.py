@@ -420,7 +420,7 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
             if out is not None:
                 return out
         else:
-            # We are not or the form Reference[T] but possibly a class that inherits from ...
+            # We are not of the form Reference[T] but possibly a class that inherits from ...
             # TODO: this doesn't handle cases where type parameters are shifted around
             all_bases = list(typing_inspect.get_generic_bases(python_type))
             seen = set()

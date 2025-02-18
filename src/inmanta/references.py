@@ -1,5 +1,5 @@
 """
-Copyright 2024 Inmanta
+Copyright 2025 Inmanta
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -86,7 +86,7 @@ class Argument(pydantic.BaseModel):
     """Base class for reference (resolver) arguments"""
 
     type: str
-    """ The type of the argument. It is used a discriminator to select the correct class
+    """ The type of the argument. It is used as a discriminator to select the correct class
     """
 
     name: str
@@ -220,6 +220,8 @@ class Base:
     @abc.abstractmethod
     def serialize(self) -> BaseModel:
         """Serialize to be able to add them to a resource"""
+        raise NotImplementedError()
+
 
     def serialize_arguments(self) -> Tuple[uuid.UUID, list[ArgumentTypes]]:
         """Serialize the arguments to this class"""
@@ -347,7 +349,7 @@ class reference:
 
     @classmethod
     def get_class(cls, name: str) -> type[Reference[RefValue]]:
-        """Get the class of registered with the given name"""
+        """Get the reference class registered with the given name"""
         if name not in cls._reference_classes:
             raise TypeError(f"There is no reference class registered with name {name}")
 
@@ -387,7 +389,7 @@ class mutator:
 
     @classmethod
     def get_class(cls, name: str) -> type[Mutator]:
-        """Get the class of registered with the given name"""
+        """Get the mutator class registered with the given name"""
         if name not in cls._mutator_classes:
             raise TypeError(f"There is no mutator class registered with name {name}")
 
