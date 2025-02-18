@@ -259,53 +259,6 @@ class UnConvertibleEntity(inmanta_type.Type):
         return self.base_entity.get_location()
 
 
-class UnConvertibleEntity(inmanta_type.Type):
-    """
-    Entity that does not convert to a dataclass.
-    """
-
-    # TODO: cache
-    def __init__(self, base_entity: "Entity") -> None:
-        super().__init__()
-        self.base_entity = base_entity
-
-    def validate(self, value: Optional[object]) -> bool:
-        return self.base_entity.validate(value)
-
-    def type_string(self) -> Optional[str]:
-        return self.base_entity.type_string()
-
-    def type_string_internal(self) -> str:
-        return self.base_entity.type_string_internal()
-
-    def normalize(self) -> None:
-        pass
-
-    def is_attribute_type(self) -> bool:
-        return False
-
-    def get_base_type(self) -> "inmanta_type.Type":
-        return self.base_entity.get_base_type()
-
-    def with_base_type(self, base_type: "inmanta_type.Type") -> "inmanta_type.Type":
-        return self.base_entity.with_base_type(base_type)
-
-    def corresponds_to(self, type: "inmanta_type.Type") -> bool:
-        raise NotImplementedError()
-
-    def as_python_type_string(self) -> "str | None":
-        return self.base_entity.as_python_type_string()
-
-    def has_custom_to_python(self) -> bool:
-        return False
-
-    def to_python(self, instance: object) -> "object":
-        return self.base_entity.to_python(instance)
-
-    def get_location(self) -> Optional[Location]:
-        return self.base_entity.get_location()
-
-
 # Define some types which are used in the context of plugins.
 PLUGIN_TYPES = {
     "any": inmanta_type.Any(),  # Any value will pass validation
@@ -397,10 +350,10 @@ def _convert_origin_to_dsl_type(
     # List
     if issubclass(origin, Sequence):
         if origin in [collections.abc.Sequence, list, typing.Sequence]:
-            args = typing.get_args(python_type)
-            if not args:
+            sargs = typing.get_args(python_type)
+            if not sargs:
                 return inmanta_type.List()
-            return inmanta_type.TypedList(to_dsl_type(args[0], location, resolver))
+            return inmanta_type.TypedList(to_dsl_type(sargs[0], location, resolver))
         else:
             raise TypingException(None, f"invalid type {python_type}, list types should be Sequence or list")
 
@@ -1178,7 +1131,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         processed_args: CheckedArgs,
         resolver: Resolver,
         queue: QueueScheduler,
-        location: Location,
+        location: Range,
     ) -> object:
         """
         The function call itself, with compiler context

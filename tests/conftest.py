@@ -36,6 +36,7 @@ from inmanta.config import log_dir
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
+from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
@@ -576,6 +577,8 @@ def reset_all_objects():
     auth.AuthJWTConfig.reset()
     InmantaLoggerConfig.clean_instance()
     AsyncHTTPClient.configure(None)
+    reference.reset()
+    mutator.reset()
 
 
 @pytest.fixture()

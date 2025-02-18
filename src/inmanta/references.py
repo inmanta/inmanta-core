@@ -24,7 +24,7 @@ import hashlib
 import json
 import typing
 import uuid
-from typing import Tuple
+from typing import Tuple, Literal
 
 import pydantic
 import typing_inspect
@@ -78,7 +78,7 @@ class ReferenceCycleException(Exception):
         trace = " -> ".join([str(x) for x in self.references])
         return "Reference cycle detected: %s" % (trace)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.get_message()
 
 
@@ -180,13 +180,17 @@ class MutatorModel(BaseModel):
 C = typing.TypeVar("C", bound="Base")
 
 
+CYCLE_TOKEN = object()
+# Token to perform cycle detection when serializing
+
+
 class Base:
     """A base class for references and mutators"""
 
     type: typing.ClassVar[ReferenceType]
 
     def __init__(self) -> None:
-        self._model: typing.Optional[BaseModel] = None
+        self._model: typing.Optional[BaseModel] | Literal[CYCLE_TOKEN]= None
 
         # Only present in compiler
         # Will be set by DynamicProxy.unwrap at the plugin boundary
@@ -265,9 +269,6 @@ class Mutator(Base):
         assert isinstance(self._model, MutatorModel)
         return self._model
 
-
-CYCLE_TOKEN = object()
-# Token to perform cycle detection when serializing
 
 
 class Reference[T: RefValue](Base):
@@ -356,7 +357,8 @@ class reference:
     @classmethod
     def reset(cls) -> None:
         """Reset the registered reference classes"""
-        cls._reference_classes = {}
+        # Keep core ones
+        cls._reference_classes = {k: v for k, v in cls._reference_classes.items() if k.startswith("core::")}
 
     @classmethod
     def get_references(cls) -> typing.Iterator[tuple[str, type[Reference[RefValue]]]]:
@@ -395,7 +397,8 @@ class mutator:
     @classmethod
     def reset(cls) -> None:
         """Reset the registered mutator classes"""
-        cls._mutator_classes = {}
+        # Keep core ones
+        cls._mutator_classes = {k: v for k, v in cls._mutator_classes.items() if k.startswith("core::")}
 
     @classmethod
     def get_mutators(cls) -> typing.Iterator[tuple[str, type[Mutator]]]:

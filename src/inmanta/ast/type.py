@@ -194,6 +194,10 @@ class ReferenceType(Type):
         self.element_type = element_type
         self.is_dataclass = False
         if element_type.is_entity():
+            # Can not be typed more strictly due to import loops
+            # The root cause of the problem is the to_dsl method, which is required by entity and plugin
+            # these are types, but to_dsl also constructs types.
+            # i.e. we can't layer the type, entity and plugin domain any more
             if element_type.get_paired_dataclass() is None:
                 raise TypingException(
                     None,
@@ -935,7 +939,7 @@ class Dict(Type):
     def issupertype(self, other: "Type") -> bool:
         return other != self and other.issubtype(self)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return type(self) is type(other)
 
     def __hash__(self) -> int:
@@ -1244,7 +1248,7 @@ class ConstraintType(NamedType):
         # This field would better be called element_type, but that would break backward compatibility
         # Is it also assumed to NEVER be a reference type
         self.basetype: Optional[Type] = None  # : ConstrainableType
-        self._constraint = None
+        self._constraint: Callable[[object],object] | None = None
         self.name: str = name
         self.namespace: Namespace = namespace
         self.comment: Optional[str] = None
@@ -1267,7 +1271,7 @@ class ConstraintType(NamedType):
         """
         Get the string representation of the constraint
         """
-        return self._constraint
+        return self.expression
 
     constraint = property(get_constraint, set_constraint)
 
@@ -1283,6 +1287,7 @@ class ConstraintType(NamedType):
         self.basetype.validate(value)
 
         assert self._constraint is not None
+        assert self.expression is not None
         if not self._constraint(value):
             raise RuntimeException(
                 self, f"Invalid value {repr(value)}, does not match constraint `{self.expression.pretty_print()}`"
@@ -1333,7 +1338,7 @@ class ConstraintType(NamedType):
         return super().issubtype(other) or self.basetype.issubtype(other)
 
 
-def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
+def create_function(tp: ConstraintType, expression: "ExpressionStatement") -> Callable[[object], object]:
     """
     Function that returns a function that evaluates the given expression.
     The generated function accepts the unbound variables in the expression

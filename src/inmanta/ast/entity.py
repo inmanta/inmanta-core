@@ -415,9 +415,9 @@ class Entity(NamedType, WithComment):
                     f"Invalid value `{value}` in index for attribute {key} on instance {instance}: "
                     f"references can not be used in indexes.",
                 )
-            return repr(value.get_value())
+            return repr(value)
 
-        attributes = {k: index_value_gate(k, v) for (k, v) in instance.slots.items() if v.is_ready()}
+        attributes = {k: index_value_gate(k, v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
 
         # check if an index entry can be added
         for index_attributes in self.get_indices():
