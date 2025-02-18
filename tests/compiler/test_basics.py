@@ -713,7 +713,7 @@ implement A using a
 implement B using b
 A(x=B())
 """,
-        r"variable u not found (reported in std::print(u) ({dir}/main.cf:11))",
+        r"variable u not found (reported in std::print(u) ({dir}/main.cf:11:5))",
         ministd=True,
     )
 

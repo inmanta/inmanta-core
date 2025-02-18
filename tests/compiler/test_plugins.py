@@ -46,7 +46,7 @@ def test_plugin_excn(snippetcompiler):
         import std
         std::template("/tet.tmpl")
 """,
-        """Exception in plugin std::template (reported in std::template('/tet.tmpl') ({dir}/main.cf:3))
+        """Exception in plugin std::template (reported in std::template('/tet.tmpl') ({dir}/main.cf:3:9))
 caused by:
   jinja2.exceptions.TemplateNotFound: /tet.tmpl
 """,
@@ -97,7 +97,7 @@ def test_kwargs_in_plugin_call_missing_arg(snippetcompiler):
 std::equals(42, desc="they differ")
         """,
         "std::equals() missing 1 required positional argument: 'arg2' "
-        "(reported in std::equals(42,desc='they differ') ({dir}/main.cf:2))",
+        "(reported in std::equals(42,desc='they differ') ({dir}/main.cf:2:1))",
         autostd=True,
     )
 
@@ -107,7 +107,7 @@ def test_kwargs_in_plugin_call_double_arg(snippetcompiler):
         """
 std::equals(42, 42, arg1=42)
         """,
-        "std::equals() got multiple values for argument 'arg1' (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2))",
+        "std::equals() got multiple values for argument 'arg1' (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2:1))",
         autostd=True,
     )
 
@@ -129,7 +129,7 @@ def test_kwargs_in_plugin_call_double_kwarg(snippetcompiler):
 std::equals(42, arg2=42, arg2=42)
         """,
         "Keyword argument arg2 repeated in function call std::equals()"
-        " (reported in std::equals(42,arg2=42) ({dir}/main.cf:2))",
+        " (reported in std::equals(42,arg2=42) ({dir}/main.cf:2:1))",
     )
 
 
@@ -188,9 +188,9 @@ import test_674
 test_674::test_not_nullable(null)
         """,
         "Value null for argument param of plugin test_674::test_not_nullable has incompatible type."
-        " Expected type: string (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))"
+        " Expected type: string (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4:1))"
         "\ncaused by:"
-        "\n  Invalid value 'null', expected string (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))",
+        "\n  Invalid value 'null', expected string (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4:1))",
     )
 
 
@@ -225,9 +225,9 @@ import test_674
 test_674::test_not_nullable_list(null)
         """,
         "Value null for argument param of plugin test_674::test_not_nullable_list has incompatible type."
-        " Expected type: int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))"
+        " Expected type: int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4:1))"
         "\ncaused by:"
-        "\n  Invalid value 'null', expected int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))",
+        "\n  Invalid value 'null', expected int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4:1))",
     )
 
 
@@ -249,7 +249,7 @@ def test_1778_context_as_kwarg_reject(snippetcompiler):
 std::generate_password("pw_id", 42, context=42)
         """,
         "std::generate_password() got an unexpected keyword argument: 'context' "
-        "(reported in std::generate_password('pw_id',42,context=42) ({dir}/main.cf:2))",
+        "(reported in std::generate_password('pw_id',42,context=42) ({dir}/main.cf:2:1))",
         autostd=True,
     )
 
@@ -315,7 +315,7 @@ a.other = A()
         compiler.do_compile()
     dir: str = snippetcompiler.project_dir
     message: str = (
-        "Unset value in python code in plugin at call: std::attr " f"({dir}/main.cf:7) (Will be rescheduled by compiler)"
+        "Unset value in python code in plugin at call: std::attr " f"({dir}/main.cf:7:1) (Will be rescheduled by compiler)"
     )
     log_contains(caplog, "inmanta.ast.statements.call", logging.DEBUG, message)
 
@@ -581,7 +581,7 @@ end
             (
                 f"Value {ns}::AnotherEntity (instantiated at {main_dir}:3) for argument value of plugin "
                 f"{ns}::annotated_arg_entity has incompatible type. Expected type: {ns}::TestEntity "
-                f"(reported in {ns}::annotated_arg_entity(value=Construct({ns}::AnotherEntity)) ({main_dir}:3))"
+                f"(reported in {ns}::annotated_arg_entity(value=Construct({ns}::AnotherEntity)) ({main_dir}:3:13))"
             ),
         ),
         (
