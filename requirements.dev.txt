@@ -9,7 +9,6 @@ types-setuptools==75.8.0.20250210
 types-toml==0.10.8.20240310
 flake8-junit-report==2.1.0
 time-machine==2.16.0
-inmanta-module-std
 
 # documentation
 furo==2024.8.6
