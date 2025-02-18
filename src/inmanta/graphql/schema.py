@@ -23,7 +23,6 @@ from contextlib import asynccontextmanager
 import inmanta.graphql.models
 import strawberry
 from sqlalchemy import AsyncAdaptedQueuePool, event, select
-from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
@@ -297,10 +296,10 @@ async def stop_engine():
 
 def start_engine(
     url: str,
-    pool_size: int,
-    max_overflow: int,
-    pool_timeout: float,
-    echo: bool,
+    pool_size: int = 10,
+    max_overflow: int = 0,
+    pool_timeout: float = 60.0,
+    echo: bool = False,
 ):
     """
     engine vs connection vs session overview

@@ -17,20 +17,20 @@
 """
 
 import logging
-from typing import Any, Mapping, Optional
+from typing import Mapping, Optional
 
 from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
 
 from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, schema
 from inmanta.data.model import DataBaseReport
-from inmanta.graphql.schema import get_connection_ctx_mgr, start_engine, stop_engine, get_pool
+from inmanta.graphql.schema import get_connection_ctx_mgr, get_pool, start_engine, stop_engine
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.types import ArgumentTypes
 from inmanta.util import IntervalSchedule, Scheduler
-from sqlalchemy import AsyncAdaptedQueuePool, text
+from sqlalchemy import text
 
 LOGGER = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ class DatabaseMonitor:
         Checks if the database pool is exhausted
         """
         pool = get_pool()
-        pool_exhausted: bool = (pool.checkedin() == 0 and pool.overflow() == self._max_overflow)
+        pool_exhausted: bool = pool.checkedin() == 0 and pool.overflow() == self._max_overflow
         if pool_exhausted:
             self._exhausted_pool_events_count += 1
 
@@ -112,7 +112,7 @@ class DatabaseMonitor:
             database=self.dn_name,
             host=self.db_host,
             max_pool=max_connections,
-            free_pool= free_connections_in_pool + self._max_overflow - open_overflow_connections,
+            free_pool=free_connections_in_pool + self._max_overflow - open_overflow_connections,
             open_connections=pool.size() - free_connections_in_pool + open_overflow_connections,
             free_connections=free_connections_in_pool,
             pool_exhaustion_time=self._exhausted_pool_events_count * self._db_exhaustion_check_interval,
@@ -135,20 +135,23 @@ class DatabaseMonitor:
         # TODO not all these are correct / equivalent to previous asyncpg pool implementation
         self._add_gauge(
             "db.connected",
-            CallbackGauge(
-                callback=lambda: 1 if (get_pool() is not None) else 0
-            ),
+            CallbackGauge(callback=lambda: 1 if (get_pool() is not None) else 0),
         )
         self._add_gauge(
-            "db.max_pool", CallbackGauge(callback=lambda: get_pool().size() + self._max_overflow if get_pool() is not None else 0)
+            "db.max_pool",
+            CallbackGauge(callback=lambda: get_pool().size() + self._max_overflow if get_pool() is not None else 0),
         )
         self._add_gauge(
             "db.open_connections",
-            CallbackGauge(callback=lambda:  get_pool().checkedout() if get_pool() is not None else 0),
+            CallbackGauge(callback=lambda: get_pool().checkedout() if get_pool() is not None else 0),
         )
         self._add_gauge(
             "db.free_connections",
-            CallbackGauge(callback=lambda: get_pool().checkedin() + self._max_overflow - get_pool().overflow() if get_pool() is not None else 0),
+            CallbackGauge(
+                callback=lambda: (
+                    get_pool().checkedin() + self._max_overflow - get_pool().overflow() if get_pool() is not None else 0
+                )
+            ),
         )
         self._add_gauge(
             "db.free_pool",
@@ -212,13 +215,12 @@ class DatabaseService(protocol.ServerSlice):
             database_name=opt.db_name.get(),
             database_username=opt.db_username.get(),
             database_password=opt.db_password.get(),
+            create_db_schema=True,
             connection_pool_min_size=opt.server_db_connection_pool_min_size.get(),
             connection_pool_max_size=opt.server_db_connection_pool_max_size.get(),
             connection_timeout=opt.server_db_connection_timeout.get(),
         )
         async with get_connection_ctx_mgr() as connection:
-            await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, connection).ensure_db_schema()
-
             # Check if JIT is enabled
             jit_available = await connection.execute("SELECT pg_jit_available();")
             if jit_available:
@@ -240,9 +242,10 @@ async def initialize_sql_alchemy_engine(
     database_name: str,
     database_username: str,
     database_password: str,
-    connection_pool_min_size: int,
-    connection_pool_max_size: int,
-    connection_timeout: float,
+    create_db_schema: bool = False,
+    connection_pool_min_size: int = 10,
+    connection_pool_max_size: int = 10,
+    connection_timeout: float = 60.0,
 ) -> None:
     """
     Initialize the sql alchemy engine for the current process and return it.
@@ -260,10 +263,12 @@ async def initialize_sql_alchemy_engine(
     start_engine(
         url=f"postgresql+asyncpg://{database_username}:{database_password}@{database_host}:{database_port}/{database_name}",
         pool_size=connection_pool_min_size,
-        max_overflow=connection_pool_max_size-connection_pool_min_size,
+        max_overflow=connection_pool_max_size - connection_pool_min_size,
         pool_timeout=connection_timeout,
         echo=True,
     )
 
+    if create_db_schema:
+        async with get_connection_ctx_mgr() as conn:
+            await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, conn).ensure_db_schema()
     LOGGER.info("Connected to PostgreSQL database %s on %s:%d", database_name, database_host, database_port)
-

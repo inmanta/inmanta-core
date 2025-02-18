@@ -62,9 +62,7 @@ from inmanta.command import CLIException, Commander, ShowUsageException, command
 from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import ALL_LOG_CONTEXT_VARS, EXIT_START_FAILED, LOG_CONTEXT_VAR_ENVIRONMENT
-from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, schema
 from inmanta.export import cfg_env
-from inmanta.graphql.schema import get_connection_ctx_mgr
 from inmanta.logging import InmantaLoggerConfig, _is_on_tty
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
@@ -156,12 +154,11 @@ def start_scheduler(options: argparse.Namespace) -> None:
             database_name=opt.db_name.get(),
             database_username=opt.db_username.get(),
             database_password=opt.db_password.get(),
+            create_db_schema=True,
             connection_pool_min_size=agent_config.scheduler_db_connection_pool_min_size.get(),
             connection_pool_max_size=agent_config.scheduler_db_connection_pool_max_size.get(),
             connection_timeout=agent_config.scheduler_db_connection_timeout.get(),
         )
-        async with get_connection_ctx_mgr() as conn:
-            await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, conn).ensure_db_schema()
 
         # also report metrics if this is relevant
         metrics_reporter = MetricsService(

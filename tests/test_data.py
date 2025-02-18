@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import datetime
 import enum
 import logging
@@ -29,49 +28,51 @@ from typing import Optional, cast
 import asyncpg
 import pytest
 from asyncpg import Connection, ForeignKeyViolationError
-from asyncpg.pool import Pool
 
+import sqlalchemy
 import utils
 from inmanta import const, data, util
 from inmanta.const import AgentStatus, LogLevel
 from inmanta.data import ArgumentCollector, QueryType
 from inmanta.deploy import state
+from inmanta.graphql.schema import get_engine, start_engine, stop_engine
 from inmanta.resources import Id
 from inmanta.types import ResourceVersionIdStr
 
 
-async def test_connect_too_small_connection_pool(postgres_db, database_name: str, create_db_schema: bool = False):
-    pool: Pool = await data.connect(
-        postgres_db.host,
-        postgres_db.port,
-        database_name,
-        postgres_db.user,
-        postgres_db.password,
-        create_db_schema,
-        connection_pool_min_size=1,
-        connection_pool_max_size=1,
-        connection_timeout=120,
+@pytest.fixture
+def sqlalchemy_url(postgres_db, database_name: str):
+    return (
+        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
     )
-    assert pool is not None
-    connection: Connection = await pool.acquire()
+
+
+async def test_connect_too_small_connection_pool(sqlalchemy_url: str):
+    start_engine(
+        url=sqlalchemy_url,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=1,
+    )
+    engine = get_engine()
+    assert engine is not None
+    connection: Connection = await engine.connect()
+
     try:
-        with pytest.raises(asyncio.TimeoutError):
-            await pool.acquire(timeout=1.0)
+        with pytest.raises(sqlalchemy.exc.TimeoutError):
+            await engine.connect()
     finally:
         await connection.close()
-        await data.disconnect()
+        await stop_engine()
 
 
-async def test_connect_default_parameters(postgres_db, database_name: str, create_db_schema: bool = False):
-    pool: Pool = await data.connect(
-        postgres_db.host, postgres_db.port, database_name, postgres_db.user, postgres_db.password, create_db_schema
-    )
-    assert pool is not None
-    try:
-        async with pool.acquire() as connection:
-            assert connection is not None
-    finally:
-        await data.disconnect()
+async def test_connect_default_parameters(sqlalchemy_url):
+    start_engine(url=sqlalchemy_url)
+
+    engine = get_engine()
+    assert engine is not None
+    async with engine.connect() as connection:
+        assert connection is not None
 
 
 @pytest.mark.parametrize("min_size, max_size", [(-1, 1), (2, 1), (-2, -2)])

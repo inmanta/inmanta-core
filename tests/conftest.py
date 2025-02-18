@@ -34,9 +34,11 @@ from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, 
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
 from inmanta.db.util import PGRestore
+from inmanta.graphql.schema import stop_engine
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 from inmanta.resources import PurgeableResource, Resource, resource
+from inmanta.server.services.databaseservice import initialize_sql_alchemy_engine
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
 
@@ -382,15 +384,16 @@ async def postgresql_pool(postgres_db, database_name):
 
 @pytest.fixture(scope="function")
 async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_reset):
-    await data.connect(
-        host=postgres_db.host,
-        port=postgres_db.port,
-        username=postgres_db.user,
-        password=postgres_db.password,
-        database=database_name,
+    await initialize_sql_alchemy_engine(
+        database_host=postgres_db.host,
+        database_port=postgres_db.port,
+        database_name=database_name,
+        database_username=postgres_db.user,
+        database_password=postgres_db.password,
+        create_db_schema=True,
     )
     yield
-    await data.disconnect()
+    await stop_engine()
 
 
 @pytest.fixture(scope="function")
