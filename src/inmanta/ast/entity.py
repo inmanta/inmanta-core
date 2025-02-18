@@ -427,7 +427,7 @@ class Entity(NamedType, WithComment):
                 if attribute not in attributes:
                     index_ok = False
                 else:
-                    key.append(f"{attribute}={index_value_gate(attribute,attributes[attribute])}")
+                    key.append(f"{attribute}={index_value_gate(attribute, attributes[attribute])}")
 
             if index_ok:
                 keys = ", ".join(key)

@@ -1152,7 +1152,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 resolver=resolver,
                 queue=queue,
                 location=location,
-                type_resolver=functools.partial(to_dsl_type, location=location, resolver=resolver),
+                type_resolver=functools.partial(to_dsl_type, location=location, resolver=self.namespace),
             ),
         )
 
