@@ -38,7 +38,6 @@ from inmanta.ast import (
     TypingException,
     WithComment,
 )
-from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import Any as inm_Any
 from inmanta.ast.type import Float, NamedType, NullableType, Type
@@ -51,6 +50,7 @@ from inmanta.types import DataclassProtocol
 
 
 if TYPE_CHECKING:
+    from inmanta.ast.blocks import BasicBlock
     from inmanta.ast import Namespaced
     from inmanta.ast.attribute import Attribute, RelationAttribute  # noqa: F401
     from inmanta.ast.statements import ExpressionStatement, Statement  # noqa: F401
@@ -104,6 +104,9 @@ class Entity(NamedType, WithComment):
         # Entities can be paired up to python dataclasses
         # If such a sibling exists, the type is kept here
         # Every instance of such entity can cary the associated python object in a slot called `DATACLASS_SELF_FIELD`
+
+    def is_entity(self) -> bool:
+        return True
 
     def normalize(self) -> None:
         self.normalized = True
@@ -787,7 +790,7 @@ class Implementation(NamedType):
     """
 
     def __init__(
-        self, name: str, stmts: BasicBlock, namespace: Namespace, target_type: str, comment: Optional[str] = None
+        self, name: str, stmts: "BasicBlock", namespace: Namespace, target_type: str, comment: Optional[str] = None
     ) -> None:
         Named.__init__(self)
         self.name = name

@@ -25,7 +25,6 @@ from collections import defaultdict, deque
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Optional
 
-import inmanta.ast.entity
 from inmanta.ast import (
     DuplicateException,
     Locatable,
@@ -90,6 +89,13 @@ class Type(Locatable):
         """
         Returns true iff this type is valid in the model as an attribute type
         """
+        return False
+
+    def is_entity(self) -> bool:
+        """
+        Returns true only for Entity
+        """
+        # Introduced to prevent import loops on isinstance checks
         return False
 
     def get_base_type(self) -> "Type":
@@ -187,7 +193,7 @@ class ReferenceType(Type):
         assert not isinstance(element_type, ReferenceType)
         self.element_type = element_type
         self.is_dataclass = False
-        if isinstance(element_type, inmanta.ast.entity.Entity):
+        if element_type.is_entity():
             if element_type.get_paired_dataclass() is None:
                 raise TypingException(
                     None,
