@@ -808,6 +808,7 @@ src/inmanta/parser/plyInmantaLex.py:0: error: Incompatible types in assignment (
 src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "int" has incompatible type "str | LocatableString"; expected "str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc"  [arg-type]
 src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "len" has incompatible type "str | LocatableString"; expected "Sized"  [arg-type]
 src/inmanta/parser/plyInmantaLex.py:0: error: Value of type "str | LocatableString" is not indexable  [index]
+src/inmanta/ast/statements/call.py:0: error: Incompatible types in assignment (expression has type "Range", base class "Locatable" defined the type as "property")  [assignment]
 src/inmanta/ast/statements/call.py:0: error: Missing type parameters for generic type "VariableABC"  [type-arg]
 src/inmanta/ast/statements/call.py:0: error: Need type annotation for "temp"  [var-annotated]
 src/inmanta/ast/statements/call.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
