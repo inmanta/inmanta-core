@@ -233,7 +233,6 @@ class Base:
         """Serialize to be able to add them to a resource"""
         raise NotImplementedError()
 
-
     def serialize_arguments(self) -> Tuple[uuid.UUID, list[ArgumentTypes]]:
         """Serialize the arguments to this class"""
         arguments: list[ArgumentTypes] = []
