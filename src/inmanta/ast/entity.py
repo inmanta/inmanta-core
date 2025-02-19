@@ -755,7 +755,9 @@ class Entity(NamedType, WithComment):
                 reference=value,
                 attribute_name=name,
             )
-            ar._model_type = self.get_attribute(name).get_type().get_no_reference()
+            attribute = self.get_attribute(name)
+            assert attribute is not None  # Mypy
+            ar._model_type = attribute.get_type().get_no_reference()
             return ar
 
         if isinstance(value, Reference):
