@@ -201,8 +201,8 @@ class ReferenceType(Type):
             if element_type.get_paired_dataclass() is None:
                 raise TypingException(
                     None,
-                    f"References to entities must always be reference to dataclasses."
-                    f"Got {element_type}, which is not a dataclass",
+                    f"References to entities must always be references to dataclasses."
+                    f" Got {element_type}, which is not a dataclass",
                 )
 
             self.is_dataclass = True
@@ -216,7 +216,7 @@ class ReferenceType(Type):
             if value._model_type.issubtype(self.element_type):
                 return True
 
-        raise TypingException(None, f"Invalid value {value} is not a subtype of {self.type_string()} `")
+        raise TypingException(None, f"Invalid value {value} is not a subtype of {self.type_string()}")
 
     def type_string(self) -> Optional[str]:
         return self.element_type.type_string()

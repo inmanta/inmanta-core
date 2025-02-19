@@ -337,7 +337,7 @@ class DataclassReference[T: DataclassProtocol](Reference[T]):
 
 
 class reference:
-    """This decorator register a reference under a specific name"""
+    """This decorator registers a reference under a specific name"""
 
     # It is not allowed to use T in a class var so we cannot use T here
     _reference_classes: typing.ClassVar[dict[str, type[Reference[RefValue]]]] = {}
