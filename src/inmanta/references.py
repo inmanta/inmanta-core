@@ -160,7 +160,7 @@ ArgumentTypes = typing.Annotated[
 """
 
 
-class BaseModel(pydantic.BaseModel):
+class SerializedReferenceLike(pydantic.BaseModel):
     """
     A base model class for references and mutators in their serialized form
     """
@@ -169,30 +169,30 @@ class BaseModel(pydantic.BaseModel):
     args: list[ArgumentTypes]
 
 
-class ReferenceModel(BaseModel):
+class ReferenceModel(SerializedReferenceLike):
     """A reference"""
 
     id: uuid.UUID
 
 
-class MutatorModel(BaseModel):
+class MutatorModel(SerializedReferenceLike):
     """A mutator"""
 
 
-C = typing.TypeVar("C", bound="Base")
+C = typing.TypeVar("C", bound="ReferenceLike")
 
 
 CYCLE_TOKEN = object()
 # Token to perform cycle detection when serializing
 
 
-class Base:
+class ReferenceLike:
     """A base class for references and mutators"""
 
     type: typing.ClassVar[ReferenceType]
 
     def __init__(self) -> None:
-        self._model: typing.Optional[BaseModel] | Literal[CYCLE_TOKEN] = None
+        self._model: typing.Optional[SerializedReferenceLike] | Literal[CYCLE_TOKEN] = None
 
         # Only present in compiler
         # Will be set by DynamicProxy.unwrap at the plugin boundary
@@ -220,7 +220,7 @@ class Base:
     @classmethod
     def deserialize(
         cls: typing.Type[C],
-        ref: BaseModel,
+        ref: SerializedReferenceLike,
         resource: "inmanta.resources.Resource",
     ) -> C:
         """Deserialize the reference or mutator.
@@ -231,7 +231,7 @@ class Base:
         return cls(**{arg.name: arg.get_arg_value(resource) for arg in ref.args})
 
     @abc.abstractmethod
-    def serialize(self) -> BaseModel:
+    def serialize(self) -> SerializedReferenceLike:
         """Serialize to be able to add them to a resource"""
         raise NotImplementedError()
 
@@ -267,7 +267,7 @@ class Base:
         return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
 
-class Mutator(Base):
+class Mutator(ReferenceLike):
     """A mutator that has side effects when executed"""
 
     @abc.abstractmethod
@@ -284,7 +284,7 @@ class Mutator(Base):
         return self._model
 
 
-class Reference[T: RefValue](Base):
+class Reference[T: RefValue](ReferenceLike):
     """Instances of this class can create references to a value and resolve them."""
 
     def __init__(self) -> None:
