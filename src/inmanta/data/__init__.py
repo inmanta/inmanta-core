@@ -70,6 +70,17 @@ from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
 
+from contextlib import asynccontextmanager
+
+from sqlalchemy import AsyncAdaptedQueuePool, event
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+
+
+ASYNC_SESSION: typing.Optional[AsyncSession] = None
+ENGINE: AsyncEngine | None = None
+POOL: AsyncAdaptedQueuePool | None = None
+
+
 LOGGER = logging.getLogger(__name__)
 
 DBLIMIT = 100000
@@ -6672,3 +6683,89 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 # Name of core schema in the DB schema verions
 # prevent import loop
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
+
+
+
+
+
+def get_async_session(connection_string: typing.Optional[str] = None) -> AsyncSession:
+    if ENGINE is None:
+        raise Exception("Cannot get session because engine wasn't started. Make sure to call start_engine() first.")
+    if ASYNC_SESSION is None:
+        # should not happen
+        raise Exception("Engine is started but session factory wasn't initialized properly.")
+
+    return ASYNC_SESSION()
+
+
+
+async def stop_engine():
+    global ENGINE
+    await ENGINE.dispose()
+    ENGINE = None
+
+
+def start_engine(
+    url: str,
+    pool_size: int = 10,
+    max_overflow: int = 0,
+    pool_timeout: float = 60.0,
+    echo: bool = False,
+):
+    """
+    engine vs connection vs session overview
+    https://stackoverflow.com/questions/34322471/sqlalchemy-engine-connection-and-session-difference
+    """
+    global ENGINE
+    global ASYNC_SESSION
+    global POOL
+
+    if ENGINE is not None:
+        raise Exception("Engine already running: cannot call start_engine twice.")
+    LOGGER.debug("Creating engine...")
+    ENGINE = create_async_engine(
+        url=url,
+        pool_size=pool_size,
+        max_overflow=max_overflow,
+        pool_timeout=pool_timeout,
+        echo=echo,
+    )
+    POOL = ENGINE.pool
+    ASYNC_SESSION = async_sessionmaker(ENGINE)
+
+    @event.listens_for(ENGINE.sync_engine, "do_connect")
+    def do_connect(dialect, conn_rec, cargs, cparams):
+        print("some-function")
+        print(dialect, conn_rec, cargs, cparams)
+
+    @event.listens_for(ENGINE.sync_engine, "engine_connect")
+    def engine_connect(conn, branch):
+        # print("engine_connect", conn.exec_driver_sql("select 1").scalar())
+        print("engine_connect")
+        print(branch)
+
+    @event.listens_for(ENGINE.sync_engine, "checkout")
+    def my_on_checkout(dbapi_conn, connection_rec, connection_proxy):
+        print("pool checkout")
+        print(dbapi_conn, connection_rec, connection_proxy)
+
+
+@asynccontextmanager
+async def get_connection_ctx_mgr():
+    async with ENGINE.connect() as connection:
+        connection_fairy = await connection.get_raw_connection()
+
+        # the really-real innermost driver connection is available
+        # from the .driver_connection attribute
+        raw_asyncio_connection = connection_fairy.driver_connection
+        yield raw_asyncio_connection
+
+
+def get_pool():
+    return POOL
+
+
+def get_engine():
+    return ENGINE
+
+

@@ -1,26 +1,26 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 
-    Module defining the v2 rest api
+Module defining the v2 rest api
 """
 
 import datetime
 import uuid
-from typing import Any, Literal, Optional, Union
+from typing import Literal, Optional, Union
 
 import inmanta.types
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
@@ -405,7 +405,7 @@ def get_scheduler_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
     Inspect the scheduler state from the given environment.
 
     :param tid: The id of the environment in which to inspect the scheduler.
-
+    :raise NotFound: No scheduler is running. For example because the environment is halted.
     """
 
 
@@ -944,7 +944,7 @@ def list_desired_state_versions(
     :param end: The upper limit for the order by column (exclusive).
                 Only one of 'start' and 'end' should be specified at the same time.
     :param filter: Filter the list of returned desired state versions.
-                Filtering by 'version' range, 'date' range and 'status' is supported.
+                Filtering by 'version' range, 'date' range, 'status' and `released` are supported.
     :param sort: Return the results sorted according to the parameter value.
                 Only sorting by 'version' is supported.
                 The following orders are supported: 'asc', 'desc'
@@ -1604,14 +1604,3 @@ def discovered_resources_get_batch(
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """
-
-
-@typedmethod(
-    path="/graphql",
-    operation="POST",
-    client_types=[ClientType.api],
-    api_version=2,
-    strict_typing=False,
-)
-def graphql(query: str) -> Any:  # Actual return type: strawberry.types.execution.ExecutionResult
-    pass
