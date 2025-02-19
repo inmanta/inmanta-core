@@ -1179,7 +1179,7 @@ class Union(Type):
         for tp in self.types:
             # For each of out types
             try:
-                # Find if this instance if of that type
+                # Find if this instance is of that type
                 if tp.validate(instance):
                     # It is of this type, does it require custom conversion?
                     if tp.has_custom_to_python():
