@@ -269,12 +269,23 @@ class ReferenceType(Type):
 
 
 class OrReferenceType(ReferenceType):
+    """
+    This class represents the shorthand for Reference[T] | T
+
+    It produces a cleaner output for exceptions
+
+    create_unions will compact unions to use this class when relevant
+    """
 
     def validate(self, value: Optional[object]) -> bool:
+        # We validate that the value is either a reference of the base type or the base type
         try:
+            # Validate that we are the reference
             return super().validate(value)
         except RuntimeException:
+            # If not, fine
             pass
+        # Validate that we are the base type
         return self.element_type.validate(value)
 
     def type_string(self) -> Optional[str]:
@@ -1145,15 +1156,29 @@ class Union(Type):
         return any(tp.has_custom_to_python() for tp in self.types)
 
     def to_python(self, instance: object) -> "object":
+        """
+        Construct a python object for this instance
+        """
+        # At this point, we have two pre-conditions
+        # 1. instance is an instance of one of our types
+        # 2. one of our types has_custom_to_python set
         for tp in self.types:
+            # For each of out types
             try:
+                # Find if this instance if of that type
                 if tp.validate(instance):
+                    # It is of this type, does it require custom conversion?
                     if tp.has_custom_to_python():
+                        # Custom conversion
                         return tp.to_python(instance)
                     else:
+                        # Default conversion
                         return DynamicProxy.return_value(instance)
             except RuntimeException:
+                # Validate fails, up to the next one
                 pass
+        # Due to the invariants, this can't happen
+        # One of the types HAS to match validate
         assert False
 
     def corresponds_to(self, type: Type) -> bool:

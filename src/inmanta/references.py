@@ -161,7 +161,9 @@ ArgumentTypes = typing.Annotated[
 
 
 class BaseModel(pydantic.BaseModel):
-    """A base model class for references and mutators"""
+    """
+    A base model class for references and mutators in their serialized form
+    """
 
     type: ReferenceType
     args: list[ArgumentTypes]
