@@ -4,3 +4,16 @@ entity Test extends std::Dataclass:
 end
 
 implement Test using std::none
+
+
+entity NullResource extends std::ManagedResource, std::PurgeableResource:
+    """
+        Copied from std to have no index
+    """
+    string name = "null"
+    string agentname = "internal"
+    bool send_event = true
+    bool fail = false
+end
+
+implement NullResource using std::none

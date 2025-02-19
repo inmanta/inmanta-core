@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import json
 import logging
 import re
 import typing
@@ -226,7 +225,7 @@ class ReferenceCollector:
         )
 
 
-def collect_references(value_reference_collector: ReferenceCollector, value: object, path: str) -> object:
+def collect_references(value_reference_collector: ReferenceCollector | None, value: object, path: str) -> object:
     """Collect value references. This method also ensures that there are no values in the resources that are not serializable.
     This includes:
         - Unknowns
@@ -248,12 +247,16 @@ def collect_references(value_reference_collector: ReferenceCollector, value: obj
             return {key: collect_references(value_reference_collector, value, f"{path}.{key}") for key, value in value.items()}
 
         case references.Reference():
+            if value_reference_collector is None:
+                raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
             value_reference_collector.add_reference(path, value)
             return None
 
         case proxy.DynamicProxy():
             inner_value = proxy.DynamicProxy.unwrap(value)
             if isinstance(inner_value, references.Reference):
+                if value_reference_collector is None:
+                    raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
                 value_reference_collector.add_reference(path, inner_value)
                 return None
             else:
@@ -398,7 +401,7 @@ class Resource(metaclass=ResourceMeta):
         field_name: str,
         model_object: "proxy.DynamicProxy",
         reference_collector: Optional[ReferenceCollector] = None,
-    ) -> str:
+    ) -> object:
         try:
             if hasattr(cls, "get_" + field_name):
                 mthd = getattr(cls, "get_" + field_name)
@@ -411,12 +414,8 @@ class Resource(metaclass=ResourceMeta):
             # walk the entire model to find any value references. Additionally we also want to make sure we raise exceptions on:
             # - Unknowns
             # - DynamicProxys to entities
-            if reference_collector:
-                value = collect_references(reference_collector, value, field_name)
-            else:
-                # use json dump when there is no reference_collector
-                # TODO: can't we just always use collect_references?
-                json.dumps(value, default=inmanta.util.api_boundary_json_encoder)
+            # - References if we don't have a reference_collector
+            value = collect_references(reference_collector, value, field_name)
 
             return value
         except IgnoreResourceException:

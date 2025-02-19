@@ -1,8 +1,9 @@
 import os
 import dataclasses
 
-from inmanta.references import reference, Reference, DataclassReference, RefValue
+from inmanta.references import reference, Reference, DataclassReference, RefValue, is_reference_of
 from inmanta.plugins import plugin
+from inmanta.resources import resource, ManagedResource, PurgeableResource
 
 
 @reference("refs::Bool")
@@ -54,6 +55,11 @@ def create_string_reference(name: Reference[str] | str) -> Reference[str]:
 def create_bool_reference_cycle(name: str) -> Reference[bool]:
     # create a reference with a cycle
     ref_cycle = StringReference(name)
+
+    assert is_reference_of(ref_cycle, str)
+    assert not is_reference_of(None, str)
+    assert not is_reference_of(ref_cycle, int)
+
     ref_cycle.name = ref_cycle
 
     return BoolReference(name=ref_cycle)
@@ -83,3 +89,8 @@ class TestReference(DataclassReference[Test]):
 @plugin
 def create_test(value: str | Reference[str]) -> TestReference:
     return TestReference(value=value)
+
+
+@resource("refs::NullResource", agent="agentname", id_attribute="name")
+class Null(ManagedResource, PurgeableResource):
+    fields = ("name", "agentname", "fail")

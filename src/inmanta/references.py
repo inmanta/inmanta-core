@@ -198,9 +198,6 @@ class ReferenceLike:
         # Will be set by DynamicProxy.unwrap at the plugin boundary
         self._model_type: typing.Optional["inm_type.Type"] = None
 
-        # TODO: do we want to enforce type correctness when creating a reference? This also has impact on how arguments are
-        #       are serialized: based on instance types or on static types
-
     def resolve_other[S: RefValue](self, value: "Reference[S] | S") -> S:
         """
         Given a reference or a value, either return the value or the value obtained by resolving the reference.
@@ -294,8 +291,11 @@ class Reference[T: RefValue](ReferenceLike):
 
     @classmethod
     def get_reference_type(cls) -> type[T] | None:
-        # TODO: this will work only when directly extending Reference[T[
-        # TODO: Add tests and docs
+        # We are that inherits from Reference[T]
+        # We do a best effort here to untangle this, but it is difficult because of
+        # https://github.com/ilevkivskyi/typing_inspect/issues/110
+        # We can only handle the case where T is a concrete type, not where it is a re-mapped type-var
+        # https://github.com/inmanta/inmanta-core/issues/8765
         for g in cls.__orig_bases__:  # type: ignore
             if typing_inspect.is_generic_type(g) and typing.get_origin(g) in [Reference, DataclassReference]:
                 return typing.get_args(g)[0]
@@ -460,7 +460,6 @@ class ReplaceValue(Mutator):
 
 def is_reference_of(instance: typing.Optional[object], type_class: type[object]) -> bool:
     """Is the given instance a reference to the given type."""
-    # TODO: test
     if instance is None or not isinstance(instance, Reference):
         return False
 

@@ -35,7 +35,6 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Self, Type, 
 
 import typing_inspect
 
-import inmanta.ast.entity
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
 from inmanta.ast import InvalidTypeAnnotation, LocatableString, Location, MultiUnsetException, Namespace
@@ -217,7 +216,6 @@ class UnConvertibleEntity(inmanta_type.Type):
     Entity that does not convert to a dataclass.
     """
 
-    # TODO: cache
     def __init__(self, base_entity: "Entity") -> None:
         super().__init__()
         self.base_entity = base_entity
@@ -320,6 +318,10 @@ def _convert_to_reference(
     python_type: type[object], origin: type[object], location: Range, resolver: Namespace
 ) -> inmanta_type.Type | None:
     if issubclass(origin, Reference):
+        # We rely on the order of argument because of
+        # https://github.com/ilevkivskyi/typing_inspect/issues/110
+        # We can only handle the case where T is a concrete type, not where it is a re-mapped type-var
+        # https://github.com/inmanta/inmanta-core/issues/8765
         args = typing.get_args(python_type)
         return ReferenceType(to_dsl_type(args[0], location, resolver))
     return None
@@ -423,8 +425,11 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
             if out is not None:
                 return out
         else:
-            # We are not of the form Reference[T] but possibly a class that inherits from ...
-            # TODO: this doesn't handle cases where type parameters are shifted around
+            # We are not of the form Reference[T] but possibly a class that inherits from it
+            # We do a best effort here to untangle this, but it is difficult because of
+            # https://github.com/ilevkivskyi/typing_inspect/issues/110
+            # We can only handle the case where T is a concrete type, not where it is a re-mapped type-var
+            # https://github.com/inmanta/inmanta-core/issues/8765
             all_bases = list(typing_inspect.get_generic_bases(python_type))
             seen = set()
             while all_bases:
@@ -453,9 +458,9 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
             for meta in reversed(python_type.__metadata__):  # type: ignore
                 if isinstance(meta, ModelType):
                     dsl_type = parse_dsl_type(meta.model_type, location, resolver)
-                    # override for specific case of a dataclass we don't want to convert
-                    # TODO: type check for entity won't work as we can't import it here
-                    if typing.get_args(python_type)[0] is DynamicProxy and isinstance(dsl_type, inmanta.ast.entity.Entity):
+                    # override for specific case of a dataclass: we don't want to convert
+                    # correct typing is difficult due to import loop, see dsl_type.is_entity()
+                    if typing.get_args(python_type)[0] is DynamicProxy and dsl_type.is_entity():
                         return UnConvertibleEntity(dsl_type)
                     return dsl_type
 

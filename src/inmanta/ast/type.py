@@ -234,7 +234,6 @@ class ReferenceType(Type):
         return self.element_type
 
     def with_base_type(self, base_type: "Type") -> "Type":
-        # TODO: can we remove this method?
         return super().with_base_type(base_type)
 
     def corresponds_to(self, type: "Type") -> bool:
@@ -451,7 +450,7 @@ class NullableType(Type):
         return self.element_type.has_custom_to_python()
 
     def issupertype(self, other: "Type") -> bool:
-        return other == self.element_type or isinstance(other, Null)
+        return isinstance(other, Null) or other.issubtype(self.element_type)
 
 
 class Any(Type):
@@ -536,6 +535,9 @@ class Primitive(Type):
         # Override to skip the null check in the parent class
         return None
 
+    def issupertype(self, other: "Type") -> bool:
+        return False
+
 
 @stable_api
 class Number(Primitive):
@@ -583,6 +585,9 @@ class Number(Primitive):
 
     def corresponds_to(self, type: "Type") -> bool:
         return isinstance(type, (Any, Float, Integer, Number))
+
+    def issupertype(self, other: "Type") -> bool:
+        return isinstance(other, (Float, Integer))
 
 
 @stable_api
@@ -675,8 +680,7 @@ class Bool(Primitive):
         raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
     def cast(self, value: Optional[object]) -> object:
-        # TODO: this is a bit odd, in that is accepts None
-        # But it has always been so
+        # this is a bit odd, in that is accepts None, but it has always been so
         return super().cast(value if not isinstance(value, NoneValue) else None)
 
     def type_string(self) -> str:
@@ -786,7 +790,7 @@ class List(Type):
         return isinstance(other, List)
 
     def issupertype(self, other: "Type") -> bool:
-        return other != self and other.issubtype(self)
+        raise NotImplementedError()
 
 
 @stable_api
@@ -875,6 +879,11 @@ class TypedList(List):
             return False
         return self.element_type.issubtype(other.element_type)
 
+    def issupertype(self, other: "Type") -> bool:
+        if not isinstance(other, TypedList):
+            return False
+        return self.element_type.issupertype(other.element_type)
+
 
 @stable_api
 class LiteralList(TypedList):
@@ -948,7 +957,7 @@ class Dict(Type):
         return isinstance(other, Dict)
 
     def issupertype(self, other: "Type") -> bool:
-        return other != self and other.issubtype(self)
+        return NotImplementedError()
 
     def __eq__(self, other: object) -> bool:
         return type(self) is type(other)
@@ -1021,6 +1030,11 @@ class TypedDict(Dict):
         if not isinstance(other, TypedDict):
             return False
         return self.element_type.issubtype(other.element_type)
+
+    def issupertype(self, other: "Type") -> bool:
+        if not isinstance(other, TypedDict):
+            return False
+        return self.element_type.issupertype(other.element_type)
 
     def get_no_reference(self) -> "Type":
         base = self.element_type.get_no_reference()
@@ -1213,15 +1227,13 @@ class Union(Type):
         return None
 
     def issupertype(self, other: "Type") -> bool:
-        # TODO: what if other is a sub-type?
-        return other in self.types
+        return any(other.issubtype(tp) for tp in self.types)
 
     def issubtype(self, other: "Type") -> bool:
         return all(element_type.issubtype(other) for element_type in self.types)
 
     def __hash__(self) -> int:
-        # TODO: not very efficient
-        return hash((type(self), *self.types))
+        return hash((3141156432848106868, *self.types))
 
 
 @stable_api

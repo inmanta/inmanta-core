@@ -125,6 +125,29 @@ def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", mod
         snippetcompiler.do_export()
 
 
+def test_references_in_resource_id(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """Test that references are rejected in expressions"""
+    refs_module = os.path.join(modules_v2_dir, "refs")
+
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import refs
+        value = refs::create_string_reference(name="CWD")
+
+        refs::NullResource(name=value,agentname=value)
+
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+        autostd=True,
+    )
+
+    with pytest.raises(
+        RuntimeException,
+        match=r"Failed to get attribute 'name' for export on 'refs::NullResource'",
+    ):
+        snippetcompiler.do_export()
+
+
 def test_references_in_index(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
     """Test that references are rejected in indexes"""
     refs_module = os.path.join(modules_v2_dir, "refs")
