@@ -1,7 +1,7 @@
 import os
 import dataclasses
 
-from inmanta.references import reference, Reference, DataclassReference, RefValue, is_reference_of
+from inmanta.references import reference, Reference, is_reference_of
 from inmanta.plugins import plugin
 from inmanta.resources import resource, ManagedResource, PurgeableResource
 
@@ -71,7 +71,7 @@ class Test:
 
 
 @reference("refs::TestReference")
-class TestReference(DataclassReference[Test]):
+class TestReference(Reference[Test]):
     """A reference that returns a dataclass"""
 
     def __init__(self, value: str | Reference[str]) -> None:

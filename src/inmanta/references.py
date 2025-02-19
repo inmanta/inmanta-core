@@ -297,7 +297,7 @@ class Reference[T: RefValue](ReferenceLike):
         # We can only handle the case where T is a concrete type, not where it is a re-mapped type-var
         # https://github.com/inmanta/inmanta-core/issues/8765
         for g in cls.__orig_bases__:  # type: ignore
-            if typing_inspect.is_generic_type(g) and typing.get_origin(g) in [Reference, DataclassReference]:
+            if typing_inspect.is_generic_type(g) and typing.get_origin(g) is Reference:
                 return typing.get_args(g)[0]
         return None
 
@@ -332,10 +332,6 @@ class Reference[T: RefValue](ReferenceLike):
 
         assert isinstance(self._model, ReferenceModel)
         return self._model
-
-
-class DataclassReference[T: DataclassProtocol](Reference[T]):
-    pass
 
 
 class reference:
@@ -425,7 +421,7 @@ class AttributeReference[T: PrimitiveTypes](Reference[T]):
 
     def __init__(
         self,
-        reference: DataclassProtocol | DataclassReference[DataclassProtocol],
+        reference: DataclassProtocol | Reference[DataclassProtocol],
         attribute_name: str,
     ) -> None:
         super().__init__()

@@ -186,9 +186,16 @@ class Type(Locatable):
 
 
 class ReferenceType(Type):
-    """A reference object"""
+    """
+    The type of a reference to something of type element_type
+
+    e.g ReferenceType(Integer()) represents a reference to an int
+    """
 
     def __init__(self, element_type: Type) -> None:
+        """
+        :param element_type: the type we refer to
+        """
         super().__init__()
         assert not isinstance(element_type, ReferenceType)
         self.element_type = element_type
@@ -957,7 +964,7 @@ class Dict(Type):
         return isinstance(other, Dict)
 
     def issupertype(self, other: "Type") -> bool:
-        return NotImplementedError()
+        raise NotImplementedError()
 
     def __eq__(self, other: object) -> bool:
         return type(self) is type(other)

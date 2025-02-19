@@ -40,8 +40,7 @@ if TYPE_CHECKING:
 
     TypeResolver = Callable[[type[object]], inm_Type]
 else:
-    # TODO: is there a cleaner way?
-    TypeResolver = ""
+    TypeResolver = object
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

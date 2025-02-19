@@ -274,10 +274,9 @@ class WildDictPath(abc.ABC):
     def _validate_container(
         self, container: object, set: bool = False, remove: bool = False
     ) -> TypeGuard[dict[object, object]]:
-        """Validate that the container supports the required mapping protocol operations
+        """Validate that the container supports the required mapping protocol operations"""
+        # To be refined in https://github.com/inmanta/inmanta-core/issues/8398
 
-        TODO: fix the typeguard. Probably by providing multiple methods for validation!
-        """
         if not hasattr(container, "__getitem__"):
             return False
 
