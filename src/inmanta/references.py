@@ -30,7 +30,9 @@ import pydantic
 import typing_inspect
 
 import inmanta
+import inmanta.resources
 from inmanta import util
+from inmanta.types import ResourceIdStr
 from inmanta.util import dict_path
 
 ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z0-9_]+::)+[A-Z][A-z0-9_-]*$")]
@@ -147,8 +149,14 @@ class ResourceArgument(Argument):
     """This argument provides the resource itself to the reference"""
 
     type: typing.Literal["resource"] = "resource"
+    id: ResourceIdStr
 
     def get_arg_value(self, resource: "inmanta.resources.Resource") -> object:
+        if not resource.id.resource_str() == self.id:
+            raise Exception(
+                f"This resource refers to another resource {self.id} instead of "
+                f"itself {resource.id.resource_str()}, this is not supported"
+            )
         return resource
 
 
@@ -236,19 +244,18 @@ class ReferenceLike:
         """Serialize the arguments to this class"""
         arguments: list[ArgumentTypes] = []
         for name, value in self.arguments.items():
-            match name, value:
-                case _, str() | int() | float() | bool():
+            match value:
+                case str() | int() | float() | bool():
                     arguments.append(LiteralArgument(name=name, value=value))
 
-                case _, Reference():
+                case Reference():
                     model = value.serialize()
                     arguments.append(ReferenceArgument(name=name, id=model.id))
 
-                case "resource", inmanta.resources.Resource():
-                    # TODO: ensure which resource
-                    arguments.append(ResourceArgument(name=name))
+                case inmanta.resources.Resource():
+                    arguments.append(ResourceArgument(name=name, id=value.id.resource_str()))
 
-                case _, type() if value in [str, float, int, bool]:
+                case type() if value in [str, float, int, bool]:
                     arguments.append(PythonTypeArgument(name=name, value=value.__name__))
 
                 case _:

@@ -94,3 +94,13 @@ def create_test(value: str | Reference[str]) -> TestReference:
 @resource("refs::NullResource", agent="agentname", id_attribute="name")
 class Null(ManagedResource, PurgeableResource):
     fields = ("name", "agentname", "fail")
+
+    @classmethod
+    def get_fail(cls, exporter, instance) -> object:
+        # Return a reference to the wrong resource!!!
+        if instance.fail:
+            if exporter._resources:
+                return StringReference(next(iter(exporter._resources.values())))
+            return False
+        else:
+            return False

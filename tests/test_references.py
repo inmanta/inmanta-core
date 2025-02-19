@@ -148,6 +148,44 @@ def test_references_in_resource_id(snippetcompiler: "SnippetCompilationTest", mo
         snippetcompiler.do_export()
 
 
+def test_references_in_wrong_resource(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """
+    Test that we can't refer to other resources directly
+
+    We only catch this on the remote side, as it is very hard to get into this situation.
+
+    We use specially crafted resources, where the one to be constructed last creates a reference to the first one.
+    """
+    refs_module = os.path.join(modules_v2_dir, "refs")
+
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import refs
+        value = refs::create_string_reference(name="CWD")
+
+        refs::NullResource(name="test",agentname="test", fail=true)
+        refs::NullResource(name="test2",agentname="test", fail=true)
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+        autostd=True,
+    )
+
+    _, res_dict = snippetcompiler.do_export()
+
+    def round_trip(resource):
+        serialized = resource.serialize()
+        data = json.dumps(serialized, default=util.api_boundary_json_encoder)
+        resources.Resource.deserialize(json.loads(data))
+
+    with pytest.raises(
+        Exception,
+        match=r"This resource refers to another resource refs::NullResource\[test,name=test2?\] instead of "
+        r"itself refs::NullResource\[test,name=test2?\], this is not supported",
+    ):
+        for resource in res_dict.values():
+            round_trip(resource)
+
+
 def test_references_in_index(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
     """Test that references are rejected in indexes"""
     refs_module = os.path.join(modules_v2_dir, "refs")
