@@ -1,22 +1,22 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 
 
-    All tests related to autostarted agents go here
+All tests related to autostarted agents go here
 """
 
 import asyncio
@@ -412,12 +412,16 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
         current_scheduler = None
 
         for child in children:
+            # ignore zombie children
+            if child.status() == psutil.STATUS_ZOMBIE:
+                continue
             if "python" in child.name():
                 cmd_line_process = " ".join(child.cmdline())
                 if "inmanta.app" in cmd_line_process and "scheduler" in cmd_line_process:
                     assert current_scheduler is None, (
-                        f"A scheduler was already found: {current_scheduler} but we found "
-                        f"a new one: {child}, this is unexpected!"
+                        f"A scheduler was already found: {current_scheduler} (spawned via {current_scheduler.cmdline()} in "
+                        f"parent process {current_scheduler.parent()}) but we found a new one: {child} (spawned via "
+                        f"{child.cmdline()} in parent process {child.parent()}), this is unexpected!"
                     )
                     current_scheduler = child
         return current_scheduler

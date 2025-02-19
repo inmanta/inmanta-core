@@ -1,19 +1,19 @@
 """
-    Copyright 2016 Inmanta
+Copyright 2016 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import copy
@@ -77,6 +77,21 @@ The following fixtures manage test environments:
 
 The deactive_venv autouse fixture cleans up all venv activation and resets inmanta.env.process_env to point to the outer
 environment.
+"""
+
+"""
+About the fixtures that control the behavior related to the scheduler:
+
+* Default behavior: We expect the test case to not (auto)start a scheduler. Any attempt to autostart the scheduler
+                    will result in an AssertionError.
+* `auto_start_agent` fixture: Indicates we expect scheduler to be autostart.
+                    => Usage: Add the `@pytest.mark.parametrize("auto_start_agent", [True])` annotation on the test case.
+* `null_agent` fixture: Create an agent that doesn't do anything. The test case just expects the agent to exists and be up.
+                    => Usage: Regular fixture instantiation.
+* `agent` fixture: Create an full in-process agent that fully works.
+                    => Usage: Regular fixture instantiation
+* `no_agent` fixture: Disables the scheduler autostart functionality, any attempt to start the scheduler is ignored.
+                    => Usage: Add the `@pytest.mark.parametrize("no_agent", [True])` annotation on the test case.
 """
 
 import asyncio
@@ -1336,7 +1351,7 @@ class SnippetCompilationTest(KeepOnFail):
                 if mod.editable:
                     install_path = mod.path
                 else:
-                    install_path = module_tool.build(mod.path, build_dir)
+                    install_path = module_tool.build(mod.path, build_dir, wheel=True)[0]
                 self.project.virtualenv.install_for_config(
                     requirements=[],
                     paths=[LocalPackagePath(path=install_path, editable=mod.editable)],
@@ -1553,6 +1568,28 @@ class SnippetCompilationTest(KeepOnFail):
             shutil.rmtree(venv)
         os.symlink(self.env, venv)
         return self._load_project(autostd=False, install_project=True, main_file=main_file)
+
+    def create_module(self, name: str, initcf: str = "", initpy: str = "") -> None:
+        module_dir = os.path.join(self.libs, name)
+        os.mkdir(module_dir)
+        os.mkdir(os.path.join(module_dir, "model"))
+        os.mkdir(os.path.join(module_dir, "files"))
+        os.mkdir(os.path.join(module_dir, "templates"))
+        os.mkdir(os.path.join(module_dir, "plugins"))
+
+        with open(os.path.join(module_dir, "model", "_init.cf"), "w+") as fd:
+            fd.write(initcf)
+
+        with open(os.path.join(module_dir, "plugins", "__init__.py"), "w+") as fd:
+            fd.write(initpy)
+
+        with open(os.path.join(module_dir, "module.yml"), "w+") as fd:
+            fd.write(
+                f"""name: {name}
+version: 0.1
+license: Test License
+                """
+            )
 
 
 @pytest.fixture(scope="session")
@@ -1883,7 +1920,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         # Build modules
         for module_dir in os.listdir(modules_v2_dir):
             path: str = os.path.join(modules_v2_dir, module_dir)
-            ModuleTool().build(path=path, output_dir=build_dir)
+            ModuleTool().build(path=path, output_dir=build_dir, wheel=True)
         # Download bare necessities
         CommandRunner(logging.getLogger(__name__)).run_command_and_log_output(
             ["pip", "download", "setuptools", "wheel"], cwd=build_dir

@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import inspect
@@ -44,7 +44,6 @@ from inmanta.execute.dataflow import (
 )
 from inmanta.execute.runtime import (
     AttributeVariable,
-    DelegateQueueScheduler,
     ExecutionUnit,
     HangUnit,
     Instance,
@@ -81,7 +80,6 @@ def test_slots_rt():
     assert_slotted(OptionVariable(r, i, qs))
 
     assert_slotted(qs)
-    assert_slotted(DelegateQueueScheduler(qs, None))
 
     assert_slotted(Waiter(qs))
 
