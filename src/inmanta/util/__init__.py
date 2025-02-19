@@ -845,7 +845,7 @@ def ensure_event_loop() -> asyncio.AbstractEventLoop:
     """
     try:
         # nothing needs to be done if this thread already has an event loop
-        return asyncio.get_event_loop()
+        return asyncio.get_running_loop()
     except RuntimeError:
         # asyncio.set_event_loop sets the event loop for this thread only
         new_loop = asyncio.new_event_loop()

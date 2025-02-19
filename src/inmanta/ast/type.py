@@ -20,7 +20,7 @@ import copy
 import functools
 import numbers
 from collections.abc import Sequence
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 from inmanta.ast import (
     DuplicateException,
@@ -34,11 +34,6 @@ from inmanta.ast import (
 )
 from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.stable_api import stable_api
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement
@@ -160,6 +155,9 @@ class NamedType(Type, Named):
     def type_string(self) -> str:
         return self.get_full_name()
 
+    def type_string_internal(self) -> str:
+        return self.type_string()
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, NamedType):
             return False
@@ -246,6 +244,9 @@ class Any(Type):
 
     def has_custom_to_python(self) -> bool:
         return False
+
+    def type_string_internal(self) -> str:
+        return "any"
 
     def __eq__(self, other: object) -> bool:
         return type(self) == type(other)  # noqa: E721
@@ -1001,7 +1002,7 @@ def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Type:
     :param resolver: The namespace that can be used to resolve the type expression
     """
     # quickfix issue #1774
-    allowed_element_type: Type = Type()
+    allowed_element_type: Type = Any()
     if locatable_type.value == "list":
         return List()
     if locatable_type.value == "dict":

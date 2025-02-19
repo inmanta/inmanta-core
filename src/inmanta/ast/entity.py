@@ -20,8 +20,9 @@ import dataclasses
 import importlib
 import inspect
 import typing
-from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
+from inmanta import plugins
 from inmanta.ast import (
     CompilerException,
     DataClassException,
@@ -43,16 +44,10 @@ from inmanta.ast.type import Any as inm_Any
 from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
-from inmanta.plugins import to_dsl_type
 from inmanta.types import DataclassProtocol
 
 # pylint: disable-msg=R0902,R0904
 
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
     from inmanta.ast import Namespaced
@@ -528,23 +523,38 @@ class Entity(NamedType, WithComment):
     def get_location(self) -> Location:
         return self.location
 
-    def pair_dataclass(self) -> None:
+    def pair_dataclass_stage1(self) -> None:
         """
         Attach the associated dataclass in the python domain
+
+        should only be called on children of std::Dataclass
+
+        Called early to make plugins able to resolve this type from python domain
+        """
+        # Find the dataclass name
+        namespace = self.namespace.get_full_name()
+        module_name = "inmanta_plugins." + namespace.replace("::", ".")
+        # Find the dataclass
+        dataclass_module = importlib.import_module(module_name)
+        dataclass_raw = getattr(dataclass_module, self.name, None)
+        self._paired_dataclass = dataclass_raw
+        if dataclass_raw is not None:
+            dataclass_raw._paired_inmanta_entity = self
+
+    def pair_dataclass(self) -> None:
+        """
+        Validate the associated dataclass in the python domain
 
         should only be called on children of std::Dataclass
         should be called after normalization
         """
         assert self.normalized
 
-        # Find the dataclass name
         namespace = self.namespace.get_full_name()
         module_name = "inmanta_plugins." + namespace.replace("::", ".")
         dataclass_name = module_name + "." + self.name
 
-        # Find the dataclass
-        dataclass_module = importlib.import_module(module_name)
-        dataclass_raw = getattr(dataclass_module, self.name, None)
+        dataclass_raw = self._paired_dataclass
         if dataclass_raw is None:
             raise DataClassMismatchException(
                 self,
@@ -609,7 +619,7 @@ class Entity(NamedType, WithComment):
                     dc_fields.pop(rel_or_attr_name)
                     # Type correspondence
                     try:
-                        dsl_type = to_dsl_type(dc_types[rel_or_attr_name])
+                        dsl_type = plugins.to_dsl_type(dc_types[rel_or_attr_name], self.location, self.namespace)
                         if not inm_type.corresponds_to(dsl_type):
                             failures.append(
                                 f"The attribute {rel_or_attr_name} does not have the same type as "
@@ -661,9 +671,6 @@ class Entity(NamedType, WithComment):
                 f"The dataclass {self.get_full_name()} defined at {self.location} has an indexes "
                 f"defined at {index_locations}. Dataclasses can not have any indexes.",
             )
-
-        self._paired_dataclass = dataclass
-        dataclass._paired_inmanta_entity = self
 
     def get_paired_dataclass(self) -> Optional[type[object]]:
         return self._paired_dataclass

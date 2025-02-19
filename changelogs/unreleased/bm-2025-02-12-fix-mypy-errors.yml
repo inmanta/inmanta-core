@@ -1,0 +1,3 @@
+description: Fix mypy errors
+change-type: patch
+destination-branches: [master, iso8]

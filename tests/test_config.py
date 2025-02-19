@@ -41,8 +41,10 @@ def test_options(monkeypatch):
     configa = Option("test", "a", "markerA", "test a docs")
     configb = Option("test", "B", option_as_default(configa), "test b docs")
     configc = Option("test", "c", "defaultc", "docstringc")
+    configd = Option("test.section", "d.option", "defaultd", "docstringd")
 
     monkeypatch.setenv("INMANTA_TEST_C", "environ_c")
+    monkeypatch.setenv("INMANTA_TEST_SECTION_D_OPTION", "environ_d")
 
     assert "test.a" in configb.get_default_desc()
 
@@ -54,9 +56,16 @@ def test_options(monkeypatch):
     configb.set("MB2")
     assert configb.get() == "MB2"
     assert configc.get() == "environ_c"
+    assert configd.get() == "environ_d"
 
-    for option, expected_sub_part in zip([configa, configb, configc], ["TEST_A", "TEST_B", "TEST_C"]):
-        assert option.get_environment_variable() == f"INMANTA_{expected_sub_part}"
+    option_to_env_var_name = {
+        configa: "INMANTA_TEST_A",
+        configb: "INMANTA_TEST_B",
+        configc: "INMANTA_TEST_C",
+        configd: "INMANTA_TEST_SECTION_D_OPTION",
+    }
+    for option, expected_env_var_name in option_to_env_var_name.items():
+        assert option.get_environment_variable() == expected_env_var_name
 
 
 def test_configfile_hierarchy(monkeypatch, tmpdir):
