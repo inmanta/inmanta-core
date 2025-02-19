@@ -33,7 +33,6 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 import inmanta.util
 import util.performance
-import utils
 from inmanta import const, data, resources, util
 from inmanta.agent.executor import DeployReport
 from inmanta.const import ResourceState

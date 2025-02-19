@@ -50,6 +50,7 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
+from inmanta.data import ConfigurationModel, Scheduler
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
@@ -315,23 +316,27 @@ async def report_db_index_usage(min_precent=100):
     for row in result:
         print(row)
 
-async def is_version_released(client, environment: uuid.UUID, version: int | None = None) -> bool:
-        if version is not None:
-            versions = await client.list_desired_state_versions(
-                tid=environment,
-                start=version-1,
-                limit=1,
-            )
-        else:
-            versions = await client.list_desired_state_versions(
-                tid=environment,
-                limit=1,
-            )
 
-        assert versions.code == 200
-        version_obj = versions.result["data"][0]
-        assert version_obj["version"] == version
-        return version_obj["status"] == "active"
+async def is_version_released(client, environment: uuid.UUID, version: int | None = None) -> bool:
+    if version is not None:
+        versions = await client.list_desired_state_versions(
+            tid=environment,
+            start=version - 1,
+            limit=1,
+        )
+    else:
+        versions = await client.list_desired_state_versions(
+            tid=environment,
+            limit=1,
+        )
+
+    assert versions.code == 200
+    version_obj = versions.result["data"][0]
+
+    LOGGER.debug("%s", versions.result["data"])
+    if version_obj["version"] != version:
+        return False
+    return version_obj["status"] == "active"
 
 
 async def wait_until_version_is_released(client, environment: uuid.UUID, version: int) -> None:
@@ -968,6 +973,23 @@ class NullAgent(SessionEndpoint):
 
     @protocol.handle(methods.trigger_read_version, env="tid", agent="id")
     async def read_version(self, env: uuid.UUID) -> Apireturn:
+        await data.Scheduler._execute_query(
+            f"""
+                                     INSERT INTO {data.Scheduler.table_name()}
+                                     VALUES($1, NULL)
+                                     ON CONFLICT DO NOTHING
+                                 """,
+            env,
+        )
+
+        items = await ConfigurationModel.get_list(environment=env, released=True, order_by_column="version", order="DESC")
+        sched = await Scheduler.get_one(environment=env)
+        last_version = sched.last_processed_model_version or 0
+        for cm in items:
+            if cm.version < last_version:
+                return 200
+            await Scheduler.set_last_processed_model_version(env, cm.version)
+            return 200
         return 200
 
     @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
