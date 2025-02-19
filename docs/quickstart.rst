@@ -95,8 +95,6 @@ Go to the `SR Linux` folder and then `containerlab` to spin-up the containers:
 .. code-block:: sh
 
     cd examples/Networking/SR\ Linux/containerlab
-    sudo docker pull ghcr.io/nokia/srlinux:latest
-    sudo docker pull ghcr.io/inmanta/orchestrator:latest
     sudo clab deploy -t topology.yml
 
 `Containerlab` will spin-up:
