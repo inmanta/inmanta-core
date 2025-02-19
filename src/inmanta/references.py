@@ -205,7 +205,7 @@ class ReferenceLike:
         """
         Given a reference or a value, either return the value or the value obtained by resolving the reference.
 
-        This method is intended to be used by mutators and reference to resolve their own parameters
+        This method is intended to be used by mutators and references to resolve their own parameters
         (which could be references as well.
 
         When resolving references on the handler side, all parameters will already be resolved
