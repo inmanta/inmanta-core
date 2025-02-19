@@ -31,7 +31,7 @@ from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from collections.abc import Awaitable, Callable, Collection, Iterable, Sequence, Set
 from configparser import RawConfigParser
-from contextlib import AbstractAsyncContextManager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from itertools import chain
 from re import Pattern
 from typing import Generic, NewType, Optional, TypeVar, Union, cast, overload
@@ -63,18 +63,13 @@ from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
-from inmanta.graphql.schema import get_connection_ctx_mgr
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-
-from contextlib import asynccontextmanager
-
 from sqlalchemy import AsyncAdaptedQueuePool, event
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
-
 
 ASYNC_SESSION: typing.Optional[AsyncSession] = None
 ENGINE: AsyncEngine | None = None
@@ -6685,9 +6680,6 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
-
-
-
 def get_async_session(connection_string: typing.Optional[str] = None) -> AsyncSession:
     if ENGINE is None:
         raise Exception("Cannot get session because engine wasn't started. Make sure to call start_engine() first.")
@@ -6696,7 +6688,6 @@ def get_async_session(connection_string: typing.Optional[str] = None) -> AsyncSe
         raise Exception("Engine is started but session factory wasn't initialized properly.")
 
     return ASYNC_SESSION()
-
 
 
 async def stop_engine():
@@ -6767,5 +6758,3 @@ def get_pool():
 
 def get_engine():
     return ENGINE
-
-

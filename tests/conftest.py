@@ -33,8 +33,8 @@ from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
+from inmanta.data import stop_engine
 from inmanta.db.util import PGRestore
-from inmanta.graphql.schema import stop_engine
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 from inmanta.resources import PurgeableResource, Resource, resource

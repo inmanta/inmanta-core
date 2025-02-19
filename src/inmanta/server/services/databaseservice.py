@@ -22,9 +22,16 @@ from typing import Mapping, Optional
 from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
 
-from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, schema
+from inmanta.data import (
+    CORE_SCHEMA_NAME,
+    PACKAGE_WITH_UPDATE_FILES,
+    get_connection_ctx_mgr,
+    get_pool,
+    schema,
+    start_engine,
+    stop_engine,
+)
 from inmanta.data.model import DataBaseReport
-from inmanta.graphql.schema import get_connection_ctx_mgr, get_pool, start_engine, stop_engine
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
