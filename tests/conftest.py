@@ -316,20 +316,22 @@ def ensure_running_postgres_db_post(postgres_db):
 
 
 @pytest.fixture(scope="function")
-async def create_db(sql_alchemy_engine, database_name_internal: str):
+async def create_db(postgres_db, database_name_internal):
     """
     see :py:database_name_internal:
     """
-
+    connection = await asyncpg.connect(
+        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, password=postgres_db.password
+    )
     try:
-        async with get_connection_ctx_mgr() as connection:
-            await connection.execute(f"CREATE DATABASE {database_name_internal}")
+        await connection.execute(f"CREATE DATABASE {database_name_internal}")
     except DuplicateDatabaseError:
         # Because it is async, this fixture can not be made session scoped.
         # Only the first time it is called, it will actually create a database
         # All other times will drop through here
         pass
-
+    finally:
+        await connection.close()
     return database_name_internal
 
 
@@ -355,17 +357,17 @@ def database_name(create_db: str) -> str:
     return create_db
 
 
-@pytest.fixture(scope="function")
-async def postgresql_client(postgres_db, database_name_internal):
-    client = await asyncpg.connect(
-        host=postgres_db.host,
-        port=postgres_db.port,
-        user=postgres_db.user,
-        password=postgres_db.password,
-        database=database_name_internal,
-    )
-    yield client
-    await client.close()
+# @pytest.fixture(scope="function")
+# async def postgresql_client(postgres_db, database_name_internal):
+#     client = await asyncpg.connect(
+#         host=postgres_db.host,
+#         port=postgres_db.port,
+#         user=postgres_db.user,
+#         password=postgres_db.password,
+#         database=database_name_internal,
+#     )
+#     yield client
+#     await client.close()
 
 @pytest.fixture(scope="function")
 async def postgresql_pool(postgres_db, database_name):
@@ -385,14 +387,16 @@ def sqlalchemy_url(postgres_db, database_name_internal: str):
         f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name_internal}"
     )
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 async def sql_alchemy_engine(sqlalchemy_url) -> AsyncEngine:
     engine = get_engine()
     if engine is None:
         await start_engine(url=sqlalchemy_url)
         engine = get_engine()
 
-    return engine
+    yield engine
+
+    await engine.dispose()
 
 
 
@@ -423,7 +427,7 @@ async def hard_clean_db_post(postgresql_client):
 
 
 @pytest.fixture(scope="function")
-async def clean_db(create_db, postgres_db):
+async def clean_db(create_db, postgres_db,database_name_internal):
     """
     1) Truncated tables: All tables which are part of the inmanta schema, except for the schemaversion table. The version
                          number stored in the schemaversion table is read by the Inmanta server during startup.
@@ -432,23 +436,26 @@ async def clean_db(create_db, postgres_db):
     """
     yield
     # By using the connection pool, we can make sure that the connection we use is alive
-    async with get_connection_ctx_mgr() as postgresql_client:
-        tables_in_db = await postgresql_client.fetch(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
-        )
-        tables_in_db = [x["table_name"] for x in tables_in_db]
-        tables_to_preserve = TABLES_TO_KEEP
-        tables_to_preserve.append(SCHEMA_VERSION_TABLE)
-        tables_to_truncate = [x for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE]
-        tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
-        if tables_to_drop:
-            drop_query = "DROP TABLE %s CASCADE" % ", ".join(tables_to_drop)
-            await postgresql_client.execute(drop_query)
-        if tables_to_truncate:
-            truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
-            await postgresql_client.execute(truncate_query)
+    postgresql_client = await asyncpg.connect(
+        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, password=postgres_db.password, database=database_name_internal
+    )
 
+    tables_in_db = await postgresql_client.fetch(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+    )
+    tables_in_db = [x["table_name"] for x in tables_in_db]
+    tables_to_preserve = TABLES_TO_KEEP
+    tables_to_preserve.append(SCHEMA_VERSION_TABLE)
+    tables_to_truncate = [x for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE]
+    tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
+    if tables_to_drop:
+        drop_query = "DROP TABLE %s CASCADE" % ", ".join(tables_to_drop)
+        await postgresql_client.execute(drop_query)
+    if tables_to_truncate:
+        truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
+        await postgresql_client.execute(truncate_query)
 
+    await postgresql_client.close()
 @pytest.fixture(scope="function")
 def get_columns_in_db_table(postgresql_client):
     async def _get_columns_in_db_table(table_name: str) -> list[str]:

@@ -5082,7 +5082,7 @@ class Resource(BaseDocument):
                 async for record in con.cursor(query, *values):
                     if no_obj:
                         record = dict(record)
-                        record["attributes"] = json.loads(record["attributes"])
+                        record["attributes"] = record["attributes"]
                         cls.__mangle_dict(record)
                         resources_list.append(record)
                     else:

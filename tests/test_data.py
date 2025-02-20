@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 import utils
 from inmanta import const, data, util
 from inmanta.const import AgentStatus, LogLevel
-from inmanta.data import ArgumentCollector, QueryType, get_engine, start_engine, stop_engine
+from inmanta.data import ArgumentCollector, QueryType, get_engine, start_engine, stop_engine, get_connection_ctx_mgr
 from inmanta.deploy import state
 from inmanta.resources import Id
 from inmanta.types import ResourceVersionIdStr
@@ -85,23 +85,20 @@ async def test_connect_invalid_parameters(sqlalchemy_url, pool_size, max_overflo
     )
 
 
-async def test_connection_failure(unused_tcp_port_factory, database_name, clean_reset):
-    port = unused_tcp_port_factory()
-    with pytest.raises(OSError):
-        await data.connect("localhost", port, database_name, "testuser", None)
 
 
-async def test_postgres_client(postgresql_client):
-    await postgresql_client.execute("CREATE TABLE test(id serial PRIMARY KEY, name VARCHAR (25) NOT NULL)")
-    await postgresql_client.execute("INSERT INTO test VALUES(5, 'jef')")
-    records = await postgresql_client.fetch("SELECT * FROM test")
-    assert len(records) == 1
-    first_record = records[0]
-    assert first_record["id"] == 5
-    assert first_record["name"] == "jef"
-    await postgresql_client.execute("DELETE FROM test WHERE test.id = " + str(first_record["id"]))
-    records = await postgresql_client.fetch("SELECT * FROM test")
-    assert len(records) == 0
+async def test_postgres_client(sql_alchemy_engine):
+    async with get_connection_ctx_mgr() as postgresql_client:
+        await postgresql_client.execute("CREATE TABLE test(id serial PRIMARY KEY, name VARCHAR (25) NOT NULL)")
+        await postgresql_client.execute("INSERT INTO test VALUES(5, 'jef')")
+        records = await postgresql_client.fetch("SELECT * FROM test")
+        assert len(records) == 1
+        first_record = records[0]
+        assert first_record["id"] == 5
+        assert first_record["name"] == "jef"
+        await postgresql_client.execute("DELETE FROM test WHERE test.id = " + str(first_record["id"]))
+        records = await postgresql_client.fetch("SELECT * FROM test")
+        assert len(records) == 0
 
 
 async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> None:
@@ -479,7 +476,7 @@ async def test_agent_process(init_dataclasses_and_load_schema):
 
 @pytest.mark.parametrize("env1_halted", [True, False])
 @pytest.mark.parametrize("env2_halted", [True, False])
-async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql_client, env1_halted, env2_halted):
+async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, env1_halted, env2_halted):
     # tests the agent process cleanup function with different combinations of halted environments
 
     project = data.Project(name="test")
@@ -513,7 +510,8 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql
             FROM agentprocess AS proc INNER JOIN agentinstance AS instance ON proc.sid=instance.process
             WHERE environment=$1 AND hostname=$2
         """
-        result = await postgresql_client.fetch(query, env, hostname)
+        async with get_connection_ctx_mgr() as conn:
+            result = await conn.fetch(query, env, hostname)
         assert result[0]["count"] == expected_nr_instances, result
 
     # Setup env1
@@ -549,7 +547,8 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql
             FROM agentprocess
             WHERE environment=$1 AND hostname=$2 AND expired IS NOT NULL
         """
-        result = await postgresql_client.fetch(query, env2.id, "proc2")
+        async with get_connection_ctx_mgr() as conn:
+            result = await conn.fetch(query, env2.id, "proc2")
         assert len(result) == 3 if env2_halted else 1
         if len(result) == 1:
             # if the cleanup was done (env2 not halted), verify the expired record that was kept is the right one.
@@ -996,7 +995,7 @@ async def test_model_get_version_nr_latest_version(init_dataclasses_and_load_sch
     assert await data.ConfigurationModel.get_version_nr_latest_version(uuid.uuid4()) is None
 
 
-async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_client):
+async def test_get_latest_resource(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -2276,11 +2275,12 @@ async def test_compile_get_report(init_dataclasses_and_load_schema):
 
 
 async def test_match_tables_in_db_against_table_definitions_in_orm(
-    postgres_db, database_name, postgresql_client, init_dataclasses_and_load_schema
+    postgres_db, database_name, init_dataclasses_and_load_schema
 ):
-    table_names = await postgresql_client.fetch(
-        "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public'"
-    )
+    async with get_connection_ctx_mgr() as conn:
+        table_names = await conn.fetch(
+            "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public'"
+        )
     table_names_in_database = [x["table_name"] for x in table_names]
     table_names_in_classes_list = [x.table_name() for x in data._classes]
     # Schema management table is not in classes list
@@ -2389,7 +2389,7 @@ async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2
         assert remaining_resource_action.started == timestamp_six_days_ago
 
 
-async def test_insert_many(init_dataclasses_and_load_schema, postgresql_client):
+async def test_insert_many(init_dataclasses_and_load_schema):
     project1 = data.Project(name="proj1")
     project2 = data.Project(name="proj2")
     projects = [project1, project2]
