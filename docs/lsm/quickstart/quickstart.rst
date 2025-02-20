@@ -44,7 +44,7 @@ This guide assumes that you already finished the :ref:`quickstart <quickstart>`,
 
 **System requirements:**
 
-* Python version 3.9 needs to be installed on your machine.
+* Python version 3.12 needs to be installed on your machine.
 * Minimal 8GB of RAM.
 
 **Setup procedure:**
@@ -253,7 +253,7 @@ The following command executes a script to copy the required resources to a spec
 
 .. code-block::
 
-   $ docker exec -ti -w /code clab-srlinux-inmanta-server  /code/setup.sh
+   $ docker exec -ti -w /code clab-srlinux-inmanta-server  /code/setup.sh <environment uuid>
 
 Afterwards, open the web-console, in this example it is on http://172.30.0.3:8888/console/.
 
