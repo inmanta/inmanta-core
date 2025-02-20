@@ -31,13 +31,13 @@ import pytest
 
 
 @pytest.mark.slowtest
-async def test_postgres_cascade_locking_order(postgresql_pool, run_without_keeping_psql_logs) -> None:
+async def test_postgres_cascade_locking_order(sql_alchemy_pool, run_without_keeping_psql_logs) -> None:
     """
     Verifies that Postgres' cascade deletion acquires locks top-down. This is important because in order to avoid deadlocks
     we define a corresponding locking order for all transactions. See `TableLockMode`, `RowLockMode` and `ConfigurationModel`
     docstrings in `inmanta.data`.
     """
-    async with postgresql_pool.acquire() as connection:
+    async with sql_alchemy_pool.acquire() as connection:
         await connection.execute(
             """
             CREATE TABLE IF NOT EXISTS root (name varchar PRIMARY KEY);
@@ -49,7 +49,7 @@ async def test_postgres_cascade_locking_order(postgresql_pool, run_without_keepi
         )
 
     async def insert():
-        async with postgresql_pool.acquire() as connection:
+        async with sql_alchemy_pool.acquire() as connection:
             await connection.execute(
                 """
                 INSERT INTO root VALUES
@@ -62,21 +62,21 @@ async def test_postgres_cascade_locking_order(postgresql_pool, run_without_keepi
             )
 
     async def lock_top_down():
-        async with postgresql_pool.acquire() as connection:
+        async with sql_alchemy_pool.acquire() as connection:
             async with connection.transaction():
                 await connection.execute("LOCK TABLE root IN SHARE MODE")
                 await asyncio.sleep(0.1)
                 await connection.execute("LOCK TABLE leaf IN SHARE MODE")
 
     async def lock_bottom_up():
-        async with postgresql_pool.acquire() as connection:
+        async with sql_alchemy_pool.acquire() as connection:
             async with connection.transaction():
                 await connection.execute("LOCK TABLE leaf IN SHARE MODE")
                 await asyncio.sleep(0.1)
                 await connection.execute("LOCK TABLE root IN SHARE MODE")
 
     async def delete():
-        async with postgresql_pool.acquire() as connection:
+        async with sql_alchemy_pool.acquire() as connection:
             async with connection.transaction():
                 await asyncio.sleep(0.05)
                 await connection.execute("DELETE FROM root")
@@ -98,7 +98,7 @@ async def test_postgres_cascade_locking_order(postgresql_pool, run_without_keepi
 @pytest.mark.slowtest
 @pytest.mark.parametrize("definition_order_one_two", [True, False])
 async def test_postgres_cascade_locking_order_siblings(
-    postgresql_pool, definition_order_one_two: bool, run_without_keeping_psql_logs
+        sql_alchemy_pool, definition_order_one_two: bool, run_without_keeping_psql_logs
 ) -> None:
     """
     Verifies locking order for siblings in the cascade tree. Locking order seems to be based on definition order of the
@@ -108,7 +108,7 @@ async def test_postgres_cascade_locking_order_siblings(
         f"CREATE TABLE IF NOT EXISTS {name} (name varchar PRIMARY KEY, myroot varchar REFERENCES root(name) ON DELETE CASCADE);"
         for name in ("leafone", "leaftwo")
     )
-    async with postgresql_pool.acquire() as connection:
+    async with sql_alchemy_pool.acquire() as connection:
         await connection.execute(
             """
             CREATE TABLE IF NOT EXISTS root (name varchar PRIMARY KEY);
@@ -119,7 +119,7 @@ async def test_postgres_cascade_locking_order_siblings(
         )
 
     async def insert():
-        async with postgresql_pool.acquire() as connection:
+        async with sql_alchemy_pool.acquire() as connection:
             await connection.execute(
                 """
                 INSERT INTO root VALUES
@@ -136,21 +136,21 @@ async def test_postgres_cascade_locking_order_siblings(
             )
 
     async def lock_one_two():
-        async with postgresql_pool.acquire() as connection:
+        async with sql_alchemy_pool.acquire() as connection:
             async with connection.transaction():
                 await connection.execute("LOCK TABLE leafone IN SHARE MODE")
                 await asyncio.sleep(0.1)
                 await connection.execute("LOCK TABLE leaftwo IN SHARE MODE")
 
     async def lock_two_one():
-        async with postgresql_pool.acquire() as connection:
+        async with sql_alchemy_pool.acquire() as connection:
             async with connection.transaction():
                 await connection.execute("LOCK TABLE leaftwo IN SHARE MODE")
                 await asyncio.sleep(0.1)
                 await connection.execute("LOCK TABLE leafone IN SHARE MODE")
 
     async def delete():
-        async with postgresql_pool.acquire() as connection:
+        async with sql_alchemy_pool.acquire() as connection:
             async with connection.transaction():
                 await asyncio.sleep(0.05)
                 await connection.execute("DELETE FROM root")
@@ -174,7 +174,7 @@ async def test_postgres_cascade_locking_order_siblings(
 
 
 @pytest.mark.slowtest
-async def test_postgres_transaction_re_entry(postgresql_pool) -> None:
+async def test_postgres_transaction_re_entry(sql_alchemy_pool) -> None:
     """
     When do transaction lock each other out?
 
@@ -182,7 +182,7 @@ async def test_postgres_transaction_re_entry(postgresql_pool) -> None:
     """
 
     # Make a table
-    async with postgresql_pool.acquire() as connection:
+    async with sql_alchemy_pool.acquire() as connection:
         await connection.execute("CREATE TABLE IF NOT EXISTS root (name varchar PRIMARY KEY, released BOOL);")
         await connection.execute(
             """
@@ -195,7 +195,7 @@ async def test_postgres_transaction_re_entry(postgresql_pool) -> None:
     async def update_root(name: str, lock: Event):
         # Main routine: lock table and update if required
         # there is lock given as an argument to make sure we can make one wait for the other
-        async with postgresql_pool.acquire() as connection:
+        async with sql_alchemy_pool.acquire() as connection:
             async with connection.transaction():
                 print(f"{name}: ENTER")
                 # for update is the key here!!!

@@ -6692,11 +6692,12 @@ def get_async_session(connection_string: typing.Optional[str] = None) -> AsyncSe
 
 async def stop_engine():
     global ENGINE
-    await ENGINE.dispose()
-    ENGINE = None
+    if ENGINE is not None:
+        await ENGINE.dispose()
+        ENGINE = None
 
 
-def start_engine(
+async def start_engine(
     url: str,
     pool_size: int = 10,
     max_overflow: int = 0,
@@ -6714,15 +6715,20 @@ def start_engine(
     if ENGINE is not None:
         raise Exception("Engine already running: cannot call start_engine twice.")
     LOGGER.debug("Creating engine...")
-    ENGINE = create_async_engine(
-        url=url,
-        pool_size=pool_size,
-        max_overflow=max_overflow,
-        pool_timeout=pool_timeout,
-        echo=echo,
-    )
-    POOL = ENGINE.pool
-    ASYNC_SESSION = async_sessionmaker(ENGINE)
+    try:
+        ENGINE = create_async_engine(
+            url=url,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            echo=echo,
+        )
+        POOL = ENGINE.pool
+        ASYNC_SESSION = async_sessionmaker(ENGINE)
+    except Exception as e:
+        await stop_engine()
+        raise e
+
 
     @event.listens_for(ENGINE.sync_engine, "do_connect")
     def do_connect(dialect, conn_rec, cargs, cparams):

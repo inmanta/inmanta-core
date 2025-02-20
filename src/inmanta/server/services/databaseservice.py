@@ -267,7 +267,7 @@ async def initialize_sql_alchemy_engine(
     :param connection_timeout: Connection timeout (in seconds) when interacting with the database.
     """
 
-    start_engine(
+    await start_engine(
         url=f"postgresql+asyncpg://{database_username}:{database_password}@{database_host}:{database_port}/{database_name}",
         pool_size=connection_pool_min_size,
         max_overflow=connection_pool_max_size - connection_pool_min_size,

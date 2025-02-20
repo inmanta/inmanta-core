@@ -241,9 +241,9 @@ def test_dbschema_get_dct_with_update_functions():
         assert inspect.getfullargspec(version.function)[0] == ["connection"]
 
 
-async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, hard_clean_db):
-    async with postgresql_pool.acquire() as postgresql_client:
-        async with postgresql_pool.acquire() as postgresql_client2:
+async def test_multi_upgrade_lockout(sql_alchemy_pool, get_columns_in_db_table, hard_clean_db):
+    async with sql_alchemy_pool.acquire() as postgresql_client:
+        async with sql_alchemy_pool.acquire() as postgresql_client2:
             # schedule 3 updates, hang on second, unblock one, verify, unblock other, verify
             corev: set[int] = await get_core_versions(postgresql_client)
 

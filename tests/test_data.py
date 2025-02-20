@@ -30,6 +30,8 @@ import pytest
 from asyncpg import Connection, ForeignKeyViolationError
 
 import sqlalchemy
+from sqlalchemy.ext.asyncio import AsyncEngine
+
 import utils
 from inmanta import const, data, util
 from inmanta.const import AgentStatus, LogLevel
@@ -39,15 +41,11 @@ from inmanta.resources import Id
 from inmanta.types import ResourceVersionIdStr
 
 
-@pytest.fixture
-def sqlalchemy_url(postgres_db, database_name: str):
-    return (
-        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
-    )
+
 
 
 async def test_connect_too_small_connection_pool(sqlalchemy_url: str):
-    start_engine(
+    await start_engine(
         url=sqlalchemy_url,
         pool_size=1,
         max_overflow=0,
@@ -65,27 +63,21 @@ async def test_connect_too_small_connection_pool(sqlalchemy_url: str):
         await stop_engine()
 
 
-async def test_connect_default_parameters(sqlalchemy_url):
-    start_engine(url=sqlalchemy_url)
 
-    engine = get_engine()
-    assert engine is not None
-    async with engine.connect() as connection:
+
+async def test_connect_default_parameters(sql_alchemy_engine):
+    assert sql_alchemy_engine is not None
+    async with sql_alchemy_engine.connect() as connection:
         assert connection is not None
 
 
-@pytest.mark.parametrize("min_size, max_size", [(-1, 1), (2, 1), (-2, -2)])
-async def test_connect_invalid_parameters(postgres_db, min_size, max_size, database_name: str, create_db_schema: bool = False):
+@pytest.mark.parametrize("pool_size, max_overflow", [(-1, 1), (2, 1), (-2, -2)])
+async def test_connect_invalid_parameters(sqlalchemy_url, pool_size, max_overflow):
     with pytest.raises(ValueError):
-        await data.connect(
-            postgres_db.host,
-            postgres_db.port,
-            database_name,
-            postgres_db.user,
-            postgres_db.password,
-            create_db_schema,
-            connection_pool_min_size=min_size,
-            connection_pool_max_size=max_size,
+        await start_engine(
+            url=sqlalchemy_url,
+            pool_size=pool_size,
+            max_overflow=max_overflow
         )
 
 
