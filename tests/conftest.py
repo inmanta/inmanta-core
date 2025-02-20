@@ -28,12 +28,13 @@ from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
 import inmanta.deploy.state
+import sqlalchemy
 import toml
 from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
-from inmanta.data import get_connection_ctx_mgr, get_engine, get_pool, start_engine, stop_engine
+from inmanta.data import get_engine, start_engine, stop_engine
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
@@ -385,7 +386,14 @@ async def postgresql_pool(postgres_db, database_name):
 
 @pytest.fixture
 def sqlalchemy_url(postgres_db, database_name_internal: str):
-    return f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name_internal}"
+    return sqlalchemy.URL.create(
+        drivername="postgresql+asyncpg",
+        username=postgres_db.user,
+        password=postgres_db.password,
+        host=postgres_db.host,
+        database=database_name_internal,
+        port=postgres_db.port,
+    )
 
 
 @pytest.fixture(scope="function")

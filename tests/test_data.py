@@ -37,7 +37,6 @@ from inmanta.data import ArgumentCollector, QueryType, get_connection_ctx_mgr, g
 from inmanta.deploy import state
 from inmanta.resources import Id
 from inmanta.types import ResourceVersionIdStr
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 
 async def test_connect_too_small_connection_pool(sqlalchemy_url: str):
