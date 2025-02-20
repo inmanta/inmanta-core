@@ -4053,7 +4053,7 @@ class ResourceAction(BaseDocument):
         if from_postgres and self.messages:
             new_messages = []
             for message in self.messages:
-                message = json.loads(message)
+                # message = json.loads(message)
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
@@ -5147,8 +5147,9 @@ class Resource(BaseDocument):
                     # left join produced no resources
                     continue
                 resource: dict[str, object] = dict(raw_resource)
-                if "attributes" in resource:
-                    resource["attributes"] = json.loads(resource["attributes"])
+                # Already de-serialized it seems ?
+                # if "attributes" in resource:
+                #     resource["attributes"] = json.loads(resource["attributes"])
                 if projection is not None:
                     assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
@@ -6695,7 +6696,6 @@ async def stop_engine():
     global ENGINE
     if ENGINE is not None:
         await ENGINE.dispose()
-        ENGINE = None
 
 
 async def start_engine(
@@ -6714,7 +6714,10 @@ async def start_engine(
     global POOL
 
     if ENGINE is not None:
-        raise Exception("Engine already running: cannot call start_engine twice.")
+        if not inmanta.RUNNING_TESTS:
+            raise Exception("Engine already running: cannot call start_engine twice.")
+        await ENGINE.dispose(close=True)
+
     LOGGER.debug("Creating engine...")
     try:
         ENGINE = create_async_engine(
