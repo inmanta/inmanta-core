@@ -26,7 +26,6 @@ from typing import Callable, NamedTuple, Optional, Type
 
 from asyncpg import Connection
 
-from inmanta.data import get_connection_ctx_mgr
 from inmanta.stable_api import stable_api
 
 logger = logging.getLogger(__name__)
@@ -137,12 +136,12 @@ class PGRestore:
     async def execute_input(self) -> None:
         schema_name, table_name, column_names = await self._parse_copy_command_in_ext_buffer()
         await self.client.copy_to_table(
-                schema_name=schema_name,
-                table_name=table_name,
-                source=AsyncSingleton(self.commandbuffer.encode()),
-                columns=column_names,
-                timeout=10,
-            )
+            schema_name=schema_name,
+            table_name=table_name,
+            source=AsyncSingleton(self.commandbuffer.encode()),
+            columns=column_names,
+            timeout=10,
+        )
         self.commandbuffer = ""
 
 

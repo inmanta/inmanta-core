@@ -20,7 +20,6 @@ import asyncio
 import secrets
 import socket
 
-import asyncpg
 import click
 from asyncpg import PostgresError
 
@@ -94,9 +93,7 @@ def validate_server_setup() -> None:
 
 
 async def get_connection_pool() -> None:
-    """
-
-    """
+    """ """
 
     database_host = server_config.db_host.get()
     database_port = server_config.db_port.get()
@@ -115,6 +112,7 @@ async def get_connection_pool() -> None:
         pool_timeout=connection_timeout,
         echo=True,
     )
+
 
 async def do_user_setup() -> None:
     """Perform the user setup that requires the database interaction"""
@@ -157,7 +155,6 @@ async def do_user_setup() -> None:
             "The version of the database is out of date: start the server to upgrade the database "
             "schema to the lastest version."
         )
-
 
     click.echo("Make sure to (re)start the orchestrator to activate all changes.")
 

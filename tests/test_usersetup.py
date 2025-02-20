@@ -103,7 +103,6 @@ async def test_user_setup(tmpdir, server_pre_start, postgres_db, database_name, 
     assert users[0].username == "new_user"
 
 
-
 async def test_user_setup_empty_username(
     tmpdir, server_pre_start, postgres_db, database_name, hard_clean_db, hard_clean_db_post
 ):
@@ -127,8 +126,6 @@ async def test_user_setup_empty_username(
     users = await data.User.get_list()
     assert len(users) == 1
     assert users[0].username == "admin"
-
-
 
 
 async def test_user_setup_schema_outdated(

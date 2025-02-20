@@ -17,7 +17,6 @@
 """
 
 import abc
-import json
 import urllib.parse
 from abc import ABC
 from collections.abc import Sequence
