@@ -1534,7 +1534,8 @@ class BaseDocument(metaclass=DocumentMeta):
         cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
     ) -> Sequence[Record]:
         async with cls.get_connection(connection) as con:
-            return await con.fetch(query, *values)
+            res=  await con.fetch(query, *values)
+            return res
 
     @classmethod
     async def _execute_query(
