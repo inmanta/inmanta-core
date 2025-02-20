@@ -468,7 +468,6 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
 
     # Configuration methods
     @classmethod
-    # TODO: cache this!
     def get_valid_sort_columns(cls) -> dict[ColumnNameStr, ColumnType]:
         """Return all valid columns for lookup and their type"""
         raise NotImplementedError()

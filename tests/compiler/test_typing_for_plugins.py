@@ -16,12 +16,32 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import inspect
 import numbers
 import typing as py_type
+from typing import Sequence, Type
 
 import inmanta.ast.type as inm_type
-from inmanta.ast import Namespace, Range, TypingException
-from inmanta.plugins import to_dsl_type
+import utils
+from inmanta import plugins
+from inmanta.ast import Namespace, Range, TypingException, statements
+from inmanta.ast.entity import Entity, Implementation
+from inmanta.ast.type import (
+    Any,
+    Bool,
+    ConstraintType,
+    Float,
+    Integer,
+    NullableType,
+    OrReferenceType,
+    ReferenceType,
+    String,
+    TypedDict,
+    TypedList,
+    Union,
+)
+from inmanta.plugins import Plugin, UnConvertibleEntity, to_dsl_type
+from inmanta.references import Reference
 
 namespace = Namespace("dummy-namespace")
 namespace.primitives = inm_type.TYPES
@@ -122,3 +142,101 @@ def test_type_correspondence():
     assert inm_number.corresponds_to(to_dsl_type_simple(float))
     assert inm_number.corresponds_to(to_dsl_type_simple(numbers.Number))
     assert not inm_number.corresponds_to(to_dsl_type_simple(str))
+
+    # Reference
+    assert ReferenceType(String()).corresponds_to(to_dsl_type_simple(Reference[str]))
+    assert OrReferenceType(String()).corresponds_to(to_dsl_type_simple(Reference[str] | str))
+    assert not ReferenceType(String()).corresponds_to(OrReferenceType(String()))
+    assert not OrReferenceType(String()).corresponds_to(ReferenceType(String()))
+    assert not OrReferenceType(String()).corresponds_to(to_dsl_type_simple(Reference[str] | int))
+
+
+def make_typedef(
+    name: str, base_type: inm_type.Type, constraint: statements.ExpressionStatement | None = None
+) -> ConstraintType:
+    tp = ConstraintType(Namespace("mymodule", parent=Namespace("__root__")), name)
+    tp.basetype = base_type
+    tp.constraint = (
+        constraint
+        if constraint is not None
+        # typedef <name> as <base_type> matching true
+        else statements.Literal(True)
+    )
+    return tp
+
+
+def test_issubtype_of_own_python_type() -> None:
+    """
+    Verify round-trip compatibility of tp.issubtype(to_dsl_type(tp.as_python_type_string()))
+    """
+    verified_types: set[type[inm_type.Type]] = set()
+
+    primitives: Sequence[inm_type.Type] = [Bool(), Integer(), Float(), String()]
+    for tp in [
+        *primitives,
+        *[NullableType(primitive) for primitive in primitives],
+        *[make_typedef("mytype", primitive) for primitive in primitives],
+        Union(primitives),
+        NullableType(Union(primitives)),
+        Any(),
+        *[TypedList(primitive) for primitive in primitives],
+        *[TypedDict(primitive) for primitive in primitives],
+        plugins.Null(),
+        inm_type.ReferenceType(Bool()),
+        inm_type.OrReferenceType(Bool()),
+        inm_type.Number(),
+        inm_type.List(),
+        inm_type.LiteralList(),
+        inm_type.LiteralDict(),
+        inm_type.Dict(),
+        inm_type.Literal(),
+        # Entity("test", Namespace("__root__"), ""), TODO: too complex to set up for now
+    ]:
+        rt_ed = to_dsl_type_simple(eval(tp.as_python_type_string()))
+        # Round trip makes the type less strict
+        assert tp.issubtype(rt_ed)
+        verified_types.add(type(tp))
+
+    all_types = {
+        tp_cls
+        for tp_cls in utils.get_all_subclasses(inm_type.Type)
+        if not inspect.isabstract(tp_cls) and not issubclass(tp_cls, Plugin)
+    }
+    except_types = {
+        Plugin,  # not relevant
+        inm_type.NamedType,  # abstract
+        inm_type.Primitive,  # abstract
+        inm_type.Type,  # abstract
+        Implementation,  # not relevant
+        UnConvertibleEntity,  # TODO
+        Entity,  # TODO
+    }
+    assert verified_types == all_types - except_types
+
+
+def test_issubtype_widening() -> None:
+    """
+    Verify issubtype accepts wider types and rejects narrower or unrelated ones.
+    """
+
+    def verify(narrow: Type, wide: Type) -> None:
+        assert narrow.issubtype(wide)
+        assert not wide.issubtype(narrow)
+
+    verify(Integer(), Union([Integer(), String()]))
+    verify(Integer(), NullableType(Integer()))
+    verify(Integer(), Any())
+
+    assert not Integer().issubtype(String())
+
+    verify(plugins.Null(), NullableType(Integer()))
+
+    verify(Union([Integer(), String()]), Union([Integer(), TypedList(Float()), String()]))
+    verify(Union([Integer(), String()]), Any())
+
+    verify(make_typedef("mytype", Integer()), Integer())
+    verify(make_typedef("mytype", Integer()), NullableType(Integer()))
+    verify(make_typedef("mytype", Integer()), Union([Integer(), String()]))
+    verify(make_typedef("mytype", Integer()), Any())
+    assert not make_typedef("mytype", Integer()).issubtype(String())
+    assert not make_typedef("mytype", Integer()).issubtype(make_typedef("othertype", Integer()))

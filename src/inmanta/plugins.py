@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import asyncio
 import collections.abc
 import dataclasses
+import functools
 import inspect
 import logging
 import numbers
@@ -34,7 +35,6 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Self, Type, 
 
 import typing_inspect
 
-import inmanta.ast.entity
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
 from inmanta.ast import InvalidTypeAnnotation, LocatableString, Location, MultiUnsetException, Namespace
@@ -49,10 +49,13 @@ from inmanta.ast import (
     WithComment,
 )
 from inmanta.ast.type import NamedType
+from inmanta.ast.type import Null as Null  # Moved, part of stable api
+from inmanta.ast.type import ReferenceType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext, get_inmanta_type_for_dataclass
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
+from inmanta.references import Reference
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
@@ -208,46 +211,11 @@ class PluginMeta(type):
             cls.__functions = {}
 
 
-class Null(inmanta_type.Type):
-    """
-    This custom type is used for the validation of plugins which only
-    accept null as an argument or return value.
-    """
-
-    def validate(self, value: Optional[object]) -> bool:
-        if isinstance(value, NoneValue):
-            return True
-
-        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
-
-    def type_string(self) -> str:
-        return "null"
-
-    def type_string_internal(self) -> str:
-        return self.type_string()
-
-    def as_python_type_string(self) -> "str | None":
-        return "None"
-
-    def corresponds_to(self, type: inmanta_type.Type) -> bool:
-        return isinstance(type, (Null, inmanta_type.Any))
-
-    def has_custom_to_python(self) -> bool:
-        return False
-
-    def __eq__(self, other: object) -> bool:
-        return type(self) == type(other)  # noqa: E721
-
-    def get_location(self) -> Optional[Location]:
-        return None
-
-
 class UnConvertibleEntity(inmanta_type.Type):
     """
     Entity that does not convert to a dataclass.
     """
 
-    # TODO: cache
     def __init__(self, base_entity: "Entity") -> None:
         super().__init__()
         self.base_entity = base_entity
@@ -346,6 +314,61 @@ def parse_dsl_type(dsl_type: str, location: Range, resolver: Namespace) -> inman
     return inmanta_type.resolve_type(locatable_type, resolver)
 
 
+def _convert_to_reference(
+    python_type: type[object], origin: type[object], location: Range, resolver: Namespace
+) -> inmanta_type.Type | None:
+    if issubclass(origin, Reference):
+        # We rely on the order of argument because of
+        # https://github.com/ilevkivskyi/typing_inspect/issues/110
+        # We can only handle the case where T is a concrete type, not where it is a re-mapped type-var
+        # https://github.com/inmanta/inmanta-core/issues/8765
+        args = typing.get_args(python_type)
+        return ReferenceType(to_dsl_type(args[0], location, resolver))
+    return None
+
+
+def _convert_origin_to_dsl_type(
+    python_type: type[object], origin: type[object], location: Range, resolver: Namespace
+) -> inmanta_type.Type | None:
+    """
+    Take a `python_type` of the form `origin[args]` and try to convert it
+    """
+    # dict
+    if issubclass(origin, Mapping):
+        if origin in [collections.abc.Mapping, dict, typing.Mapping]:
+            args = typing_inspect.get_args(python_type)
+            if not args:
+                return inmanta_type.TypedDict(inmanta_type.Any())
+
+            if not issubclass(args[0], str):
+                raise TypingException(
+                    None, f"invalid type {python_type}, the keys of any dict should be 'str', got {args[0]} instead"
+                )
+
+            if len(args) == 1:
+                return inmanta_type.TypedDict(inmanta_type.Any())
+
+            return inmanta_type.TypedDict(to_dsl_type(args[1], location, resolver))
+        else:
+            raise TypingException(None, f"invalid type {python_type}, dictionary types should be Mapping or dict")
+
+    # List
+    if issubclass(origin, Sequence):
+        if origin in [collections.abc.Sequence, list, typing.Sequence]:
+            sargs = typing.get_args(python_type)
+            if not sargs:
+                return inmanta_type.List()
+            return inmanta_type.TypedList(to_dsl_type(sargs[0], location, resolver))
+        else:
+            raise TypingException(None, f"invalid type {python_type}, list types should be Sequence or list")
+
+    # Set
+    if issubclass(origin, collections.abc.Set):
+        raise TypingException(None, f"invalid type {python_type}, set is not supported on the plugin boundary")
+
+    return _convert_to_reference(python_type, origin, location, resolver)
+
+
 def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace) -> inmanta_type.Type:
     """
     Convert a python type annotation to an Inmanta DSL type annotation.
@@ -377,11 +400,16 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
                 return Null()
             if len(other_types) == 1:
                 return inmanta_type.NullableType(to_dsl_type(other_types[0], location, resolver))
-            bases = [to_dsl_type(arg, location, resolver) for arg in other_types]
-            return inmanta_type.NullableType(inmanta_type.Union(bases))
+            return inmanta_type.create_union([to_dsl_type(arg, location, resolver) for arg in other_types] + [Null()])
         else:
             bases = [to_dsl_type(arg, location, resolver) for arg in typing.get_args(python_type)]
-            return inmanta_type.Union(bases)
+            return inmanta_type.create_union(bases)
+
+    if dataclasses.is_dataclass(python_type):
+        entity = get_inmanta_type_for_dataclass(python_type)
+        if entity:
+            return entity
+        raise TypingException(None, f"invalid type {python_type}, this dataclass has no associated inmanta entity")
 
     if dataclasses.is_dataclass(python_type):
         entity = get_inmanta_type_for_dataclass(python_type)
@@ -392,48 +420,47 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
     # Lists and dicts
     if typing_inspect.is_generic_type(python_type):
         origin = typing.get_origin(python_type)
+        if origin is not None:
+            out = _convert_origin_to_dsl_type(python_type, origin, location, resolver)
+            if out is not None:
+                return out
+        else:
+            # We are not of the form Reference[T] but possibly a class that inherits from it
+            # We do a best effort here to untangle this, but it is difficult because of
+            # https://github.com/ilevkivskyi/typing_inspect/issues/110
+            # We can only handle the case where T is a concrete type, not where it is a re-mapped type-var
+            # https://github.com/inmanta/inmanta-core/issues/8765
+            all_bases = list(typing_inspect.get_generic_bases(python_type))
+            seen = set()
+            while all_bases:
+                base = all_bases.pop()
+                # prevent loops
+                if base in seen:
+                    continue
+                seen.add(base)
 
-        # dict
-        if issubclass(origin, Mapping):
-            if origin in [collections.abc.Mapping, dict, Mapping]:
-                args = typing.get_args(python_type)
-                if not args:
-                    return inmanta_type.TypedDict(inmanta_type.Any())
+                if not typing_inspect.is_generic_type(base):
+                    # Not generic, not interesting
+                    continue
 
-                if not issubclass(args[0], str):
-                    raise TypingException(
-                        None, f"invalid type {python_type}, the keys of any dict should be 'str', got {args[0]} instead"
-                    )
+                origin = typing.get_origin(base)
+                if origin is None:
+                    # no origin, see if we have any other bases higher up
+                    all_bases.extend(typing_inspect.get_generic_bases(base))
+                    continue
 
-                if len(args) == 1:
-                    return inmanta_type.TypedDict(inmanta_type.Any())
-
-                return inmanta_type.TypedDict(to_dsl_type(args[1], location, resolver))
-            else:
-                raise TypingException(None, f"invalid type {python_type}, dictionary types should be Mapping or dict")
-
-        # List
-        if issubclass(origin, Sequence):
-            if origin in [collections.abc.Sequence, list, Sequence]:
-                args = typing.get_args(python_type)
-                if not args:
-                    return inmanta_type.List()
-                return inmanta_type.TypedList(to_dsl_type(args[0], location, resolver))
-            else:
-                raise TypingException(None, f"invalid type {python_type}, list types should be Sequence or list")
-
-        # Set
-        if issubclass(origin, collections.abc.Set):
-            raise TypingException(None, f"invalid type {python_type}, set is not supported on the plugin boundary")
+                out = _convert_to_reference(base, origin, location, resolver)
+                if out is not None:
+                    return out
 
         # Annotated
         if origin is typing.Annotated:
             for meta in reversed(python_type.__metadata__):  # type: ignore
                 if isinstance(meta, ModelType):
                     dsl_type = parse_dsl_type(meta.model_type, location, resolver)
-                    # override for specific case of a dataclass we don't want to convert
-                    # TODO: type check for entity won't work as we can't import it here
-                    if typing.get_args(python_type)[0] is DynamicProxy and isinstance(dsl_type, inmanta.ast.entity.Entity):
+                    # override for specific case of a dataclass: we don't want to convert
+                    # correct typing is difficult due to import loop, see dsl_type.is_entity()
+                    if typing.get_args(python_type)[0] is DynamicProxy and dsl_type.is_entity():
                         return UnConvertibleEntity(dsl_type)
                     return dsl_type
 
@@ -644,6 +671,11 @@ class PluginReturn(PluginValue):
             return str(self.resolved_type)
         else:
             return repr(self.type_expression)
+
+    def resolve_type(self, plugin: "Plugin", resolver: Namespace) -> inmanta_type.Type:
+        out = super().resolve_type(plugin, resolver)
+        self._resolved_type = out
+        return out
 
 
 @dataclasses.dataclass
@@ -1107,7 +1139,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         processed_args: CheckedArgs,
         resolver: Resolver,
         queue: QueueScheduler,
-        location: Location,
+        location: Range,
     ) -> object:
         """
         The function call itself, with compiler context
@@ -1124,7 +1156,12 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         value = DynamicProxy.unwrap(
             value,
-            dynamic_context=DynamicUnwrapContext(resolver=resolver, queue=queue, location=location),
+            dynamic_context=DynamicUnwrapContext(
+                resolver=resolver,
+                queue=queue,
+                location=location,
+                type_resolver=functools.partial(to_dsl_type, location=location, resolver=self.namespace),
+            ),
         )
 
         try:

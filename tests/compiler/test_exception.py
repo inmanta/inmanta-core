@@ -108,7 +108,7 @@ import tests
 tests::raise_exception('my message')
         """,
         """  PluginException in plugin tests::raise_exception
-  Test: my message (reported in tests::raise_exception('my message') ({dir}/main.cf:3))
+  Test: my message (reported in tests::raise_exception('my message') ({dir}/main.cf:3:1))
   caused by:
     inmanta_plugins.tests.TestPluginException: my message
 """,

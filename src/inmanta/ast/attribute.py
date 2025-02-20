@@ -18,8 +18,8 @@ Contact: code@inmanta.com
 
 from typing import TYPE_CHECKING, Optional, Tuple
 
+import inmanta.ast.type as inmanta_type
 from inmanta.ast import CompilerException, Locatable, Location, RuntimeException, TypingException
-from inmanta.ast.type import NullableType, TypedList
 from inmanta.execute import runtime
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
@@ -48,12 +48,11 @@ class Attribute(Locatable):
         self.__entity = entity
         self.__multi = multi
         self.__nullable = nullable
-
         self.__type: Type = value_type
         if multi:
-            self.__type = TypedList(self.__type)
+            self.__type = inmanta_type.TypedList(self.__type)
         if nullable:
-            self.__type = NullableType(self.__type)
+            self.__type = inmanta_type.NullableType(self.__type)
 
         self.comment = None  # type: Optional[str]
         self.end: Optional[RelationAttribute] = None

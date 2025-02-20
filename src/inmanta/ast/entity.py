@@ -38,18 +38,19 @@ from inmanta.ast import (
     TypingException,
     WithComment,
 )
-from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import Any as inm_Any
 from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
+from inmanta.references import AttributeReference, PrimitiveTypes, Reference
 from inmanta.types import DataclassProtocol
 
 # pylint: disable-msg=R0902,R0904
 
 
 if TYPE_CHECKING:
+    from inmanta.ast.blocks import BasicBlock
     from inmanta.ast import Namespaced
     from inmanta.ast.attribute import Attribute, RelationAttribute  # noqa: F401
     from inmanta.ast.statements import ExpressionStatement, Statement  # noqa: F401
@@ -104,6 +105,9 @@ class Entity(NamedType, WithComment):
         # If such a sibling exists, the type is kept here
         # Every instance of such entity can cary the associated python object in a slot called `DATACLASS_SELF_FIELD`
 
+    def is_entity(self) -> bool:
+        return True
+
     def normalize(self) -> None:
         self.normalized = True
         for attribute in self.__default_values.values():
@@ -137,6 +141,9 @@ class Entity(NamedType, WithComment):
         self.subc = [SubConstructor(self, i) for i in self.get_implements()]
         for sub in self.subc:
             sub.normalize()
+
+        if self._paired_dataclass:
+            self.pair_dataclass()
 
     def get_sub_constructor(self) -> list[SubConstructor]:
         return self.subc
@@ -400,7 +407,17 @@ class Entity(NamedType, WithComment):
         Update indexes based on the instance and the attribute that has
         been set
         """
-        attributes = {k: repr(v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
+
+        def index_value_gate(key: str, value: object) -> str:
+            if isinstance(value, Reference):
+                raise TypingException(
+                    None,
+                    f"Invalid value `{value}` in index for attribute {key} on instance {instance}: "
+                    f"references can not be used in indexes.",
+                )
+            return repr(value)
+
+        attributes = {k: v for k, v in instance.slots.items() if v.is_ready()}
 
         # check if an index entry can be added
         for index_attributes in self.get_indices():
@@ -410,7 +427,7 @@ class Entity(NamedType, WithComment):
                 if attribute not in attributes:
                     index_ok = False
                 else:
-                    key.append(f"{attribute}={attributes[attribute]}")
+                    key.append(f"{attribute}={index_value_gate(attribute, attributes[attribute].get_value())}")
 
             if index_ok:
                 keys = ", ".join(key)
@@ -448,10 +465,17 @@ class Entity(NamedType, WithComment):
                 stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params)
             )
 
-        def coerce(t: Type, v: object) -> object:
+        def coerce(key: str, t: Type, v: object) -> object:
             """
             Coerce float-typed values to float (e.g. 1 -> 1.0)
             """
+            t = t.get_no_reference()
+
+            if isinstance(v, Reference):
+                raise TypingException(
+                    None, f"Invalid value `{v}` in index for attribute {key}: " f"references can not be used in indexes."
+                )
+
             match t:
                 case Float():
                     return t.cast(v)
@@ -465,7 +489,7 @@ class Entity(NamedType, WithComment):
                 "%s=%s"
                 % (
                     k,
-                    repr(coerce(self.get_attribute(k).type, v)),
+                    repr(coerce(k, self.get_attribute(k).type, v)),
                 )
                 for k, v in sorted(params, key=lambda x: x[0])
             ]
@@ -722,18 +746,37 @@ class Entity(NamedType, WithComment):
          i.e. instances of the associated dataclass
         """
         assert self._paired_dataclass is not None  # make mypy happy
-        assert isinstance(value, self._paired_dataclass)
 
         def convert_none(x: object | None) -> object:
             return x if x is not None else NoneValue()
 
-        instance = self.get_instance(
-            {k.name: convert_none(getattr(value, k.name)) for k in dataclasses.fields(value)},
-            resolver,
-            queue,
-            location,
-            None,
-        )
+        def convert_to_attr_ref(name: str) -> AttributeReference[PrimitiveTypes]:
+            ar: AttributeReference[PrimitiveTypes] = AttributeReference(
+                reference=value,
+                attribute_name=name,
+            )
+            attribute = self.get_attribute(name)
+            assert attribute is not None  # Mypy
+            ar._model_type = attribute.get_type().get_no_reference()
+            return ar
+
+        if isinstance(value, Reference):
+            instance = self.get_instance(
+                {k.name: convert_to_attr_ref(k.name) for k in dataclasses.fields(self._paired_dataclass)},
+                resolver,
+                queue,
+                location,
+                None,
+            )
+        else:
+            instance = self.get_instance(
+                {k.name: convert_none(getattr(value, k.name)) for k in dataclasses.fields(value)},
+                resolver,
+                queue,
+                location,
+                None,
+            )
+
         instance.dataclass_self = value
         # generate an implementation
         for stmt in self.get_sub_constructor():
@@ -749,7 +792,7 @@ class Implementation(NamedType):
     """
 
     def __init__(
-        self, name: str, stmts: BasicBlock, namespace: Namespace, target_type: str, comment: Optional[str] = None
+        self, name: str, stmts: "BasicBlock", namespace: Namespace, target_type: str, comment: Optional[str] = None
     ) -> None:
         Named.__init__(self)
         self.name = name

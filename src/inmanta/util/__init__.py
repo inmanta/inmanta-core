@@ -559,7 +559,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
 
     from inmanta.data.model import BaseModel
 
-    if isinstance(o, BaseModel):
+    if isinstance(o, (BaseModel, pydantic.BaseModel)):
         return o.model_dump(by_alias=True)
 
     if dataclasses.is_dataclass(o) and not isinstance(o, type):

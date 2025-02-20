@@ -22,15 +22,15 @@ from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException, VariableShadowWarning
-from inmanta.ast.statements import DefinitionStatement, DynamicStatement, Statement, StaticEagerPromise
 from inmanta.execute.runtime import QueueScheduler, Resolver
 
 if TYPE_CHECKING:
+    from inmanta.ast.statements import DefinitionStatement, DynamicStatement, Statement, StaticEagerPromise
     from inmanta.execute.runtime import ExecutionContext
 
 
 class BasicBlock:
-    def __init__(self, namespace: Namespace, stmts: list[DynamicStatement] = []) -> None:
+    def __init__(self, namespace: Namespace, stmts: "list[DynamicStatement]" = []) -> None:
         self.__stmts = []  # type: List[DynamicStatement]
         self.__definition_stmts = []  # type: List[DefinitionStatement]
         self.__variables = []  # type: List[Tuple[str, Statement]]
@@ -40,17 +40,17 @@ class BasicBlock:
         for st in stmts:
             self.add(st)
 
-    def get_stmts(self) -> list[DynamicStatement]:
+    def get_stmts(self) -> "list[DynamicStatement]":
         return self.__stmts
 
     def get_anchors(self) -> list[Anchor]:
         """Should only be called after normalization."""
         return [a for s in self.__stmts for a in s.get_anchors()]
 
-    def add(self, stmt: DynamicStatement) -> None:
+    def add(self, stmt: "DynamicStatement") -> None:
         self.__stmts.append(stmt)
 
-    def add_definition(self, stmt: DefinitionStatement) -> None:
+    def add_definition(self, stmt: "DefinitionStatement") -> None:
         self.__definition_stmts.append(stmt)
 
     def get_variables(self) -> list[str]:
@@ -59,7 +59,7 @@ class BasicBlock:
         """
         return [var for var, _ in self.__variables]
 
-    def add_var(self, name: str, stmt: Statement) -> None:
+    def add_var(self, name: str, stmt: "Statement") -> None:
         """
         Adds a variable to this block, paired with the statement that put it here.
         """
@@ -84,7 +84,7 @@ class BasicBlock:
     #     def get_requires(self) -> List[str]:
     #         return self.external
 
-    def get_eager_promises(self) -> Sequence[StaticEagerPromise]:
+    def get_eager_promises(self) -> "Sequence[StaticEagerPromise]":
         """
         Returns the collection of eager promises for this block, i.e. promises parent scopes should acquire as a result of
         attribute assignments in or below this block.
