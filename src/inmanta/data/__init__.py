@@ -1141,6 +1141,8 @@ class Field(Generic[T]):
         if isinstance(value, str) and issubclass(self.field_type, pydantic.BaseModel):
             jsv = json.loads(value)
             return self.field_type(**jsv)
+        if isinstance(value, dict) and issubclass(self.field_type, pydantic.BaseModel):
+            return self.field_type(**value)
         if self.field_type == pydantic.AnyHttpUrl:
             return pydantic.TypeAdapter(pydantic.AnyHttpUrl).validate_python(value)
 
@@ -3883,20 +3885,16 @@ class Compile(BaseDocument):
             version=requested_compile["version"],
             do_export=requested_compile["do_export"],
             force_update=requested_compile["force_update"],
-            metadata=json.loads(requested_compile["metadata"]) if requested_compile["metadata"] else {},
-            environment_variables=(
-                json.loads(requested_compile["used_environment_variables"])
-                if requested_compile["used_environment_variables"] is not None
-                else {}
-            ),
-            requested_environment_variables=(json.loads(requested_compile["requested_environment_variables"])),
-            mergeable_environment_variables=(json.loads(requested_compile["mergeable_environment_variables"])),
+            metadata=requested_compile["metadata"] or {},
+            environment_variables=requested_compile["used_environment_variables"] or {},
+            requested_environment_variables=requested_compile["requested_environment_variables"],
+            mergeable_environment_variables=requested_compile["mergeable_environment_variables"],
             partial=requested_compile["partial"],
             removed_resource_sets=requested_compile["removed_resource_sets"],
             exporter_plugin=requested_compile["exporter_plugin"],
             notify_failed_compile=requested_compile["notify_failed_compile"],
             failed_compile_message=requested_compile["failed_compile_message"],
-            compile_data=json.loads(requested_compile["compile_data"]) if requested_compile["compile_data"] else None,
+            compile_data=requested_compile["compile_data"],
             reports=reports,
         )
 

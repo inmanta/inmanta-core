@@ -738,8 +738,34 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
         return query_builder
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.CompileReport]:
-        return [
-            CompileReport(
+        # return [
+        #     CompileReport(
+        #         id=compile["id"],
+        #         remote_id=compile["remote_id"],
+        #         environment=compile["environment"],
+        #         requested=compile["requested"],
+        #         started=compile["started"],
+        #         completed=compile["completed"],
+        #         success=compile["success"],
+        #         version=compile["version"],
+        #         do_export=compile["do_export"],
+        #         force_update=compile["force_update"],
+        #         metadata=compile["metadata"],
+        #         environment_variables=compile["used_environment_variables"],
+        #         requested_environment_variables=compile["requested_environment_variables"],
+        #         mergeable_environment_variables=compile["mergeable_environment_variables"],
+        #         partial=compile["partial"],
+        #         removed_resource_sets=compile["removed_resource_sets"],
+        #         exporter_plugin=compile["exporter_plugin"],
+        #         notify_failed_compile=compile["notify_failed_compile"],
+        #         failed_compile_message=compile["failed_compile_message"],
+        #     )
+        #     for compile in records
+        # ]
+
+        out = []
+        for compile in records:
+            report = CompileReport(
                 id=compile["id"],
                 remote_id=compile["remote_id"],
                 environment=compile["environment"],
@@ -750,8 +776,8 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                 version=compile["version"],
                 do_export=compile["do_export"],
                 force_update=compile["force_update"],
-                metadata=compile["metadata"],
-                environment_variables=compile["used_environment_variables"],
+                metadata=compile["metadata"] or {},
+                environment_variables=compile["used_environment_variables"] or {},
                 requested_environment_variables=compile["requested_environment_variables"],
                 mergeable_environment_variables=compile["mergeable_environment_variables"],
                 partial=compile["partial"],
@@ -760,8 +786,8 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                 notify_failed_compile=compile["notify_failed_compile"],
                 failed_compile_message=compile["failed_compile_message"],
             )
-            for compile in records
-        ]
+            out.append(report)
+        return out
 
 
 class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVersion]):
@@ -1181,7 +1207,7 @@ class ParameterView(DataView[ParameterOrder, model.Parameter]):
                 value=parameter["value"],
                 source=parameter["source"],
                 updated=parameter["updated"],
-                metadata=json.loads(parameter["metadata"]) if parameter["metadata"] else None,
+                metadata=parameter["metadata"],
                 environment=parameter["environment"],
             )
             for parameter in records

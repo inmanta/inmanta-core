@@ -65,11 +65,12 @@ class PGRestore:
 
     # asyncpg execute method can not read in COPY IN
 
-    def __init__(self, script: list[str]) -> None:
+    def __init__(self, script: list[str], postgresql_client: Connection) -> None:
         self.commandbuffer = ""
         self.extbuffer = ""
         self.mode = MODE_READ_COMMAND
         self.script = script
+        self.client = postgresql_client
 
     async def run(self) -> None:
         for line in self.script:
@@ -99,8 +100,7 @@ class PGRestore:
     async def execute_buffer(self) -> None:
         if not self.commandbuffer.strip():
             return
-        async with get_connection_ctx_mgr() as connection:
-            await connection.execute(self.commandbuffer)
+        await self.client.execute(self.commandbuffer)
         self.commandbuffer = ""
 
     async def _parse_fq_table_name(self, fq_table_name: str) -> tuple[Optional[str], str]:
@@ -136,9 +136,7 @@ class PGRestore:
 
     async def execute_input(self) -> None:
         schema_name, table_name, column_names = await self._parse_copy_command_in_ext_buffer()
-
-        async with get_connection_ctx_mgr() as connection:
-            await connection.copy_to_table(
+        await self.client.copy_to_table(
                 schema_name=schema_name,
                 table_name=table_name,
                 source=AsyncSingleton(self.commandbuffer.encode()),

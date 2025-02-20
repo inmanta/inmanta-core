@@ -94,18 +94,14 @@ async def test_user_setup(tmpdir, server_pre_start, postgres_db, database_name, 
 
     result = await cli.run("yes", "new_user", "password")
     assert result.exit_code == 0
-    try:
-        # Because the setup command calls data.disconnect(), we cannot use the init_dataclasses_and_load_schema fixture here.
-        # After calling into cli.run(), the connection to the database, which was setup by the init_dataclasses_and_load_schema
-        # fixture, will be no longer active.
-        connection = await get_connection_pool()
-        users = await data.User.get_list()
-        assert len(users) == 1
-        assert users[0].username == "new_user"
+    # Because the setup command calls data.disconnect(), we cannot use the init_dataclasses_and_load_schema fixture here.
+    # After calling into cli.run(), the connection to the database, which was setup by the init_dataclasses_and_load_schema
+    # fixture, will be no longer active.
+    await get_connection_pool()
+    users = await data.User.get_list()
+    assert len(users) == 1
+    assert users[0].username == "new_user"
 
-    finally:
-        if connection is not None:
-            await data.disconnect()
 
 
 async def test_user_setup_empty_username(
@@ -124,26 +120,25 @@ async def test_user_setup_empty_username(
 
     result = await cli.run("yes", "", "password")
     assert result.exit_code == 0
-    try:
-        # Because the setup command calls data.disconnect(), we cannot use the init_dataclasses_and_load_schema fixture here.
-        # After calling into cli.run(), the connection to the database, which was setup by the init_dataclasses_and_load_schema
-        # fixture, will be no longer active.
-        connection = await get_connection_pool()
-        users = await data.User.get_list()
-        assert len(users) == 1
-        assert users[0].username == "admin"
-
-    finally:
-        if connection is not None:
-            await data.disconnect()
+    # Because the setup command calls data.disconnect(), we cannot use the init_dataclasses_and_load_schema fixture here.
+    # After calling into cli.run(), the connection to the database, which was setup by the init_dataclasses_and_load_schema
+    # fixture, will be no longer active.
+    await get_connection_pool()
+    users = await data.User.get_list()
+    assert len(users) == 1
+    assert users[0].username == "admin"
 
 
-async def test_user_setup_schema_outdated(tmpdir, postgres_db, database_name, hard_clean_db, hard_clean_db_post):
+
+
+async def test_user_setup_schema_outdated(
+    tmpdir, postgres_db, database_name, postgresql_client, hard_clean_db, hard_clean_db_post
+):
     setup_config(tmpdir, postgres_db, database_name)
 
     dump_path = os.path.join(os.path.dirname(__file__), "db/migration_tests/dumps/v202211230.sql")
     with open(dump_path) as fh:
-        await PGRestore(fh.readlines()).run()
+        await PGRestore(fh.readlines(), postgresql_client).run()
 
     cli = CLI_user_setup()
     result = await cli.run("yes", "new_user", "password")
