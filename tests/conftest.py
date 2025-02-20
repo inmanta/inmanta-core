@@ -369,6 +369,18 @@ async def postgresql_client(postgres_db, database_name):
     yield client
     await client.close()
 
+@pytest.fixture(scope="function")
+async def postgresql_pool(postgres_db, database_name):
+    client = await asyncpg.create_pool(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
+    )
+    yield client
+    await client.close()
+
 @pytest.fixture
 def sqlalchemy_url(postgres_db, database_name: str):
     return (
