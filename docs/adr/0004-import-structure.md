@@ -57,12 +57,13 @@ Chosen option: "[option 1]", because [justification. e.g., only option, which me
   - composing interface modules should also only import interface modules of composed modules
 
 
-e.g. consider executor and deploy packages and the new_agent
-- executor.executor is the interface package
-- deploy imports executor.executor
-- new_agent import both the interface and concrete implementations of both executor and deploy (top level)
-- deploy doesn't import the non-interface parts of executor because it never constructs executors (it is constructed with a reference to a executor manager, which serves as a factory)
-- executor doesn't know about deploy at all
+e.g. consider `inmanta.agent.executor.executor` and `inmanta.deploy` packages and the new_agent
+- `inmanta.agent.executor.executor` is the interface package for the executor framework
+- `inmanta.deploy` is the package containing the scheduler (it has no external interface package)
+- `inmanta.deploy` imports `inmanta.agent.executor.executor`
+- `inmanta.agent.agent_new` imports both the interface and concrete implementations of both executor and deploy (top level)
+- `inmanta.deploy` doesn't import the non-interface parts of `inmanta.agent.executor.executor` because it never constructs executors (it is constructed with a reference to a executor manager, which serves as a factory)
+- `inmanta.agent.executor.executor` doesn't know about deploy at all
 
 
 * Good, because it offers guidance
