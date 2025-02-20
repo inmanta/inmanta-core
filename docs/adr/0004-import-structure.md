@@ -42,7 +42,7 @@ Chosen option: "[option 1]", because [justification. e.g., only option, which me
    - which should be documented
    - from that responsibility can be derived its knowledge about the world around it,
    - which in turn drives which other modules it "sees"
--  keep __init__ light, as it is always imported when a submodule is imported.
+-  keep `__init__` light, as it is always imported when a submodule is imported.
 - a package can offer an interface module (called now something like `model`/`types`/`__init__`).....
   - The interface module contains the external interface of the module for other module to consume
     - superclasses
