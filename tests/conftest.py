@@ -316,22 +316,20 @@ def ensure_running_postgres_db_post(postgres_db):
 
 
 @pytest.fixture(scope="function")
-async def create_db(postgres_db, database_name_internal: str):
+async def create_db(sql_alchemy_engine, database_name_internal: str):
     """
     see :py:database_name_internal:
     """
-    connection = await asyncpg.connect(
-        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, password=postgres_db.password
-    )
+
     try:
-        await connection.execute(f"CREATE DATABASE {database_name_internal}")
+        async with get_connection_ctx_mgr() as connection:
+            await connection.execute(f"CREATE DATABASE {database_name_internal}")
     except DuplicateDatabaseError:
         # Because it is async, this fixture can not be made session scoped.
         # Only the first time it is called, it will actually create a database
         # All other times will drop through here
         pass
-    finally:
-        await connection.close()
+
     return database_name_internal
 
 
@@ -358,13 +356,13 @@ def database_name(create_db: str) -> str:
 
 
 @pytest.fixture(scope="function")
-async def postgresql_client(postgres_db, database_name):
+async def postgresql_client(postgres_db, database_name_internal):
     client = await asyncpg.connect(
         host=postgres_db.host,
         port=postgres_db.port,
         user=postgres_db.user,
         password=postgres_db.password,
-        database=database_name,
+        database=database_name_internal,
     )
     yield client
     await client.close()
@@ -382,9 +380,9 @@ async def postgresql_pool(postgres_db, database_name):
     await client.close()
 
 @pytest.fixture
-def sqlalchemy_url(postgres_db, database_name: str):
+def sqlalchemy_url(postgres_db, database_name_internal: str):
     return (
-        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
+        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name_internal}"
     )
 
 @pytest.fixture
