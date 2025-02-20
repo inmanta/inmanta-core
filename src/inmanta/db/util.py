@@ -24,8 +24,10 @@ from dataclasses import dataclass
 from types import TracebackType
 from typing import Callable, NamedTuple, Optional, Type
 
+import asyncpg
 from asyncpg import Connection
 
+from inmanta.data import get_connection_ctx_mgr
 from inmanta.stable_api import stable_api
 
 logger = logging.getLogger(__name__)
@@ -64,12 +66,11 @@ class PGRestore:
 
     # asyncpg execute method can not read in COPY IN
 
-    def __init__(self, script: list[str], postgresql_client: Connection) -> None:
+    def __init__(self, script: list[str]) -> None:
         self.commandbuffer = ""
         self.extbuffer = ""
         self.mode = MODE_READ_COMMAND
         self.script = script
-        self.client = postgresql_client
 
     async def run(self) -> None:
         for line in self.script:
@@ -99,7 +100,8 @@ class PGRestore:
     async def execute_buffer(self) -> None:
         if not self.commandbuffer.strip():
             return
-        await self.client.execute(self.commandbuffer)
+        async with get_connection_ctx_mgr() as connection:
+            await connection.execute(self.commandbuffer)
         self.commandbuffer = ""
 
     async def _parse_fq_table_name(self, fq_table_name: str) -> tuple[Optional[str], str]:
@@ -135,13 +137,15 @@ class PGRestore:
 
     async def execute_input(self) -> None:
         schema_name, table_name, column_names = await self._parse_copy_command_in_ext_buffer()
-        await self.client.copy_to_table(
-            schema_name=schema_name,
-            table_name=table_name,
-            source=AsyncSingleton(self.commandbuffer.encode()),
-            columns=column_names,
-            timeout=10,
-        )
+
+        async with get_connection_ctx_mgr() as connection:
+            await connection.copy_to_table(
+                schema_name=schema_name,
+                table_name=table_name,
+                source=AsyncSingleton(self.commandbuffer.encode()),
+                columns=column_names,
+                timeout=10,
+            )
         self.commandbuffer = ""
 
 
@@ -171,6 +175,8 @@ async def postgres_get_custom_types(postgresql_client: Connection) -> list[str]:
     type_names: list[str] = [str(x["Name"]) for x in types_in_db]
 
     return type_names
+
+
 
 
 @stable_api

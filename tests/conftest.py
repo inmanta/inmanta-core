@@ -421,6 +421,17 @@ async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_res
     yield
     await stop_engine()
 
+@pytest.fixture(scope="function")
+async def postgresql_client(postgres_db, database_name_internal):
+    client = await asyncpg.connect(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name_internal,
+    )
+    yield client
+    await client.close()
 
 @pytest.fixture(scope="function")
 async def hard_clean_db(postgresql_client):
@@ -435,7 +446,7 @@ async def hard_clean_db_post(postgresql_client):
 
 
 @pytest.fixture(scope="function")
-async def clean_db(create_db, postgres_db, database_name_internal):
+async def clean_db(create_db, postgresql_client):
     """
     1) Truncated tables: All tables which are part of the inmanta schema, except for the schemaversion table. The version
                          number stored in the schemaversion table is read by the Inmanta server during startup.
@@ -444,13 +455,6 @@ async def clean_db(create_db, postgres_db, database_name_internal):
     """
     yield
     # By using the connection pool, we can make sure that the connection we use is alive
-    postgresql_client = await asyncpg.connect(
-        host=postgres_db.host,
-        port=postgres_db.port,
-        user=postgres_db.user,
-        password=postgres_db.password,
-        database=database_name_internal,
-    )
 
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     tables_in_db = [x["table_name"] for x in tables_in_db]

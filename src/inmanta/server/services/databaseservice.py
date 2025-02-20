@@ -183,8 +183,8 @@ class DatabaseMonitor:
     async def get_connection_status(self) -> bool:
         try:
             async with get_connection_ctx_mgr() as conn:
-                res = await conn.execute(text("select 1"))
-                return res.scalar() == 1
+                res = await conn.fetchval("SELECT 1;")
+                return res == 1
         except Exception:
             LOGGER.exception("Connection to PostgreSQL failed")
         return False
@@ -229,7 +229,7 @@ class DatabaseService(protocol.ServerSlice):
         )
         async with get_connection_ctx_mgr() as connection:
             # Check if JIT is enabled
-            jit_available = await connection.execute("SELECT pg_jit_available();")
+            jit_available = await connection.fetchval("SELECT pg_jit_available();")
             if jit_available:
                 LOGGER.warning("JIT is enabled in the PostgreSQL database. This might result in poor query performance.")
 

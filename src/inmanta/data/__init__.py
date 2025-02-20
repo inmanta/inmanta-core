@@ -5105,11 +5105,7 @@ class Resource(BaseDocument):
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
         resource_records = await cls._fetch_query(query, *values, connection=connection)
-        resources = [dict(record) for record in resource_records]
-        for res in resources:
-            if "attributes" in res:
-                res["attributes"] = json.loads(res["attributes"])
-        return resources
+        return [dict(record) for record in resource_records]
 
     @classmethod
     async def get_resources_since_version_raw(
@@ -5193,13 +5189,7 @@ class Resource(BaseDocument):
         WHERE r.environment=$1 AND r.model = $2;
         """
         resource_records = await cls._fetch_query(query, environment, version, connection=connection)
-        resources = [dict(record) for record in resource_records]
-        for res in resources:
-            if project_attributes:
-                for k in project_attributes:
-                    if res[k]:
-                        res[k] = json.loads(res[k])
-        return resources
+        return [dict(record) for record in resource_records]
 
     @classmethod
     async def get_latest_version(cls, environment: uuid.UUID, resource_id: ResourceIdStr) -> Optional["Resource"]:
@@ -5334,7 +5324,7 @@ class Resource(BaseDocument):
             return None
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
-        attributes = json.loads(record["attributes"])
+        attributes = record["attributes"]
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
@@ -6733,21 +6723,21 @@ async def start_engine(
         await stop_engine()
         raise e
 
-    @event.listens_for(ENGINE.sync_engine, "do_connect")
-    def do_connect(dialect, conn_rec, cargs, cparams):
-        print("some-function")
-        print(dialect, conn_rec, cargs, cparams)
-
-    @event.listens_for(ENGINE.sync_engine, "engine_connect")
-    def engine_connect(conn, branch):
-        # print("engine_connect", conn.exec_driver_sql("select 1").scalar())
-        print("engine_connect")
-        print(branch)
-
-    @event.listens_for(ENGINE.sync_engine, "checkout")
-    def my_on_checkout(dbapi_conn, connection_rec, connection_proxy):
-        print("pool checkout")
-        print(dbapi_conn, connection_rec, connection_proxy)
+    # @event.listens_for(ENGINE.sync_engine, "do_connect")
+    # def do_connect(dialect, conn_rec, cargs, cparams):
+    #     print("some-function")
+    #     print(dialect, conn_rec, cargs, cparams)
+    #
+    # @event.listens_for(ENGINE.sync_engine, "engine_connect")
+    # def engine_connect(conn, branch):
+    #     # print("engine_connect", conn.exec_driver_sql("select 1").scalar())
+    #     print("engine_connect")
+    #     print(branch)
+    #
+    # @event.listens_for(ENGINE.sync_engine, "checkout")
+    # def my_on_checkout(dbapi_conn, connection_rec, connection_proxy):
+    #     print("pool checkout")
+    #     print(dbapi_conn, connection_rec, connection_proxy)
 
 
 @asynccontextmanager

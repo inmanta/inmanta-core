@@ -139,13 +139,13 @@ async def test_user_setup_empty_username(
 
 
 async def test_user_setup_schema_outdated(
-    tmpdir, postgres_db, database_name, postgresql_client, hard_clean_db, hard_clean_db_post
+    tmpdir, postgres_db, database_name, hard_clean_db, hard_clean_db_post
 ):
     setup_config(tmpdir, postgres_db, database_name)
 
     dump_path = os.path.join(os.path.dirname(__file__), "db/migration_tests/dumps/v202211230.sql")
     with open(dump_path) as fh:
-        await PGRestore(fh.readlines(), postgresql_client).run()
+        await PGRestore(fh.readlines()).run()
 
     cli = CLI_user_setup()
     result = await cli.run("yes", "new_user", "password")
