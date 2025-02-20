@@ -19,7 +19,6 @@
 import asyncio
 
 from inmanta import data
-from inmanta.data import get_engine, stop_engine
 from inmanta.server.server import Server
 from inmanta.server.services.compilerservice import CompilerService
 

@@ -24,7 +24,6 @@ from dataclasses import dataclass
 from types import TracebackType
 from typing import Callable, NamedTuple, Optional, Type
 
-import asyncpg
 from asyncpg import Connection
 
 from inmanta.data import get_connection_ctx_mgr
@@ -175,8 +174,6 @@ async def postgres_get_custom_types(postgresql_client: Connection) -> list[str]:
     type_names: list[str] = [str(x["Name"]) for x in types_in_db]
 
     return type_names
-
-
 
 
 @stable_api

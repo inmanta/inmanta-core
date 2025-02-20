@@ -421,6 +421,7 @@ async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_res
     yield
     await stop_engine()
 
+
 @pytest.fixture(scope="function")
 async def postgresql_client(postgres_db, database_name_internal):
     client = await asyncpg.connect(
@@ -432,6 +433,7 @@ async def postgresql_client(postgres_db, database_name_internal):
     )
     yield client
     await client.close()
+
 
 @pytest.fixture(scope="function")
 async def hard_clean_db(postgresql_client):

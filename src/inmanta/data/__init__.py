@@ -68,7 +68,7 @@ from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-from sqlalchemy import AsyncAdaptedQueuePool, event
+from sqlalchemy import AsyncAdaptedQueuePool
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 ASYNC_SESSION: typing.Optional[AsyncSession] = None

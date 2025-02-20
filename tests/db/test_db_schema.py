@@ -32,7 +32,7 @@ import inmanta.db.versions
 from data.db import versions
 from data.db_with_invalid_versions import invalid_versions
 from inmanta import data
-from inmanta.data import CORE_SCHEMA_NAME, schema, get_connection_ctx_mgr
+from inmanta.data import CORE_SCHEMA_NAME, get_connection_ctx_mgr, schema
 from inmanta.data.schema import TableNotFound, Version
 from utils import log_contains
 

@@ -37,7 +37,6 @@ from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.types import ArgumentTypes
 from inmanta.util import IntervalSchedule, Scheduler
-from sqlalchemy import text
 
 LOGGER = logging.getLogger(__name__)
 
