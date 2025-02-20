@@ -33,7 +33,7 @@ import pytest
 
 
 @pytest.mark.slowtest
-async def test_postgres_cascade_locking_order(sql_alchemy_engine,create_db, run_without_keeping_psql_logs) -> None:
+async def test_postgres_cascade_locking_order(sql_alchemy_engine, create_db, run_without_keeping_psql_logs) -> None:
     """
     Verifies that Postgres' cascade deletion acquires locks top-down. This is important because in order to avoid deadlocks
     we define a corresponding locking order for all transactions. See `TableLockMode`, `RowLockMode` and `ConfigurationModel`
@@ -98,12 +98,15 @@ async def test_postgres_cascade_locking_order(sql_alchemy_engine,create_db, run_
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("definition_order_one_two", [
-    # True,
-    False
-])
+@pytest.mark.parametrize(
+    "definition_order_one_two",
+    [
+        # True,
+        False
+    ],
+)
 async def test_postgres_cascade_locking_order_siblings(
-        sql_alchemy_engine, definition_order_one_two: bool, run_without_keeping_psql_logs
+    sql_alchemy_engine, definition_order_one_two: bool, run_without_keeping_psql_logs
 ) -> None:
     """
     Verifies locking order for siblings in the cascade tree. Locking order seems to be based on definition order of the

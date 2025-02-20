@@ -1534,7 +1534,7 @@ class BaseDocument(metaclass=DocumentMeta):
         cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
     ) -> Sequence[Record]:
         async with cls.get_connection(connection) as con:
-            res=  await con.fetch(query, *values)
+            res = await con.fetch(query, *values)
             return res
 
     @classmethod
@@ -6732,7 +6732,6 @@ async def start_engine(
     except Exception as e:
         await stop_engine()
         raise e
-
 
     @event.listens_for(ENGINE.sync_engine, "do_connect")
     def do_connect(dialect, conn_rec, cargs, cparams):

@@ -30,18 +30,14 @@ import pytest
 from asyncpg import Connection, ForeignKeyViolationError
 
 import sqlalchemy
-from sqlalchemy.ext.asyncio import AsyncEngine
-
 import utils
 from inmanta import const, data, util
 from inmanta.const import AgentStatus, LogLevel
-from inmanta.data import ArgumentCollector, QueryType, get_engine, start_engine, stop_engine, get_connection_ctx_mgr
+from inmanta.data import ArgumentCollector, QueryType, get_connection_ctx_mgr, get_engine, start_engine, stop_engine
 from inmanta.deploy import state
 from inmanta.resources import Id
 from inmanta.types import ResourceVersionIdStr
-
-
-
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 
 async def test_connect_too_small_connection_pool(sqlalchemy_url: str):
@@ -63,28 +59,23 @@ async def test_connect_too_small_connection_pool(sqlalchemy_url: str):
         await stop_engine()
 
 
-
-
 async def test_connect_default_parameters(sql_alchemy_engine):
     assert sql_alchemy_engine is not None
     async with sql_alchemy_engine.connect() as connection:
         assert connection is not None
 
 
-@pytest.mark.parametrize("pool_size, max_overflow", [
-    # (-1, 1),
-    # (2, 1),
-    (-2, -2)
-])
+@pytest.mark.parametrize(
+    "pool_size, max_overflow",
+    [
+        # (-1, 1),
+        # (2, 1),
+        (-2, -2)
+    ],
+)
 async def test_connect_invalid_parameters(sqlalchemy_url, pool_size, max_overflow):
     # with pytest.raises(ValueError):
-    await start_engine(
-        url=sqlalchemy_url,
-        pool_size=pool_size,
-        max_overflow=max_overflow
-    )
-
-
+    await start_engine(url=sqlalchemy_url, pool_size=pool_size, max_overflow=max_overflow)
 
 
 async def test_postgres_client(sql_alchemy_engine):
@@ -2278,9 +2269,7 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
     postgres_db, database_name, init_dataclasses_and_load_schema
 ):
     async with get_connection_ctx_mgr() as conn:
-        table_names = await conn.fetch(
-            "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public'"
-        )
+        table_names = await conn.fetch("SELECT table_name FROM information_schema.tables " "WHERE table_schema='public'")
     table_names_in_database = [x["table_name"] for x in table_names]
     table_names_in_classes_list = [x.table_name() for x in data._classes]
     # Schema management table is not in classes list

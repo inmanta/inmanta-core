@@ -24,7 +24,6 @@ from glob import glob
 from re import Pattern
 from threading import Condition
 
-from sqlalchemy.ext.asyncio import AsyncEngine
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
@@ -34,7 +33,7 @@ from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
-from inmanta.data import stop_engine, get_pool, get_engine, start_engine, get_connection_ctx_mgr
+from inmanta.data import get_connection_ctx_mgr, get_engine, get_pool, start_engine, stop_engine
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
@@ -42,6 +41,7 @@ from inmanta.resources import PurgeableResource, Resource, resource
 from inmanta.server.services.databaseservice import initialize_sql_alchemy_engine
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -369,6 +369,7 @@ def database_name(create_db: str) -> str:
 #     yield client
 #     await client.close()
 
+
 @pytest.fixture(scope="function")
 async def postgresql_pool(postgres_db, database_name):
     client = await asyncpg.create_pool(
@@ -381,11 +382,11 @@ async def postgresql_pool(postgres_db, database_name):
     yield client
     await client.close()
 
+
 @pytest.fixture
 def sqlalchemy_url(postgres_db, database_name_internal: str):
-    return (
-        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name_internal}"
-    )
+    return f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name_internal}"
+
 
 @pytest.fixture(scope="function")
 async def sql_alchemy_engine(sqlalchemy_url) -> AsyncEngine:
@@ -397,7 +398,6 @@ async def sql_alchemy_engine(sqlalchemy_url) -> AsyncEngine:
     yield engine
 
     await engine.dispose()
-
 
 
 @pytest.fixture(scope="function")
@@ -427,7 +427,7 @@ async def hard_clean_db_post(postgresql_client):
 
 
 @pytest.fixture(scope="function")
-async def clean_db(create_db, postgres_db,database_name_internal):
+async def clean_db(create_db, postgres_db, database_name_internal):
     """
     1) Truncated tables: All tables which are part of the inmanta schema, except for the schemaversion table. The version
                          number stored in the schemaversion table is read by the Inmanta server during startup.
@@ -437,12 +437,14 @@ async def clean_db(create_db, postgres_db,database_name_internal):
     yield
     # By using the connection pool, we can make sure that the connection we use is alive
     postgresql_client = await asyncpg.connect(
-        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, password=postgres_db.password, database=database_name_internal
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name_internal,
     )
 
-    tables_in_db = await postgresql_client.fetch(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
-    )
+    tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     tables_in_db = [x["table_name"] for x in tables_in_db]
     tables_to_preserve = TABLES_TO_KEEP
     tables_to_preserve.append(SCHEMA_VERSION_TABLE)
@@ -456,6 +458,8 @@ async def clean_db(create_db, postgres_db,database_name_internal):
         await postgresql_client.execute(truncate_query)
 
     await postgresql_client.close()
+
+
 @pytest.fixture(scope="function")
 def get_columns_in_db_table(postgresql_client):
     async def _get_columns_in_db_table(table_name: str) -> list[str]:

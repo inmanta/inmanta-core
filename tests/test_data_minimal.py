@@ -1,7 +1,7 @@
-from inmanta import data
 import pytest
 
-from inmanta.data import get_connection_ctx_mgr, ArgumentCollector
+from inmanta import data
+from inmanta.data import ArgumentCollector, get_connection_ctx_mgr
 
 
 async def test_environment_no_environment_name(init_dataclasses_and_load_schema):
