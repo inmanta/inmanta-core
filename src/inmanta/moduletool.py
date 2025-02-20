@@ -1,19 +1,19 @@
 """
-    Copyright 2018 Inmanta
+Copyright 2018 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import argparse
@@ -24,11 +24,13 @@ import inspect
 import itertools
 import logging
 import os
+import pathlib
 import py_compile
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import zipfile
 from argparse import ArgumentParser, RawTextHelpFormatter
@@ -161,10 +163,10 @@ class ModuleLikeTool:
 @total_ordering
 @enum.unique
 class ChangeType(enum.Enum):
-    MAJOR: str = "major"
-    MINOR: str = "minor"
-    PATCH: str = "patch"
-    REVISION: str = "revision"
+    MAJOR = "major"
+    MINOR = "minor"
+    PATCH = "patch"
+    REVISION = "revision"
 
     def __lt__(self, other: "ChangeType") -> bool:
         order: list[ChangeType] = [ChangeType.REVISION, ChangeType.PATCH, ChangeType.MINOR, ChangeType.MAJOR]
@@ -605,7 +607,7 @@ class ModuleTool(ModuleLikeTool):
 
         build = subparser.add_parser(
             "build",
-            help="Build a Python package from a V2 module.",
+            help="Build a Python package from a V2 module. By default, a wheel and a sdist package is built.",
             parents=parent_parsers,
         )
         build.add_argument(
@@ -635,6 +637,22 @@ class ModuleTool(ModuleLikeTool):
             action="store_true",
             default=False,
             dest="byte_code",
+        )
+        build.add_argument(
+            "-w",
+            "--wheel",
+            help="Build a wheel.",
+            action="store_true",
+            default=False,
+            dest="wheel",
+        )
+        build.add_argument(
+            "-s",
+            "--sdist",
+            help="Build a sdist.",
+            action="store_true",
+            default=False,
+            dest="sdist",
         )
 
         subparser.add_parser(
@@ -753,10 +771,20 @@ When a development release is done using the \--dev option, this command:
         ModuleConverter(mod).convert_in_place()
 
     def build(
-        self, path: Optional[str] = None, output_dir: Optional[str] = None, dev_build: bool = False, byte_code: bool = False
-    ) -> str:
+        self,
+        path: Optional[str] = None,
+        output_dir: Optional[str] = None,
+        dev_build: bool = False,
+        byte_code: bool = False,
+        wheel: bool = False,
+        sdist: bool = False,
+    ) -> list[str]:
         """
-        Build a v2 module and return the path to the build artifact.
+        Build a v2 module and return the path to the build artifact(s).
+
+        :param wheel: True iff build a wheel package.
+        :param sdist: True iff build a sdist package.
+        :returns: A list of paths to the distribution packages that were built.
         """
         if path is not None:
             path = os.path.abspath(path)
@@ -768,12 +796,33 @@ When a development release is done using the \--dev option, this command:
         if output_dir is None:
             output_dir = os.path.join(path, "dist")
 
+        timestamp = datetime.datetime.now(datetime.timezone.utc)
+
+        distributions_to_build: Sequence[Literal["wheel", "sdist"]]
+        if wheel is sdist:
+            # Build sdist and wheel by default or if both wheel and sdist are set.
+            distributions_to_build = ["wheel", "sdist"]
+        elif wheel:
+            distributions_to_build = ["wheel"]
+        elif sdist:
+            distributions_to_build = ["sdist"]
+
+        def _build_distribution_packages(module_dir: str) -> list[str]:
+            return [
+                V2ModuleBuilder(module_dir).build(
+                    output_dir, dev_build=dev_build, byte_code=byte_code, distribution=current_distribution, timestamp=timestamp
+                )
+                for current_distribution in distributions_to_build
+            ]
+
         if isinstance(module, ModuleV1):
             with tempfile.TemporaryDirectory() as tmpdir:
                 ModuleConverter(module).convert(tmpdir)
-                return V2ModuleBuilder(tmpdir).build(output_dir, dev_build=dev_build, byte_code=byte_code)
+                artifacts = _build_distribution_packages(tmpdir)
         else:
-            return V2ModuleBuilder(path).build(output_dir, dev_build=dev_build, byte_code=byte_code)
+            artifacts = _build_distribution_packages(path)
+
+        return artifacts
 
     def get_project_for_module(self, module: str) -> Project:
         try:
@@ -1478,11 +1527,20 @@ class V2ModuleBuilder:
         """
         self._module = ModuleV2(project=None, path=os.path.abspath(module_path))
 
-    def build(self, output_directory: str, dev_build: bool = False, byte_code: bool = False) -> str:
+    def build(
+        self,
+        output_directory: str,
+        dev_build: bool = False,
+        byte_code: bool = False,
+        distribution: Literal["wheel", "sdist"] = "wheel",
+        timestamp: datetime.datetime | None = None,
+    ) -> str:
         """
         Build the module using the pip system config and return the path to the build artifact.
 
-        :param byte_code: When set to true, only bytecode will be included. This also results in a binary wheel
+        :param byte_code: When set to true, only bytecode will be included. This also results in a binary wheel.
+        :param timestamp: If a dev build is requested, this timestamp will be used in the version number of the dev build.
+                          If None, the current time will be used as a timestamp.
         """
         if os.path.exists(output_directory):
             if not os.path.isdir(output_directory):
@@ -1493,19 +1551,22 @@ class V2ModuleBuilder:
             build_path = os.path.join(tmpdir, "module")
             shutil.copytree(self._module.path, build_path)
             if dev_build:
-                self._add_dev_build_tag_to_setup_cfg(build_path)
+                self._add_dev_build_tag_to_setup_cfg(build_path, timestamp)
             self._ensure_plugins(build_path)
             self._move_data_files_into_namespace_package_dir(build_path)
             if byte_code:
                 self._byte_compile_code(build_path)
 
-            path_to_wheel = self._build_v2_module(build_path, output_directory)
-            self._verify_wheel(build_path, path_to_wheel)
-            return path_to_wheel
+            distribution_pkg = self._build_v2_module(build_path, output_directory, distribution)
+            self._verify(build_path, distribution_pkg, distribution)
+            return distribution_pkg
 
-    def _add_dev_build_tag_to_setup_cfg(self, build_path: str) -> None:
+    def _add_dev_build_tag_to_setup_cfg(self, build_path: str, timestamp: datetime.datetime | None = None) -> None:
         """
         Add a build_tag of the format `.dev<timestamp>` to the setup.cfg file. The timestamp has the form %Y%m%d%H%M%S.
+
+        :param timestamp: The timestamp to use in the version number of the dev build. If None, use the current time
+                          as the timestamp.
         """
         path_setup_cfg = os.path.join(build_path, "setup.cfg")
         # Read setup.cfg file
@@ -1514,9 +1575,10 @@ class V2ModuleBuilder:
         # Set build_tag
         if not config_in.has_section("egg_info"):
             config_in.add_section("egg_info")
-        timestamp_uct = datetime.datetime.now(datetime.timezone.utc)
-        timestamp_uct_str = timestamp_uct.strftime("%Y%m%d%H%M%S")
-        config_in.set("egg_info", "tag_build", f".dev{timestamp_uct_str}")
+        if timestamp is None:
+            timestamp = datetime.datetime.now(datetime.timezone.utc)
+        timestamp_str = timestamp.strftime("%Y%m%d%H%M%S")
+        config_in.set("egg_info", "tag_build", f".dev{timestamp_str}")
         # Write file back
         with open(path_setup_cfg, "w") as fh:
             config_in.write(fh)
@@ -1568,22 +1630,37 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         with open(os.path.join(build_path, "pyproject.toml"), "w") as fh:
             fh.write(pyproject)
 
-    def _verify_wheel(self, build_path: str, path_to_wheel: str) -> None:
+    def _verify(self, build_path: str, path_distribution_pkg: str, distribution: Literal["wheel", "sdist"]) -> None:
         """
         Verify whether there were files in the python package on disk that were not packaged
-        in the given wheel and log a warning if such a file exists.
+        in the given distribution package and log a warning if such a file exists.
         """
         rel_path_namespace_package = os.path.join("inmanta_plugins", self._module.name)
         abs_path_namespace_package = os.path.join(build_path, rel_path_namespace_package)
         files_in_python_package_dir = self._get_files_in_directory(abs_path_namespace_package, ignore=BUILD_FILE_IGNORE_PATTERN)
-        with zipfile.ZipFile(path_to_wheel) as z:
-            dir_prefix = f"{rel_path_namespace_package}/"
-            files_in_wheel = {
-                info.filename[len(dir_prefix) :]
-                for info in z.infolist()
-                if not info.is_dir() and info.filename.startswith(dir_prefix)
-            }
-        unpackaged_files = files_in_python_package_dir - files_in_wheel
+        dir_prefix = f"{rel_path_namespace_package}/"
+        files_in_plugins_dir: set[str]
+        if distribution == "wheel":
+            # It's a wheel
+            with zipfile.ZipFile(path_distribution_pkg) as z:
+                files_in_plugins_dir = {
+                    info.filename[len(dir_prefix) :]
+                    for info in z.infolist()
+                    if not info.is_dir() and info.filename.startswith(dir_prefix)
+                }
+        else:
+            # It's an sdist
+            files_in_plugins_dir = set()
+            with tarfile.open(name=path_distribution_pkg) as tar:
+                for member in tar.getmembers():
+                    if member.isdir():
+                        continue
+                    path = pathlib.Path(member.name)
+                    path_without_root_dir = path.relative_to(path.parts[0])
+                    if path_without_root_dir.parts[0:2] == ("inmanta_plugins", self._module.name):
+                        path_from_mod_plugins_dir = path_without_root_dir.relative_to(dir_prefix)
+                        files_in_plugins_dir.add(str(path_from_mod_plugins_dir))
+        unpackaged_files = files_in_python_package_dir - files_in_plugins_dir
         if unpackaged_files:
             LOGGER.warning(
                 f"The following files are present in the {rel_path_namespace_package} directory on disk, but were not "
@@ -1667,13 +1744,12 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         else:
             return DefaultIsolatedEnv()
 
-    def _build_v2_module(self, build_path: str, output_directory: str) -> str:
+    def _build_v2_module(self, build_path: str, output_directory: str, distribution: Literal["wheel", "sdist"]) -> str:
         """
         Build v2 module using the pip system config and using PEP517 package builder.
         """
         try:
             with self._get_isolated_env_builder() as env:
-                distribution: Literal["wheel"] = "wheel"
                 builder = build.ProjectBuilder(source_dir=build_path, python_executable=env.python_executable)
                 env.install(builder.build_system_requires)
                 env.install(builder.get_requires_for_build(distribution=distribution))

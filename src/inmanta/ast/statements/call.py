@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import logging
@@ -21,6 +21,7 @@ from collections import abc
 from itertools import chain
 from typing import Mapping, Optional, Sequence
 
+import inmanta.ast
 import inmanta.ast.type as InmantaType
 import inmanta.execute.dataflow as dataflow
 from inmanta import plugins
@@ -29,15 +30,18 @@ from inmanta.ast import (
     ExternalException,
     LocatableString,
     Location,
+    MultiUnsetException,
     Namespace,
+    PluginTypeException,
     RuntimeException,
     TypeReferenceAnchor,
+    UnknownException,
+    UnsetException,
     WrappingRuntimeException,
 )
 from inmanta.ast.statements import AttributeAssignmentLHS, ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.proxy import UnknownException, UnsetException
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, VariableABC, Waiter
 from inmanta.execute.util import NoneValue, Unknown
 
@@ -213,7 +217,8 @@ class PluginFunction(Function):
         self.plugin: plugins.Plugin = plugin
 
     def call_direct(self, args: list[object], kwargs: dict[str, object]) -> object:
-        no_unknows = self.plugin.check_args(args, kwargs)
+        processed_args = self.plugin.check_args(args, kwargs)
+        no_unknows = not processed_args.unknowns
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
             raise RuntimeException(self.ast_node, "Received unknown value during direct execution")
@@ -225,12 +230,15 @@ class PluginFunction(Function):
             raise RuntimeException(self.ast_node, "emits_statements functions are not allowed in direct execution")
         else:
             try:
-                return self.plugin(*args, **kwargs)
+                return self.plugin(*processed_args.args, **processed_args.kwargs)
+            except PluginTypeException:
+                # already has sufficient context, no need to wrap it
+                raise
             except RuntimeException as e:
                 raise WrappingRuntimeException(
                     self.ast_node, "Exception in direct execution for plugin %s" % self.ast_node.name, e
                 )
-            except plugins.PluginException as e:
+            except inmanta.ast.PluginException as e:
                 raise ExplicitPluginException(
                     self.ast_node, "PluginException in direct execution for plugin %s" % self.ast_node.name, e
                 )
@@ -246,27 +254,29 @@ class PluginFunction(Function):
         result: ResultVariable,
     ) -> None:
 
-        no_unknows = self.plugin.check_args(args, kwargs)
+        processed_args = self.plugin.check_args(args, kwargs)
+        no_unknows = not processed_args.unknowns
 
         if not no_unknows and not self.plugin.opts["allow_unknown"]:
             result.set_value(Unknown(self), self.ast_node.location)
             return
 
+        args = processed_args.args
+        kwargs = processed_args.kwargs
+
         if self.plugin._context != -1:
             # Don't mutate the arguments!
-            new_args = list(args)
-            new_args.insert(self.plugin._context, plugins.Context(resolver, queue, self.ast_node, self.plugin, result))
-            args = new_args
+            args.insert(self.plugin._context, plugins.Context(resolver, queue, self.ast_node, self.plugin, result))
 
         if self.plugin.opts["emits_statements"]:
             self.plugin(*args, **kwargs)
         else:
             try:
-                value = self.plugin(*args, **kwargs)
+                value = self.plugin.call_in_context(processed_args, resolver, queue, self.ast_node.location)
                 result.set_value(value if value is not None else NoneValue(), self.ast_node.location)
             except UnknownException as e:
                 result.set_value(e.unknown, self.ast_node.location)
-            except UnsetException as e:
+            except (UnsetException, MultiUnsetException) as e:
                 call: str = str(self.plugin)
                 location: str = str(self.ast_node.location)
                 LOGGER.debug(
@@ -277,9 +287,12 @@ class PluginFunction(Function):
                 # If it is handled here, the re-queueing can not be done,
                 # leading to very subtle errors such as #2787
                 raise e
+            except PluginTypeException:
+                # already has sufficient context, no need to wrap it
+                raise
             except RuntimeException as e:
                 raise WrappingRuntimeException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
-            except plugins.PluginException as e:
+            except inmanta.ast.PluginException as e:
                 raise ExplicitPluginException(self.ast_node, "PluginException in plugin %s" % self.ast_node.name, e)
             except Exception as e:
                 raise ExternalException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)

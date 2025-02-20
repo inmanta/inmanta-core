@@ -1,0 +1,6 @@
+---
+description: "Fix `test_deploy_with_undefined` test case"
+issue-nr: 8612
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master]

@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import logging
@@ -39,8 +39,27 @@ def _normalize_name(name: str) -> str:
     return name.replace("_", "-")
 
 
+def _get_env_var_name_for_config_option(section: str, name: str) -> str:
+    """
+    Return the name of the environment variable that belongs to the given config option.
+    """
+    env_var_name = f"INMANTA_{section}_{name}"
+    # The names of config sections and config options can be written using both - and _ characters in config files.
+    # For environment variables we support _ only.
+    env_var_name = env_var_name.replace("-", "_")
+    # The configuration section lsm.callback has a dot in its name. This character is not supported
+    # in the name of an environment variable. As such, we use an _ instead.
+    env_var_name = env_var_name.replace(".", "_")
+    return env_var_name.upper()
+
+
 def _get_from_env(section: str, name: str) -> Optional[str]:
-    return os.environ.get(f"INMANTA_{section}_{name}".replace("-", "_").upper(), default=None)
+    """
+    Return the value of the given config option set via an environment variable, or None if the config
+    option was not set via an environment variable.
+    """
+    env_var_name = _get_env_var_name_for_config_option(section, name)
+    return os.environ.get(env_var_name, default=None)
 
 
 class LenientConfigParser(ConfigParser):
@@ -64,6 +83,7 @@ class LenientConfigParser(ConfigParser):
 class Config:
     __instance: Optional[ConfigParser] = None
     _config_dir: Optional[str] = None  # The directory this config was loaded from
+    _min_c_config_file: Optional[str] = None  # Config file
     __config_definition: dict[str, dict[str, "Option"]] = defaultdict(dict)
 
     @classmethod
@@ -95,8 +115,11 @@ class Config:
         files: list[str]
         if min_c_config_file is not None:
             files = [main_cfg_file] + cfg_files_in_config_dir + local_dot_inmanta_cfg_files + [min_c_config_file]
+            cls._min_c_config_file = min_c_config_file
+
         else:
             files = [main_cfg_file] + cfg_files_in_config_dir + local_dot_inmanta_cfg_files
+            cls._min_c_config_file = None
 
         config = LenientConfigParser(interpolation=Interpolation())
         config.read(files)
@@ -142,6 +165,7 @@ class Config:
     def _reset(cls) -> None:
         cls.__instance = None
         cls._config_dir = None
+        cls._min_c_config_file = None
 
     @overload
     @classmethod
@@ -168,7 +192,8 @@ class Config:
 
     @classmethod
     def get_for_option(cls, option: "Option[T]") -> T:
-        raw_value: str | T = cls._get_value(option.section, option.name, option.get_default_value())
+        default_value = option.get_default_value()
+        raw_value: str | T = cls._get_value(option.section, option.name, default_value)
         return option.validate(raw_value)
 
     @classmethod
@@ -397,7 +422,7 @@ class Option(Generic[T]):
         """
         Return the environment variable associated with this config option.
         """
-        return f"INMANTA_{self.section}_{self.name.replace('-', '_')}".upper()
+        return _get_env_var_name_for_config_option(self.section, self.name)
 
     def get_default_desc(self) -> str:
         defa = self.default
@@ -458,6 +483,22 @@ logging_config = Option(
     "options will be ignored when this option is set.",
     validator=is_str_opt,
 )
+
+
+def make_option_for_log_file(component_name: str) -> Option[str | None]:
+    return Option(
+        section="logging",
+        name=component_name,
+        default=None,
+        documentation=f"The path to the configuration file for the logging of the {component_name}. This is a YAML file that follows "
+        "the dictionary-schema accepted by logging.config.dictConfig(). All other log-related configuration "
+        "options will be ignored when this option is set.",
+        validator=is_str_opt,
+    )
+
+
+component_log_configs = {k: make_option_for_log_file(k) for k in ["server", "scheduler", "compiler"]}
+scheduler_log_config = component_log_configs["scheduler"]
 
 
 def get_executable() -> Optional[str]:

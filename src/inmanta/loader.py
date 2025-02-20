@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import base64
@@ -221,7 +221,7 @@ class ModuleSource:
             return NotImplemented
         return (self.name, self.hash_value, self.is_byte_code) < (other.name, other.hash_value, other.is_byte_code)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, ModuleSource):
             return False
         return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
@@ -288,7 +288,7 @@ class CodeLoader:
 
     def load_module(self, mod_name: str, hv: str) -> None:
         """
-        Ensure the given module is loaded.
+        Ensure the given module is loaded. Does not capture any import errors.
 
         :param mod_name: Name of the module to load
         :param hv: hash value of the content of the module
@@ -298,18 +298,15 @@ class CodeLoader:
 
         # Importing a module -> only the first import loads the code
         # cache of loaded modules mechanism -> starts afresh when agent is restarted
-        try:
-            if mod_name in self.__modules:
-                if hv != self.__modules[mod_name][0]:
-                    raise Exception(f"The content of module {mod_name} changed since it was last imported.")
-                LOGGER.debug("Module %s is already loaded", mod_name)
-                return
-            else:
-                mod = importlib.import_module(mod_name)
-            self.__modules[mod_name] = (hv, mod)
-            LOGGER.info("Loaded module %s", mod_name)
-        except ImportError:
-            LOGGER.exception("Unable to load module %s", mod_name)
+        if mod_name in self.__modules:
+            if hv != self.__modules[mod_name][0]:
+                raise Exception(f"The content of module {mod_name} changed since it was last imported.")
+            LOGGER.debug("Module %s is already loaded", mod_name)
+            return
+        else:
+            mod = importlib.import_module(mod_name)
+        self.__modules[mod_name] = (hv, mod)
+        LOGGER.info("Loaded module %s", mod_name)
 
     def install_source(self, module_source: ModuleSource) -> None:
         """

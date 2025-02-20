@@ -1,19 +1,19 @@
 """
-    Copyright 2021 Inmanta
+Copyright 2021 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import logging
@@ -623,9 +623,9 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     jinja2_version_before = active_env.get_installed_packages()["jinja2"].base_version
 
     # Install the module
-    mod_artifact_path = ModuleTool().build(path=module_path)
+    mod_artifact_paths = ModuleTool().build(path=module_path, wheel=True)
     with pytest.raises(ConflictingRequirements) as e:
-        env.process_env.install_from_source([env.LocalPackagePath(path=mod_artifact_path, editable=False)])
+        env.process_env.install_from_source([env.LocalPackagePath(path=mod_artifact_paths[0], editable=False)])
 
     assert ("these package versions have conflicting dependencies") in str(e.value.msg)
 

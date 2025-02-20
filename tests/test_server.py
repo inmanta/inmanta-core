@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -33,14 +33,15 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from inmanta import config, const, data, loader, resources, util
 from inmanta.agent import executor, handler
 from inmanta.const import ParameterSource
-from inmanta.data import AUTO_DEPLOY, ResourceIdStr, ResourcePersistentState
-from inmanta.data.model import AttributeStateChange, ResourceVersionIdStr
+from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
+from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import persistence, state
 from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version
 from utils import log_contains, log_doesnt_contain, retry_limited
 
@@ -545,7 +546,7 @@ async def test_get_resource_on_invalid_resource_id(server, client, environment) 
     assert f"{invalid_resource_version_id} is not a valid resource version id" in result.result["message"]
 
 
-@pytest.mark.skip("Need to not autostart to work")
+@pytest.mark.parametrize("no_agent", [True])
 async def test_clear_environment(client, server, clienthelper, environment):
     """
     Test clearing out an environment
@@ -661,33 +662,32 @@ async def test_batched_code_upload(
             assert info.content == source_code
 
 
-async def test_resource_action_log(server, client, environment):
-    version = (await client.reserve_version(environment)).result["data"]
-    resources = [
-        {
-            "group": "root",
-            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::testing::NullResource[vm1.dev.inmanta.com,name=network],v=%d" % version,
-            "owner": "root",
-            "path": "/etc/sysconfig/network",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "version": version,
-        }
-    ]
-    res = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-    )
-    assert res.code == 200
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_resource_action_log(server, client, environment, clienthelper, snippetcompiler):
+    await clienthelper.set_auto_deploy()
 
+    snippetcompiler.setup_for_snippet(
+        """\
+        import std::testing
+
+        std::testing::NullResource(name="network", agentname="internal")
+        """,
+        autostd=True,
+    )
+
+    version, _ = await snippetcompiler.do_export_and_deploy()
+
+    await clienthelper.wait_for_released(version)
+    await clienthelper.wait_for_deployed(version)
     resource_action_log = os.path.join(config.log_dir.get(), f"{opt.server_resource_action_log_prefix.get()}{environment}.log")
+    print(resource_action_log)
+    logging.root.warning("%s", resource_action_log)
+
+    log = os.path.join(config.log_dir.get(), f"agent-{environment}.log")
+    with open(log, "r") as fh:
+        for line in fh:
+            logging.warning(line)
+
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
     with open(resource_action_log) as f:
@@ -715,8 +715,6 @@ async def test_invalid_sid(server, client, environment):
 async def test_get_param(server, client, environment, tz_aware_timestamp: bool):
     config.Config.set("server", "tz-aware-timestamps", str(tz_aware_timestamp).lower())
 
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
-    assert result.code == 200
     metadata = {"key1": "val1", "key2": "val2"}
 
     await client.set_param(environment, "param", ParameterSource.user, "val", "", metadata, False)
@@ -845,12 +843,11 @@ async def test_bootloader_connect_running_db(server_config, postgres_db, caplog,
     log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
 
 
-@pytest.mark.skip("Broken")
-async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, agent):
+async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, null_agent):
     """
     Test querying resource actions via the API
     """
-    aclient = agent._client
+    aclient = null_agent._client
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -1323,7 +1320,7 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
         if method_to_use == "send_deploy_done":
             await update_manager.send_deploy_done(
                 attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes_r1),
-                result=executor.DeployResult(
+                result=executor.DeployReport(
                     rvid=rvid_r1_v1,
                     action_id=action_id,
                     resource_state=const.HandlerResourceState.deployed,
@@ -1332,10 +1329,13 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
                     change=const.Change.purged,
                 ),
                 state=state.ResourceState(
-                    status=state.ComplianceStatus.COMPLIANT,
-                    deployment_result=state.DeploymentResult.DEPLOYED,
-                    blocked=state.BlockedStatus.NO,
+                    compliance=state.Compliance.COMPLIANT,
+                    last_deploy_result=state.DeployResult.DEPLOYED,
+                    blocked=state.Blocked.NOT_BLOCKED,
+                    last_deployed=now,
                 ),
+                started=now,
+                finished=now,
             )
         else:
             result = await null_agent._client.resource_action_update(
@@ -1352,10 +1352,6 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
                 send_events=True,
             )
             assert result.code == 200, result.result
-
-    # Assert effect of send_deploy_done call
-    assert f"{rvid_r1_v1}: message" in caplog.messages
-    assert f"{rvid_r1_v1}: test" in caplog.messages
 
     result = await client.get_resource_actions(tid=env_id)
     assert result.code == 200, result.result
@@ -1413,7 +1409,7 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
     with pytest.raises(ValueError):
         await update_manager.send_deploy_done(
             attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=attributes_r1),
-            result=executor.DeployResult(
+            result=executor.DeployReport(
                 rvid=rvid_r1_v1,
                 action_id=action_id,
                 resource_state=const.HandlerResourceState.deployed,
@@ -1422,10 +1418,13 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
                 change=const.Change.created,
             ),
             state=state.ResourceState(
-                status=state.ComplianceStatus.COMPLIANT,
-                deployment_result=state.DeploymentResult.DEPLOYED,
-                blocked=state.BlockedStatus.NO,
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
+                last_deployed=datetime.now().astimezone(),
             ),
+            started=datetime.now().astimezone(),
+            finished=datetime.now().astimezone(),
         )
 
 
@@ -1450,7 +1449,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
     with pytest.raises(ValueError) as exec_info:
         await update_manager.send_deploy_done(
             attribute_hash="",
-            result=executor.DeployResult(
+            result=executor.DeployReport(
                 rvid=rvid_r1_v1,
                 action_id=uuid.uuid4(),
                 resource_state=const.HandlerResourceState.deployed,
@@ -1459,10 +1458,13 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
                 change=const.Change.nochange,
             ),
             state=state.ResourceState(
-                status=state.ComplianceStatus.COMPLIANT,
-                deployment_result=state.DeploymentResult.DEPLOYED,
-                blocked=state.BlockedStatus.NO,
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
+                last_deployed=datetime.now().astimezone(),
             ),
+            started=datetime.now().astimezone(),
+            finished=datetime.now().astimezone(),
         )
     assert "The resource with the given id does not exist in the given environment" in str(exec_info.value)
 
@@ -1478,7 +1480,7 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
     with pytest.raises(ValueError) as exec_info:
         await update_manager.send_deploy_done(
             attribute_hash="",
-            result=executor.DeployResult(
+            result=executor.DeployReport(
                 rvid=rvid_r1_v1,
                 action_id=uuid.uuid4(),
                 resource_state=const.HandlerResourceState.deployed,
@@ -1487,10 +1489,13 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
                 change=const.Change.nochange,
             ),
             state=state.ResourceState(
-                status=state.ComplianceStatus.COMPLIANT,
-                deployment_result=state.DeploymentResult.DEPLOYED,
-                blocked=state.BlockedStatus.NO,
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
+                last_deployed=datetime.now().astimezone(),
             ),
+            started=datetime.now().astimezone(),
+            finished=datetime.now().astimezone(),
         )
     assert "No resource action exists for action_id" in str(exec_info.value)
 

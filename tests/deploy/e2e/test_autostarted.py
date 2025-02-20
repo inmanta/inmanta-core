@@ -1,22 +1,22 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 
 
-    All tests related to autostarted agents go here
+All tests related to autostarted agents go here
 """
 
 import asyncio
@@ -105,7 +105,6 @@ async def setup_environment_with_agent(client, project_name):
     env = await data.Environment.get_by_id(uuid.UUID(env_id))
 
     await env.set(data.AUTO_DEPLOY, True)
-    await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
     await env.set(data.AUTOSTART_ON_START, True)
 
     clienthelper = ClientHelper(client, env_id)
@@ -129,12 +128,11 @@ async def setup_environment_with_agent(client, project_name):
     assert result.code == 200
 
     # check deploy
-    await wait_until_deployment_finishes(client, env_id)
+    await clienthelper.wait_for_deployed(version=version)
     result = await client.get_version(env_id, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
-    assert result.result["model"]["result"] == "failed"
 
     result = await client.list_agents(tid=env_id)
     assert result.code == 200
@@ -149,7 +147,7 @@ async def setup_environment_with_agent(client, project_name):
     return project_id, env_id
 
 
-def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> list[psutil.Process]:
+def _get_inmanta_scheduler_child_processes(parent_process: psutil.Process) -> list[psutil.Process]:
     def try_get_cmd(p: psutil.Process) -> str:
         try:
             return p.cmdline()
@@ -158,11 +156,13 @@ def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> list[p
             """If a child process is gone, p.cmdline() raises an exception"""
             return ""
 
-    return [p for p in parent_process.children(recursive=True) if "inmanta.app" in try_get_cmd(p) and "agent" in try_get_cmd(p)]
+    return [
+        p for p in parent_process.children(recursive=True) if "inmanta.app" in try_get_cmd(p) and "scheduler" in try_get_cmd(p)
+    ]
 
 
 def ps_diff_inmanta_agent_processes(original: list[psutil.Process], current_process: psutil.Process, diff: int = 0) -> None:
-    current = _get_inmanta_agent_child_processes(current_process)
+    current = _get_inmanta_scheduler_child_processes(current_process)
 
     def is_terminated(proc):
         try:
@@ -241,8 +241,7 @@ async def test_auto_deploy_no_splay(server, client, clienthelper: ClientHelper, 
         result = await client.list_agents(tid=environment)
         await asyncio.sleep(0.1)
 
-    assert len(result.result["agents"]) == 2
-    assert result.result["agents"][0]["name"] == const.AGENT_SCHEDULER_ID
+    assert len(result.result["agents"]) == 1
 
 
 async def test_deploy_no_code(resource_container, client, clienthelper, environment):
@@ -293,11 +292,9 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     await retry_limited(log_any, 1)
 
 
-@pytest.mark.skip("Test when agent pause PR is in with proper helper functions")
-async def test_stop_autostarted_agents_on_environment_removal(server, client, resource_container):
+async def test_stop_autostarted_agents_on_environment_removal(server, client):
     current_process = psutil.Process()
-    inmanta_agent_child_processes: list[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
-    resource_container.Provider.reset()
+    inmanta_agent_child_processes: list[psutil.Process] = _get_inmanta_scheduler_child_processes(current_process)
     (project_id, env_id) = await setup_environment_with_agent(client, "proj")
 
     # One autostarted agent should running as a subprocess
@@ -320,7 +317,6 @@ async def test_autostart_clear_agent_venv_on_delete(
     resource_container.Provider.reset()
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTO_DEPLOY, True)
-    await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
     await env.set(data.AUTOSTART_ON_START, True)
 
     version = await clienthelper.get_version()
@@ -416,12 +412,16 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
         current_scheduler = None
 
         for child in children:
+            # ignore zombie children
+            if child.status() == psutil.STATUS_ZOMBIE:
+                continue
             if "python" in child.name():
                 cmd_line_process = " ".join(child.cmdline())
                 if "inmanta.app" in cmd_line_process and "scheduler" in cmd_line_process:
                     assert current_scheduler is None, (
-                        f"A scheduler was already found: {current_scheduler} but we found "
-                        f"a new one: {child}, this is unexpected!"
+                        f"A scheduler was already found: {current_scheduler} (spawned via {current_scheduler.cmdline()} in "
+                        f"parent process {current_scheduler.parent()}) but we found a new one: {child} (spawned via "
+                        f"{child.cmdline()} in parent process {child.parent()}), this is unexpected!"
                     )
                     current_scheduler = child
         return current_scheduler
@@ -579,7 +579,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     await retry_limited(are_resources_being_deployed, timeout=5)
 
     # Let's check the agent table and check that agent1 is present and not paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
+    await assert_is_paused(client, environment, {"agent1": False})
 
     # Make sure the children of the scheduler are consistent
     await wait_for_consistent_children(
@@ -617,7 +617,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     assert result.result["versions"][0]["total"] == 1
 
     # Let's check the agent table and check that agent1 is present and not paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
+    await assert_is_paused(client, environment, {"agent1": False})
 
     # Now let's halt the environment
     result = await client.halt_environment(tid=environment)
@@ -636,7 +636,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     assert result.code == 200
 
     # Let's recheck the agent table and check that the scheduler and agent1 are present and paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: True, "agent1": True})
+    await assert_is_paused(client, environment, {"agent1": True})
 
     # Let's wait for the executor to die (
     await retry_limited(
@@ -672,7 +672,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     await client.resume_environment(environment)
 
     # Let's check the agent table and check that the scheduler and agent1 are present and not paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
+    await assert_is_paused(client, environment, {"agent1": False})
 
     if should_time_out:
         # Wait for at least one resource to be in deploying
@@ -773,14 +773,14 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert result.result["versions"][0]["total"] == 3
 
     # Let's check the agent table and check that agent1 is present and not paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
+    await assert_is_paused(client, environment, {"agent1": False})
 
     # Now let's pause agent1
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
     assert result.code == 200
 
     # Let's recheck the agent table and check that agent1 is present and paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": True})
+    await assert_is_paused(client, environment, {"agent1": True})
 
     # Let's also check if the state of resources are consistent with what we expect:
     # The agent finished deploying resource n°2 before pausing and resource n°3
@@ -801,7 +801,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert result.code == 200
 
     # Everything should be back online
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
+    await assert_is_paused(client, environment, {"agent1": False})
 
     # Nothing should have changed concerning the state of our resources, yet!
     result = await client.resource_list(environment, deploy_summary=True)
@@ -938,7 +938,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     )
 
     # Everything should be consistent in DB: the agent should still be paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": True})
+    await assert_is_paused(client, environment, {"agent1": True})
 
     # Let's recheck the number of processes after restarting the server
     state_after_restart = construct_scheduler_children(current_pid)
@@ -1025,13 +1025,13 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert result.result["versions"][0]["total"] == 3
 
     # Let's check the agent table and check that agent1 is present and not paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False})
+    await assert_is_paused(client, environment, {"agent1": False})
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
     assert result.code == 200
 
     # Let's check the agent table and check that agent1 is present and paused
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": True})
+    await assert_is_paused(client, environment, {"agent1": True})
 
     # Wait for the current deployment of the agent to end
     await retry_limited(are_resources_deployed, timeout=6, interval=1, deployed_resources=2)
@@ -1054,7 +1054,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     result = await client.agent_action(environment, name="agent1", action=AgentAction.keep_paused_on_resume.value)
     assert result.code == 200
 
-    await assert_is_paused(client, environment, {const.AGENT_SCHEDULER_ID: True, "agent1": True})
+    await assert_is_paused(client, environment, {"agent1": True})
 
     await retry_limited(
         wait_for_terminated_status,
@@ -1081,11 +1081,10 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
 
     result = await client.list_agents(tid=environment)
     assert result.code == 200
-    assert len(result.result["agents"]) == 2
+    assert len(result.result["agents"]) == 1
     expected_agents_status = {e["name"]: e["paused"] for e in result.result["agents"]}
-    assert set(expected_agents_status.keys()) == {const.AGENT_SCHEDULER_ID, "agent1"}
+    assert set(expected_agents_status.keys()) == {"agent1"}
     assert expected_agents_status["agent1"]
-    assert not expected_agents_status[const.AGENT_SCHEDULER_ID]
 
     # Make sure the children of the scheduler are consistent
     await wait_for_consistent_children(
@@ -1156,17 +1155,13 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
     assert result.result["versions"][0]["total"] == 3
 
     # Let's check the agent table and check that all agents are presents and not paused
-    await assert_is_paused(
-        client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False, "agent2": False, "agent3": False}
-    )
+    await assert_is_paused(client, environment, {"agent1": False, "agent2": False, "agent3": False})
 
     await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
     assert result.code == 200
 
     # Let's check the agent table and check that all agents are presents and paused
-    await assert_is_paused(
-        client, environment, {const.AGENT_SCHEDULER_ID: True, "agent1": True, "agent2": True, "agent3": True}
-    )
+    await assert_is_paused(client, environment, {"agent1": True, "agent2": True, "agent3": True})
     result = await client.get_agents(environment)
     assert result.code == 200
     actual_data = result.result["data"]
@@ -1215,9 +1210,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
     assert result.code == 200
 
     # Let's check the agent table and check that all agents are presents and not paused
-    await assert_is_paused(
-        client, environment, {const.AGENT_SCHEDULER_ID: False, "agent1": False, "agent2": False, "agent3": False}
-    )
+    await assert_is_paused(client, environment, {"agent1": False, "agent2": False, "agent3": False})
 
     result = await client.get_agents(environment)
     assert result.code == 200

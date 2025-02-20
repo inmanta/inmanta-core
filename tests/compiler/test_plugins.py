@@ -1,19 +1,19 @@
 """
-    Copyright 2018 Inmanta
+Copyright 2018 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import logging
@@ -26,7 +26,14 @@ import pytest
 import inmanta.ast.statements.define
 import inmanta.compiler as compiler
 import inmanta.plugins
-from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException
+from inmanta.ast import (
+    CompilerException,
+    ExplicitPluginException,
+    InvalidTypeAnnotation,
+    Namespace,
+    RuntimeException,
+    WrappingRuntimeException,
+)
 from utils import log_contains
 
 if typing.TYPE_CHECKING:
@@ -180,7 +187,10 @@ import test_674
 
 test_674::test_not_nullable(null)
         """,
-        "Invalid value 'null', expected string (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))",
+        "Value null for argument param of plugin test_674::test_not_nullable has incompatible type."
+        " Expected type: string (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))"
+        "\ncaused by:"
+        "\n  Invalid value 'null', expected string (reported in test_674::test_not_nullable(null) ({dir}/main.cf:4))",
     )
 
 
@@ -214,7 +224,10 @@ import test_674
 
 test_674::test_not_nullable_list(null)
         """,
-        "Invalid value 'null', expected int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))",
+        "Value null for argument param of plugin test_674::test_not_nullable_list has incompatible type."
+        " Expected type: int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))"
+        "\ncaused by:"
+        "\n  Invalid value 'null', expected int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))",
     )
 
 
@@ -375,13 +388,18 @@ import keyword_only_arguments
     plugins: dict[str, inmanta.plugins.Plugin] = {
         name: stmt for name, stmt in statements.items() if hasattr(stmt, "get_signature")
     }
-
     assert (
         plugins["catch_all_arguments::sum_all"].get_signature()
         == "sum_all(a: 'int', *aa: 'int', b: 'int', **bb: 'int') -> 'int'"
     )
+    assert plugins["catch_all_arguments::sum_all"].get_signature(use_dsl_types=True) == (
+        "sum_all(a: int, *aa: int, b: int, **bb: int) -> int"
+    )
     assert plugins["keyword_only_arguments::sum_all"].get_signature() == (
         "sum_all(a: 'int', b: 'int' = 1, *, c: 'int', d: 'int' = 2) -> 'int'"
+    )
+    assert plugins["keyword_only_arguments::sum_all"].get_signature(use_dsl_types=True) == (
+        "sum_all(a: int, b: int, *, c: int, d: int) -> int"
     )
 
 
@@ -416,3 +434,255 @@ plugin_context_and_defaults::func()
         """
     )
     compiler.do_compile()
+
+
+def test_inferred_signatures_logging(snippetcompiler: "SnippetCompilationTest", caplog) -> None:
+    """
+    Test that the signature (using inferred Inmanta types)
+    for each plugin is correctly logged
+    """
+    with caplog.at_level(logging.DEBUG):
+
+        snippetcompiler.setup_for_snippet(
+            """
+import plugin_native_types
+            """,
+            ministd=True,
+        )
+        compiler.do_compile()
+
+        expected_signatures = [
+            "get_from_dict(value: dict[string, string], key: string) -> string?",
+            "many_arguments(il: string[], idx: int) -> string",
+            "as_none(value: string)",
+            "var_args_test(value: string, *other: string[])",
+            "var_kwargs_test(value: string, *other: string[], **more: dict[string, int])",
+            (
+                "all_args_types(positional_arg: string, *star_args_collector: string[], "
+                "key_word_arg: string?, **star_star_args_collector: dict[string, string])"
+            ),
+            "positional_args_ordering_test(c: string, a: string, b: string) -> string",
+            "no_collector(pos_arg_1: string, pos_arg_2: string, kw_only_123: string, kw_only_2: string, kw_only_3: string)",
+            "only_kwargs(*, kw_only_1: string, kw_only_2: string, kw_only_3: int)",
+            "optional_arg(a: int?)",
+        ]
+        for plugin_signature in expected_signatures:
+            log_contains(
+                caplog=caplog,
+                loggerpart="inmanta.plugins",
+                level=logging.DEBUG,
+                msg=f"Found plugin plugin_native_types::{plugin_signature}",
+            )
+
+
+def test_native_types(snippetcompiler: "SnippetCompilationTest", caplog) -> None:
+    """
+    test the use of python types
+    """
+    with caplog.at_level(logging.DEBUG):
+
+        snippetcompiler.setup_for_snippet(
+            """
+import plugin_native_types
+
+test_entity = plugin_native_types::TestEntity(value=2)
+a = "b"
+a = plugin_native_types::get_from_dict({"a":"b"}, "a")
+
+none = null
+none = plugin_native_types::get_from_dict({"a":"b"}, "B")
+
+a = plugin_native_types::many_arguments(["a","c","b"], 1)
+
+none = plugin_native_types::as_none("a")
+
+# Union types (input)
+plugin_native_types::union_single_type(value="test")     # type value: Union[str]
+plugin_native_types::union_multiple_types(value="test")  # type value: Union[int, str]
+plugin_native_types::union_multiple_types(value=123)     # type value: Union[int, str]
+for val in ["test", 123, null, test_entity]:
+    plugin_native_types::union_optional_1(value=val)     # type value: Union[None, int, str, Entity]
+    plugin_native_types::union_optional_2(value=val)     # type value: Optional[Union[int, str, Entity]]
+    plugin_native_types::union_optional_3(value=val)     # type value: Union[int, str, Entity] | None
+    plugin_native_types::union_optional_4(value=val)     # type value: None | Union[int, str, Entity]
+end
+
+# Union types (return value)
+plugin_native_types::union_return_single_type(value="test")     # type return value: Union[str]
+plugin_native_types::union_return_multiple_types(value="test")  # type return value: Union[str, int]
+plugin_native_types::union_return_multiple_types(value=123)     # type return value: Union[str, int]
+for val in ["test", 123, null, test_entity]:
+    plugin_native_types::union_return_optional_1(value=val)     # type return value: Union[None, int, str, Entity]
+    plugin_native_types::union_return_optional_2(value=val)     # type return value: Optional[Union[int, str, Entity]]
+    plugin_native_types::union_return_optional_3(value=val)     # type return value: Union[int, str, Entity] | None
+    plugin_native_types::union_return_optional_4(value=val)     # type return value: None | Union[int, str, Entity]
+end
+
+# Annotated types
+plugin_native_types::annotated_arg_entity(test_entity)     # type value: Annotated[MyEntity, ModelType["TestEntity"]]
+plugin_native_types::annotated_return_entity(test_entity)  # type return value: Annotated[MyEntity, ModelType["TestEntity"]]
+# Entity: typing.TypeAlias = typing.Annotated[Any, ModelType["std::Entity"]]
+plugin_native_types::type_entity_arg(test_entity)          # type value: Entity
+plugin_native_types::type_entity_return(test_entity)       # type return value: Entity
+plugin_native_types::type_entity_alias_arg(test_entity)          # type value: EntityAlias
+plugin_native_types::type_entity_alias_return(test_entity)       # type return value: EntityAlias
+
+for val in ["yes", "no"]:
+    plugin_native_types::annotated_arg_literal(val)        # type value: Annotated[Literal["yes", "no"], ModelType["response"]]
+    plugin_native_types::annotated_return_literal(val)   # type value: Annotated[Literal["yes", "no"], ModelType["response"]]
+end
+        """,
+            ministd=True,
+        )
+    compiler.do_compile()
+
+    main_dir = snippetcompiler.main
+    # Parameter to plugin has incompatible type
+    ns = "plugin_native_types"
+    for plugin_name, plugin_value, error_message in [
+        (
+            "union_single_type",
+            123,
+            f"Value 123 for argument value of plugin {ns}::union_single_type has incompatible type. Expected type: string",
+        ),
+        (
+            "union_multiple_types",
+            "[1, 2, 3]",
+            f"Value [1, 2, 3] for argument value of plugin {ns}::union_multiple_types has incompatible type."
+            " Expected type: Union[int,string]",
+        ),
+        (
+            "union_optional_1",
+            1.2,
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_1 has incompatible type."
+            f" Expected type: Union[int,string,std::Entity]?",
+        ),
+        (
+            "union_optional_2",
+            1.2,
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_2 has incompatible type."
+            f" Expected type: Union[int,string,std::Entity]?",
+        ),
+        (
+            "union_optional_3",
+            1.2,
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_3 has incompatible type."
+            f" Expected type: Union[int,string,std::Entity]?",
+        ),
+        (
+            "union_optional_4",
+            1.2,
+            f"Value 1.2 for argument value of plugin {ns}::union_optional_4 has incompatible type."
+            f" Expected type: Union[int,string,std::Entity]?",
+        ),
+        (
+            "annotated_arg_entity",
+            "plugin_native_types::AnotherEntity(another_value=1)",
+            (
+                f"Value {ns}::AnotherEntity (instantiated at {main_dir}:3) for argument value of plugin "
+                f"{ns}::annotated_arg_entity has incompatible type. Expected type: {ns}::TestEntity "
+                f"(reported in {ns}::annotated_arg_entity(value=Construct({ns}::AnotherEntity)) ({main_dir}:3))"
+            ),
+        ),
+        (
+            "annotated_arg_literal",
+            "'maybe'",
+            (
+                f"Value maybe for argument value of plugin {ns}::annotated_arg_literal has incompatible type. "
+                f"Expected type: {ns}::response (reported in plugin_native_types::annotated_arg_literal(value='maybe')"
+            ),
+        ),
+    ]:
+        snippetcompiler.setup_for_snippet(
+            f"""
+            import plugin_native_types
+            plugin_native_types::{plugin_name}(value={plugin_value})
+            """,
+            ministd=True,
+        )
+        with pytest.raises(RuntimeException) as exc_info:
+            compiler.do_compile()
+        assert error_message in str(exc_info.value)
+
+    # Return value of plugin has incompatible type
+    for plugin_name, plugin_value, error_message in [
+        (
+            "union_return_single_type",
+            123,
+            f"Return value 123 of plugin {ns}::union_return_single_type has incompatible type. Expected type: string",
+        ),
+        (
+            "union_return_multiple_types",
+            "[1, 2, 3]",
+            f"Return value [1, 2, 3] of plugin {ns}::union_return_multiple_types has incompatible type."
+            " Expected type: Union[string,int]",
+        ),
+        (
+            "union_return_optional_1",
+            1.2,
+            (
+                f"Return value 1.2 of plugin {ns}::union_return_optional_1 has incompatible type."
+                " Expected type: Union[int,string,std::Entity]?"
+            ),
+        ),
+        (
+            "union_return_optional_2",
+            1.2,
+            (
+                f"Return value 1.2 of plugin {ns}::union_return_optional_2 has incompatible type."
+                " Expected type: Union[int,string,std::Entity]?"
+            ),
+        ),
+        (
+            "union_return_optional_3",
+            1.2,
+            (
+                f"Return value 1.2 of plugin {ns}::union_return_optional_3 has incompatible type."
+                " Expected type: Union[int,string,std::Entity]?"
+            ),
+        ),
+        (
+            "union_return_optional_4",
+            1.2,
+            (
+                f"Return value 1.2 of plugin {ns}::union_return_optional_4 has incompatible type."
+                " Expected type: Union[int,string,std::Entity]?"
+            ),
+        ),
+        (
+            "annotated_return_entity",
+            "plugin_native_types::AnotherEntity(another_value=1)",
+            (
+                f"Return value {ns}::AnotherEntity (instantiated at {main_dir}:3) of plugin {ns}::annotated_return_entity "
+                f"has incompatible type. Expected type: {ns}::TestEntity"
+            ),
+        ),
+        (
+            "annotated_return_literal",
+            "'maybe'",
+            (
+                f"Return value maybe of plugin {ns}::annotated_return_literal has incompatible type. "
+                f"Expected type: {ns}::response"
+            ),
+        ),
+    ]:
+        snippetcompiler.setup_for_snippet(
+            f"""
+            import plugin_native_types
+            plugin_native_types::{plugin_name}(value={plugin_value})
+            """,
+            ministd=True,
+        )
+        with pytest.raises(WrappingRuntimeException) as exc_info:
+            compiler.do_compile()
+        assert error_message in str(exc_info.value)
+
+    snippetcompiler.setup_for_snippet(
+        """
+        import plugin_invalid_union_type
+        """,
+        ministd=True,
+    )
+    with pytest.raises(InvalidTypeAnnotation) as exc_info:
+        compiler.do_compile()
+    assert "Union type must be subscripted, got typing.Union" in str(exc_info.value)

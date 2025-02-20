@@ -1,19 +1,19 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import datetime
@@ -24,9 +24,15 @@ from inmanta import const, data
 
 
 async def test_consistent_resource_state_reporting(
-    server, agent, environment, resource_container, clienthelper, client
+    server,
+    agent_no_state_check,
+    environment,
+    resource_container,
+    clienthelper,
+    client,
 ) -> None:
     """Doesn't work for new scheduler, as every release is a deploy"""
+    agent = agent_no_state_check  # updating the resources via the server makes the scheduler out of date
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTO_DEPLOY, False)
     await env.set(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
@@ -79,8 +85,8 @@ async def test_consistent_resource_state_reporting(
         resource_ids=[f"{rid},v={version1}"],
         action_id=uuid.uuid4(),
         action=const.ResourceAction.deploy,
-        started=datetime.datetime.now(),
-        finished=datetime.datetime.now(),
+        started=datetime.datetime.now().astimezone(),
+        finished=datetime.datetime.now().astimezone(),
         messages=[],
         status=const.ResourceState.failed,
     )

@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import datetime
@@ -50,7 +50,7 @@ class HandlerResourceState(str, Enum):
     dry = "dry"
     # A resource indicates it wants to skip its deployment, because one of its dependencies wasn't deployed
     # and that it should only be redeployed once its dependencies are deployed successfully. Resources with this
-    # HandlerResourceState will get the TRANSIENT blocked status.
+    # HandlerResourceState will get the TEMPORARILY_BLOCKED blocked status.
     skipped_for_dependency = "skipped_for_dependency"
     unavailable = "unavailable"
 
@@ -263,7 +263,7 @@ ENVIRON_FORCE_TTY = "FORCE_TTY"
 
 LOG_LEVEL_TRACE = 3
 
-NAME_RESOURCE_ACTION_LOGGER = "resource_action_logger"
+NAME_RESOURCE_ACTION_LOGGER = "inmanta.resource_action"
 
 # Time we give the server/agent to shutdown gracefully, before we force stop the ioloop
 SHUTDOWN_GRACE_IOLOOP = 10
@@ -389,3 +389,13 @@ AGENT_SCHEDULER_ID = "$__scheduler"
 # resource attributes for event propagation
 RESOURCE_ATTRIBUTE_SEND_EVENTS = "send_event"
 RESOURCE_ATTRIBUTE_RECEIVE_EVENTS = "receive_events"
+
+
+# Per component log variables
+LOG_CONTEXT_VAR_ENVIRONMENT = "environment"
+
+ALL_LOG_CONTEXT_VARS = [LOG_CONTEXT_VAR_ENVIRONMENT]
+
+
+# Logger namespace
+LOGGER_NAME_EXECUTOR = "inmanta.executor"

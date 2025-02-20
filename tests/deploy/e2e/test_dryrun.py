@@ -1,19 +1,19 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 # Copied over from old tests
@@ -25,6 +25,7 @@ import uuid
 import pytest
 
 from inmanta import const, data, execute
+from inmanta.const import AgentAction
 from inmanta.util import get_compiler_version
 from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
 
@@ -342,8 +343,8 @@ async def test_dryrun_code_loading_failure(server, client, resource_container, e
     assert changes[0]["attributes"]["handler"] == {
         "from_value": "FAILED",
         "from_value_compare": "FAILED",
-        "to_value": "Resource is in an undeployable state",
-        "to_value_compare": "Resource is in an undeployable state",
+        "to_value": "Unable to construct an executor for this resource",
+        "to_value_compare": "Unable to construct an executor for this resource",
     }
 
 
@@ -447,6 +448,11 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
         compiler_version=get_compiler_version(),
     )
     assert result.code == 200
+    # Pause agent3
+    result = await client.agent_action(tid=environment, name="agent3", action=AgentAction.pause.name)
+    assert result.code == 200
+    a = await data.Agent.get_one(environment=environment, name="agent3")
+    assert a.paused
 
     mod_db = await data.ConfigurationModel.get_version(uuid.UUID(environment), version)
     assert mod_db is not None
@@ -525,7 +531,6 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
     assert changes[6]["status"] == "skipped_for_undefined"
     assert changes[7]["status"] == "skipped_for_undefined"
 
-    pytest.skip("Agent down will only work when we have pause ability!!!")
     assert changes[8]["status"] == "agent_down"
     # Changes for undeployable resources are empty
     for i in range(4, 9):

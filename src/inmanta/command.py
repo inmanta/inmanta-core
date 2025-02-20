@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import argparse
@@ -53,9 +53,12 @@ class Commander:
         require_project: bool = False,
         aliases: list[str] = [],
         add_verbose_flag: bool = True,
+        component: str | None = None,
     ) -> None:
         """
         Add a new export function
+
+        :param component: the component name for which to initialize logging
         """
         if name in cls.__command_functions:
             raise Exception("Command %s already registered" % name)
@@ -67,6 +70,7 @@ class Commander:
             "require_project": require_project,
             "aliases": aliases,
             "add_verbose_flag": add_verbose_flag,
+            "component": component,
         }
 
     config = None
@@ -101,6 +105,7 @@ class command:  # noqa: N801
         require_project: bool = False,
         aliases: list[str] = [],
         add_verbose_flag: bool = True,
+        component: str | None = None,
     ) -> None:
         self.name = name
         self.help = help_msg
@@ -108,12 +113,20 @@ class command:  # noqa: N801
         self.parser_config = parser_config
         self.aliases = aliases
         self.add_verbose_flag = add_verbose_flag
+        self.component = component
 
     def __call__(self, function: FunctionType) -> FunctionType:
         """
         The wrapping
         """
         Commander.add(
-            self.name, function, self.help, self.parser_config, self.require_project, self.aliases, self.add_verbose_flag
+            self.name,
+            function,
+            self.help,
+            self.parser_config,
+            self.require_project,
+            self.aliases,
+            self.add_verbose_flag,
+            self.component,
         )
         return function

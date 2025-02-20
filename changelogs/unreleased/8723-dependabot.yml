@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump types-setuptools from 75.8.0.20250110 to 75.8.0.20250210
+destination-branches:
+- master
+- iso8
+sections: {}

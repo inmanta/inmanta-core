@@ -1,0 +1,40 @@
+---
+description: Clean up API endpoints and configuration options that are no longer used.
+issue-nr: 8197
+issue-repo: inmanta-core
+change-type: major
+destination-branches: [master]
+sections:
+  deprecation-note: |
+    The following configuration options were removed:
+      - config.agent-map
+      - config.use_autostart_agent_map
+      - config.agent-names
+      - config.agent-get-resource-backoff
+      - unknown_handler.default
+      - server.auto-recompile-wait
+      - config.agent-interval
+      - config.agent-splay
+      - server_rest_transport.port
+
+    The following environment settings were removed:
+      - push_on_auto_deploy
+      - agent_trigger_method_on_auto_deploy
+      - environment_agent_trigger_method
+      - autostart_agent_map
+      - autostart_agent_deploy_splay
+      - autostart_agent_repair_splay
+
+    The following internal API endpoints were removed:
+      - get_resources_for_agent: `GET /api/v1/resource`
+      - get_code: `GET api/v1/code/<id>`
+      - resource_event: `PUT api/v1/event/<id>`
+      - update_agent_map: `POST api/v2/agentmap`
+      - resource_deploy_done: `POST api/v2/resource/<rvid>/deploy/done`
+      - resource_deploy_start: `POST api/v2/resource/<rvid>/deploy/start`
+
+    The following settings are being deprecated:
+      - [database.connection-pool-max-size](#database.connection-pool-max-size) replaced by [server.db-connection-pool-max-size](#server.db-connection-pool-max-size) and [scheduler.db-connection-pool-max-size](#scheduler.db-connection-pool-max-size).
+      - [database.connection-pool-min-size](#database.connection-pool-min-size) replaced by [server.db-connection-pool-min-size](#server.db-connection-pool-min-size) and [scheduler.db-connection-pool-min-size](#scheduler.db-connection-pool-min-size).
+      - [database.connection-timeout](#database.connection-timeout) replaced by [server.db-connection-timeout](#server.db-connection-timeout) and [scheduler.db-connection-timeout](#scheduler.db-connection-timeout).
+

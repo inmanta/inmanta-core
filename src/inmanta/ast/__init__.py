@@ -1,35 +1,32 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import traceback
 from abc import abstractmethod
 from functools import lru_cache
-from typing import Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from inmanta import warnings
 from inmanta.ast import export
+from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
+from inmanta.types import DataclassProtocol
 from inmanta.warnings import InmantaWarning
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute  # noqa: F401
@@ -39,7 +36,6 @@ if TYPE_CHECKING:
     from inmanta.ast.type import NamedType, Type  # noqa: F401
     from inmanta.compiler import Compiler
     from inmanta.execute.runtime import DelayedResultVariable, ExecutionContext, Instance, ResultVariable  # noqa: F401
-    from inmanta.plugins import PluginException
 
 
 class TypeDeprecationWarning(InmantaWarning):
@@ -715,7 +711,9 @@ class MissingImportException(TypeNotFoundException):
 
 
 class AmbiguousTypeException(TypeNotFoundException):
-    """Exception raised when a type is referenced that does not exist"""
+    """
+    Exception raised when a type is referenced in an unqualified manner in a context where it can not be unambiguously resolved.
+    """
 
     def __init__(self, type: LocatableString, candidates: list["Entity"]) -> None:
         candidates = sorted(candidates, key=lambda x: x.get_full_name())
@@ -824,6 +822,15 @@ class AttributeException(WrappingRuntimeException):
         self.instance = instance
 
 
+class PluginTypeException(WrappingRuntimeException):
+    """
+    Raised when an argument or return value of a plugin is not in-line with the type
+    annotation of that plugin. Wraps the validation error.
+    """
+
+    pass
+
+
 class OptionalValueException(RuntimeException):
     """Exception raised when an optional value is accessed that has no value (and is frozen)"""
 
@@ -852,11 +859,49 @@ class TypingException(RuntimeException):
         return 10
 
 
+class InvalidTypeAnnotation(TypingException):
+    """
+    Invalid type annotation, e.g. for a plugin.
+    """
+
+
 class DirectExecuteException(TypingException):
     """Exception raised when direct execute is called on a wrong object"""
 
     def importantance(self) -> int:
         return 11
+
+
+class DataClassException(TypingException):
+    """Exception in relation to dataclasses"""
+
+    def __init__(self, entity: "Entity", msg: str) -> None:
+        super().__init__(entity, msg)
+        self.entity = entity
+
+    def importantance(self) -> int:
+        return 9
+
+
+class DataClassMismatchException(DataClassException):
+    """
+    Exception due to a mismatch between both version of a dataclass
+
+    """
+
+    def __init__(
+        self,
+        entity: "Entity",
+        dataclass: DataclassProtocol | None,
+        dataclass_python_name: str,
+        msg: str,
+    ) -> None:
+        """
+        :param dataclass python dataclass, None if absent
+        """
+        super().__init__(entity, msg)
+        self.dataclass = dataclass
+        self.dataclass_python_name = dataclass_python_name
 
 
 class KeyException(RuntimeException):
@@ -996,3 +1041,61 @@ class MultiException(CompilerException):
             out += "\n" + part
 
         return out
+
+
+class UnsetException(RuntimeException):
+    """
+    This exception is thrown when an attribute is accessed that was not yet
+    available (i.e. it has not been frozen yet).
+    """
+
+    def __init__(self, msg: str, instance: Optional["Instance"] = None, attribute: Optional["Attribute"] = None) -> None:
+        RuntimeException.__init__(self, None, msg)
+        self.instance: Optional["Instance"] = instance
+        self.attribute: Optional["Attribute"] = attribute
+        self.msg = msg
+
+    def get_result_variable(self) -> Optional["Instance"]:
+        return self.instance
+
+
+class MultiUnsetException(RuntimeException):
+    """
+    This exception is thrown when multiple attributes are accessed that were not yet
+    available (i.e. it has not been frozen yet).
+    """
+
+    def __init__(self, msg: str, result_variables: "list[ResultVariable[object]]") -> None:
+        RuntimeException.__init__(self, None, msg)
+        self.result_variables = result_variables
+
+
+class UnknownException(Exception):
+    """
+    This exception is thrown when code tries to access a value that is
+    unknown and cannot be determined during this evaluation. The code
+    receiving this exception is responsible for invalidating any results
+    depending on this value by return an instance of Unknown as well.
+    """
+
+    def __init__(self, unknown: Unknown):
+        super().__init__()
+        self.unknown = unknown
+
+
+class AttributeNotFound(NotFoundException, AttributeError):
+    """
+    Exception used for backwards compatibility with try-except blocks around some_proxy.some_attr.
+    This previously raised `NotFoundException` which is currently deprecated in this context.
+    Its new behavior is to raise an AttributeError for compatibility with Python's builtin `hasattr`.
+    """
+
+
+@stable_api
+class PluginException(Exception):
+    """
+    Base class for custom exceptions raised from a plugin.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.message = message

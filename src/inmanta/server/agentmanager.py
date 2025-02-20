@@ -1,19 +1,19 @@
 """
-    Copyright 2018 Inmanta
+Copyright 2018 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -34,14 +34,15 @@ from uuid import UUID
 import asyncpg.connection
 
 import inmanta.config
+import inmanta.exceptions
 import inmanta.server.services.environmentlistener
 from inmanta import config as global_config
 from inmanta import const, data, tracing
 from inmanta.agent import config as agent_cfg
-from inmanta.config import Config, config_map_to_str
+from inmanta.config import Config, config_map_to_str, scheduler_log_config
 from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
 from inmanta.data import APILIMIT, Environment, InvalidSort, model
-from inmanta.data.model import DataBaseReport, ResourceIdStr
+from inmanta.data.model import DataBaseReport
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
@@ -59,7 +60,7 @@ from inmanta.server import protocol
 from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, SessionManager
 from inmanta.server.server import Server
 from inmanta.server.services import environmentservice
-from inmanta.types import Apireturn, ArgumentTypes, ReturnTupple
+from inmanta.types import Apireturn, ArgumentTypes, ResourceIdStr, ReturnTupple
 
 from ..data.dataview import AgentView
 from . import config as server_config
@@ -844,7 +845,7 @@ class AgentManager(ServerSlice, SessionListener):
     @handle(methods.list_agents, env="tid")
     async def list_agents(
         self,
-        env: Optional[data.Environment],
+        env: data.Environment,
         start: Optional[str] = None,
         end: Optional[str] = None,
         limit: Optional[int] = None,
@@ -858,30 +859,20 @@ class AgentManager(ServerSlice, SessionListener):
         :raises BadRequest: Limit, start and end can not be set together
         :raises BadRequest: Limit parameter can not exceed 1000
         """
-        query = {}
-        if env is not None:
-            query["environment"] = env.id
+        if env is None:
+            return 404, {"message": "The given environment id does not exist!"}
+        new_agent_endpoint = await self.get_agents(env, limit, start, end, start, end)
 
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"Limit parameter can not exceed {APILIMIT}, got {limit}.")
-
-        ags = await data.Agent.get_list_paged(
-            page_by_column="name",
-            order_by_column="name",
-            order="ASC NULLS LAST",
-            limit=limit,
-            start=start,
-            end=end,
-            no_obj=False,
-            lock=None,
-            connection=None,
-            **query,
-        )
+        def mangle_format(agent: model.Agent) -> dict[str, object]:
+            native = agent.model_dump()
+            native["primary"] = ""
+            native["state"] = agent.status
+            if native["last_failover"] is None:
+                native["last_failover"] = ""
+            return native
 
         return 200, {
-            "agents": [a.to_dict() for a in ags],
+            "agents": [mangle_format(a) for a in new_agent_endpoint._response],
             "servertime": datetime.now().astimezone(),
         }
 
@@ -1173,7 +1164,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                 # silently ignore requests if this environment is halted
                 refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env, connection=connection)
                 if refreshed_env is None:
-                    raise Exception("Can't ensure scheduler: environment %s does not exist" % env)
+                    raise inmanta.exceptions.EnvironmentNotFound(f"Can't ensure scheduler: environment {env} does not exist")
                 if refreshed_env.halted:
                     return False
 
@@ -1232,19 +1223,13 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         out: str = os.path.join(self._server_storage["logs"], "agent-%s.out" % env.id)
         err: str = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
 
-        agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
-
         proc: subprocess.Process = await self._fork_inmanta(
             [
                 "--log-file-level",
                 "DEBUG",
-                "--timed-logs",
                 "--config",
                 config_path,
-                "--config-dir",
-                Config._config_dir if Config._config_dir is not None else "",
-                "--log-file",
-                agent_log,
+                *(["--config-dir", Config._config_dir] if Config._config_dir is not None else []),
                 "scheduler",
             ],
             out,
@@ -1271,10 +1256,8 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
 
         privatestatedir: str = self._get_state_dir_for_agent_in_env(env.id)
 
-        agent_deploy_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, connection=connection))
         agent_deploy_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection))
 
-        agent_repair_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME, connection=connection))
         agent_repair_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection))
 
         # generate config file
@@ -1284,9 +1267,7 @@ log-dir={global_config.log_dir.get()}
 
 environment=%(env_id)s
 
-agent-deploy-splay-time=%(agent_deploy_splay)d
 agent-deploy-interval=%(agent_deploy_interval)s
-agent-repair-splay-time=%(agent_repair_splay)d
 agent-repair-interval=%(agent_repair_interval)s
 
 [agent]
@@ -1300,9 +1281,7 @@ host=%(serveradress)s
             "env_id": environment_id,
             "port": port,
             "statedir": privatestatedir,
-            "agent_deploy_splay": agent_deploy_splay,
             "agent_deploy_interval": agent_deploy_interval,
-            "agent_repair_splay": agent_repair_splay,
             "agent_repair_interval": agent_repair_interval,
             "serveradress": server_config.server_address.get(),
         }
@@ -1354,6 +1333,14 @@ password = {opt.influxdb_password.get()}
 interval = {opt.influxdb_interval.get()}
 tags = {config_map_to_str(opt.influxdb_tags.get())}
 """
+
+        if scheduler_log_config.get():
+            config += f"""
+
+[logging]
+scheduler = {os.path.abspath(scheduler_log_config.get())}
+"""
+
         return config
 
     async def _fork_inmanta(
@@ -1474,6 +1461,11 @@ tags = {config_map_to_str(opt.influxdb_tags.get())}
         await self._agent_manager.ensure_agent_registered(env_db, const.AGENT_SCHEDULER_ID)
         if not (assert_no_start_scheduler or no_start_scheduler):
             await self._ensure_scheduler(env.id)
+
+    async def notify_agent_deploy_timer_update(self, env: data.Environment) -> None:
+        agent_client = self._agent_manager.get_agent_client(tid=env.id, endpoint=AGENT_SCHEDULER_ID, live_agent_only=False)
+        if agent_client:
+            self.add_background_task(agent_client.notify_timer_update(env.id))
 
 
 # For testing only

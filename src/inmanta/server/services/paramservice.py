@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import datetime
@@ -26,7 +26,7 @@ from inmanta import data
 from inmanta.const import ParameterSource
 from inmanta.data import InvalidSort
 from inmanta.data.dataview import FactsView, ParameterView
-from inmanta.data.model import Fact, Parameter, ResourceIdStr
+from inmanta.data.model import Fact, Parameter
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -36,7 +36,7 @@ from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.server import Server
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, JsonType
+from inmanta.types import Apireturn, JsonType, ResourceIdStr
 
 LOGGER = logging.getLogger(__name__)
 
@@ -75,44 +75,28 @@ class ParameterService(protocol.ServerSlice):
         LOGGER.info("Renewing facts")
 
         updated_before = datetime.datetime.now().astimezone() - datetime.timedelta(0, self._fact_renew)
-        params_to_renew = await data.Parameter.get_updated_before_active_env(updated_before)
+        async with data.Parameter.get_connection() as connection:
+            params_to_renew = await data.Parameter.get_updated_before_active_env(updated_before, connection=connection)
+            unknown_parameters = await data.UnknownParameter.get_unknowns_in_latest_released_model_versions(
+                connection=connection
+            )
 
         LOGGER.debug("Renewing %d parameters", len(params_to_renew))
-
-        environments = await data.Environment.get_list(halted=False)
-        ids_non_halted_envs = [env.id for env in environments]
-
         for param in params_to_renew:
-            if param.environment in ids_non_halted_envs:
-                LOGGER.debug(
-                    "Requesting new parameter value for %s of resource %s in env %s",
-                    param.name,
-                    param.resource_id,
-                    param.environment,
-                )
-                await self.agentmanager.request_parameter(param.environment, param.resource_id)
-            else:
-                LOGGER.debug(
-                    "Not Requesting value for unknown parameter %s of resource %s in env %s as the env is halted",
-                    param.name,
-                    param.resource_id,
-                    param.environment,
-                )
+            LOGGER.debug(
+                "Requesting new parameter value for %s of resource %s in env %s",
+                param.name,
+                param.resource_id,
+                param.environment,
+            )
+            await self.agentmanager.request_parameter(param.environment, param.resource_id)
 
-        unknown_parameters = await data.UnknownParameter.get_list(resolved=False)
+        LOGGER.debug("Requesting value for %d unknowns", len(unknown_parameters))
         for u in unknown_parameters:
-            if u.environment in ids_non_halted_envs:
-                LOGGER.debug(
-                    "Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.environment
-                )
-                await self.agentmanager.request_parameter(u.environment, u.resource_id)
-            else:
-                LOGGER.debug(
-                    "Not Requesting value for unknown parameter %s of resource %s in env %s as the env is halted",
-                    u.name,
-                    u.resource_id,
-                    u.environment,
-                )
+            LOGGER.debug(
+                "Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.environment
+            )
+            await self.agentmanager.request_parameter(u.environment, u.resource_id)
         LOGGER.info("Done renewing parameters")
 
     @handle(methods.get_param, param_id="id", env="tid")

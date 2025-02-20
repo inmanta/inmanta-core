@@ -1,19 +1,19 @@
 """
-    Copyright 2018 Inmanta
+Copyright 2018 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -36,7 +36,8 @@ from inmanta import const, data, util
 from inmanta.const import AgentStatus, LogLevel
 from inmanta.data import ArgumentCollector, QueryType
 from inmanta.deploy import state
-from inmanta.resources import Id, ResourceVersionIdStr
+from inmanta.resources import Id
+from inmanta.types import ResourceVersionIdStr
 
 
 async def test_connect_too_small_connection_pool(postgres_db, database_name: str, create_db_schema: bool = False):
@@ -114,7 +115,7 @@ async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> N
     all_db_document_classes: abc.Set[type[data.BaseDocument]] = utils.get_all_subclasses(data.BaseDocument) - {
         data.BaseDocument
     }
-    exclude_enums = [state.DeploymentResult, state.BlockedStatus]  # These enums are modelled in the db using a varchar
+    exclude_enums = [state.DeployResult, state.Blocked]  # These enums are modelled in the db using a varchar
     for cls in all_db_document_classes:
         enums: abc.Mapping[str, data.Field] = {
             name: field
@@ -1985,6 +1986,26 @@ async def test_get_updated_before_active_env(init_dataclasses_and_load_schema, h
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
+    version = 1
+    cm1 = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        released=True,
+        is_suitable_for_partial_compiles=False,
+    )
+    await cm1.insert()
+
+    res = data.Resource.new(
+        environment=env.id,
+        resource_version_id=f"test::SetExpiringFact[agent1,key=key1],v={version}",
+        status=const.ResourceState.deployed,
+        attributes={"key": "key1", "purge_on_delete": True, "purged": False},
+    )
+    await res.insert()
+
     if halted:
         await env.update_fields(halted=True)
 
@@ -2988,7 +3009,6 @@ async def test_retrieve_optional_field_no_default(init_dataclasses_and_load_sche
     assert report.returncode is None
 
 
-@pytest.mark.skip("std loading is currently a bit broken")
 async def test_get_current_resource_state(server, environment, client, clienthelper, agent):
     """
     Verify the behavior of the Resource.get_current_resource_state() method.
@@ -3020,11 +3040,13 @@ async def test_get_current_resource_state(server, environment, client, clienthel
     result = await client.release_version(tid=environment, id=version1)
     assert result.code == 200
 
+    await utils.wait_until_deployment_finishes(client, environment, version=version1)
+
     state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
         env=environment,
         rid="std::testing::NullResource[agent1,name=test1]",
     )
-    assert state is const.ResourceState.available
+    assert state is const.ResourceState.unavailable  # executor fails to load handler code because we never pushed any code
 
     # Create version 2 with undefined resource. Don't release the version yet.
     version2 = await clienthelper.get_version()
@@ -3048,10 +3070,12 @@ async def test_get_current_resource_state(server, environment, client, clienthel
         env=environment,
         rid="std::testing::NullResource[agent1,name=test1]",
     )
-    assert state is const.ResourceState.available
+    assert state is const.ResourceState.unavailable
 
     result = await client.release_version(tid=environment, id=version2)
     assert result.code == 200
+
+    await utils.wait_until_deployment_finishes(client, environment, version=version2)
 
     state: Optional[const.ResourceState] = await data.Resource.get_current_resource_state(
         env=environment,

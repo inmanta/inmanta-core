@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import datetime
@@ -32,9 +32,8 @@ import texttable
 from inmanta import protocol, util
 from inmanta.config import Config, cmdline_rest_transport
 from inmanta.const import AgentAction, DesiredStateVersionStatus, ResourceAction
-from inmanta.data.model import ResourceVersionIdStr
 from inmanta.resources import Id
-from inmanta.types import JsonType
+from inmanta.types import JsonType, ResourceVersionIdStr
 
 
 class Client:
@@ -750,7 +749,7 @@ def version_report(client: Client, environment: str, version: str, show_detailed
     if not result:
         return
 
-    agents: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    agents: dict[str, dict[str, list[dict[str, object]]]] = defaultdict(lambda: defaultdict(list))
     for res in result["resources"]:
         if len(res["actions"]) > 0 or show_detailed_report:
             agents[res["agent"]][res["resource_type"]].append(res)
@@ -760,7 +759,8 @@ def version_report(client: Client, environment: str, version: str, show_detailed
         click.echo("=" * 72)
 
         for t in sorted(agents[agent].keys()):
-            parsed_resource_version_id = Id.parse_id(ResourceVersionIdStr(agents[agent][t][0]["resource_version_id"]))
+            resource_version_id = cast(ResourceVersionIdStr, agents[agent][t][0]["resource_version_id"])
+            parsed_resource_version_id = Id.parse_id(resource_version_id)
             click.echo(click.style("Resource type:", bold=True) + f"{t} ({parsed_resource_version_id.attribute})")
             click.echo("-" * 72)
 

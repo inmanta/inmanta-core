@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import datetime
@@ -24,9 +24,8 @@ import uuid
 from collections import abc
 from collections.abc import Sequence
 from enum import Enum, StrEnum
-from typing import ClassVar, Mapping, NewType, Optional, Self, Union
+from typing import ClassVar, Mapping, Optional, Self, Union
 
-import pydantic
 import pydantic.schema
 from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
 
@@ -35,7 +34,11 @@ import inmanta.ast.export as ast_export
 import pydantic_core.core_schema
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
-from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
+from inmanta.types import ArgumentTypes, JsonType
+from inmanta.types import ResourceIdStr as ResourceIdStr  # Keep in place for backwards compat with <=ISO8
+from inmanta.types import ResourceType as ResourceType  # Keep in place for backwards compat with <=ISO8
+from inmanta.types import ResourceVersionIdStr as ResourceVersionIdStr  # Keep in place for backwards compat with <=ISO8
+from inmanta.types import SimpleTypes
 
 
 def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
@@ -200,22 +203,6 @@ class CompileRunReport(BaseModel):
 class CompileDetails(CompileReport):
     compile_data: Optional[CompileData] = None
     reports: Optional[list[CompileRunReport]] = None
-
-
-ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API
-"""
-    The resource id with the version included.
-"""
-
-ResourceIdStr = NewType("ResourceIdStr", str)  # Part of the stable API
-"""
-    The resource id without the version
-"""
-
-ResourceType = NewType("ResourceType", str)
-"""
-    The type of the resource
-"""
 
 
 class AttributeStateChange(BaseModel):
@@ -671,11 +658,16 @@ class DesiredStateLabel(BaseModel):
 
 
 class DesiredStateVersion(BaseModel):
+    """
+    :param released: has this desired state version been released?
+    """
+
     version: int
     date: datetime.datetime
     total: int
     labels: list[DesiredStateLabel]
     status: const.DesiredStateVersionStatus
+    released: bool
 
 
 class PromoteTriggerMethod(StrEnum):
@@ -935,7 +927,7 @@ class SchedulerStatusReport(BaseModel):
 
     # Can't type properly because of current module structure
     scheduler_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceState
-    db_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceDetails
+    db_state: Mapping[ResourceIdStr, object]  # "True" type is deploy.state.ResourceIntent
     resource_states: Mapping[ResourceIdStr, const.ResourceState]
     discrepancies: list[Discrepancy] | dict[ResourceIdStr, list[Discrepancy]]
 

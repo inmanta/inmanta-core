@@ -1,19 +1,19 @@
 """
-    Copyright 2016 Inmanta
+Copyright 2016 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import logging
@@ -28,15 +28,15 @@ from uuid import UUID, uuid4
 import pytest
 
 from inmanta import const, data, util
-from inmanta.agent.executor import DeployResult
+from inmanta.agent.executor import DeployReport
 from inmanta.const import Change, ResourceAction, ResourceState
-from inmanta.data import ResourceVersionIdStr, model
 from inmanta.data.model import ResourceId
 from inmanta.deploy import persistence, state
 from inmanta.resources import Id
 from inmanta.server import SLICE_ORCHESTRATION, SLICE_RESOURCE
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
+from inmanta.types import ResourceVersionIdStr
 from inmanta.util import get_compiler_version
 from utils import assert_no_warning
 
@@ -421,13 +421,14 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
     result = await client.release_version(environment, version, False)
     assert result.code == 200
 
-    async def deploy(rvid: model.ResourceVersionIdStr, change: Change = Change.nochange):
+    async def deploy(rvid: ResourceVersionIdStr, change: Change = Change.nochange):
         update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
         action_id = uuid.uuid4()
+        start_time: datetime = datetime.now().astimezone()
         await update_manager.send_in_progress(action_id, Id.parse_id(rvid))
         await update_manager.send_deploy_done(
             attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resources[0]),
-            result=DeployResult(
+            result=DeployReport(
                 rvid=rvid,
                 action_id=action_id,
                 resource_state=const.HandlerResourceState.deployed,
@@ -436,10 +437,13 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
                 change=change,
             ),
             state=state.ResourceState(
-                status=state.ComplianceStatus.COMPLIANT,
-                deployment_result=state.DeploymentResult.DEPLOYED,
-                blocked=state.BlockedStatus.NO,
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
+                last_deployed=datetime.now().astimezone(),
             ),
+            started=start_time,
+            finished=datetime.now().astimezone(),
         )
 
     async def assert_resources_to_deploy(

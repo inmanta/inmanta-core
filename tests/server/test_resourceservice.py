@@ -1,19 +1,19 @@
 """
-    Copyright 2021 Inmanta
+Copyright 2021 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import datetime
@@ -24,8 +24,8 @@ import pytest
 
 from inmanta import const, data, resources, util
 from inmanta.agent import executor
-from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.deploy import persistence, state
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
 
 @pytest.fixture
@@ -48,11 +48,11 @@ async def resource_deployer(client, environment, null_agent):
             attribute_hash: str,
             change: const.Change = const.Change.created,
             status: const.HandlerResourceState = const.HandlerResourceState.deployed,
-            deployment_result: state.DeploymentResult = state.DeploymentResult.DEPLOYED,
+            deployment_result: state.DeployResult = state.DeployResult.DEPLOYED,
         ) -> None:
             await update_manager.send_deploy_done(
                 attribute_hash=attribute_hash,
-                result=executor.DeployResult(
+                result=executor.DeployReport(
                     rvid=rvid,
                     action_id=action_id,
                     resource_state=status,
@@ -61,8 +61,15 @@ async def resource_deployer(client, environment, null_agent):
                     change=change,
                 ),
                 state=state.ResourceState(
-                    status=state.ComplianceStatus.COMPLIANT, deployment_result=deployment_result, blocked=state.BlockedStatus.NO
+                    compliance=state.Compliance.COMPLIANT,
+                    last_deploy_result=deployment_result,
+                    blocked=state.Blocked.NOT_BLOCKED,
+                    last_deployed=datetime.datetime.now().astimezone(),
                 ),
+                # not completely accurate but the exact time only really matters for some specifics of event propagation
+                # so we keep the interface simple
+                started=datetime.datetime.now().astimezone(),
+                finished=datetime.datetime.now().astimezone(),
             )
 
         @classmethod
@@ -72,7 +79,7 @@ async def resource_deployer(client, environment, null_agent):
             attribute_hash: str,
             change: const.Change = const.Change.created,
             status: const.HandlerResourceState = const.HandlerResourceState.deployed,
-            deployment_result: state.DeploymentResult = state.DeploymentResult.DEPLOYED,
+            deployment_result: state.DeployResult = state.DeployResult.DEPLOYED,
         ) -> None:
             action_id = await cls.start_deployment(rvid)
             await cls.deployment_finished(rvid, action_id, attribute_hash, change, status, deployment_result)
@@ -509,7 +516,7 @@ async def test_last_non_deploying_status_field_on_resource(
         action_id: uuid.UUID,
         status: const.ResourceState,
         attribute_hash: str,
-        deployment_result: state.DeploymentResult,
+        deployment_result: state.DeployResult,
     ) -> None:
         if endpoint_to_use == "deployment_endpoint":
             await resource_deployer.deployment_finished(
@@ -555,7 +562,7 @@ async def test_last_non_deploying_status_field_on_resource(
         action_id=action_id_r1,
         status=const.ResourceState.deployed,
         attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=resources[0]),
-        deployment_result=state.DeploymentResult.DEPLOYED,
+        deployment_result=state.DeployResult.DEPLOYED,
     )
     action_id_r2 = await start_deployment(rvid=rvid_r2_v1)
     await assert_status_fields(
@@ -572,7 +579,7 @@ async def test_last_non_deploying_status_field_on_resource(
         action_id=action_id_r2,
         status=const.ResourceState.skipped,
         attribute_hash=util.make_attribute_hash(resource_id=rid_r2, attributes=resources[1]),
-        deployment_result=state.DeploymentResult.SKIPPED,
+        deployment_result=state.DeployResult.SKIPPED,
     )
     await assert_status_fields(
         r1_status=const.ResourceState.deploying,
@@ -587,7 +594,7 @@ async def test_last_non_deploying_status_field_on_resource(
         action_id=action_id_r1,
         status=const.ResourceState.failed,
         attribute_hash=util.make_attribute_hash(resource_id=rid_r1, attributes=resources[0]),
-        deployment_result=state.DeploymentResult.FAILED,
+        deployment_result=state.DeployResult.FAILED,
     )
     await start_deployment(rvid=rvid_r2_v1)
     await assert_status_fields(

@@ -1,19 +1,19 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import concurrent
@@ -24,8 +24,15 @@ from copy import deepcopy
 
 from inmanta import const
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployResult, DryrunResult, FactResult, FailedResources, ResourceDetails, ResourceInstallSpec
-from inmanta.data.model import ResourceIdStr
+from inmanta.agent.executor import (
+    DeployReport,
+    DryrunReport,
+    FailedResources,
+    GetFactReport,
+    ResourceDetails,
+    ResourceInstallSpec,
+)
+from inmanta.types import ResourceIdStr
 
 
 class WriteBarierExecutor(executor.Executor):
@@ -41,7 +48,7 @@ class WriteBarierExecutor(executor.Executor):
         resource_details: ResourceDetails,
         reason: str,
         requires: Mapping[ResourceIdStr, const.ResourceState],
-    ) -> DeployResult:
+    ) -> DeployReport:
         return await self.delegate.execute(
             action_id,
             gid,
@@ -54,10 +61,10 @@ class WriteBarierExecutor(executor.Executor):
         self,
         resource: ResourceDetails,
         dry_run_id: uuid.UUID,
-    ) -> DryrunResult:
+    ) -> DryrunReport:
         return await self.delegate.dry_run(deepcopy(resource), dry_run_id)
 
-    async def get_facts(self, resource: ResourceDetails) -> FactResult:
+    async def get_facts(self, resource: ResourceDetails) -> GetFactReport:
         return await self.delegate.get_facts(deepcopy(resource))
 
     async def join(self) -> None:
@@ -81,6 +88,8 @@ class WriteBarierExecutorManager(executor.ExecutorManager[WriteBarierExecutor]):
     async def get_executor(
         self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
     ) -> WriteBarierExecutor:
+        if not code:
+            raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
         return WriteBarierExecutor(await self.delegate.get_executor(agent_name, agent_uri, code))
 
     async def stop_for_agent(self, agent_name: str) -> list[WriteBarierExecutor]:

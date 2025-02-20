@@ -1,20 +1,22 @@
 """
-    Copyright 2022 Inmanta
+Copyright 2022 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
+
+import inmanta.types
 
 """
 Tests to verify correctness/compatibility of code snippets in the docs.
@@ -29,7 +31,6 @@ import py
 import pytest
 
 from inmanta import data
-from inmanta.data import model
 from utils import v1_module_from_template, wait_until_deployment_finishes
 
 DOCS_DIR: str = os.path.join(os.path.dirname(__file__), "..", "docs")
@@ -98,7 +99,7 @@ async def test_docs_snippet_partial_compile(
         resources: abc.Sequence[data.Resource] = await data.Resource.get_resources_for_version(env_id, version)
         hosts_by_network: dict[int, set[int]] = defaultdict(set)
         for resource in resources:
-            if resource.resource_type == model.ResourceType("__config__::Host"):
+            if resource.resource_type == inmanta.types.ResourceType("__config__::Host"):
                 hosts_by_network[resource.attributes["network_id"]].add(resource.attributes["host_id"])
         return hosts_by_network
 
@@ -172,7 +173,7 @@ async def test_docs_snippets_unmanaged_resources_basic(
     version, _ = await snippetcompiler.do_export_and_deploy()
 
     await clienthelper.wait_for_released(version)
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment, version=version)
 
     result = await client.discovered_resources_get_batch(tid=environment)
     assert result.code == 200
@@ -233,7 +234,7 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
 
     await clienthelper.wait_for_released(version)
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment, version=version)
 
     result = await client.discovered_resources_get_batch(tid=environment)
     assert result.code == 200

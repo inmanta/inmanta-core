@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -29,6 +29,7 @@ import asyncpg
 
 from inmanta import logging as inmanta_logging
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
+from inmanta.logging import FullLoggingConfig, InmantaLoggerConfig
 from inmanta.server import config
 from inmanta.server.extensions import ApplicationContext, FeatureManager, InvalidSliceNameException
 from inmanta.server.protocol import Server, ServerSlice
@@ -65,13 +66,8 @@ class ConstrainedApplicationContext(ApplicationContext):
     def set_feature_manager(self, feature_manager: FeatureManager) -> None:
         self.parent.set_feature_manager(feature_manager)
 
-    def register_default_logging_config(self, logging_config: inmanta_logging.LoggingConfigExtension) -> None:
-        """
-        Used by an Inmanta extension to register the default configuration of specific loggers, formatters
-        and handlers it uses. The names of the formatters and handlers must be prefixed with `<name-extension>_`.
-        """
-        logging_config.validate_for_extension(self.namespace)
-        self.parent.register_default_logging_config(logging_config)
+    def register_default_logging_config(self, log_config_extender: inmanta_logging.LoggingConfigBuilderExtension) -> None:
+        self.parent.register_default_logging_config(log_config_extender)
 
 
 @stable_api
@@ -94,12 +90,15 @@ class InmantaBootloader:
         self.restserver = Server()
         self.started = False
         self.feature_manager: Optional[FeatureManager] = None
+        # cache for ctx
+        self.ctx: ApplicationContext | None = None
 
         if configure_logging:
             inmanta_logger_config = inmanta_logging.InmantaLoggerConfig.get_instance()
             inmanta_logger_config.apply_options(inmanta_logging.Options())
 
     async def start(self) -> None:
+        self.start_loggers_for_extensions()
         db_wait_time: int = config.db_wait_time.get()
         if db_wait_time != 0:
             # Wait for the database to be up before starting the server
@@ -113,6 +112,13 @@ class InmantaBootloader:
             ctx.get_feature_manager().add_slice(mypart)
         await self.restserver.start()
         self.started = True
+
+    def start_loggers_for_extensions(self, on_config: InmantaLoggerConfig | None = None) -> FullLoggingConfig:
+        ctx = self.load_slices()
+        log_config_extenders = ctx.get_default_log_config_extenders()
+        if on_config is None:
+            on_config = InmantaLoggerConfig.get_current_instance()
+        return on_config.extend_config(log_config_extenders)
 
     async def stop(self, timeout: Optional[int] = None) -> None:
         """
@@ -256,9 +262,13 @@ class InmantaBootloader:
         """
         Load all slices in the server
         """
+        if self.ctx is not None and not load_all_extensions:
+            return self.ctx
         exts: dict[str, ModuleType] = self._load_extensions(load_all_extensions)
         ctx: ApplicationContext = self._collect_slices(exts, only_register_environment_settings)
         self.feature_manager = ctx.get_feature_manager()
+        if not only_register_environment_settings and not load_all_extensions:
+            self.ctx = ctx
         return ctx
 
     async def wait_for_db(self, db_wait_time: int) -> None:

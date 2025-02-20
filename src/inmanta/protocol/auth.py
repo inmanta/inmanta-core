@@ -1,19 +1,19 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import abc
@@ -410,7 +410,7 @@ class AuthJWTConfig:
         if "jwt-username-claim" in self._config:
             if self.sign:
                 raise ValueError(f"auth config {self.section} used for signing cannot use a custom claim.")
-            self.jwt_username_claim = self._config.get("jwt-username-claim")
+            self.jwt_username_claim = self._config["jwt-username-claim"]
 
     def parse_claim_matching(self, claim_conf: str) -> None:
         """Parse claim matching expressions"""
@@ -459,7 +459,10 @@ class AuthJWTConfig:
         self.jwks_uri = self._config["jwks_uri"]
 
         if "validate_cert" in self._config:
-            self.validate_cert = self._config.getboolean("validate_cert")
+            validate_cert = self._config.getboolean("validate_cert")
+            # Make mypy happy
+            assert validate_cert is not None
+            self.validate_cert = validate_cert
         else:
             self.validate_cert = True
 

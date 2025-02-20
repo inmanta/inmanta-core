@@ -1,19 +1,19 @@
 """
-    Copyright 2021 Inmanta
+Copyright 2021 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -50,16 +50,15 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data import ResourceIdStr
-from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, ResourceType
+from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
-from inmanta.deploy.state import ResourceDetails
+from inmanta.deploy.state import ResourceIntent
 from inmanta.moduletool import ModuleTool
-from inmanta.protocol import Client, SessionEndpoint, methods
+from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
-from inmanta.types import Apireturn
+from inmanta.types import Apireturn, ResourceIdStr, ResourceType
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
 
@@ -153,7 +152,7 @@ def log_contains(caplog, loggerpart, level, msg, test_phase="call"):
             print(logger_name, log_level, message)
         print("------------")
 
-    assert False
+    assert False, f'Message "{msg}" not present in logs'
 
 
 def log_doesnt_contain(caplog, loggerpart, level, msg):
@@ -276,23 +275,6 @@ def assert_no_warning(caplog, loggers_to_allow: list[str] = NOISY_LOGGERS):
         assert record.levelname != "WARNING" or (record.name in loggers_to_allow), str(record) + record.getMessage()
 
 
-def configure(unused_tcp_port, database_name, database_port):
-    import inmanta.agent.config  # noqa: F401
-    import inmanta.server.config  # noqa: F401
-    from inmanta.config import Config
-
-    free_port = str(unused_tcp_port)
-    Config.load_config()
-    Config.set("server", "bind-port", free_port)
-    Config.set("agent_rest_transport", "port", free_port)
-    Config.set("compiler_rest_transport", "port", free_port)
-    Config.set("client_rest_transport", "port", free_port)
-    Config.set("cmdline_rest_transport", "port", free_port)
-    Config.set("database", "name", database_name)
-    Config.set("database", "host", "localhost")
-    Config.set("database", "port", str(database_port))
-
-
 def configure_auth(auth: bool, ca: bool, ssl: bool) -> None:
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
     if auth:
@@ -411,23 +393,23 @@ async def get_done_count(
 
 
 async def wait_until_deployment_finishes(
-    client: Client, environment: str, version: int = -1, timeout: int = 10, wait_for_n: int | None = None
+    client: Client, environment: str, *, version: int = -1, timeout: int = 10, wait_for_n: int | None = None
 ) -> None:
     async def done() -> bool:
 
         if version >= 0:
             scheduler = await data.Scheduler.get_one(environment=environment)
-            if scheduler.last_processed_model_version is None or scheduler.last_processed_model_version < version:
+            if (
+                scheduler is None
+                or scheduler.last_processed_model_version is None
+                or scheduler.last_processed_model_version < version
+            ):
                 return False
 
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
 
         summary = result.result["metadata"]["deploy_summary"]
-
-        import pprint
-
-        pprint.pprint(result.result["data"])
 
         # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
         #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
@@ -505,13 +487,13 @@ class ClientHelper:
         if wait_for_released:
             await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
 
-    async def wait_for_released(self, version: int | None):
+    async def wait_for_released(self, version: int | None = None):
         """
         Version None means latest
         """
         await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
 
-    async def is_released(self, version: int | None) -> bool:
+    async def is_released(self, version: int | None = None) -> bool:
         """Version None means latest"""
         versions = await self.client.list_versions(tid=self.environment)
         assert versions.code == 200
@@ -521,7 +503,7 @@ class ClientHelper:
         return lookup[version]
 
     async def wait_for_deployed(self, version: int = -1, timeout=10) -> None:
-        await wait_until_deployment_finishes(self.client, str(self.environment), version, timeout)
+        await wait_until_deployment_finishes(self.client, str(self.environment), version=version, timeout=timeout)
 
     async def wait_full_success(self) -> None:
         await wait_full_success(self.client, self.environment)
@@ -707,7 +689,7 @@ def module_from_template(
     """
 
     def to_python_requires(
-        requires: abc.Sequence[Union[module.InmantaModuleRequirement, inmanta.util.CanonicalRequirement]]
+        requires: abc.Sequence[Union[module.InmantaModuleRequirement, inmanta.util.CanonicalRequirement]],
     ) -> list[str]:
         return [
             str(req) if isinstance(req, packaging.requirements.Requirement) else str(req.get_python_package_requirement())
@@ -774,14 +756,14 @@ def module_from_template(
                 config=PipConfig(use_system_config=True),
             )
         else:
-            mod_artifact_path = ModuleTool().build(path=dest_dir)
+            mod_artifact_paths = ModuleTool().build(path=dest_dir, wheel=True)
             env.process_env.install_for_config(
                 requirements=[],
-                paths=[env.LocalPackagePath(path=mod_artifact_path)],
+                paths=[env.LocalPackagePath(path=mod_artifact_paths[0])],
                 config=PipConfig(use_system_config=True),
             )
     if publish_index is not None:
-        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
+        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir, wheel=True)
         publish_index.publish()
     with open(config_file) as fh:
         return module.ModuleV2Metadata.parse(fh)
@@ -932,7 +914,7 @@ async def _deploy_resources(client, environment, resources, version: int, push, 
     result = await client.release_version(environment, version, push, agent_trigger_method)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version)
+    await wait_until_deployment_finishes(client, environment, version=version)
 
     result = await client.get_version(environment, version)
     assert result.code == 200
@@ -994,8 +976,12 @@ class NullAgent(SessionEndpoint):
     async def get_status(self) -> Apireturn:
         return 200, {}
 
+    @protocol.handle(methods_v2.trigger_get_status, env="tid")
+    async def get_scheduler_resource_state(self, env: data.Environment) -> SchedulerStatusReport:
+        return SchedulerStatusReport(scheduler_state={}, db_state={}, resource_states={}, discrepancies=[])
 
-def make_requires(resources: Mapping[ResourceIdStr, ResourceDetails]) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
+
+def make_requires(resources: Mapping[ResourceIdStr, ResourceIntent]) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
     """Convert resources from the scheduler input format to its requires format"""
     return {k: {req for req in resource.attributes.get("requires", [])} for k, resource in resources.items()}
 
@@ -1014,6 +1000,9 @@ class DummyCodeManager(CodeManager):
     async def get_code(
         self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
     ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
+        if not resource_types:
+            raise ValueError(f"{self.__class__.__name__}.get_code() expects at least one resource type")
+
         return ([ResourceInstallSpec(rt, version, dummyblueprint) for rt in resource_types], {})
 
 
@@ -1035,9 +1024,9 @@ def assert_resource_persistent_state(
     resource_persistent_state: data.ResourcePersistentState,
     is_undefined: bool,
     is_orphan: bool,
-    deployment_result: state.DeploymentResult,
-    blocked_status: state.BlockedStatus,
-    expected_compliance_status: state.ComplianceStatus,
+    last_deploy_result: state.DeployResult,
+    blocked: state.Blocked,
+    expected_compliance: Optional[state.Compliance],
 ) -> None:
     """
     Assert that the given ResourcePersistentState record has the given content.
@@ -1049,12 +1038,12 @@ def assert_resource_persistent_state(
         resource_persistent_state.is_orphan == is_orphan
     ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.is_orphan} != {is_orphan})"
     assert (
-        resource_persistent_state.deployment_result is deployment_result
-    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.deployment_result} != {deployment_result})"
+        resource_persistent_state.last_deploy_result is last_deploy_result
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.last_deploy_result} != {last_deploy_result})"
     assert (
-        resource_persistent_state.blocked_status is blocked_status
-    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.blocked_status} != {blocked_status})"
-    assert resource_persistent_state.get_compliance_status() is expected_compliance_status, (
+        resource_persistent_state.blocked is blocked
+    ), f"{resource_persistent_state.resource_id} ({resource_persistent_state.blocked} != {blocked})"
+    assert resource_persistent_state.get_compliance_status() is expected_compliance, (
         f"{resource_persistent_state.resource_id}"
-        f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance_status})"
+        f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance})"
     )

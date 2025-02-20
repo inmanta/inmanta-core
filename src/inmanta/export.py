@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import argparse
@@ -28,17 +28,18 @@ import pydantic
 
 from inmanta import const, loader, protocol
 from inmanta.agent.handler import Commander
-from inmanta.ast import CompilerException, Namespace
+from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.const import ResourceState
-from inmanta.data.model import PipConfig, ResourceVersionIdStr
-from inmanta.execute.proxy import DynamicProxy, UnknownException
+from inmanta.data.model import PipConfig
+from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import Instance
 from inmanta.module import Project
 from inmanta.protocol import Result
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
+from inmanta.types import ResourceVersionIdStr
 from inmanta.util import get_compiler_version, hash_file
 
 LOGGER = logging.getLogger(__name__)
