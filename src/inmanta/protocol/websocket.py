@@ -15,7 +15,6 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
-import abc
 import asyncio
 import logging
 import socket
@@ -229,11 +228,11 @@ async def dispatch_method(call_targets: list[common.CallTarget], msg: RPC_Call) 
     # rebuild a request so that the RPC layer can process it as if it came from a proper HTTP call
     body = method_call.body or {}
     query_string = parse.urlparse(method_call.url).query
-    for key, value in parse.parse_qs(query_string, keep_blank_values=True):
+    for key, value in parse.parse_qs(query_string, keep_blank_values=True).items():
         if len(value) == 1:
-            body[key] = value[0].decode("latin-1")
+            body[key] = value[0]
         else:
-            body[key] = [v.decode("latin-1") for v in value]
+            body[key] = value
 
     body.update(kwargs)
 
