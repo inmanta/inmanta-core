@@ -90,7 +90,8 @@ authentication is enabled all other components require a valid token.
 
 In the server configuration multiple token providers (issuers) can be configured (See :ref:`auth-config`). Inmanta requires at
 least one issuer with the HS256 algorithm. The server uses this to sign tokens it issues itself. This provider is indicated with
-sign set to true. Inmanta issues tokens for compilers the servers runs itself and for autostarted agents.
+sign set to true. Inmanta issues tokens for compilers the servers runs itself and for autostarted agents. Make sure you set
+:inmanta.config:option:`server.bind-address` to ``127.0.0.1``.
 
 Compilers, cli and agents that are not started by the server itself, require a token in their transport configuration. This
 token is configured with the ``token`` option in the groups :inmanta.config:group:`agent_rest_transport`,
@@ -107,7 +108,8 @@ the settings page.
    Generating a new token in the web-console.
 
 
-Setup the built-in authentication provider of the Inmanta server (See :ref:`auth-int`) or configure an external issuer (See :ref:`auth-ext`) for web-console access to bootstrap access to the create token api call.
+Setup the built-in authentication provider of the Inmanta server (See :ref:`auth-int`) or configure an external issuer 
+(See :ref:`auth-ext`) for web-console access to bootstrap access to the create token api call.
 When no external issuer is available and web-console access is not required, the ``inmanta-cli token bootstrap`` command
 can be used to create a token that has access to everything. However, it expires after 3600s for security reasons.
 
@@ -144,7 +146,7 @@ An example configuration is:
     [auth_jwt_default]
     algorithm=HS256
     sign=true
-    client_types=agent,compiler
+    client_types=agent,compiler,api
     key=rID3kG4OwGpajIsxnGDhat4UFcMkyFZQc1y3oKQTPRs
     expire=0
     issuer=https://localhost:8888/
