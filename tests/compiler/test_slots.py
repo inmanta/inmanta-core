@@ -19,7 +19,7 @@ Contact: code@inmanta.com
 import inspect
 from collections import abc
 from itertools import chain
-from typing import Any, TypeVar
+from typing import TypeVar
 
 import inmanta.ast.type
 import utils
