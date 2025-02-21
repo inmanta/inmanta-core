@@ -401,10 +401,9 @@ def sqlalchemy_url(postgres_db, database_name_internal: str):
 
 @pytest.fixture(scope="function")
 async def sql_alchemy_engine(sqlalchemy_url) -> AsyncEngine:
+
+    await start_engine(url=sqlalchemy_url)
     engine = get_engine()
-    if engine is None:
-        await start_engine(url=sqlalchemy_url)
-        engine = get_engine()
 
     yield engine
 

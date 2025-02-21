@@ -6604,7 +6604,7 @@ async def stop_engine() -> None:
     global ENGINE
     if ENGINE is not None:
         await ENGINE.dispose()
-
+    ENGINE = None
 
 async def start_engine(
     url: str,
@@ -6620,9 +6620,7 @@ async def start_engine(
     global ENGINE
 
     if ENGINE is not None:
-        if not inmanta.RUNNING_TESTS:
-            raise Exception("Engine already running: cannot call start_engine twice.")
-        await ENGINE.dispose(close=True)
+        raise Exception("Engine already running: cannot call start_engine twice.")
 
     LOGGER.debug("Creating engine...")
     try:
