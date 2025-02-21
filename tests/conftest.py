@@ -374,30 +374,18 @@ def database_name(create_db: str) -> str:
     return create_db
 
 
-# @pytest.fixture(scope="function")
-# async def postgresql_client(postgres_db, database_name_internal):
-#     client = await asyncpg.connect(
-#         host=postgres_db.host,
-#         port=postgres_db.port,
-#         user=postgres_db.user,
-#         password=postgres_db.password,
-#         database=database_name_internal,
-#     )
-#     yield client
-#     await client.close()
-
-
 @pytest.fixture(scope="function")
-async def postgresql_pool(postgres_db, database_name):
-    client = await asyncpg.create_pool(
+async def postgresql_client(postgres_db, database_name_internal):
+    client = await asyncpg.connect(
         host=postgres_db.host,
         port=postgres_db.port,
         user=postgres_db.user,
         password=postgres_db.password,
-        database=database_name,
+        database=database_name_internal,
     )
     yield client
     await client.close()
+
 
 
 @pytest.fixture
@@ -438,17 +426,7 @@ async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_res
     await stop_engine()
 
 
-@pytest.fixture(scope="function")
-async def postgresql_client(postgres_db, database_name_internal):
-    client = await asyncpg.connect(
-        host=postgres_db.host,
-        port=postgres_db.port,
-        user=postgres_db.user,
-        password=postgres_db.password,
-        database=database_name_internal,
-    )
-    yield client
-    await client.close()
+
 
 
 @pytest.fixture(scope="function")

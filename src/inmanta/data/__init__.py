@@ -68,12 +68,9 @@ from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-from sqlalchemy import AsyncAdaptedQueuePool
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-ASYNC_SESSION: typing.Optional[AsyncSession] = None
 ENGINE: AsyncEngine | None = None
-POOL: AsyncAdaptedQueuePool | None = None
 
 
 LOGGER = logging.getLogger(__name__)
@@ -1535,8 +1532,7 @@ class BaseDocument(metaclass=DocumentMeta):
         cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
     ) -> Sequence[Record]:
         async with cls.get_connection(connection) as con:
-            res = await con.fetch(query, *values)
-            return res
+            return await con.fetch(query, *values)
 
     @classmethod
     async def _execute_query(
@@ -4050,7 +4046,6 @@ class ResourceAction(BaseDocument):
         if from_postgres and self.messages:
             new_messages = []
             for message in self.messages:
-                # message = json.loads(message)
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
@@ -5140,9 +5135,6 @@ class Resource(BaseDocument):
                     # left join produced no resources
                     continue
                 resource: dict[str, object] = dict(raw_resource)
-                # Already de-serialized it seems ?
-                # if "attributes" in resource:
-                #     resource["attributes"] = json.loads(resource["attributes"])
                 if projection is not None:
                     assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
@@ -6637,16 +6629,6 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
-def get_async_session(connection_string: typing.Optional[str] = None) -> AsyncSession:
-    if ENGINE is None:
-        raise Exception("Cannot get session because engine wasn't started. Make sure to call start_engine() first.")
-    if ASYNC_SESSION is None:
-        # should not happen
-        raise Exception("Engine is started but session factory wasn't initialized properly.")
-
-    return ASYNC_SESSION()
-
-
 async def stop_engine():
     global ENGINE
     if ENGINE is not None:
@@ -6665,8 +6647,6 @@ async def start_engine(
     https://stackoverflow.com/questions/34322471/sqlalchemy-engine-connection-and-session-difference
     """
     global ENGINE
-    global ASYNC_SESSION
-    global POOL
 
     if ENGINE is not None:
         if not inmanta.RUNNING_TESTS:
@@ -6682,27 +6662,9 @@ async def start_engine(
             pool_timeout=pool_timeout,
             echo=echo,
         )
-        POOL = ENGINE.pool
-        ASYNC_SESSION = async_sessionmaker(ENGINE)
     except Exception as e:
         await stop_engine()
         raise e
-
-    # @event.listens_for(ENGINE.sync_engine, "do_connect")
-    # def do_connect(dialect, conn_rec, cargs, cparams):
-    #     print("some-function")
-    #     print(dialect, conn_rec, cargs, cparams)
-    #
-    # @event.listens_for(ENGINE.sync_engine, "engine_connect")
-    # def engine_connect(conn, branch):
-    #     # print("engine_connect", conn.exec_driver_sql("select 1").scalar())
-    #     print("engine_connect")
-    #     print(branch)
-    #
-    # @event.listens_for(ENGINE.sync_engine, "checkout")
-    # def my_on_checkout(dbapi_conn, connection_rec, connection_proxy):
-    #     print("pool checkout")
-    #     print(dbapi_conn, connection_rec, connection_proxy)
 
 
 @asynccontextmanager
@@ -6717,7 +6679,7 @@ async def get_connection_ctx_mgr():
 
 
 def get_pool():
-    return POOL
+    return ENGINE.pool
 
 
 def get_engine():

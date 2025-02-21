@@ -64,31 +64,17 @@ async def test_connect_default_parameters(sql_alchemy_engine):
         assert connection is not None
 
 
-@pytest.mark.parametrize(
-    "pool_size, max_overflow",
-    [
-        # (-1, 1),
-        # (2, 1),
-        (-2, -2)
-    ],
-)
-async def test_connect_invalid_parameters(sqlalchemy_url, pool_size, max_overflow):
-    # with pytest.raises(ValueError):
-    await start_engine(url=sqlalchemy_url, pool_size=pool_size, max_overflow=max_overflow)
-
-
-async def test_postgres_client(sql_alchemy_engine):
-    async with get_connection_ctx_mgr() as postgresql_client:
-        await postgresql_client.execute("CREATE TABLE test(id serial PRIMARY KEY, name VARCHAR (25) NOT NULL)")
-        await postgresql_client.execute("INSERT INTO test VALUES(5, 'jef')")
-        records = await postgresql_client.fetch("SELECT * FROM test")
-        assert len(records) == 1
-        first_record = records[0]
-        assert first_record["id"] == 5
-        assert first_record["name"] == "jef"
-        await postgresql_client.execute("DELETE FROM test WHERE test.id = " + str(first_record["id"]))
-        records = await postgresql_client.fetch("SELECT * FROM test")
-        assert len(records) == 0
+async def test_postgres_client(postgresql_client):
+    await postgresql_client.execute("CREATE TABLE test(id serial PRIMARY KEY, name VARCHAR (25) NOT NULL)")
+    await postgresql_client.execute("INSERT INTO test VALUES(5, 'jef')")
+    records = await postgresql_client.fetch("SELECT * FROM test")
+    assert len(records) == 1
+    first_record = records[0]
+    assert first_record["id"] == 5
+    assert first_record["name"] == "jef"
+    await postgresql_client.execute("DELETE FROM test WHERE test.id = " + str(first_record["id"]))
+    records = await postgresql_client.fetch("SELECT * FROM test")
+    assert len(records) == 0
 
 
 async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> None:
@@ -466,7 +452,7 @@ async def test_agent_process(init_dataclasses_and_load_schema):
 
 @pytest.mark.parametrize("env1_halted", [True, False])
 @pytest.mark.parametrize("env2_halted", [True, False])
-async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, env1_halted, env2_halted):
+async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql_client, env1_halted, env2_halted):
     # tests the agent process cleanup function with different combinations of halted environments
 
     project = data.Project(name="test")
@@ -500,8 +486,7 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, env1_halte
             FROM agentprocess AS proc INNER JOIN agentinstance AS instance ON proc.sid=instance.process
             WHERE environment=$1 AND hostname=$2
         """
-        async with get_connection_ctx_mgr() as conn:
-            result = await conn.fetch(query, env, hostname)
+        result = await postgresql_client.fetch(query, env, hostname)
         assert result[0]["count"] == expected_nr_instances, result
 
     # Setup env1
@@ -537,8 +522,7 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, env1_halte
             FROM agentprocess
             WHERE environment=$1 AND hostname=$2 AND expired IS NOT NULL
         """
-        async with get_connection_ctx_mgr() as conn:
-            result = await conn.fetch(query, env2.id, "proc2")
+        result = await postgresql_client.fetch(query, env2.id, "proc2")
         assert len(result) == 3 if env2_halted else 1
         if len(result) == 1:
             # if the cleanup was done (env2 not halted), verify the expired record that was kept is the right one.
@@ -2265,10 +2249,11 @@ async def test_compile_get_report(init_dataclasses_and_load_schema):
 
 
 async def test_match_tables_in_db_against_table_definitions_in_orm(
-    postgres_db, database_name, init_dataclasses_and_load_schema
+    postgres_db, database_name, postgresql_client, init_dataclasses_and_load_schema
 ):
-    async with get_connection_ctx_mgr() as conn:
-        table_names = await conn.fetch("SELECT table_name FROM information_schema.tables " "WHERE table_schema='public'")
+    table_names = await postgresql_client.fetch(
+        "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public'"
+    )
     table_names_in_database = [x["table_name"] for x in table_names]
     table_names_in_classes_list = [x.table_name() for x in data._classes]
     # Schema management table is not in classes list
