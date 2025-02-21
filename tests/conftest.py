@@ -387,7 +387,6 @@ async def postgresql_client(postgres_db, database_name_internal):
     await client.close()
 
 
-
 @pytest.fixture
 def sqlalchemy_url(postgres_db, database_name_internal: str):
     return sqlalchemy.URL.create(
@@ -424,9 +423,6 @@ async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_res
     )
     yield
     await stop_engine()
-
-
-
 
 
 @pytest.fixture(scope="function")

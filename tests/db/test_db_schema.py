@@ -241,8 +241,7 @@ def test_dbschema_get_dct_with_update_functions():
         assert inspect.getfullargspec(version.function)[0] == ["connection"]
 
 
-async def test_multi_upgrade_lockout(get_columns_in_db_table, hard_clean_db):
-    # Maybe just need the pool
+async def test_multi_upgrade_lockout(sql_alchemy_engine, get_columns_in_db_table, hard_clean_db):
     async with get_connection_ctx_mgr() as conn1:
         async with get_connection_ctx_mgr() as conn2:
             # schedule 3 updates, hang on second, unblock one, verify, unblock other, verify
