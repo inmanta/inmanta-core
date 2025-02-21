@@ -1297,7 +1297,7 @@ class Literal(Union):
         return type.is_attribute_type()
 
     def issupertype(self, other: "Type") -> bool:
-        return other.is_attribute_type() and other != self
+        return other != self and other.is_attribute_type()
 
     def issubtype(self, other: "Type") -> bool:
         return Type.issubtype(self, other)
