@@ -452,8 +452,8 @@ The example above configures the server to validate Cloudflare ZTNA JWT tokens. 
 application.
 
 Some providers do not supply the JWT in the Authorization header but in an alternative header. This can be controlled using the
-:inmanta.config:option:`server.auth-additional-header` setting. For cloudflare it needs to be set to `Cf-Access-Jwt-Assertion`. In case of an alternative
-header we expect the plain token and not a bearer token.
+:inmanta.config:option:`server.auth-additional-header` setting. For cloudflare it needs to be set to `Cf-Access-Jwt-Assertion`. 
+In case of an alternative header we expect the plain token and not a bearer token.
 
 
 .. code-block:: ini

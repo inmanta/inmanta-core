@@ -16,27 +16,56 @@ This page describes how to deploy an Inmanta server in a HA setup and how to per
         version.
 
 
-Setup a HA PostgreSQL cluster
-#############################
+Choosing the right type of availability requires carefull consideration of various trade-offs. The orchestrator is not part of
+the datapath. When it is not running it will not affect the services in the network, it only affects the ability to make changes
+in the network. This means that the main consideration for choosing the right type of availability comes from how users interact
+with either the web console and/or the APIs.
 
-The Inmanta server stores its state in a PostgreSQL database. As such, the PostgreSQL database should be deployed in a high
-available setup, to ensure the durability of the state of the Inmanta Orchestrator. This page describes how to setup a two node
-PosgreSQL cluster, consisting of a master node and a warm standby. The master node performs synchronous replication to the
-standby node. When the master node fails, the standby can be promoted to the new master node by performing a manual action.
+The Inmanta server stores its state in a PostgreSQL database and can recover entirely after a restart of the orchestrator
+processes based on the state in the database. As such, the PostgreSQL database should be deployed in a high available setup, to
+ensure the durability of the state of the Inmanta Orchestrator. 
 
-This setup has a number of properties:
 
-* It ensure durability by only returning operations like API calls when both database instances has confirmed that the
-  changes have been stored on disk.
+.. figure:: /administrators/images/ha_architecture.png
+   :width: 100%
+   :align: center
+
+   The three types of availability
+
+There are three types of availability possible:
+
+* None: in case of failure the entire intent can be lost. It can only be restored by giving the orchestrator the same intent and
+  let it step through the lifeycle of each service in its service inventory. The deployment consists of a single orchestrator
+  instance and a single database. These can run on the same or different machines.
+* Durable: in case of failure the orchestrator no data is lost, however the API of the orchestrator is not available. The
+  deployment consists of a single orchestrator instance that connects to a primary PostgreSQL database. This primary streams all
+  changes to a standby PostgreSQL server. Database transactions only return when both databases have stored the changes durable.
+  Depending on the deployment the failover can be done manually or fully automated.
+* High-available: in case of failure no data is lost and only during the failover the APIs might be unavailable for a few
+  seconds. This deployment consists of an active orchestrator and a standby orchestrator instance. The standby instance is
+  inactive and activates only when there is no active orchestrator. Both connect to a PostgreSQL cluster with at least 3 nodes.
+  Database transactions only return at least 2 out of 3 databases have stored the change durable. Depending on the deployment the failover can be done manually or fully automated.
+
+Durable availability provides for almost all types of deployments a good trade-off between setup and operational complexity and
+the availability and durability guarantees. This setup has a number of properties:
+
+* It ensure durability by only returning operations like API calls when both database instances has confirmed that the changes
+  have been stored on disk.
 * It is possible to use a tool such as pgpool to loadbalance read-only database queries to the standby node. However, this is
   out of scope of this manual.
 * It does not provide any additionaly availability, it even slighly reduces it: both database servers need to be up and
-  responsive to process write queries. If the standby node is down, the master node will block on any write query. Read
-  queries continue to be served until the database pool is exhausted.
+  responsive to process write queries. If the standby node is down, the master node will block on any write query. Read queries
+  continue to be served until the database pool is exhausted.
 
-For almost all types of deployments it provides a good trade-off between setup and operational complexity and the availability
-and durability guarantees. If both durability and higher availability are required, a setup with at least 3 databases is required.
+If both durability and higher availability are required, a setup with at least 3 databases is required.
 This is out of scope for this documentation. Please contact support for assistance on this topic.
+
+Setup a HA PostgreSQL cluster
+#############################
+
+This page describes how to setup a two node PosgreSQL cluster, consisting of a master node and a warm standby. The master node
+performs synchronous replication to the standby node. When the master node fails, the standby can be promoted to the new master
+node by performing a manual action.
 
 Prerequisites
 -------------
