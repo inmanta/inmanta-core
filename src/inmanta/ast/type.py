@@ -483,6 +483,8 @@ class Any(Type):
         return type(self) == type(other)  # noqa: E721
 
     def issupertype(self, other: "Type") -> bool:
+        if other == self:
+            return False
         return True
 
     def __hash__(self):
@@ -794,6 +796,8 @@ class List(Type):
         return hash(type(self))
 
     def issubtype(self, other: "Type") -> bool:
+        if isinstance(other, Any):
+            return True
         return isinstance(other, List)
 
     def issupertype(self, other: "Type") -> bool:
@@ -857,7 +861,7 @@ class TypedList(List):
         return hash((type(self), self.element_type))
 
     def is_attribute_type(self) -> bool:
-        return self.get_base_type().is_attribute_type()
+        return self.element_type.is_attribute_type()
 
     def corresponds_to(self, type: Type) -> bool:
         if isinstance(type, Any):
@@ -882,6 +886,8 @@ class TypedList(List):
         return self.element_type.has_custom_to_python()
 
     def issubtype(self, other: "Type") -> bool:
+        if isinstance(other, Any):
+            return True
         if not isinstance(other, TypedList):
             return False
         return self.element_type.issubtype(other.element_type)
@@ -911,6 +917,15 @@ class LiteralList(TypedList):
 
     def with_base_type(self, base_type: Type) -> Type:
         return self
+
+    def has_custom_to_python(self) -> bool:
+        return False
+
+    def get_no_reference(self) -> Type:
+        return self
+
+    def is_attribute_type(self) -> bool:
+        return True
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, LiteralList):
@@ -961,6 +976,8 @@ class Dict(Type):
         return isinstance(type, Dict)
 
     def issubtype(self, other: "Type") -> bool:
+        if isinstance(other, Any):
+            return True
         return isinstance(other, Dict)
 
     def issupertype(self, other: "Type") -> bool:
@@ -1034,6 +1051,8 @@ class TypedDict(Dict):
         return hash((type(self), self.element_type))
 
     def issubtype(self, other: "Type") -> bool:
+        if isinstance(other, Any):
+            return True
         if not isinstance(other, TypedDict):
             return False
         return self.element_type.issubtype(other.element_type)
@@ -1067,6 +1086,12 @@ class LiteralDict(TypedDict):
         if not isinstance(other, LiteralDict):
             return NotImplemented
         return True
+
+    def has_custom_to_python(self) -> bool:
+        return False
+
+    def get_no_reference(self) -> Type:
+        return self
 
     def is_attribute_type(self) -> bool:
         return True
@@ -1272,10 +1297,16 @@ class Literal(Union):
         return type.is_attribute_type()
 
     def issupertype(self, other: "Type") -> bool:
-        return other.is_attribute_type()
+        return other != self and other.is_attribute_type()
 
     def issubtype(self, other: "Type") -> bool:
         return Type.issubtype(self, other)
+
+    def has_custom_to_python(self) -> bool:
+        return False
+
+    def get_no_reference(self) -> "Type":
+        return self
 
 
 @stable_api
