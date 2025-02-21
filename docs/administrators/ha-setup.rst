@@ -19,11 +19,11 @@ This page describes how to deploy an Inmanta server in a HA setup and how to per
 Choosing the right type of availability requires carefull consideration of various trade-offs. The orchestrator is not part of
 the datapath. When it is not running it will not affect the services in the network, it only affects the ability to make changes
 in the network. This means that the main consideration for choosing the right type of availability comes from how users interact
-with either the web console and/or the APIs.
+with the web console and/or the APIs.
 
 The Inmanta server stores its state in a PostgreSQL database and can recover entirely after a restart of the orchestrator
-processes based on the state in the database. As such, the PostgreSQL database should be deployed in a high available setup, to
-ensure the durability of the state of the Inmanta Orchestrator. 
+processes based on the state in the database. As such, the PostgreSQL database should be deployed in an available setup, to
+ensure the durability of the state of the Inmanta Orchestrator. However, high availability is not a strict requirement.
 
 
 .. figure:: /administrators/images/ha_architecture.png
@@ -44,7 +44,8 @@ There are three types of availability possible:
 * High-available: in case of failure no data is lost and only during the failover the APIs might be unavailable for a few
   seconds. This deployment consists of an active orchestrator and a standby orchestrator instance. The standby instance is
   inactive and activates only when there is no active orchestrator. Both connect to a PostgreSQL cluster with at least 3 nodes.
-  Database transactions only return at least 2 out of 3 databases have stored the change durable. Depending on the deployment the failover can be done manually or fully automated.
+  Database transactions only return when at least 2 out of 3 databases have stored the change durable. Depending on the deployment
+  the failover can be done manually or fully automated.
 
 Durable availability provides for almost all types of deployments a good trade-off between setup and operational complexity and
 the availability and durability guarantees. This setup has a number of properties:
@@ -56,9 +57,9 @@ the availability and durability guarantees. This setup has a number of propertie
 * It does not provide any additionaly availability, it even slighly reduces it: both database servers need to be up and
   responsive to process write queries. If the standby node is down, the master node will block on any write query. Read queries
   continue to be served until the database pool is exhausted.
-
-If both durability and higher availability are required, a setup with at least 3 databases is required.
-This is out of scope for this documentation. Please contact support for assistance on this topic.
+ 
+If both durability and higher availability are required, a setup with at least 3 databases is required. This is out of scope for
+this documentation. Please contact support for assistance on this topic.
 
 Setup a HA PostgreSQL cluster
 #############################
