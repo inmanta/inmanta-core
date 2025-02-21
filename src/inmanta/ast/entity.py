@@ -329,7 +329,7 @@ class Entity(NamedType, WithComment):
 
     def is_subclass(self, subclass_candidate: "Entity", *, strict: bool = True) -> bool:
         """
-        Check if self is a subclass off the given subclass_candidate.
+        Check if self is a subclass of the given subclass_candidate.
         Does not consider entities a subclass of themselves in strict mode (the default).
 
         :param strict: Only return True for entities that are a strict subtype, i.e. not of the same type.
