@@ -34,7 +34,7 @@ from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from itertools import chain
 from re import Pattern
-from typing import Generic, NewType, Optional, TypeVar, Union, cast, overload
+from typing import AsyncGenerator, Generic, NewType, Optional, TypeVar, Union, cast, overload
 from uuid import UUID
 
 import asyncpg
@@ -45,7 +45,6 @@ import typing_inspect
 from asyncpg import Connection
 from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
-from sqlalchemy import Pool
 
 import inmanta.db.versions
 import inmanta.protocol
@@ -68,6 +67,7 @@ from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
+from sqlalchemy import Pool
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 ENGINE: AsyncEngine | None = None
@@ -6605,6 +6605,7 @@ async def stop_engine() -> None:
         await ENGINE.dispose()
     ENGINE = None
 
+
 async def start_engine(
     url: str,
     pool_size: int = 10,
@@ -6636,9 +6637,9 @@ async def start_engine(
 
 
 @asynccontextmanager
-async def get_connection_ctx_mgr() ->  AbstractAsyncContextManager[Connection]:
+async def get_connection_ctx_mgr() -> AsyncGenerator[Connection]:
     if ENGINE is None:
-        raise Exception('SQL Alchemy engine was not initialized')
+        raise Exception("SQL Alchemy engine was not initialized")
     async with ENGINE.connect() as connection:
         connection_fairy = await connection.get_raw_connection()
 
@@ -6656,5 +6657,5 @@ def get_pool() -> Pool:
 
 
 def get_engine() -> AsyncEngine:
-    assert ENGINE is not None, 'SQL Alchemy engine was not initialized'
+    assert ENGINE is not None, "SQL Alchemy engine was not initialized"
     return ENGINE

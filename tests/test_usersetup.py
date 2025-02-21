@@ -25,7 +25,7 @@ from click import testing
 from inmanta import data
 from inmanta.db.util import PGRestore
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.user_setup import cmd, connect_to_db
+from inmanta.user_setup import cmd
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,9 @@ def setup_config(tmpdir, postgres_db, database_name):
     os.chdir(tmpdir)
 
 
-async def test_user_setup(tmpdir, server_pre_start, postgres_db, postgresql_client, database_name, hard_clean_db, hard_clean_db_post):
+async def test_user_setup(
+    tmpdir, server_pre_start, postgres_db, postgresql_client, database_name, hard_clean_db, hard_clean_db_post
+):
     ibl = InmantaBootloader(configure_logging=True)
     # we need the server to start so that all the migrations scripts are applied, but the server needs
     # to be shut down afterwards, otherwise the call to start_engine() will result in an exception saying
