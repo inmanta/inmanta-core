@@ -19,9 +19,9 @@ Contact: code@inmanta.com
 import logging
 
 import pytest
-from asyncpg import Connection
 
 from inmanta import data
+from inmanta.data import get_connection_ctx_mgr
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server import config as opt
 from inmanta.server.services import databaseservice
@@ -80,15 +80,10 @@ async def test_pool_exhaustion_watcher(set_pool_size_to_one, server, caplog):
     with caplog.at_level(logging.WARNING, "inmanta.server.services.databaseservice"):
         database_slice = server.get_slice(databaseservice.SLICE_DATABASE)
 
-        pool = database_slice._pool
-        assert pool is not None
-        connection: Connection = await pool.acquire()
-        try:
+        async with get_connection_ctx_mgr():
             # Make sure _check_database_pool_exhaustion gets called (scheduled to run every 200ms)
             # and records some exhaustion events.
             await retry_limited(exhaustion_events_recorded, 1)
-        finally:
-            await connection.close()
 
         # Call _report_database_pool_exhaustion manually (scheduled to run every 24h)
         database_slice._db_monitor._report_and_reset()
