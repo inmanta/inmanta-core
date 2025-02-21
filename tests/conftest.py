@@ -461,8 +461,6 @@ async def clean_db(create_db, postgresql_client):
         truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
         await postgresql_client.execute(truncate_query)
 
-    await postgresql_client.close()
-
 
 @pytest.fixture(scope="function")
 def get_columns_in_db_table(postgresql_client):

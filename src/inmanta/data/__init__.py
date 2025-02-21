@@ -45,6 +45,7 @@ import typing_inspect
 from asyncpg import Connection
 from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
+from sqlalchemy import Pool
 
 import inmanta.db.versions
 import inmanta.protocol
@@ -6599,7 +6600,7 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
-async def stop_engine():
+async def stop_engine() -> None:
     global ENGINE
     if ENGINE is not None:
         await ENGINE.dispose()
@@ -6611,7 +6612,7 @@ async def start_engine(
     max_overflow: int = 0,
     pool_timeout: float = 60.0,
     echo: bool = False,
-):
+) -> None:
     """
     engine vs connection vs session overview
     https://stackoverflow.com/questions/34322471/sqlalchemy-engine-connection-and-session-difference
@@ -6638,7 +6639,8 @@ async def start_engine(
 
 
 @asynccontextmanager
-async def get_connection_ctx_mgr():
+async def get_connection_ctx_mgr() ->  AbstractAsyncContextManager[Connection]:
+    assert ENGINE is not None, 'SQL Alchemy engine was not initialized'
     async with ENGINE.connect() as connection:
         connection_fairy = await connection.get_raw_connection()
 
@@ -6648,9 +6650,13 @@ async def get_connection_ctx_mgr():
         yield raw_asyncio_connection
 
 
-def get_pool():
-    return ENGINE.pool
+def get_pool() -> Pool:
+    pool = get_engine().pool
+    assert pool is not None, "SQL Alchemy engine's pool was not initialized"
+
+    return pool
 
 
-def get_engine():
+def get_engine() -> AsyncEngine:
+    assert ENGINE is not None, 'SQL Alchemy engine was not initialized'
     return ENGINE
