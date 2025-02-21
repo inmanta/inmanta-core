@@ -5045,7 +5045,6 @@ class Resource(BaseDocument):
                 async for record in con.cursor(query, *values):
                     if no_obj:
                         record = dict(record)
-                        record["attributes"] = record["attributes"]
                         cls.__mangle_dict(record)
                         resources_list.append(record)
                     else:
@@ -6638,7 +6637,8 @@ async def start_engine(
 
 @asynccontextmanager
 async def get_connection_ctx_mgr() ->  AbstractAsyncContextManager[Connection]:
-    assert ENGINE is not None, 'SQL Alchemy engine was not initialized'
+    if ENGINE is None:
+        raise Exception('SQL Alchemy engine was not initialized')
     async with ENGINE.connect() as connection:
         connection_fairy = await connection.get_raw_connection()
 

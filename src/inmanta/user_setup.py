@@ -26,7 +26,7 @@ from asyncpg import PostgresError
 import nacl.pwhash
 from inmanta import config, data
 from inmanta.const import MIN_PASSWORD_LENGTH
-from inmanta.data import start_engine
+from inmanta.data import start_engine, stop_engine
 from inmanta.data.model import AuthMethod
 from inmanta.protocol import auth
 from inmanta.server import config as server_config
@@ -92,7 +92,7 @@ def validate_server_setup() -> None:
         raise click.ClickException("The user setup was aborted as it was not executed locally on the orchestrator")
 
 
-async def get_connection_pool() -> None:
+async def connect_to_db() -> None:
     """ """
 
     database_host = server_config.db_host.get()
@@ -121,7 +121,7 @@ async def do_user_setup() -> None:
             f"{'Trying to connect to DB:': <50}"
             f"{('%s (%s:%s)' % (server_config.db_name.get(), server_config.db_host.get(), server_config.db_port.get()))}"
         )
-        await get_connection_pool()
+        await connect_to_db()
         click.echo(f"{'Connection to database' : <50}{click.style('success', fg='green')}")
         users = await data.User.get_list()
 
@@ -155,6 +155,8 @@ async def do_user_setup() -> None:
             "The version of the database is out of date: start the server to upgrade the database "
             "schema to the lastest version."
         )
+    finally:
+        await stop_engine()
 
     click.echo("Make sure to (re)start the orchestrator to activate all changes.")
 

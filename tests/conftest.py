@@ -407,7 +407,7 @@ async def sql_alchemy_engine(sqlalchemy_url) -> AsyncEngine:
 
     yield engine
 
-    await engine.dispose()
+    await stop_engine()
 
 
 @pytest.fixture(scope="function")

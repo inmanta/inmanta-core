@@ -108,6 +108,18 @@ class DatabaseMonitor:
         """Get the status of the database connection"""
         connected = await self.get_connection_status()
 
+        if not connected:
+            return DataBaseReport(
+                connected=connected,
+                database=self.dn_name,
+                host=self.db_host,
+                max_pool=0,
+                free_pool=0,
+                open_connections=0,
+                free_connections=0,
+                pool_exhaustion_time=self._exhausted_pool_events_count * self._db_exhaustion_check_interval,
+            )
+
         pool = get_pool()
         max_connections = pool.size() + self._max_overflow
         free_connections_in_pool = pool.checkedin()
@@ -261,6 +273,7 @@ async def initialize_sql_alchemy_engine(
     :param database_name: Name of the database to connect to.
     :param database_username: Username for database authentication.
     :param database_password: Password for database authentication.
+    :param create_db_schema: Make sure the DB schema is created and up-to-date.
     :param connection_pool_min_size: Initialize the pool with this number of connections .
     :param connection_pool_max_size: Limit the size of the pool to this number of connections .
     :param connection_timeout: Connection timeout (in seconds) when interacting with the database.
