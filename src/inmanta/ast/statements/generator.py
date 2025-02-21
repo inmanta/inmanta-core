@@ -955,7 +955,7 @@ class Constructor(ExpressionStatement):
                 )
             elif local_type is not None:
                 # always prefer local type, raise an exception if it is of an incorrect type
-                if not type_hint.is_subclass(local_type, strict=False):
+                if not local_type.is_subclass(type_hint, strict=False):
                     raise TypingException(
                         self,
                         f"Can not assign a value of type {str(local_type)} "
