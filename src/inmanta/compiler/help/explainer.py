@@ -230,7 +230,7 @@ class {problem.entity.name}:
                 case inmanta.ast.attribute.RelationAttribute():
                     pass
                 case inmanta.ast.attribute.Attribute() as attr:
-                    python += f"   {attr.name}: {attr.type.get_no_reference().as_python_type_string()}\n"
+                    python += f"   {attr.name}: {attr.type.as_python_type_string()}\n"
         out += python
 
         if problem.dataclass is not None:

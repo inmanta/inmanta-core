@@ -531,7 +531,7 @@ class ShortIndexLookup(IndexLookup):
                 self, "short index lookup is only possible on bi-drectional relations, %s is unidirectional" % relation
             )
 
-        self.type = relation.type
+        self.type = relation.type_internal
 
         self.type.lookup_index(
             list(

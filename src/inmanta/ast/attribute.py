@@ -48,22 +48,37 @@ class Attribute(Locatable):
         self.__entity = entity
         self.__multi = multi
         self.__nullable = nullable
-        self.__type: Type = value_type
+
+        # The actual type
+        self.__type_internal: Type = value_type
         if multi:
-            self.__type = inmanta_type.TypedList(self.__type)
+            self.__type_internal = inmanta_type.TypedList(self.__type_internal)
         if nullable:
-            self.__type = inmanta_type.NullableType(self.__type)
+            self.__type_internal = inmanta_type.NullableType(self.__type_internal)
+
+        # Drop all reference for backward compatibility
+        self.__type: Type = self.__type_internal.get_no_reference()
 
         self.comment = None  # type: Optional[str]
         self.end: Optional[RelationAttribute] = None
 
     def get_type(self) -> "Type":
         """
-        Get the type of this attribute.
+        Get the declared type of this attribute.
         """
         return self.__type
 
     type: "Type" = property(get_type)
+
+    @property
+    def type_internal(self) -> "Type":
+        """
+        Get the actual type used by the compiler for type checking.
+
+        The externally visible type will never include references
+        The internal type may accommodate references
+        """
+        return self.__type_internal
 
     def get_name(self) -> str:
         """
@@ -98,11 +113,11 @@ class Attribute(Locatable):
         """
         if isinstance(value, Unknown):
             return
-        self.type.validate(value)
+        self.type_internal.validate(value)
 
     def get_new_result_variable(self, instance: "Instance", queue: "runtime.QueueScheduler") -> "runtime.ResultVariable":
         out: runtime.ResultVariable[object] = runtime.ResultVariable()
-        out.set_type(self.type)
+        out.set_type(self.type_internal)
         return out
 
     def is_optional(self) -> bool:
@@ -171,7 +186,7 @@ class RelationAttribute(Attribute):
             out = runtime.OptionVariable(self, instance, queue)
         else:
             out = runtime.ListVariable(self, instance, queue)
-        out.set_type(self.type)
+        out.set_type(self.type_internal)
         return out
 
     def is_optional(self) -> bool:

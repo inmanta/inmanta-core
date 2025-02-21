@@ -869,7 +869,10 @@ class Constructor(ExpressionStatement):
             attr = self.type.get_attribute(k)
             if attr is None:
                 raise TypingException(self.__attribute_locations[k], f"no attribute {k} on type {self.type.get_full_name()}")
-            type_hint = attr.get_type().get_base_type()
+            # Whether we use type or type_internal doesn't matter here,
+            # because this argument will only ever be used on entity types
+            # which can't be references
+            type_hint = attr.type_internal.get_base_type()
             # don't notify the rhs for index attributes because it won't be able to resolve the reference
             # (index attributes need to be resolved before the instance can be constructed)
             v.normalize(

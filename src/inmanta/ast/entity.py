@@ -329,12 +329,17 @@ class Entity(NamedType, WithComment):
 
     def is_subclass(self, subclass_candidate: "Entity", *, strict: bool = True) -> bool:
         """
-        Check if the given subclass_candidate entity is a subclass of this class.
+        Check if self is a subclass off the given subclass_candidate.
         Does not consider entities a subclass of themselves in strict mode (the default).
 
         :param strict: Only return True for entities that are a strict subtype, i.e. not of the same type.
         """
-        return (not strict and subclass_candidate == self) or subclass_candidate.is_parent(self)
+        return (not strict and subclass_candidate == self) or self.is_parent(subclass_candidate)
+
+    def issupertype(self, other: "Type") -> bool:
+        if not isinstance(other, Entity):
+            raise NotImplementedError()
+        return other.is_subclass(self, strict=True)
 
     def validate(self, value: object) -> bool:
         """
@@ -347,7 +352,7 @@ class Entity(NamedType, WithComment):
             raise RuntimeException(None, f"Invalid type for value '{value}', should be type {self}")
 
         value_definition = value.type
-        if not (value_definition is self or self.is_subclass(value_definition)):
+        if not (value_definition is self or value_definition.is_subclass(self)):
             raise RuntimeException(None, f"Invalid class type for {value}, should be {self}")
 
         return True
@@ -469,8 +474,6 @@ class Entity(NamedType, WithComment):
             """
             Coerce float-typed values to float (e.g. 1 -> 1.0)
             """
-            t = t.get_no_reference()
-
             if isinstance(v, Reference):
                 raise TypingException(
                     None, f"Invalid value `{v}` in index for attribute {key}: " f"references can not be used in indexes."
@@ -630,7 +633,7 @@ class Entity(NamedType, WithComment):
                             "All attributes of a dataclasses must be identical in both the python and inmanta domain.",
                         )
                         continue
-                    inm_type = attr.get_type()
+                    inm_type = attr.type_internal
 
                     # all own fields are primitive
                     if not inm_type.is_attribute_type():
@@ -757,7 +760,7 @@ class Entity(NamedType, WithComment):
             )
             attribute = self.get_attribute(name)
             assert attribute is not None  # Mypy
-            ar._model_type = attribute.get_type().get_no_reference()
+            ar._model_type = attribute.get_type()
             return ar
 
         if isinstance(value, Reference):
