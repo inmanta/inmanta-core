@@ -64,7 +64,6 @@ from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
-from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
@@ -1203,7 +1202,6 @@ class BaseDocument(metaclass=DocumentMeta):
       strings.
     """
 
-    _connection_pool: Optional[asyncpg.pool.Pool] = None
     _fields_metadata: dict[str, Field]
     __primary_key__: tuple[str, ...]
     __ignore_fields__: tuple[str, ...]
@@ -1416,34 +1414,6 @@ class BaseDocument(metaclass=DocumentMeta):
         Generate a new ID. Override to use something else than uuid4
         """
         return uuid.uuid4()
-
-    @classmethod
-    def set_connection_pool(cls, pool: asyncpg.pool.Pool) -> None:
-        if cls._connection_pool:
-            raise Exception(f"Connection already set on {cls} ({cls._connection_pool}!")
-        cls._connection_pool = pool
-
-    @classmethod
-    async def close_connection_pool(cls) -> None:
-        if not cls._connection_pool:
-            return
-        try:
-            await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
-        except asyncio.TimeoutError:
-            cls._connection_pool.terminate()
-            # Don't propagate this exception but just write a log message. This way:
-            #   * A timeout here still makes sure that the other server slices get stopped
-            #   * The tests don't fail when this timeout occurs
-            LOGGER.exception("A timeout occurred while closing the connection pool to the database")
-        except asyncio.CancelledError:
-            cls._connection_pool.terminate()
-            # Propagate cancel
-            raise
-        except Exception:
-            LOGGER.exception("An unexpected exception occurred while closing the connection pool to the database")
-            raise
-        finally:
-            cls._connection_pool = None
 
     def __setattr__(self, name: str, value: object) -> None:
         if name[0] == "_":
