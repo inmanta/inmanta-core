@@ -1,9 +1,9 @@
 """
-    Inmanta LSM, example for custom partial compile
+Inmanta LSM, example for custom partial compile
 
-    :copyright: 2024 Inmanta
-    :contact: code@inmanta.com
-    :license: Inmanta EULA
+:copyright: 2024 Inmanta
+:contact: code@inmanta.com
+:license: Inmanta EULA
 """
 
 from inmanta_plugins import lsm

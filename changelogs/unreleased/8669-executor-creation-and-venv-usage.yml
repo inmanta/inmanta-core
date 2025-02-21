@@ -1,0 +1,6 @@
+---
+description: "Fix flaky `test_executor_creation_and_venv_usage` test case."
+issue-nr: 8669
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso8]

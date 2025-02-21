@@ -1,19 +1,19 @@
 """
-    Copyright 2023 Inmanta
+Copyright 2023 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -29,6 +29,7 @@ import asyncpg.connection
 import asyncpg.exceptions
 import pydantic
 
+import inmanta.exceptions
 import inmanta.util
 from inmanta import const, data, tracing
 from inmanta.const import ResourceState
@@ -1313,15 +1314,19 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
     ) -> SchedulerStatusReport:
+        if env.halted:
+            raise NotFound(message=f"No scheduler is running for environment {env.id}, because the environment is halted.")
         try:
             await self.autostarted_agent_manager._ensure_scheduler(env.id)
-        except Exception as e:
-            raise ServerError(f"Scheduler in env {env.id} failed to start.") from e
+        except inmanta.exceptions.EnvironmentNotFound:
+            raise NotFound(message=f"Environment {env.id} doesn't exist.")
+        except Exception:
+            raise ServerError(f"Scheduler in environment {env.id} failed to start.")
         else:
             client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
 
             if client is None:
-                raise ServerError(f"Cannot retrieve session for scheduler in env {env.id}.")
+                raise NotFound(message=f"No scheduler is running for environment {env.id}.")
 
             status = await client.trigger_get_status(env.id)
 

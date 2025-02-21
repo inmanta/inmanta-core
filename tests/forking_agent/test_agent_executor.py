@@ -1,15 +1,15 @@
 """
-    Copyright 2024 Inmanta
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-        http://www.apache.org/licenses/LICENSE-2.0
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
-    Contact: code@inmanta.com
+Copyright 2024 Inmanta
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -24,7 +24,6 @@ import sys
 
 from inmanta import const
 from inmanta.agent import executor, forking_executor
-from inmanta.agent.forking_executor import MPExecutor
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
 from inmanta.signals import dump_ioloop_running, dump_threads
@@ -313,7 +312,7 @@ async def test_executor_creation_and_venv_usage(
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
     """
-    mpmanager_light.process_pool.venv_checkup_interval = 0.1
+    mpmanager_light.process_pool.venv_checkup_interval = 0.1  # Renew the timestamp of the venv status file every 100 ms
     requirements1 = ()
     requirements2 = ("pkg1",)
     requirements3 = ("pkg2",)
@@ -389,15 +388,22 @@ def test():
     assert new_check_executor2 > old_check_executor2
     assert (datetime.datetime.now().astimezone() - new_check_executor2).seconds <= 2
 
-    async def wait_for_agent_stop_running(executor: MPExecutor) -> bool:
-        """
-        Wait for the agent to stop running
-        """
-        return not executor.running
+    async def stop_executor_and_wait_for_executor_server_to_stop(
+        executor_name: str, executor_blueprint: executor.ExecutorBlueprint
+    ) -> None:
+        # Stop the executor
+        executors = await executor_manager.stop_for_agent(executor_name)
+        await asyncio.gather(*(e.join() for e in executors))
+        assert all(not e.running for e in executors)
+
+        def did_executor_server_stop() -> bool:
+            return executor_blueprint in mpmanager_light.process_pool.pool
+
+        # Also wait until the executor server has stopped, because that one refreshes the .inmanta_venv_status file.
+        await retry_limited(did_executor_server_stop, timeout=10)
 
     # Now we want to check if the cleanup is working correctly
-    await executor_manager.stop_for_agent("agent1")
-    await retry_limited(wait_for_agent_stop_running, executor=executor_1, timeout=10)
+    await stop_executor_and_wait_for_executor_server_to_stop(executor_name="agent1", executor_blueprint=blueprint1)
     # First we want to override the modification date of the `inmanta_venv_status` file
     os.utime(
         executor_1_venv_status_file, (datetime.datetime.now().astimezone().timestamp(), old_datetime.astimezone().timestamp())
@@ -415,9 +421,7 @@ def test():
     assert {executor_2.process.executor_virtual_env.env_path, executor_3.process.executor_virtual_env.env_path} == venvs
 
     # Let's stop the other agent and pretend that the venv is broken
-    executors = await executor_manager.stop_for_agent("agent2")
-    await asyncio.gather(*(e.join() for e in executors))
-    await retry_limited(wait_for_agent_stop_running, executor=executor_2, timeout=10)
+    await stop_executor_and_wait_for_executor_server_to_stop(executor_name="agent2", executor_blueprint=blueprint2)
     executor_2_venv_status_file.unlink()
 
     await environment_manager.cleanup_inactive_pool_members()
@@ -425,9 +429,7 @@ def test():
     assert len(venvs) == 1, "Only one Virtual Environment should exist!"  # Only nr 3
 
     # Let's stop the other agent and pretend that the venv is outdated
-    executors = await executor_manager.stop_for_agent("agent3")
-    await asyncio.gather(*(e.join() for e in executors))
-    await retry_limited(wait_for_agent_stop_running, executor=executor_3, timeout=10)
+    await stop_executor_and_wait_for_executor_server_to_stop(executor_name="agent3", executor_blueprint=blueprint3)
     # This part of the test is a bit subtle because we rely on the fact that there is no context switching between the
     # modification override of the inmanta file and the retrieval of the last modification of the file
     os.utime(

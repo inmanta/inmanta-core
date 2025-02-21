@@ -1,39 +1,40 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
-import json
 import logging
 import re
+import typing
+import uuid
 from collections.abc import Iterable, Iterator, Sequence
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
 
 import inmanta.ast
 import inmanta.util
-from inmanta import const
+from inmanta import const, references
 from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
-from inmanta.execute import util
+from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 
 if TYPE_CHECKING:
     from inmanta import export
     from inmanta.data import ResourceAction
-    from inmanta.execute import proxy, runtime
+    from inmanta.execute import runtime
 
 LOGGER = logging.getLogger(__name__)
 
@@ -179,6 +180,94 @@ class ResourceMeta(type):
 RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"}
 
 
+class ReferenceCollector:
+    """Collect and organize all references and mutators"""
+
+    def __init__(self, resource: "Resource") -> None:
+        self.references: dict[uuid.UUID, references.ReferenceModel] = {}
+        self.mutators: list[references.MutatorModel] = []
+        self.resource = resource
+
+    def _add_reference(self, value: object) -> None:
+        """Add a value reference and recursively add any other references."""
+        match value:
+            case list():
+                for v in value:
+                    self._add_reference(v)
+
+            case dict():
+                for k, v in value.values():
+                    self._add_reference(v)
+
+            case references.Reference():
+                ref = value.serialize()
+                self.references[ref.id] = ref
+                for arg in value.arguments.values():
+                    self._add_reference(arg)
+
+            case _:
+                pass
+
+    def add_reference(self, path: str, reference: "references.Reference[references.PrimitiveTypes]") -> None:
+        """Add a new attribute map to a value reference that we found at the given path.
+
+        :param path: The path where the value needs to be inserted
+        :param reference: The attribute reference
+        """
+        self._add_reference(reference)
+
+        self.mutators.append(
+            references.ReplaceValue(
+                resource=self.resource,
+                value=reference,
+                destination=path,
+            ).serialize()
+        )
+
+
+def collect_references(value_reference_collector: ReferenceCollector | None, value: object, path: str) -> object:
+    """Collect value references. This method also ensures that there are no values in the resources that are not serializable.
+    This includes:
+        - Unknowns
+        - DynamicProxy
+
+
+    :param value_reference_collector: An object that holds all the collected secret references and mappings
+    :param value: The value to recursively find value references on
+    :param path: The current path we are working on in the tree
+    """
+    match value:
+        case list() | proxy.SequenceProxy():
+            return [
+                collect_references(value_reference_collector, value, f"{path}[{index}]")
+                for index, value in enumerate(cast(typing.Iterable[object], value))
+            ]
+
+        case dict() | proxy.DictProxy():
+            return {key: collect_references(value_reference_collector, value, f"{path}.{key}") for key, value in value.items()}
+
+        case references.Reference():
+            if value_reference_collector is None:
+                raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
+            value_reference_collector.add_reference(path, value)
+            return None
+
+        case proxy.DynamicProxy():
+            inner_value = proxy.DynamicProxy.unwrap(value)
+            if isinstance(inner_value, references.Reference):
+                if value_reference_collector is None:
+                    raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
+                value_reference_collector.add_reference(path, inner_value)
+                return None
+            else:
+                raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
+        case util.Unknown():
+            raise TypeError(f"{repr(value)} in resource is not JSON serializable at path {path}")
+
+        case _:
+            return value
+
+
 @stable_api
 class Resource(metaclass=ResourceMeta):
     """
@@ -190,7 +279,12 @@ class Resource(metaclass=ResourceMeta):
     static methods in the class with the name "get_$fieldname".
     """
 
-    fields: Sequence[str] = (const.RESOURCE_ATTRIBUTE_SEND_EVENTS, const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS)
+    fields: Sequence[str] = (
+        const.RESOURCE_ATTRIBUTE_SEND_EVENTS,
+        const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS,
+        const.RESOURCE_ATTRIBUTE_REFERENCES,
+        const.RESOURCE_ATTRIBUTE_MUTATORS,
+    )
     send_event: bool  # Deprecated field
     model: "proxy.DynamicProxy"
     map: dict[str, Callable[[Optional["export.Exporter"], "proxy.DynamicProxy"], Any]]
@@ -201,6 +295,16 @@ class Resource(metaclass=ResourceMeta):
             return obj.send_event
         except Exception:
             return False
+
+    @staticmethod
+    def get_references(_exporter: "export.Exporter", instance: "Resource") -> "typing.Sequence[references.ReferenceModel]":
+        """This method is present so the serialization works correctly. This field is set by the serializer"""
+        return []
+
+    @staticmethod
+    def get_mutators(_exporter: "export.Exporter", instance: "Resource") -> "typing.Sequence[references.MutatorModel]":
+        """This method is present so the serialization works correctly. This field is set by the serializer"""
+        return []
 
     @staticmethod
     def get_receive_events(_exporter: "export.Exporter", obj: "Resource") -> bool:
@@ -291,8 +395,13 @@ class Resource(metaclass=ResourceMeta):
 
     @classmethod
     def map_field(
-        cls, exporter: Optional["export.Exporter"], entity_name: str, field_name: str, model_object: "proxy.DynamicProxy"
-    ) -> str:
+        cls,
+        exporter: Optional["export.Exporter"],
+        entity_name: str,
+        field_name: str,
+        model_object: "proxy.DynamicProxy",
+        reference_collector: Optional[ReferenceCollector] = None,
+    ) -> object:
         try:
             if hasattr(cls, "get_" + field_name):
                 mthd = getattr(cls, "get_" + field_name)
@@ -301,10 +410,13 @@ class Resource(metaclass=ResourceMeta):
                 value = cls.map[field_name](exporter, model_object)
             else:
                 value = getattr(model_object, field_name)
-            # serialize to weed out all unknowns
-            # not very efficient, but the tree has to be traversed anyways
-            # passing along the serialized version would break the resource apis
-            json.dumps(value, default=inmanta.util.api_boundary_json_encoder)
+
+            # walk the entire model to find any value references. Additionally we also want to make sure we raise exceptions on:
+            # - Unknowns
+            # - DynamicProxys to entities
+            # - References if we don't have a reference_collector
+            value = collect_references(reference_collector, value, field_name)
+
             return value
         except IgnoreResourceException:
             raise  # will be handled in _load_resources of export.py
@@ -331,11 +443,18 @@ class Resource(metaclass=ResourceMeta):
 
         # build the id of the object
         obj_id = resource_cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
+        obj = resource_cls(obj_id)
 
         # map all fields
-        fields = {field: resource_cls.map_field(exporter, entity_name, field, model_object) for field in resource_cls.fields}
+        reference_collector = ReferenceCollector(obj)
+        fields: dict[str, object] = {
+            field: resource_cls.map_field(exporter, entity_name, field, model_object, reference_collector)
+            for field in resource_cls.fields
+        }
 
-        obj = resource_cls(obj_id)
+        fields[const.RESOURCE_ATTRIBUTE_REFERENCES] = list(reference_collector.references.values())
+        fields[const.RESOURCE_ATTRIBUTE_MUTATORS] = reference_collector.mutators
+
         obj.populate(fields)
         obj.model = model_object
 
@@ -343,8 +462,9 @@ class Resource(metaclass=ResourceMeta):
 
     @classmethod
     def deserialize(cls, obj_map: JsonType) -> "Resource":
-        """
-        Deserialize the resource from the given dictionary
+        """Deserialize the resource from the given dictionary
+
+        :param obj_map: The json structure that represents all fields of the resource
         """
         obj_id = Id.parse_id(obj_map["id"])
         cls_resource, _options = resource.get_class(obj_id.entity_type)
@@ -353,14 +473,30 @@ class Resource(metaclass=ResourceMeta):
         if cls_resource is None:
             raise TypeError("No resource class registered for entity %s" % obj_id.entity_type)
 
-        # backward compatibility for resources that were exported and stored in serialized form before the
-        # receive_events field was introduced
+        # backward compatibility for resources that were exported and stored in serialized form before these fields were
+        # introduced:
+        # - receive_events
+        # - references
+        # - mutators
+        extra: dict[str, object] = {}
         if const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS not in obj_map:
-            obj_map = {**obj_map, const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: True}
+            extra[const.RESOURCE_ATTRIBUTE_RECEIVE_EVENTS] = True
+
+        if (
+            const.RESOURCE_ATTRIBUTE_MUTATORS not in obj_map
+            or obj_map[const.RESOURCE_ATTRIBUTE_MUTATORS] is None
+            or const.RESOURCE_ATTRIBUTE_REFERENCES not in obj_map
+            or obj_map[const.RESOURCE_ATTRIBUTE_REFERENCES] is None
+        ):
+            extra[const.RESOURCE_ATTRIBUTE_MUTATORS] = []
+            extra[const.RESOURCE_ATTRIBUTE_REFERENCES] = []
+
+        if extra:
+            obj_map = {**obj_map, **extra}
 
         obj = cls_resource(obj_id)
         obj.populate(obj_map, force_fields)
-
+        obj.resolve_all_references()
         return obj
 
     @classmethod
@@ -387,21 +523,61 @@ class Resource(metaclass=ResourceMeta):
 
         self.version = _id.version
 
-    def populate(self, fields: dict[str, Any], force_fields: bool = False) -> None:
+        self._references_model: dict[uuid.UUID, references.ReferenceModel] = {}
+        self._references: dict[uuid.UUID, references.Reference[references.RefValue]] = {}
+
+    def __getitem__(self, key: str) -> object:
+        """Support dict like access on the resource"""
+        if key in self.fields:
+            return getattr(self, key)
+
+        raise KeyError()
+
+    def __setitem__(self, key: str, value: object) -> None:
+        """Support dict like access on the resource. It is not possible to create new
+        attributes using setitem
+        """
+        if key in self.fields:
+            return setattr(self, key, value)
+
+        raise KeyError()
+
+    def get_reference_value(self, id: uuid.UUID) -> "references.RefValue":
+        """Get a value of a reference"""
+        if id not in self._references:
+            if id not in self._references_model:
+                raise KeyError(f"The reference with id {id} is not defined in resource {self.id}")
+
+            model = self._references_model[id]
+            ref = references.reference.get_class(model.type).deserialize(model, self)
+            self._references[model.id] = ref
+
+        return self._references[id].get()
+
+    def resolve_all_references(self) -> None:
+        """Resolve all value references"""
+        for ref in self.references:  # type: ignore
+            model = references.ReferenceModel(**ref)
+            self._references_model[model.id] = model
+
+        for mutator in self.mutators:  # type: ignore
+            mutator = references.mutator.get_class(mutator["type"]).deserialize(references.MutatorModel(**mutator), self)
+            mutator.run()
+
+    def populate(self, fields: dict[str, object], force_fields: bool = False) -> None:
         for field in self.__class__.fields:
             if field in fields or force_fields:
                 setattr(self, field, fields[field])
             else:
                 raise Exception("Resource with id {} does not have field {}".format(fields["id"], field))
+
         if "requires" in fields:
             # parse requires into ID's
-            for require in fields["requires"]:
+            for require in fields["requires"]:  # type: ignore
                 self.requires.add(Id.parse_id(require))
 
     def set_version(self, version: int) -> None:
-        """
-        Set the version of this resource
-        """
+        """Set the version of this resource"""
         self.version = version
         self.id.version = version
 

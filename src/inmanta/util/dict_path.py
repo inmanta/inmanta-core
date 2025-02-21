@@ -1,19 +1,19 @@
 """
-    Copyright 2023 Inmanta
+Copyright 2023 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import abc
@@ -271,8 +271,22 @@ class WildDictPath(abc.ABC):
     def parse(cls: type[TWDP], inp: str) -> Optional[TWDP]:
         pass
 
-    def _validate_container(self, container: object) -> TypeGuard[dict[object, object]]:
-        return isinstance(container, dict)
+    def _validate_container(
+        self, container: object, set: bool = False, remove: bool = False
+    ) -> TypeGuard[dict[object, object]]:
+        """Validate that the container supports the required mapping protocol operations"""
+        # To be refined in https://github.com/inmanta/inmanta-core/issues/8398
+
+        if not hasattr(container, "__getitem__"):
+            return False
+
+        if set and not hasattr(container, "__setitem__"):
+            return False
+
+        if remove and not hasattr(container, "__delitem__"):
+            return False
+
+        return True
 
 
 @stable_api
@@ -920,7 +934,7 @@ class InDict(DictPath, WildInDict):
         return elements[0]
 
     def set_element(self, container: object, value: object, construct: bool = True) -> None:
-        if self._validate_container(container):
+        if self._validate_container(container, set=True):
             container[self.key.value] = value
         else:
             raise ContainerStructureException(f"{container} is not a Dict")
@@ -932,7 +946,7 @@ class InDict(DictPath, WildInDict):
         return self.key.value
 
     def remove(self, container: object) -> None:
-        if self._validate_container(container):
+        if self._validate_container(container, remove=True):
             for key in list(container.keys()):
                 if self.key.matches(key):
                     del container[key]
@@ -1119,7 +1133,7 @@ class NullPath(DictPath, WildNullPath):
             raise ContainerStructureException(f"{container} is not a Dict")
 
     def set_element(self, container: object, value: object, construct: bool = True) -> None:
-        if not self._validate_container(container):
+        if not self._validate_container(container, set=True, remove=True):
             raise ContainerStructureException(f"Argument container is not a Dict: {container}")
         if not self._validate_container(value):
             raise ContainerStructureException(f"Argument value is not a Dict: {container}")

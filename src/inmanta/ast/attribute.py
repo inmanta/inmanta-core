@@ -1,33 +1,28 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 
+import inmanta.ast.type as inmanta_type
 from inmanta.ast import CompilerException, Locatable, Location, RuntimeException, TypingException
-from inmanta.ast.type import NullableType, TypedList
 from inmanta.execute import runtime
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Entity  # noqa: F401
@@ -53,12 +48,11 @@ class Attribute(Locatable):
         self.__entity = entity
         self.__multi = multi
         self.__nullable = nullable
-
         self.__type: Type = value_type
         if multi:
-            self.__type = TypedList(self.__type)
+            self.__type = inmanta_type.TypedList(self.__type)
         if nullable:
-            self.__type = NullableType(self.__type)
+            self.__type = inmanta_type.NullableType(self.__type)
 
         self.comment = None  # type: Optional[str]
         self.end: Optional[RelationAttribute] = None

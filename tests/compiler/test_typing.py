@@ -1,19 +1,19 @@
 """
-    Copyright 2018 Inmanta
+Copyright 2018 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import re
@@ -234,7 +234,7 @@ def test_cast_exception_kwargs(snippetcompiler):
         """
 bool(value = 1)
         """,
-        "Only positional arguments allowed in type cast (reported in bool(value=1) ({dir}/main.cf:2))",
+        "Only positional arguments allowed in type cast (reported in bool(value=1) ({dir}/main.cf:2:1))",
     )
 
 
@@ -244,7 +244,7 @@ def test_cast_exception_wrapped_kwargs(snippetcompiler):
 dct = {"value" : 1}
 bool(**dct)
         """,
-        "Only positional arguments allowed in type cast (reported in bool(**dct) ({dir}/main.cf:3))",
+        "Only positional arguments allowed in type cast (reported in bool(**dct) ({dir}/main.cf:3:1))",
     )
 
 
@@ -253,7 +253,7 @@ def test_cast_exception_too_many_args(snippetcompiler):
         """
 bool(0, 1)
         """,
-        "Illegal arguments 0,1: type cast expects exactly 1 argument (reported in bool(0,1) ({dir}/main.cf:2))",
+        "Illegal arguments 0,1: type cast expects exactly 1 argument (reported in bool(0,1) ({dir}/main.cf:2:1))",
     )
 
 
@@ -262,7 +262,7 @@ def test_cast_exception_non_primitive(snippetcompiler):
         """
 list("[]")
         """,
-        "Can not call 'list', can only call plugin or primitive type cast (reported in list('[]') ({dir}/main.cf:2))",
+        "Can not call 'list', can only call plugin or primitive type cast (reported in list('[]') ({dir}/main.cf:2:1))",
     )
 
 
@@ -271,7 +271,7 @@ def test_cast_exception_type_error(snippetcompiler):
         """
 number(null)
         """,
-        "Failed to cast 'null' to number (reported in number(null) ({dir}/main.cf:2))",
+        "Failed to cast 'null' to number (reported in number(null) ({dir}/main.cf:2:1))",
     )
 
 
@@ -280,7 +280,7 @@ def test_cast_exception_value_error(snippetcompiler):
         """
 int("Hello World!")
         """,
-        "Failed to cast 'Hello World!' to int (reported in int('Hello World!') ({dir}/main.cf:2))",
+        "Failed to cast 'Hello World!' to int (reported in int('Hello World!') ({dir}/main.cf:2:1))",
     )
 
 
@@ -289,7 +289,7 @@ def test_cast_exception_int_value_error(snippetcompiler):
         """
 int("0.0")
         """,
-        "Failed to cast '0.0' to int (reported in int('0.0') ({dir}/main.cf:2))",
+        "Failed to cast '0.0' to int (reported in int('0.0') ({dir}/main.cf:2:1))",
     )
 
 
@@ -333,27 +333,27 @@ end
     attrs: dict[str, Attribute] = entity.get_attributes()
 
     assert "n" in attrs
-    assert isinstance(attrs["n"].type, Number)
+    assert isinstance(attrs["n"].type.get_no_reference(), Number)
 
     assert "ns" in attrs
     ns_type: inmanta_type.Type = attrs["ns"].type
-    assert isinstance(ns_type, inmanta_type.TypedList)
-    assert isinstance(ns_type.element_type, Number)
+    assert isinstance(ns_type.get_no_reference(), inmanta_type.TypedList)
+    assert isinstance(ns_type.get_no_reference().element_type, Number)
 
     assert "maybe_n" in attrs
     maybe_n_type: inmanta_type.Type = attrs["maybe_n"].type
-    assert isinstance(maybe_n_type, inmanta_type.NullableType)
-    assert isinstance(maybe_n_type.element_type, Number)
+    assert isinstance(maybe_n_type.get_no_reference(), inmanta_type.NullableType)
+    assert isinstance(maybe_n_type.get_no_reference().element_type, Number)
 
     assert "maybe_ns" in attrs
     maybe_ns_type: inmanta_type.Type = attrs["maybe_ns"].type
-    assert isinstance(maybe_ns_type, inmanta_type.NullableType)
+    assert isinstance(maybe_ns_type.get_no_reference(), inmanta_type.NullableType)
     maybe_ns_element_type: inmanta_type.Type = maybe_ns_type.element_type
-    assert isinstance(maybe_ns_element_type, inmanta_type.TypedList)
-    assert isinstance(maybe_ns_element_type.element_type, Number)
+    assert isinstance(maybe_ns_element_type.get_no_reference(), inmanta_type.TypedList)
+    assert isinstance(maybe_ns_element_type.get_no_reference().element_type, Number)
 
     assert "lst" in attrs
-    assert isinstance(attrs["lst"].type, inmanta_type.List)
+    assert isinstance(attrs["lst"].type.get_no_reference(), inmanta_type.List)
 
 
 @pytest.mark.parametrize("base_type", inmanta_type.TYPES.values())
@@ -605,10 +605,10 @@ def test_float_type_argument_plugin_error(snippetcompiler, val):
         snippet,
         (
             f"Value {repr(val)} for argument val1 of plugin test_674::test_float_to_int has incompatible type."
-            f" Expected type: float (reported in test_674::test_float_to_int({repr(val)}) ({{dir}}/main.cf:4))"
+            f" Expected type: float (reported in test_674::test_float_to_int({repr(val)}) ({{dir}}/main.cf:4:12))"
             "\ncaused by:"
             f"\n  Invalid value '{val}', expected float (reported in test_674::test_float_to_int({repr(val)})"
-            " ({dir}/main.cf:4))"
+            " ({dir}/main.cf:4:12))"
         ),
     )
 
@@ -636,9 +636,9 @@ test = test_674::test_error_float()
         """,
         (
             "Return value 1 of plugin test_674::test_error_float has incompatible type. Expected type: float"
-            " (reported in test_674::test_error_float() ({dir}/main.cf:4))"
+            " (reported in test_674::test_error_float() ({dir}/main.cf:4:8))"
             "\ncaused by:"
-            "\n  Invalid value '1', expected float (reported in test_674::test_error_float() ({dir}/main.cf:4))"
+            "\n  Invalid value '1', expected float (reported in test_674::test_error_float() ({dir}/main.cf:4:8))"
         ),
     )
 

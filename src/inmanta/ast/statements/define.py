@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 # pylint: disable-msg=R0923,W0613
@@ -46,7 +46,7 @@ from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.entity import Entity, Implement, Implementation
 from inmanta.ast.statements import BiStatement, ExpressionStatement, Literal, Statement, TypeDefinitionStatement
-from inmanta.ast.type import TYPES, ConstraintType, NullableType, Type, TypedList
+from inmanta.ast.type import TYPES, ConstraintType, NullableType, OrReferenceType, ReferenceType, Type, TypedList
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 from inmanta.plugins import Plugin
 
@@ -184,6 +184,7 @@ class DefineEntity(TypeDefinitionStatement):
         try:
             entity_type = self.type
             entity_type.comment = self.comment
+            is_dataclass = False
 
             add_attributes: dict[str, Attribute] = {}
             attribute: DefineAttribute
@@ -195,7 +196,7 @@ class DefineEntity(TypeDefinitionStatement):
                 name = str(attribute.name)
                 attr_obj = Attribute(
                     entity_type,
-                    attribute.type.get_basetype(self.namespace),
+                    OrReferenceType(attribute.type.get_basetype(self.namespace)),
                     name,
                     attribute.get_location(),
                     attribute.type.multi,
@@ -226,6 +227,7 @@ class DefineEntity(TypeDefinitionStatement):
 
                 entity_type.parent_entities.append(parent_type)
                 parent_type.child_entities.append(entity_type)
+                is_dataclass |= parent_type.get_full_name() == "std::Dataclass"
 
             for parent_type in entity_type.get_all_parent_entities():
                 for attr_name, other_attr in parent_type.attributes.items():
@@ -239,6 +241,9 @@ class DefineEntity(TypeDefinitionStatement):
                             add_attributes[attr_name] = other_attr
                         else:
                             raise DuplicateException(my_attr, other_attr, "Incompatible attributes")
+
+            if is_dataclass:
+                entity_type.pair_dataclass_stage1()
             # verify all attribute compatibility
         except TypeNotFoundException as e:
             e.set_statement(self)
@@ -473,7 +478,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         """
         basetype = self.namespace.get_type(self.basetype)
         self.anchors.append(TypeAnchor(self.basetype, basetype))
-
+        assert not isinstance(basetype, ReferenceType)
         constraint_type = self.type
 
         constraint_type.comment = self.comment
@@ -639,7 +644,7 @@ class DefineIndex(DefinitionStatement):
                         self, f"Index can not contain list attributes, Attribute ' {attribute}.{entity_type}' is a list"
                     )
 
-        entity_type.add_index([str(a) for a in self.attributes])
+        entity_type.add_index([str(a) for a in self.attributes], self)
 
 
 class PluginStatement(TypeDefinitionStatement):

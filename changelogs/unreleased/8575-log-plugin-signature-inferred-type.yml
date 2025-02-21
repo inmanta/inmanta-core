@@ -1,0 +1,4 @@
+description: Log the inferred Inmanta DSL type for the plugins signatures.
+issue-nr: 8575
+change-type: patch
+destination-branches: [master, iso8]

@@ -1,0 +1,7 @@
+description: Added support for dataclasses in plugins.
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  feature: "{{description}}. See [plugins](module-plugins)"
+
+
