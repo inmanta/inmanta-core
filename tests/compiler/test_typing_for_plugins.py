@@ -19,7 +19,7 @@ Contact: code@inmanta.com
 import inspect
 import numbers
 import typing as py_type
-from typing import Sequence, Type
+from typing import Sequence
 
 import inmanta.ast.type as inm_type
 import utils
@@ -32,6 +32,7 @@ from inmanta.ast.type import (
     ConstraintType,
     Float,
     Integer,
+    Null,
     NullableType,
     OrReferenceType,
     ReferenceType,
@@ -165,6 +166,63 @@ def make_typedef(
     return tp
 
 
+def test_type_utility_methods() -> None:
+
+    def check_type(intypes: list[inm_type.Type], is_attr: bool, custom_to_python: bool):
+        for intype in intypes:
+            # Basic type compare
+            assert intype.issubtype(Any())
+
+            try:
+                assert not intype.issupertype(intype)
+            except NotImplementedError:
+                # Valid response
+                pass
+
+            try:
+                assert not intype.issupertype(Any())
+            except NotImplementedError:
+                # Valid response
+                pass
+            # Ensure we are not stuck in an infinite loop
+            intype.get_no_reference()
+            intype.get_base_type()
+            # Make sure the recursive ones work
+            assert intype.is_attribute_type() == is_attr, f"{intype}, is attribute expected {is_attr}"
+            assert intype.has_custom_to_python() == custom_to_python
+
+    primitives: list[inm_type.Type] = [Bool(), Integer(), Float(), String()]
+
+    check_type(primitives, True, False)
+    check_type([NullableType(primitive) for primitive in primitives], True, False)
+    check_type([Union(primitives)], True, False)
+    check_type([NullableType(Union(primitives))], True, False)
+    check_type([Any()], False, False)
+    check_type([TypedList(primitive) for primitive in primitives], True, False)
+    check_type([TypedDict(primitive) for primitive in primitives], False, False)
+    check_type([Null()], False, False)
+    check_type([inm_type.ReferenceType(Bool()), inm_type.OrReferenceType(Bool())], True, True)
+    check_type(
+        [
+            inm_type.Number(),
+            inm_type.LiteralList(),
+            inm_type.LiteralDict(),
+            inm_type.Literal(),
+        ],
+        True,
+        False,
+    )
+
+    check_type(
+        [
+            inm_type.List(),
+            inm_type.Dict(),
+        ],
+        False,
+        False,
+    )
+
+
 def test_issubtype_of_own_python_type() -> None:
     """
     Verify round-trip compatibility of tp.issubtype(to_dsl_type(tp.as_python_type_string()))
@@ -219,7 +277,7 @@ def test_issubtype_widening() -> None:
     Verify issubtype accepts wider types and rejects narrower or unrelated ones.
     """
 
-    def verify(narrow: Type, wide: Type) -> None:
+    def verify(narrow: inm_type.Type, wide: inm_type.Type) -> None:
         assert narrow.issubtype(wide)
         assert not wide.issubtype(narrow)
 
@@ -240,3 +298,20 @@ def test_issubtype_widening() -> None:
     verify(make_typedef("mytype", Integer()), Any())
     assert not make_typedef("mytype", Integer()).issubtype(String())
     assert not make_typedef("mytype", Integer()).issubtype(make_typedef("othertype", Integer()))
+
+    namespace = Namespace("dummy_namespace")
+    entity: Entity = Entity("DummyEntity", namespace)
+    sub_entity: Entity = Entity("DummyEntitySub", namespace)
+
+    entity.child_entities.append(sub_entity)
+    sub_entity.parent_entities.append(entity)
+
+    assert sub_entity.is_subclass(entity)
+    assert not entity.is_subclass(sub_entity)
+    assert not entity.issubtype(sub_entity)
+
+    verify(sub_entity, entity)
+    verify(sub_entity, Any())
+
+    assert not entity.issubtype(Integer())
+    assert not Integer().issubtype(entity)

@@ -21,6 +21,7 @@ from collections import abc
 from itertools import chain
 from typing import TypeVar
 
+import inmanta.ast.type
 import utils
 from inmanta.ast import Anchor, LocatableString, Location, Range
 from inmanta.ast.attribute import RelationAttribute
@@ -68,7 +69,7 @@ def test_slots_rt():
     rs = Resolver(ns)
     e = Entity("xx", ns)
     qs = QueueScheduler(None, [], [], {})
-    r = RelationAttribute(e, None, "xx", Location("", 1))
+    r = RelationAttribute(e, inmanta.ast.type.Any(), "xx", Location("", 1))
     i = Instance(e, rs, qs)
     sa = SetAttribute(Reference("a"), "a", Literal("a"))
 
