@@ -296,6 +296,8 @@ class ModelState:
             result.resource_state[resource_id] = resource_state
 
             # Populate resources intent
+            assert isinstance(res["attribute_hash"], str)
+            assert isinstance(res["attributes"], dict)
             resource_intent = ResourceIntent(
                 resource_id=resource_id,
                 attribute_hash=res["attribute_hash"],

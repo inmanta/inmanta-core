@@ -67,7 +67,7 @@ from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-from sqlalchemy import Pool, URL
+from sqlalchemy import Pool, URL, AsyncAdaptedQueuePool
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 ENGINE: AsyncEngine | None = None
@@ -5287,6 +5287,7 @@ class Resource(BaseDocument):
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
+        assert isinstance(attributes, dict)
         if "version" not in attributes:
             attributes["version"] = record["latest_model"]
         requires = [resources.Id.parse_id(req).resource_str() for req in attributes["requires"]]
@@ -6664,10 +6665,10 @@ async def get_connection_ctx_mgr() -> AsyncIterator[Connection]:
         yield raw_asyncio_connection
 
 
-def get_pool() -> Pool:
+def get_pool() -> AsyncAdaptedQueuePool:
     pool = get_engine().pool
     assert pool is not None, "SQL Alchemy engine's pool was not initialized"
-
+    assert isinstance(pool, AsyncAdaptedQueuePool)
     return pool
 
 
