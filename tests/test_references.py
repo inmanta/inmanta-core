@@ -27,8 +27,9 @@ import pytest
 from inmanta import env, references, resources, util
 from inmanta.agent.handler import PythonLogger
 from inmanta.ast import ExternalException, RuntimeException, TypingException
+from inmanta.data.model import ReleasedResourceDetails, ReleasedResourceState
 from inmanta.references import ReferenceCycleException
-from utils import log_contains
+from utils import ClientHelper, log_contains
 
 if typing.TYPE_CHECKING:
     from conftest import SnippetCompilationTest
@@ -37,7 +38,9 @@ if typing.TYPE_CHECKING:
 # defined in tests/data/modules_v2/refs
 
 
-def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str, caplog) -> None:
+def test_references_in_model(
+    snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str, caplog, agent, clienthelper
+) -> None:
     """Test the use of references in the model and if they produce the correct serialized form."""
     refs_module = os.path.join(modules_v2_dir, "refs")
 
@@ -83,6 +86,55 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
         assert not resource.fail and resource.fail is not None
 
     log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference TestReference CWD")
+
+
+async def test_deploy_end_to_end(
+    snippetcompiler: "SnippetCompilationTest",
+    modules_v2_dir: str,
+    caplog,
+    agent,
+    client,
+    clienthelper: ClientHelper,
+    environment,
+) -> None:
+    refs_module = os.path.join(modules_v2_dir, "refs")
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+           import refs
+           import std::testing
+
+           test_ref = refs::create_bad_reference(name=refs::create_string_reference(name="CWD"))
+
+           # bad ref will fail
+           std::testing::NullResource(
+               name="test",
+               agentname="test",
+               fail=refs::create_bool_reference(name=test_ref),
+           )
+
+            # good ref will work
+            std::testing::NullResource(
+               name="test2",
+               agentname="test",
+               fail=refs::create_bool_reference(name="testx"),
+           )
+           """,
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+    )
+
+    await clienthelper.set_auto_deploy()
+    await snippetcompiler.do_export_and_deploy()
+    await clienthelper.wait_for_released()
+    await clienthelper.wait_for_deployed()
+    result = await client.resource_details(environment, "std::testing::NullResource[test,name=test]")
+    assert result.code == 200
+    details = ReleasedResourceDetails(**result.result["data"])
+    assert details.status == ReleasedResourceState.failed
+
+    result = await client.resource_details(environment, "std::testing::NullResource[test,name=test2]")
+    assert result.code == 200
+    details = ReleasedResourceDetails(**result.result["data"])
+    assert details.status == ReleasedResourceState.deployed
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:

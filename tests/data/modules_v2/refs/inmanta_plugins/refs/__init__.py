@@ -111,3 +111,27 @@ class Null(ManagedResource, PurgeableResource):
             return False
         else:
             return False
+
+
+@reference("refs::BAD")
+class BadReference(Reference[str]):
+    """A dummy reference to a string"""
+
+    def __init__(self, name: str | Reference[str]) -> None:
+        """
+        :param name: The name of the environment variable.
+        """
+        super().__init__()
+        self.name = name
+
+    def resolve(self, logger: LoggerABC) -> str:
+        """Resolve the reference"""
+        raise Exception("BAD")
+
+    def __str__(self) -> str:
+        return f"BadReference"
+
+
+@plugin
+def create_bad_reference(name: Reference[str] | str) -> Reference[str]:
+    return BadReference(name=name)
