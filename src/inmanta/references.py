@@ -349,7 +349,8 @@ class Reference[T: RefValue](ReferenceLike):
             self._reference_value = self.resolve(logger)
             self._reference_value_cached = True
 
-        logger.debug("Using cached value for reference %(reference)s", reference=str(self))
+        else:
+            logger.debug("Using cached value for reference %(reference)s", reference=str(self))
         return self._reference_value
 
     def serialize(self) -> ReferenceModel:
