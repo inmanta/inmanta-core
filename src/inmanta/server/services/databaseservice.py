@@ -136,6 +136,18 @@ class DatabaseMonitor:
             pool_exhaustion_time=self._exhausted_pool_events_count * self._db_exhaustion_check_interval,
         )
 
+    def get_connections_in_use(self) -> int:
+        pool = get_pool()
+        if pool is None:
+            return 0
+        return pool.checkedout() + max(0, pool.overflow())
+
+    def get_free_connections(self) -> int:
+        pool = get_pool()
+        if pool is None:
+            return 0
+        return pool.checkedin()
+
     def get_pool_free(self) -> int:
         pool = get_pool()
         if pool is None:
@@ -161,15 +173,11 @@ class DatabaseMonitor:
         )
         self._add_gauge(
             "db.open_connections",
-            CallbackGauge(callback=lambda: get_pool().checkedout() if get_pool() is not None else 0),
+            CallbackGauge(callback=lambda: self.get_connections_in_use),
         )
         self._add_gauge(
             "db.free_connections",
-            CallbackGauge(
-                callback=lambda: (
-                    get_pool().checkedin() + self._max_overflow - get_pool().overflow() if get_pool() is not None else 0
-                )
-            ),
+            CallbackGauge(callback=lambda: (get_pool().checkedin() if get_pool() is not None else 0)),
         )
         self._add_gauge(
             "db.free_pool",

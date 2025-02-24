@@ -42,7 +42,7 @@ from inmanta.types import ResourceVersionIdStr
 
 async def test_connect_too_small_connection_pool(sqlalchemy_url_parameters: Mapping[str, str]):
     """
-        Test sql alchemy engine connection pool saturation
+    Test sql alchemy engine connection pool saturation
     """
     await start_engine(
         **sqlalchemy_url_parameters,

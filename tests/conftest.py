@@ -28,7 +28,6 @@ from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
 import inmanta.deploy.state
-import sqlalchemy
 import toml
 from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
