@@ -37,6 +37,7 @@ from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.types import ArgumentTypes
 from inmanta.util import IntervalSchedule, Scheduler
+from sqlalchemy import AsyncAdaptedQueuePool
 
 LOGGER = logging.getLogger(__name__)
 
@@ -123,36 +124,31 @@ class DatabaseMonitor:
         pool = get_pool()
         max_connections = pool.size() + self._max_overflow
         free_connections_in_pool = pool.checkedin()
-        open_overflow_connections = pool.overflow()
 
         return DataBaseReport(
             connected=connected,
             database=self.dn_name,
             host=self.db_host,
             max_pool=max_connections,
-            free_pool=free_connections_in_pool + self._max_overflow - open_overflow_connections,
-            open_connections=pool.size() - free_connections_in_pool + open_overflow_connections,
-            free_connections=free_connections_in_pool,
+            free_pool=free_connections_in_pool,
+            open_connections=pool.checkedout(),
+            free_connections=self.get_free_connections(pool),
             pool_exhaustion_time=self._exhausted_pool_events_count * self._db_exhaustion_check_interval,
         )
 
-    def get_connections_in_use(self) -> int:
-        pool = get_pool()
-        if pool is None:
-            return 0
-        return pool.checkedout() + max(0, pool.overflow())
+    def get_free_connections(self, pool: Optional[AsyncAdaptedQueuePool] = None) -> int:
+        """
+        Return all available connections for the given pool:
+          "idle" connections waiting in the pool + possible overflow connections.
 
-    def get_free_connections(self) -> int:
-        pool = get_pool()
+        If no pool is passed as an argument, the one associated with the running sql
+        alchemy engine for this process will try to be used.
+        """
+        if pool is None:
+            pool = get_pool()
         if pool is None:
             return 0
-        return pool.checkedin()
-
-    def get_pool_free(self) -> int:
-        pool = get_pool()
-        if pool is None:
-            return 0
-        return pool.size() + self._max_overflow - pool.checkedout() - pool.overflow()
+        return pool.checkedin() + self._max_overflow - max(0, pool.overflow())
 
     def _add_gauge(self, name: str, the_gauge: CallbackGauge) -> None:
         """Helper to register gauges and keep track of registrations"""
@@ -162,26 +158,25 @@ class DatabaseMonitor:
     def start_monitor(self) -> None:
         """Attach to monitoring system"""
 
-        # TODO not all these are correct / equivalent to previous asyncpg pool implementation
         self._add_gauge(
             "db.connected",
             CallbackGauge(callback=lambda: 1 if (get_pool() is not None) else 0),
         )
         self._add_gauge(
-            "db.max_pool",
+            "db.max_concurrent_connections",
             CallbackGauge(callback=lambda: get_pool().size() + self._max_overflow if get_pool() is not None else 0),
         )
         self._add_gauge(
             "db.open_connections",
-            CallbackGauge(callback=lambda: self.get_connections_in_use),
+            CallbackGauge(callback=lambda: (get_pool().checkedout() if get_pool() is not None else 0)),
         )
         self._add_gauge(
-            "db.free_connections",
+            "db.free_connections_in_pool",
             CallbackGauge(callback=lambda: (get_pool().checkedin() if get_pool() is not None else 0)),
         )
         self._add_gauge(
-            "db.free_pool",
-            CallbackGauge(callback=self.get_pool_free),
+            "db.all_available_connections",
+            CallbackGauge(callback=self.get_free_connections),
         )
         self._add_gauge(
             "db.pool_exhaustion_count",
