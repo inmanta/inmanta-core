@@ -63,6 +63,7 @@ async def test_connect_default_parameters(sql_alchemy_engine):
     async with sql_alchemy_engine.connect() as connection:
         assert connection is not None
 
+
 async def test_connection_failure(postgres_db, unused_tcp_port_factory, database_name, clean_reset):
     wrong_port = unused_tcp_port_factory()
 
@@ -71,7 +72,7 @@ async def test_connection_failure(postgres_db, unused_tcp_port_factory, database
         database_password=postgres_db.password,
         database_host=postgres_db.host,
         database_port=wrong_port,
-        database_name=database_name
+        database_name=database_name,
     )
     engine = get_engine()
     with pytest.raises(ConnectionRefusedError):

@@ -67,7 +67,7 @@ from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-from sqlalchemy import Pool, URL, AsyncAdaptedQueuePool
+from sqlalchemy import URL, AsyncAdaptedQueuePool
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 ENGINE: AsyncEngine | None = None
