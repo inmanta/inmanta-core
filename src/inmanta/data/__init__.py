@@ -67,7 +67,7 @@ from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-from sqlalchemy import Pool
+from sqlalchemy import Pool, URL
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 ENGINE: AsyncEngine | None = None
@@ -3853,7 +3853,8 @@ class Compile(BaseDocument):
             force_update=requested_compile["force_update"],
             metadata=requested_compile["metadata"] or {},
             environment_variables=requested_compile["used_environment_variables"] or {},
-            requested_environment_variables=requested_compile["requested_environment_variables"],
+            # requested_environment_variables=requested_compile["requested_environment_variables"],
+            requested_environment_variables=(json.loads(requested_compile["requested_environment_variables"])),
             mergeable_environment_variables=requested_compile["mergeable_environment_variables"],
             partial=requested_compile["partial"],
             removed_resource_sets=requested_compile["removed_resource_sets"],
@@ -6607,7 +6608,12 @@ async def stop_engine() -> None:
 
 
 async def start_engine(
-    url: str,
+    *,
+    database_username: str,
+    database_password: str,
+    database_host: str,
+    database_port: int,
+    database_name: str,
     pool_size: int = 10,
     max_overflow: int = 0,
     pool_timeout: float = 60.0,
@@ -6617,6 +6623,16 @@ async def start_engine(
     engine vs connection vs session overview
     https://stackoverflow.com/questions/34322471/sqlalchemy-engine-connection-and-session-difference
     """
+
+    url_object = URL.create(
+        drivername="postgresql+asyncpg",
+        username=database_username,
+        password=database_password,
+        host=database_host,
+        port=database_port,
+        database=database_name,
+    )
+
     global ENGINE
 
     if ENGINE is not None:
@@ -6625,7 +6641,7 @@ async def start_engine(
     LOGGER.debug("Creating engine...")
     try:
         ENGINE = create_async_engine(
-            url=url,
+            url=url_object,
             pool_size=pool_size,
             max_overflow=max_overflow,
             pool_timeout=pool_timeout,

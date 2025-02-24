@@ -93,20 +93,20 @@ def validate_server_setup() -> None:
 
 
 async def connect_to_db() -> None:
-    """ """
+    """
+    Connect to the database
+    """
 
-    database_host = server_config.db_host.get()
-    database_port = server_config.db_port.get()
-
-    database_username = server_config.db_username.get()
-    database_password = server_config.db_password.get()
-    database_name = server_config.db_name.get()
     connection_pool_min_size = server_config.server_db_connection_pool_min_size.get()
     connection_pool_max_size = server_config.server_db_connection_pool_max_size.get()
     connection_timeout = server_config.db_connection_timeout.get()
 
     await start_engine(
-        url=f"postgresql+asyncpg://{database_username}:{database_password}@{database_host}:{database_port}/{database_name}",
+        database_username=server_config.db_username.get(),
+        database_password=server_config.db_password.get(),
+        database_host=server_config.db_host.get(),
+        database_port=server_config.db_port.get(),
+        database_name=server_config.db_name.get(),
         pool_size=connection_pool_min_size,
         max_overflow=connection_pool_max_size - connection_pool_min_size,
         pool_timeout=connection_timeout,
