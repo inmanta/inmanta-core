@@ -71,12 +71,8 @@ class Agent(SessionEndpoint):
 
     async def start(self) -> None:
         # Make mypy happy
-        assert data.Resource._connection_pool is not None
-        self._db_monitor = DatabaseMonitor(
-            data.Resource._connection_pool,
-            opt.db_name.get(),
-            opt.db_host.get(),
-        )
+        max_overflow = cfg.scheduler_db_connection_pool_max_size.get() - cfg.scheduler_db_connection_pool_min_size.get()
+        self._db_monitor = DatabaseMonitor(opt.db_name.get(), opt.db_host.get(), max_overflow)
         self._db_monitor.start()
 
         await super().start()
