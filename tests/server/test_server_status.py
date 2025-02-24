@@ -21,7 +21,6 @@ import uuid
 
 import pytest
 
-from inmanta import data
 from inmanta.data import stop_engine
 from inmanta.server.server import Server
 from inmanta.server.services.compilerservice import CompilerService

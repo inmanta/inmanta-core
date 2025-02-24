@@ -70,7 +70,6 @@ from inmanta.util import parse_timestamp
 from sqlalchemy import URL, AsyncAdaptedQueuePool
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-
 """
 Global reference to the SQL Alchemy engine
 Main APIs to interact with it:
@@ -6607,7 +6606,6 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
-
 async def start_engine(
     *,
     database_username: str,
@@ -6668,7 +6666,6 @@ async def get_connection_ctx_mgr() -> AsyncIterator[Connection]:
         # from the .driver_connection attribute
         raw_asyncio_connection = connection_fairy.driver_connection
         yield raw_asyncio_connection
-
 
 
 async def stop_engine() -> None:

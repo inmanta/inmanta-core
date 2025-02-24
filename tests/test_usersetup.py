@@ -37,7 +37,7 @@ class CLI_user_setup:
         runner = testing.CliRunner(mix_stderr=False)
 
         def invoke():
-            return runner.invoke(cli=cmd, input=f"{run_locally}\n{username}\n{password}", catch_exceptions=False)
+            return runner.invoke(cli=cmd, input=f"{run_locally}\n{username}\n{password}")
 
         result = await asyncio.get_event_loop().run_in_executor(None, invoke)
         # reset to default again
