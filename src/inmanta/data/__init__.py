@@ -29,12 +29,12 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Callable, Collection, Iterable, Sequence, Set
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Iterable, Sequence, Set
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from itertools import chain
 from re import Pattern
-from typing import AsyncGenerator, Generic, NewType, Optional, TypeVar, Union, cast, overload
+from typing import Generic, NewType, Optional, TypeVar, Union, cast, overload
 from uuid import UUID
 
 import asyncpg
@@ -6637,7 +6637,7 @@ async def start_engine(
 
 
 @asynccontextmanager
-async def get_connection_ctx_mgr() -> AsyncGenerator[Connection]:
+async def get_connection_ctx_mgr() -> AsyncIterator[Connection]:
     if ENGINE is None:
         raise Exception("SQL Alchemy engine was not initialized")
     async with ENGINE.connect() as connection:
