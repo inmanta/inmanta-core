@@ -70,6 +70,14 @@ from inmanta.util import parse_timestamp
 from sqlalchemy import URL, AsyncAdaptedQueuePool
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+
+"""
+Global reference to the SQL Alchemy engine
+Main APIs to interact with it:
+- start_engine()
+- get_connection_ctx_mgr()
+- stop_engine()
+"""
 ENGINE: AsyncEngine | None = None
 
 
@@ -5287,7 +5295,6 @@ class Resource(BaseDocument):
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
-        assert isinstance(attributes, dict)
         if "version" not in attributes:
             attributes["version"] = record["latest_model"]
         requires = [resources.Id.parse_id(req).resource_str() for req in attributes["requires"]]
@@ -6600,12 +6607,6 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
-async def stop_engine() -> None:
-    global ENGINE
-    if ENGINE is not None:
-        await ENGINE.dispose()
-    ENGINE = None
-
 
 async def start_engine(
     *,
@@ -6620,8 +6621,7 @@ async def start_engine(
     echo: bool = False,
 ) -> None:
     """
-    engine vs connection vs session overview
-    https://stackoverflow.com/questions/34322471/sqlalchemy-engine-connection-and-session-difference
+    Start the SQL Alchemy engine for this process
     """
 
     url_object = URL.create(
@@ -6654,6 +6654,11 @@ async def start_engine(
 
 @asynccontextmanager
 async def get_connection_ctx_mgr() -> AsyncIterator[Connection]:
+    """
+    Retrieve an asyncpg connection from the sqlalchemy engine's
+    connection pool. This method is expected to be used as an
+    async context manager.
+    """
     if ENGINE is None:
         raise Exception("SQL Alchemy engine was not initialized")
     async with ENGINE.connect() as connection:
@@ -6663,6 +6668,17 @@ async def get_connection_ctx_mgr() -> AsyncIterator[Connection]:
         # from the .driver_connection attribute
         raw_asyncio_connection = connection_fairy.driver_connection
         yield raw_asyncio_connection
+
+
+
+async def stop_engine() -> None:
+    """
+    Stop the sql alchemy engine.
+    """
+    global ENGINE
+    if ENGINE is not None:
+        await ENGINE.dispose()
+    ENGINE = None
 
 
 def get_pool() -> AsyncAdaptedQueuePool:
