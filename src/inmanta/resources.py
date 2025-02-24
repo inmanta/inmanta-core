@@ -542,27 +542,29 @@ class Resource(metaclass=ResourceMeta):
 
         raise KeyError()
 
-    def get_reference_value(self, id: uuid.UUID, ctx: "handler.LoggerABC") -> "references.RefValue":
+    def get_reference_value(self, id: uuid.UUID, logger: "handler.LoggerABC") -> "references.RefValue":
         """Get a value of a reference"""
         if id not in self._references:
             if id not in self._references_model:
                 raise KeyError(f"The reference with id {id} is not defined in resource {self.id}")
 
             model = self._references_model[id]
-            ref = references.reference.get_class(model.type).deserialize(model, self, ctx)
+            ref = references.reference.get_class(model.type).deserialize(model, self, logger)
             self._references[model.id] = ref
 
-        return self._references[id].get(ctx)
+        return self._references[id].get(logger)
 
-    def resolve_all_references(self, ctx: "handler.LoggerABC") -> None:
+    def resolve_all_references(self, logger: "handler.LoggerABC") -> None:
         """Resolve all value references"""
         for ref in self.references:  # type: ignore
             model = references.ReferenceModel(**ref)
             self._references_model[model.id] = model
 
         for mutator in self.mutators:  # type: ignore
-            mutator = references.mutator.get_class(mutator["type"]).deserialize(references.MutatorModel(**mutator), self, ctx)
-            mutator.run(ctx)
+            mutator = references.mutator.get_class(mutator["type"]).deserialize(
+                references.MutatorModel(**mutator), self, logger
+            )
+            mutator.run(logger)
 
     def populate(self, fields: dict[str, object], force_fields: bool = False) -> None:
         for field in self.__class__.fields:

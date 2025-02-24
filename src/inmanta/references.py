@@ -99,12 +99,12 @@ class Argument(pydantic.BaseModel):
     def get_arg_value(
         self,
         resource: "inmanta.resources.Resource",
-        ctx: "handler.LoggerABC",
+        logger: "handler.LoggerABC",
     ) -> object:
         """Get the value for the argument to be able to construct the reference again
 
         :param resource: The resource on which the reference has been defined
-        :param ctx: The logger context to use while resolving/deserializing
+        :param logger: The logger context to use while resolving/deserializing
         """
 
 
@@ -117,7 +117,7 @@ class LiteralArgument(Argument):
     def get_arg_value(
         self,
         resource: "inmanta.resources.Resource",
-        ctx: "handler.LoggerABC",
+        logger: "handler.LoggerABC",
     ) -> object:
         return self.value
 
@@ -131,9 +131,9 @@ class ReferenceArgument(Argument):
     def get_arg_value(
         self,
         resource: "inmanta.resources.Resource",
-        ctx: "handler.LoggerABC",
+        logger: "handler.LoggerABC",
     ) -> object:
-        return resource.get_reference_value(self.id, ctx)
+        return resource.get_reference_value(self.id, logger)
 
 
 class GetArgument(Argument):
@@ -145,7 +145,7 @@ class GetArgument(Argument):
     def get_arg_value(
         self,
         resource: "inmanta.resources.Resource",
-        ctx: "handler.LoggerABC",
+        logger: "handler.LoggerABC",
     ) -> object:
         return None
 
@@ -161,7 +161,7 @@ class PythonTypeArgument(Argument):
     def get_arg_value(
         self,
         resource: "inmanta.resources.Resource",
-        ctx: "handler.LoggerABC",
+        logger: "handler.LoggerABC",
     ) -> object:
         return getattr(builtins, self.value)
 
@@ -175,7 +175,7 @@ class ResourceArgument(Argument):
     def get_arg_value(
         self,
         resource: "inmanta.resources.Resource",
-        ctx: "handler.LoggerABC",
+        logger: "handler.LoggerABC",
     ) -> object:
         if not resource.id.resource_str() == self.id:
             raise Exception(
@@ -231,7 +231,7 @@ class ReferenceLike:
         # Will be set by DynamicProxy.unwrap at the plugin boundary
         self._model_type: typing.Optional["inm_type.Type"] = None
 
-    def resolve_other[S: RefValue](self, value: "Reference[S] | S", ctx: "handler.LoggerABC") -> S:
+    def resolve_other[S: RefValue](self, value: "Reference[S] | S", logger: "handler.LoggerABC") -> S:
         """
         Given a reference or a value, either return the value or the value obtained by resolving the reference.
 
@@ -244,7 +244,7 @@ class ReferenceLike:
         When resolving reference on the compiler side, not all references will be resolved and using this method is required.
         """
         if isinstance(value, Reference):
-            return value.get(ctx)
+            return value.get(logger)
         return value
 
     @classmethod
@@ -252,14 +252,14 @@ class ReferenceLike:
         cls: typing.Type[C],
         ref: SerializedReferenceLike,
         resource: "inmanta.resources.Resource",
-        ctx: "handler.LoggerABC",
+        logger: "handler.LoggerABC",
     ) -> C:
         """Deserialize the reference or mutator.
 
         :param ref: The model of the reference to deserialize
         :param resource: The resource to use as a read-only reference
         """
-        return cls(**{arg.name: arg.get_arg_value(resource, ctx) for arg in ref.args})
+        return cls(**{arg.name: arg.get_arg_value(resource, logger) for arg in ref.args})
 
     @abc.abstractmethod
     def serialize(self) -> SerializedReferenceLike:
@@ -301,7 +301,7 @@ class Mutator(ReferenceLike):
     """A mutator that has side effects when executed"""
 
     @abc.abstractmethod
-    def run(self, ctx: "handler.LoggerABC") -> None:
+    def run(self, logger: "handler.LoggerABC") -> None:
         """Execute the mutator"""
 
     def serialize(self) -> MutatorModel:
@@ -339,16 +339,17 @@ class Reference[T: RefValue](ReferenceLike):
         return dataclasses.is_dataclass(cls.get_reference_type())
 
     @abc.abstractmethod
-    def resolve(self, ctx: "handler.LoggerABC") -> T:
+    def resolve(self, logger: "handler.LoggerABC") -> T:
         """This method resolves the reference and returns the object that it refers to"""
         pass
 
-    def get(self, ctx: "handler.LoggerABC") -> T:
+    def get(self, logger: "handler.LoggerABC") -> T:
         """Get the value. If we have already resolved it a cached value is returned, otherwise resolve() is called"""
         if not self._reference_value_cached:
-            self._reference_value = self.resolve(ctx)
+            self._reference_value = self.resolve(logger)
             self._reference_value_cached = True
 
+        logger.debug("Using cached value for reference %(reference)s", reference=str(self))
         return self._reference_value
 
     def serialize(self) -> ReferenceModel:
@@ -462,8 +463,8 @@ class AttributeReference[T: PrimitiveTypes](Reference[T]):
         self.attribute_name = attribute_name
         self.reference = reference
 
-    def resolve(self, ctx: "handler.LoggerABC") -> T:
-        return typing.cast(T, getattr(self.resolve_other(self.reference, ctx), self.attribute_name))
+    def resolve(self, logger: "handler.LoggerABC") -> T:
+        return typing.cast(T, getattr(self.resolve_other(self.reference, logger), self.attribute_name))
 
 
 @mutator(name="core::Replace")
@@ -482,8 +483,8 @@ class ReplaceValue(Mutator):
         self.value = value
         self.destination = destination
 
-    def run(self, ctx: "handler.LoggerABC") -> None:
-        value = self.resolve_other(self.value, ctx)
+    def run(self, logger: "handler.LoggerABC") -> None:
+        value = self.resolve_other(self.value, logger)
         dict_path_expr = dict_path.to_path(self.destination)
         dict_path_expr.set_element(self.resource, value)
 

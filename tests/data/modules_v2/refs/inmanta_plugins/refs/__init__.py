@@ -18,9 +18,12 @@ class BoolReference(Reference[bool]):
         super().__init__()
         self.name = name
 
-    def resolve(self, ctx: LoggerABC) -> bool:
+    def resolve(self, logger: LoggerABC) -> bool:
         """Resolve the reference"""
-        return os.getenv(self.resolve_other(self.name, ctx)) == "true"
+        return os.getenv(self.resolve_other(self.name, logger)) == "true"
+
+    def __str__(self) -> str:
+        return f"BoolReference {self.name}"
 
 
 @reference("refs::String")
@@ -34,9 +37,9 @@ class StringReference(Reference[str]):
         super().__init__()
         self.name = name
 
-    def resolve(self, ctx: LoggerABC) -> str:
+    def resolve(self, logger: LoggerABC) -> str:
         """Resolve the reference"""
-        return self.resolve_other(self.name, ctx)
+        return self.resolve_other(self.name, logger)
 
     def __str__(self) -> str:
         return f"StringReference"
@@ -82,9 +85,12 @@ class TestReference(Reference[Test]):
         super().__init__()
         self.value = value
 
-    def resolve(self, ctx: LoggerABC) -> Test:
+    def resolve(self, logger: LoggerABC) -> Test:
         """Resolve test references"""
-        return Test(value=self.resolve_other(self.value, ctx))
+        return Test(value=self.resolve_other(self.value, logger))
+
+    def __str__(self):
+        return f"TestReference {self.value}"
 
 
 @plugin

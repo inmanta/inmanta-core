@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import typing
+from logging import DEBUG
 
 import pytest
 
@@ -27,6 +28,7 @@ from inmanta import env, references, resources, util
 from inmanta.agent.handler import PythonLogger
 from inmanta.ast import ExternalException, RuntimeException, TypingException
 from inmanta.references import ReferenceCycleException
+from utils import log_contains
 
 if typing.TYPE_CHECKING:
     from conftest import SnippetCompilationTest
@@ -35,7 +37,7 @@ if typing.TYPE_CHECKING:
 # defined in tests/data/modules_v2/refs
 
 
-def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str, caplog) -> None:
     """Test the use of references in the model and if they produce the correct serialized form."""
     refs_module = os.path.join(modules_v2_dir, "refs")
 
@@ -74,10 +76,13 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
 
     data = json.dumps(serialized, default=util.api_boundary_json_encoder)
 
-    resource = resources.Resource.deserialize(json.loads(data))
-    resource.resolve_all_references(PythonLogger(logging.getLogger("test.refs")))
+    with caplog.at_level(DEBUG):
+        resource = resources.Resource.deserialize(json.loads(data))
+        resource.resolve_all_references(PythonLogger(logging.getLogger("test.refs")))
 
-    assert not resource.fail and resource.fail is not None
+        assert not resource.fail and resource.fail is not None
+
+    log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference TestReference CWD")
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
@@ -122,7 +127,7 @@ def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", mod
 
     with pytest.raises(
         RuntimeException,
-        match=r"Invalid value `\<inmanta_plugins\.refs\.BoolReference object at 0x[0-9a-f]*\>`: "
+        match=r"Invalid value `BoolReference StringReference`: "
         "the condition for an if statement can only be a boolean expression",
     ):
         snippetcompiler.do_export()
