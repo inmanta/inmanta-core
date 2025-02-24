@@ -395,20 +395,13 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
         - Executor(s)
     """
 
-    def get_process_children(current_pid: int) -> list[Process]:
-        """
-        Retrieves the current list of processes running under this process
-
-        :param current_pid: The PID of this process
-        """
-        return psutil.Process(current_pid).children(recursive=True)
-
-    def find_scheduler(children: list[Process]) -> Optional[Process]:
+    def find_scheduler() -> Optional[Process]:
         """
         Find and return the Scheduler. Make sure only one scheduler is running
-
-        :param children: The list of processes that are currently running
         """
+        # Only consider the direct children. The scheduler process is always
+        # a direct child of the server process.
+        children = psutil.Process(current_pid).children(recursive=False)
         current_scheduler = None
 
         for child in children:
@@ -457,8 +450,7 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
             executors=executors,
         )
 
-    children = get_process_children(current_pid)
-    latest_scheduler = find_scheduler(children)
+    latest_scheduler = find_scheduler()
     if latest_scheduler is None:
         return SchedulerChildren(
             scheduler=None,
