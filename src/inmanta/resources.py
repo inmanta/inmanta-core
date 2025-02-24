@@ -33,6 +33,7 @@ from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 
 if TYPE_CHECKING:
     from inmanta import export
+    from inmanta.agent import handler
     from inmanta.data import ResourceAction
     from inmanta.execute import runtime
 
@@ -496,7 +497,6 @@ class Resource(metaclass=ResourceMeta):
 
         obj = cls_resource(obj_id)
         obj.populate(obj_map, force_fields)
-        obj.resolve_all_references()
         return obj
 
     @classmethod
@@ -542,27 +542,27 @@ class Resource(metaclass=ResourceMeta):
 
         raise KeyError()
 
-    def get_reference_value(self, id: uuid.UUID) -> "references.RefValue":
+    def get_reference_value(self, id: uuid.UUID, ctx: "handler.LoggerABC") -> "references.RefValue":
         """Get a value of a reference"""
         if id not in self._references:
             if id not in self._references_model:
                 raise KeyError(f"The reference with id {id} is not defined in resource {self.id}")
 
             model = self._references_model[id]
-            ref = references.reference.get_class(model.type).deserialize(model, self)
+            ref = references.reference.get_class(model.type).deserialize(model, self, ctx)
             self._references[model.id] = ref
 
-        return self._references[id].get()
+        return self._references[id].get(ctx)
 
-    def resolve_all_references(self) -> None:
+    def resolve_all_references(self, ctx: "handler.LoggerABC") -> None:
         """Resolve all value references"""
         for ref in self.references:  # type: ignore
             model = references.ReferenceModel(**ref)
             self._references_model[model.id] = model
 
         for mutator in self.mutators:  # type: ignore
-            mutator = references.mutator.get_class(mutator["type"]).deserialize(references.MutatorModel(**mutator), self)
-            mutator.run()
+            mutator = references.mutator.get_class(mutator["type"]).deserialize(references.MutatorModel(**mutator), self, ctx)
+            mutator.run(ctx)
 
     def populate(self, fields: dict[str, object], force_fields: bool = False) -> None:
         for field in self.__class__.fields:

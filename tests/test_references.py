@@ -17,12 +17,14 @@ Contact: code@inmanta.com
 """
 
 import json
+import logging
 import os
 import typing
 
 import pytest
 
 from inmanta import env, references, resources, util
+from inmanta.agent.handler import PythonLogger
 from inmanta.ast import ExternalException, RuntimeException, TypingException
 from inmanta.references import ReferenceCycleException
 
@@ -73,8 +75,9 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
     data = json.dumps(serialized, default=util.api_boundary_json_encoder)
 
     resource = resources.Resource.deserialize(json.loads(data))
+    resource.resolve_all_references(PythonLogger(logging.getLogger("test.refs")))
 
-    assert not resource.fail
+    assert not resource.fail and resource.fail is not None
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
@@ -175,7 +178,8 @@ def test_references_in_wrong_resource(snippetcompiler: "SnippetCompilationTest",
     def round_trip(resource):
         serialized = resource.serialize()
         data = json.dumps(serialized, default=util.api_boundary_json_encoder)
-        resources.Resource.deserialize(json.loads(data))
+        r = resources.Resource.deserialize(json.loads(data))
+        r.resolve_all_references(PythonLogger(logging.getLogger("test.refs")))
 
     with pytest.raises(
         Exception,

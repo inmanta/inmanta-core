@@ -1,6 +1,7 @@
 import os
 import dataclasses
 
+from inmanta.agent.handler import LoggerABC
 from inmanta.references import reference, Reference, is_reference_of
 from inmanta.plugins import plugin
 from inmanta.resources import resource, ManagedResource, PurgeableResource
@@ -17,9 +18,9 @@ class BoolReference(Reference[bool]):
         super().__init__()
         self.name = name
 
-    def resolve(self) -> bool:
+    def resolve(self, ctx: LoggerABC) -> bool:
         """Resolve the reference"""
-        return os.getenv(self.resolve_other(self.name)) == "true"
+        return os.getenv(self.resolve_other(self.name, ctx)) == "true"
 
 
 @reference("refs::String")
@@ -33,9 +34,9 @@ class StringReference(Reference[str]):
         super().__init__()
         self.name = name
 
-    def resolve(self) -> str:
+    def resolve(self, ctx: LoggerABC) -> str:
         """Resolve the reference"""
-        return self.resolve_other(self.name)
+        return self.resolve_other(self.name, ctx)
 
     def __str__(self) -> str:
         return f"StringReference"
@@ -81,9 +82,9 @@ class TestReference(Reference[Test]):
         super().__init__()
         self.value = value
 
-    def resolve(self) -> Test:
+    def resolve(self, ctx: LoggerABC) -> Test:
         """Resolve test references"""
-        return Test(value=self.resolve_other(self.value))
+        return Test(value=self.resolve_other(self.value, ctx))
 
 
 @plugin
