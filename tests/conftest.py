@@ -122,7 +122,7 @@ import uuid
 import venv
 import weakref
 from collections import abc, defaultdict, namedtuple
-from collections.abc import AsyncIterator, Awaitable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Iterator, Mapping
 from configparser import ConfigParser
 from typing import Any, Callable, Dict, Generic, Optional, Union
 
@@ -388,21 +388,24 @@ async def postgresql_client(postgres_db, database_name_internal):
 
 
 @pytest.fixture
-def sqlalchemy_url(postgres_db, database_name_internal: str):
-    return sqlalchemy.URL.create(
-        drivername="postgresql+asyncpg",
-        username=postgres_db.user,
-        password=postgres_db.password,
-        host=postgres_db.host,
-        database=database_name_internal,
-        port=postgres_db.port,
-    )
+def sqlalchemy_url_parameters(postgres_db, database_name_internal: str) -> dict[str, str]:
+    """
+    Return the dict representation of the parameters to pass to the start_engine
+    function to start the sql alchemy engine.
+    """
+    return {
+        "database_username": postgres_db.user,
+        "database_password": postgres_db.password,
+        "database_host": postgres_db.host,
+        "database_port": postgres_db.port,
+        "database_name": database_name_internal,
+    }
 
 
 @pytest.fixture(scope="function")
-async def sql_alchemy_engine(sqlalchemy_url) -> AsyncEngine:
+async def sql_alchemy_engine(sqlalchemy_url_parameters: Mapping[str, str]) -> AsyncEngine:
 
-    await start_engine(url=sqlalchemy_url)
+    await start_engine(**sqlalchemy_url_parameters)
     engine = get_engine()
 
     yield engine

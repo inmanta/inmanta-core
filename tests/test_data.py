@@ -22,6 +22,7 @@ import logging
 import time
 import uuid
 from collections import abc
+from collections.abc import Mapping
 from datetime import UTC
 from typing import Optional, cast
 
@@ -39,9 +40,12 @@ from inmanta.resources import Id
 from inmanta.types import ResourceVersionIdStr
 
 
-async def test_connect_too_small_connection_pool(sqlalchemy_url: str):
+async def test_connect_too_small_connection_pool(sqlalchemy_url_parameters: Mapping[str, str]):
+    """
+        Test sql alchemy engine connection pool saturation
+    """
     await start_engine(
-        url=sqlalchemy_url,
+        **sqlalchemy_url_parameters,
         pool_size=1,
         max_overflow=0,
         pool_timeout=1,
@@ -59,12 +63,18 @@ async def test_connect_too_small_connection_pool(sqlalchemy_url: str):
 
 
 async def test_connect_default_parameters(sql_alchemy_engine):
+    """
+    Basic connectivity test for the sql alchemy engine
+    """
     assert sql_alchemy_engine is not None
     async with sql_alchemy_engine.connect() as connection:
         assert connection is not None
 
 
 async def test_connection_failure(postgres_db, unused_tcp_port_factory, database_name, clean_reset):
+    """
+    Basic connectivity test: using an incorrect port raises an error
+    """
     wrong_port = unused_tcp_port_factory()
 
     await start_engine(
@@ -78,6 +88,8 @@ async def test_connection_failure(postgres_db, unused_tcp_port_factory, database
     with pytest.raises(ConnectionRefusedError):
         async with engine.connect() as _:
             pass
+
+    await stop_engine()
 
 
 async def test_postgres_client(postgresql_client):

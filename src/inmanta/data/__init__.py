@@ -6665,6 +6665,7 @@ async def get_connection_ctx_mgr() -> AsyncIterator[Connection]:
         # the really-real innermost driver connection is available
         # from the .driver_connection attribute
         raw_asyncio_connection = connection_fairy.driver_connection
+        assert isinstance(raw_asyncio_connection, Connection)
         yield raw_asyncio_connection
 
 
