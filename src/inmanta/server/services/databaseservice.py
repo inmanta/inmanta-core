@@ -122,15 +122,13 @@ class DatabaseMonitor:
             )
 
         pool = get_pool()
-        max_connections = pool.size() + self._max_overflow
-        free_connections_in_pool = pool.checkedin()
 
         return DataBaseReport(
             connected=connected,
             database=self.dn_name,
             host=self.db_host,
-            max_pool=max_connections,
-            free_pool=free_connections_in_pool,
+            max_pool=pool.size() + self._max_overflow,
+            free_pool=pool.checkedin(),
             open_connections=pool.checkedout(),
             free_connections=self.get_free_connections(pool),
             pool_exhaustion_time=self._exhausted_pool_events_count * self._db_exhaustion_check_interval,

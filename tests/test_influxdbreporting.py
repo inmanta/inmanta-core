@@ -185,9 +185,10 @@ async def test_available_metrics(server):
                 types[key] = base_types
 
     assert metrics["db.connected"]["value"]
-    assert "db.max_pool" in metrics
+    assert "db.max_concurrent_connections" in metrics
     assert "db.open_connections" in metrics
-    assert "db.free_connections" in metrics
+    assert "db.free_connections_in_pool" in metrics
+    assert "db.all_available_connections" in metrics
     assert "self.spec.cpu" in metrics
 
     # ensure it doesn't crash when the server is down
