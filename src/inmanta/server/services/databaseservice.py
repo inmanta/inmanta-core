@@ -123,14 +123,22 @@ class DatabaseMonitor:
 
         pool = get_pool()
 
+        """
+        :param max_pool: maximal pool size
+        :param free_pool: number of connections not in use in the pool
+        :param open_connections: number of connections currently open
+        :param free_connections: number of connections currently open and not in use
+        :param pool_exhaustion_time: nr of seconds since start we observed the pool to be exhausted
+        """
+
         return DataBaseReport(
             connected=connected,
             database=self.dn_name,
             host=self.db_host,
             max_pool=pool.size() + self._max_overflow,
-            free_pool=pool.checkedin(),
-            open_connections=pool.checkedout(),
-            free_connections=self.get_free_connections(pool),
+            free_pool=self.get_free_connections(pool),
+            open_connections=pool.checkedin() + max(0, pool.overflow()),
+            free_connections=pool.checkedin(),
             pool_exhaustion_time=self._exhausted_pool_events_count * self._db_exhaustion_check_interval,
         )
 
@@ -161,19 +169,21 @@ class DatabaseMonitor:
             CallbackGauge(callback=lambda: 1 if (get_pool() is not None) else 0),
         )
         self._add_gauge(
-            "db.max_concurrent_connections",
+            "db.max_pool",
             CallbackGauge(callback=lambda: get_pool().size() + self._max_overflow if get_pool() is not None else 0),
         )
         self._add_gauge(
             "db.open_connections",
-            CallbackGauge(callback=lambda: (get_pool().checkedout() if get_pool() is not None else 0)),
+            CallbackGauge(
+                callback=lambda: (get_pool().checkedin() + max(0, get_pool().overflow()) if get_pool() is not None else 0)
+            ),
         )
         self._add_gauge(
-            "db.free_connections_in_pool",
+            "db.free_connections",
             CallbackGauge(callback=lambda: (get_pool().checkedin() if get_pool() is not None else 0)),
         )
         self._add_gauge(
-            "db.all_available_connections",
+            "db.free_pool",
             CallbackGauge(callback=self.get_free_connections),
         )
         self._add_gauge(
