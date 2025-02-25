@@ -123,14 +123,6 @@ class DatabaseMonitor:
 
         pool = get_pool()
 
-        """
-        :param max_pool: maximal pool size
-        :param free_pool: number of connections not in use in the pool
-        :param open_connections: number of connections currently open
-        :param free_connections: number of connections currently open and not in use
-        :param pool_exhaustion_time: nr of seconds since start we observed the pool to be exhausted
-        """
-
         return DataBaseReport(
             connected=connected,
             database=self.dn_name,

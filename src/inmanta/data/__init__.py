@@ -6687,6 +6687,5 @@ def get_pool() -> AsyncAdaptedQueuePool:
 
 
 def get_engine() -> AsyncEngine:
-    if ENGINE is None:
-        raise Exception("SQL Alchemy engine was not initialized")
+    assert ENGINE is not None, "SQL Alchemy engine was not initialized"
     return ENGINE
