@@ -525,6 +525,7 @@ class Resource(metaclass=ResourceMeta):
 
         self._references_model: dict[uuid.UUID, references.ReferenceModel] = {}
         self._references: dict[uuid.UUID, references.Reference[references.RefValue]] = {}
+        self._resolved = False
 
     def __getitem__(self, key: str) -> object:
         """Support dict like access on the resource"""
@@ -556,15 +557,20 @@ class Resource(metaclass=ResourceMeta):
 
     def resolve_all_references(self, logger: "handler.LoggerABC") -> None:
         """Resolve all value references"""
+        if self._resolved:
+            return
         for ref in self.references:  # type: ignore
-            model = references.ReferenceModel(**ref)
-            self._references_model[model.id] = model
+            if ref.get("id", None) not in self._references_model:
+                model = references.ReferenceModel(**ref)
+                self._references_model[model.id] = model
 
         for mutator in self.mutators:  # type: ignore
             mutator = references.mutator.get_class(mutator["type"]).deserialize(
                 references.MutatorModel(**mutator), self, logger
             )
             mutator.run(logger)
+
+        self._resolved = True
 
     def populate(self, fields: dict[str, object], force_fields: bool = False) -> None:
         for field in self.__class__.fields:
