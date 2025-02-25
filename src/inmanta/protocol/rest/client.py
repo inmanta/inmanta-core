@@ -132,6 +132,7 @@ class RESTClient(RESTBase):
                     ca_certs=ca_certs,
                     decompress_response=True,
                 )
+                response = None
                 response = await self.client.fetch(request)
             except HTTPError as e:
                 if isinstance(e, tornado.simple_httpclient.HTTPStreamClosedError):
@@ -153,7 +154,9 @@ class RESTClient(RESTBase):
             except CancelledError:
                 raise
             except Exception as e:
-                LOGGER.exception("Failed to send request")
+                LOGGER.exception(f"Failed to send request {str(e)}")
+                LOGGER.exception(f"{body=}")
+                LOGGER.exception(f"{response=}")
                 return common.Result(code=500, result={"message": str(e)})
 
         return self._decode_response(response)

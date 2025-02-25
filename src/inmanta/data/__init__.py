@@ -6675,7 +6675,7 @@ async def stop_engine() -> None:
     """
     global ENGINE
     if ENGINE is not None:
-        await ENGINE.dispose()
+        await ENGINE.dispose(close=False)
     ENGINE = None
 
 
@@ -6687,5 +6687,6 @@ def get_pool() -> AsyncAdaptedQueuePool:
 
 
 def get_engine() -> AsyncEngine:
-    assert ENGINE is not None, "SQL Alchemy engine was not initialized"
+    if ENGINE is None:
+        raise Exception("SQL Alchemy engine was not initialized")
     return ENGINE
