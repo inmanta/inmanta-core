@@ -17,14 +17,20 @@ Contact: code@inmanta.com
 """
 
 import json
+import logging
 import os
 import typing
+from logging import DEBUG
+from uuid import UUID
 
 import pytest
 
 from inmanta import env, references, resources, util
+from inmanta.agent.handler import PythonLogger
 from inmanta.ast import ExternalException, RuntimeException, TypingException
+from inmanta.data.model import ReleasedResourceDetails, ReleasedResourceState
 from inmanta.references import ReferenceCycleException
+from utils import ClientHelper, log_contains
 
 if typing.TYPE_CHECKING:
     from conftest import SnippetCompilationTest
@@ -33,7 +39,11 @@ if typing.TYPE_CHECKING:
 # defined in tests/data/modules_v2/refs
 
 
-def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+def test_references_in_model(
+    snippetcompiler: "SnippetCompilationTest",
+    modules_v2_dir: str,
+    caplog,
+) -> None:
     """Test the use of references in the model and if they produce the correct serialized form."""
     refs_module = os.path.join(modules_v2_dir, "refs")
 
@@ -73,8 +83,62 @@ def test_references_in_model(snippetcompiler: "SnippetCompilationTest", modules_
     data = json.dumps(serialized, default=util.api_boundary_json_encoder)
 
     resource = resources.Resource.deserialize(json.loads(data))
+    resource.resolve_all_references(PythonLogger(logging.getLogger("test.refs")))
+    assert not resource.fail and resource.fail is not None
 
-    assert not resource.fail
+    with caplog.at_level(DEBUG):
+        resource.get_reference_value(UUID("78d7ff5f-6309-3011-bfff-8068471d5761"), PythonLogger(logging.getLogger("test.refs")))
+
+    log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference TestReference CWD")
+
+
+async def test_deploy_end_to_end(
+    snippetcompiler: "SnippetCompilationTest",
+    modules_v2_dir: str,
+    caplog,
+    agent,
+    client,
+    clienthelper: ClientHelper,
+    environment,
+) -> None:
+    refs_module = os.path.join(modules_v2_dir, "refs")
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+           import refs
+           import std::testing
+
+           test_ref = refs::create_bad_reference(name=refs::create_string_reference(name="CWD"))
+
+           # bad ref will fail
+           std::testing::NullResource(
+               name="test",
+               agentname="test",
+               fail=refs::create_bool_reference(name=test_ref),
+           )
+
+            # good ref will work
+            std::testing::NullResource(
+               name="test2",
+               agentname="test",
+               fail=refs::create_bool_reference(name="testx"),
+           )
+           """,
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+    )
+
+    await clienthelper.set_auto_deploy()
+    await snippetcompiler.do_export_and_deploy()
+    await clienthelper.wait_for_released()
+    await clienthelper.wait_for_deployed()
+    result = await client.resource_details(environment, "std::testing::NullResource[test,name=test]")
+    assert result.code == 200
+    details = ReleasedResourceDetails(**result.result["data"])
+    assert details.status == ReleasedResourceState.failed
+
+    result = await client.resource_details(environment, "std::testing::NullResource[test,name=test2]")
+    assert result.code == 200
+    details = ReleasedResourceDetails(**result.result["data"])
+    assert details.status == ReleasedResourceState.deployed
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
@@ -119,7 +183,7 @@ def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", mod
 
     with pytest.raises(
         RuntimeException,
-        match=r"Invalid value `\<inmanta_plugins\.refs\.BoolReference object at 0x[0-9a-f]*\>`: "
+        match=r"Invalid value `BoolReference StringReference`: "
         "the condition for an if statement can only be a boolean expression",
     ):
         snippetcompiler.do_export()
@@ -175,7 +239,8 @@ def test_references_in_wrong_resource(snippetcompiler: "SnippetCompilationTest",
     def round_trip(resource):
         serialized = resource.serialize()
         data = json.dumps(serialized, default=util.api_boundary_json_encoder)
-        resources.Resource.deserialize(json.loads(data))
+        r = resources.Resource.deserialize(json.loads(data))
+        r.resolve_all_references(PythonLogger(logging.getLogger("test.refs")))
 
     with pytest.raises(
         Exception,

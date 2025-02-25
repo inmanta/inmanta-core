@@ -1,6 +1,7 @@
 import os
 import dataclasses
 
+from inmanta.agent.handler import LoggerABC
 from inmanta.references import reference, Reference, is_reference_of
 from inmanta.plugins import plugin
 from inmanta.resources import resource, ManagedResource, PurgeableResource
@@ -17,9 +18,12 @@ class BoolReference(Reference[bool]):
         super().__init__()
         self.name = name
 
-    def resolve(self) -> bool:
+    def resolve(self, logger: LoggerABC) -> bool:
         """Resolve the reference"""
-        return os.getenv(self.resolve_other(self.name)) == "true"
+        return os.getenv(self.resolve_other(self.name, logger)) == "true"
+
+    def __str__(self) -> str:
+        return f"BoolReference {self.name}"
 
 
 @reference("refs::String")
@@ -33,9 +37,9 @@ class StringReference(Reference[str]):
         super().__init__()
         self.name = name
 
-    def resolve(self) -> str:
+    def resolve(self, logger: LoggerABC) -> str:
         """Resolve the reference"""
-        return self.resolve_other(self.name)
+        return self.resolve_other(self.name, logger)
 
     def __str__(self) -> str:
         return f"StringReference"
@@ -81,9 +85,12 @@ class TestReference(Reference[Test]):
         super().__init__()
         self.value = value
 
-    def resolve(self) -> Test:
+    def resolve(self, logger: LoggerABC) -> Test:
         """Resolve test references"""
-        return Test(value=self.resolve_other(self.value))
+        return Test(value=self.resolve_other(self.value, logger))
+
+    def __str__(self):
+        return f"TestReference {self.value}"
 
 
 @plugin
@@ -104,3 +111,27 @@ class Null(ManagedResource, PurgeableResource):
             return False
         else:
             return False
+
+
+@reference("refs::BAD")
+class BadReference(Reference[str]):
+    """A dummy reference to a string"""
+
+    def __init__(self, name: str | Reference[str]) -> None:
+        """
+        :param name: The name of the environment variable.
+        """
+        super().__init__()
+        self.name = name
+
+    def resolve(self, logger: LoggerABC) -> str:
+        """Resolve the reference"""
+        raise Exception("BAD")
+
+    def __str__(self) -> str:
+        return f"BadReference"
+
+
+@plugin
+def create_bad_reference(name: Reference[str] | str) -> Reference[str]:
+    return BadReference(name=name)
