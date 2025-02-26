@@ -21,7 +21,7 @@ import uuid
 
 import pytest
 
-from inmanta import data
+from inmanta.data import stop_engine
 from inmanta.server.server import Server
 from inmanta.server.services.compilerservice import CompilerService
 
@@ -54,7 +54,7 @@ async def test_server_status(server, client, agent, environment):
 
 
 async def test_server_status_database_unreachable(server, client):
-    await data.Environment.close_connection_pool()
+    await stop_engine()
     result = await client.get_server_status()
     assert result.code == 200
     database_slice = None
