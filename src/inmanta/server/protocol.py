@@ -489,6 +489,9 @@ class Session:
             await asyncio.wait_for(future, timeout)
         except asyncio.TimeoutError:
             LOGGER.warning(log_message)
+        except Exception as e:
+            LOGGER.warning(f"OTHER EXC {str(e)}")
+            raise e
 
     def put_call(self, call_spec: common.Request, timeout: int = 10, expect_reply: bool = True) -> asyncio.Future:
         reply_id = uuid.uuid4()

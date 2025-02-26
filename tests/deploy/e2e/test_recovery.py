@@ -29,19 +29,19 @@ from inmanta import config, const, data
 from inmanta.agent.agent_new import Agent
 from inmanta.deploy.state import Blocked, Compliance, DeployResult, ResourceState
 
-
-@pytest.fixture
-async def server_pre_start(server_config):
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
+#
+# @pytest.fixture
+# async def server_pre_start(server_config):
+#     config.Config.set("config", "agent-deploy-interval", "0")
+#     config.Config.set("config", "agent-repair-interval", "0")
 
 
 async def test_agent_disconnect(
-    resource_container, environment, server, client, clienthelper, async_finalizer, caplog, agent_no_state_check: Agent
+    resource_container, environment, server, client, clienthelper, caplog, agent_no_state_check: Agent
 ):
     caplog.set_level(logging.INFO)
-    config.Config.set("config", "server-timeout", "1")
-    config.Config.set("config", "agent-reconnect-delay", "1")
+    # config.Config.set("config", "server-timeout", "1")
+    # config.Config.set("config", "agent-reconnect-delay", "1")
 
     version = await clienthelper.get_version()
     await clienthelper.put_version_simple([utils.get_resource(version)], version)

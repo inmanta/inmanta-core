@@ -6675,7 +6675,7 @@ async def stop_engine() -> None:
     """
     global ENGINE
     if ENGINE is not None:
-        await ENGINE.dispose(close=False)
+        await ENGINE.dispose(close=True)
     ENGINE = None
 
 

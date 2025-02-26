@@ -703,6 +703,7 @@ class ResourceScheduler(TaskManager):
 
         :param connection: Connection to use for db operations. Should not be in a transaction context.
         """
+        LOGGER.error(f"read_versionread_version {self._running}")
         if not self._running:
             return
         async with self._intent_lock, self.state_update_manager.get_connection(connection) as con:
