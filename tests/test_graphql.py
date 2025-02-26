@@ -18,7 +18,6 @@
 
 import datetime
 import subprocess
-import sys
 import uuid
 
 import pytest

@@ -23,7 +23,6 @@ from typing import List, Optional
 from sqlalchemy import (
     ARRAY,
     Boolean,
-    Column,
     DateTime,
     Double,
     Enum,
@@ -33,7 +32,6 @@ from sqlalchemy import (
     LargeBinary,
     PrimaryKeyConstraint,
     String,
-    Table,
     UniqueConstraint,
     text,
 )
@@ -521,9 +519,9 @@ class Resource(Base):
     resource_set: Mapped[Optional[str]] = mapped_column(String)
 
     configurationmodel: Mapped["ConfigurationModel"] = relationship("ConfigurationModel", back_populates="resource")
-    resource_action: Mapped[List["ResourceAction"]] = relationship(
-        "ResourceAction", secondary="resourceaction_resource", back_populates="resource"
-    )
+    # resource_action: Mapped[List["ResourceAction"]] = relationship(
+    #     "ResourceAction", secondary="resourceaction_resource", back_populates="resource"
+    # )
 
 
 class ResourceAction(Base):
@@ -570,9 +568,9 @@ class ResourceAction(Base):
     changes: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     change: Mapped[Optional[str]] = mapped_column(Enum("nochange", "created", "purged", "updated", name="change"))
 
-    resource: Mapped[List["Resource"]] = relationship(
-        "Resource", secondary="resourceaction_resource", back_populates="resource_action"
-    )
+    # resource: Mapped[List["Resource"]] = relationship(
+    #     "Resource", secondary="resourceaction_resource", back_populates="resource_action"
+    # )
     configurationmodel: Mapped["ConfigurationModel"] = relationship("ConfigurationModel", back_populates="resourceaction")
 
 
@@ -624,28 +622,28 @@ class Agent(Base):
     agentinstance: Mapped["AgentInstance"] = relationship("AgentInstance", back_populates="agent")
 
 
-t_resourceaction_resource = Table(
-    "resourceaction_resource",
-    Base.metadata,
-    Column("environment", UUID, primary_key=True, nullable=False),
-    Column("resource_action_id", UUID, primary_key=True, nullable=False),
-    Column("resource_id", String, primary_key=True, nullable=False),
-    Column("resource_version", Integer, primary_key=True, nullable=False),
-    ForeignKeyConstraint(
-        ["environment", "resource_id", "resource_version"],
-        ["resource.environment", "resource.resource_id", "resource.model"],
-        ondelete="CASCADE",
-        name="resourceaction_resource_environment_resource_id_resource_v_fkey",
-    ),
-    ForeignKeyConstraint(
-        ["resource_action_id"],
-        ["resourceaction.action_id"],
-        ondelete="CASCADE",
-        name="resourceaction_resource_resource_action_id_fkey",
-    ),
-    PrimaryKeyConstraint(
-        "environment", "resource_id", "resource_version", "resource_action_id", name="resourceaction_resource_pkey"
-    ),
-    Index("resourceaction_resource_environment_resource_version_index", "environment", "resource_version"),
-    Index("resourceaction_resource_resource_action_id_index", "resource_action_id"),
-)
+# t_resourceaction_resource = Table(
+#     "resourceaction_resource",
+#     Base.metadata,
+#     Column("environment", UUID, primary_key=True, nullable=False),
+#     Column("resource_action_id", UUID, primary_key=True, nullable=False),
+#     Column("resource_id", String, primary_key=True, nullable=False),
+#     Column("resource_version", Integer, primary_key=True, nullable=False),
+#     ForeignKeyConstraint(
+#         ["environment", "resource_id", "resource_version"],
+#         ["resource.environment", "resource.resource_id", "resource.model"],
+#         ondelete="CASCADE",
+#         name="resourceaction_resource_environment_resource_id_resource_v_fkey",
+#     ),
+#     ForeignKeyConstraint(
+#         ["resource_action_id"],
+#         ["resourceaction.action_id"],
+#         ondelete="CASCADE",
+#         name="resourceaction_resource_resource_action_id_fkey",
+#     ),
+#     PrimaryKeyConstraint(
+#         "environment", "resource_id", "resource_version", "resource_action_id", name="resourceaction_resource_pkey"
+#     ),
+#     Index("resourceaction_resource_environment_resource_version_index", "environment", "resource_version"),
+#     Index("resourceaction_resource_resource_action_id_index", "resource_action_id"),
+# )
