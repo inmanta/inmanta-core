@@ -6644,6 +6644,7 @@ async def start_engine(
             max_overflow=max_overflow,
             pool_timeout=pool_timeout,
             echo=echo,
+            pool_pre_ping=True,
         )
     except Exception as e:
         await stop_engine()
