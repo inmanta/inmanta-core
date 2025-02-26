@@ -181,9 +181,20 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         else:
             # main execution
             try:
+
+                def resolve_and_deploy(
+                    provider: HandlerAPI[Resource],
+                    ctx: handler.HandlerContext,
+                    resource: Resource,
+                    requires: Mapping[ResourceIdStr, const.ResourceState],
+                ) -> None:
+                    resource.resolve_all_references(ctx)
+                    provider.deploy(ctx, resource, requires)
+
                 await asyncio.get_running_loop().run_in_executor(
                     self.thread_pool,
-                    provider.deploy,
+                    resolve_and_deploy,
+                    provider,
                     ctx,
                     resource,
                     requires,
@@ -309,8 +320,17 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         )
                     else:
                         try:
+
+                            def resolve_and_dryrun(
+                                provider: HandlerAPI[Resource],
+                                ctx: handler.HandlerContext,
+                                resource: Resource,
+                            ) -> None:
+                                resource.resolve_all_references(ctx)
+                                provider.execute(ctx, resource, True)
+
                             await asyncio.get_running_loop().run_in_executor(
-                                self.thread_pool, provider.execute, ctx, resource_obj, True
+                                self.thread_pool, resolve_and_dryrun, provider, ctx, resource_obj
                             )
 
                             changes = ctx.changes
@@ -394,8 +414,17 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 try:
                     with self._cache:
                         provider = await self.get_provider(resource_obj)
+
+                        def resolve_and_getfact(
+                            provider: HandlerAPI[Resource],
+                            ctx: handler.HandlerContext,
+                            resource: Resource,
+                        ) -> dict[str, object]:
+                            resource.resolve_all_references(ctx)
+                            return provider.check_facts(ctx, resource)
+
                         result = await asyncio.get_running_loop().run_in_executor(
-                            self.thread_pool, provider.check_facts, ctx, resource_obj
+                            self.thread_pool, resolve_and_getfact, provider, ctx, resource_obj
                         )
 
                         parameters = [
