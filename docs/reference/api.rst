@@ -108,6 +108,12 @@ Handlers
     :inherited-members:
     :undoc-members:
 
+References
+----------
+
+.. autoclass:: inmanta.references.Reference
+
+.. autodecorator:: inmanta.references.reference
 
 Export
 ------
