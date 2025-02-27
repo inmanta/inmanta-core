@@ -20,14 +20,13 @@ import pytest
 
 import inmanta.data.sqlalchemy as models
 import inmanta.graphql.schema as schema
+from inmanta.data import get_connection_ctx_mgr
 
 
 @pytest.fixture
 async def setup_database(init_dataclasses_and_load_schema):
     # Initialize DB
-    # Force reinitialization of schema with the correct connection string
-    #schema.initialize_schema()
-    async with schema.get_async_session() as session:
+    async with get_connection_ctx_mgr() as session:
         project_1 = models.Project(
             id=uuid.UUID("00000000-1234-5678-1234-000000000001"),
             name="test-proj-1",
