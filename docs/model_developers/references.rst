@@ -5,7 +5,7 @@ References and Secrets
 
 When a handler needs information that is not available to the compiler, references are used.
 
-For example, to extract username and password from a environment variables:
+For example, to extract username and password from an environment variables:
 
 .. code-block:: inmanta
     :emphasize-lines: 6-7
@@ -22,7 +22,7 @@ For example, to extract username and password from a environment variables:
 
 
 This means that the username and password will never be present in the compiler, but that they will be picked up by the handler when needed.
-This is very different from using `std::get_env`, which will resolve the environment variable in the compiler and store it in the database.
+This is very different from using ``std::get_env``, which will resolve the environment variable in the compiler and store it in the database.
 
 More advanced combination are also possible:
 
@@ -49,7 +49,7 @@ More advanced combination are also possible:
 Here we get the root secret from the environment variable ``NETBOX_API_TOKEN``, which we use to query the inventory for proper credentials for this device.
 
 References can be used in the model and in resources transparently.
-However any attempt to perform an operations (e.g. addition, string formatting,... ) on a reference will result in an exception.
+However any attempt to perform an operation (e.g. addition, string formatting,... ) on a reference will result in an exception.
 
 References will be automatically resolved before passing the resource into a handler.
 I.e. using references in handlers requires no special attention.
@@ -60,10 +60,10 @@ Creating new types of References
 
 When you want to expose your own type of reference, the following steps are required:
 
-1. Create a subclass of :py:class:`inmanta.references.Reference`, with a type parameter that is either a primitive type of a dataclass.
-2. Annotate it with :py:func:`inmanta.references.reference`
-2. Implement the `resolve` method, that will resolve the reference. This method can use `self.resolve_others` to resolve any reference received as an argument. The logger passed into this method is similar to the ctx passed into a handler. The logger will write the logs into the database as well, when resolving references for a handler.
-3. Create a plugin to construct the reference
+1. Create a subclass of :py:class:`inmanta.references.Reference`, with a type parameter that is either a primitive type or a dataclass.
+2. Annotate it with :py:func:`inmanta.references.reference`.
+3. Implement the ``resolve`` method, that will resolve the reference. This method can use ``self.resolve_others`` to resolve any reference received as an argument. The logger passed into this method is similar to the ``ctx`` argument passed into a handler. The logger will write the logs into the database as well, when resolving references for a handler.
+4. Create a plugin to construct the reference.
 
 .. code-block:: python
 
@@ -114,7 +114,7 @@ Handling references in plugins
 
 When a plugin supports references, it has to explicitly indicate this in the type annotation of the arguments and return value.
 
-For example, to create a plugin that can concatenate two strings, where one of either can be a reference, we would do the following:
+For example, to create a plugin that can concatenate two strings, where either one can be a reference, we would do the following:
 
 .. literalinclude:: examples/references_1.py
    :language: python

@@ -201,7 +201,7 @@ as an argument to this plugin, but for IDE and static typing purposes it will be
 Type hinting using Inmanta DSL types
 ------------------------------------
 
-Alternatively, the Inmanta :term:`DSL` type annotations can be provided as a string (Python3 style argument annotation).
+Alternatively, the Inmanta :term:`DSL` type annotations can be provided as a string (Python3 style argument annotation)
 that refers to Inmanta primitive types or to entities.
 
 .. code-block:: python

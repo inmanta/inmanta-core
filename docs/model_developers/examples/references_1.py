@@ -10,8 +10,8 @@ class ConcatReference(Reference[str]):
         self.other = other
 
     def resolve(self, logger) -> str:
-        ## do the actual resolution
-        ## First resolve the argument, then concat them
+        # do the actual resolution
+        # First resolve the arguments, then concat them
         return self.resolve_other(self.one, logger) + self.resolve_other(self.other, logger)
 
 @plugin
