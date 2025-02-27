@@ -18,19 +18,16 @@ import uuid
 
 import pytest
 
-import inmanta.graphql.models as models
+import inmanta.data.sqlalchemy as models
 import inmanta.graphql.schema as schema
 
 
 @pytest.fixture
-async def setup_database(postgres_db, database_name):
+async def setup_database(init_dataclasses_and_load_schema):
     # Initialize DB
-    conn_string = (
-        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
-    )
     # Force reinitialization of schema with the correct connection string
-    schema.initialize_schema(conn_string)
-    async with schema.get_async_session(conn_string) as session:
+    #schema.initialize_schema()
+    async with schema.get_async_session() as session:
         project_1 = models.Project(
             id=uuid.UUID("00000000-1234-5678-1234-000000000001"),
             name="test-proj-1",

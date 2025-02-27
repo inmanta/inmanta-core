@@ -17,32 +17,35 @@ import typing
 import inmanta.data.sqlalchemy as models
 import strawberry
 from sqlalchemy import asc, desc, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from strawberry import relay
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.info import ContextType
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
+from inmanta.data import get_engine
 
 mapper = StrawberrySQLAlchemyMapper()
 
 ASYNC_SESSION: typing.Optional[AsyncSession] = None
 SCHEMA = None
 
+def get_expert_mode(root: "Environment") -> bool:
+    return root.settings.get("enable_lsm_expert_mode", False)
 @mapper.type(models.Environment)
 class Environment:
-    pass
+    is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
 
 
-def get_async_session(connection_string: typing.Optional[str] = None) -> AsyncSession:
+def get_async_session() -> AsyncSession:
     if ASYNC_SESSION is None:
-        initialize_schema(connection_string)
+        initialize_schema()
     return ASYNC_SESSION()
 
 
-def get_schema(connection_string: typing.Optional[str] = None):
+def get_schema():
     if SCHEMA is None:
-        initialize_schema(connection_string)
+        initialize_schema()
     return SCHEMA
 
 
@@ -82,10 +85,10 @@ def add_filter_and_sort(stmt, filter: StrawberryFilter, order_by: StrawberryOrde
     return stmt
 
 
-def initialize_schema(connection_string: typing.Optional[str] = None):
+def initialize_schema():
     global ASYNC_SESSION
     global SCHEMA
-    async_engine = create_async_engine(connection_string or "sqlite+aiosqlite:///database.db", echo="debug")
+    async_engine = get_engine()
     ASYNC_SESSION = async_sessionmaker(async_engine)
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=ASYNC_SESSION)
 
@@ -110,4 +113,3 @@ def initialize_schema(connection_string: typing.Optional[str] = None):
                 return a
 
     SCHEMA = strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
-    return SCHEMA

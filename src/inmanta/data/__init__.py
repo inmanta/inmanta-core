@@ -68,7 +68,7 @@ from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
 from sqlalchemy import URL, AsyncAdaptedQueuePool
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine, async_sessionmaker, AsyncSession
 
 """
 Global reference to the SQL Alchemy engine
@@ -6690,3 +6690,4 @@ def get_pool() -> AsyncAdaptedQueuePool:
 def get_engine() -> AsyncEngine:
     assert ENGINE is not None, "SQL Alchemy engine was not initialized"
     return ENGINE
+
