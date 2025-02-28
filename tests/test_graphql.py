@@ -236,6 +236,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
         results = result.result["data"]["data"]["environments"]["edges"]
         assert [node["node"]["name"] for node in results] == test_case[1]
 
+    # Get the first 5 elements
     result = await client.graphql(query=query % "first: 5")
     assert result.code == 200
     environments = result.result["data"]["data"]["environments"]
@@ -243,18 +244,20 @@ async def test_query_environments_with_paging(server, client, setup_database):
     assert len(results) == 5
     first_cursor = results[0]["cursor"]
     last_cursor = results[4]["cursor"]
+    # Assert that the paging information is correct
     assert environments["pageInfo"]["startCursor"] == first_cursor
     assert environments["pageInfo"]["endCursor"] == last_cursor
     assert environments["pageInfo"]["hasNextPage"] is True
     assert environments["pageInfo"]["hasPreviousPage"] is False
 
+    # Get 5 environments starting from the second to last cursor of the previous result
     second_to_last_cursor = results[3]["cursor"]
-
     result = await client.graphql(query=query % f'first: 5, after:"{second_to_last_cursor}"')
     assert result.code == 200
     environments = result.result["data"]["data"]["environments"]
     results = environments["edges"]
     assert len(results) == 5
+    # Assert that the first cursor of these results is the last from the previous results
     first_cursor = results[0]["cursor"]
     assert first_cursor == last_cursor
     new_last_cursor = results[4]["cursor"]
