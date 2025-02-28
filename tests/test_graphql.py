@@ -12,371 +12,147 @@
     Contact: code@inmanta.com
 """
 
-import datetime
-import subprocess
 import uuid
 
 import pytest
 
 import inmanta.data.sqlalchemy as models
 import inmanta.graphql.schema as schema
-from inmanta.data import get_connection_ctx_mgr
+from inmanta.data import get_session
 
 
 @pytest.fixture
-async def setup_database(init_dataclasses_and_load_schema):
+async def setup_database():
     # Initialize DB
-    async with get_connection_ctx_mgr() as session:
-        project_1 = models.Project(
-            id=uuid.UUID("00000000-1234-5678-1234-000000000001"),
-            name="test-proj-1",
-            environment=[
-                models.Environment(
-                    id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
-                    name="test-env-1",
-                    halted=False,
-                    notification=[
-                        models.Notification(
-                            id=uuid.UUID("22222222-1234-5678-1234-000000000000"),
-                            created=datetime.datetime.now(),
-                            title="New notification",
-                            message="This is a notification",
-                            severity="message",
-                            read=False,
-                            cleared=False,
-                            uri=None,
-                        ),
-                        models.Notification(
-                            id=uuid.UUID("22222222-1234-5678-1234-000000000001"),
-                            created=datetime.datetime.now(),
-                            title="Another notification",
-                            message="This is another notification",
-                            severity="error",
-                            read=False,
-                            cleared=False,
-                            uri=None,
-                        ),
-                    ],
-                    # settings=[
-                    #     models.EnvironmentSetting(
-                    #         name="setting for env test-env-1",
-                    #         type="str",
-                    #         default="default",
-                    #         recompile=False,
-                    #         update_model=False,
-                    #         agent_restart=False,
-                    #         doc="this is env_setting_1",
-                    #     ),
-                    #     models.EnvironmentSetting(
-                    #         name="another setting for env test-env-1",
-                    #         type="str",
-                    #         default="default",
-                    #         recompile=False,
-                    #         update_model=False,
-                    #         agent_restart=False,
-                    #         doc="this is env_setting_1",
-                    #     ),
-                    # ],
-                )
-            ],
+    async with get_session() as session:
+        project = models.Project(id=uuid.UUID("00000000-1234-5678-1234-000000000001"), name="test-proj")
+        environment_1 = models.Environment(
+            id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
+            name="test-env-1",
+            project=project.id,
+            halted=False,
+            settings={
+                "enable_lsm_expert_mode": False,
+            },
         )
-        project_2 = models.Project(
-            id=uuid.UUID("00000000-1234-5678-1234-100000000001"),
-            name="test-proj-2",
-            environment=[
-                models.Environment(
-                    id=uuid.UUID("11111111-1234-5678-1234-100000000001"),
-                    name="test-env-2",
-                    halted=False,
-                    notification=[
-                        models.Notification(
-                            id=uuid.UUID("22222222-1234-5678-1234-100000000000"),
-                            created=datetime.datetime.now(),
-                            title="New notification",
-                            message="This is a notification 2",
-                            severity="message",
-                            read=False,
-                            cleared=False,
-                            uri=None,
-                        ),
-                        models.Notification(
-                            id=uuid.UUID("22222222-1234-5678-1234-100000000001"),
-                            created=datetime.datetime.now(),
-                            title="Another notification",
-                            message="This is another notification 2",
-                            severity="error",
-                            read=False,
-                            cleared=False,
-                            uri=None,
-                        ),
-                    ],
-                    # settings=[
-                    #     models.EnvironmentSetting(
-                    #         name="setting for env test-env-2",
-                    #         type="str",
-                    #         default="default",
-                    #         recompile=False,
-                    #         update_model=False,
-                    #         agent_restart=False,
-                    #         doc="this is env_setting_1",
-                    #     ),
-                    #     models.EnvironmentSetting(
-                    #         name="another setting for env test-env-2",
-                    #         type="str",
-                    #         default="default",
-                    #         recompile=False,
-                    #         update_model=False,
-                    #         agent_restart=False,
-                    #         doc="this is env_setting_1",
-                    #     ),
-                    # ],
-                ),
-                models.Environment(
-                    id=uuid.UUID("11111111-1234-5678-1234-100000000002"),
-                    name="test-env-3",
-                    halted=False,
-                    notification=[
-                        models.Notification(
-                            id=uuid.UUID("22222222-1234-5678-1234-200000000000"),
-                            created=datetime.datetime.now(),
-                            title="New notification",
-                            message="This is a notification 3",
-                            severity="message",
-                            read=False,
-                            cleared=False,
-                            uri=None,
-                        ),
-                        models.Notification(
-                            id=uuid.UUID("22222222-1234-5678-1234-200000000001"),
-                            created=datetime.datetime.now(),
-                            title="Another notification",
-                            message="This is another notification 4",
-                            severity="error",
-                            read=False,
-                            cleared=False,
-                            uri=None,
-                        ),
-                    ],
-                    # settings=[
-                    #     models.EnvironmentSetting(
-                    #         name="setting for env test-env-3",
-                    #         type="str",
-                    #         default="default",
-                    #         recompile=False,
-                    #         update_model=False,
-                    #         agent_restart=False,
-                    #         doc="this is env_setting_1",
-                    #     ),
-                    #     models.EnvironmentSetting(
-                    #         name="another setting for env test-env-4",
-                    #         type="str",
-                    #         default="default",
-                    #         recompile=False,
-                    #         update_model=False,
-                    #         agent_restart=False,
-                    #         doc="this is env_setting_1",
-                    #     ),
-                    # ],
-                ),
-            ],
+        environment_2 = models.Environment(
+            id=uuid.UUID("11111111-1234-5678-1234-000000000002"),
+            name="test-env-2",
+            project=project.id,
+            halted=False,
+            settings={
+                "enable_lsm_expert_mode": True,
+            },
         )
-        session.add_all([project_1, project_2])
+        environment_3 = models.Environment(
+            id=uuid.UUID("11111111-1234-5678-1234-000000000003"),
+            name="test-env-3",
+            project=project.id,
+            halted=True,
+        )
+        session.add_all([project, environment_1, environment_2, environment_3])
         await session.commit()
         await session.flush()
         schema.mapper.finalize()
 
 
-async def test_generate_sqlalchemy_models(postgres_db, database_name):
-    conn_string = (
-        f"postgresql+asyncpg://{postgres_db.user}:{postgres_db.password}@{postgres_db.host}:{postgres_db.port}/{database_name}"
-    )
-    subprocess.run(["sqlacodegen", conn_string])
-
-
-async def test_query_projects(server, client, setup_database):
+async def test_query_environment_project(server, client, setup_database):
     """
     Display basic querying capabilities with recursive relationships
     """
     query = """
 {
-  projects {
-    id
-    name
-    environment {
+    environments {
         edges {
             node {
               id
-              project_ {
-                id
+              halted
+              isExpertMode
+              project
+              project_{
                 name
-                environment {
-                    edges {
-                        node {
-                            name
-                        }
-                    }
-                }
               }
             }
         }
     }
-  }
 }
     """
     result = await client.graphql(query=query)
     assert result.code == 200
     assert result.result["data"] == {
         "data": {
-            "projects": [
-                {
-                    "environment": {
-                        "edges": [
-                            {
-                                "node": {
-                                    "id": "11111111-1234-5678-1234-000000000001",
-                                    "project_": {
-                                        "environment": {"edges": [{"node": {"name": "test-env-1"}}]},
-                                        "id": "00000000-1234-5678-1234-000000000001",
-                                        "name": "test-proj-1",
-                                    },
-                                }
-                            }
-                        ]
+            "environments": {
+                "edges": [
+                    {
+                        "node": {
+                            "halted": False,
+                            "id": "11111111-1234-5678-1234-000000000001",
+                            "isExpertMode": False,
+                            "project": "00000000-1234-5678-1234-000000000001",
+                            "project_": {"name": "test-proj"},
+                        }
                     },
-                    "id": "00000000-1234-5678-1234-000000000001",
-                    "name": "test-proj-1",
-                },
-                {
-                    "environment": {
-                        "edges": [
-                            {
-                                "node": {
-                                    "id": "11111111-1234-5678-1234-100000000001",
-                                    "project_": {
-                                        "environment": {
-                                            "edges": [{"node": {"name": "test-env-2"}}, {"node": {"name": "test-env-3"}}]
-                                        },
-                                        "id": "00000000-1234-5678-1234-100000000001",
-                                        "name": "test-proj-2",
-                                    },
-                                }
-                            },
-                            {
-                                "node": {
-                                    "id": "11111111-1234-5678-1234-100000000002",
-                                    "project_": {
-                                        "environment": {
-                                            "edges": [{"node": {"name": "test-env-2"}}, {"node": {"name": "test-env-3"}}]
-                                        },
-                                        "id": "00000000-1234-5678-1234-100000000001",
-                                        "name": "test-proj-2",
-                                    },
-                                }
-                            },
-                        ]
+                    {
+                        "node": {
+                            "halted": False,
+                            "id": "11111111-1234-5678-1234-000000000002",
+                            "isExpertMode": True,
+                            "project": "00000000-1234-5678-1234-000000000001",
+                            "project_": {"name": "test-proj"},
+                        }
                     },
-                    "id": "00000000-1234-5678-1234-100000000001",
-                    "name": "test-proj-2",
-                },
-            ]
+                    {
+                        "node": {
+                            "halted": True,
+                            "id": "11111111-1234-5678-1234-000000000003",
+                            "isExpertMode": False,
+                            "project": "00000000-1234-5678-1234-000000000001",
+                            "project_": {"name": "test-proj"},
+                        }
+                    },
+                ]
+            }
         },
         "errors": None,
         "extensions": {},
     }
 
 
-async def test_query_projects_with_filtering(server, client, setup_database):
+async def test_query_environments_with_filtering(server, client, setup_database):
     """
     Display basic filtering capabilities
     """
-    query_filter_on = """
+    query = """
 {
-  projects(id: "00000000-1234-5678-1234-100000000001"){
-    id
-    }
-}
-    """
-    filtered_data = [{"id": "00000000-1234-5678-1234-100000000001"}]
-
-    query_filter_off = """
-{
-  projects{
-    id
-    }
-}
-        """
-    unfiltered_data = [
-        {"id": "00000000-1234-5678-1234-000000000001"},
-        {"id": "00000000-1234-5678-1234-100000000001"},
-    ]
-    scenarios = [
-        (query_filter_on, filtered_data),
-        (query_filter_off, unfiltered_data),
-    ]
-    for query, expected_data in scenarios:
-        result = await client.graphql(query=query)
-        assert result.code == 200
-        assert result.result["data"] == {
-            "data": {"projects": expected_data},
-            "errors": None,
-            "extensions": {},
-        }
-
-
-async def test_query_path(server, client, setup_database):
-    """
-    This test shows capabilities to trigger different sql queries
-    based on the graphql input query
-    For example
-    - a query that joins environment and project tables when querying project -> environments
-    or
-    - a query that solely relies on the environment table.
-    """
-    query_via_project = """
-{
-  projects(id: "00000000-1234-5678-1234-000000000001") {
-    id
-    environment {
+    environments(filter:{id: "11111111-1234-5678-1234-000000000002"}) {
         edges {
             node {
-                id
-                name
+              id
+              halted
+              isExpertMode
+              project
             }
         }
     }
-  }
 }
-    """
-    expected_data_via_project = {
+"""
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    assert result.result["data"] == {
         "data": {
-            "projects": [
-                {
-                    "environment": {"edges": [{"node": {"id": "11111111-1234-5678-1234-000000000001", "name": "test-env-1"}}]},
-                    "id": "00000000-1234-5678-1234-000000000001",
-                }
-            ]
+            "environments": {
+                "edges": [
+                    {
+                        "node": {
+                            "halted": False,
+                            "id": "11111111-1234-5678-1234-000000000002",
+                            "isExpertMode": True,
+                            "project": "00000000-1234-5678-1234-000000000001",
+                        }
+                    }
+                ]
+            }
         },
         "errors": None,
         "extensions": {},
     }
-    query_via_environments = """
-{
-  environments(id: "11111111-1234-5678-1234-000000000001") {
-    id
-    name
-  }
-}
-        """
-    expected_data_via_environment = {
-        "data": {"environments": [{"id": "11111111-1234-5678-1234-000000000001", "name": "test-env-1"}]},
-        "errors": None,
-        "extensions": {},
-    }
-    scenarios = [
-        (query_via_project, expected_data_via_project),
-        (query_via_environments, expected_data_via_environment),
-    ]
-    for query, expected_data in scenarios:
-        result = await client.graphql(query=query)
-        assert result.code == 200
-        assert result.result["data"] == expected_data

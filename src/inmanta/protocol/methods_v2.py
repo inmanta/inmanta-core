@@ -1605,6 +1605,7 @@ def discovered_resources_get_batch(
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """
 
+
 @typedmethod(
     path="/graphql",
     operation="POST",

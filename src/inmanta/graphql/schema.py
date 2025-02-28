@@ -16,36 +16,38 @@ import typing
 
 import inmanta.data.sqlalchemy as models
 import strawberry
-from sqlalchemy import asc, desc, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from inmanta.data import get_session, get_session_factory
+from sqlalchemy import Select, asc, desc, select
 from strawberry import relay
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.info import ContextType
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
-from inmanta.data import get_engine
 
-mapper = StrawberrySQLAlchemyMapper()
+mapper: StrawberrySQLAlchemyMapper[typing.Any] = StrawberrySQLAlchemyMapper()
+SCHEMA: strawberry.Schema | None = None
 
-ASYNC_SESSION: typing.Optional[AsyncSession] = None
-SCHEMA = None
 
 def get_expert_mode(root: "Environment") -> bool:
-    return root.settings.get("enable_lsm_expert_mode", False)
+    if not hasattr(root, "settings"):
+        return False
+    return bool(root.settings.get("enable_lsm_expert_mode", False))
+
+
+@mapper.type(models.Project)
+class Project:
+    pass
+
+
 @mapper.type(models.Environment)
 class Environment:
     is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
 
 
-def get_async_session() -> AsyncSession:
-    if ASYNC_SESSION is None:
-        initialize_schema()
-    return ASYNC_SESSION()
-
-
-def get_schema():
+def get_schema() -> strawberry.Schema:
     if SCHEMA is None:
         initialize_schema()
+    assert SCHEMA
     return SCHEMA
 
 
@@ -69,7 +71,11 @@ class EnvironmentOrder(StrawberryOrder):
     name: typing.Optional[str] = strawberry.UNSET
 
 
-def add_filter_and_sort(stmt, filter: StrawberryFilter, order_by: StrawberryOrder):
+def add_filter_and_sort(
+    stmt: Select[typing.Any],
+    filter: typing.Union[StrawberryFilter, strawberry.UNSET],
+    order_by: typing.Union[StrawberryOrder, strawberry.UNSET],
+) -> Select[typing.Any]:
     if filter is not strawberry.UNSET:
         stmt = stmt.filter_by(**filter.get_filter_dict())
     if order_by is not strawberry.UNSET:
@@ -85,31 +91,27 @@ def add_filter_and_sort(stmt, filter: StrawberryFilter, order_by: StrawberryOrde
     return stmt
 
 
-def initialize_schema():
-    global ASYNC_SESSION
+def initialize_schema() -> None:
     global SCHEMA
-    async_engine = get_engine()
-    ASYNC_SESSION = async_sessionmaker(async_engine)
-    loader = StrawberrySQLAlchemyLoader(async_bind_factory=ASYNC_SESSION)
+    loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
 
     class CustomInfo(Info):
         @property
-        def context(self) -> ContextType:
-            return {
-                "sqlalchemy_loader": loader,
-            }
+        def context(self) -> ContextType:  # type: ignore[type-var]
+            return typing.cast(ContextType, {"sqlalchemy_loader": loader})
 
     @strawberry.type
     class Query:
-        @relay.connection(mapper.connection_types["EnvironmentConnection"])
+        @relay.connection(mapper.connection_types["EnvironmentConnection"])  # type: ignore[misc]
         async def environments(
-            self, order_by: typing.Optional[EnvironmentOrder] = strawberry.UNSET, filter: EnvironmentFilter | None = strawberry.UNSET
-        ) -> typing.Iterable[Environment]:
-            async with get_async_session() as session:
+            self,
+            order_by: typing.Optional[EnvironmentOrder] = strawberry.UNSET,
+            filter: EnvironmentFilter | None = strawberry.UNSET,
+        ) -> typing.Iterable[models.Environment]:
+            async with get_session() as session:
                 stmt = select(models.Environment)
                 stmt = add_filter_and_sort(stmt, filter, order_by)
                 _environments = await session.scalars(stmt)
-                a = _environments.all()
-                return a
+                return _environments.all()
 
     SCHEMA = strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))

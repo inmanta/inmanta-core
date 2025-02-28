@@ -16,8 +16,8 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-from inmanta.server import agentmanager, server
 from inmanta.graphql.graphql import GraphQLSlice
+from inmanta.server import agentmanager, server
 from inmanta.server.extensions import ApplicationContext
 from inmanta.server.services import (
     codeservice,
