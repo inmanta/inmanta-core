@@ -35,7 +35,6 @@ requires = [
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
     "setproctitle~=1.3",
-    "SQLAlchemy~=2.0",
     "strawberry-sqlalchemy-mapper==0.5.0",
 ]
 

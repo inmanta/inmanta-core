@@ -1614,4 +1614,12 @@ def discovered_resources_get_batch(
     strict_typing=False,
 )
 def graphql(query: str) -> Any:  # Actual return type: strawberry.types.execution.ExecutionResult
+    """
+    GraphQL endpoint for Inmanta.
+    Supports paging, filtering and sorting on certain attributes.
+
+    Available queries:
+        - "environments" - Gets a list of created environments.
+            Supports filter and sorting on id and name.
+    """
     pass
