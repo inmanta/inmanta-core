@@ -128,10 +128,22 @@ class CodeManager:
     def __init__(self) -> None:
         # Old implementation
         # Use by external code
+
+        # Maps resource_type e.g.
+        # 'std::testing::NullResource'
+        #
+        # to
+        #
+        # resource class ? handler ?
         self.__type_file: dict[str, set[str]] = {}
         self.__file_info: dict[str, SourceInfo] = {}
 
         # Cache of module to source info
+        # Maps module name e.g. std
+        #
+        # to
+
+
         self.__module_to_source_info: dict[str, list[SourceInfo]] = {}
 
     def register_code(self, type_name: str, instance: object) -> None:
@@ -153,7 +165,7 @@ class CodeManager:
             return
 
         # get the module
-        module_name = get_inmanta_module_name(instance.__module__)
+        module_name: str = get_inmanta_module_name(instance.__module__)
 
         all_plugin_files: list[SourceInfo] = self._get_source_info_for_module(module_name)
 

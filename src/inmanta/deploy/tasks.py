@@ -173,13 +173,13 @@ class Deploy(Task):
                     # FIXME: code loading interface is not nice like this,
                     #   - we may want to track modules per agent, instead of types
                     #   - we may also want to track the module version vs the model version
-                    #       as it avoid the problem of fast chanfing model versions
+                    #       as it avoid the problem of fast changing model versions
 
                     my_executor: executor.Executor = await self.get_executor(
                         task_manager=task_manager,
                         agent_spec=(agent, deploy_intent.all_types_for_agent),
                         resource_type=executor_resource_details.id.entity_type,
-                        version=version,
+                        version=version,  # model version
                     )
                 except Exception as e:
                     log_line = data.LogLine.log(

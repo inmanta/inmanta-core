@@ -517,6 +517,7 @@ class Exporter:
             types.add(type_name)
 
         for type_name, handler_definition in Commander.get_providers():
+            # this is a noop for resources already registered in loop above
             code_manager.register_code(type_name, handler_definition)
             types.add(type_name)
 
