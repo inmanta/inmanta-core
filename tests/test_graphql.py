@@ -17,7 +17,6 @@ import uuid
 import pytest
 
 import inmanta.data.sqlalchemy as models
-import inmanta.graphql.schema as schema
 from inmanta.data import get_session
 
 
@@ -28,7 +27,7 @@ async def setup_database():
         project = models.Project(id=uuid.UUID("00000000-1234-5678-1234-000000000001"), name="test-proj")
         environment_1 = models.Environment(
             id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
-            name="test-env-1",
+            name="test-env-b",
             project=project.id,
             halted=False,
             settings={
@@ -37,7 +36,7 @@ async def setup_database():
         )
         environment_2 = models.Environment(
             id=uuid.UUID("11111111-1234-5678-1234-000000000002"),
-            name="test-env-2",
+            name="test-env-c",
             project=project.id,
             halted=False,
             settings={
@@ -46,14 +45,13 @@ async def setup_database():
         )
         environment_3 = models.Environment(
             id=uuid.UUID("11111111-1234-5678-1234-000000000003"),
-            name="test-env-3",
+            name="test-env-a",
             project=project.id,
             halted=True,
         )
         session.add_all([project, environment_1, environment_2, environment_3])
         await session.commit()
         await session.flush()
-        schema.mapper.finalize()
 
 
 async def test_query_environment_project(server, client, setup_database):
@@ -120,7 +118,7 @@ async def test_query_environment_project(server, client, setup_database):
 
 async def test_query_environments_with_filtering(server, client, setup_database):
     """
-    Display basic filtering capabilities
+    Display basic paging capabilities
     """
     query = """
 {
@@ -156,3 +154,111 @@ async def test_query_environments_with_filtering(server, client, setup_database)
         "errors": None,
         "extensions": {},
     }
+
+
+async def test_query_environments_with_sorting(server, client, setup_database):
+    """
+    Display basic sorting capabilities
+    """
+    query = """
+{
+    environments(%s){
+        edges {
+            node {
+              id
+              name
+            }
+        }
+    }
+}
+"""
+    test_cases = [
+        ('orderBy:{name: "asc"}', ["test-env-a", "test-env-b", "test-env-c"]),
+        ('orderBy:{name: "desc"}', ["test-env-c", "test-env-b", "test-env-a"]),
+        ('orderBy:{id: "asc"}', ["test-env-b", "test-env-c", "test-env-a"]),
+        ('orderBy:{id: "desc"}', ["test-env-a", "test-env-c", "test-env-b"]),
+    ]
+
+    for test_case in test_cases:
+        result = await client.graphql(query=query % test_case[0])
+        assert result.code == 200
+        results = result.result["data"]["data"]["environments"]["edges"]
+        assert [node["node"]["name"] for node in results] == test_case[1]
+
+
+async def test_query_environments_with_paging(server, client, setup_database):
+    """
+    Display basic paging capabilities
+    """
+    async with get_session() as session:
+        project = models.Project(id=uuid.UUID("00000000-1234-5678-1234-000000000002"), name="test-proj-2")
+        instances = [project]
+        for i in range(10):
+            instances.append(
+                models.Environment(
+                    id=uuid.UUID(f"21111111-1234-5678-1234-00000000000{i}"),
+                    name=f"test-env-{i}",
+                    project=project.id,
+                    halted=False,
+                )
+            )
+        session.add_all(instances)
+        await session.commit()
+        await session.flush()
+    query = """
+{
+    environments(%s){
+        pageInfo{
+            startCursor,
+            endCursor,
+            hasPreviousPage,
+            hasNextPage
+        }
+        edges {
+            cursor
+            node {
+              id
+              name
+            }
+        }
+    }
+}
+"""
+    test_cases = [
+        ("first: 3", ["test-env-b", "test-env-c", "test-env-a"]),
+        ("first: 5", ["test-env-b", "test-env-c", "test-env-a", "test-env-0", "test-env-1"]),
+        ("last: 5", ["test-env-5", "test-env-6", "test-env-7", "test-env-8", "test-env-9"]),
+    ]
+
+    for test_case in test_cases:
+        result = await client.graphql(query=query % test_case[0])
+        assert result.code == 200
+        results = result.result["data"]["data"]["environments"]["edges"]
+        assert [node["node"]["name"] for node in results] == test_case[1]
+
+    result = await client.graphql(query=query % "first: 5")
+    assert result.code == 200
+    environments = result.result["data"]["data"]["environments"]
+    results = environments["edges"]
+    assert len(results) == 5
+    first_cursor = results[0]["cursor"]
+    last_cursor = results[4]["cursor"]
+    assert environments["pageInfo"]["startCursor"] == first_cursor
+    assert environments["pageInfo"]["endCursor"] == last_cursor
+    assert environments["pageInfo"]["hasNextPage"] is True
+    assert environments["pageInfo"]["hasPreviousPage"] is False
+
+    second_to_last_cursor = results[3]["cursor"]
+
+    result = await client.graphql(query=query % f'first: 5, after:"{second_to_last_cursor}"')
+    assert result.code == 200
+    environments = result.result["data"]["data"]["environments"]
+    results = environments["edges"]
+    assert len(results) == 5
+    first_cursor = results[0]["cursor"]
+    assert first_cursor == last_cursor
+    new_last_cursor = results[4]["cursor"]
+    assert environments["pageInfo"]["startCursor"] == first_cursor
+    assert environments["pageInfo"]["endCursor"] == new_last_cursor
+    assert environments["pageInfo"]["hasNextPage"] is True
+    assert environments["pageInfo"]["hasPreviousPage"] is True

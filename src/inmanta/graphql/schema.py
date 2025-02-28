@@ -73,12 +73,12 @@ class EnvironmentOrder(StrawberryOrder):
 
 def add_filter_and_sort(
     stmt: Select[typing.Any],
-    filter: typing.Union[StrawberryFilter, strawberry.UNSET],
-    order_by: typing.Union[StrawberryOrder, strawberry.UNSET],
+    filter: typing.Optional[StrawberryFilter] = strawberry.UNSET,
+    order_by: typing.Optional[StrawberryOrder] = strawberry.UNSET,
 ) -> Select[typing.Any]:
-    if filter is not strawberry.UNSET:
+    if filter and filter is not strawberry.UNSET:
         stmt = stmt.filter_by(**filter.get_filter_dict())
-    if order_by is not strawberry.UNSET:
+    if order_by and order_by is not strawberry.UNSET:
         for key in order_by.__dict__.keys():
             order = getattr(order_by, key)
             if order is not strawberry.UNSET:
@@ -105,8 +105,8 @@ def initialize_schema() -> None:
         @relay.connection(mapper.connection_types["EnvironmentConnection"])  # type: ignore[misc]
         async def environments(
             self,
+            filter: typing.Optional[EnvironmentFilter] = strawberry.UNSET,
             order_by: typing.Optional[EnvironmentOrder] = strawberry.UNSET,
-            filter: EnvironmentFilter | None = strawberry.UNSET,
         ) -> typing.Iterable[models.Environment]:
             async with get_session() as session:
                 stmt = select(models.Environment)
