@@ -118,7 +118,7 @@ async def test_query_environment_project(server, client, setup_database):
 
 async def test_query_environments_with_filtering(server, client, setup_database):
     """
-    Display basic paging capabilities
+    Display basic filtering capabilities
     """
     query = """
 {

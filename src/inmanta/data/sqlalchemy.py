@@ -20,6 +20,12 @@ from sqlalchemy import Boolean, ForeignKeyConstraint, Index, Integer, PrimaryKey
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+# Since our GraphQL strawberry models are generated through these SQLAlchemy models, we should only uncomment
+# relationships that we want to support on GraphQL. The rest of the models are commented so that when we want to add them,
+# we take a critical look at them first to see if they make sense/match our db schema.
+# Currently, these models don't offer any additional validation, besides typing, so it's best to avoid inserting/modifying
+# DB entries directly using these models.
+
 
 class Base(DeclarativeBase):
     pass
