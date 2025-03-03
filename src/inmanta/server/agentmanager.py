@@ -37,8 +37,9 @@ import inmanta.config
 import inmanta.exceptions
 import inmanta.server.services.environmentlistener
 from inmanta import config as global_config
-from inmanta import const, data, tracing
+from inmanta import const, data
 from inmanta import logging as inmanta_logging
+from inmanta import tracing
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config, config_map_to_str, scheduler_log_config
 from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
@@ -1191,11 +1192,15 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                     start_new_process = False
 
                 if start_new_process:
-                    self._agent_procs[env], stdout_log, stderr_log = await self.__do_start_agent(refreshed_env, connection=connection)
+                    self._agent_procs[env], stdout_log, stderr_log = await self.__do_start_agent(
+                        refreshed_env, connection=connection
+                    )
 
                 # Wait for all agents to start
                 try:
-                    await self._wait_for_agents(refreshed_env, autostart_scheduler, stdout_log=stdout_log, stderr_log=stderr_log, connection=connection)
+                    await self._wait_for_agents(
+                        refreshed_env, autostart_scheduler, stdout_log=stdout_log, stderr_log=stderr_log, connection=connection
+                    )
                 except asyncio.TimeoutError:
                     LOGGER.warning("Not all agent instances started successfully")
                 return start_new_process
@@ -1256,13 +1261,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         environment_id = str(env.id)
         port: int = opt.server_bind_port.get()
 
-        server_connect_address: str
-        try:
-            # Try to derive the IP address of the server from the server.bind-address config option.
-            server_connect_address = next(addr.strip() for addr in opt.server_bind_address.get() if addr.strip() != "0.0.0.0")
-        except StopIteration:
-            # The bind-address is set to 0.0.0.0, assume that 127.0.0.1 is the loopback address.
-            server_connect_address = "127.0.0.1"
+        server_address: str = opt.get_address_to_connect_back_to_server()
 
         privatestatedir: str = self._get_state_dir_for_agent_in_env(env.id)
 
@@ -1293,7 +1292,7 @@ host=%(serveradress)s
             "statedir": privatestatedir,
             "agent_deploy_interval": agent_deploy_interval,
             "agent_repair_interval": agent_repair_interval,
-            "serveradress": server_connect_address,
+            "serveradress": server_address,
         }
 
         if server_config.server_enable_auth.get():
@@ -1385,13 +1384,13 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
                 errhandle.close()
 
     async def _wait_for_agents(
-            self,
-            env: data.Environment,
-            agents: Set[str],
-            *,
-            stdout_log: str,
-            stderr_log: str,
-            connection: Optional[asyncpg.connection.Connection] = None,
+        self,
+        env: data.Environment,
+        agents: Set[str],
+        *,
+        stdout_log: str,
+        stderr_log: str,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
         Wait until all requested autostarted agent instances are active, e.g. after starting a new agent process.

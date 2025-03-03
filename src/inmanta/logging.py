@@ -15,13 +15,14 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
-import uuid
+
 import abc
 import logging
 import logging.config
 import os
 import re
 import sys
+import uuid
 from argparse import Namespace
 from collections.abc import Mapping, Sequence, Set
 from io import TextIOWrapper
