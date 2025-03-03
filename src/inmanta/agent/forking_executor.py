@@ -1062,8 +1062,6 @@ class MPManager(
             handler code in its venv. Must have at least one element.
         :return: An Executor instance
         """
-        if not code:
-            raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
 
         blueprint = executor.ExecutorBlueprint.from_specs(code)
         executor_id = executor.ExecutorId(agent_name, agent_uri, blueprint)
