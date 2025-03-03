@@ -38,6 +38,7 @@ import inmanta.exceptions
 import inmanta.server.services.environmentlistener
 from inmanta import config as global_config
 from inmanta import const, data, tracing
+from inmanta import logging as inmanta_logging
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config, config_map_to_str, scheduler_log_config
 from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
@@ -1190,20 +1191,22 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                     start_new_process = False
 
                 if start_new_process:
-                    self._agent_procs[env] = await self.__do_start_agent(refreshed_env, connection=connection)
+                    self._agent_procs[env], stdout_log, stderr_log = await self.__do_start_agent(refreshed_env, connection=connection)
 
                 # Wait for all agents to start
                 try:
-                    await self._wait_for_agents(refreshed_env, autostart_scheduler, connection=connection)
+                    await self._wait_for_agents(refreshed_env, autostart_scheduler, stdout_log=stdout_log, stderr_log=stderr_log, connection=connection)
                 except asyncio.TimeoutError:
                     LOGGER.warning("Not all agent instances started successfully")
                 return start_new_process
 
     async def __do_start_agent(
         self, env: data.Environment, *, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> subprocess.Process:
+    ) -> tuple[subprocess.Process, str, str]:
         """
         Start an autostarted agent process for the given environment. Should only be called if none is running yet.
+
+        :return: A tuple consisting of the agent process, the stdout log file and the stderr log file.
         """
         assert not assert_no_start_scheduler
 
@@ -1236,7 +1239,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         )
 
         LOGGER.debug("Started new agent with PID %s", proc.pid)
-        return proc
+        return proc, out, err
 
     async def _make_agent_config(
         self,
@@ -1252,6 +1255,14 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         """
         environment_id = str(env.id)
         port: int = opt.server_bind_port.get()
+
+        server_connect_address: str
+        try:
+            # Try to derive the IP address of the server from the server.bind-address config option.
+            server_connect_address = next(addr.strip() for addr in opt.server_bind_address.get() if addr.strip() != "0.0.0.0")
+        except StopIteration:
+            # The bind-address is set to 0.0.0.0, assume that 127.0.0.1 is the loopback address.
+            server_connect_address = "127.0.0.1"
 
         privatestatedir: str = self._get_state_dir_for_agent_in_env(env.id)
 
@@ -1282,7 +1293,7 @@ host=%(serveradress)s
             "statedir": privatestatedir,
             "agent_deploy_interval": agent_deploy_interval,
             "agent_repair_interval": agent_repair_interval,
-            "serveradress": server_config.server_address.get(),
+            "serveradress": server_connect_address,
         }
 
         if server_config.server_enable_auth.get():
@@ -1331,6 +1342,10 @@ username = {opt.influxdb_username.get()}
 password = {opt.influxdb_password.get()}
 interval = {opt.influxdb_interval.get()}
 tags = {config_map_to_str(opt.influxdb_tags.get())}
+
+[server]
+# Required to resolve the IP address to connect back to the Inmanta server
+bind-address={opt.server_bind_address.get()}
 """
 
         if scheduler_log_config.get():
@@ -1370,7 +1385,13 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
                 errhandle.close()
 
     async def _wait_for_agents(
-        self, env: data.Environment, agents: Set[str], *, connection: Optional[asyncpg.connection.Connection] = None
+            self,
+            env: data.Environment,
+            agents: Set[str],
+            *,
+            stdout_log: str,
+            stderr_log: str,
+            connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
         Wait until all requested autostarted agent instances are active, e.g. after starting a new agent process.
@@ -1379,6 +1400,8 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
 
         :param env: The environment for which to wait for agents.
         :param agents: Autostarted agent endpoints to wait for.
+        :param stdout_log: The log file to which the agent writes its stdout stream.
+        :param stderr_log: The log file to which the agent writes its stderr stream.
 
         :raises TimeoutError: When not all agent instances are active and no new agent instance became active in the last
             5 seconds.
@@ -1399,14 +1422,22 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
         last_new_agent_seen = started
         last_log = started
 
+        log_files = [
+            inmanta_logging.LoggingConfigBuilder.get_log_file_for_scheduler(env.id, global_config.log_dir.get()),
+            stdout_log,
+            stderr_log,
+        ]
+
         while len(expected_agents_in_up_state) != len(actual_agents_in_up_state):
             await asyncio.sleep(0.1)
             now = int(time.time())
             if now - last_new_agent_seen > AUTO_STARTED_AGENT_WAIT:
                 LOGGER.warning(
-                    "Timeout: agent with PID %s took too long to start: still waiting for agent instances %s",
+                    "Timeout: agent with PID %s took too long to start: still waiting for agent instances %s."
+                    " See log files %s for more information.",
                     proc.pid,
                     ",".join(sorted(expected_agents_in_up_state - actual_agents_in_up_state)),
+                    ", ".join(log_files),
                 )
 
                 raise asyncio.TimeoutError()
