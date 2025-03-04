@@ -392,7 +392,9 @@ class LoggingConfigBuilder:
 
             env = context[LOG_CONTEXT_VAR_ENVIRONMENT]
 
-            log_file = self.get_log_file_for_scheduler(env=env, log_dir=config.log_dir.get(), log_file_cli_option=options.log_file)
+            log_file = self.get_log_file_for_scheduler(
+                env=env, log_dir=config.log_dir.get(), log_file_cli_option=options.log_file
+            )
 
             # We don't override log-file-level as we can't detect if it is set
 
