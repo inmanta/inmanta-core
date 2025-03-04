@@ -379,7 +379,7 @@ class LoggingConfigBuilder:
         handler_root_logger: str
         log_level: int
 
-        log_file_cli_option = options.log_file
+        log_file: Optional[str] = options.log_file
 
         short_names = False
         if component == "compiler":
@@ -392,19 +392,19 @@ class LoggingConfigBuilder:
 
             env = context[LOG_CONTEXT_VAR_ENVIRONMENT]
 
-            log_file_cli_option = self.get_log_file_for_scheduler(env, config.log_dir.get(), log_file_cli_option)
+            log_file = self.get_log_file_for_scheduler(env=env, log_dir=config.log_dir.get(), log_file_cli_option=options.log_file)
 
             # We don't override log-file-level as we can't detect if it is set
 
         # Shared config
-        if log_file_cli_option:
+        if log_file:
             log_level = convert_inmanta_log_level(options.log_file_level)
             handler_root_logger = f"{component}_handler" if component is not None else "root_handler"
             handlers[handler_root_logger] = {
                 "class": "logging.handlers.WatchedFileHandler",
                 "level": python_log_level_to_name(log_level),
                 "formatter": "core_log_formatter",
-                "filename": log_file_cli_option,
+                "filename": log_file,
                 "mode": "a+",
             }
         else:

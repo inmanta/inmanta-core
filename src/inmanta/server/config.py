@@ -136,19 +136,6 @@ server_bind_port = Option(
     is_int,
 )
 
-
-def get_address_to_connect_back_to_server() -> str:
-    """
-    Return the IP address that subprocesses should use to connect back to the server.
-    """
-    try:
-        # Try to derive the IP address of the server from the server.bind-address config option.
-        return next(addr.strip() for addr in server_bind_address.get() if addr.strip() != "0.0.0.0")
-    except StopIteration:
-        # The bind-address is set to 0.0.0.0, assume that 127.0.0.1 is the loopback address.
-        return "127.0.0.1"
-
-
 server_tz_aware_timestamps = Option(
     "server",
     "tz_aware_timestamps",

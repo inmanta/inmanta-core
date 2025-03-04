@@ -1261,8 +1261,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         environment_id = str(env.id)
         port: int = opt.server_bind_port.get()
 
-        server_address: str = opt.get_address_to_connect_back_to_server()
-
         privatestatedir: str = self._get_state_dir_for_agent_in_env(env.id)
 
         agent_deploy_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection))
@@ -1285,14 +1283,13 @@ executor-retention-time={agent_cfg.agent_executor_retention_time.get()}
 
 [agent_rest_transport]
 port=%(port)s
-host=%(serveradress)s
+host=localhost
 """ % {
             "env_id": environment_id,
             "port": port,
             "statedir": privatestatedir,
             "agent_deploy_interval": agent_deploy_interval,
             "agent_repair_interval": agent_repair_interval,
-            "serveradress": server_address,
         }
 
         if server_config.server_enable_auth.get():

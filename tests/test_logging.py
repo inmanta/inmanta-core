@@ -540,7 +540,7 @@ async def test_output_default_logging_cmd(inmanta_config, tmp_path):
         ]
         process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE)
         try:
-            stdout, stderr = await wait_for(process.communicate(), timeout=5)
+            await wait_for(process.communicate(), timeout=5)
         except TimeoutError as e:
             process.kill()
             await process.communicate()
