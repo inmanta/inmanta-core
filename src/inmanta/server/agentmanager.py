@@ -1422,7 +1422,7 @@ scheduler = {os.path.abspath(scheduler_log_config.get())}
         last_log = started
 
         log_files = [
-            inmanta_logging.LoggingConfigBuilder.get_log_file_for_scheduler(env.id, global_config.log_dir.get()),
+            inmanta_logging.LoggingConfigBuilder.get_log_file_for_scheduler(str(env.id), global_config.log_dir.get()),
             stdout_log,
             stderr_log,
         ]

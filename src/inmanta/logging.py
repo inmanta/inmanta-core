@@ -22,7 +22,6 @@ import logging.config
 import os
 import re
 import sys
-import uuid
 from argparse import Namespace
 from collections.abc import Mapping, Sequence, Set
 from io import TextIOWrapper
@@ -345,11 +344,11 @@ class LoggingConfigBuilder:
         return logging_config_core
 
     @classmethod
-    def get_log_file_for_scheduler(cls, env_id: uuid.UUID, log_dir: str, log_file_cli_option: str | None = None) -> str:
+    def get_log_file_for_scheduler(cls, env: str, log_dir: str, log_file_cli_option: str | None = None) -> str:
         """
         Returns the path to the main log file of the scheduler.
 
-        :param env_id: The environment id this scheduler belongs to.
+        :param env: The environment parameter to use in the name of the log file.
         :param log_dir: The log directory as configured using the config.log_dir configuration option.
         :param log_file_cli_option: The value of the --log-file CLI config option or None if the option was not provided.
         """
@@ -357,7 +356,7 @@ class LoggingConfigBuilder:
             return log_file_cli_option
         else:
             # use setting as formerly passed by the autostarted agent manager if not set via CLI
-            return os.path.join(log_dir, f"agent-{env_id}.log")
+            return os.path.join(log_dir, f"agent-{env}.log")
 
     def get_logging_config_from_options(
         self,
@@ -391,9 +390,9 @@ class LoggingConfigBuilder:
             if LOG_CONTEXT_VAR_ENVIRONMENT not in context:
                 raise Exception("The scheduler expects an environment as context")
 
-            env = context.get(LOG_CONTEXT_VAR_ENVIRONMENT)
+            env = context[LOG_CONTEXT_VAR_ENVIRONMENT]
 
-            log_file_cli_option = self.get_log_file_for_scheduler(uuid.UUID(env), config.log_dir.get(), log_file_cli_option)
+            log_file_cli_option = self.get_log_file_for_scheduler(env, config.log_dir.get(), log_file_cli_option)
 
             # We don't override log-file-level as we can't detect if it is set
 

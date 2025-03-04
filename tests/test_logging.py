@@ -347,7 +347,7 @@ def test_scheduler_documentation_conformance(inmanta_config, monkeypatch):
     )
     default = LoggingConfigBuilder()
     from_config = default.get_logging_config_from_options(
-        sys.stdout, Options(log_file_level="DEBUG"), component="scheduler", context={"environment": env}
+        sys.stdout, Options(log_file_level="DEBUG"), component="scheduler", context={"environment": str(env)}
     )
 
     assert from_config._to_dict_config() == from_file_dict
@@ -540,7 +540,7 @@ async def test_output_default_logging_cmd(inmanta_config, tmp_path):
         ]
         process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE)
         try:
-            await wait_for(process.communicate(), timeout=5)
+            stdout, stderr = await wait_for(process.communicate(), timeout=5)
         except TimeoutError as e:
             process.kill()
             await process.communicate()
