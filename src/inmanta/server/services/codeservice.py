@@ -116,3 +116,22 @@ class CodeService(protocol.ServerSlice):
                 )
 
         return sources
+
+    @handle(methods_v2.get_module_source_for_agent, env="tid")
+    async def get_source_code(self, env: data.Environment, agent: str, version: int) -> list[model.Source]:
+        code = await data.Code.get_version(environment=env.id, version=version, resource=resource_type)
+        if code is None:
+            raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
+
+        sources = []
+
+        # Get all module code pertaining to this env/version/resource
+        if code.source_refs is not None:
+            for code_hash, (file_name, module, requires) in code.source_refs.items():
+                sources.append(
+                    model.Source(
+                        hash=code_hash, is_byte_code=file_name.endswith(".pyc"), module_name=module, requirements=requires
+                    )
+                )
+
+        return sources

@@ -94,6 +94,7 @@ class CodeManager:
         else:
             raise CouldNotResolveCode(resource_type, version, str(result.get_result()))
 
+    @async_lru_cache(maxsize=1024)
     async def get_code(
         self, environment: uuid.UUID, model_version: int, agent_name: str
     ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
@@ -107,24 +108,32 @@ class CodeManager:
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
 
-        resource_install_specs: list[ResourceInstallSpec] = []
-        invalid_resources: executor.FailedResources = {}
-        for resource_type in set(resource_types):
-            try:
-                resource_install_specs.append(await self.get_code_for_type(environment, version, resource_type))
-            except CouldNotResolveCode as e:
-                LOGGER.error(
-                    "%s",
-                    e.msg,
+        result: protocol.Result = await self._client.get_source_code(environment, version, resource_type)
+        if result.code == 200 and result.result is not None:
+            sync_client = SyncClient(client=self._client, ioloop=asyncio.get_running_loop())
+            requirements: set[str] = set()
+            sources: list["ModuleSource"] = []
+            # Encapsulate source code details in ``ModuleSource`` objects
+            for source in result.result["data"]:
+                sources.append(
+                    ModuleSource(
+                        name=source["module_name"],
+                        is_byte_code=source["is_byte_code"],
+                        hash_value=source["hash"],
+                        _client=sync_client,
+                    )
                 )
-                invalid_resources[resource_type] = e
-            except Exception as e:
-                LOGGER.error(
-                    "Failed to get source code for %s version=%d",
-                    resource_type,
-                    version,
-                    exc_info=True,
-                )
-                invalid_resources[resource_type] = e
-
-        return resource_install_specs, invalid_resources
+                requirements.update(source["requirements"])
+            resource_install_spec = ResourceInstallSpec(
+                resource_type,
+                version,
+                executor.ExecutorBlueprint(
+                    pip_config=await self.get_pip_config(environment, version),
+                    requirements=list(requirements),
+                    sources=sources,
+                    python_version=sys.version_info[:2],
+                ),
+            )
+            return resource_install_spec
+        else:
+            raise CouldNotResolveCode(resource_type, version, str(result.get_result()))

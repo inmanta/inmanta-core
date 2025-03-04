@@ -93,10 +93,6 @@ class Task(abc.ABC):
             agent_name=agent_name,
         )
 
-        # Bail out if this failed
-        if resource_type in invalid_resources:
-            raise invalid_resources[resource_type]
-
         # Get executor
         my_executor: executor.Executor = await task_manager.executor_manager.get_executor(
             agent_name=agent_name, agent_uri="NO_URI", code=code
