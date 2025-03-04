@@ -95,17 +95,20 @@ class CodeManager:
             raise CouldNotResolveCode(resource_type, version, str(result.get_result()))
 
     async def get_code(
-        self, environment: uuid.UUID, model_version: int, agent_name: str
+        self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
     ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
         """
         Get the collection of installation specifications (i.e. pip config, python package dependencies,
-        Inmanta modules sources) required to deploy resources on a given agent for a given configuration
-        model version.
+        Inmanta modules sources) required to deploy a given version for the provided resource types.
+
+        Expects at least one resource type.
 
         :return: Tuple of:
             - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
+        if not resource_types:
+            raise ValueError(f"{self.__class__.__name__}.get_code() expects at least one resource type")
 
         resource_install_specs: list[ResourceInstallSpec] = []
         invalid_resources: executor.FailedResources = {}
