@@ -3,6 +3,6 @@ description: "The agent and the compiler now connect back to the server via the 
 issue-nr: 8752
 issue-repo: inmanta-core
 change-type: patch
-destination-branches: [master, iso8, iso7]
+destination-branches: [master, iso8]
 sections:
   bugfix: "{{description}}"
