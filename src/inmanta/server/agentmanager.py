@@ -1341,10 +1341,6 @@ username = {opt.influxdb_username.get()}
 password = {opt.influxdb_password.get()}
 interval = {opt.influxdb_interval.get()}
 tags = {config_map_to_str(opt.influxdb_tags.get())}
-
-[server]
-# Required to resolve the IP address to connect back to the Inmanta server
-bind-address={opt.server_bind_address.get()}
 """
 
         if scheduler_log_config.get():
