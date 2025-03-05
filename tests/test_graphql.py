@@ -21,14 +21,13 @@ from inmanta.data import get_session
 
 
 @pytest.fixture
-async def setup_database():
+async def setup_database(project_default):
     # Initialize DB
     async with get_session() as session:
-        project = models.Project(id=uuid.UUID("00000000-1234-5678-1234-000000000001"), name="test-proj")
         environment_1 = models.Environment(
             id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
             name="test-env-b",
-            project=project.id,
+            project=project_default,
             halted=False,
             settings={
                 "enable_lsm_expert_mode": False,
@@ -37,7 +36,7 @@ async def setup_database():
         environment_2 = models.Environment(
             id=uuid.UUID("11111111-1234-5678-1234-000000000002"),
             name="test-env-c",
-            project=project.id,
+            project=project_default,
             halted=False,
             settings={
                 "enable_lsm_expert_mode": True,
@@ -46,10 +45,10 @@ async def setup_database():
         environment_3 = models.Environment(
             id=uuid.UUID("11111111-1234-5678-1234-000000000003"),
             name="test-env-a",
-            project=project.id,
+            project=project_default,
             halted=True,
         )
-        session.add_all([project, environment_1, environment_2, environment_3])
+        session.add_all([environment_1, environment_2, environment_3])
         await session.commit()
         await session.flush()
 
@@ -66,10 +65,6 @@ async def test_query_environment_project(server, client, setup_database):
               id
               halted
               isExpertMode
-              project
-              project_{
-                name
-              }
             }
         }
     }
@@ -86,8 +81,6 @@ async def test_query_environment_project(server, client, setup_database):
                             "halted": False,
                             "id": "11111111-1234-5678-1234-000000000001",
                             "isExpertMode": False,
-                            "project": "00000000-1234-5678-1234-000000000001",
-                            "project_": {"name": "test-proj"},
                         }
                     },
                     {
@@ -95,8 +88,6 @@ async def test_query_environment_project(server, client, setup_database):
                             "halted": False,
                             "id": "11111111-1234-5678-1234-000000000002",
                             "isExpertMode": True,
-                            "project": "00000000-1234-5678-1234-000000000001",
-                            "project_": {"name": "test-proj"},
                         }
                     },
                     {
@@ -104,8 +95,6 @@ async def test_query_environment_project(server, client, setup_database):
                             "halted": True,
                             "id": "11111111-1234-5678-1234-000000000003",
                             "isExpertMode": False,
-                            "project": "00000000-1234-5678-1234-000000000001",
-                            "project_": {"name": "test-proj"},
                         }
                     },
                 ]
@@ -128,7 +117,6 @@ async def test_query_environments_with_filtering(server, client, setup_database)
               id
               halted
               isExpertMode
-              project
             }
         }
     }

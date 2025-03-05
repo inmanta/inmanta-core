@@ -29,25 +29,35 @@ SCHEMA: strawberry.Schema | None = None
 
 
 def get_expert_mode(root: "Environment") -> bool:
-    if not hasattr(root, "settings"):
-        return False
+    assert hasattr(root, "settings")
     return bool(root.settings.get("enable_lsm_expert_mode", False))
-
-
-@mapper.type(models.Project)
-class Project:
-    pass
 
 
 @mapper.type(models.Environment)
 class Environment:
+    # Add every relation/attribute that we don't want to expose in our GraphQL endpoint to `__exclude__`
+    __exclude__ = [
+        "project_",
+        "agentprocess",
+        "code",
+        "compile",
+        "configurationmodel",
+        "discoveredresource",
+        "environmentmetricsgauge",
+        "environmentmetricstimer",
+        "notification",
+        "parameter",
+        "resource_persistent_state",
+        "unknownparameter",
+        "agent",
+    ]
     is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
 
 
 def get_schema() -> strawberry.Schema:
+    global SCHEMA
     if SCHEMA is None:
-        initialize_schema()
-    assert SCHEMA
+        SCHEMA = initialize_schema()
     return SCHEMA
 
 
@@ -91,8 +101,7 @@ def add_filter_and_sort(
     return stmt
 
 
-def initialize_schema() -> None:
-    global SCHEMA
+def initialize_schema() -> strawberry.Schema:
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
 
     class CustomInfo(Info):
@@ -102,7 +111,7 @@ def initialize_schema() -> None:
 
     @strawberry.type
     class Query:
-        @relay.connection(mapper.connection_types["EnvironmentConnection"])  # type: ignore[misc]
+        @relay.connection(relay.ListConnection[Environment])  # type: ignore[misc]
         async def environments(
             self,
             filter: typing.Optional[EnvironmentFilter] = strawberry.UNSET,
@@ -114,4 +123,4 @@ def initialize_schema() -> None:
                 _environments = await session.scalars(stmt)
                 return _environments.all()
 
-    SCHEMA = strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
+    return strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
