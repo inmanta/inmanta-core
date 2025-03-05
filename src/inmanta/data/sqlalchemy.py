@@ -11,19 +11,32 @@ See the License for the specific language governing permissions and
 limitations under the License.
 Contact: code@inmanta.com
 """
+
 import datetime
 import uuid
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from inmanta.data.model import EnvSettingType
-from sqlalchemy import Boolean, ForeignKeyConstraint, Index, Integer, PrimaryKeyConstraint, String, UniqueConstraint, text, \
-    LargeBinary, ARRAY, DateTime
+from sqlalchemy import (
+    ARRAY,
+    Boolean,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    LargeBinary,
+    PrimaryKeyConstraint,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
     pass
+
 
 class ModuleRequirements(Base):
     __tablename__ = "module_requirements"
@@ -38,15 +51,20 @@ class ModuleRequirements(Base):
     environment: Mapped[uuid.UUID] = mapped_column(UUID)
     requirements: Mapped[list[str]] = mapped_column(ARRAY(String()))
 
+
 class FilesInModule(Base):
     __tablename__ = "files_in_module"
     __table_args__ = (
-        ForeignKeyConstraint(["module_name", "module_version", "environment"], ["module_requirements.module_name", "module_requirements.module_version", "module_requirements.environment"], ondelete="CASCADE"),
+        ForeignKeyConstraint(
+            ["module_name", "module_version", "environment"],
+            ["module_requirements.module_name", "module_requirements.module_version", "module_requirements.environment"],
+            ondelete="CASCADE",
+        ),
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="files_in_module_environment_fkey"),
         ForeignKeyConstraint(
             ["file_content_hash"], ["file.content_hash"], ondelete="RESTRICT", name="files_in_module_file_content_hash_fkey"
-        ), # todo add test for restrict behaviour on delete
-        UniqueConstraint("module_name", "module_version", "environment", "file_path")
+        ),  # todo add test for restrict behaviour on delete
+        UniqueConstraint("module_name", "module_version", "environment", "file_path"),
     )
     __mapper_args__ = {"primary_key": ["module_name", "module_version", "environment", "file_path"]}
 
@@ -60,14 +78,18 @@ class FilesInModule(Base):
 class ModulesForAgent(Base):
     __tablename__ = "modules_for_agent"
     __table_args__ = (
-        ForeignKeyConstraint(["cm_version", "environment"], ["configurationmodel.version", "configurationmodel.environment"], ondelete="CASCADE"), # TODO add test for deletion
-        # is this deleted when cm is deleted via regular api (non-sqlalchemy api)
+        ForeignKeyConstraint(
+            ["cm_version", "environment"], ["configurationmodel.version", "configurationmodel.environment"], ondelete="CASCADE"
+        ),  # TODO add test for deletion: check this deleted when cm is deleted via regular api (non-sqlalchemy api)
         ForeignKeyConstraint(["agent_name", "environment"], ["agent.name", "agent.environment"], ondelete="CASCADE"),
-        ForeignKeyConstraint(["module_name","module_version", "environment"], ["module_requirements.module_name", "module_requirements.module_version", "module_requirements.environment"], ondelete="RESTRICT"),
-        UniqueConstraint("cm_version", "environment", "agent_name", "module_name")
+        ForeignKeyConstraint(
+            ["module_name", "module_version", "environment"],
+            ["module_requirements.module_name", "module_requirements.module_version", "module_requirements.environment"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("cm_version", "environment", "agent_name", "module_name"),
     )
     __mapper_args__ = {"primary_key": ["cm_version", "environment", "agent_name", "module_name"]}
-
 
     cm_version: Mapped[int] = mapped_column(Integer)
     environment: Mapped[uuid.UUID] = mapped_column(UUID)
@@ -76,14 +98,12 @@ class ModulesForAgent(Base):
     module_version: Mapped[str] = mapped_column(String)
 
 
-
 class File(Base):
     __tablename__ = "file"
     __table_args__ = (PrimaryKeyConstraint("content_hash", name="file_pkey"),)
 
     content_hash: Mapped[str] = mapped_column(String, primary_key=True)
     content: Mapped[bytes] = mapped_column(LargeBinary)
-
 
 
 #
@@ -263,21 +283,23 @@ class ConfigurationModel(Base):
 
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    undeployable: Mapped[list] = mapped_column(ARRAY(String()))
-    skipped_for_undeployable: Mapped[list] = mapped_column(ARRAY(String()))
+    undeployable: Mapped[list[str]] = mapped_column(ARRAY(String()))
+    skipped_for_undeployable: Mapped[list[str]] = mapped_column(ARRAY(String()))
     is_suitable_for_partial_compiles: Mapped[bool] = mapped_column(Boolean)
     date: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     released: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
-    version_info: Mapped[Optional[dict]] = mapped_column(JSONB)
+    version_info: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
     total: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     partial_base: Mapped[Optional[int]] = mapped_column(Integer)
-    pip_config: Mapped[Optional[dict]] = mapped_column(JSONB)
+    pip_config: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="configurationmodel")
-    dryrun: Mapped[List["Dryrun"]] = relationship("Dryrun", back_populates="configurationmodel")
-    resource: Mapped[List["Resource"]] = relationship("Resource", back_populates="configurationmodel")
-    resourceaction: Mapped[List["ResourceAction"]] = relationship("ResourceAction", back_populates="configurationmodel")
-    unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", back_populates="configurationmodel")
+    # dryrun: Mapped[List["Dryrun"]] = relationship("Dryrun", back_populates="configurationmodel")
+    # resource: Mapped[List["Resource"]] = relationship("Resource", back_populates="configurationmodel")
+    # resourceaction: Mapped[List["ResourceAction"]] = relationship("ResourceAction", back_populates="configurationmodel")
+    # unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", back_populates="configurationmodel")
+
+
 #
 #
 # class DiscoveredResource(Base):
@@ -663,7 +685,9 @@ class Agent(Base):
     unpause_on_resume: Mapped[Optional[bool]] = mapped_column(Boolean)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="agent")
-    agentinstance: Mapped["AgentInstance"] = relationship("AgentInstance", back_populates="agent")
+    # agentinstance: Mapped["AgentInstance"] = relationship("AgentInstance", back_populates="agent")
+
+
 #
 #
 # t_resourceaction_resource = Table(
