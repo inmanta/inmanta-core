@@ -31,7 +31,7 @@ part = file_name_regex.match(__name__)[1]
 async def test_add_tables_for_agent_code_transport_rework(
     postgresql_client: asyncpg.Connection,
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
-    get_tables_in_db: abc.Callable[[], abc.Awaitable[list[str]]]
+    get_tables_in_db: abc.Callable[[], abc.Awaitable[list[str]]],
 ) -> None:
     # This migration script only creates tables and adds indexes
 
@@ -42,4 +42,3 @@ async def test_add_tables_for_agent_code_transport_rework(
     assert "module_requirements" in await get_tables_in_db()
     assert "files_in_module" in await get_tables_in_db()
     assert "modules_for_agent" in await get_tables_in_db()
-

@@ -2306,7 +2306,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         def load_module_v2_requirements(module_like: ModuleLike) -> None:
             """
-            Loads all v2 modules explicitly required by the supplied module_like instance, installing them if install=True. If
+            Loads all v2 modules explicitly required by the supplied module like instance, installing them if install=True. If
             any of these requirements have already been loaded as v1, queues them for reload.
             """
             for requirement in module_like.get_module_v2_requirements():

@@ -48,7 +48,8 @@ async def update(connection: Connection) -> None:
             REFERENCES public.module_requirements(module_name, module_version, environment) ON DELETE CASCADE
         );
 
-        CREATE INDEX files_in_module_module_name_module_version_environment_index ON public.files_in_module (module_name, module_version, environment);
+        CREATE INDEX files_in_module_module_name_module_version_environment_index
+        ON public.files_in_module (module_name, module_version, environment);
 
         -- Create the modules_for_agent table.
         CREATE TABLE public.modules_for_agent (
@@ -65,7 +66,8 @@ async def update(connection: Connection) -> None:
             REFERENCES public.module_requirements(module_name, module_version, environment) ON DELETE CASCADE
         );
 
-        CREATE INDEX modules_for_agent_agent_name_cm_version_environment_index ON public.modules_for_agent (agent_name, cm_version, environment);
+        CREATE INDEX modules_for_agent_agent_name_cm_version_environment_index
+        ON public.modules_for_agent (agent_name, cm_version, environment);
 
     """
     await connection.execute(schema)
