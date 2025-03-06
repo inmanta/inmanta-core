@@ -1,0 +1,7 @@
+description: Added support for secrets and references in inmanta models.
+change-type: patch
+destination-branches: [master, iso8]
+sections:
+  feature: "{{description}} For more information, [see documentation](references)"
+
+

@@ -1,5 +1,5 @@
-Test plugins
-************
+Testing plugins
+****************
 
 Testing the behavior of an Inmanta plugin can be done by using the ``project`` fixture, which is part of the ``pytest-inmanta``
 package. This fixture provides functionality to call a plugin directly from a pytest test case.
