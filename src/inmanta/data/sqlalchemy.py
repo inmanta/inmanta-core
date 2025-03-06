@@ -159,11 +159,12 @@ class Environment(Base):
 
     project_: Mapped["Project"] = relationship("Project", back_populates="environment")
 
+    configurationmodel: Mapped[List["ConfigurationModel"]] = relationship("ConfigurationModel", back_populates="environment_")
+    agent: Mapped[List["Agent"]] = relationship("Agent", back_populates="environment_")
 
 #     agentprocess: Mapped[List["AgentProcess"]] = relationship("AgentProcess", back_populates="environment_")
 #     code: Mapped[List["Code"]] = relationship("Code", back_populates="environment_")
 #     compile: Mapped[List["Compile"]] = relationship("Compile", back_populates="environment_")
-#     configurationmodel: Mapped[List["ConfigurationModel"]] = relationship("ConfigurationModel", back_populates="environment_")
 #     discoveredresource: Mapped[List["DiscoveredResource"]] = relationship("DiscoveredResource", back_populates="environment_")
 #     environmentmetricsgauge: Mapped[List["EnvironmentMetricsGauge"]] = relationship(
 #         "EnvironmentMetricsGauge", back_populates="environment_"
@@ -177,7 +178,6 @@ class Environment(Base):
 #         "ResourcePersistentState", back_populates="environment_"
 #     )
 #     unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", back_populates="environment_")
-#     agent: Mapped[List["Agent"]] = relationship("Agent", back_populates="environment_")
 #
 #
 # class AgentProcess(Base):

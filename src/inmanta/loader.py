@@ -31,10 +31,13 @@ import types
 from collections import abc
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
+from functools import cached_property
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
 from typing import TYPE_CHECKING, Optional
+
+from pydantic import BaseModel, computed_field
 
 from inmanta import const, module
 from inmanta.stable_api import stable_api
@@ -64,54 +67,50 @@ def get_inmanta_module_name(python_module_name: str) -> str:
 class SourceNotFoundException(Exception):
     """This exception is raised when the source of the provided type is not found"""
 
+@dataclass(frozen=True)
+class PythonModule:
+    module_name: str
+    module_version: str
+    files_in_module: list["SourceInfo"]
 
-class SourceInfo:
+
+class SourceInfo(BaseModel):
     """This class is used to store information related to source code information"""
+    path: str
+    module_name: str
 
-    def __init__(self, path: str, module_name: str) -> None:
-        """
-        :param path: The path of the source code file
-        :param module_name: The fully qualified name of the Python module. Should be a module in the inmanta_plugins namespace.
-        """
-        self.path = path
-        self._hash: Optional[str] = None
-        self._content: Optional[bytes] = None
-        self._requires: Optional[list[str]] = None
-        self.module_name = module_name
-
-    @property
+    @computed_field
+    @cached_property
     def hash(self) -> str:
         """Get the sha1 hash of the file"""
-        if self._hash is None:
-            sha1sum = hashlib.new("sha1")
-            sha1sum.update(self.content)
-            self._hash = sha1sum.hexdigest()
+        sha1sum = hashlib.new("sha1")
+        sha1sum.update(self.content)
+        return sha1sum.hexdigest()
 
-        return self._hash
 
-    @property
+
+    @cached_property
     def content(self) -> bytes:
         """Get the content of the file"""
-        if self._content is None:
-            with open(self.path, "rb") as fd:
-                self._content = fd.read()
-        return self._content
+        with open(self.path, "rb") as fd:
+            _content = fd.read()
+        return _content
 
     def _get_module_name(self) -> str:
         """Get the name of the inmanta module, derived from the python module name"""
         return get_inmanta_module_name(self.module_name)
 
-    @property
+    @computed_field
+    @cached_property
     def requires(self) -> list[str]:
         """List of python requirements associated with this source file"""
-        if self._requires is None:
-            project: module.Project = module.Project.get()
-            mod: module.Module = project.modules[self._get_module_name()]
-            if project.metadata.agent_install_dependency_modules:
-                self._requires = mod.get_all_python_requirements_as_list()
-            else:
-                self._requires = mod.get_strict_python_requirements_as_list()
-        return self._requires
+        project: module.Project = module.Project.get()
+        mod: module.Module = project.modules[self._get_module_name()]
+        if project.metadata.agent_install_dependency_modules:
+            _requires = mod.get_all_python_requirements_as_list()
+        else:
+            _requires = mod.get_strict_python_requirements_as_list()
+        return _requires
 
 
 class CodeManager:
@@ -128,7 +127,13 @@ class CodeManager:
     def __init__(self) -> None:
         # Old implementation
         # Use by external code
+
+        # Map of [Union[resouce_type, handler_type], set[path]]
+        # Which python files are required by each type
         self.__type_file: dict[str, set[str]] = {}
+
+        # Map of [path, SourceInfo]
+        # To which python module do these python files belong
         self.__file_info: dict[str, SourceInfo] = {}
 
         # Cache of module to source info
@@ -164,7 +169,7 @@ class CodeManager:
             return self.__module_to_source_info[module_name]
 
         sources = [
-            SourceInfo(path, module_name) for path, module_name in module.Project.get().modules[module_name].get_plugin_files()
+            SourceInfo(path=path, module_name=module_name) for path, module_name in module.Project.get().modules[module_name].get_plugin_files()
         ]
 
         self.__module_to_source_info[module_name] = sources
@@ -185,6 +190,11 @@ class CodeManager:
     def get_file_hashes(self) -> Iterable[str]:
         """Return the hashes of all source files"""
         return (info.hash for info in self.__file_info.values())
+
+
+    def get_module_source_info(self) -> dict[str, list[SourceInfo]]:
+        """Return all module source info"""
+        return self.__module_to_source_info
 
     def get_file_content(self, hash: str) -> bytes:
         """Get the file content for the given hash"""

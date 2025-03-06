@@ -15,12 +15,15 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
-
+import hashlib
 import logging
 from typing import cast
 
+from sqlalchemy import insert
+
 from inmanta import data
-from inmanta.data import model
+from inmanta.data import model, get_session
+from inmanta.data.sqlalchemy import FilesInModule, ModuleRequirements
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
@@ -48,8 +51,47 @@ class CodeService(protocol.ServerSlice):
         await super().prestart(server)
         self.file_slice = cast(FileService, server.get_slice(SLICE_FILE))
 
+
+    @handle(methods_v2.upload_modules, env="tid")
+    async def upload_modules(env: data.Environment, modules_data: JsonType) -> Apireturn:
+        module_requirements_stmt = insert(ModuleRequirements)
+        files_in_module_stmt = insert(FilesInModule)
+
+        module_requirements_data = []
+        files_in_module_data = []
+        for module_name, python_module in modules_data:
+
+            requirements: set[str] = set()
+
+            for file in python_module.files_in_module:
+                file_in_module = {
+                    "module_name": module_name,
+                    "module_version": python_module.module_version,
+                    "environment": env,
+                    "file_content_hash": file.hash,
+                    "file_path": file.path,
+                }
+                requirements.update(file.requires)
+                files_in_module_data.append(file_in_module)
+
+            module_requirements = {
+                "module_name": module_name,
+                "module_version": python_module.module_version,
+                "environment": env,
+                "requirements": requirements,
+            }
+
+            module_requirements_data.append(module_requirements)
+
+        async with get_session() as session:
+            await session.execute(module_requirements_stmt, module_requirements_data)
+            await session.execute(files_in_module_stmt, files_in_module_data)
+            await session.commit()
+
+
     @handle(methods.upload_code_batched, code_id="id", env="tid")
     async def upload_code_batched(self, env: data.Environment, code_id: int, resources: JsonType) -> Apireturn:
+        raise NotImplementedError("Endpoint moved to methods_v2.upload_modules.")
         # validate
         for rtype, sources in resources.items():
             if not isinstance(rtype, str):
@@ -118,20 +160,21 @@ class CodeService(protocol.ServerSlice):
         return sources
 
     @handle(methods_v2.get_module_source_for_agent, env="tid")
-    async def get_source_code(self, env: data.Environment, agent: str, version: int) -> list[model.Source]:
-        code = await data.Code.get_version(environment=env.id, version=version, resource=resource_type)
-        if code is None:
-            raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
-
-        sources = []
-
-        # Get all module code pertaining to this env/version/resource
-        if code.source_refs is not None:
-            for code_hash, (file_name, module, requires) in code.source_refs.items():
-                sources.append(
-                    model.Source(
-                        hash=code_hash, is_byte_code=file_name.endswith(".pyc"), module_name=module, requirements=requires
-                    )
-                )
-
-        return sources
+    async def get_module_source_for_agent(self, env: data.Environment, agent: str, model_version: int) -> list[model.Source]:
+        # code = await data.Code.get_version(environment=env.id, version=version, resource=resource_type)
+        # if code is None:
+        #     raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
+        #
+        # sources = []
+        #
+        # # Get all module code pertaining to this env/version/resource
+        # if code.source_refs is not None:
+        #     for code_hash, (file_name, module, requires) in code.source_refs.items():
+        #         sources.append(
+        #             model.Source(
+        #                 hash=code_hash, is_byte_code=file_name.endswith(".pyc"), module_name=module, requirements=requires
+        #             )
+        #         )
+        #
+        # return sources
+        pass

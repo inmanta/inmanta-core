@@ -1,193 +1,52 @@
-def test_basic_read_write(server):
-    """
-
-    :return:
-    """
-
-
-
-import datetime
 import logging
-import subprocess
-import sys
 import uuid
 
 import pytest
 
 from sqlalchemy import select, insert
 
-from inmanta.data.sqlalchemy import Environment, Project
+import inmanta.data.sqlalchemy as models
 from inmanta.data import get_session
 
 LOGGER = logging.getLogger(__name__)
 
 
-@pytest.fixture
-async def setup_database(postgres_db, database_name):
-    # Initialize DB
 
+@pytest.fixture
+async def setup_database(project_default):
+    # Initialize DB
     async with get_session() as session:
-        project_1 = models.Project(
-            id=uuid.UUID("00000000-1234-5678-1234-000000000001"),
-            name="test-proj-1",
-            environments=[
-                models.Environment(
-                    id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
-                    name="test-env-1",
-                    halted=False,
-                    notification=[
-                        models.Notification(
-                            id=uuid.UUID("22222222-1234-5678-1234-000000000000"),
-                            created=datetime.datetime.now(),
-                            title="New notification",
-                            message="This is a notification",
-                            severity="message",
-                            read=False,
-                            cleared=False,
-                            uri=None,
-                        ),
-                        models.Notification(
-                            id=uuid.UUID("22222222-1234-5678-1234-000000000001"),
-                            created=datetime.datetime.now(),
-                            title="Another notification",
-                            message="This is another notification",
-                            severity="error",
-                            read=False,
-                            cleared=False,
-                            uri=None,
-                        ),
-                    ],
-                    # settings=[
-                    #     models.EnvironmentSetting(
-                    #         name="setting for env test-env-1",
-                    #         type="str",
-                    #         default="default",
-                    #         recompile=False,
-                    #         update_model=False,
-                    #         agent_restart=False,
-                    #         doc="this is env_setting_1",
-                    #     ),
-                    #     models.EnvironmentSetting(
-                    #         name="another setting for env test-env-1",
-                    #         type="str",
-                    #         default="default",
-                    #         recompile=False,
-                    #         update_model=False,
-                    #         agent_restart=False,
-                    #         doc="this is env_setting_1",
-                    #     ),
-                    # ],
-                )
-            ],
+        environment_1 = models.Environment(
+            id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
+            name="test-env-b",
+            project=project_default,
+            halted=False,
+            settings={
+                "enable_lsm_expert_mode": False,
+            },
         )
-        project_2 = models.Project(
-            id=uuid.UUID("00000000-1234-5678-1234-100000000001"),
-            name="test-proj-2",
-            environments=[
-                models.Environment(
-                    id=uuid.UUID("11111111-1234-5678-1234-100000000001"),
-                    name="test-env-2",
-                    halted=False,
-                    notification=[
-                        models.Notification(
-                            id=uuid.UUID("22222222-1234-5678-1234-100000000000"),
-                            created=datetime.datetime.now(),
-                            title="New notification",
-                            message="This is a notification 2",
-                            severity="message",
-                            read=False,
-                            cleared=False,
-                            uri=None,
-                        ),
-                        models.Notification(
-                            id=uuid.UUID("22222222-1234-5678-1234-100000000001"),
-                            created=datetime.datetime.now(),
-                            title="Another notification",
-                            message="This is another notification 2",
-                            severity="error",
-                            read=False,
-                            cleared=False,
-                            uri=None,
-                        ),
-                    ],
-                    # settings=[
-                    #     models.EnvironmentSetting(
-                    #         name="setting for env test-env-2",
-                    #         type="str",
-                    #         default="default",
-                    #         recompile=False,
-                    #         update_model=False,
-                    #         agent_restart=False,
-                    #         doc="this is env_setting_1",
-                    #     ),
-                    #     models.EnvironmentSetting(
-                    #         name="another setting for env test-env-2",
-                    #         type="str",
-                    #         default="default",
-                    #         recompile=False,
-                    #         update_model=False,
-                    #         agent_restart=False,
-                    #         doc="this is env_setting_1",
-                    #     ),
-                    # ],
-                ),
-                models.Environment(
-                    id=uuid.UUID("11111111-1234-5678-1234-100000000002"),
-                    name="test-env-3",
-                    halted=False,
-                    notification=[
-                        models.Notification(
-                            id=uuid.UUID("22222222-1234-5678-1234-200000000000"),
-                            created=datetime.datetime.now(),
-                            title="New notification",
-                            message="This is a notification 3",
-                            severity="message",
-                            read=False,
-                            cleared=False,
-                            uri=None,
-                        ),
-                        models.Notification(
-                            id=uuid.UUID("22222222-1234-5678-1234-200000000001"),
-                            created=datetime.datetime.now(),
-                            title="Another notification",
-                            message="This is another notification 4",
-                            severity="error",
-                            read=False,
-                            cleared=False,
-                            uri=None,
-                        ),
-                    ],
-                    # settings=[
-                    #     models.EnvironmentSetting(
-                    #         name="setting for env test-env-3",
-                    #         type="str",
-                    #         default="default",
-                    #         recompile=False,
-                    #         update_model=False,
-                    #         agent_restart=False,
-                    #         doc="this is env_setting_1",
-                    #     ),
-                    #     models.EnvironmentSetting(
-                    #         name="another setting for env test-env-4",
-                    #         type="str",
-                    #         default="default",
-                    #         recompile=False,
-                    #         update_model=False,
-                    #         agent_restart=False,
-                    #         doc="this is env_setting_1",
-                    #     ),
-                    # ],
-                ),
-            ],
+        environment_2 = models.Environment(
+            id=uuid.UUID("11111111-1234-5678-1234-000000000002"),
+            name="test-env-c",
+            project=project_default,
+            halted=False,
+            settings={
+                "enable_lsm_expert_mode": True,
+            },
         )
-        session.add_all([project_1, project_2])
+        environment_3 = models.Environment(
+            id=uuid.UUID("11111111-1234-5678-1234-000000000003"),
+            name="test-env-a",
+            project=project_default,
+            halted=True,
+        )
+        session.add_all([environment_1, environment_2, environment_3])
         await session.commit()
         await session.flush()
-        schema.mapper.finalize()
 
 
 
-async def test_sql_alchemy_read(client, server, setup_database_no_data):
+async def test_sql_alchemy_read(client, server):
     """
     Create project and envs using regular endpoints
     Read using sql alchemy capabilities
@@ -213,8 +72,8 @@ async def test_sql_alchemy_read(client, server, setup_database_no_data):
 
     # READ - SQL Alchemy
 
-    stmt = select(Environment.id, Environment.name).order_by(Environment.name)
-    async with get_async_session() as session:
+    stmt = select(models.Environment.id, models.Environment.name).order_by(models.Environment.name)
+    async with get_session() as session:
         result_execute = await session.execute(stmt)
         assert result_execute.all() == [
             (uuid.UUID(env_1_id), env_1_name),
@@ -222,7 +81,7 @@ async def test_sql_alchemy_read(client, server, setup_database_no_data):
         ]
 
 
-async def test_sql_alchemy_write(client, server, setup_database_no_data):
+async def test_sql_alchemy_write(client, server):
     """
     Create projects and envs using sql alchemy
     Read using regular endpoints
@@ -232,7 +91,7 @@ async def test_sql_alchemy_write(client, server, setup_database_no_data):
     # WRITE - SQL Alchemy
 
     proj_id = uuid.uuid4()
-    stmt = insert(Project)
+    stmt = insert(models.Project)
     data = [
         {
             "id": proj_id,
@@ -240,11 +99,11 @@ async def test_sql_alchemy_write(client, server, setup_database_no_data):
         }
     ]
 
-    async with get_async_session() as session:
+    async with get_session() as session:
         result_execute = await session.execute(stmt, data)
         await session.commit()
 
-    stmt = insert(Environment).returning(Environment.id)
+    stmt = insert(models.Environment).returning(models.Environment.id)
     data = [
         {
             "id": uuid.uuid4(),
@@ -253,7 +112,7 @@ async def test_sql_alchemy_write(client, server, setup_database_no_data):
         }
     ]
 
-    async with get_async_session() as session:
+    async with get_session() as session:
         result_execute = await session.execute(stmt, data)
         await session.commit()
         env_id = result_execute.scalars().all()[0]
@@ -294,7 +153,7 @@ async def test_basic_read_write(server):
     # WRITE - SQL Alchemy
 
     proj_id = uuid.uuid4()
-    stmt = insert(Project)
+    stmt = insert(models.Project)
     data = [
         {
             "id": proj_id,
@@ -302,11 +161,11 @@ async def test_basic_read_write(server):
         }
     ]
 
-    async with get_async_session() as session:
+    async with get_session() as session:
         result_execute = await session.execute(stmt, data)
         await session.commit()
 
-    stmt = insert(Environment).returning(Environment.id)
+    stmt = insert(models.Environment).returning(models.Environment.id)
     data = [
         {
             "id": uuid.uuid4(),
@@ -315,7 +174,7 @@ async def test_basic_read_write(server):
         }
     ]
 
-    async with get_async_session() as session:
+    async with get_session() as session:
         result_execute = await session.execute(stmt, data)
         await session.commit()
         env_id = result_execute.scalars().all()[0]
@@ -323,10 +182,63 @@ async def test_basic_read_write(server):
 
     # READ - SQL Alchemy
 
-    stmt = select(Environment.id, Environment.name).order_by(Environment.name)
+    stmt = select(models.Environment.id, models.Environment.name).order_by(models.Environment.name)
     async with get_session() as session:
         result_execute = await session.execute(stmt)
         assert result_execute.all() == [
-            (uuid.UUID(env_1_id), env_1_name),
-            (uuid.UUID(env_2_id), env_2_name),
+            (env_id, "env_1"),
         ]
+
+
+async def test_code_upload_and_retrieval(server):
+    """
+    Test code upload for different modules and versions.
+    Test code retrieval.
+    """
+
+    #
+    # # ------------ Code upload ------------
+    #
+    #
+    # # WRITE - SQL Alchemy
+    #
+    # proj_id = uuid.uuid4()
+    # env_id = uuid.uuid4()
+    # stmt = insert(models.FilesInModule)
+    # data = [
+    #     {
+    #         "module_name": f"module_{module_index}",
+    #         "module_version": f"{major}.2.3",
+    #         "environment": env_id ,
+    #         "file_content_hash":,
+    #         "file_path":f"/path/to/file_{file_index}",
+    #     }
+    # ]
+    #
+    # async with get_session() as session:
+    #     result_execute = await session.execute(stmt, data)
+    #     await session.commit()
+    #
+    # stmt = insert(models.Environment).returning(models.Environment.id)
+    # data = [
+    #     {
+    #         "id": uuid.uuid4(),
+    #         "name": "env_1",
+    #         "project": proj_id
+    #     }
+    # ]
+    #
+    # async with get_session() as session:
+    #     result_execute = await session.execute(stmt, data)
+    #     await session.commit()
+    #     env_id = result_execute.scalars().all()[0]
+    #
+    #
+    # # READ - SQL Alchemy
+    #
+    # stmt = select(models.Environment.id, models.Environment.name).order_by(models.Environment.name)
+    # async with get_session() as session:
+    #     result_execute = await session.execute(stmt)
+    #     assert result_execute.all() == [
+    #         (env_id, "env_1"),
+    #     ]

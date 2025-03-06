@@ -913,6 +913,7 @@ class OrchestrationService(protocol.ServerSlice):
             resource_state=resource_state,
             resource_sets=resource_sets,
         )
+        all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
 
         async with data.Resource.get_connection() as con:
             # We don't allow connection reuse here, because the last line in this block can't tolerate a transaction
