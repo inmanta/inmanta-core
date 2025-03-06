@@ -133,7 +133,6 @@ async def test_query_environments_with_filtering(server, client, setup_database)
                             "halted": False,
                             "id": "11111111-1234-5678-1234-000000000002",
                             "isExpertMode": True,
-                            "project": "00000000-1234-5678-1234-000000000001",
                         }
                     }
                 ]

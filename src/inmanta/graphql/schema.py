@@ -13,6 +13,7 @@ Contact: code@inmanta.com
 """
 
 import typing
+import uuid
 
 import inmanta.data.sqlalchemy as models
 import strawberry
@@ -34,7 +35,7 @@ def get_expert_mode(root: "Environment") -> bool:
 
 
 @mapper.type(models.Environment)
-class Environment:
+class Environment(relay.Node):
     # Add every relation/attribute that we don't want to expose in our GraphQL endpoint to `__exclude__`
     __exclude__ = [
         "project_",
@@ -51,6 +52,7 @@ class Environment:
         "unknownparameter",
         "agent",
     ]
+    id: relay.NodeID[uuid.UUID]
     is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
 
 
