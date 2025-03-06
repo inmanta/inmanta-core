@@ -6602,6 +6602,7 @@ _classes = [
 
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 
+
 # Name of core schema in the DB schema verions
 # prevent import loop
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME

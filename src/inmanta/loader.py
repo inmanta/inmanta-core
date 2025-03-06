@@ -67,50 +67,6 @@ def get_inmanta_module_name(python_module_name: str) -> str:
 class SourceNotFoundException(Exception):
     """This exception is raised when the source of the provided type is not found"""
 
-@dataclass(frozen=True)
-class PythonModule:
-    module_name: str
-    module_version: str
-    files_in_module: list["SourceInfo"]
-
-
-class SourceInfo(BaseModel):
-    """This class is used to store information related to source code information"""
-    path: str
-    module_name: str
-
-    @computed_field
-    @cached_property
-    def hash(self) -> str:
-        """Get the sha1 hash of the file"""
-        sha1sum = hashlib.new("sha1")
-        sha1sum.update(self.content)
-        return sha1sum.hexdigest()
-
-
-
-    @cached_property
-    def content(self) -> bytes:
-        """Get the content of the file"""
-        with open(self.path, "rb") as fd:
-            _content = fd.read()
-        return _content
-
-    def _get_module_name(self) -> str:
-        """Get the name of the inmanta module, derived from the python module name"""
-        return get_inmanta_module_name(self.module_name)
-
-    @computed_field
-    @cached_property
-    def requires(self) -> list[str]:
-        """List of python requirements associated with this source file"""
-        project: module.Project = module.Project.get()
-        mod: module.Module = project.modules[self._get_module_name()]
-        if project.metadata.agent_install_dependency_modules:
-            _requires = mod.get_all_python_requirements_as_list()
-        else:
-            _requires = mod.get_strict_python_requirements_as_list()
-        return _requires
 
 
 class CodeManager:
@@ -672,3 +628,49 @@ def unload_modules_for_path(path: str) -> None:
     for mod_name in loaded_modules:
         del sys.modules[mod_name]
     importlib.invalidate_caches()
+
+
+@dataclass(frozen=True)
+class PythonModule:
+    module_name: str
+    module_version: str
+    files_in_module: list["SourceInfo"]
+
+
+class SourceInfo(BaseModel):
+    """This class is used to store information related to source code information"""
+    path: str
+    module_name: str
+
+    @computed_field
+    @cached_property
+    def hash(self) -> str:
+        """Get the sha1 hash of the file"""
+        sha1sum = hashlib.new("sha1")
+        sha1sum.update(self.content)
+        return sha1sum.hexdigest()
+
+
+
+    @cached_property
+    def content(self) -> bytes:
+        """Get the content of the file"""
+        with open(self.path, "rb") as fd:
+            _content = fd.read()
+        return _content
+
+    def _get_module_name(self) -> str:
+        """Get the name of the inmanta module, derived from the python module name"""
+        return get_inmanta_module_name(self.module_name)
+
+    @computed_field
+    @cached_property
+    def requires(self) -> list[str]:
+        """List of python requirements associated with this source file"""
+        project: module.Project = module.Project.get()
+        mod: module.Module = project.modules[self._get_module_name()]
+        if project.metadata.agent_install_dependency_modules:
+            _requires = mod.get_all_python_requirements_as_list()
+        else:
+            _requires = mod.get_strict_python_requirements_as_list()
+        return _requires
