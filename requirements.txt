@@ -4,11 +4,11 @@ click==8.1.8
 colorlog==6.9.0
 cookiecutter==2.6.0
 crontab==1.0.1
-cryptography==44.0.1
+cryptography==44.0.2
 docstring-parser==0.16
 email-validator==2.2.0
-logfire==3.6.4
-jinja2==3.1.5
+logfire==3.7.1
+jinja2==3.1.6
 more-itertools==10.6.0
 opentelemetry-instrumentation-asyncpg>=0.46b,<0.51
 packaging==24.2
@@ -20,7 +20,7 @@ PyJWT==2.10.1
 pynacl==1.5.0
 python-dateutil==2.9.0.post0
 pyyaml==6.0.2
-setuptools==75.8.1
+setuptools==75.8.2
 texttable==1.7.0
 tornado==6.4.2
 toml==0.10.2
