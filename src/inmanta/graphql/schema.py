@@ -35,7 +35,7 @@ def get_expert_mode(root: "Environment") -> bool:
 
 
 @mapper.type(models.Environment)
-class Environment(relay.Node):
+class Environment:
     # Add every relation/attribute that we don't want to expose in our GraphQL endpoint to `__exclude__`
     __exclude__ = [
         "project_",
@@ -52,7 +52,6 @@ class Environment(relay.Node):
         "unknownparameter",
         "agent",
     ]
-    id: relay.NodeID[uuid.UUID]
     is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
 
 
@@ -104,6 +103,11 @@ def add_filter_and_sort(
 
 
 def initialize_schema() -> strawberry.Schema:
+    """
+    Initializes the Strawberry GraphQL schema.
+    It is initiated in a function instead of being declared at the module level, because we have to do this
+    after the SQLAlchemy engine is initialized.
+    """
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
 
     class CustomInfo(Info):
@@ -113,7 +117,7 @@ def initialize_schema() -> strawberry.Schema:
 
     @strawberry.type
     class Query:
-        @relay.connection(relay.ListConnection[Environment])  # type: ignore[misc]
+        @relay.connection(relay.ListConnection[Environment])  # type: ignore[misc, type-var]
         async def environments(
             self,
             filter: typing.Optional[EnvironmentFilter] = strawberry.UNSET,
