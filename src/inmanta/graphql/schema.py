@@ -13,7 +13,6 @@ Contact: code@inmanta.com
 """
 
 import typing
-import uuid
 
 import inmanta.data.sqlalchemy as models
 import strawberry
