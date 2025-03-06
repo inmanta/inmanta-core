@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump jinja2 from 3.1.5 to 3.1.6
+destination-branches:
+- master
+sections: {}
