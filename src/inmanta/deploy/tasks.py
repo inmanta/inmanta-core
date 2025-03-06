@@ -175,6 +175,13 @@ class Deploy(Task):
                     #   - we may also want to track the module version vs the model version
                     #       as it avoid the problem of fast chanfing model versions
 
+
+                    # my_executor: executor.Executor = await self.get_executor(
+                    #     task_manager=task_manager,
+                    #     agent_name=agent,
+                    #     model_version=version,
+                    # )
+
                     my_executor: executor.Executor = await self.get_executor(
                         task_manager=task_manager,
                         agent_spec=(agent, deploy_intent.all_types_for_agent),

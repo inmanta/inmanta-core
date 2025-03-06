@@ -20,12 +20,13 @@ Module defining the v2 rest api
 
 import datetime
 import uuid
-from typing import Literal, Optional, Union
+from typing import Literal, Optional, Union, Any
 
 import inmanta.types
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
 from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig
+from inmanta.loader import PythonModule
 from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
@@ -1364,6 +1365,17 @@ def update_notification(
     """
 
 
+@typedmethod(path="/modulecodebatched/", operation="PUT", arg_options=methods.ENV_OPTS, client_types=[ClientType.compiler], api_version=2)
+def upload_modules(tid: uuid.UUID, modules_data: dict[str, PythonModule]) -> None:
+   """
+   TODO
+
+   :param tid: The id of the environment to which the code belongs.
+   :param files_in_modules: TODO
+
+   """
+
+
 @typedmethod(
     path="/code/<version>",
     operation="GET",
@@ -1379,6 +1391,23 @@ def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> list[mo
     :param version: The id of the model version
     :param resource_type: The type name of the resource
     :raises NotFound: Raised when the version or type is not found
+    """
+
+
+@typedmethod(
+    path="/code/<agent>/<model_version>",
+    operation="GET",
+    agent_server=True,
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def get_module_source_for_agent(tid: uuid.UUID, agent: str, model_version: int) -> list[model.Source]:
+    """
+    Get all module code for the given (agent, model_version)
+    :param tid: The id of the environment
+    :param agent: The type name of the resource
+    :param model_version: The id of the model version
     """
 
 

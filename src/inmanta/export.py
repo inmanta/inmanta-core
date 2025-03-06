@@ -18,11 +18,13 @@ Contact: code@inmanta.com
 
 import argparse
 import base64
+import dataclasses
+import hashlib
 import itertools
 import logging
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Sequence, Mapping
 from typing import Any, Callable, Optional, Union
 
 import pydantic
@@ -36,6 +38,7 @@ from inmanta.const import ResourceState
 from inmanta.data.model import PipConfig
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import Instance
+from inmanta.loader import PythonModule
 from inmanta.module import Project
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
@@ -78,7 +81,7 @@ class DependencyCycleException(Exception):
         return "Cycle in dependencies: %s" % self.cycle
 
 
-def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_manager: loader.CodeManager) -> None:
+def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, code_manager: loader.CodeManager) -> None:
     res = conn.stat_files(list(code_manager.get_file_hashes()))
     if res is None or res.code != 200:
         raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
@@ -88,6 +91,32 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
         res = conn.upload_file(id=file, content=base64.b64encode(content).decode("ascii"))
         if res is None or res.code != 200:
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
+
+    def get_modules_data() -> dict[str, PythonModule]:
+        source_info = code_manager.get_module_source_info()
+
+        modules_data = {}
+        for module_name, files_in_module in source_info.items():
+            all_files_hashes = [file.hash for file in sorted(files_in_module, key=lambda f: f.hash)]
+
+            module_version_hash = hashlib.new("sha1")
+            for file_hash in all_files_hashes:
+                module_version_hash.update(file_hash.encode())
+
+            module_version = module_version_hash.hexdigest()
+            modules_data[module_name] = dataclasses.asdict(
+                PythonModule(
+                    module_name = module_name,
+                    module_version = module_version,
+                    files_in_module = files_in_module,
+                )
+            )
+        return modules_data
+
+    res = conn.upload_modules(tid=tid, modules_data=get_modules_data())
+    if res is None or res.code != 200:
+        raise Exception("Unable to upload plugin code to the server (msg: %s)" % res.result)
+
 
     # Example of what a source_map may look like:
     # Type Name: mymodule::Mytype"
@@ -102,14 +131,14 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
     #    },
     # ...other types would be included as well
     # }
-    source_map = {
-        resource_name: {source.hash: (source.path, source.module_name, source.requires) for source in sources}
-        for resource_name, sources in code_manager.get_types()
-    }
-
-    res = conn.upload_code_batched(tid=tid, id=version, resources=source_map)
-    if res is None or res.code != 200:
-        raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
+    # source_map = {
+    #     resource_name: {source.hash: (source.path, source.module_name, source.requires) for source in sources}
+    #     for resource_name, sources in code_manager.get_types()
+    # }
+    #
+    # res = conn.upload_code_batched(tid=tid, id=version, resources=source_map)
+    # if res is None or res.code != 200:
+    #     raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
 
 class Exporter:
@@ -501,10 +530,8 @@ class Exporter:
 
         return resources
 
-    def deploy_code(self, conn: protocol.SyncClient, tid: uuid.UUID, version: Optional[int] = None) -> None:
+    def deploy_code(self, conn: protocol.SyncClient, tid: uuid.UUID, ) -> None:
         """Deploy code to the server"""
-        if version is None:
-            version = int(time.time())
 
         code_manager = loader.CodeManager()
         LOGGER.info("Sending resources and handler source to server")
@@ -529,7 +556,7 @@ class Exporter:
 
         LOGGER.info("Uploading source files")
 
-        upload_code(conn, tid, version, code_manager)
+        upload_code(conn, tid, code_manager)
 
     def commit_resources(
         self,
@@ -557,7 +584,7 @@ class Exporter:
 
         # partial exports use the same code as the version they're based on
         if not partial_compile:
-            self.deploy_code(conn, tid, version)
+            self.deploy_code(conn, tid)
 
         LOGGER.info("Uploading %d files" % len(self._file_store))
 
