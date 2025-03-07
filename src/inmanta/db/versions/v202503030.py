@@ -21,7 +21,7 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    * Create the module_requirements table, that keeps track of the python package requirements
+    * Create the module table, that keeps track of the python package requirements
       per inmanta module (name, version).
     * Create the files_in_module table, that keeps track of which files belong to which inmanta
       module.
@@ -37,7 +37,6 @@ async def update(connection: Connection) -> None:
             PRIMARY KEY(environment, name, version)
         );
 
-        -- Create the files_in_module table.
         CREATE TABLE public.files_in_module (
             module_name varchar,
             module_version varchar,
@@ -52,7 +51,6 @@ async def update(connection: Connection) -> None:
         CREATE INDEX files_in_module_environment_module_name_module_version_index
         ON public.files_in_module (environment, module_name, module_version);
 
-        -- Create the modules_for_agent table.
         CREATE TABLE public.modules_for_agent (
             cm_version integer,
             agent_name varchar,
