@@ -7,6 +7,7 @@ from sqlalchemy import select, insert
 
 import inmanta.data.sqlalchemy as models
 from inmanta.data import get_session
+from inmanta.data.sqlalchemy import ModuleRequirements, FilesInModule
 
 LOGGER = logging.getLogger(__name__)
 
@@ -190,13 +191,78 @@ async def test_basic_read_write(server):
         ]
 
 
-async def test_code_upload_and_retrieval(server):
+async def test_code_upload_and_retrieval(server, client, environment):
     """
     Test code upload for different modules and versions.
     Test code retrieval.
     """
+    await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
+    return hv
 
+
+    module_requirements_stmt = insert(ModuleRequirements)
+    files_in_module_stmt = insert(FilesInModule)
+
+    modules_data = {
+        'minimalwaitingmodule': {
+            'files_in_module': [{
+                                    'hash': 'ac20beb5c6c92237a4ad0d442926ca66f35dab32',
+                                    'module_name': 'inmanta_plugins.minimalwaitingmodule',
+                                    'path': '/home/hugo/work/inmanta/github-repos/inmanta-core/tests/data/modules/minimalwaitingmodule/plugins/__init__.py',
+                                    'requires': []}],
+            'module_name': 'minimalwaitingmodule',
+            'module_version': '7eaaa3c767d79d8348678afa16db69602e53c66c'},
+        'std': {
+            'files_in_module': [{
+                                    'hash': '783979f77d1a40fa9b9c54c445c6f090de5797a1',
+                                    'module_name': 'inmanta_plugins.std.resources',
+                                    'path': '/tmp/tmp8kf8r_bg/std/plugins/resources.py',
+                                    'requires': ['Jinja2>=3.1,<4', 'email_validator>=1.3,<3', 'pydantic>=1.10,<3',
+                                                 'inmanta-core>=8.7.0.dev']}, {
+                                    'hash': '4ac629bdc461bf185971b82b4fc3dd457fba3fdd',
+                                    'module_name': 'inmanta_plugins.std.types',
+                                    'path': '/tmp/tmp8kf8r_bg/std/plugins/types.py',
+                                    'requires': ['Jinja2>=3.1,<4', 'email_validator>=1.3,<3', 'pydantic>=1.10,<3',
+                                                 'inmanta-core>=8.7.0.dev']}, {
+                                    'hash': '835f0e49da1e099d13e87b95d7f296ff68b57348',
+                                    'module_name': 'inmanta_plugins.std',
+                                    'path': '/tmp/tmp8kf8r_bg/std/plugins/__init__.py',
+                                    'requires': ['Jinja2>=3.1,<4', 'email_validator>=1.3,<3', 'pydantic>=1.10,<3',
+                                                 'inmanta-core>=8.7.0.dev']}],
+            'module_name': 'std',
+            'module_version': '6e929def427efefe814ce4ae0c00a9653628fdcb'}}
+    module_requirements_data = []
+    files_in_module_data = []
+    for module_name, python_module in modules_data.items():
+
+        requirements: set[str] = set()
+
+        for file in python_module["files_in_module"]:
+            file_in_module = {
+                "module_name": module_name,
+                "module_version": python_module["module_version"],
+                "environment": environment,
+                "file_content_hash": file['hash'],
+                "file_path": file['path'],
+            }
+            requirements.update(file['requires'])
+            files_in_module_data.append(file_in_module)
+
+        module_requirements = {
+            "module_name": module_name,
+            "module_version": python_module["module_version"],
+            "environment": environment,
+            "requirements": requirements,
+        }
+
+        module_requirements_data.append(module_requirements)
+
+    async with get_session() as session:
+        await session.execute(module_requirements_stmt, module_requirements_data)
+        await session.execute(files_in_module_stmt, files_in_module_data)
+        await session.commit()
     #
+
     # # ------------ Code upload ------------
     #
     #

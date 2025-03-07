@@ -32,6 +32,7 @@ from enum import Enum
 from typing import Optional, Self
 
 import asyncpg
+from black.linegen import bracket_split_build_line
 
 from inmanta import const, data
 from inmanta.agent import executor

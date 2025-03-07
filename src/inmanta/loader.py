@@ -120,7 +120,7 @@ class CodeManager:
 
         self.__type_file[type_name].update(source_info.path for source_info in all_plugin_files)
 
-    def _get_source_info_for_module(self, module_name: str) -> list[SourceInfo]:
+    def _get_source_info_for_module(self, module_name: str) -> list["SourceInfo"]:
         if module_name in self.__module_to_source_info:
             return self.__module_to_source_info[module_name]
 
@@ -148,7 +148,7 @@ class CodeManager:
         return (info.hash for info in self.__file_info.values())
 
 
-    def get_module_source_info(self) -> dict[str, list[SourceInfo]]:
+    def get_module_source_info(self) -> dict[str, list["SourceInfo"]]:
         """Return all module source info"""
         return self.__module_to_source_info
 
@@ -160,7 +160,7 @@ class CodeManager:
 
         raise KeyError("No file found with this hash")
 
-    def get_types(self) -> Iterable[tuple[str, list[SourceInfo]]]:
+    def get_types(self) -> Iterable[tuple[str, list["SourceInfo"]]]:
         """Get a list of all registered types"""
         return ((type_name, [self.__file_info[path] for path in files]) for type_name, files in self.__type_file.items())
 

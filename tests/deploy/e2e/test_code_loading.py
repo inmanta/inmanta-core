@@ -27,6 +27,7 @@ import tempfile
 import uuid
 from collections.abc import Sequence
 from logging import DEBUG
+from typing import Any
 
 import pytest
 
@@ -78,7 +79,7 @@ async def agent(server, environment, deactive_venv):
 
 
 async def make_source_structure(
-    into: dict[str, tuple[str, str, list[str]]],
+    into: dict[str, dict[str, str, list[dict[str, Any]]]],
     file: str,
     module: str,
     source: str,
@@ -88,10 +89,43 @@ async def make_source_structure(
 ) -> str:
     """
     :param into: dict to populate:
-        - key = hash value of the file
-        - value = tuple (file_name, module, dependencies)
+        # - key = hash value of the file
+        # - value = tuple (file_name, module, dependencies)
+        - key = module name eg std
+        - value = dict{
+            module_name eg std -> TODO  can go maybe ?
+            module_version
+            files_in_module : list [
+                dict {
+                    path: str
+                    fq mod name inmanta_plugins.std.resources',
+                    hash: str
+                    requires list[str]
+                }
+            ]
+        }
+
+        'module_name': 'std',
+        'module_version': '6e929def427efefe814ce4ae0c00a9653628fdcb',
+        'files_in_module': [{
+                                'path': '/tmp/tmpskd9n7zx/std/plugins/resources.py',
+                                'module_name': 'inmanta_plugins.std.resources',
+                                'hash': '783979f77d1a40fa9b9c54c445c6f090de5797a1',
+                                'requires': ['Jinja2>=3.1,<4', 'email_validator>=1.3,<3', 'pydantic>=1.10,<3',
+                                             'inmanta-core>=8.7.0.dev']}, {
+                                'path': '/tmp/tmpskd9n7zx/std/plugins/types.py',
+                                'module_name': 'inmanta_plugins.std.types',
+                                'hash': '4ac629bdc461bf185971b82b4fc3dd457fba3fdd',
+                                'requires': ['Jinja2>=3.1,<4', 'email_validator>=1.3,<3', 'pydantic>=1.10,<3',
+                                             'inmanta-core>=8.7.0.dev']}, {
+                                'path': '/tmp/tmpskd9n7zx/std/plugins/__init__.py',
+                                'module_name': 'inmanta_plugins.std',
+                                'hash': '835f0e49da1e099d13e87b95d7f296ff68b57348',
+                                'requires': ['Jinja2>=3.1,<4', 'email_validator>=1.3,<3', 'pydantic>=1.10,<3',
+                                             'inmanta-core>=8.7.0.dev']}]}}
+
     """
-    with tempfile.TemporaryDirectory() as tmpdirname:
+    with (tempfile.TemporaryDirectory() as tmpdirname):
         if byte_code:
             py_file = os.path.join(tmpdirname, "test.py")
             pyc_file = os.path.join(tmpdirname, "test.pyc")
@@ -108,7 +142,18 @@ async def make_source_structure(
         sha1sum = hashlib.new("sha1")
         sha1sum.update(data)
         hv: str = sha1sum.hexdigest()
-        into[hv] = (file_name, module, dependencies)
+        into[module] = {
+            'module_name': module,
+            "module_version": hv, # only one file: module hash == file hash
+            "files_in_module": [
+                {
+                    'path': file_name,
+                    'module_name': module,
+                    'hash': hv,
+                    'requires': dependencies,
+                }
+            ]
+        }
         await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
         return hv
 
@@ -132,9 +177,9 @@ def test():
     return 10
     """
 
-    sources = {}
+    modules_data = {}
     await make_source_structure(
-        sources,
+        modules_data,
         "inmanta_plugins/test/__init__.py",
         "inmanta_plugins.test",
         code,
@@ -153,15 +198,94 @@ def test():
     )
     assert res.code == 200
 
-    res = await client.upload_code_batched(tid=environment, id=version, resources={"test::Test": sources})
+
+
+    #
+    # res = conn.stat_files(list(code_manager.get_file_hashes()))
+    # if res is None or res.code != 200:
+    #     raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
+    #
+    # for file in res.result["files"]:
+    #     content = code_manager.get_file_content(file)
+    #     res = conn.upload_file(id=file, content=base64.b64encode(content).decode("ascii"))
+    #     if res is None or res.code != 200:
+    #         raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
+    #
+    # def get_modules_data() -> dict[str, PythonModule]:
+    #     source_info = code_manager.get_module_source_info()
+    #
+    #     modules_data = {}
+    #     for module_name, files_in_module in source_info.items():
+    #         all_files_hashes = [file.hash for file in sorted(files_in_module, key=lambda f: f.hash)]
+    #
+    #         module_version_hash = hashlib.new("sha1")
+    #         for file_hash in all_files_hashes:
+    #             module_version_hash.update(file_hash.encode())
+    #
+    #         module_version = module_version_hash.hexdigest()
+    #         modules_data[module_name] = dataclasses.asdict(
+    #             PythonModule(
+    #                 module_name = module_name,
+    #                 module_version = module_version,
+    #                 files_in_module = files_in_module,
+    #             )
+    #         )
+    #     return modules_data
+    # modules_data = {
+    #     "test": {
+    #         'module_name': 'test',
+    #         "module_version": module_hash,
+    #         "files_in_module": [
+    #             {
+    #                 'path': '/tmp/tmpskd9n7zx/std/plugins/types.py',
+    #                 'module_name': 'inmanta_plugins.test',
+    #                 'hash': '4ac629bdc461bf185971b82b4fc3dd457fba3fdd',
+    #                 'requires': ['pkg[optional-a]'],
+    #             }
+    #         ]
+    #     }
+    # }
+
+    # res = client.upload_modules(tid=environment, modules_data=modules_data)
+    # if res is None or res.code != 200:
+    #     raise Exception("Unable to upload plugin code to the server (msg: %s)" % res.result)
+
+
+    # Example of what a source_map may look like:
+    # Type Name: mymodule::Mytype"
+    # Source Files:
+    #   /path/to/__init__.py (hash: 'abc123', module: 'inmanta_plugins.mymodule.Mytype')
+    #   /path/to/utils.py (hash: 'def456', module: 'inmanta_plugins.mymodule.Mytype')
+    #
+    # source_map = {
+    #    "mymodule::Mytype": {
+    #      'abc123': ('/path/to/__init__.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>),
+    #      'def456': ('/path/to/utils.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>)
+    #    },
+    # ...other types would be included as well
+    # }
+    # source_map = {
+    #     resource_name: {source.hash: (source.path, source.module_name, source.requires) for source in sources}
+    #     for resource_name, sources in code_manager.get_types()
+    # }
+    #
+    # res = conn.upload_code_batched(tid=tid, id=version, resources=source_map)
+    # if res is None or res.code != 200:
+    #     raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
+
+
+
+    res = await client.upload_modules(tid=environment, modules_data=modules_data)
     assert res.code == 200
+
+    # res = await client.upload_code_batched(tid=environment, id=version, resources={"test::Test": sources})
 
     codemanager = CodeManager(agent._client)
 
-    install_spec, _ = await codemanager.get_code(
-        environment=environment,
-        version=version,
-        resource_types=["test::Test"],
+    install_spec = await codemanager.get_code(
+        environment=uuid.UUID(environment),
+        model_version=version,
+        agent_name="agent1",
     )
     await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
 

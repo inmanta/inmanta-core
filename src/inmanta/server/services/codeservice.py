@@ -53,31 +53,33 @@ class CodeService(protocol.ServerSlice):
 
 
     @handle(methods_v2.upload_modules, env="tid")
-    async def upload_modules(env: data.Environment, modules_data: JsonType) -> Apireturn:
+    async def upload_modules(self, env: data.Environment, modules_data: JsonType) -> Apireturn:
+        LOGGER.debug(f"{env=}")
+        LOGGER.debug(f"{modules_data=}")
         module_requirements_stmt = insert(ModuleRequirements)
         files_in_module_stmt = insert(FilesInModule)
 
         module_requirements_data = []
         files_in_module_data = []
-        for module_name, python_module in modules_data:
+        for module_name, python_module in modules_data.items():
 
             requirements: set[str] = set()
 
-            for file in python_module.files_in_module:
+            for file in python_module["files_in_module"]:
                 file_in_module = {
                     "module_name": module_name,
-                    "module_version": python_module.module_version,
-                    "environment": env,
-                    "file_content_hash": file.hash,
-                    "file_path": file.path,
+                    "module_version": python_module["module_version"],
+                    "environment": env.id,
+                    "file_content_hash": file['hash'],
+                    "file_path": file['path'],
                 }
-                requirements.update(file.requires)
+                requirements.update(file['requires'])
                 files_in_module_data.append(file_in_module)
 
             module_requirements = {
                 "module_name": module_name,
-                "module_version": python_module.module_version,
-                "environment": env,
+                "module_version": python_module["module_version"],
+                "environment": env.id,
                 "requirements": requirements,
             }
 
@@ -91,7 +93,7 @@ class CodeService(protocol.ServerSlice):
 
     @handle(methods.upload_code_batched, code_id="id", env="tid")
     async def upload_code_batched(self, env: data.Environment, code_id: int, resources: JsonType) -> Apireturn:
-        raise NotImplementedError("Endpoint moved to methods_v2.upload_modules.")
+        # raise NotImplementedError("Endpoint moved to methods_v2.upload_modules.")
         # validate
         for rtype, sources in resources.items():
             if not isinstance(rtype, str):

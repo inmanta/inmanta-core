@@ -98,8 +98,8 @@ class Task(abc.ABC):
 
         code, invalid_resources = await task_manager.code_manager.get_code(
             environment=task_manager.environment,
-            version=version,
-            resource_types=all_types_for_agent,
+            model_version=version,
+            agent_name=agent_name
         )
 
         # Bail out if this failed
@@ -181,7 +181,7 @@ class Deploy(Task):
                     #     agent_name=agent,
                     #     model_version=version,
                     # )
-
+                    LOGGER.debug("GETTING EXECT")
                     my_executor: executor.Executor = await self.get_executor(
                         task_manager=task_manager,
                         agent_spec=(agent, deploy_intent.all_types_for_agent),

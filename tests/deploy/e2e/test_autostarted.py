@@ -895,7 +895,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         return deployed == deployed_resources
 
     # Wait for this resource to be deployed
-    await retry_limited(are_resources_deploying, 5)
+    await retry_limited(are_resources_deploying, 50)
 
     # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
     # something is moving

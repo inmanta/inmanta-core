@@ -22,9 +22,13 @@ import sys
 import uuid
 from typing import Collection
 
-from inmanta import protocol
+from sqlalchemy import select
+
+from inmanta import protocol, data
 from inmanta.agent import executor
 from inmanta.agent.executor import ResourceInstallSpec
+from inmanta.data import get_connection_ctx_mgr, get_session
+import inmanta.data.sqlalchemy as models
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.loader import ModuleSource
 from inmanta.protocol import Client, SyncClient
@@ -61,6 +65,19 @@ class CodeManager:
         if pip_config is None:
             return LEGACY_PIP_DEFAULT
         return PipConfig(**pip_config)
+
+
+    # async def get_code_for_agent(self, environment: uuid.UUID, model_version: int, agent_name: str) -> ResourceInstallSpec:
+    #     async with get_connection_ctx_mgr() as conn:
+    #         await data.Scheduler._execute_query(
+    #             f"""
+    #                 INSERT INTO {data.Scheduler.table_name()}
+    #                 VALUES($1, NULL)
+    #                 ON CONFLICT DO NOTHING
+    #             """,
+    #             self.environment,
+    #             connection=con,
+    #         )
 
     @async_lru_cache(maxsize=1024)
     async def get_code_for_type(self, environment: uuid.UUID, version: int, resource_type: ResourceType) -> ResourceInstallSpec:
@@ -107,33 +124,46 @@ class CodeManager:
             - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
+        # async with get_session() as session:
 
-        result: protocol.Result = await self._client.get_source_code(environment, version, resource_type)
-        if result.code == 200 and result.result is not None:
-            sync_client = SyncClient(client=self._client, ioloop=asyncio.get_running_loop())
-            requirements: set[str] = set()
-            sources: list["ModuleSource"] = []
-            # Encapsulate source code details in ``ModuleSource`` objects
-            for source in result.result["data"]:
-                sources.append(
-                    ModuleSource(
-                        name=source["module_name"],
-                        is_byte_code=source["is_byte_code"],
-                        hash_value=source["hash"],
-                        _client=sync_client,
-                    )
-                )
-                requirements.update(source["requirements"])
-            resource_install_spec = ResourceInstallSpec(
-                resource_type,
-                version,
-                executor.ExecutorBlueprint(
-                    pip_config=await self.get_pip_config(environment, version),
-                    requirements=list(requirements),
-                    sources=sources,
-                    python_version=sys.version_info[:2],
-                ),
-            )
-            return resource_install_spec
-        else:
-            raise CouldNotResolveCode(resource_type, version, str(result.get_result()))
+        stmt = select(
+            models.ModulesForAgent.module_name,
+            models.ModulesForAgent.module_version
+        ).where(
+            models.ModulesForAgent.environment == environment,
+            models.ModulesForAgent.agent_name == agent_name,
+            models.ModulesForAgent.cm_version == model_version
+        )
+        async with get_session() as session:
+            result_execute = await session.execute(stmt)
+        return result_execute.all()
+        #
+        # result: protocol.Result = await self._client.get_source_code(environment, version, resource_type)
+        # if result.code == 200 and result.result is not None:
+        #     sync_client = SyncClient(client=self._client, ioloop=asyncio.get_running_loop())
+        #     requirements: set[str] = set()
+        #     sources: list["ModuleSource"] = []
+        #     # Encapsulate source code details in ``ModuleSource`` objects
+        #     for source in result.result["data"]:
+        #         sources.append(
+        #             ModuleSource(
+        #                 name=source["module_name"],
+        #                 is_byte_code=source["is_byte_code"],
+        #                 hash_value=source["hash"],
+        #                 _client=sync_client,
+        #             )
+        #         )
+        #         requirements.update(source["requirements"])
+        #     resource_install_spec = ResourceInstallSpec(
+        #         resource_type,
+        #         version,
+        #         executor.ExecutorBlueprint(
+        #             pip_config=await self.get_pip_config(environment, model_version),
+        #             requirements=list(requirements),
+        #             sources=sources,
+        #             python_version=sys.version_info[:2],
+        #         ),
+        #     )
+        #     return resource_install_spec
+        # else:
+        #     raise CouldNotResolveCode(resource_type, version, str(result.get_result()))

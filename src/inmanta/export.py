@@ -112,8 +112,10 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, code_manager: loader.
                 )
             )
         return modules_data
-
-    res = conn.upload_modules(tid=tid, modules_data=get_modules_data())
+    modules_data = get_modules_data()
+    LOGGER.debug(f'{tid=}')
+    LOGGER.debug(f'{modules_data=}')
+    res = conn.upload_modules(tid=tid, modules_data=modules_data)
     if res is None or res.code != 200:
         raise Exception("Unable to upload plugin code to the server (msg: %s)" % res.result)
 
