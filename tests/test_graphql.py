@@ -53,9 +53,9 @@ async def setup_database(project_default):
         await session.flush()
 
 
-async def test_query_environment_project(server, client, setup_database):
+async def test_query_is_expert_mode(server, client, setup_database, project_default):
     """
-    Display basic querying capabilities with recursive relationships
+    Tests the custom attribute isExpertMode
     """
     query = """
 {
@@ -65,6 +65,7 @@ async def test_query_environment_project(server, client, setup_database):
               id
               halted
               isExpertMode
+              project
             }
         }
     }
@@ -81,6 +82,7 @@ async def test_query_environment_project(server, client, setup_database):
                             "halted": False,
                             "id": "11111111-1234-5678-1234-000000000001",
                             "isExpertMode": False,
+                            "project": project_default,
                         }
                     },
                     {
@@ -88,6 +90,7 @@ async def test_query_environment_project(server, client, setup_database):
                             "halted": False,
                             "id": "11111111-1234-5678-1234-000000000002",
                             "isExpertMode": True,
+                            "project": project_default,
                         }
                     },
                     {
@@ -95,6 +98,7 @@ async def test_query_environment_project(server, client, setup_database):
                             "halted": True,
                             "id": "11111111-1234-5678-1234-000000000003",
                             "isExpertMode": False,
+                            "project": project_default,
                         }
                     },
                 ]
