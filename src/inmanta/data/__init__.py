@@ -68,7 +68,7 @@ from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
 from sqlalchemy import URL, AsyncAdaptedQueuePool
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 """
 Global reference to the SQL Alchemy engine
@@ -78,6 +78,8 @@ Main APIs to interact with it:
 - stop_engine()
 """
 ENGINE: AsyncEngine | None = None
+
+SESSION_FACTORY: async_sessionmaker[AsyncSession] | None = None
 
 
 LOGGER = logging.getLogger(__name__)
@@ -6638,6 +6640,7 @@ async def start_engine(
     )
 
     global ENGINE
+    global SESSION_FACTORY
 
     if ENGINE is not None:
         raise Exception("Engine already running: cannot call start_engine twice.")
@@ -6652,6 +6655,7 @@ async def start_engine(
             echo=echo,
             pool_pre_ping=True,
         )
+        SESSION_FACTORY = async_sessionmaker(ENGINE)
     except Exception as e:
         await stop_engine()
         raise e
@@ -6681,9 +6685,11 @@ async def stop_engine() -> None:
     Stop the sql alchemy engine.
     """
     global ENGINE
+    global SESSION_FACTORY
     if ENGINE is not None:
         await ENGINE.dispose(close=True)
     ENGINE = None
+    SESSION_FACTORY = None
 
 
 def get_pool() -> AsyncAdaptedQueuePool:
@@ -6696,3 +6702,15 @@ def get_pool() -> AsyncAdaptedQueuePool:
 def get_engine() -> AsyncEngine:
     assert ENGINE is not None, "SQL Alchemy engine was not initialized"
     return ENGINE
+
+
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    assert SESSION_FACTORY is not None, "SQL Alchemy engine and session factory were not initialized"
+    return SESSION_FACTORY
+
+
+@asynccontextmanager
+async def get_session() -> AsyncIterator[AsyncSession]:
+    assert SESSION_FACTORY is not None, "SQL Alchemy engine and session factory were not initialized"
+    async with SESSION_FACTORY() as session:
+        yield session

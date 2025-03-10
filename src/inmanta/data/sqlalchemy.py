@@ -51,6 +51,7 @@ class Module(Base):
     environment: Mapped[uuid.UUID] = mapped_column(UUID)
     requirements: Mapped[list[str]] = mapped_column(ARRAY(String()))
 
+
 class FilesInModule(Base):
     __tablename__ = "files_in_module"
     __table_args__ = (
