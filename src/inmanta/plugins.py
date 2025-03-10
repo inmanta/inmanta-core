@@ -1035,6 +1035,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             if kwarg.arg_position is not None and kwarg.arg_position < len(args):
                 # The exception raised here tries to match as closely as possible what python
                 # would have raised as exception
+                raise ZeroDivisionError
                 raise RuntimeException(None, f"{self.get_full_name()}() got multiple values for argument '{name}'")
 
             # (4) Validate the input value

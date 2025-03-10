@@ -20,7 +20,7 @@ Module defining the v2 rest api
 
 import datetime
 import uuid
-from typing import Literal, Optional, Union
+from typing import Literal, Optional, Union, Any, TYPE_CHECKING
 
 import inmanta.types
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
@@ -32,6 +32,11 @@ from inmanta.protocol.decorators import typedmethod
 from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.types import PrimitiveTypes, ResourceIdStr
 
+from inmanta.data.model import BaseModel
+
+# if TYPE_CHECKING:
+#     Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
+    # from inmanta.data.model import BaseModel  # noqa: F401
 
 @typedmethod(
     path="/version/partial",
@@ -1364,6 +1369,18 @@ def update_notification(
     """
 
 
+
+@typedmethod(path="/modulecodebatched/", operation="PUT", arg_options=methods.ENV_OPTS, client_types=[ClientType.compiler], api_version=2, varkw=True)
+def upload_modules(tid: uuid.UUID, **kwargs: object) -> None:
+   """
+   TODO
+
+   :param tid: The id of the environment to which the code belongs.
+   :param modules_data: TODO
+
+   """
+
+
 @typedmethod(
     path="/code/<version>",
     operation="GET",
@@ -1379,6 +1396,23 @@ def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> list[mo
     :param version: The id of the model version
     :param resource_type: The type name of the resource
     :raises NotFound: Raised when the version or type is not found
+    """
+
+
+@typedmethod(
+    path="/code/<agent>/<model_version>",
+    operation="GET",
+    agent_server=True,
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def get_module_source_for_agent(tid: uuid.UUID, agent: str, model_version: int) -> list[model.Source]:
+    """
+    Get all module code for the given (agent, model_version)
+    :param tid: The id of the environment
+    :param agent: The type name of the resource
+    :param model_version: The id of the model version
     """
 
 

@@ -48,7 +48,7 @@ from inmanta import config, const, data, env, module, protocol, util
 from inmanta.agent import config as cfg
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
+from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec, ModuleInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data import get_connection_ctx_mgr
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, SchedulerStatusReport
@@ -996,15 +996,12 @@ dummyblueprint = ExecutorBlueprint(
 
 
 class DummyCodeManager(CodeManager):
-    """Code manager that prentend no code is ever needed"""
+    """Code manager that pretends no code is ever needed"""
 
     async def get_code(
-        self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
-    ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
-        if not resource_types:
-            raise ValueError(f"{self.__class__.__name__}.get_code() expects at least one resource type")
-
-        return ([ResourceInstallSpec(rt, version, dummyblueprint) for rt in resource_types], {})
+        self, environment: uuid.UUID, model_version: int, agent_name: str
+    ) -> tuple[Collection[ModuleInstallSpec], executor.FailedResources]:
+        return ([ModuleInstallSpec("dummy_module", "0.0.0",model_version, dummyblueprint)], {})
 
 
 async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:

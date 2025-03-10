@@ -178,6 +178,9 @@ logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
     "resourceaction_resource",
+    "module",
+    "modules_for_agent",
+    "files_in_module",
 ]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
