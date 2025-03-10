@@ -33,13 +33,13 @@ async def update(connection: Connection) -> None:
             name varchar NOT NULL,
             version varchar NOT NULL,
             environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
-            requirements character varying[] DEFAULT ARRAY[]::character varying[] NOT NULL,
+            requirements varchar[] DEFAULT ARRAY[]::varchar[] NOT NULL,
             PRIMARY KEY(environment, name, version)
         );
 
         CREATE TABLE public.files_in_module (
-            module_name varchar,
-            module_version varchar,
+            module_name varchar NOT NULL,
+            module_version varchar NOT NULL,
             environment uuid NOT NULL,
             file_content_hash varchar NOT NULL REFERENCES file(content_hash) ON DELETE CASCADE,
             file_path varchar NOT NULL,
@@ -48,14 +48,14 @@ async def update(connection: Connection) -> None:
                 REFERENCES public.module(environment, name, version) ON DELETE CASCADE
         );
 
-        CREATE INDEX files_in_module_environment_module_name_module_version_index
-        ON public.files_in_module (environment, module_name, module_version);
+        CREATE INDEX files_in_module_file_content_hash_index
+        ON public.files_in_module (file_content_hash);
 
         CREATE TABLE public.modules_for_agent (
-            cm_version integer,
-            agent_name varchar,
-            module_name varchar,
-            module_version varchar,
+            cm_version integer NOT NULL,
+            agent_name varchar NOT NULL,
+            module_name varchar NOT NULL,
+            module_version varchar NOT NULL,
             environment uuid NOT NULL,
             PRIMARY KEY(environment, cm_version, agent_name, module_name, module_version),
             FOREIGN KEY (environment, cm_version)
@@ -66,11 +66,9 @@ async def update(connection: Connection) -> None:
                 REFERENCES public.module(environment, name, version) ON DELETE CASCADE
         );
 
-        CREATE INDEX modules_for_agent_environment_cm_version_index
-        ON public.modules_for_agent (environment, cm_version);
-        CREATE INDEX modules_for_agent_environment_agent_name_index
+        CREATE UNIQUE INDEX modules_for_agent_environment_agent_name_index
         ON public.modules_for_agent (environment, agent_name);
-        CREATE INDEX modules_for_agent_environment_module_name_module_version_index
+        CREATE UNIQUE INDEX modules_for_agent_environment_module_name_module_version_index
         ON public.modules_for_agent (environment, module_name, module_version);
 
     """
