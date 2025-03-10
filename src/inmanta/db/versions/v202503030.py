@@ -66,9 +66,9 @@ async def update(connection: Connection) -> None:
                 REFERENCES public.module(environment, name, version) ON DELETE CASCADE
         );
 
-        CREATE UNIQUE INDEX modules_for_agent_environment_agent_name_index
+        CREATE INDEX modules_for_agent_environment_agent_name_index
         ON public.modules_for_agent (environment, agent_name);
-        CREATE UNIQUE INDEX modules_for_agent_environment_module_name_module_version_index
+        CREATE INDEX modules_for_agent_environment_module_name_module_version_index
         ON public.modules_for_agent (environment, module_name, module_version);
 
     """
