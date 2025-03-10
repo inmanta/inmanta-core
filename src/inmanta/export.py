@@ -106,8 +106,8 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, code_manager: loader.
             module_version = module_version_hash.hexdigest()
             modules_data[module_name] = dataclasses.asdict(
                 PythonModule(
-                    module_name = module_name,
-                    module_version = module_version,
+                    name = module_name,
+                    version = module_version,
                     files_in_module = files_in_module,
                 )
             )

@@ -143,8 +143,8 @@ async def make_source_structure(
         sha1sum.update(data)
         hv: str = sha1sum.hexdigest()
         into[module] = {
-            'module_name': module,
-            "module_version": hv, # only one file: module hash == file hash
+            'name': module,
+            "version": hv, # only one file: module hash == file hash
             "files_in_module": [
                 {
                     'path': file_name,
@@ -187,14 +187,21 @@ def test():
         client=client,
     )
 
-    version = await clienthelper.get_version()
 
+
+
+    res = await client.upload_modules(tid=environment, modules_data=modules_data)
+    assert res.code == 200
+
+    module_version_info = {module_name: data["version"] for module_name, data in modules_data.items()}
+    version = await clienthelper.get_version()
     res = await client.put_version(
         tid=environment,
         version=version,
         resources=[],
         pip_config=PipConfig(index_url=index_with_pkgs_containing_optional_deps),
         compiler_version=get_compiler_version(),
+        module_version_info=module_version_info,
     )
     assert res.code == 200
 
@@ -275,8 +282,6 @@ def test():
 
 
 
-    res = await client.upload_modules(tid=environment, modules_data=modules_data)
-    assert res.code == 200
 
     # res = await client.upload_code_batched(tid=environment, id=version, resources={"test::Test": sources})
 

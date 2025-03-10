@@ -665,6 +665,7 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
+        module_version_info: Optional[dict[str, str]],
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -678,6 +679,7 @@ class OrchestrationService(protocol.ServerSlice):
         :param removed_resource_sets: When a partial compile is done, this parameter should indicate the names of the resource
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
+        :param module_version_info: Mapping of module name to module version.
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -891,6 +893,7 @@ class OrchestrationService(protocol.ServerSlice):
         compiler_version: Optional[str] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
+        module_version_info: Optional[dict[str, str]] = None
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
@@ -930,6 +933,7 @@ class OrchestrationService(protocol.ServerSlice):
                     resource_sets,
                     pip_config=pip_config,
                     connection=con,
+                    module_version_info={},
                 )
             # This must be outside all transactions, as it relies on the result of _put_version
             # and it starts a background task, so it can't re-use this connection

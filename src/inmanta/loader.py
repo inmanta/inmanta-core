@@ -632,8 +632,8 @@ def unload_modules_for_path(path: str) -> None:
 
 @dataclass(frozen=True)
 class PythonModule:
-    module_name: str
-    module_version: str
+    name: str
+    version: str
     files_in_module: list["SourceInfo"]
 
 

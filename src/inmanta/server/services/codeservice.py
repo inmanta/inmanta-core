@@ -56,10 +56,10 @@ class CodeService(protocol.ServerSlice):
     async def upload_modules(self, env: data.Environment, modules_data: JsonType) -> Apireturn:
         LOGGER.debug(f"{env=}")
         LOGGER.debug(f"{modules_data=}")
-        module_requirements_stmt = insert(Module)
+        module_stmt = insert(Module)
         files_in_module_stmt = insert(FilesInModule)
 
-        module_requirements_data = []
+        module_data = []
         files_in_module_data = []
         for module_name, python_module in modules_data.items():
 
@@ -68,7 +68,7 @@ class CodeService(protocol.ServerSlice):
             for file in python_module["files_in_module"]:
                 file_in_module = {
                     "module_name": module_name,
-                    "module_version": python_module["module_version"],
+                    "module_version": python_module["version"],
                     "environment": env.id,
                     "file_content_hash": file['hash'],
                     "file_path": file['path'],
@@ -77,16 +77,16 @@ class CodeService(protocol.ServerSlice):
                 files_in_module_data.append(file_in_module)
 
             module_requirements = {
-                "module_name": module_name,
-                "module_version": python_module["module_version"],
+                "name": module_name,
+                "version": python_module["version"],
                 "environment": env.id,
                 "requirements": requirements,
             }
 
-            module_requirements_data.append(module_requirements)
+            module_data.append(module_requirements)
 
         async with get_session() as session:
-            await session.execute(module_requirements_stmt, module_requirements_data)
+            await session.execute(module_stmt, module_data)
             await session.execute(files_in_module_stmt, files_in_module_data)
             await session.commit()
 

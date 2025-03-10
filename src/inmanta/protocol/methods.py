@@ -531,6 +531,7 @@ def put_version(
     compiler_version: Optional[str] = None,
     resource_sets: dict[inmanta.types.ResourceIdStr, Optional[str]] = {},
     pip_config: Optional[PipConfig] = None,
+    module_version_info: Optional[dict[str, str]] = None,
 ):
     """
     Store a new version of the configuration model
