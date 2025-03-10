@@ -268,6 +268,22 @@ class ExecutorId:
     def identity(self) -> str:
         return self.agent_name + self.agent_uri + self.blueprint.blueprint_hash()
 
+@dataclass(frozen=True)
+class ModuleInstallSpec:
+    """
+    This class encapsulates the requirements for a specific (module_name, module_version) for a specific model version.
+
+    :ivar module_name: fully qualified name for this module
+    :ivar module_version: the version of the module to use
+    :ivar model_version: the version of the model to use
+    :ivar blueprint: the associate install blueprint
+
+    """
+
+    module_name: str
+    module_version: str
+    model_version: int
+    blueprint: ExecutorBlueprint
 
 @dataclass(frozen=True)
 class ResourceInstallSpec:

@@ -26,7 +26,7 @@ from sqlalchemy import select
 
 from inmanta import protocol, data
 from inmanta.agent import executor
-from inmanta.agent.executor import ResourceInstallSpec
+from inmanta.agent.executor import ResourceInstallSpec, ModuleInstallSpec
 from inmanta.data import get_connection_ctx_mgr, get_session
 import inmanta.data.sqlalchemy as models
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
@@ -114,7 +114,7 @@ class CodeManager:
     @async_lru_cache(maxsize=1024)
     async def get_code(
         self, environment: uuid.UUID, model_version: int, agent_name: str
-    ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
+    ) -> tuple[Collection[ModuleInstallSpec], executor.FailedResources]:
         """
         Get the collection of installation specifications (i.e. pip config, python package dependencies,
         Inmanta modules sources) required to deploy resources on a given agent for a given configuration
