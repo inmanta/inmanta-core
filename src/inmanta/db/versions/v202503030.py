@@ -21,7 +21,7 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    * Create the module_requirements table, that keeps track of the python package requirements
+    * Create the module table, that keeps track of the python package requirements
       per inmanta module (name, version).
     * Create the files_in_module table, that keeps track of which files belong to which inmanta
       module.
@@ -29,45 +29,47 @@ async def update(connection: Connection) -> None:
       by which agent.
     """
     schema = """
-        CREATE TABLE public.module_requirements (
-            module_name varchar,
-            module_version varchar,
+        CREATE TABLE public.module (
+            name varchar NOT NULL,
+            version varchar NOT NULL,
             environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
-            requirements character varying[] DEFAULT ARRAY[]::character varying[],
-            PRIMARY KEY(module_name, module_version, environment)
+            requirements varchar[] DEFAULT ARRAY[]::varchar[] NOT NULL,
+            PRIMARY KEY(environment, name, version)
         );
 
-        -- Create the files_in_module table.
         CREATE TABLE public.files_in_module (
-            module_name varchar,
-            module_version varchar,
+            module_name varchar NOT NULL,
+            module_version varchar NOT NULL,
             environment uuid NOT NULL,
             file_content_hash varchar NOT NULL REFERENCES file(content_hash) ON DELETE CASCADE,
             file_path varchar NOT NULL,
-            FOREIGN KEY (module_name, module_version, environment)
-            REFERENCES public.module_requirements(module_name, module_version, environment) ON DELETE CASCADE
+            PRIMARY KEY(environment, module_name, module_version, file_path),
+            FOREIGN KEY (environment, module_name, module_version)
+                REFERENCES public.module(environment, name, version) ON DELETE CASCADE
         );
 
-        CREATE INDEX files_in_module_module_name_module_version_environment_index
-        ON public.files_in_module (module_name, module_version, environment);
+        CREATE INDEX files_in_module_file_content_hash_index
+        ON public.files_in_module (file_content_hash);
 
-        -- Create the modules_for_agent table.
         CREATE TABLE public.modules_for_agent (
-            cm_version integer,
-            agent_name varchar,
-            module_name varchar,
-            module_version varchar,
+            cm_version integer NOT NULL,
+            agent_name varchar NOT NULL,
+            module_name varchar NOT NULL,
+            module_version varchar NOT NULL,
             environment uuid NOT NULL,
-            FOREIGN KEY (cm_version, environment)
-            REFERENCES public.configurationmodel(version, environment) ON DELETE CASCADE,
-            FOREIGN KEY (agent_name, environment)
-            REFERENCES public.agent(name, environment) ON DELETE CASCADE,
-            FOREIGN KEY (module_name, module_version, environment)
-            REFERENCES public.module_requirements(module_name, module_version, environment) ON DELETE CASCADE
+            PRIMARY KEY(environment, cm_version, agent_name, module_name, module_version),
+            FOREIGN KEY (environment, cm_version)
+                REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE,
+            FOREIGN KEY (environment, agent_name)
+                REFERENCES public.agent(environment, name) ON DELETE CASCADE,
+            FOREIGN KEY (environment, module_name, module_version)
+                REFERENCES public.module(environment, name, version) ON DELETE CASCADE
         );
 
-        CREATE INDEX modules_for_agent_agent_name_cm_version_environment_index
-        ON public.modules_for_agent (agent_name, cm_version, environment);
+        CREATE UNIQUE INDEX modules_for_agent_environment_agent_name_index
+        ON public.modules_for_agent (environment, agent_name);
+        CREATE UNIQUE INDEX modules_for_agent_environment_module_name_module_version_index
+        ON public.modules_for_agent (environment, module_name, module_version);
 
     """
     await connection.execute(schema)

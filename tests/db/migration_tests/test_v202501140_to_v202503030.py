@@ -35,10 +35,10 @@ async def test_add_tables_for_agent_code_transport_rework(
 ) -> None:
     # This migration script only creates tables and adds indexes
 
-    assert "module_requirements" not in await get_tables_in_db()
+    assert "module" not in await get_tables_in_db()
     assert "files_in_module" not in await get_tables_in_db()
     assert "modules_for_agent" not in await get_tables_in_db()
     await migrate_db_from()
-    assert "module_requirements" in await get_tables_in_db()
+    assert "module" in await get_tables_in_db()
     assert "files_in_module" in await get_tables_in_db()
     assert "modules_for_agent" in await get_tables_in_db()
