@@ -7,7 +7,7 @@ from sqlalchemy import select, insert
 
 import inmanta.data.sqlalchemy as models
 from inmanta.data import get_session
-from inmanta.data.sqlalchemy import ModuleRequirements, FilesInModule
+from inmanta.data.sqlalchemy import Module, FilesInModule
 
 LOGGER = logging.getLogger(__name__)
 
@@ -200,7 +200,7 @@ async def test_code_upload_and_retrieval(server, client, environment):
     return hv
 
 
-    module_requirements_stmt = insert(ModuleRequirements)
+    module_requirements_stmt = insert(Module)
     files_in_module_stmt = insert(FilesInModule)
 
     modules_data = {

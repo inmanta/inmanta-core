@@ -92,7 +92,7 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, code_manager: loader.
         if res is None or res.code != 200:
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
-    def get_modules_data() -> dict[str, PythonModule]:
+    def get_modules_data() -> dict[str, dict[str, Any]]:
         source_info = code_manager.get_module_source_info()
 
         modules_data = {}

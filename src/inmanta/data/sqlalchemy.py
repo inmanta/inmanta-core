@@ -38,11 +38,11 @@ class Base(DeclarativeBase):
     pass
 
 
-class ModuleRequirements(Base):
-    __tablename__ = "module_requirements"
+class Module(Base):
+    __tablename__ = "module"
 
     __table_args__ = (
-        PrimaryKeyConstraint("module_name", "module_version", "environment", name="module_requirements_pkey"),
+        PrimaryKeyConstraint("module_name", "module_version", "environment", name="module_pkey"),
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="code_environment_fkey"),
     )
 
@@ -56,7 +56,7 @@ class FilesInModule(Base):
     __table_args__ = (
         ForeignKeyConstraint(
             ["module_name", "module_version", "environment"],
-            ["module_requirements.module_name", "module_requirements.module_version", "module_requirements.environment"],
+            ["module.module_name", "module.module_version", "module.environment"],
             ondelete="CASCADE",
         ),
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="files_in_module_environment_fkey"),
@@ -83,7 +83,7 @@ class ModulesForAgent(Base):
         ForeignKeyConstraint(["agent_name", "environment"], ["agent.name", "agent.environment"], ondelete="CASCADE"),
         ForeignKeyConstraint(
             ["module_name", "module_version", "environment"],
-            ["module_requirements.module_name", "module_requirements.module_version", "module_requirements.environment"],
+            ["module.module_name", "module.module_version", "module.environment"],
             ondelete="RESTRICT",
         ),
         UniqueConstraint("cm_version", "environment", "agent_name", "module_name"),

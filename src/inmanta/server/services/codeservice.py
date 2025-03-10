@@ -23,7 +23,7 @@ from sqlalchemy import insert
 
 from inmanta import data
 from inmanta.data import model, get_session
-from inmanta.data.sqlalchemy import FilesInModule, ModuleRequirements
+from inmanta.data.sqlalchemy import FilesInModule, Module
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
@@ -56,7 +56,7 @@ class CodeService(protocol.ServerSlice):
     async def upload_modules(self, env: data.Environment, modules_data: JsonType) -> Apireturn:
         LOGGER.debug(f"{env=}")
         LOGGER.debug(f"{modules_data=}")
-        module_requirements_stmt = insert(ModuleRequirements)
+        module_requirements_stmt = insert(Module)
         files_in_module_stmt = insert(FilesInModule)
 
         module_requirements_data = []
