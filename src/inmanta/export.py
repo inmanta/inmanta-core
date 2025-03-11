@@ -536,10 +536,10 @@ class Exporter:
         self,
         conn: protocol.SyncClient,
         tid: uuid.UUID,
+        code_manager: loader.CodeManager,
     ) -> None:
         """Deploy code to the server"""
 
-        code_manager = loader.CodeManager()
         LOGGER.info("Sending resources and handler source to server")
 
         types = set()
@@ -588,9 +588,11 @@ class Exporter:
 
         conn = protocol.SyncClient("compiler")
 
+        code_manager = loader.CodeManager()
+
         # partial exports use the same code as the version they're based on
         if not partial_compile:
-            self.deploy_code(conn, tid)
+            self.deploy_code(conn, tid, code_manager)
 
         LOGGER.info("Uploading %d files" % len(self._file_store))
 
@@ -651,7 +653,7 @@ class Exporter:
                     resource_state=self._resource_state,
                     version_info=version_info,
                     compiler_version=get_compiler_version(),
-                    **kwargs,
+                    type_to_module_data=code_manager.get_type_to_module() ** kwargs,
                 )
             return result
 

@@ -28,6 +28,7 @@ import asyncpg
 import asyncpg.connection
 import asyncpg.exceptions
 import pydantic
+from asyncpg import Connection
 
 import inmanta.exceptions
 import inmanta.util
@@ -666,6 +667,7 @@ class OrchestrationService(protocol.ServerSlice):
         *,
         connection: asyncpg.connection.Connection,
         module_version_info: Optional[dict[str, str]],
+        type_to_module_data: Optional[dict[ResourceIdStr, str]],
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -821,6 +823,49 @@ class OrchestrationService(protocol.ServerSlice):
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
+            async def populate_join_table(
+                cm_version: int,
+                environment: uuid.UUID,
+                module_version_info: dict[str, str],
+                type_to_module_data: dict[ResourceIdStr, str],
+                rid_to_resource: dict[str, data.Resource],
+                connection: Connection,
+            ):
+                if not all([module_version_info, type_to_module_data, rid_to_resource]):
+                    return
+                resource_id = next(id for id in rid_to_resource.keys())
+                agent_name = rid_to_resource[resource_id].agent
+
+                module_name = type_to_module_data[resource_id]
+                module_version = module_version_info[module_name]
+                query = """
+                            INSERT INTO modules_for_agent(
+                                cm_version,
+                                environment,
+                                agent_name,
+                                module_name,
+                                module_version,
+                            ) VALUES(
+                                $1,
+                                $2,
+                                $3,
+                                $4,
+                                $5,
+                            )
+                        """
+                async with connection as con:
+                    result = await con.fetchrow(
+                        query,
+                        cm_version,
+                        environment,
+                        agent_name,
+                        module_name,
+                        module_version,
+                    )
+                    # Make mypy happy
+                    assert result is not None
+
+            await populate_join_table(version, env.id, module_version_info, type_to_module_data, rid_to_resource, connection)
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
             all_rvids = [i.resource_version_str() for i in all_ids]
@@ -896,6 +941,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
         module_version_info: Optional[dict[str, str]] = None,
+        type_to_module_data: Optional[dict[str, str]] = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
@@ -918,7 +964,7 @@ class OrchestrationService(protocol.ServerSlice):
             resource_state=resource_state,
             resource_sets=resource_sets,
         )
-        all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
+        # all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
 
         async with data.Resource.get_connection() as con:
             # We don't allow connection reuse here, because the last line in this block can't tolerate a transaction
@@ -936,6 +982,7 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                     module_version_info=module_version_info,
+                    type_to_module_data=type_to_module_data,
                 )
             # This must be outside all transactions, as it relies on the result of _put_version
             # and it starts a background task, so it can't re-use this connection

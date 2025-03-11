@@ -178,6 +178,7 @@ def test():
     """
 
     modules_data = {}
+    type_to_module_data = {}
     await make_source_structure(
         modules_data,
         "inmanta_plugins/test/__init__.py",
@@ -199,6 +200,7 @@ def test():
         pip_config=PipConfig(index_url=index_with_pkgs_containing_optional_deps),
         compiler_version=get_compiler_version(),
         module_version_info=module_version_info,
+        type_to_module_data=type_to_module_data,
     )
     assert res.code == 200
 
@@ -354,7 +356,7 @@ async def test_agent_code_loading_with_failure(
     # We want to test
     nonexistent_version = -1
     resource_install_specs_1, invalid_resources_1 = await codemanager.get_code(
-        environment=environment, version=nonexistent_version, resource_types=["test::Test", "test::Test2", "test::Test3"]
+        environment=environment, model_version=nonexistent_version, agent_name="dummy"
     )
     assert len(invalid_resources_1.keys()) == 3
     for resource_type, exception in invalid_resources_1.items():

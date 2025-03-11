@@ -23,10 +23,10 @@ import uuid
 from typing import Collection
 
 import inmanta.data.sqlalchemy as models
-from inmanta import data, protocol
+from inmanta import protocol
 from inmanta.agent import executor
 from inmanta.agent.executor import ModuleInstallSpec, ResourceInstallSpec
-from inmanta.data import get_connection_ctx_mgr, get_session
+from inmanta.data import get_session
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.loader import ModuleSource
 from inmanta.protocol import Client, SyncClient

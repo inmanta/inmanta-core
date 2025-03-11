@@ -20,21 +20,17 @@ Module defining the v2 rest api
 
 import datetime
 import uuid
-from typing import TYPE_CHECKING, Any, Literal, Optional, Union
+from typing import Literal, Optional, Union
 
 import inmanta.types
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
-from inmanta.data.model import BaseModel, DataBaseReport, LinkedDiscoveredResource, PipConfig
+from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig
 from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
 from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.types import PrimitiveTypes, ResourceIdStr
-
-# if TYPE_CHECKING:
-#     Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
-# from inmanta.data.model import BaseModel  # noqa: F401
 
 
 @typedmethod(

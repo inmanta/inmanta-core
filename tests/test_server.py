@@ -628,7 +628,7 @@ async def test_token_without_auth(server, client, environment):
     assert token.code == 400
 
 
-async def test_batched_code_upload(
+async def test_batched_code_upload_refac(
     server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
 ):
     """Test uploading all code definitions at once"""
@@ -684,6 +684,7 @@ async def test_batched_code_upload(
             assert response.code == 200
             source_code = base64.b64decode(response.result["content"])
             assert info.content == source_code
+
 
 @pytest.mark.parametrize("auto_start_agent", [True])
 async def test_resource_action_log(server, client, environment, clienthelper, snippetcompiler):

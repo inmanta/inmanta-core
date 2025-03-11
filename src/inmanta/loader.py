@@ -91,11 +91,12 @@ class CodeManager:
         # To which python module do these python files belong
         self.__file_info: dict[str, SourceInfo] = {}
 
+        # Map of [Union[resouce_type, handler_type], str]
+        # Maps a type to the module it lives in
+        self.__type_to_module: dict[str, str] = {}
+
         # Cache of module to source info
         self.__module_to_source_info: dict[str, list[SourceInfo]] = {}
-
-        # Cache of agent to module info
-        self.__agent_to_module_info: dict[str, set[str]] = {}
 
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
@@ -111,25 +112,17 @@ class CodeManager:
         if type_name not in self.__type_file:
             self.__type_file[type_name] = set()
 
-
         # if file_name is in there, all plugin files should be in there => return
         if file_name in self.__type_file[type_name]:
             return
-
-        agent_name = self.get_object_agent(instance)
-
-        if agent_name not in self.__agent_to_module_info:
-            self.__agent_to_module_info[agent_name] = set()
-
-
 
         # get the module
         module_name = get_inmanta_module_name(instance.__module__)
 
         all_plugin_files: list[SourceInfo] = self._get_source_info_for_module(module_name)
+        self.__type_to_module[type_name] = module_name
 
         self.__type_file[type_name].update(source_info.path for source_info in all_plugin_files)
-        self.__agent_to_module_info[agent_name].update(source_info.path for source_info in all_plugin_files)
 
     def _get_source_info_for_module(self, module_name: str) -> list["SourceInfo"]:
         if module_name in self.__module_to_source_info:
@@ -155,7 +148,6 @@ class CodeManager:
         except TypeError:
             return None
 
-
     def get_object_agent(self, instance: object) -> Optional[str]:
         """Get the agent associated with the object"""
         try:
@@ -163,11 +155,11 @@ class CodeManager:
         except AttributeError:
             pass
         try:
-            return instance['agent']
+            return instance["agent"]
         except KeyError:
             pass
         try:
-            return instance['_agent']
+            return instance["_agent"]
         except KeyError:
             pass
         raise Exception(f"No agent is defined for object {instance}.")
@@ -179,6 +171,10 @@ class CodeManager:
     def get_module_source_info(self) -> dict[str, list["SourceInfo"]]:
         """Return all module source info"""
         return self.__module_to_source_info
+
+    def get_type_to_module(self) -> dict[str, str]:
+        """Return all module source info"""
+        return self.__type_to_module
 
     def get_file_content(self, hash: str) -> bytes:
         """Get the file content for the given hash"""

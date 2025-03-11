@@ -48,7 +48,7 @@ from inmanta import config, const, data, env, module, protocol, util
 from inmanta.agent import config as cfg
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import ExecutorBlueprint, ModuleInstallSpec, ResourceInstallSpec
+from inmanta.agent.executor import ExecutorBlueprint, ModuleInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data import get_connection_ctx_mgr
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, SchedulerStatusReport
@@ -59,7 +59,7 @@ from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
-from inmanta.types import Apireturn, ResourceIdStr, ResourceType
+from inmanta.types import Apireturn, ResourceIdStr
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
 

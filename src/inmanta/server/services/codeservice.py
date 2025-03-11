@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import hashlib
 import logging
 from typing import cast
 
@@ -75,14 +74,14 @@ class CodeService(protocol.ServerSlice):
                 requirements.update(file["requires"])
                 files_in_module_data.append(file_in_module)
 
-            module_requirements = {
+            module = {
                 "name": module_name,
                 "version": python_module["version"],
                 "environment": env.id,
                 "requirements": requirements,
             }
 
-            module_data.append(module_requirements)
+            module_data.append(module)
 
         async with get_session() as session:
             await session.execute(module_stmt, module_data)
