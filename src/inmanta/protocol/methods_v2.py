@@ -20,23 +20,22 @@ Module defining the v2 rest api
 
 import datetime
 import uuid
-from typing import Literal, Optional, Union, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
 import inmanta.types
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
-from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig
+from inmanta.data.model import BaseModel, DataBaseReport, LinkedDiscoveredResource, PipConfig
 from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
 from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.types import PrimitiveTypes, ResourceIdStr
 
-from inmanta.data.model import BaseModel
-
 # if TYPE_CHECKING:
 #     Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
-    # from inmanta.data.model import BaseModel  # noqa: F401
+# from inmanta.data.model import BaseModel  # noqa: F401
+
 
 @typedmethod(
     path="/version/partial",
@@ -1369,16 +1368,22 @@ def update_notification(
     """
 
 
-
-@typedmethod(path="/modulecodebatched/", operation="PUT", arg_options=methods.ENV_OPTS, client_types=[ClientType.compiler], api_version=2, varkw=True)
+@typedmethod(
+    path="/modulecodebatched/",
+    operation="PUT",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.compiler],
+    api_version=2,
+    varkw=True,
+)
 def upload_modules(tid: uuid.UUID, **kwargs: object) -> None:
-   """
-   TODO
+    """
+    TODO
 
-   :param tid: The id of the environment to which the code belongs.
-   :param modules_data: TODO
+    :param tid: The id of the environment to which the code belongs.
+    :param modules_data: TODO
 
-   """
+    """
 
 
 @typedmethod(

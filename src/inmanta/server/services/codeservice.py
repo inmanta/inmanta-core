@@ -15,20 +15,20 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
+
 import hashlib
 import logging
 from typing import cast
 
-from sqlalchemy import insert
-
 from inmanta import data
-from inmanta.data import model, get_session
+from inmanta.data import get_session, model
 from inmanta.data.sqlalchemy import FilesInModule, Module
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.services.fileservice import FileService
 from inmanta.types import Apireturn, JsonType
+from sqlalchemy import insert
 
 LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +51,6 @@ class CodeService(protocol.ServerSlice):
         await super().prestart(server)
         self.file_slice = cast(FileService, server.get_slice(SLICE_FILE))
 
-
     @handle(methods_v2.upload_modules, env="tid")
     async def upload_modules(self, env: data.Environment, modules_data: JsonType) -> Apireturn:
         LOGGER.debug(f"{env=}")
@@ -70,10 +69,10 @@ class CodeService(protocol.ServerSlice):
                     "module_name": module_name,
                     "module_version": python_module["version"],
                     "environment": env.id,
-                    "file_content_hash": file['hash'],
-                    "file_path": file['path'],
+                    "file_content_hash": file["hash"],
+                    "file_path": file["path"],
                 }
-                requirements.update(file['requires'])
+                requirements.update(file["requires"])
                 files_in_module_data.append(file_in_module)
 
             module_requirements = {
@@ -89,7 +88,6 @@ class CodeService(protocol.ServerSlice):
             await session.execute(module_stmt, module_data)
             await session.execute(files_in_module_stmt, files_in_module_data)
             await session.commit()
-
 
     @handle(methods.upload_code_batched, code_id="id", env="tid")
     async def upload_code_batched(self, env: data.Environment, code_id: int, resources: JsonType) -> Apireturn:

@@ -22,18 +22,17 @@ import sys
 import uuid
 from typing import Collection
 
-from sqlalchemy import select
-
-from inmanta import protocol, data
-from inmanta.agent import executor
-from inmanta.agent.executor import ResourceInstallSpec, ModuleInstallSpec
-from inmanta.data import get_connection_ctx_mgr, get_session
 import inmanta.data.sqlalchemy as models
+from inmanta import data, protocol
+from inmanta.agent import executor
+from inmanta.agent.executor import ModuleInstallSpec, ResourceInstallSpec
+from inmanta.data import get_connection_ctx_mgr, get_session
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.loader import ModuleSource
 from inmanta.protocol import Client, SyncClient
 from inmanta.types import ResourceType
 from inmanta.util.async_lru import async_lru_cache
+from sqlalchemy import select
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,7 +64,6 @@ class CodeManager:
         if pip_config is None:
             return LEGACY_PIP_DEFAULT
         return PipConfig(**pip_config)
-
 
     # async def get_code_for_agent(self, environment: uuid.UUID, model_version: int, agent_name: str) -> ResourceInstallSpec:
     #     async with get_connection_ctx_mgr() as conn:
@@ -126,13 +124,10 @@ class CodeManager:
         """
         # async with get_session() as session:
 
-        stmt = select(
-            models.ModulesForAgent.module_name,
-            models.ModulesForAgent.module_version
-        ).where(
+        stmt = select(models.ModulesForAgent.module_name, models.ModulesForAgent.module_version).where(
             models.ModulesForAgent.environment == environment,
             models.ModulesForAgent.agent_name == agent_name,
-            models.ModulesForAgent.cm_version == model_version
+            models.ModulesForAgent.cm_version == model_version,
         )
         async with get_session() as session:
             result_execute = await session.execute(stmt)

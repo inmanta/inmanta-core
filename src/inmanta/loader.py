@@ -68,7 +68,6 @@ class SourceNotFoundException(Exception):
     """This exception is raised when the source of the provided type is not found"""
 
 
-
 class CodeManager:
     """This class is responsible for loading and packaging source code for types (resources, handlers, ...) that need to be
     available in a remote process (e.g. agent).
@@ -95,6 +94,9 @@ class CodeManager:
         # Cache of module to source info
         self.__module_to_source_info: dict[str, list[SourceInfo]] = {}
 
+        # Cache of agent to module info
+        self.__agent_to_module_info: dict[str, set[str]] = {}
+
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
 
@@ -109,9 +111,17 @@ class CodeManager:
         if type_name not in self.__type_file:
             self.__type_file[type_name] = set()
 
+
         # if file_name is in there, all plugin files should be in there => return
         if file_name in self.__type_file[type_name]:
             return
+
+        agent_name = self.get_object_agent(instance)
+
+        if agent_name not in self.__agent_to_module_info:
+            self.__agent_to_module_info[agent_name] = set()
+
+
 
         # get the module
         module_name = get_inmanta_module_name(instance.__module__)
@@ -119,13 +129,15 @@ class CodeManager:
         all_plugin_files: list[SourceInfo] = self._get_source_info_for_module(module_name)
 
         self.__type_file[type_name].update(source_info.path for source_info in all_plugin_files)
+        self.__agent_to_module_info[agent_name].update(source_info.path for source_info in all_plugin_files)
 
     def _get_source_info_for_module(self, module_name: str) -> list["SourceInfo"]:
         if module_name in self.__module_to_source_info:
             return self.__module_to_source_info[module_name]
 
         sources = [
-            SourceInfo(path=path, module_name=module_name) for path, module_name in module.Project.get().modules[module_name].get_plugin_files()
+            SourceInfo(path=path, module_name=module_name)
+            for path, module_name in module.Project.get().modules[module_name].get_plugin_files()
         ]
 
         self.__module_to_source_info[module_name] = sources
@@ -143,10 +155,26 @@ class CodeManager:
         except TypeError:
             return None
 
+
+    def get_object_agent(self, instance: object) -> Optional[str]:
+        """Get the agent associated with the object"""
+        try:
+            return instance.agent
+        except AttributeError:
+            pass
+        try:
+            return instance['agent']
+        except KeyError:
+            pass
+        try:
+            return instance['_agent']
+        except KeyError:
+            pass
+        raise Exception(f"No agent is defined for object {instance}.")
+
     def get_file_hashes(self) -> Iterable[str]:
         """Return the hashes of all source files"""
         return (info.hash for info in self.__file_info.values())
-
 
     def get_module_source_info(self) -> dict[str, list["SourceInfo"]]:
         """Return all module source info"""
@@ -639,6 +667,7 @@ class PythonModule:
 
 class SourceInfo(BaseModel):
     """This class is used to store information related to source code information"""
+
     path: str
     module_name: str
 
@@ -649,8 +678,6 @@ class SourceInfo(BaseModel):
         sha1sum = hashlib.new("sha1")
         sha1sum.update(self.content)
         return sha1sum.hexdigest()
-
-
 
     @cached_property
     def content(self) -> bytes:

@@ -642,6 +642,30 @@ async def test_batched_code_upload(
 
     code_manager = loader.CodeManager()
 
+    for name, source_info in code_manager.get_types():
+        assert len(source_info) >= 2
+        for info in source_info:
+            # fetch the code from the server
+            response = await agent_multi._client.get_file(info.hash)
+            assert response.code == 200
+            source_code = base64.b64decode(response.result["content"])
+            assert info.content == source_code
+
+
+async def test_batched_code_upload(
+    server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
+):
+    """Test uploading all code definitions at once"""
+    snippetcompiler.setup_for_snippet(
+        """
+    import std::testing
+    f = std::testing::NullResource(name="test")
+    """
+    )
+    version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
+
+    code_manager = loader.CodeManager()
+
     for type_name, resource_definition in resources.resource.get_resources():
         code_manager.register_code(type_name, resource_definition)
 
@@ -660,7 +684,6 @@ async def test_batched_code_upload(
             assert response.code == 200
             source_code = base64.b64decode(response.result["content"])
             assert info.content == source_code
-
 
 @pytest.mark.parametrize("auto_start_agent", [True])
 async def test_resource_action_log(server, client, environment, clienthelper, snippetcompiler):

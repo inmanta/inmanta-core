@@ -49,8 +49,8 @@ async def test_resource_sets_via_put_version(server, client, environment, client
     )
     assert result.code == 400
     assert (
-        'Invalid request: The following resource ids provided in the resource_sets '
-        'parameter are not present in the resources list: test::Resource[agent1,key=key1]'
+        "Invalid request: The following resource ids provided in the resource_sets "
+        "parameter are not present in the resources list: test::Resource[agent1,key=key1]"
     ) in result.result["message"]
 
     resources = [

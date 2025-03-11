@@ -97,9 +97,7 @@ class Task(abc.ABC):
             )
 
         code, invalid_resources = await task_manager.code_manager.get_code(
-            environment=task_manager.environment,
-            model_version=version,
-            agent_name=agent_name
+            environment=task_manager.environment, model_version=version, agent_name=agent_name
         )
 
         # Bail out if this failed
@@ -174,7 +172,6 @@ class Deploy(Task):
                     #   - we may want to track modules per agent, instead of types
                     #   - we may also want to track the module version vs the model version
                     #       as it avoid the problem of fast chanfing model versions
-
 
                     # my_executor: executor.Executor = await self.get_executor(
                     #     task_manager=task_manager,

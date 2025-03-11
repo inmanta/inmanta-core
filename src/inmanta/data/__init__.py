@@ -2707,7 +2707,6 @@ class Environment(BaseDocument):
             # The delete cascade/clear logic of an Environment
             # The delete cascade logic of a ConfigurationModel
 
-
     async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
         """
         Reserves the next available version and returns it. Increments the last_version counter.

@@ -816,6 +816,8 @@ class OrchestrationService(protocol.ServerSlice):
             all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
             all_agents.add(const.AGENT_SCHEDULER_ID)
 
+            LOGGER.debug(module_version_info)
+
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
@@ -893,7 +895,7 @@ class OrchestrationService(protocol.ServerSlice):
         compiler_version: Optional[str] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
-        module_version_info: Optional[dict[str, str]] = None
+        module_version_info: Optional[dict[str, str]] = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
@@ -933,7 +935,7 @@ class OrchestrationService(protocol.ServerSlice):
                     resource_sets,
                     pip_config=pip_config,
                     connection=con,
-                    module_version_info={},
+                    module_version_info=module_version_info,
                 )
             # This must be outside all transactions, as it relies on the result of _put_version
             # and it starts a background task, so it can't re-use this connection
@@ -1065,6 +1067,7 @@ class OrchestrationService(protocol.ServerSlice):
                     removed_resource_sets=removed_resource_sets,
                     pip_config=pip_config,
                     connection=con,
+                    module_version_info={},
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)

@@ -125,7 +125,7 @@ async def make_source_structure(
                                              'inmanta-core>=8.7.0.dev']}]}}
 
     """
-    with (tempfile.TemporaryDirectory() as tmpdirname):
+    with tempfile.TemporaryDirectory() as tmpdirname:
         if byte_code:
             py_file = os.path.join(tmpdirname, "test.py")
             pyc_file = os.path.join(tmpdirname, "test.pyc")
@@ -143,16 +143,16 @@ async def make_source_structure(
         sha1sum.update(data)
         hv: str = sha1sum.hexdigest()
         into[module] = {
-            'name': module,
-            "version": hv, # only one file: module hash == file hash
+            "name": module,
+            "version": hv,  # only one file: module hash == file hash
             "files_in_module": [
                 {
-                    'path': file_name,
-                    'module_name': module,
-                    'hash': hv,
-                    'requires': dependencies,
+                    "path": file_name,
+                    "module_name": module,
+                    "hash": hv,
+                    "requires": dependencies,
                 }
-            ]
+            ],
         }
         await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
         return hv
@@ -187,9 +187,6 @@ def test():
         client=client,
     )
 
-
-
-
     res = await client.upload_modules(tid=environment, modules_data=modules_data)
     assert res.code == 200
 
@@ -204,8 +201,6 @@ def test():
         module_version_info=module_version_info,
     )
     assert res.code == 200
-
-
 
     #
     # res = conn.stat_files(list(code_manager.get_file_hashes()))
@@ -257,7 +252,6 @@ def test():
     # if res is None or res.code != 200:
     #     raise Exception("Unable to upload plugin code to the server (msg: %s)" % res.result)
 
-
     # Example of what a source_map may look like:
     # Type Name: mymodule::Mytype"
     # Source Files:
@@ -279,9 +273,6 @@ def test():
     # res = conn.upload_code_batched(tid=tid, id=version, resources=source_map)
     # if res is None or res.code != 200:
     #     raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
-
-
-
 
     # res = await client.upload_code_batched(tid=environment, id=version, resources={"test::Test": sources})
 
@@ -446,10 +437,10 @@ raise Exception("Fail code loading")
             }
         ],
         compiler_version=get_compiler_version(),
+        module_version_info={
+            "inmanta_plugins.test": "2bf2115acde296712916b76cab9b6b96791ba295",
+        },
     )
-    assert res.code == 200
-
-    res = await client.upload_code_batched(tid=environment, id=version, resources={"test::Test": sources})
     assert res.code == 200
 
     res = await client.release_version(tid=environment, id=version)

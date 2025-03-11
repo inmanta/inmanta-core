@@ -110,7 +110,7 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv):
     assert source_info.requires == ["inmanta-module-std", "lorem"]
     project._metadata.agent_install_dependency_modules = False
     # reset cache
-    source_info._requires = None
+    source_info.requires = None
     # when disabled only install non-module dependencies
     assert source_info.requires == ["lorem"]
 

@@ -268,6 +268,7 @@ class ExecutorId:
     def identity(self) -> str:
         return self.agent_name + self.agent_uri + self.blueprint.blueprint_hash()
 
+
 @dataclass(frozen=True)
 class ModuleInstallSpec:
     """
@@ -284,6 +285,7 @@ class ModuleInstallSpec:
     module_version: str
     model_version: int
     blueprint: ExecutorBlueprint
+
 
 @dataclass(frozen=True)
 class ResourceInstallSpec:

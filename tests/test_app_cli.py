@@ -481,10 +481,7 @@ async def test_export_invalid_argument_combination() -> None:
     assert missing_partial_flag in stderr.decode("utf-8")
 
 
-@pytest.mark.parametrize("set_keep_logger_names_option", [
-    True,
-    False
-])
+@pytest.mark.parametrize("set_keep_logger_names_option", [True, False])
 async def test_logger_name_in_compiler_exporter_output(
     server,
     environment: str,

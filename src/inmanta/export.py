@@ -24,7 +24,7 @@ import itertools
 import logging
 import time
 import uuid
-from collections.abc import Sequence, Mapping
+from collections.abc import Sequence
 from typing import Any, Callable, Optional, Union
 
 import pydantic
@@ -106,19 +106,19 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, code_manager: loader.
             module_version = module_version_hash.hexdigest()
             modules_data[module_name] = dataclasses.asdict(
                 PythonModule(
-                    name = module_name,
-                    version = module_version,
-                    files_in_module = files_in_module,
+                    name=module_name,
+                    version=module_version,
+                    files_in_module=files_in_module,
                 )
             )
         return modules_data
+
     modules_data = get_modules_data()
-    LOGGER.debug(f'{tid=}')
-    LOGGER.debug(f'{modules_data=}')
+    LOGGER.debug(f"{tid=}")
+    LOGGER.debug(f"{modules_data=}")
     res = conn.upload_modules(tid=tid, modules_data=modules_data)
     if res is None or res.code != 200:
-        raise Exception("Unable to upload plugin code to the server (msg: %s)" % res.result)
-
+        raise Exception(f"Unable to upload plugin code to the server (msg: %s)\n{modules_data=}" % res.result)
 
     # Example of what a source_map may look like:
     # Type Name: mymodule::Mytype"
@@ -532,7 +532,11 @@ class Exporter:
 
         return resources
 
-    def deploy_code(self, conn: protocol.SyncClient, tid: uuid.UUID, ) -> None:
+    def deploy_code(
+        self,
+        conn: protocol.SyncClient,
+        tid: uuid.UUID,
+    ) -> None:
         """Deploy code to the server"""
 
         code_manager = loader.CodeManager()
