@@ -853,6 +853,8 @@ class OrchestrationService(protocol.ServerSlice):
                 assert rid_to_resource
                 assert type_to_agent
 
+                # TODO insert all values this only inserts the first value
+                # TODO add test for multiple value insert
                 resource_type = next(type for type in type_to_module_data.keys())
                 agent_name = type_to_agent[resource_type]
 
