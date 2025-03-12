@@ -489,7 +489,7 @@ src/inmanta/data/dataview.py:0: error: Argument 1 to "loads" has incompatible ty
 src/inmanta/data/dataview.py:0: error: Argument 1 to "loads" has incompatible type "object"; expected "str | bytes | bytearray"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument 1 to "loads" has incompatible type "object"; expected "str | bytes | bytearray"  [arg-type]
 src/inmanta/data/dataview.py:0: error: Argument 1 to "loads" has incompatible type "object"; expected "str | bytes | bytearray"  [arg-type]
-src/inmanta/data/dataview.py:0: error: List comprehension has incompatible type List[dict[str, Any]]; expected List[DiscoveredResource]  [misc]
+src/inmanta/data/dataview.py:0: error: Return type "Sequence[dict[str, str]]" of "construct_dtos" incompatible with return type "Sequence[DiscoveredResource]" in supertype "DataView"  [override]
 src/inmanta/data/dataview.py:0: error: Returning Any from function declared to return "dict[str, Any]"  [no-any-return]
 src/inmanta/data/dataview.py:0: error: Unsupported left operand type for + ("object")  [operator]
 src/inmanta/data/dataview.py:0: error: Unsupported left operand type for + ("object")  [operator]
