@@ -136,7 +136,6 @@ server_bind_port = Option(
     is_int,
 )
 
-
 server_tz_aware_timestamps = Option(
     "server",
     "tz_aware_timestamps",
