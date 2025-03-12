@@ -1,0 +1,6 @@
+import std::testing
+
+one_value = std::create_environment_reference("test")
+concat_value = concat(one_value, "b")
+std::testing::NullResource(name="test", value=concat_value)
+
