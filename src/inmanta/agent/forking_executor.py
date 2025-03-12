@@ -107,7 +107,7 @@ from inmanta.protocol.ipc_light import (
     LogShipper,
     ReturnType,
 )
-from inmanta.types import ResourceIdStr, ResourceType
+from inmanta.types import ResourceIdStr
 from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(LOGGER_NAME_EXECUTOR)
@@ -1068,7 +1068,6 @@ class MPManager(
 
         # Use pool manager
         my_executor = await self.get(executor_id)
-
 
         # FIXME: recovery. If loading failed, we currently never rebuild https://github.com/inmanta/inmanta-core/issues/7695
         return my_executor

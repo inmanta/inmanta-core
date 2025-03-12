@@ -833,14 +833,20 @@ class OrchestrationService(protocol.ServerSlice):
                 connection: Connection,
             ) -> None:
                 if not all([module_version_info, type_to_module_data, rid_to_resource, type_to_agent]):
-                    raise Exception(
+                    LOGGER.debug(
                         "Cannot populate join table modules_for_agent. The following arguments are not set: %s"
-                        % str(arg_name for arg_name, arg in zip(
-                            ["module_version_info", "type_to_module_data", "rid_to_resource", "type_to_agent"],
-                            [module_version_info, type_to_module_data, rid_to_resource, type_to_agent]
+                        % ", ".join(
+                            [
+                                arg_name
+                                for arg_name, arg in zip(
+                                    ["module_version_info", "type_to_module_data", "rid_to_resource", "type_to_agent"],
+                                    [module_version_info, type_to_module_data, rid_to_resource, type_to_agent],
+                                )
+                                if not arg
+                            ]
                         )
-                            if not arg)
                     )
+                    return
 
                 assert module_version_info
                 assert type_to_module_data

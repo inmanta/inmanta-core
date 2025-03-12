@@ -24,14 +24,7 @@ from copy import deepcopy
 
 from inmanta import const
 from inmanta.agent import executor
-from inmanta.agent.executor import (
-    DeployReport,
-    DryrunReport,
-    FailedModules,
-    GetFactReport,
-    ModuleInstallSpec,
-    ResourceDetails,
-)
+from inmanta.agent.executor import DeployReport, DryrunReport, FailedModules, GetFactReport, ModuleInstallSpec, ResourceDetails
 from inmanta.types import ResourceIdStr
 
 

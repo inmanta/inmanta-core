@@ -148,7 +148,6 @@ class CodeManager:
         except TypeError:
             return None
 
-
     def get_file_hashes(self) -> Iterable[str]:
         """Return the hashes of all source files"""
         return (info.hash for info in self.__file_info.values())
