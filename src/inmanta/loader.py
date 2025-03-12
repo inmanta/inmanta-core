@@ -148,21 +148,6 @@ class CodeManager:
         except TypeError:
             return None
 
-    def get_object_agent(self, instance: object) -> Optional[str]:
-        """Get the agent associated with the object"""
-        try:
-            return instance.agent
-        except AttributeError:
-            pass
-        try:
-            return instance["agent"]
-        except KeyError:
-            pass
-        try:
-            return instance["_agent"]
-        except KeyError:
-            pass
-        raise Exception(f"No agent is defined for object {instance}.")
 
     def get_file_hashes(self) -> Iterable[str]:
         """Return the hashes of all source files"""

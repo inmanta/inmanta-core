@@ -578,10 +578,10 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
         return out
 
-    async def ensure_code(self, code: typing.Collection[executor.ModuleInstallSpec]) -> executor.FailedResources:
+    async def ensure_code(self, code: typing.Collection[executor.ModuleInstallSpec]) -> dict[str, Exception]:
         """Ensure that the code for the given environment and version is loaded"""
 
-        failed_to_load: executor.FailedResources = {}
+        failed_to_load: dict[str, Exception] = {}
 
         if self._loader is None:
             return failed_to_load
