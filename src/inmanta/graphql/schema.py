@@ -77,6 +77,10 @@ class Environment:
 
 
 def get_schema(metadata: GraphQLMetadata) -> strawberry.Schema:
+    """
+    Fetches strawberry.Schema instance.
+    Initializes schema and metadata if they are None
+    """
     global METADATA
     global SCHEMA
     if SCHEMA is None:
