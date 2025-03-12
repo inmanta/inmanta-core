@@ -202,11 +202,7 @@ class ModelState:
     dirty: set["ResourceIdStr"] = dataclasses.field(default_factory=set)
     # group resources by agent to allow efficient triggering of a deploy for a single agent
     resources_by_agent: dict[str, set["ResourceIdStr"]] = dataclasses.field(default_factory=lambda: defaultdict(set))
-    # types per agent keeps track of which resource types live on which agent by doing a reference count
-    # the dict is agent_name -> resource_type -> resource_count
-    types_per_agent: dict[str, dict["ResourceType", int]] = dataclasses.field(
-        default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
-    )
+
 
     @classmethod
     async def create_from_db(
@@ -303,8 +299,7 @@ class ModelState:
             )
             result.intent[resource_id] = resource_intent
 
-            # Populate types_per_agent
-            result.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type] += 1
+            # Populate resources_by_agent
             result.resources_by_agent[resource_intent.id.agent_name].add(resource_id)
 
             # Populate requires
@@ -390,7 +385,6 @@ class ModelState:
             )
             if resource not in self.requires:
                 self.requires[resource] = set()
-            self.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type] += 1
             self.resources_by_agent[resource_intent.id.agent_name].add(resource)
         else:
             # we already know the resource => update relevant fields
@@ -441,9 +435,6 @@ class ModelState:
         with contextlib.suppress(KeyError):
             del self.requires.reverse_mapping()[resource]
 
-        self.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type] -= 1
-        if self.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type] == 0:
-            del self.types_per_agent[resource_intent.id.agent_name][resource_intent.id.entity_type]
         self.resources_by_agent[resource_intent.id.agent_name].discard(resource)
         if not self.resources_by_agent[resource_intent.id.agent_name]:
             del self.resources_by_agent[resource_intent.id.agent_name]

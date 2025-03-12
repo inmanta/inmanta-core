@@ -64,11 +64,11 @@ class WriteBarierExecutor(executor.Executor):
         await self.delegate.join()
 
     @property
-    def failed_resources(self) -> FailedModules:
+    def failed_modules(self) -> FailedModules:
         return self.delegate.failed_modules
 
-    @failed_resources.setter
-    def failed_resources(self, value: FailedModules) -> None:
+    @failed_modules.setter
+    def failed_modules(self, value: FailedModules) -> None:
         self.delegate.failed_modules = value
 
 

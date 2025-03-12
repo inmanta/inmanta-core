@@ -565,7 +565,7 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
-    failed_modules: FailedModules
+    failed_modules: FailedModules  # TODO still useful ?
 
     @abc.abstractmethod
     async def execute(

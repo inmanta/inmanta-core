@@ -70,11 +70,7 @@ class ResourceVersionIntent:
 
     model_version: int
     intent: ResourceIntent
-    # All types that live on this agent. Required to ensure that the executor loads the appropriate code for this version,
-    # even if new versions come in before the executor is constructed.
-    # Should be dropped once this functionality moves to the code manager.
-    # At that point, the state's types_per_agent can be dropped as well.
-    all_types_for_agent: Collection[ResourceType]
+
 
 
 @dataclass(frozen=True)
@@ -1140,7 +1136,6 @@ class ResourceScheduler(TaskManager):
             return ResourceVersionIntent(
                 model_version=self._state.version,
                 intent=resource_intent,
-                all_types_for_agent=list(self._state.types_per_agent[self._state.intent[resource].id.agent_name]),
             )
 
     async def deploy_start(self, action_id: uuid.UUID, resource: ResourceIdStr) -> Optional[DeployIntent]:
@@ -1157,7 +1152,6 @@ class ResourceScheduler(TaskManager):
                 intent=resource_intent,
                 dependencies=dependencies,
                 deploy_start=datetime.datetime.now().astimezone(),
-                all_types_for_agent=list(self._state.types_per_agent[self._state.intent[resource].id.agent_name]),
             )
             # Update the state in the database.
             await self.state_update_manager.send_in_progress(

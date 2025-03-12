@@ -139,8 +139,8 @@ def make_resource_minimal(environment):
     return make_resource_minimal
 
 
-def get_types_for_agent(scheduler: ResourceScheduler, agent: str) -> Collection[ResourceType]:
-    return list(scheduler._state.types_per_agent[agent])
+def get_resources_for_agent(scheduler: ResourceScheduler, agent: str) -> Collection[ResourceIdStr]:
+    return list(scheduler._state.resources_by_agent[agent])
 
 
 async def test_basic_deploy(agent: TestAgent, make_resource_minimal):
@@ -1545,7 +1545,7 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
         [ModelVersion(version=5, resources=resources, requires=make_requires(resources), undefined=set())]
     )
 
-    assert len(get_types_for_agent(agent.scheduler, "agent1")) == 2
+    assert len(get_resources_for_agent(agent.scheduler, "agent1")) == 2
 
     resources = {
         ResourceIdStr(rid1): make_resource_minimal(rid1, {"value": "a"}, []),
@@ -1555,7 +1555,7 @@ async def test_removal(agent: TestAgent, make_resource_minimal):
         [ModelVersion(version=6, resources=resources, requires=make_requires(resources), undefined=set())]
     )
 
-    assert len(get_types_for_agent(agent.scheduler, "agent1")) == 1
+    assert len(get_resources_for_agent(agent.scheduler, "agent1")) == 1
     assert len(agent.scheduler._state.intent) == 1
 
 
@@ -1670,7 +1670,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.intent) == 7
-    assert len(get_types_for_agent(agent.scheduler, "agent1")) == 1
+    assert len(get_resources_for_agent(agent.scheduler, "agent1")) == 7
 
     # rid1: transitively blocked on rid4
     # rid2: deployed
@@ -1899,7 +1899,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.intent) == 2
-    assert len(get_types_for_agent(agent.scheduler, "agent1")) == 1
+    assert len(get_resources_for_agent(agent.scheduler, "agent1")) == 2
 
     assert_resource_state(
         rid8,
@@ -1931,7 +1931,7 @@ async def test_unknowns(agent: TestAgent, make_resource_minimal) -> None:
     )
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
     assert len(agent.scheduler._state.intent) == 2
-    assert len(get_types_for_agent(agent.scheduler, "agent1")) == 1
+    assert len(get_resources_for_agent(agent.scheduler, "agent1")) == 2
 
     assert_resource_state(
         rid8,

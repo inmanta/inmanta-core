@@ -76,25 +76,17 @@ class Task(abc.ABC):
         self,
         *,
         task_manager: "scheduler.TaskManager",
-        agent_spec: tuple[str, Collection[ResourceType]],
-        resource_type: ResourceType,
+        agent_name: str,
         version: int,
     ) -> executor.Executor:
         """
         Helper method to produce the executor
 
         :param task_manager: A reference to the task manager instance.
-        :param agent_spec: agent name and all resource types that live on it.
-        :param resource_type: The resource type that we specifically care about for this resource action.
-            Should also be in the agent's resource types.
+        :param agent_name: agent name.
         :param version: The version of the code to load on the executor.
         """
-        agent_name, all_types_for_agent = agent_spec
 
-        if not all_types_for_agent:
-            raise ValueError(
-                f"{self.__class__.__name__}.get_executor() expects at least one resource type in the agent spec parameter"
-            )
 
         code = await task_manager.code_manager.get_code(
             environment=task_manager.environment, model_version=version, agent_name=agent_name
@@ -104,11 +96,7 @@ class Task(abc.ABC):
         my_executor: executor.Executor = await task_manager.executor_manager.get_executor(
             agent_name=agent_name, agent_uri="NO_URI", code=code
         )
-        failed_resources = my_executor.failed_modules
 
-        # Bail out if this failed
-        if resource_type in failed_resources:
-            raise failed_resources[resource_type]
 
         return my_executor
 
@@ -164,21 +152,9 @@ class Deploy(Task):
 
                 # Get executor
                 try:
-                    # FIXME: code loading interface is not nice like this,
-                    #   - we may want to track modules per agent, instead of types
-                    #   - we may also want to track the module version vs the model version
-                    #       as it avoid the problem of fast chanfing model versions
-
-                    # my_executor: executor.Executor = await self.get_executor(
-                    #     task_manager=task_manager,
-                    #     agent_name=agent,
-                    #     model_version=version,
-                    # )
-                    LOGGER.debug("GETTING EXECT")
                     my_executor: executor.Executor = await self.get_executor(
                         task_manager=task_manager,
-                        agent_spec=(agent, deploy_intent.all_types_for_agent),
-                        resource_type=executor_resource_details.id.entity_type,
+                        agent_name = agent,
                         version=version,
                     )
                 except Exception as e:
@@ -250,8 +226,7 @@ class DryRun(Task):
         try:
             my_executor: executor.Executor = await self.get_executor(
                 task_manager=task_manager,
-                agent_spec=(agent, [executor_resource_details.id.entity_type]),
-                resource_type=executor_resource_details.id.entity_type,
+                agent_name = agent,
                 version=self.version,
             )
         except Exception:
@@ -308,8 +283,7 @@ class RefreshFact(Task):
         try:
             my_executor = await self.get_executor(
                 task_manager=task_manager,
-                agent_spec=(agent, version_intent.all_types_for_agent),
-                resource_type=self.id.entity_type,
+                agent_name=agent,
                 version=version,
             )
         except Exception:
