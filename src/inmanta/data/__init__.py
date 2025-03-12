@@ -81,7 +81,7 @@ ENGINE: AsyncEngine | None = None
 
 """
 Object that creates async sessions.
-Used mainly by GraphQL via these APIs:
+Used mainly by our GraphQL implementation via these APIs:
 - get_session_factory()
 - get_session()
 """
