@@ -1372,7 +1372,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         )
         return query_builder
 
-    def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.DiscoveredResource]:
         return [
             model.DiscoveredResource(
                 discovered_resource_id=res["discovered_resource_id"],
