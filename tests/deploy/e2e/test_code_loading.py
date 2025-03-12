@@ -35,7 +35,6 @@ from inmanta import config
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
-from inmanta.agent.executor import ResourceInstallSpec, ModuleInstallSpec
 from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.data import PipConfig
 from inmanta.env import process_env
@@ -353,8 +352,21 @@ async def test_agent_code_loading_with_failure(
     #
     # res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test3": sources})
     #
+    modules_data = {}
+    type_to_module_data = {
+        "test::Test": "inmanta_plugins.test",
+        "test::Test2": "inmanta_plugins.test",
+    }
+    module_version = await make_source_structure(
+        modules_data,
+        "inmanta_plugins/test/__init__.py",
+        "inmanta_plugins.test",
+        "",
+        client=client,
+    )
 
-    res = await client.upload_modules(tid=environment, modules_data={})
+    res = await client.upload_modules(tid=environment, modules_data=modules_data)
+
     assert res.code == 200
 
     async def get_version() -> int:
@@ -362,9 +374,28 @@ async def test_agent_code_loading_with_failure(
         res = await client.put_version(
             tid=environment,
             version=version,
-            resources=[],
-            pip_config=PipConfig(),
+            resources=[
+                {
+                    "id": "test::Test[agent1,name=test],v=%d" % version,
+                    "purged": False,
+                    "requires": [],
+                    "version": version,
+                    "name": "test",
+                },
+                {
+                    "id": "test::Test2[agent1,name=test],v=%d" % version,
+                    "purged": False,
+                    "requires": [],
+                    "version": version,
+                    "name": "test",
+                },
+            ],
+            module_version_info={
+                "inmanta_plugins.test": module_version,
+            },
+            type_to_module_data=type_to_module_data,
             compiler_version=get_compiler_version(),
+            pip_config=PipConfig(),
         )
         assert res.code == 200
         return version
@@ -373,25 +404,16 @@ async def test_agent_code_loading_with_failure(
 
     config.Config.set("agent", "executor-mode", "threaded")
 
-    resource_install_specs_1: list[ModuleInstallSpec]
-    resource_install_specs_2: list[ModuleInstallSpec]
-
     codemanager = CodeManager(agent._client)
 
     # We want to test
     nonexistent_version = -1
     with pytest.raises(CouldNotResolveCode):
-        resource_install_specs_1 = await codemanager.get_code(
+        _ = await codemanager.get_code(
             environment=environment, model_version=nonexistent_version, agent_name="dummy_agent_name"
         )
 
-    await agent.executor_manager.ensure_code(
-        code=resource_install_specs_1,
-    )
-
-    resource_install_specs_2, _ = await codemanager.get_code(
-        environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"]
-    )
+    module_install_specs_2 = await codemanager.get_code(environment=environment, model_version=version_1, agent_name="agent1")
 
     async def _install(blueprint: executor.ExecutorBlueprint) -> None:
         raise Exception("MKPTCH: Unable to load code when agent is started with code loading disabled.")
@@ -399,9 +421,9 @@ async def test_agent_code_loading_with_failure(
     monkeypatch.setattr(agent.executor_manager, "_install", _install)
 
     failed_to_load = await agent.executor_manager.ensure_code(
-        code=resource_install_specs_2,
+        code=module_install_specs_2,
     )
-    assert len(failed_to_load) == 2
+    assert len(failed_to_load) == 1
     for handler, exception in failed_to_load.items():
         assert str(exception) == (
             f"Failed to install handler {handler} version=1: "
@@ -410,16 +432,7 @@ async def test_agent_code_loading_with_failure(
 
     monkeypatch.undo()
 
-    idx1 = log_index(
-        caplog,
-        "inmanta.agent.code_manager",
-        logging.ERROR,
-        "Failed to get source code for test::Test2 version=-1",
-    )
-
-    log_index(caplog, "test_code_loading", logging.ERROR, "Failed to install handler test::Test version=1", idx1)
-
-    log_index(caplog, "test_code_loading", logging.ERROR, "Failed to install handler test::Test2 version=1", idx1)
+    log_index(caplog, "test_code_loading", logging.ERROR, "Failed to install handler inmanta_plugins.test version=1")
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])

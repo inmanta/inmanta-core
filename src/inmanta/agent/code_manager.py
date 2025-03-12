@@ -16,21 +16,17 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import asyncio
 import logging
 import sys
 import uuid
 from typing import Collection
 
 import inmanta.data.sqlalchemy as models
-from inmanta import protocol
 from inmanta.agent import executor
-from inmanta.agent.executor import ModuleInstallSpec, ResourceInstallSpec
+from inmanta.agent.executor import ModuleInstallSpec
 from inmanta.data import get_session
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
-from inmanta.loader import ModuleSource
-from inmanta.protocol import Client, SyncClient
-from inmanta.types import ResourceType
+from inmanta.protocol import Client
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
 
@@ -64,7 +60,6 @@ class CodeManager:
         if pip_config is None:
             return LEGACY_PIP_DEFAULT
         return PipConfig(**pip_config)
-
 
     @async_lru_cache(maxsize=1024)
     async def get_code(self, environment: uuid.UUID, model_version: int, agent_name: str) -> Collection[ModuleInstallSpec]:
@@ -130,4 +125,3 @@ class CodeManager:
         if not module_install_specs:
             raise CouldNotResolveCode(agent_name, model_version)
         return module_install_specs
-
