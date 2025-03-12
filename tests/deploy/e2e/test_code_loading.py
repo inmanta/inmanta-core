@@ -34,8 +34,8 @@ import pytest
 from inmanta import config
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import ResourceInstallSpec
+from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
+from inmanta.agent.executor import ResourceInstallSpec, ModuleInstallSpec
 from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.data import PipConfig
 from inmanta.env import process_env
@@ -335,6 +335,10 @@ async def test_agent_code_loading_with_failure(
     """
     Test goal: make sure that failed resources are correctly returned by `get_code` and `ensure_code` methods.
     The failed resources should have the right exception contained in the returned object.
+
+    TODO: update docstrings of all updated tests
+    TODO: remove old transport mechanism parts
+
     """
 
     caplog.set_level(DEBUG)
@@ -369,26 +373,17 @@ async def test_agent_code_loading_with_failure(
 
     config.Config.set("agent", "executor-mode", "threaded")
 
-    resource_install_specs_1: list[ResourceInstallSpec]
-    resource_install_specs_2: list[ResourceInstallSpec]
+    resource_install_specs_1: list[ModuleInstallSpec]
+    resource_install_specs_2: list[ModuleInstallSpec]
 
     codemanager = CodeManager(agent._client)
 
     # We want to test
     nonexistent_version = -1
-    resource_install_specs_1, invalid_resources_1 = await codemanager.get_code(
-        environment=environment, model_version=nonexistent_version, agent_name="dummy"
-    )
-    assert len(invalid_resources_1.keys()) == 3
-    for resource_type, exception in invalid_resources_1.items():
-        assert (
-            "Failed to get source code for " + resource_type + " version=-1, result={'message': 'Request or "
-            "referenced resource does not exist: The version of the code does not exist. "
-            + resource_type
-            + ", "
-            + str(nonexistent_version)
-            + "'}"
-        ) == str(exception)
+    with pytest.raises(CouldNotResolveCode):
+        resource_install_specs_1 = await codemanager.get_code(
+            environment=environment, model_version=nonexistent_version, agent_name="dummy_agent_name"
+        )
 
     await agent.executor_manager.ensure_code(
         code=resource_install_specs_1,
