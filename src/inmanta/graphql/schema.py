@@ -12,11 +12,13 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import dataclasses
 import typing
 
 import inmanta.data.sqlalchemy as models
 import strawberry
 from inmanta.data import get_session, get_session_factory
+from inmanta.server.services.compilerservice import CompilerService
 from sqlalchemy import Select, asc, desc, select
 from strawberry import relay
 from strawberry.schema.config import StrawberryConfig
@@ -24,13 +26,32 @@ from strawberry.types import Info
 from strawberry.types.info import ContextType
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
 
+
+@dataclasses.dataclass
+class GraphQLMetadata:
+    compiler_service: CompilerService
+
+
 mapper: StrawberrySQLAlchemyMapper[typing.Any] = StrawberrySQLAlchemyMapper()
 SCHEMA: strawberry.Schema | None = None
+METADATA: GraphQLMetadata | None = None
 
 
 def get_expert_mode(root: "Environment") -> bool:
-    assert hasattr(root, "settings")
+    """
+    Checks settings of environment to figure out if expert mode is enabled or not
+    """
+    assert hasattr(root, "settings")  # Make mypy happy
     return bool(root.settings.get("enable_lsm_expert_mode", False))
+
+
+def get_is_compiling(root: "Environment") -> bool:
+    """
+    Checks compiler service to figure out if environment is compiling or not
+    """
+    assert METADATA is not None, "Schema was not properly initialized"
+    assert hasattr(root, "id")  # Make mypy happy
+    return METADATA.compiler_service.is_environment_compiling(environment_id=root.id)
 
 
 @mapper.type(models.Environment)
@@ -52,12 +73,16 @@ class Environment:
         "agent",
     ]
     is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
+    is_compiling: bool = strawberry.field(resolver=get_is_compiling)
 
 
-def get_schema() -> strawberry.Schema:
+def get_schema(metadata: GraphQLMetadata) -> strawberry.Schema:
+    global METADATA
     global SCHEMA
     if SCHEMA is None:
         SCHEMA = initialize_schema()
+        METADATA = metadata
+    assert SCHEMA
     return SCHEMA
 
 

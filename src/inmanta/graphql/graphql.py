@@ -14,17 +14,29 @@ Contact: code@inmanta.com
 
 from typing import Any
 
-import inmanta.graphql.schema
+from inmanta.graphql.schema import GraphQLMetadata, get_schema
 from inmanta.protocol import methods_v2
 from inmanta.protocol.decorators import handle
-from inmanta.server import SLICE_GRAPHQL, protocol
+from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL, protocol
+from inmanta.server.protocol import Server
+from inmanta.server.services.compilerservice import CompilerService
 
 
 class GraphQLSlice(protocol.ServerSlice):
+    metadata: GraphQLMetadata
 
     def __init__(self) -> None:
         super().__init__(name=SLICE_GRAPHQL)
 
+    def get_dependencies(self) -> list[str]:
+        return [SLICE_COMPILER]
+
+    async def prestart(self, server: Server) -> None:
+        compiler_service = server.get_slice(SLICE_COMPILER)
+        assert isinstance(compiler_service, CompilerService)
+        self.metadata = GraphQLMetadata(compiler_service=compiler_service)
+        await super().prestart(server)
+
     @handle(methods_v2.graphql)
     async def graphql(self, query: str) -> Any:  # Actual return type: strawberry.types.execution.ExecutionResult
-        return await inmanta.graphql.schema.get_schema().execute(query)
+        return await get_schema(self.metadata).execute(query)

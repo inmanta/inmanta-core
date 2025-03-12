@@ -18,6 +18,7 @@ import pytest
 
 import inmanta.data.sqlalchemy as models
 from inmanta.data import get_session
+from inmanta.util import get_compiler_version, retry_limited
 
 
 @pytest.fixture
@@ -121,6 +122,7 @@ async def test_query_environments_with_filtering(server, client, setup_database)
               id
               halted
               isExpertMode
+              isCompiling
             }
         }
     }
@@ -256,3 +258,89 @@ async def test_query_environments_with_paging(server, client, setup_database):
     assert environments["pageInfo"]["endCursor"] == new_last_cursor
     assert environments["pageInfo"]["hasNextPage"] is True
     assert environments["pageInfo"]["hasPreviousPage"] is True
+
+
+async def test_is_environment_compiling(server, client, clienthelper, environment):
+    query = """
+    {
+        environments {
+            edges {
+                node {
+                  id
+                  isCompiling
+                }
+            }
+        }
+    }
+        """
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    assert result.result["data"] == {
+        "data": {
+            "environments": {
+                "edges": [
+                    {
+                        "node": {
+                            "id": str(environment),
+                            "isCompiling": False,
+                        }
+                    },
+                ]
+            }
+        },
+        "errors": None,
+        "extensions": {},
+    }
+    version = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+    )
+    assert result.code == 200
+    # Trigger recompile so that we have time to catch it below
+    result = await client.notify_change_get(id=str(environment))
+    assert result.code == 200
+
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    assert result.result["data"] == {
+        "data": {
+            "environments": {
+                "edges": [
+                    {
+                        "node": {
+                            "id": str(environment),
+                            "isCompiling": True,
+                        }
+                    },
+                ]
+            }
+        },
+        "errors": None,
+        "extensions": {},
+    }
+
+    # Wait for compile to be done
+    async def compile_done():
+        return (await client.is_compiling(environment)).code == 204
+
+    await retry_limited(compile_done, 10)
+
+    # Assert that it is no longer compiling
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    assert result.result["data"] == {
+        "data": {
+            "environments": {
+                "edges": [
+                    {
+                        "node": {
+                            "id": str(environment),
+                            "isCompiling": False,
+                        }
+                    },
+                ]
+            }
+        },
+        "errors": None,
+        "extensions": {},
+    }
