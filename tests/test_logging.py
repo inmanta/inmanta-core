@@ -347,7 +347,7 @@ def test_scheduler_documentation_conformance(inmanta_config, monkeypatch):
     )
     default = LoggingConfigBuilder()
     from_config = default.get_logging_config_from_options(
-        sys.stdout, Options(log_file_level="DEBUG"), component="scheduler", context={"environment": env}
+        sys.stdout, Options(log_file_level="DEBUG"), component="scheduler", context={"environment": str(env)}
     )
 
     assert from_config._to_dict_config() == from_file_dict
