@@ -578,7 +578,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
         return out
 
-    async def ensure_code(self, code: typing.Collection[executor.ResourceInstallSpec]) -> executor.FailedResources:
+    async def ensure_code(self, code: typing.Collection[executor.ModuleInstallSpec]) -> executor.FailedResources:
         """Ensure that the code for the given environment and version is loaded"""
 
         failed_to_load: executor.FailedResources = {}
@@ -586,16 +586,16 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         if self._loader is None:
             return failed_to_load
 
-        for resource_install_spec in code:
+        for module_install_spec in code:
             # only one logical thread can load a particular resource type at any time
-            async with self._resource_loader_lock.get(resource_install_spec.resource_type):
+            async with self._resource_loader_lock.get(module_install_spec.module_name):
                 # stop if the last successful load was this one
                 # The combination of the lock and this check causes the reloads to naturally 'batch up'
-                if self._last_loaded_version[resource_install_spec.resource_type] == resource_install_spec.blueprint:
+                if self._last_loaded_version[module_install_spec.module_name] == module_install_spec.blueprint:
                     self.logger.debug(
                         "Handler code already installed for %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
+                        module_install_spec.module_name,
+                        module_install_spec.model_version,
                     )
                     continue
 
@@ -603,29 +603,29 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     # Install required python packages and the list of ``ModuleSource`` with the provided pip config
                     self.logger.debug(
                         "Installing handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
+                        module_install_spec.module_name,
+                        module_install_spec.model_version,
                     )
-                    await self._install(resource_install_spec.blueprint)
+                    await self._install(module_install_spec.blueprint)
                     self.logger.debug(
                         "Installed handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
+                        module_install_spec.module_name,
+                        module_install_spec.model_version,
                     )
 
-                    self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.blueprint
+                    self._last_loaded_version[module_install_spec.module_name] = module_install_spec.blueprint
                 except Exception as e:
                     self.logger.exception(
                         "Failed to install handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
+                        module_install_spec.module_name,
+                        module_install_spec.model_version,
                     )
-                    if resource_install_spec.resource_type not in failed_to_load:
-                        failed_to_load[resource_install_spec.resource_type] = Exception(
-                            f"Failed to install handler {resource_install_spec.resource_type} "
-                            f"version={resource_install_spec.model_version}: {e}"
+                    if module_install_spec.module_name not in failed_to_load:
+                        failed_to_load[module_install_spec.module_name] = Exception(
+                            f"Failed to install handler {module_install_spec.module_name} "
+                            f"version={module_install_spec.model_version}: {e}"
                         ).with_traceback(e.__traceback__)
-                    self._last_loaded_version[resource_install_spec.resource_type] = None
+                    self._last_loaded_version[module_install_spec.module_name] = None
 
         return failed_to_load
 

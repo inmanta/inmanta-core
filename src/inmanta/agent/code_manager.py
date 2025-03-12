@@ -127,6 +127,7 @@ class CodeManager:
             select(
                 models.ModulesForAgent.module_name,
                 models.ModulesForAgent.module_version,
+                models.ModulesForAgent.cm_version,
                 models.Module.requirements,
                 models.FilesInModule.file_content_hash,
             )
@@ -159,12 +160,12 @@ class CodeManager:
             for res in result_execute.all():
                 module_install_specs.append(
                     ModuleInstallSpec(
-                        module_name=res["module_name"],
-                        module_version=res["module_version"],
-                        model_version=res["model_version"],
+                        module_name=res.module_name,
+                        module_version=res.module_version,
+                        model_version=res.cm_version,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=await self.get_pip_config(environment, model_version),
-                            requirements=res["requirements"],
+                            requirements=res.requirements,
                             sources=[],  # TODO
                             python_version=sys.version_info[:2],
                         ),

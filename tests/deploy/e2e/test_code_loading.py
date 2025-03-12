@@ -175,10 +175,17 @@ async def test_agent_installs_dependency_containing_extras(
     code = """
 def test():
     return 10
+
+@resource("test::Resource", agent="agent1", id_attribute="key")
+class Res(Resource):
+    fields = ("agent", "key", "value")
+
     """
 
     modules_data = {}
-    type_to_module_data = {}
+    type_to_module_data = {
+        "test::Resource":"inmanta_plugins.test",
+    }
     await make_source_structure(
         modules_data,
         "inmanta_plugins/test/__init__.py",
@@ -193,10 +200,21 @@ def test():
 
     module_version_info = {module_name: data["version"] for module_name, data in modules_data.items()}
     version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "receive_events": False,
+            "purged": False,
+            "requires": [],
+        }
+    ]
     res = await client.put_version(
         tid=environment,
         version=version,
-        resources=[],
+        resources=resources,
         pip_config=PipConfig(index_url=index_with_pkgs_containing_optional_deps),
         compiler_version=get_compiler_version(),
         module_version_info=module_version_info,

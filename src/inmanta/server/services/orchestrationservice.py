@@ -818,6 +818,7 @@ class OrchestrationService(protocol.ServerSlice):
             all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
             all_agents.add(const.AGENT_SCHEDULER_ID)
 
+            type_to_agent: dict[str, str] = {res.resource_type: res.agent for res in rid_to_resource.values()}
             LOGGER.debug(module_version_info)
 
             for agent in all_agents:
@@ -828,15 +829,15 @@ class OrchestrationService(protocol.ServerSlice):
                 environment: uuid.UUID,
                 module_version_info: dict[str, str],
                 type_to_module_data: dict[ResourceIdStr, str],
-                rid_to_resource: dict[str, data.Resource],
+                type_to_agent: dict[str, str],
                 connection: Connection,
             ):
                 if not all([module_version_info, type_to_module_data, rid_to_resource]):
                     return
-                resource_id = next(id for id in rid_to_resource.keys())
-                agent_name = rid_to_resource[resource_id].agent
+                resource_type = next(type for type in type_to_module_data.keys())
+                agent_name = type_to_agent[resource_type]
 
-                module_name = type_to_module_data[resource_id]
+                module_name = type_to_module_data[resource_type]
                 module_version = module_version_info[module_name]
                 query = """
                             INSERT INTO modules_for_agent(
@@ -844,17 +845,17 @@ class OrchestrationService(protocol.ServerSlice):
                                 environment,
                                 agent_name,
                                 module_name,
-                                module_version,
+                                module_version
                             ) VALUES(
                                 $1,
                                 $2,
                                 $3,
                                 $4,
-                                $5,
-                            )
+                                $5
+                            );
                         """
-                async with connection as con:
-                    result = await con.fetchrow(
+                async with connection.transaction():
+                    result = await connection.fetchrow(
                         query,
                         cm_version,
                         environment,
@@ -862,10 +863,8 @@ class OrchestrationService(protocol.ServerSlice):
                         module_name,
                         module_version,
                     )
-                    # Make mypy happy
-                    assert result is not None
 
-            await populate_join_table(version, env.id, module_version_info, type_to_module_data, rid_to_resource, connection)
+            await populate_join_table(version, env.id, module_version_info, type_to_module_data, type_to_agent, connection)
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
             all_rvids = [i.resource_version_str() for i in all_ids]
