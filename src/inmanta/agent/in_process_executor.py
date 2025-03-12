@@ -546,7 +546,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         await asyncio.gather(*(child.join() for child in self.executors.values()))
 
     async def get_executor(
-        self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
+        self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ModuleInstallSpec]
     ) -> InProcessExecutor:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.

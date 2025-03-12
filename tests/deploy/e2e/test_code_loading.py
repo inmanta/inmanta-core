@@ -321,7 +321,19 @@ async def test_agent_code_loading_with_failure(
 
     caplog.set_level(DEBUG)
 
-    sources = {}
+    # sources = {}
+    #
+    # res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test": sources})
+    # assert res.code == 200
+    #
+    # res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test2": sources})
+    # assert res.code == 200
+    #
+    # res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test3": sources})
+    #
+
+    res = await client.upload_modules(tid=environment, modules_data={})
+    assert res.code == 200
 
     async def get_version() -> int:
         version = await clienthelper.get_version()
@@ -336,15 +348,6 @@ async def test_agent_code_loading_with_failure(
         return version
 
     version_1 = await get_version()
-
-    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test": sources})
-    assert res.code == 200
-
-    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test2": sources})
-    assert res.code == 200
-
-    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test3": sources})
-    assert res.code == 200
 
     config.Config.set("agent", "executor-mode", "threaded")
 

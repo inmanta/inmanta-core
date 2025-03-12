@@ -47,12 +47,21 @@ def get_module_source(module: str, code: str) -> ModuleSource:
     return ModuleSource(module, hv, False, data)
 
 
-def test_code_manager(tmpdir: py.path.local, deactive_venv):
+@pytest.mark.parametrize(
+    "install_all_dependencies,expected_dependencies",
+    [
+        (True, ["inmanta-module-std", "lorem"]),
+        (False, ["lorem"]),
+    ],
+)
+def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependencies, expected_dependencies):
     """Verify the code manager"""
     original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
     shutil.copytree(original_project_dir, project_dir)
     project: Project = Project(project_dir, venv_path=os.path.join(project_dir, ".env"))
+    project._metadata.agent_install_dependency_modules = install_all_dependencies
+
     Project.set(project)
     project.install_modules()
     project.load()
@@ -107,12 +116,7 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv):
     # verify requirements behavior
     source_info: SourceInfo = single_type_list[0]
     # by default also install dependencies on other modules
-    assert source_info.requires == ["inmanta-module-std", "lorem"]
-    project._metadata.agent_install_dependency_modules = False
-    # reset cache
-    source_info.requires = None
-    # when disabled only install non-module dependencies
-    assert source_info.requires == ["lorem"]
+    assert source_info.requires == expected_dependencies
 
 
 def test_code_loader(tmp_path, caplog):

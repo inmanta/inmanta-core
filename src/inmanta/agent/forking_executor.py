@@ -1049,7 +1049,7 @@ class MPManager(
         self,
         agent_name: str,
         agent_uri: str,
-        code: typing.Collection[executor.ResourceInstallSpec],
+        code: typing.Collection[executor.ModuleInstallSpec],
     ) -> MPExecutor:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.

@@ -653,7 +653,8 @@ class Exporter:
                     resource_state=self._resource_state,
                     version_info=version_info,
                     compiler_version=get_compiler_version(),
-                    type_to_module_data=code_manager.get_type_to_module() ** kwargs,
+                    type_to_module_data=code_manager.get_type_to_module(),
+                    **kwargs,
                 )
             return result
 

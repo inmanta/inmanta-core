@@ -52,11 +52,18 @@ class CodeService(protocol.ServerSlice):
 
     @handle(methods_v2.upload_modules, env="tid")
     async def upload_modules(self, env: data.Environment, modules_data: JsonType) -> Apireturn:
+        """
+
+        :param modules_data: dict with key module name and value loader.PythonModule
+        :return:
+        """
         LOGGER.debug(f"{env=}")
         LOGGER.debug(f"{modules_data=}")
         module_stmt = insert(Module)
         files_in_module_stmt = insert(FilesInModule)
 
+        if not modules_data:
+            return
         module_data = []
         files_in_module_data = []
         for module_name, python_module in modules_data.items():

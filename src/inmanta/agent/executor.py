@@ -167,7 +167,7 @@ class ExecutorBlueprint(EnvBlueprint):
         self.sources = sorted(set(self.sources))
 
     @classmethod
-    def from_specs(cls, code: typing.Collection["ResourceInstallSpec"]) -> "ExecutorBlueprint":
+    def from_specs(cls, code: typing.Collection["ModuleInstallSpec"]) -> "ExecutorBlueprint":
         """
         Create a single ExecutorBlueprint by combining the blueprint(s) of several
         ResourceInstallSpec by merging respectively their module sources and their
@@ -625,14 +625,14 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
     """
 
     @abc.abstractmethod
-    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]) -> E:
+    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ModuleInstallSpec]) -> E:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
         If an Executor does not exist for the given configuration, a new one is created.
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param agent_uri: The name of the host on which the agent is running.
-        :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
+        :param code: Collection of ModuleInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
             handler code in its venv. Must have at least one element.
         :return: An Executor instance

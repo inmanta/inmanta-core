@@ -31,7 +31,7 @@ from asyncpg import Connection
 
 from inmanta import const
 from inmanta.agent import Agent, executor
-from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ModuleInstallSpec, ResourceDetails
 from inmanta.const import Change
 from inmanta.deploy import state
 from inmanta.deploy.persistence import StateUpdateManager
@@ -175,9 +175,7 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         self.executors[agent_name] = executor
         return executor
 
-    async def get_executor(
-        self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
-    ) -> DummyExecutor:
+    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ModuleInstallSpec]) -> DummyExecutor:
         if not code:
             raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
         if agent_name not in self.executors:

@@ -1115,6 +1115,7 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                     module_version_info={},
+                    type_to_module_data={},
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)

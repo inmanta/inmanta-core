@@ -32,7 +32,7 @@ from inmanta.loader import ModuleSource
 from inmanta.protocol import Client, SyncClient
 from inmanta.types import ResourceType
 from inmanta.util.async_lru import async_lru_cache
-from sqlalchemy import select
+from sqlalchemy import and_, select
 
 LOGGER = logging.getLogger(__name__)
 
@@ -110,9 +110,7 @@ class CodeManager:
             raise CouldNotResolveCode(resource_type, version, str(result.get_result()))
 
     @async_lru_cache(maxsize=1024)
-    async def get_code(
-        self, environment: uuid.UUID, model_version: int, agent_name: str
-    ) -> tuple[Collection[ModuleInstallSpec], executor.FailedResources]:
+    async def get_code(self, environment: uuid.UUID, model_version: int, agent_name: str) -> Collection[ModuleInstallSpec]:
         """
         Get the collection of installation specifications (i.e. pip config, python package dependencies,
         Inmanta modules sources) required to deploy resources on a given agent for a given configuration
@@ -124,14 +122,55 @@ class CodeManager:
         """
         # async with get_session() as session:
 
-        stmt = select(models.ModulesForAgent.module_name, models.ModulesForAgent.module_version).where(
-            models.ModulesForAgent.environment == environment,
-            models.ModulesForAgent.agent_name == agent_name,
-            models.ModulesForAgent.cm_version == model_version,
+        module_install_specs = []
+        stmt = (
+            select(
+                models.ModulesForAgent.module_name,
+                models.ModulesForAgent.module_version,
+                models.Module.requirements,
+                models.FilesInModule.file_content_hash,
+            )
+            .join_from(
+                models.ModulesForAgent,
+                models.Module,
+                and_(
+                    models.ModulesForAgent.module_name == models.Module.name,
+                    models.ModulesForAgent.module_version == models.Module.version,
+                    models.ModulesForAgent.environment == models.Module.environment,
+                ),
+            )
+            .join_from(
+                models.Module,
+                models.FilesInModule,
+                and_(
+                    models.Module.name == models.FilesInModule.module_name,
+                    models.Module.version == models.FilesInModule.module_version,
+                    models.Module.environment == models.FilesInModule.environment,
+                ),
+            )
+            .where(
+                models.ModulesForAgent.environment == environment,
+                models.ModulesForAgent.agent_name == agent_name,
+                models.ModulesForAgent.cm_version == model_version,
+            )
         )
         async with get_session() as session:
             result_execute = await session.execute(stmt)
-        return result_execute.all()
+            for res in result_execute.all():
+                module_install_specs.append(
+                    ModuleInstallSpec(
+                        module_name=res["module_name"],
+                        module_version=res["module_version"],
+                        model_version=res["model_version"],
+                        blueprint=executor.ExecutorBlueprint(
+                            pip_config=await self.get_pip_config(environment, model_version),
+                            requirements=res["requirements"],
+                            sources=[],  # TODO
+                            python_version=sys.version_info[:2],
+                        ),
+                    )
+                )
+        return module_install_specs
         #
         # result: protocol.Result = await self._client.get_source_code(environment, version, resource_type)
         # if result.code == 200 and result.result is not None:

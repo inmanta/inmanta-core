@@ -36,7 +36,7 @@ from deploy.scheduler_mocks import FAIL_DEPLOY, DummyExecutor, ManagedExecutor, 
 from inmanta import const, util
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.executor import ResourceDetails, ResourceInstallSpec
+from inmanta.agent.executor import ModuleInstallSpec, ResourceDetails
 from inmanta.config import Config
 from inmanta.deploy import state, tasks
 from inmanta.deploy.scheduler import ModelVersion, ResourceScheduler
@@ -2457,9 +2457,7 @@ class BrokenDummyManager(executor.ExecutorManager[executor.Executor]):
     A broken dummy ExecutorManager that fails on get_executor to test failure paths
     """
 
-    async def get_executor(
-        self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
-    ) -> DummyExecutor:
+    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ModuleInstallSpec]) -> DummyExecutor:
         raise Exception()
 
     async def stop_for_agent(self, agent_name: str) -> list[DummyExecutor]:
