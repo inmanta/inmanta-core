@@ -1401,23 +1401,6 @@ def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> list[mo
 
 
 @typedmethod(
-    path="/code/<agent>/<model_version>",
-    operation="GET",
-    agent_server=True,
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def get_module_source_for_agent(tid: uuid.UUID, agent: str, model_version: int) -> list[model.Source]:
-    """
-    Get all module code for the given (agent, model_version)
-    :param tid: The id of the environment
-    :param agent: The type name of the resource
-    :param model_version: The id of the model version
-    """
-
-
-@typedmethod(
     path="/pip/config/<version>",
     operation="GET",
     api=True,

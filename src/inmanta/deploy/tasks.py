@@ -96,19 +96,15 @@ class Task(abc.ABC):
                 f"{self.__class__.__name__}.get_executor() expects at least one resource type in the agent spec parameter"
             )
 
-        code, invalid_resources = await task_manager.code_manager.get_code(
+        code = await task_manager.code_manager.get_code(
             environment=task_manager.environment, model_version=version, agent_name=agent_name
         )
-
-        # Bail out if this failed
-        if resource_type in invalid_resources:
-            raise invalid_resources[resource_type]
 
         # Get executor
         my_executor: executor.Executor = await task_manager.executor_manager.get_executor(
             agent_name=agent_name, agent_uri="NO_URI", code=code
         )
-        failed_resources = my_executor.failed_resources
+        failed_resources = my_executor.failed_modules
 
         # Bail out if this failed
         if resource_type in failed_resources:

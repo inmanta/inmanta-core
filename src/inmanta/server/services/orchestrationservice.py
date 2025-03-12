@@ -827,13 +827,26 @@ class OrchestrationService(protocol.ServerSlice):
             async def populate_join_table(
                 cm_version: int,
                 environment: uuid.UUID,
-                module_version_info: dict[str, str],
-                type_to_module_data: dict[ResourceIdStr, str],
-                type_to_agent: dict[str, str],
+                module_version_info: dict[str, str] | None,
+                type_to_module_data: dict[ResourceIdStr, str] | None,
+                type_to_agent: dict[str, str] | None,
                 connection: Connection,
-            ):
-                if not all([module_version_info, type_to_module_data, rid_to_resource]):
-                    return
+            ) -> None:
+                if not all([module_version_info, type_to_module_data, rid_to_resource, type_to_agent]):
+                    raise Exception(
+                        "Cannot populate join table modules_for_agent. The following arguments are not set: %s"
+                        % str(arg_name for arg_name, arg in zip(
+                            ["module_version_info", "type_to_module_data", "rid_to_resource", "type_to_agent"],
+                            [module_version_info, type_to_module_data, rid_to_resource, type_to_agent]
+                        )
+                            if not arg)
+                    )
+
+                assert module_version_info
+                assert type_to_module_data
+                assert rid_to_resource
+                assert type_to_agent
+
                 resource_type = next(type for type in type_to_module_data.keys())
                 agent_name = type_to_agent[resource_type]
 
@@ -940,7 +953,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
         module_version_info: Optional[dict[str, str]] = None,
-        type_to_module_data: Optional[dict[str, str]] = None,
+        type_to_module_data: Optional[dict[ResourceIdStr, str]] = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure

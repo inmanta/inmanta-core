@@ -51,7 +51,7 @@ from inmanta.types import JsonType, ResourceIdStr, ResourceType, ResourceVersion
 LOGGER = logging.getLogger(__name__)
 
 
-FailedResources: typing.TypeAlias = dict[ResourceType, Exception]
+FailedModules: typing.TypeAlias = dict[str, Exception]
 
 
 class AgentInstance(abc.ABC):
@@ -565,7 +565,7 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
-    failed_resources: FailedResources
+    failed_modules: FailedModules
 
     @abc.abstractmethod
     async def execute(

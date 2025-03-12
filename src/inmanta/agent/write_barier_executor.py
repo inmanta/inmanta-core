@@ -27,7 +27,7 @@ from inmanta.agent import executor
 from inmanta.agent.executor import (
     DeployReport,
     DryrunReport,
-    FailedResources,
+    FailedModules,
     GetFactReport,
     ModuleInstallSpec,
     ResourceDetails,
@@ -71,12 +71,12 @@ class WriteBarierExecutor(executor.Executor):
         await self.delegate.join()
 
     @property
-    def failed_resources(self) -> FailedResources:
-        return self.delegate.failed_resources
+    def failed_resources(self) -> FailedModules:
+        return self.delegate.failed_modules
 
     @failed_resources.setter
-    def failed_resources(self, value: FailedResources) -> None:
-        self.delegate.failed_resources = value
+    def failed_resources(self, value: FailedModules) -> None:
+        self.delegate.failed_modules = value
 
 
 class WriteBarierExecutorManager(executor.ExecutorManager[WriteBarierExecutor]):

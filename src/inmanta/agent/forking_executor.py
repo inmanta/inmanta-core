@@ -760,7 +760,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
 
         # Set by init and parent class
         self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = process.failed_resource_results
-        self.failed_resources: executor.FailedResources = {}
+        self.failed_resources: executor.FailedModules = {}
 
     async def call(self, method: IPCMethod[ExecutorContext, ReturnType]) -> ReturnType:
         try:
@@ -1069,19 +1069,6 @@ class MPManager(
         # Use pool manager
         my_executor = await self.get(executor_id)
 
-        # translation from code to type can only be done here
-        if my_executor.failed_resource_results and not my_executor.failed_resources:
-            # If some code loading failed, resolve here
-            # reverse index
-            type_for_spec: dict[inmanta.loader.ModuleSource, list[ResourceType]] = collections.defaultdict(list)
-            for spec in code:
-                for source in spec.blueprint.sources:
-                    type_for_spec[source].append(spec.resource_type)
-            # resolve
-            for failed_resource_result in my_executor.failed_resource_results:
-                for rtype in type_for_spec.get(failed_resource_result.module_source, []):
-                    if rtype not in my_executor.failed_resources:
-                        my_executor.failed_resources[rtype] = failed_resource_result.exception
 
         # FIXME: recovery. If loading failed, we currently never rebuild https://github.com/inmanta/inmanta-core/issues/7695
         return my_executor

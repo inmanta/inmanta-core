@@ -652,7 +652,7 @@ class SourceInfo(BaseModel):
     path: str
     module_name: str
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @cached_property
     def hash(self) -> str:
         """Get the sha1 hash of the file"""
@@ -671,7 +671,7 @@ class SourceInfo(BaseModel):
         """Get the name of the inmanta module, derived from the python module name"""
         return get_inmanta_module_name(self.module_name)
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @cached_property
     def requires(self) -> list[str]:
         """List of python requirements associated with this source file"""

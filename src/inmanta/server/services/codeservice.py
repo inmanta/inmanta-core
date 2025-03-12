@@ -63,7 +63,7 @@ class CodeService(protocol.ServerSlice):
         files_in_module_stmt = insert(FilesInModule)
 
         if not modules_data:
-            return
+            raise BadRequest("No modules were provided")
         module_data = []
         files_in_module_data = []
         for module_name, python_module in modules_data.items():
@@ -94,6 +94,8 @@ class CodeService(protocol.ServerSlice):
             await session.execute(module_stmt, module_data)
             await session.execute(files_in_module_stmt, files_in_module_data)
             await session.commit()
+
+        return 200
 
     @handle(methods.upload_code_batched, code_id="id", env="tid")
     async def upload_code_batched(self, env: data.Environment, code_id: int, resources: JsonType) -> Apireturn:
@@ -164,23 +166,3 @@ class CodeService(protocol.ServerSlice):
                 )
 
         return sources
-
-    @handle(methods_v2.get_module_source_for_agent, env="tid")
-    async def get_module_source_for_agent(self, env: data.Environment, agent: str, model_version: int) -> list[model.Source]:
-        # code = await data.Code.get_version(environment=env.id, version=version, resource=resource_type)
-        # if code is None:
-        #     raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
-        #
-        # sources = []
-        #
-        # # Get all module code pertaining to this env/version/resource
-        # if code.source_refs is not None:
-        #     for code_hash, (file_name, module, requires) in code.source_refs.items():
-        #         sources.append(
-        #             model.Source(
-        #                 hash=code_hash, is_byte_code=file_name.endswith(".pyc"), module_name=module, requirements=requires
-        #             )
-        #         )
-        #
-        # return sources
-        pass

@@ -28,11 +28,11 @@ import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import DeployReport, DryrunReport, FailedResources, GetFactReport, ResourceDetails
+from inmanta.agent.executor import DeployReport, DryrunReport, FailedModules, GetFactReport, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
 from inmanta.data.model import AttributeStateChange
-from inmanta.loader import CodeLoader
+from inmanta.loader import CodeLoader, FailedModuleSource
 from inmanta.resources import Resource
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import NamedLock, join_threadpools
@@ -76,7 +76,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         self._stopped = False
 
-        self.failed_resources: FailedResources = dict()
+        self.failed_modules: FailedModules = dict()
 
         self.cache_cleanup_tick_rate = inmanta.agent.config.agent_cache_cleanup_tick_rate.get()
         self.periodic_cache_cleanup_job: Optional[asyncio.Task[None]] = None
@@ -574,14 +574,14 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     await out.start()
                     self.executors[agent_name] = out
         assert out.uri == agent_uri
-        out.failed_resources = await self.ensure_code(code)
+        out.failed_modules = await self.ensure_code(code)
 
         return out
 
-    async def ensure_code(self, code: typing.Collection[executor.ModuleInstallSpec]) -> dict[str, Exception]:
+    async def ensure_code(self, code: typing.Collection[executor.ModuleInstallSpec]) -> FailedModules:
         """Ensure that the code for the given environment and version is loaded"""
 
-        failed_to_load: dict[str, Exception] = {}
+        failed_to_load: FailedModules = {}
 
         if self._loader is None:
             return failed_to_load
