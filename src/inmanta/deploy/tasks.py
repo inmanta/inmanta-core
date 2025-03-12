@@ -22,7 +22,6 @@ import datetime
 import logging
 import traceback
 import uuid
-from collections.abc import Collection
 from dataclasses import dataclass
 
 import pyformance
@@ -32,7 +31,7 @@ from inmanta.agent import executor
 from inmanta.agent.executor import DeployReport
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
-from inmanta.types import ResourceIdStr, ResourceType
+from inmanta.types import ResourceIdStr
 
 LOGGER = logging.getLogger(__name__)
 
@@ -87,7 +86,6 @@ class Task(abc.ABC):
         :param version: The version of the code to load on the executor.
         """
 
-
         code = await task_manager.code_manager.get_code(
             environment=task_manager.environment, model_version=version, agent_name=agent_name
         )
@@ -96,7 +94,6 @@ class Task(abc.ABC):
         my_executor: executor.Executor = await task_manager.executor_manager.get_executor(
             agent_name=agent_name, agent_uri="NO_URI", code=code
         )
-
 
         return my_executor
 
@@ -154,7 +151,7 @@ class Deploy(Task):
                 try:
                     my_executor: executor.Executor = await self.get_executor(
                         task_manager=task_manager,
-                        agent_name = agent,
+                        agent_name=agent,
                         version=version,
                     )
                 except Exception as e:
@@ -226,7 +223,7 @@ class DryRun(Task):
         try:
             my_executor: executor.Executor = await self.get_executor(
                 task_manager=task_manager,
-                agent_name = agent,
+                agent_name=agent,
                 version=self.version,
             )
         except Exception:

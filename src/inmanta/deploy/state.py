@@ -31,7 +31,7 @@ from typing import Optional, Self, cast
 import asyncpg
 
 from inmanta import const, resources
-from inmanta.types import ResourceIdStr, ResourceType
+from inmanta.types import ResourceIdStr
 from inmanta.util.collections import BidirectionalManyMapping
 
 
@@ -202,7 +202,6 @@ class ModelState:
     dirty: set["ResourceIdStr"] = dataclasses.field(default_factory=set)
     # group resources by agent to allow efficient triggering of a deploy for a single agent
     resources_by_agent: dict[str, set["ResourceIdStr"]] = dataclasses.field(default_factory=lambda: defaultdict(set))
-
 
     @classmethod
     async def create_from_db(

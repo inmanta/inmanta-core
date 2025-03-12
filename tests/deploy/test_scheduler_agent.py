@@ -43,7 +43,7 @@ from inmanta.deploy.scheduler import ModelVersion, ResourceScheduler
 from inmanta.deploy.state import Blocked, Compliance, DeployResult
 from inmanta.deploy.work import ScheduledWork, TaskPriority
 from inmanta.protocol.common import custom_json_encoder
-from inmanta.types import ResourceIdStr, ResourceType
+from inmanta.types import ResourceIdStr
 from inmanta.util import retry_limited
 from utils import make_requires
 

@@ -45,7 +45,7 @@ from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
-from inmanta.types import ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 NB_ITERATIONS_PASS_IO_LOOP: int = 100
@@ -70,7 +70,6 @@ class ResourceVersionIntent:
 
     model_version: int
     intent: ResourceIntent
-
 
 
 @dataclass(frozen=True)
