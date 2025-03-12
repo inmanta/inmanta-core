@@ -184,7 +184,7 @@ class Res(Resource):
 
     modules_data = {}
     type_to_module_data = {
-        "test::Resource":"inmanta_plugins.test",
+        "test::Resource": "inmanta_plugins.test",
     }
     await make_source_structure(
         modules_data,

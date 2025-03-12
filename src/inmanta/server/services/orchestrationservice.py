@@ -855,7 +855,7 @@ class OrchestrationService(protocol.ServerSlice):
                             );
                         """
                 async with connection.transaction():
-                    result = await connection.fetchrow(
+                    await connection.fetchrow(
                         query,
                         cm_version,
                         environment,
