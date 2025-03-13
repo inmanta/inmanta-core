@@ -32,64 +32,6 @@ class GraphQLMetadata:
     compiler_service: CompilerService
 
 
-mapper: StrawberrySQLAlchemyMapper[typing.Any] = StrawberrySQLAlchemyMapper()
-SCHEMA: strawberry.Schema | None = None
-METADATA: GraphQLMetadata | None = None
-
-
-def get_expert_mode(root: "Environment") -> bool:
-    """
-    Checks settings of environment to figure out if expert mode is enabled or not
-    """
-    assert hasattr(root, "settings")  # Make mypy happy
-    return bool(root.settings.get("enable_lsm_expert_mode", False))
-
-
-def get_is_compiling(root: "Environment") -> bool:
-    """
-    Checks compiler service to figure out if environment is compiling or not
-    """
-    assert METADATA is not None, "Metadata was not properly initialized"
-    assert hasattr(root, "id")  # Make mypy happy
-    return METADATA.compiler_service.is_environment_compiling(environment_id=root.id)
-
-
-@mapper.type(models.Environment)
-class Environment:
-    # Add every relation/attribute that we don't want to expose in our GraphQL endpoint to `__exclude__`
-    __exclude__ = [
-        "project_",
-        "agentprocess",
-        "code",
-        "compile",
-        "configurationmodel",
-        "discoveredresource",
-        "environmentmetricsgauge",
-        "environmentmetricstimer",
-        "notification",
-        "parameter",
-        "resource_persistent_state",
-        "unknownparameter",
-        "agent",
-    ]
-    is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
-    is_compiling: bool = strawberry.field(resolver=get_is_compiling)
-
-
-def get_schema(metadata: GraphQLMetadata) -> strawberry.Schema:
-    """
-    Fetches strawberry.Schema instance.
-    Initializes schema and metadata if they are None
-    """
-    global METADATA
-    global SCHEMA
-    METADATA = metadata
-    if SCHEMA is None:
-        SCHEMA = initialize_schema()
-    assert SCHEMA
-    return SCHEMA
-
-
 class StrawberryFilter:
     def get_filter_dict(self) -> dict[str, typing.Any]:
         return {key: value for key, value in self.__dict__.items() if value is not strawberry.UNSET}
@@ -97,17 +39,6 @@ class StrawberryFilter:
 
 class StrawberryOrder:
     pass
-
-
-@strawberry.input
-class EnvironmentFilter(StrawberryFilter):
-    id: typing.Optional[str] = strawberry.UNSET
-
-
-@strawberry.input(one_of=True)
-class EnvironmentOrder(StrawberryOrder):
-    id: typing.Optional[str] = strawberry.UNSET
-    name: typing.Optional[str] = strawberry.UNSET
 
 
 def add_filter_and_sort(
@@ -130,13 +61,59 @@ def add_filter_and_sort(
     return stmt
 
 
-def initialize_schema() -> strawberry.Schema:
+def get_schema(metadata: GraphQLMetadata) -> strawberry.Schema:
     """
     Initializes the Strawberry GraphQL schema.
     It is initiated in a function instead of being declared at the module level, because we have to do this
     after the SQLAlchemy engine is initialized.
     """
+
+    mapper: StrawberrySQLAlchemyMapper[typing.Any] = StrawberrySQLAlchemyMapper()
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
+
+    def get_expert_mode(root: "Environment") -> bool:
+        """
+        Checks settings of environment to figure out if expert mode is enabled or not
+        """
+        assert hasattr(root, "settings")  # Make mypy happy
+        return bool(root.settings.get("enable_lsm_expert_mode", False))
+
+    def get_is_compiling(root: "Environment") -> bool:
+        """
+        Checks compiler service to figure out if environment is compiling or not
+        """
+        assert hasattr(root, "id")  # Make mypy happy
+        return metadata.compiler_service.is_environment_compiling(environment_id=root.id)
+
+    @mapper.type(models.Environment)
+    class Environment:
+        # Add every relation/attribute that we don't want to expose in our GraphQL endpoint to `__exclude__`
+        __exclude__ = [
+            "project_",
+            "agentprocess",
+            "code",
+            "compile",
+            "configurationmodel",
+            "discoveredresource",
+            "environmentmetricsgauge",
+            "environmentmetricstimer",
+            "notification",
+            "parameter",
+            "resource_persistent_state",
+            "unknownparameter",
+            "agent",
+        ]
+        is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
+        is_compiling: bool = strawberry.field(resolver=get_is_compiling)
+
+    @strawberry.input
+    class EnvironmentFilter(StrawberryFilter):
+        id: typing.Optional[str] = strawberry.UNSET
+
+    @strawberry.input(one_of=True)
+    class EnvironmentOrder(StrawberryOrder):
+        id: typing.Optional[str] = strawberry.UNSET
+        name: typing.Optional[str] = strawberry.UNSET
 
     class CustomInfo(Info):
         @property
