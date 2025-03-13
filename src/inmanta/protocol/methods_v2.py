@@ -1372,7 +1372,7 @@ def update_notification(
     api_version=2,
     varkw=True,
 )
-def upload_modules(tid: uuid.UUID, **kwargs: object) -> None:
+def upload_modules(tid: uuid.UUID, **kwargs: object) -> ReturnValue[int]:
     """
     TODO
 

@@ -23,6 +23,7 @@ from inmanta import data
 from inmanta.data import get_session, model
 from inmanta.data.sqlalchemy import FilesInModule, Module
 from inmanta.protocol import handle, methods, methods_v2
+from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.services.fileservice import FileService
@@ -51,7 +52,7 @@ class CodeService(protocol.ServerSlice):
         self.file_slice = cast(FileService, server.get_slice(SLICE_FILE))
 
     @handle(methods_v2.upload_modules, env="tid")
-    async def upload_modules(self, env: data.Environment, modules_data: JsonType) -> Apireturn:
+    async def upload_modules(self, env: data.Environment, modules_data: JsonType) -> ReturnValue[None]:
         """
 
         :param modules_data: dict with key module name and value loader.PythonModule
@@ -95,7 +96,7 @@ class CodeService(protocol.ServerSlice):
             await session.execute(files_in_module_stmt, files_in_module_data)
             await session.commit()
 
-        return 200
+        return ReturnValue(response=None)
 
     @handle(methods.upload_code_batched, code_id="id", env="tid")
     async def upload_code_batched(self, env: data.Environment, code_id: int, resources: JsonType) -> Apireturn:
