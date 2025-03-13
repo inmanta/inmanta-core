@@ -17,14 +17,15 @@ import uuid
 import pytest
 
 import inmanta.data.sqlalchemy as models
-from inmanta.data import get_session
-from inmanta.util import get_compiler_version, retry_limited
+from inmanta import data
+from inmanta.server import SLICE_COMPILER
+from inmanta.server.services.compilerservice import CompilerService
 
 
 @pytest.fixture
 async def setup_database(project_default):
     # Initialize DB
-    async with get_session() as session:
+    async with data.get_session() as session:
         environment_1 = models.Environment(
             id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
             name="test-env-b",
@@ -122,7 +123,6 @@ async def test_query_environments_with_filtering(server, client, setup_database)
               id
               halted
               isExpertMode
-              isCompiling
             }
         }
     }
@@ -183,7 +183,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
     """
     Display basic paging capabilities
     """
-    async with get_session() as session:
+    async with data.get_session() as session:
         project = models.Project(id=uuid.UUID("00000000-1234-5678-1234-000000000002"), name="test-proj-2")
         instances = [project]
         for i in range(10):
@@ -260,7 +260,12 @@ async def test_query_environments_with_paging(server, client, setup_database):
     assert environments["pageInfo"]["hasPreviousPage"] is True
 
 
-async def test_is_environment_compiling(server, client, clienthelper, environment):
+async def test_is_environment_compiling(server, client, clienthelper, environment, mocked_compiler_service_block):
+
+    compilerslice = server.get_slice(SLICE_COMPILER)
+    assert isinstance(compilerslice, CompilerService)
+    env = await data.Environment.get_by_id(environment)
+
     query = """
     {
         environments {
@@ -273,74 +278,41 @@ async def test_is_environment_compiling(server, client, clienthelper, environmen
         }
     }
         """
-    result = await client.graphql(query=query)
-    assert result.code == 200
-    assert result.result["data"] == {
-        "data": {
-            "environments": {
-                "edges": [
-                    {
-                        "node": {
-                            "id": str(environment),
-                            "isCompiling": False,
-                        }
-                    },
-                ]
-            }
-        },
-        "errors": None,
-        "extensions": {},
-    }
-    version = await clienthelper.get_version()
-    result = await client.put_version(
-        tid=environment, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
-    )
-    assert result.code == 200
-    # Trigger recompile so that we have time to catch it below
-    result = await client.notify_change_get(id=str(environment))
-    assert result.code == 200
+
+    def get_response(is_compiling: bool) -> dict:
+        return {
+            "data": {
+                "environments": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": environment,
+                                "isCompiling": is_compiling,
+                            }
+                        },
+                    ]
+                }
+            },
+            "errors": None,
+            "extensions": {},
+        }
 
     result = await client.graphql(query=query)
     assert result.code == 200
-    assert result.result["data"] == {
-        "data": {
-            "environments": {
-                "edges": [
-                    {
-                        "node": {
-                            "id": str(environment),
-                            "isCompiling": True,
-                        }
-                    },
-                ]
-            }
-        },
-        "errors": None,
-        "extensions": {},
-    }
+    assert result.result["data"] == get_response(is_compiling=False)
 
-    # Wait for compile to be done
-    async def compile_done():
-        return (await client.is_compiling(environment)).code == 204
+    # Trigger compile
+    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
 
-    await retry_limited(compile_done, 10)
-
-    # Assert that it is no longer compiling
+    # Assert that GraphQL reports that environment is compiling
     result = await client.graphql(query=query)
     assert result.code == 200
-    assert result.result["data"] == {
-        "data": {
-            "environments": {
-                "edges": [
-                    {
-                        "node": {
-                            "id": str(environment),
-                            "isCompiling": False,
-                        }
-                    },
-                ]
-            }
-        },
-        "errors": None,
-        "extensions": {},
-    }
+    assert result.result["data"] == get_response(is_compiling=True)
+
+    # Finish compile
+    del compilerslice._env_to_compile_task[uuid.UUID(environment)]
+
+    # Assert that GraphQL reports that environment is no longer compiling
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    assert result.result["data"] == get_response(is_compiling=False)
