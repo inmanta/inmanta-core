@@ -49,7 +49,7 @@ def get_is_compiling(root: "Environment") -> bool:
     """
     Checks compiler service to figure out if environment is compiling or not
     """
-    assert METADATA is not None, "Schema was not properly initialized"
+    assert METADATA is not None, "Metadata was not properly initialized"
     assert hasattr(root, "id")  # Make mypy happy
     return METADATA.compiler_service.is_environment_compiling(environment_id=root.id)
 
@@ -83,9 +83,9 @@ def get_schema(metadata: GraphQLMetadata) -> strawberry.Schema:
     """
     global METADATA
     global SCHEMA
+    METADATA = metadata
     if SCHEMA is None:
         SCHEMA = initialize_schema()
-        METADATA = metadata
     assert SCHEMA
     return SCHEMA
 
