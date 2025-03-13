@@ -28,7 +28,7 @@ from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.services.fileservice import FileService
 from inmanta.types import Apireturn, JsonType
-from sqlalchemy import insert
+from sqlalchemy.dialects.postgresql import insert
 
 LOGGER = logging.getLogger(__name__)
 
@@ -60,8 +60,9 @@ class CodeService(protocol.ServerSlice):
         """
         LOGGER.debug(f"{env=}")
         LOGGER.debug(f"{modules_data=}")
-        module_stmt = insert(Module)
-        files_in_module_stmt = insert(FilesInModule)
+        module_stmt = insert(Module).on_conflict_do_nothing()
+
+        files_in_module_stmt = insert(FilesInModule).on_conflict_do_nothing()
 
         if not modules_data:
             raise BadRequest("No modules were provided")

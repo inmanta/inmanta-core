@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import base64
+import dataclasses
 import functools
 import hashlib
 import importlib
@@ -35,7 +36,7 @@ from functools import cached_property
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from pydantic import BaseModel, computed_field
 
@@ -98,6 +99,8 @@ class CodeManager:
         # Cache of module to source info
         self.__module_to_source_info: dict[str, list[SourceInfo]] = {}
 
+        self.__modules_data: dict[str, dict[str, Any]] = {}
+
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
 
@@ -155,6 +158,36 @@ class CodeManager:
     def get_module_source_info(self) -> dict[str, list["SourceInfo"]]:
         """Return all module source info"""
         return self.__module_to_source_info
+
+    def get_modules_data(self) -> dict[str, dict[str, Any]]:
+        if self.__modules_data:
+            return self.__modules_data
+
+        source_info = self.get_module_source_info()
+
+        modules_data = {}
+        for module_name, files_in_module in source_info.items():
+            all_files_hashes = [file.hash for file in sorted(files_in_module, key=lambda f: f.hash)]
+
+            module_version_hash = hashlib.new("sha1")
+            for file_hash in all_files_hashes:
+                module_version_hash.update(file_hash.encode())
+
+            module_version = module_version_hash.hexdigest()
+            modules_data[module_name] = dataclasses.asdict(
+                PythonModule(
+                    name=module_name,
+                    version=module_version,
+                    files_in_module=files_in_module,
+                )
+            )
+        self.__modules_data = modules_data
+
+        return self.__modules_data
+
+    def get_module_version_info(self) -> dict[str, str]:
+        """Return all module version info"""
+        return {module_data["name"]: module_data["version"] for module_data in self.get_modules_data().values()}
 
     def get_type_to_module(self) -> dict[str, str]:
         """Return all module source info"""

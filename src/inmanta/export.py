@@ -18,8 +18,6 @@ Contact: code@inmanta.com
 
 import argparse
 import base64
-import dataclasses
-import hashlib
 import itertools
 import logging
 import time
@@ -38,7 +36,6 @@ from inmanta.const import ResourceState
 from inmanta.data.model import PipConfig
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import Instance
-from inmanta.loader import PythonModule
 from inmanta.module import Project
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
@@ -92,28 +89,7 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, code_manager: loader.
         if res is None or res.code != 200:
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
-    def get_modules_data() -> dict[str, dict[str, Any]]:
-        source_info = code_manager.get_module_source_info()
-
-        modules_data = {}
-        for module_name, files_in_module in source_info.items():
-            all_files_hashes = [file.hash for file in sorted(files_in_module, key=lambda f: f.hash)]
-
-            module_version_hash = hashlib.new("sha1")
-            for file_hash in all_files_hashes:
-                module_version_hash.update(file_hash.encode())
-
-            module_version = module_version_hash.hexdigest()
-            modules_data[module_name] = dataclasses.asdict(
-                PythonModule(
-                    name=module_name,
-                    version=module_version,
-                    files_in_module=files_in_module,
-                )
-            )
-        return modules_data
-
-    modules_data = get_modules_data()
+    modules_data = code_manager.get_modules_data()
     LOGGER.debug(f"{tid=}")
     LOGGER.debug(f"{modules_data=}")
     res = conn.upload_modules(tid=tid, modules_data=modules_data)
@@ -654,6 +630,7 @@ class Exporter:
                     version_info=version_info,
                     compiler_version=get_compiler_version(),
                     type_to_module_data=code_manager.get_type_to_module(),
+                    module_version_info=code_manager.get_module_version_info(),
                     **kwargs,
                 )
             return result
