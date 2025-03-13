@@ -36,7 +36,6 @@ from inmanta.const import ParameterSource
 from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import persistence, state
-from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
@@ -650,8 +649,6 @@ async def test_batched_code_upload(
             assert response.code == 200
             source_code = base64.b64decode(response.result["content"])
             assert info.content == source_code
-
-
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
