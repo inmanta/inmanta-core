@@ -21,6 +21,8 @@ requires = [
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
+    # Beta version of pydantic is incompatible with the strawberry library at the moment
+    # https://github.com/strawberry-graphql/strawberry/issues/3807
     "pydantic~=2.5,!=2.9.2,<2.10.7",
     "pyformance~=0.4",
     "PyJWT~=2.0",
