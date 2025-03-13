@@ -221,80 +221,6 @@ class Res(Resource):
     )
     assert res.code == 200
 
-    #
-    # res = conn.stat_files(list(code_manager.get_file_hashes()))
-    # if res is None or res.code != 200:
-    #     raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
-    #
-    # for file in res.result["files"]:
-    #     content = code_manager.get_file_content(file)
-    #     res = conn.upload_file(id=file, content=base64.b64encode(content).decode("ascii"))
-    #     if res is None or res.code != 200:
-    #         raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
-    #
-    # def get_modules_data() -> dict[str, PythonModule]:
-    #     source_info = code_manager.get_module_source_info()
-    #
-    #     modules_data = {}
-    #     for module_name, files_in_module in source_info.items():
-    #         all_files_hashes = [file.hash for file in sorted(files_in_module, key=lambda f: f.hash)]
-    #
-    #         module_version_hash = hashlib.new("sha1")
-    #         for file_hash in all_files_hashes:
-    #             module_version_hash.update(file_hash.encode())
-    #
-    #         module_version = module_version_hash.hexdigest()
-    #         modules_data[module_name] = dataclasses.asdict(
-    #             PythonModule(
-    #                 module_name = module_name,
-    #                 module_version = module_version,
-    #                 files_in_module = files_in_module,
-    #             )
-    #         )
-    #     return modules_data
-    # modules_data = {
-    #     "test": {
-    #         'module_name': 'test',
-    #         "module_version": module_hash,
-    #         "files_in_module": [
-    #             {
-    #                 'path': '/tmp/tmpskd9n7zx/std/plugins/types.py',
-    #                 'module_name': 'inmanta_plugins.test',
-    #                 'hash': '4ac629bdc461bf185971b82b4fc3dd457fba3fdd',
-    #                 'requires': ['pkg[optional-a]'],
-    #             }
-    #         ]
-    #     }
-    # }
-
-    # res = client.upload_modules(tid=environment, modules_data=modules_data)
-    # if res is None or res.code != 200:
-    #     raise Exception("Unable to upload plugin code to the server (msg: %s)" % res.result)
-
-    # Example of what a source_map may look like:
-    # Type Name: mymodule::Mytype"
-    # Source Files:
-    #   /path/to/__init__.py (hash: 'abc123', module: 'inmanta_plugins.mymodule.Mytype')
-    #   /path/to/utils.py (hash: 'def456', module: 'inmanta_plugins.mymodule.Mytype')
-    #
-    # source_map = {
-    #    "mymodule::Mytype": {
-    #      'abc123': ('/path/to/__init__.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>),
-    #      'def456': ('/path/to/utils.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>)
-    #    },
-    # ...other types would be included as well
-    # }
-    # source_map = {
-    #     resource_name: {source.hash: (source.path, source.module_name, source.requires) for source in sources}
-    #     for resource_name, sources in code_manager.get_types()
-    # }
-    #
-    # res = conn.upload_code_batched(tid=tid, id=version, resources=source_map)
-    # if res is None or res.code != 200:
-    #     raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
-
-    # res = await client.upload_code_batched(tid=environment, id=version, resources={"test::Test": sources})
-
     codemanager = CodeManager(agent._client)
 
     install_spec = await codemanager.get_code(
@@ -342,16 +268,6 @@ async def test_agent_code_loading_with_failure(
 
     caplog.set_level(DEBUG)
 
-    # sources = {}
-    #
-    # res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test": sources})
-    # assert res.code == 200
-    #
-    # res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test2": sources})
-    # assert res.code == 200
-    #
-    # res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test3": sources})
-    #
     modules_data = {}
     type_to_module_data = {
         "test::Test": "inmanta_plugins.test",

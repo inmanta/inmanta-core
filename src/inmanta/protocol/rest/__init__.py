@@ -631,8 +631,6 @@ class RESTBase(util.TaskHandler[None]):
             )
 
             with tracing.span("Calling method " + config.method_name, arguments=arguments.call_args):
-                LOGGER.debug(f"{config.handler=}")
-                LOGGER.debug(f"{arguments.call_args=}")
                 result = await config.handler(**arguments.call_args)
 
             return await arguments.process_return(result)

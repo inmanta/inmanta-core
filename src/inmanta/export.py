@@ -90,33 +90,9 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, code_manager: loader.
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
     modules_data = code_manager.get_modules_data()
-    LOGGER.debug(f"{tid=}")
-    LOGGER.debug(f"{modules_data=}")
     res = conn.upload_modules(tid=tid, modules_data=modules_data)
     if res is None or res.code != 200:
         raise Exception(f"Unable to upload plugin code to the server (msg: %s)\n{modules_data=}" % res.result)
-
-    # Example of what a source_map may look like:
-    # Type Name: mymodule::Mytype"
-    # Source Files:
-    #   /path/to/__init__.py (hash: 'abc123', module: 'inmanta_plugins.mymodule.Mytype')
-    #   /path/to/utils.py (hash: 'def456', module: 'inmanta_plugins.mymodule.Mytype')
-    #
-    # source_map = {
-    #    "mymodule::Mytype": {
-    #      'abc123': ('/path/to/__init__.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>),
-    #      'def456': ('/path/to/utils.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>)
-    #    },
-    # ...other types would be included as well
-    # }
-    # source_map = {
-    #     resource_name: {source.hash: (source.path, source.module_name, source.requires) for source in sources}
-    #     for resource_name, sources in code_manager.get_types()
-    # }
-    #
-    # res = conn.upload_code_batched(tid=tid, id=version, resources=source_map)
-    # if res is None or res.code != 200:
-    #     raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
 
 class Exporter:
