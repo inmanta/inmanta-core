@@ -1,0 +1,6 @@
+change-type: patch
+description: Update opentelemetry-instrumentation-asyncpg requirement from <0.51,>=0.46b
+    to >=0.46b,<0.53
+destination-branches:
+- master
+sections: {}
