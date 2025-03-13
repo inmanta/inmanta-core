@@ -20,6 +20,7 @@ import inmanta.data.sqlalchemy as models
 from inmanta import data
 from inmanta.server import SLICE_COMPILER
 from inmanta.server.services.compilerservice import CompilerService
+from inmanta.util import retry_limited
 
 
 @pytest.fixture
@@ -303,10 +304,15 @@ async def test_is_environment_compiling(server, client, clienthelper, environmen
 
     # Trigger compile
     await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    # prevent race conditions where compile request is not yet in queue
+    await retry_limited(lambda: compilerslice._env_to_compile_task.get(uuid.UUID(environment), None) is not None, timeout=10)
 
     # Assert that GraphQL reports that environment is compiling
     result = await client.graphql(query=query)
     assert result.code == 200
+    # Check if regular endpoint confirms that it is compiling
+    regular_check = await client.is_compiling(environment)
+    assert regular_check.code == 200
     assert result.result["data"] == get_response(is_compiling=True)
 
     # Finish compile
