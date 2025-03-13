@@ -29,6 +29,7 @@ from inmanta import env, references, resources, util
 from inmanta.agent.handler import PythonLogger
 from inmanta.ast import ExternalException, RuntimeException, TypingException
 from inmanta.data.model import ReleasedResourceDetails, ReleasedResourceState
+from inmanta.export import ResourceDict
 from inmanta.references import ReferenceCycleException
 from utils import ClientHelper, log_contains
 
@@ -304,3 +305,29 @@ def test_references_in_index(snippetcompiler: "SnippetCompilationTest", modules_
         match="Invalid value `StringReference` in index for attribute value: references can not be used in indexes",
     ):
         snippetcompiler.do_export()
+
+
+def test_ref_docs(snippetcompiler, monkeypatch, capsys):
+    base_path = os.path.join(os.path.dirname(__file__), "..", "docs", "model_developers", "examples")
+
+    def read_file(name: str) -> str:
+        with open(os.path.join(base_path, name), "r") as fh:
+            return fh.read()
+
+    def run_for_example(name: str) -> ResourceDict:
+        snippetcompiler.create_module(
+            f"references{name}", read_file(f"references_{name}.cf"), read_file(f"references_{name}.py")
+        )
+        snippetcompiler.setup_for_snippet(f"import references{name}", autostd=True)
+        _, resources = snippetcompiler.do_export()
+        return resources
+
+    resources = run_for_example(1)
+    assert len(resources) == 1
+    resource = next(iter(resources.values()))
+    assert len(resource["mutators"]) != 0
+
+    monkeypatch.setenv("test", "TEST VALUE")
+    run_for_example(2)
+
+    assert "TEST VALUE" in capsys.readouterr()[0]
