@@ -1,0 +1,5 @@
+---
+description: Limit pydantic version to 2.10.6 due to an incompatibility with the strawberry library
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master]
