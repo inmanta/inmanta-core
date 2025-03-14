@@ -1,0 +1,4 @@
+---
+description: Make the assertion on the firetime of the timer in the tests less strict.
+change-type: patch
+destination-branches: [master, iso8]

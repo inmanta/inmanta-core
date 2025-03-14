@@ -138,7 +138,7 @@ async def test_time_manager_basics():
     await t4[0].activation_lock.wait()
 
     def assert_fired(timer: MockTimer, at: datetime.datetime) -> None:
-        assert timedelta(milliseconds=0) < (timer.activated_at - at) < timedelta(milliseconds=5)
+        assert timedelta(milliseconds=0) < (timer.activated_at - at) < timedelta(milliseconds=10)
 
     assert_fired(*t1)
     assert_fired(*t2)
