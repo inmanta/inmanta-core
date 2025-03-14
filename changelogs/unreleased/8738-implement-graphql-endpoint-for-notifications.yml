@@ -1,7 +1,4 @@
-description: Implemented a GraphQL endpoint.
-  Added a query to fetch environments that supports filtering, sorting and paging.
-issue-nr: 8736
+description: Added a query to fetch notifications
+issue-nr: 8738
 change-type: minor
 destination-branches: [master]
-sections:
-  feature: "{{description}}"
