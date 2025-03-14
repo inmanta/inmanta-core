@@ -1,0 +1,4 @@
+---
+description: Fix bug in the test suite where the subprocess discovery fails if a process became a zombie or terminated while processing it.
+change-type: patch
+destination-branches: [master, iso8]
