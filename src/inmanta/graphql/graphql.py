@@ -14,7 +14,7 @@ Contact: code@inmanta.com
 
 from typing import Any
 
-from inmanta.graphql.schema import GraphQLMetadata, get_schema
+from inmanta.graphql.schema import GraphQLContext, get_schema
 from inmanta.protocol import methods_v2
 from inmanta.protocol.decorators import handle
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL, protocol
@@ -23,10 +23,11 @@ from inmanta.server.services.compilerservice import CompilerService
 
 
 class GraphQLSlice(protocol.ServerSlice):
-    metadata: GraphQLMetadata
+    metadata: GraphQLContext | None
 
     def __init__(self) -> None:
         super().__init__(name=SLICE_GRAPHQL)
+        self.metadata = None
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_COMPILER]
@@ -34,9 +35,10 @@ class GraphQLSlice(protocol.ServerSlice):
     async def prestart(self, server: Server) -> None:
         compiler_service = server.get_slice(SLICE_COMPILER)
         assert isinstance(compiler_service, CompilerService)
-        self.metadata = GraphQLMetadata(compiler_service=compiler_service)
+        self.metadata = GraphQLContext(compiler_service=compiler_service)
         await super().prestart(server)
 
     @handle(methods_v2.graphql)
     async def graphql(self, query: str) -> Any:  # Actual return type: strawberry.types.execution.ExecutionResult
+        assert self.metadata is not None
         return await get_schema(self.metadata).execute(query)

@@ -26,9 +26,15 @@ from strawberry.types import Info
 from strawberry.types.info import ContextType
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
 
+mapper: StrawberrySQLAlchemyMapper[typing.Any] = StrawberrySQLAlchemyMapper()
+
 
 @dataclasses.dataclass
-class GraphQLMetadata:
+class GraphQLContext:
+    """
+    Context passed down by the GraphQL slice, to be used by the Strawberry models.
+    """
+
     compiler_service: CompilerService
 
 
@@ -61,14 +67,13 @@ def add_filter_and_sort(
     return stmt
 
 
-def get_schema(metadata: GraphQLMetadata) -> strawberry.Schema:
+def get_schema(metadata: GraphQLContext) -> strawberry.Schema:
     """
     Initializes the Strawberry GraphQL schema.
     It is initiated in a function instead of being declared at the module level, because we have to do this
     after the SQLAlchemy engine is initialized.
     """
 
-    mapper: StrawberrySQLAlchemyMapper[typing.Any] = StrawberrySQLAlchemyMapper()
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
 
     def get_expert_mode(root: "Environment") -> bool:
@@ -76,7 +81,10 @@ def get_schema(metadata: GraphQLMetadata) -> strawberry.Schema:
         Checks settings of environment to figure out if expert mode is enabled or not
         """
         assert hasattr(root, "settings")  # Make mypy happy
-        return bool(root.settings.get("enable_lsm_expert_mode", False))
+        is_expert_mode = root.settings.get("enable_lsm_expert_mode", False)
+        if isinstance(is_expert_mode, str) and is_expert_mode.lower() == "false":
+            return False
+        return bool(is_expert_mode)
 
     def get_is_compiling(root: "Environment") -> bool:
         """

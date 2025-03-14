@@ -21,6 +21,7 @@ from inmanta import data
 from inmanta.server import SLICE_COMPILER
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
+from utils import run_compile_and_wait_until_compile_is_done
 
 
 @pytest.fixture
@@ -316,7 +317,7 @@ async def test_is_environment_compiling(server, client, clienthelper, environmen
     assert result.result["data"] == get_response(is_compiling=True)
 
     # Finish compile
-    del compilerslice._env_to_compile_task[uuid.UUID(environment)]
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
     # Assert that GraphQL reports that environment is no longer compiling
     result = await client.graphql(query=query)
