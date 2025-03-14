@@ -51,7 +51,7 @@ from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvActivationFail
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
-from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_GRAPHQL, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
 from inmanta.server.services import environmentservice
@@ -630,7 +630,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         return [SLICE_DATABASE]
 
     def get_depended_by(self) -> list[str]:
-        return [SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT]
+        return [SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT, SLICE_GRAPHQL]
 
     async def prestart(self, server: server.protocol.Server) -> None:
         await super().prestart(server)
@@ -949,9 +949,12 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         """
         await self._process_next_compile_in_queue(environment=environment)
 
+    def is_environment_compiling(self, environment_id: uuid.UUID) -> bool:
+        return environment_id in self._env_to_compile_task
+
     @protocol.handle(methods.is_compiling, environment_id="id")
     async def is_compiling(self, environment_id: uuid.UUID) -> Apireturn:
-        if environment_id in self._env_to_compile_task:
+        if self.is_environment_compiling(environment_id):
             return 200
         return 204
 

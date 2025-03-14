@@ -18,8 +18,12 @@ import uuid
 import pytest
 
 import inmanta.data.sqlalchemy as models
+from inmanta import data
+from inmanta.server import SLICE_COMPILER
+from inmanta.server.services.compilerservice import CompilerService
+from inmanta.util import retry_limited
+from utils import run_compile_and_wait_until_compile_is_done
 from inmanta import const
-from inmanta.data import get_session
 
 
 @pytest.fixture
@@ -44,7 +48,7 @@ async def setup_database(project_default):
         return notifications
 
     # Initialize DB
-    async with get_session() as session:
+    async with data.get_session() as session:
         environment_1 = models.Environment(
             id=uuid.UUID("11111111-1234-5678-1234-000000000001"),
             name="test-env-b",
@@ -211,7 +215,7 @@ async def test_query_environments_with_paging(server, client, setup_database):
     """
     Display basic paging capabilities
     """
-    async with get_session() as session:
+    async with data.get_session() as session:
         project = models.Project(id=uuid.UUID("00000000-1234-5678-1234-000000000002"), name="test-proj-2")
         instances = [project]
         for i in range(10):
@@ -286,6 +290,69 @@ async def test_query_environments_with_paging(server, client, setup_database):
     assert environments["pageInfo"]["endCursor"] == new_last_cursor
     assert environments["pageInfo"]["hasNextPage"] is True
     assert environments["pageInfo"]["hasPreviousPage"] is True
+
+
+async def test_is_environment_compiling(server, client, clienthelper, environment, mocked_compiler_service_block):
+
+    compilerslice = server.get_slice(SLICE_COMPILER)
+    assert isinstance(compilerslice, CompilerService)
+    env = await data.Environment.get_by_id(environment)
+
+    query = """
+    {
+        environments {
+            edges {
+                node {
+                  id
+                  isCompiling
+                }
+            }
+        }
+    }
+        """
+
+    def get_response(is_compiling: bool) -> dict:
+        return {
+            "data": {
+                "environments": {
+                    "edges": [
+                        {
+                            "node": {
+                                "id": environment,
+                                "isCompiling": is_compiling,
+                            }
+                        },
+                    ]
+                }
+            },
+            "errors": None,
+            "extensions": {},
+        }
+
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    assert result.result["data"] == get_response(is_compiling=False)
+
+    # Trigger compile
+    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    # prevent race conditions where compile request is not yet in queue
+    await retry_limited(lambda: compilerslice._env_to_compile_task.get(uuid.UUID(environment), None) is not None, timeout=10)
+
+    # Assert that GraphQL reports that environment is compiling
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    # Check if regular endpoint confirms that it is compiling
+    regular_check = await client.is_compiling(environment)
+    assert regular_check.code == 200
+    assert result.result["data"] == get_response(is_compiling=True)
+
+    # Finish compile
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
+
+    # Assert that GraphQL reports that environment is no longer compiling
+    result = await client.graphql(query=query)
+    assert result.code == 200
+    assert result.result["data"] == get_response(is_compiling=False)
 
 
 async def test_notifications(server, client, setup_database):

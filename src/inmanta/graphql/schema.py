@@ -12,12 +12,14 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import dataclasses
 import typing
 import uuid
 
 import inmanta.data.sqlalchemy as models
 import strawberry
 from inmanta.data import get_session, get_session_factory
+from inmanta.server.services.compilerservice import CompilerService
 from sqlalchemy import Select, asc, desc, select
 from strawberry import relay
 from strawberry.schema.config import StrawberryConfig
@@ -26,45 +28,15 @@ from strawberry.types.info import ContextType
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyLoader, StrawberrySQLAlchemyMapper
 
 mapper: StrawberrySQLAlchemyMapper[typing.Any] = StrawberrySQLAlchemyMapper()
-SCHEMA: strawberry.Schema | None = None
 
 
-def get_expert_mode(root: "Environment") -> bool:
-    assert hasattr(root, "settings")
-    return bool(root.settings.get("enable_lsm_expert_mode", False))
+@dataclasses.dataclass
+class GraphQLContext:
+    """
+    Context passed down by the GraphQL slice, to be used by the Strawberry models.
+    """
 
-
-@mapper.type(models.Environment)
-class Environment:
-    # Add every relation/attribute that we don't want to expose in our GraphQL endpoint to `__exclude__`
-    __exclude__ = [
-        "project_",
-        "agentprocess",
-        "code",
-        "compile",
-        "configurationmodel",
-        "discoveredresource",
-        "environmentmetricsgauge",
-        "environmentmetricstimer",
-        "notification",
-        "parameter",
-        "resource_persistent_state",
-        "unknownparameter",
-        "agent",
-    ]
-    is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
-
-
-@mapper.type(models.Notification)
-class Notification:
-    pass
-
-
-def get_schema() -> strawberry.Schema:
-    global SCHEMA
-    if SCHEMA is None:
-        SCHEMA = initialize_schema()
-    return SCHEMA
+    compiler_service: CompilerService
 
 
 class StrawberryFilter:
@@ -118,13 +90,61 @@ def add_filter_and_sort(
     return stmt
 
 
-def initialize_schema() -> strawberry.Schema:
+def get_schema(metadata: GraphQLContext) -> strawberry.Schema:
     """
     Initializes the Strawberry GraphQL schema.
     It is initiated in a function instead of being declared at the module level, because we have to do this
     after the SQLAlchemy engine is initialized.
     """
+
     loader = StrawberrySQLAlchemyLoader(async_bind_factory=get_session_factory())
+
+    def get_expert_mode(root: "Environment") -> bool:
+        """
+        Checks settings of environment to figure out if expert mode is enabled or not
+        """
+        assert hasattr(root, "settings")  # Make mypy happy
+        is_expert_mode = root.settings.get("enable_lsm_expert_mode", False)
+        if isinstance(is_expert_mode, str) and is_expert_mode.lower() == "false":
+            return False
+        return bool(is_expert_mode)
+
+    def get_is_compiling(root: "Environment") -> bool:
+        """
+        Checks compiler service to figure out if environment is compiling or not
+        """
+        assert hasattr(root, "id")  # Make mypy happy
+        return metadata.compiler_service.is_environment_compiling(environment_id=root.id)
+
+    @mapper.type(models.Environment)
+    class Environment:
+        # Add every relation/attribute that we don't want to expose in our GraphQL endpoint to `__exclude__`
+        __exclude__ = [
+            "project_",
+            "agentprocess",
+            "code",
+            "compile",
+            "configurationmodel",
+            "discoveredresource",
+            "environmentmetricsgauge",
+            "environmentmetricstimer",
+            "notification",
+            "parameter",
+            "resource_persistent_state",
+            "unknownparameter",
+            "agent",
+        ]
+        is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
+        is_compiling: bool = strawberry.field(resolver=get_is_compiling)
+
+    @strawberry.input
+    class EnvironmentFilter(StrawberryFilter):
+        id: typing.Optional[str] = strawberry.UNSET
+
+    @strawberry.input(one_of=True)
+    class EnvironmentOrder(StrawberryOrder):
+        id: typing.Optional[str] = strawberry.UNSET
+        name: typing.Optional[str] = strawberry.UNSET
 
     class CustomInfo(Info):
         @property
