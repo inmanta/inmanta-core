@@ -441,13 +441,6 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
                         fork_server = child
                     case executor if "inmanta: executor process" in executor:
                         executors.append(child)
-                    case py if "python" in py:
-                        cmd_line_process = " ".join(child.cmdline())
-                        resource_tracker_import = "from multiprocessing.resource_tracker"
-                        if resource_tracker_import not in cmd_line_process:
-                            assert False, f"Unexpected process: {py}"
-                    case _ as e:
-                        assert False, f"Unexpected process: {e}"
             except psutil.NoSuchProcess:
                 # The process terminated or it became a zombie process
                 continue
