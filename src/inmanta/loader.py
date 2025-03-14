@@ -35,7 +35,7 @@ from functools import cached_property
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from pydantic import BaseModel, computed_field
 
@@ -98,7 +98,7 @@ class CodeManager:
         # Cache of module to source info
         self.__module_to_source_info: dict[str, list[SourceInfo]] = {}
 
-        self.__modules_data: dict[str, dict[str, Any]] = {}
+        self.__modules_data: dict[str, "PythonModule"] = {}
 
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.

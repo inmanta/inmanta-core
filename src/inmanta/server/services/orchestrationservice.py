@@ -62,7 +62,7 @@ from inmanta.server import config as opt
 from inmanta.server import diff, protocol
 from inmanta.server.services import resourceservice
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr, ReturnTupple
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
 
 LOGGER = logging.getLogger(__name__)
 PLOGGER = logging.getLogger("performance")
@@ -818,7 +818,7 @@ class OrchestrationService(protocol.ServerSlice):
             all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
             all_agents.add(const.AGENT_SCHEDULER_ID)
 
-            type_to_agent: dict[ResourceType, str] = {res.resource_type: res.agent for res in rid_to_resource.values()}
+            type_to_agent: dict[str, str] = {str(res.resource_type): res.agent for res in rid_to_resource.values()}
             LOGGER.debug(module_version_info)
 
             for agent in all_agents:
@@ -828,8 +828,8 @@ class OrchestrationService(protocol.ServerSlice):
                 cm_version: int,
                 environment: uuid.UUID,
                 module_version_info: dict[str, str] | None,
-                type_to_module_data: dict[ResourceIdStr, str] | None,
-                type_to_agent: dict[ResourceType, str] | None,
+                type_to_module_data: dict[str, str] | None,
+                type_to_agent: dict[str, str] | None,
                 connection: Connection,
             ) -> None:
                 if not all([module_version_info, type_to_module_data, rid_to_resource, type_to_agent]):
