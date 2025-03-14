@@ -101,7 +101,7 @@ class CodeService(protocol.ServerSlice):
 
     @handle(methods.upload_code_batched, code_id="id", env="tid")
     async def upload_code_batched(self, env: data.Environment, code_id: int, resources: JsonType) -> Apireturn:
-        # raise NotImplementedError("Endpoint moved to methods_v2.upload_modules.")
+        raise NotImplementedError("Endpoint moved to methods_v2.upload_modules.")
         # validate
         for rtype, sources in resources.items():
             if not isinstance(rtype, str):

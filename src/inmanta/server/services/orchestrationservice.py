@@ -853,13 +853,6 @@ class OrchestrationService(protocol.ServerSlice):
                 assert rid_to_resource
                 assert type_to_agent
 
-                # TODO insert all values this only inserts the first value
-                # TODO add test for multiple value insert
-                resource_type = next(type for type in type_to_module_data.keys())
-                agent_name = type_to_agent[resource_type]
-
-                module_name = type_to_module_data[resource_type]
-                module_version = module_version_info[module_name]
                 query = """
                             INSERT INTO modules_for_agent(
                                 cm_version,
@@ -876,13 +869,18 @@ class OrchestrationService(protocol.ServerSlice):
                             );
                         """
                 async with connection.transaction():
-                    await connection.fetchrow(
+                    await connection.executemany(
                         query,
-                        cm_version,
-                        environment,
-                        agent_name,
-                        module_name,
-                        module_version,
+                        [
+                            (
+                                cm_version,
+                                environment,
+                                type_to_agent[resource_type],
+                                type_to_module_data[resource_type],
+                                module_version_info[type_to_module_data[resource_type]],
+                            )
+                            for resource_type in type_to_module_data.keys()
+                        ]
                     )
 
             await populate_join_table(version, env.id, module_version_info, type_to_module_data, type_to_agent, connection)

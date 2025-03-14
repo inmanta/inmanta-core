@@ -159,7 +159,7 @@ class CodeManager:
         """Return all module source info"""
         return self.__module_to_source_info
 
-    def get_modules_data(self) -> dict[str, dict[str, Any]]:
+    def get_modules_data(self) -> dict[str, "PythonModule"]:
         if self.__modules_data:
             return self.__modules_data
 
@@ -174,12 +174,10 @@ class CodeManager:
                 module_version_hash.update(file_hash.encode())
 
             module_version = module_version_hash.hexdigest()
-            modules_data[module_name] = dataclasses.asdict(
-                PythonModule(
+            modules_data[module_name] = PythonModule(
                     name=module_name,
                     version=module_version,
                     files_in_module=files_in_module,
-                )
             )
         self.__modules_data = modules_data
 
@@ -187,7 +185,7 @@ class CodeManager:
 
     def get_module_version_info(self) -> dict[str, str]:
         """Return all module version info"""
-        return {module_data["name"]: module_data["version"] for module_data in self.get_modules_data().values()}
+        return {module_data.name: module_data.version for module_data in self.get_modules_data().values()}
 
     def get_type_to_module(self) -> dict[str, str]:
         """Return all module source info"""
