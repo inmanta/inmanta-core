@@ -28,6 +28,7 @@ import asyncpg
 import asyncpg.connection
 import asyncpg.exceptions
 import pydantic
+from asyncpg import Connection
 
 import inmanta.exceptions
 import inmanta.util
@@ -665,6 +666,8 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
+        module_version_info: Optional[dict[str, str]],
+        type_to_module_data: Optional[dict[str, str]],
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -678,6 +681,7 @@ class OrchestrationService(protocol.ServerSlice):
         :param removed_resource_sets: When a partial compile is done, this parameter should indicate the names of the resource
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
+        :param module_version_info: Mapping of module name to module version.
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -814,9 +818,72 @@ class OrchestrationService(protocol.ServerSlice):
             all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
             all_agents.add(const.AGENT_SCHEDULER_ID)
 
+            type_to_agent: dict[str, str] = {str(res.resource_type): res.agent for res in rid_to_resource.values()}
+            LOGGER.debug(module_version_info)
+
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
+            async def populate_join_table(
+                cm_version: int,
+                environment: uuid.UUID,
+                module_version_info: dict[str, str] | None,
+                type_to_module_data: dict[str, str] | None,
+                type_to_agent: dict[str, str] | None,
+                connection: Connection,
+            ) -> None:
+                if not all([module_version_info, type_to_module_data, rid_to_resource, type_to_agent]):
+                    LOGGER.debug(
+                        "Cannot populate join table modules_for_agent. The following arguments are not set: %s"
+                        % ", ".join(
+                            [
+                                arg_name
+                                for arg_name, arg in zip(
+                                    ["module_version_info", "type_to_module_data", "rid_to_resource", "type_to_agent"],
+                                    [module_version_info, type_to_module_data, rid_to_resource, type_to_agent],
+                                )
+                                if not arg
+                            ]
+                        )
+                    )
+                    return
+
+                assert module_version_info
+                assert type_to_module_data
+                assert rid_to_resource
+                assert type_to_agent
+
+                query = """
+                            INSERT INTO modules_for_agent(
+                                cm_version,
+                                environment,
+                                agent_name,
+                                module_name,
+                                module_version
+                            ) VALUES(
+                                $1,
+                                $2,
+                                $3,
+                                $4,
+                                $5
+                            );
+                        """
+                async with connection.transaction():
+                    await connection.executemany(
+                        query,
+                        [
+                            (
+                                cm_version,
+                                environment,
+                                type_to_agent[resource_type],
+                                type_to_module_data[resource_type],
+                                module_version_info[type_to_module_data[resource_type]],
+                            )
+                            for resource_type in type_to_agent.keys()
+                        ],
+                    )
+
+            await populate_join_table(version, env.id, module_version_info, type_to_module_data, type_to_agent, connection)
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
             all_rvids = [i.resource_version_str() for i in all_ids]
@@ -891,6 +958,8 @@ class OrchestrationService(protocol.ServerSlice):
         compiler_version: Optional[str] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
+        module_version_info: Optional[dict[str, str]] = None,
+        type_to_module_data: Optional[dict[str, str]] = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
@@ -907,7 +976,7 @@ class OrchestrationService(protocol.ServerSlice):
             raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
 
         unknowns_objs = self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
-        rid_to_resource = self._create_dao_resources_from_api_resources(
+        rid_to_resource: dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
             env_id=env.id,
             resources=resources,
             resource_state=resource_state,
@@ -929,6 +998,8 @@ class OrchestrationService(protocol.ServerSlice):
                     resource_sets,
                     pip_config=pip_config,
                     connection=con,
+                    module_version_info=module_version_info,
+                    type_to_module_data=type_to_module_data,
                 )
             # This must be outside all transactions, as it relies on the result of _put_version
             # and it starts a background task, so it can't re-use this connection
@@ -1060,6 +1131,8 @@ class OrchestrationService(protocol.ServerSlice):
                     removed_resource_sets=removed_resource_sets,
                     pip_config=pip_config,
                     connection=con,
+                    module_version_info={},
+                    type_to_module_data={},
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)

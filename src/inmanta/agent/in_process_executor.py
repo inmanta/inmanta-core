@@ -28,7 +28,7 @@ import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import DeployReport, DryrunReport, FailedResources, GetFactReport, ResourceDetails
+from inmanta.agent.executor import DeployReport, DryrunReport, FailedModules, GetFactReport, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
 from inmanta.data.model import AttributeStateChange
@@ -76,7 +76,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         self._stopped = False
 
-        self.failed_resources: FailedResources = dict()
+        self.failed_modules: FailedModules = dict()
 
         self.cache_cleanup_tick_rate = inmanta.agent.config.agent_cache_cleanup_tick_rate.get()
         self.periodic_cache_cleanup_job: Optional[asyncio.Task[None]] = None
@@ -546,7 +546,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         await asyncio.gather(*(child.join() for child in self.executors.values()))
 
     async def get_executor(
-        self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
+        self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ModuleInstallSpec]
     ) -> InProcessExecutor:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
@@ -574,28 +574,28 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     await out.start()
                     self.executors[agent_name] = out
         assert out.uri == agent_uri
-        out.failed_resources = await self.ensure_code(code)
+        out.failed_modules = await self.ensure_code(code)
 
         return out
 
-    async def ensure_code(self, code: typing.Collection[executor.ResourceInstallSpec]) -> executor.FailedResources:
+    async def ensure_code(self, code: typing.Collection[executor.ModuleInstallSpec]) -> FailedModules:
         """Ensure that the code for the given environment and version is loaded"""
 
-        failed_to_load: executor.FailedResources = {}
+        failed_to_load: FailedModules = {}
 
         if self._loader is None:
             return failed_to_load
 
-        for resource_install_spec in code:
+        for module_install_spec in code:
             # only one logical thread can load a particular resource type at any time
-            async with self._resource_loader_lock.get(resource_install_spec.resource_type):
+            async with self._resource_loader_lock.get(module_install_spec.module_name):
                 # stop if the last successful load was this one
                 # The combination of the lock and this check causes the reloads to naturally 'batch up'
-                if self._last_loaded_version[resource_install_spec.resource_type] == resource_install_spec.blueprint:
+                if self._last_loaded_version[module_install_spec.module_name] == module_install_spec.blueprint:
                     self.logger.debug(
                         "Handler code already installed for %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
+                        module_install_spec.module_name,
+                        module_install_spec.model_version,
                     )
                     continue
 
@@ -603,29 +603,29 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     # Install required python packages and the list of ``ModuleSource`` with the provided pip config
                     self.logger.debug(
                         "Installing handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
+                        module_install_spec.module_name,
+                        module_install_spec.model_version,
                     )
-                    await self._install(resource_install_spec.blueprint)
+                    await self._install(module_install_spec.blueprint)
                     self.logger.debug(
                         "Installed handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
+                        module_install_spec.module_name,
+                        module_install_spec.model_version,
                     )
 
-                    self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.blueprint
+                    self._last_loaded_version[module_install_spec.module_name] = module_install_spec.blueprint
                 except Exception as e:
                     self.logger.exception(
                         "Failed to install handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
+                        module_install_spec.module_name,
+                        module_install_spec.model_version,
                     )
-                    if resource_install_spec.resource_type not in failed_to_load:
-                        failed_to_load[resource_install_spec.resource_type] = Exception(
-                            f"Failed to install handler {resource_install_spec.resource_type} "
-                            f"version={resource_install_spec.model_version}: {e}"
+                    if module_install_spec.module_name not in failed_to_load:
+                        failed_to_load[module_install_spec.module_name] = Exception(
+                            f"Failed to install handler {module_install_spec.module_name} "
+                            f"version={module_install_spec.model_version}: {e}"
                         ).with_traceback(e.__traceback__)
-                    self._last_loaded_version[resource_install_spec.resource_type] = None
+                    self._last_loaded_version[module_install_spec.module_name] = None
 
         return failed_to_load
 

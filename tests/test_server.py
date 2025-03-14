@@ -31,12 +31,11 @@ from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import config, const, data, loader, resources, util
-from inmanta.agent import executor, handler
+from inmanta.agent import executor
 from inmanta.const import ParameterSource
 from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import persistence, state
-from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
@@ -641,16 +640,6 @@ async def test_batched_code_upload(
     version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
 
     code_manager = loader.CodeManager()
-
-    for type_name, resource_definition in resources.resource.get_resources():
-        code_manager.register_code(type_name, resource_definition)
-
-    for type_name, handler_definition in handler.Commander.get_providers():
-        code_manager.register_code(type_name, handler_definition)
-
-    await asyncio.get_event_loop().run_in_executor(
-        None, lambda: upload_code(sync_client_multi, environment_multi, version, code_manager)
-    )
 
     for name, source_info in code_manager.get_types():
         assert len(source_info) >= 2

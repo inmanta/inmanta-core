@@ -1365,6 +1365,24 @@ def update_notification(
 
 
 @typedmethod(
+    path="/modulecodebatched/",
+    operation="PUT",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.compiler],
+    api_version=2,
+    varkw=True,
+)
+def upload_modules(tid: uuid.UUID, **kwargs: object) -> ReturnValue[int]:
+    """
+    TODO
+
+    :param tid: The id of the environment to which the code belongs.
+    :param modules_data: TODO
+
+    """
+
+
+@typedmethod(
     path="/code/<version>",
     operation="GET",
     agent_server=True,

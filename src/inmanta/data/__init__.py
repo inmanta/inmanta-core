@@ -2709,6 +2709,10 @@ class Environment(BaseDocument):
             await ResourcePersistentState.delete_all(environment=self.id, connection=con)
             await Scheduler.delete_all(environment=self.id, connection=con)
 
+            # TODO: Add
+            # The delete cascade/clear logic of an Environment
+            # The delete cascade logic of a ConfigurationModel
+
     async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
         """
         Reserves the next available version and returns it. Increments the last_version counter.
@@ -6608,6 +6612,7 @@ _classes = [
 
 
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
+
 
 # Name of core schema in the DB schema verions
 # prevent import loop

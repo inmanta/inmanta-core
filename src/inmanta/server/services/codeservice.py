@@ -20,12 +20,15 @@ import logging
 from typing import cast
 
 from inmanta import data
-from inmanta.data import model
+from inmanta.data import get_session, model
+from inmanta.data.sqlalchemy import FilesInModule, Module
 from inmanta.protocol import handle, methods, methods_v2
+from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.services.fileservice import FileService
 from inmanta.types import Apireturn, JsonType
+from sqlalchemy.dialects.postgresql import insert
 
 LOGGER = logging.getLogger(__name__)
 
@@ -48,8 +51,57 @@ class CodeService(protocol.ServerSlice):
         await super().prestart(server)
         self.file_slice = cast(FileService, server.get_slice(SLICE_FILE))
 
+    @handle(methods_v2.upload_modules, env="tid")
+    async def upload_modules(self, env: data.Environment, modules_data: JsonType) -> ReturnValue[None]:
+        """
+
+        :param modules_data: dict with key module name and value loader.PythonModule
+        :return:
+        """
+        LOGGER.debug(f"{env=}")
+        LOGGER.debug(f"{modules_data=}")
+        module_stmt = insert(Module).on_conflict_do_nothing()
+
+        files_in_module_stmt = insert(FilesInModule).on_conflict_do_nothing()
+
+        if not modules_data:
+            raise BadRequest("No modules were provided")
+        module_data = []
+        files_in_module_data = []
+        for module_name, python_module in modules_data.items():
+
+            requirements: set[str] = set()
+
+            for file in python_module["files_in_module"]:
+                file_in_module = {
+                    "module_name": module_name,
+                    "module_version": python_module["version"],
+                    "environment": env.id,
+                    "file_content_hash": file["hash"],
+                    "file_path": file["path"],
+                }
+                requirements.update(file["requires"])
+                files_in_module_data.append(file_in_module)
+
+            module = {
+                "name": module_name,
+                "version": python_module["version"],
+                "environment": env.id,
+                "requirements": requirements,
+            }
+
+            module_data.append(module)
+
+        async with get_session() as session:
+            await session.execute(module_stmt, module_data)
+            await session.execute(files_in_module_stmt, files_in_module_data)
+            await session.commit()
+
+        return ReturnValue(response=None)
+
     @handle(methods.upload_code_batched, code_id="id", env="tid")
     async def upload_code_batched(self, env: data.Environment, code_id: int, resources: JsonType) -> Apireturn:
+        raise NotImplementedError("Endpoint moved to methods_v2.upload_modules.")
         # validate
         for rtype, sources in resources.items():
             if not isinstance(rtype, str):

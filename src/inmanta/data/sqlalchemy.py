@@ -45,6 +45,66 @@ class Base(DeclarativeBase):
     pass
 
 
+class Module(Base):
+    __tablename__ = "module"
+
+    __table_args__ = (
+        PrimaryKeyConstraint("name", "version", "environment", name="module_pkey"),
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="code_environment_fkey"),
+    )
+
+    name: Mapped[str] = mapped_column(String)
+    version: Mapped[str] = mapped_column(String)
+    environment: Mapped[uuid.UUID] = mapped_column(UUID)
+    requirements: Mapped[list[str]] = mapped_column(ARRAY(String()))
+
+
+class FilesInModule(Base):
+    __tablename__ = "files_in_module"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["module_name", "module_version", "environment"],
+            ["module.name", "module.version", "module.environment"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="files_in_module_environment_fkey"),
+        ForeignKeyConstraint(
+            ["file_content_hash"], ["file.content_hash"], ondelete="RESTRICT", name="files_in_module_file_content_hash_fkey"
+        ),  # todo add test for restrict behaviour on delete
+        UniqueConstraint("module_name", "module_version", "environment", "file_path"),
+    )
+    __mapper_args__ = {"primary_key": ["module_name", "module_version", "environment", "file_path"]}
+
+    module_name: Mapped[str] = mapped_column(String)
+    module_version: Mapped[str] = mapped_column(String)
+    environment: Mapped[uuid.UUID] = mapped_column(UUID)
+    file_content_hash: Mapped[str] = mapped_column(String)
+    file_path: Mapped[str] = mapped_column(String)
+
+
+class ModulesForAgent(Base):
+    __tablename__ = "modules_for_agent"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["cm_version", "environment"], ["configurationmodel.version", "configurationmodel.environment"], ondelete="CASCADE"
+        ),  # TODO add test for deletion: check this deleted when cm is deleted via regular api (non-sqlalchemy api)
+        ForeignKeyConstraint(["agent_name", "environment"], ["agent.name", "agent.environment"], ondelete="CASCADE"),
+        ForeignKeyConstraint(
+            ["module_name", "module_version", "environment"],
+            ["module.name", "module.version", "module.environment"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("cm_version", "environment", "agent_name", "module_name"),
+    )
+    __mapper_args__ = {"primary_key": ["cm_version", "environment", "agent_name", "module_name"]}
+
+    cm_version: Mapped[int] = mapped_column(Integer)
+    environment: Mapped[uuid.UUID] = mapped_column(UUID)
+    agent_name: Mapped[str] = mapped_column(String)
+    module_name: Mapped[str] = mapped_column(String)
+    module_version: Mapped[str] = mapped_column(String)
+
+
 class File(Base):
     __tablename__ = "file"
     __table_args__ = (PrimaryKeyConstraint("content_hash", name="file_pkey"),)
