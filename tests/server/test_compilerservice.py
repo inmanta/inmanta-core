@@ -29,7 +29,7 @@ import subprocess
 import uuid
 from asyncio import Semaphore
 from collections import abc
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import py.path
 import pytest
@@ -53,12 +53,16 @@ from inmanta.server.services.compilerservice import CompilerService, CompileRun,
 from inmanta.server.services.notificationservice import NotificationService
 from inmanta.util import ensure_directory_exist
 from server.conftest import EnvironmentFactory
-from utils import LogSequence, log_contains, report_db_index_usage, retry_limited, wait_for_version
+from utils import (
+    LogSequence,
+    log_contains,
+    report_db_index_usage,
+    retry_limited,
+    run_compile_and_wait_until_compile_is_done,
+    wait_for_version,
+)
 
 logger = logging.getLogger("inmanta.test.server.compilerservice")
-
-if TYPE_CHECKING:
-    from conftest import CompileRunnerMock
 
 
 @pytest.fixture
@@ -980,37 +984,6 @@ std::testing::NullResource(name='test')
     logger.info("wait for 5")
     versions = await wait_for_version(client, environment, cnt=5)
     assert versions["count"] == 5
-
-
-async def run_compile_and_wait_until_compile_is_done(
-    compiler_service: CompilerService,
-    compiler_queue: queue.Queue["CompileRunnerMock"],
-    env_id: uuid.UUID,
-    fail: Optional[bool] = None,
-    fail_on_pull=False,
-) -> "CompileRunnerMock":
-    """
-    Unblock the first compile in the compiler queue and wait until the compile finishes.
-    """
-    # prevent race conditions where compile request is not yet in queue
-    await retry_limited(lambda: not compiler_queue.empty(), timeout=10)
-    run = compiler_queue.get(block=True)
-    if fail is not None:
-        run._make_compile_fail = fail
-    run._make_pull_fail = fail_on_pull
-
-    current_task = compiler_service._env_to_compile_task[env_id]
-    run.block = False
-
-    def _is_compile_finished() -> bool:
-        if env_id not in compiler_service._env_to_compile_task:
-            return True
-        if current_task is not compiler_service._env_to_compile_task[env_id]:
-            return True
-        return False
-
-    await retry_limited(_is_compile_finished, timeout=10)
-    return run
 
 
 async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, server, client, environment):
