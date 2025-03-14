@@ -13,6 +13,7 @@ Contact: code@inmanta.com
 """
 
 import typing
+import uuid
 
 import inmanta.data.sqlalchemy as models
 import strawberry
@@ -54,6 +55,11 @@ class Environment:
     is_expert_mode: bool = strawberry.field(resolver=get_expert_mode)
 
 
+@mapper.type(models.Notification)
+class Notification:
+    pass
+
+
 def get_schema() -> strawberry.Schema:
     global SCHEMA
     if SCHEMA is None:
@@ -79,6 +85,17 @@ class EnvironmentFilter(StrawberryFilter):
 class EnvironmentOrder(StrawberryOrder):
     id: typing.Optional[str] = strawberry.UNSET
     name: typing.Optional[str] = strawberry.UNSET
+
+
+@strawberry.input
+class NotificationFilter(StrawberryFilter):
+    cleared: typing.Optional[bool] = strawberry.UNSET
+    environment: typing.Optional[uuid.UUID] = strawberry.UNSET
+
+
+@strawberry.input(one_of=True)
+class NotificationOrder(StrawberryOrder):
+    created: typing.Optional[str] = strawberry.UNSET
 
 
 def add_filter_and_sort(
@@ -127,5 +144,17 @@ def initialize_schema() -> strawberry.Schema:
                 stmt = add_filter_and_sort(stmt, filter, order_by)
                 _environments = await session.scalars(stmt)
                 return _environments.all()
+
+        @relay.connection(relay.ListConnection[Notification])  # type: ignore[misc, type-var]
+        async def notifications(
+            self,
+            filter: typing.Optional[NotificationFilter] = strawberry.UNSET,
+            order_by: typing.Optional[NotificationOrder] = strawberry.UNSET,
+        ) -> typing.Iterable[models.Notification]:
+            async with get_session() as session:
+                stmt = select(models.Notification)
+                stmt = add_filter_and_sort(stmt, filter, order_by)
+                _notifications = await session.scalars(stmt)
+                return _notifications.all()
 
     return strawberry.Schema(query=Query, config=StrawberryConfig(info_class=CustomInfo))
