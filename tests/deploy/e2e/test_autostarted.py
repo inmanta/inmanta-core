@@ -408,15 +408,19 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
             # ignore zombie children
             if child.status() == psutil.STATUS_ZOMBIE:
                 continue
-            if "python" in child.name():
-                cmd_line_process = " ".join(child.cmdline())
-                if "inmanta.app" in cmd_line_process and "scheduler" in cmd_line_process:
-                    assert current_scheduler is None, (
-                        f"A scheduler was already found: {current_scheduler} (spawned via {current_scheduler.cmdline()} in "
-                        f"parent process {current_scheduler.parent()}) but we found a new one: {child} (spawned via "
-                        f"{child.cmdline()} in parent process {child.parent()}), this is unexpected!"
-                    )
-                    current_scheduler = child
+            try:
+                if "python" in child.name():
+                    cmd_line_process = " ".join(child.cmdline())
+                    if "inmanta.app" in cmd_line_process and "scheduler" in cmd_line_process:
+                        assert current_scheduler is None, (
+                            f"A scheduler was already found: {current_scheduler} (spawned via {current_scheduler.cmdline()} in "
+                            f"parent process {current_scheduler.parent()}) but we found a new one: {child} (spawned via "
+                            f"{child.cmdline()} in parent process {child.parent()}), this is unexpected!"
+                        )
+                        current_scheduler = child
+            except psutil.NoSuchProcess:
+                # The process terminated or it became a zombie process
+                continue
         return current_scheduler
 
     def filter_relevant_processes(latest_scheduler: Process) -> SchedulerChildren:
@@ -431,18 +435,22 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
         executors = []
 
         for child in children:
-            match child.name():
-                case "inmanta: multiprocessing fork server":
-                    fork_server = child
-                case executor if "inmanta: executor process" in executor:
-                    executors.append(child)
-                case py if "python" in py:
-                    cmd_line_process = " ".join(child.cmdline())
-                    resource_tracker_import = "from multiprocessing.resource_tracker"
-                    if resource_tracker_import in cmd_line_process:
-                        continue
-                case _ as e:
-                    assert False, f"Unexpected process: {e}"
+            try:
+                match child.name():
+                    case "inmanta: multiprocessing fork server":
+                        fork_server = child
+                    case executor if "inmanta: executor process" in executor:
+                        executors.append(child)
+                    case py if "python" in py:
+                        cmd_line_process = " ".join(child.cmdline())
+                        resource_tracker_import = "from multiprocessing.resource_tracker"
+                        if resource_tracker_import in cmd_line_process:
+                            continue
+                    case _ as e:
+                        assert False, f"Unexpected process: {e}"
+            except psutil.NoSuchProcess:
+                # The process terminated or it became a zombie process
+                continue
 
         return SchedulerChildren(
             scheduler=latest_scheduler,
