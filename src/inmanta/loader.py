@@ -17,7 +17,6 @@ Contact: code@inmanta.com
 """
 
 import base64
-import dataclasses
 import functools
 import hashlib
 import importlib
@@ -175,9 +174,9 @@ class CodeManager:
 
             module_version = module_version_hash.hexdigest()
             modules_data[module_name] = PythonModule(
-                    name=module_name,
-                    version=module_version,
-                    files_in_module=files_in_module,
+                name=module_name,
+                version=module_version,
+                files_in_module=files_in_module,
             )
         self.__modules_data = modules_data
 

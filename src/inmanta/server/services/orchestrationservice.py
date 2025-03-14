@@ -62,7 +62,7 @@ from inmanta.server import config as opt
 from inmanta.server import diff, protocol
 from inmanta.server.services import resourceservice
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr, ReturnTupple
 
 LOGGER = logging.getLogger(__name__)
 PLOGGER = logging.getLogger("performance")
@@ -667,7 +667,7 @@ class OrchestrationService(protocol.ServerSlice):
         *,
         connection: asyncpg.connection.Connection,
         module_version_info: Optional[dict[str, str]],
-        type_to_module_data: Optional[dict[ResourceIdStr, str]],
+        type_to_module_data: Optional[dict[str, str]],
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -818,7 +818,7 @@ class OrchestrationService(protocol.ServerSlice):
             all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
             all_agents.add(const.AGENT_SCHEDULER_ID)
 
-            type_to_agent: dict[str, str] = {res.resource_type: res.agent for res in rid_to_resource.values()}
+            type_to_agent: dict[ResourceType, str] = {res.resource_type: res.agent for res in rid_to_resource.values()}
             LOGGER.debug(module_version_info)
 
             for agent in all_agents:
@@ -829,7 +829,7 @@ class OrchestrationService(protocol.ServerSlice):
                 environment: uuid.UUID,
                 module_version_info: dict[str, str] | None,
                 type_to_module_data: dict[ResourceIdStr, str] | None,
-                type_to_agent: dict[str, str] | None,
+                type_to_agent: dict[ResourceType, str] | None,
                 connection: Connection,
             ) -> None:
                 if not all([module_version_info, type_to_module_data, rid_to_resource, type_to_agent]):
@@ -879,8 +879,8 @@ class OrchestrationService(protocol.ServerSlice):
                                 type_to_module_data[resource_type],
                                 module_version_info[type_to_module_data[resource_type]],
                             )
-                            for resource_type in type_to_module_data.keys()
-                        ]
+                            for resource_type in type_to_agent.keys()
+                        ],
                     )
 
             await populate_join_table(version, env.id, module_version_info, type_to_module_data, type_to_agent, connection)
@@ -959,7 +959,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
         module_version_info: Optional[dict[str, str]] = None,
-        type_to_module_data: Optional[dict[ResourceIdStr, str]] = None,
+        type_to_module_data: Optional[dict[str, str]] = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
