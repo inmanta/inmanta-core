@@ -18,12 +18,11 @@ import uuid
 import pytest
 
 import inmanta.data.sqlalchemy as models
-from inmanta import data
+from inmanta import const, data
 from inmanta.server import SLICE_COMPILER
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
 from utils import run_compile_and_wait_until_compile_is_done
-from inmanta import const
 
 
 @pytest.fixture
