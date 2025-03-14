@@ -1620,6 +1620,9 @@ def graphql(query: str) -> Any:  # Actual return type: strawberry.types.executio
 
     Available queries:
         - "environments" - Gets a list of created environments.
-            Supports filter and sorting on id and name.
+            Supports filter and sorting on "id" and "name".
+        - "notifications" - Gets a list of notifications.
+            Supports filters on "cleared" and "environment"
+            Supports sorting on "created"
     """
     pass

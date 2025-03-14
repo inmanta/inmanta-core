@@ -1,0 +1,4 @@
+description: Added a query to fetch notifications
+issue-nr: 8738
+change-type: minor
+destination-branches: [master]
