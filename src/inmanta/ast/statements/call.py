@@ -29,10 +29,10 @@ from inmanta.ast import (
     ExplicitPluginException,
     ExternalException,
     LocatableString,
-    Location,
     MultiUnsetException,
     Namespace,
     PluginTypeException,
+    Range,
     RuntimeException,
     TypeReferenceAnchor,
     UnknownException,
@@ -68,14 +68,13 @@ class FunctionCall(ReferenceStatement):
         arguments: list[ExpressionStatement],
         kwargs: list[tuple[LocatableString, ExpressionStatement]],
         wrapped_kwargs: list[WrappedKwargs],
-        location: Location,
         namespace: Namespace,
     ) -> None:
         ReferenceStatement.__init__(self, list(chain(arguments, (v for _, v in kwargs), wrapped_kwargs)))
         self.name: LocatableString = name
         self.arguments: list[ExpressionStatement] = arguments
         self.wrapped_kwargs: list[WrappedKwargs] = wrapped_kwargs
-        self.location: Location = location
+        self.location: Range = name.get_location()
         self.namespace: Namespace = namespace
         self.kwargs: dict[str, ExpressionStatement] = {}
         for loc_name, expr in kwargs:

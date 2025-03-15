@@ -25,6 +25,7 @@ import json
 import logging
 import math
 import os
+import queue
 import random
 import shutil
 import uuid
@@ -33,7 +34,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timezone
 from logging import LogRecord
-from typing import Any, Collection, Mapping, Optional, Set, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Collection, Mapping, Optional, Set, TypeVar, Union
 
 import pytest
 import yaml
@@ -50,6 +51,7 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
+from inmanta.data import get_connection_ctx_mgr
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
@@ -58,6 +60,7 @@ from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
+from inmanta.server.services.compilerservice import CompilerService
 from inmanta.types import Apireturn, ResourceIdStr, ResourceType
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
@@ -65,6 +68,9 @@ from libpip2pi.commands import dir2pi
 T = TypeVar("T")
 
 LOGGER = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from conftest import CompileRunnerMock
 
 
 def get_all_subclasses(cls: type[T]) -> set[type[T]]:
@@ -309,7 +315,7 @@ async def report_db_index_usage(min_precent=100):
         " n_live_tup rows_in_table, seq_scan * n_live_tup badness  FROM pg_stat_user_tables "
         "WHERE seq_scan + idx_scan > 0 order by badness desc"
     )
-    async with data.Compile._connection_pool.acquire() as con:
+    async with get_connection_ctx_mgr() as con:
         result = await con.fetch(q)
 
     for row in result:
@@ -399,8 +405,11 @@ async def wait_until_deployment_finishes(
 
         if version >= 0:
             scheduler = await data.Scheduler.get_one(environment=environment)
-            assert scheduler is not None
-            if scheduler.last_processed_model_version is None or scheduler.last_processed_model_version < version:
+            if (
+                scheduler is None
+                or scheduler.last_processed_model_version is None
+                or scheduler.last_processed_model_version < version
+            ):
                 return False
 
         result = await client.resource_list(environment, deploy_summary=True)
@@ -753,14 +762,14 @@ def module_from_template(
                 config=PipConfig(use_system_config=True),
             )
         else:
-            mod_artifact_path = ModuleTool().build(path=dest_dir)
+            mod_artifact_paths = ModuleTool().build(path=dest_dir, wheel=True)
             env.process_env.install_for_config(
                 requirements=[],
-                paths=[env.LocalPackagePath(path=mod_artifact_path)],
+                paths=[env.LocalPackagePath(path=mod_artifact_paths[0])],
                 config=PipConfig(use_system_config=True),
             )
     if publish_index is not None:
-        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
+        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir, wheel=True)
         publish_index.publish()
     with open(config_file) as fh:
         return module.ModuleV2Metadata.parse(fh)
@@ -1038,3 +1047,34 @@ def assert_resource_persistent_state(
         f"{resource_persistent_state.resource_id}"
         f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance})"
     )
+
+
+async def run_compile_and_wait_until_compile_is_done(
+    compiler_service: CompilerService,
+    compiler_queue: queue.Queue["CompileRunnerMock"],
+    env_id: uuid.UUID,
+    fail: Optional[bool] = None,
+    fail_on_pull=False,
+) -> "CompileRunnerMock":
+    """
+    Unblock the first compile in the compiler queue and wait until the compile finishes.
+    """
+    # prevent race conditions where compile request is not yet in queue
+    await retry_limited(lambda: not compiler_queue.empty(), timeout=10)
+    run = compiler_queue.get(block=True)
+    if fail is not None:
+        run._make_compile_fail = fail
+    run._make_pull_fail = fail_on_pull
+
+    current_task = compiler_service._env_to_compile_task[env_id]
+    run.block = False
+
+    def _is_compile_finished() -> bool:
+        if env_id not in compiler_service._env_to_compile_task:
+            return True
+        if current_task is not compiler_service._env_to_compile_task[env_id]:
+            return True
+        return False
+
+    await retry_limited(_is_compile_finished, timeout=10)
+    return run

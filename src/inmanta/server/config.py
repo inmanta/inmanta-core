@@ -136,7 +136,6 @@ server_bind_port = Option(
     is_int,
 )
 
-
 server_tz_aware_timestamps = Option(
     "server",
     "tz_aware_timestamps",
@@ -272,7 +271,7 @@ server_enabled_extensions: Option[list[str]] = Option(
     "enabled_extensions",
     list,
     "A list of extensions the server must load. Core is always loaded."
-    "If an extension listed in this list is not available, the server will refuse to start.",
+    " If an extension listed in this list is not available, the server will refuse to start.",
     is_list,
 )
 
@@ -281,7 +280,7 @@ server_access_control_allow_origin = Option(
     "access-control-allow-origin",
     None,
     "Configures the Access-Control-Allow-Origin setting of the http server."
-    "Defaults to not sending an Access-Control-Allow-Origin header.",
+    " Defaults to not sending an Access-Control-Allow-Origin header.",
     is_str_opt,
 )
 

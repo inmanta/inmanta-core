@@ -395,31 +395,32 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
         - Executor(s)
     """
 
-    def get_process_children(current_pid: int) -> list[Process]:
-        """
-        Retrieves the current list of processes running under this process
-
-        :param current_pid: The PID of this process
-        """
-        return psutil.Process(current_pid).children(recursive=True)
-
-    def find_scheduler(children: list[Process]) -> Optional[Process]:
+    def find_scheduler() -> Optional[Process]:
         """
         Find and return the Scheduler. Make sure only one scheduler is running
-
-        :param children: The list of processes that are currently running
         """
+        # Only consider the direct children. The scheduler process is always
+        # a direct child of the server process.
+        children = psutil.Process(current_pid).children(recursive=False)
         current_scheduler = None
 
         for child in children:
-            if "python" in child.name():
-                cmd_line_process = " ".join(child.cmdline())
-                if "inmanta.app" in cmd_line_process and "scheduler" in cmd_line_process:
-                    assert current_scheduler is None, (
-                        f"A scheduler was already found: {current_scheduler} but we found "
-                        f"a new one: {child}, this is unexpected!"
-                    )
-                    current_scheduler = child
+            # ignore zombie children
+            if child.status() == psutil.STATUS_ZOMBIE:
+                continue
+            try:
+                if "python" in child.name():
+                    cmd_line_process = " ".join(child.cmdline())
+                    if "inmanta.app" in cmd_line_process and "scheduler" in cmd_line_process:
+                        assert current_scheduler is None, (
+                            f"A scheduler was already found: {current_scheduler} (spawned via {current_scheduler.cmdline()} in "
+                            f"parent process {current_scheduler.parent()}) but we found a new one: {child} (spawned via "
+                            f"{child.cmdline()} in parent process {child.parent()}), this is unexpected!"
+                        )
+                        current_scheduler = child
+            except psutil.NoSuchProcess:
+                # The process terminated or it became a zombie process
+                continue
         return current_scheduler
 
     def filter_relevant_processes(latest_scheduler: Process) -> SchedulerChildren:
@@ -434,18 +435,15 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
         executors = []
 
         for child in children:
-            match child.name():
-                case "inmanta: multiprocessing fork server":
-                    fork_server = child
-                case executor if "inmanta: executor process" in executor:
-                    executors.append(child)
-                case py if "python" in py:
-                    cmd_line_process = " ".join(child.cmdline())
-                    resource_tracker_import = "from multiprocessing.resource_tracker"
-                    if resource_tracker_import in cmd_line_process:
-                        continue
-                case _ as e:
-                    assert False, f"Unexpected process: {e}"
+            try:
+                match child.name():
+                    case "inmanta: multiprocessing fork server":
+                        fork_server = child
+                    case executor if "inmanta: executor process" in executor:
+                        executors.append(child)
+            except psutil.NoSuchProcess:
+                # The process terminated or it became a zombie process
+                continue
 
         return SchedulerChildren(
             scheduler=latest_scheduler,
@@ -453,8 +451,7 @@ def construct_scheduler_children(current_pid: int) -> SchedulerChildren:
             executors=executors,
         )
 
-    children = get_process_children(current_pid)
-    latest_scheduler = find_scheduler(children)
+    latest_scheduler = find_scheduler()
     if latest_scheduler is None:
         return SchedulerChildren(
             scheduler=None,
@@ -556,7 +553,8 @@ import minimalwaitingmodule
 
 a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep={time_to_sleep})
 """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
 
     # Now, let's deploy some resources
@@ -625,7 +623,8 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 
     a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep={time_to_sleep})
     """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
     result = await client.release_version(environment, version, push=False)
@@ -731,7 +730,8 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 b = minimalwaitingmodule::Sleep(name="test_sleep2", agent="agent1", time_to_sleep=5)
 c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sleep=5)
 """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
 
     # Now, let's deploy some resources
@@ -883,7 +883,8 @@ import minimalwaitingmodule
 
 a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
 """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
 
     # Now, let's deploy a resource
@@ -984,7 +985,8 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 b = minimalwaitingmodule::Sleep(name="test_sleep2", agent="agent1", time_to_sleep=5)
 c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sleep=5)
 """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
 
     # Now, let's deploy some resources
@@ -1127,7 +1129,8 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 b = minimalwaitingmodule::Sleep(name="test_sleep2", agent="agent2", time_to_sleep=5)
 c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_sleep=5)
 """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
 
     # Now, let's deploy some resources
@@ -1283,7 +1286,8 @@ import minimalwaitingmodule
 
 a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
 """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
 
     # Now, let's deploy a resource
@@ -1366,7 +1370,8 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 
 a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
     """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
     result = await client.release_version(environment, version, push=False)

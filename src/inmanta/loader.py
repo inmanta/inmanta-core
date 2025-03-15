@@ -143,7 +143,7 @@ class CodeManager:
         """
         file_name = self.get_object_source(instance)
         if file_name is None:
-            raise SourceNotFoundException(f"Unable to locate source code of instance {inspect} for entity {type_name}")
+            raise SourceNotFoundException(f"Unable to locate source code of instance {instance} for entity {type_name}")
 
         if type_name not in self.__type_file:
             self.__type_file[type_name] = set()
@@ -288,7 +288,7 @@ class CodeLoader:
 
     def load_module(self, mod_name: str, hv: str) -> None:
         """
-        Ensure the given module is loaded.
+        Ensure the given module is loaded. Does not capture any import errors.
 
         :param mod_name: Name of the module to load
         :param hv: hash value of the content of the module
@@ -298,18 +298,15 @@ class CodeLoader:
 
         # Importing a module -> only the first import loads the code
         # cache of loaded modules mechanism -> starts afresh when agent is restarted
-        try:
-            if mod_name in self.__modules:
-                if hv != self.__modules[mod_name][0]:
-                    raise Exception(f"The content of module {mod_name} changed since it was last imported.")
-                LOGGER.debug("Module %s is already loaded", mod_name)
-                return
-            else:
-                mod = importlib.import_module(mod_name)
-            self.__modules[mod_name] = (hv, mod)
-            LOGGER.info("Loaded module %s", mod_name)
-        except ImportError:
-            LOGGER.exception("Unable to load module %s", mod_name)
+        if mod_name in self.__modules:
+            if hv != self.__modules[mod_name][0]:
+                raise Exception(f"The content of module {mod_name} changed since it was last imported.")
+            LOGGER.debug("Module %s is already loaded", mod_name)
+            return
+        else:
+            mod = importlib.import_module(mod_name)
+        self.__modules[mod_name] = (hv, mod)
+        LOGGER.info("Loaded module %s", mod_name)
 
     def install_source(self, module_source: ModuleSource) -> None:
         """

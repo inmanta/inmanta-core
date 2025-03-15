@@ -19,7 +19,7 @@ Contact: code@inmanta.com
 import traceback
 from abc import abstractmethod
 from functools import lru_cache
-from typing import Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from inmanta import warnings
 from inmanta.ast import export
@@ -27,11 +27,6 @@ from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
 from inmanta.types import DataclassProtocol
 from inmanta.warnings import InmantaWarning
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute  # noqa: F401

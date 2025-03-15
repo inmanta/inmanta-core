@@ -37,7 +37,7 @@ async def server_pre_start(server_config):
 
 
 async def test_agent_disconnect(
-    resource_container, environment, server, client, clienthelper, async_finalizer, caplog, agent_no_state_check: Agent
+    resource_container, environment, server, client, clienthelper, caplog, agent_no_state_check: Agent
 ):
     caplog.set_level(logging.INFO)
     config.Config.set("config", "server-timeout", "1")

@@ -291,7 +291,7 @@ def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, sni
     assert ModuleTool().get_module(module_name).version == Version("2.0.0")
 
 
-def test_module_add_preinstalled_v1(snippetcompiler_clean, caplog) -> None:
+def test_module_add_preinstalled_v1(snippetcompiler_clean, caplog, tmpvenv_active) -> None:
     """
     Verify that `inmanta module add` respects preinstalled v1 modules when they're compatible and logs a warning when they're
     not.

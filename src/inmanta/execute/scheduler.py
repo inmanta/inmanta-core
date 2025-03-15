@@ -274,18 +274,6 @@ class Scheduler:
         for block in blocks:
             block.normalize()
 
-        # Dataclass validation
-        data_class_root = self.types.get("std::Dataclass")
-        if data_class_root is not None:
-            assert isinstance(data_class_root, Entity)
-            for dataclass in data_class_root.get_all_child_entities():
-                dataclass.pair_dataclass()
-        else:
-            # we have no dataclasses, std is too old!
-            # We don't warn because if they are used they will produce a warning (class not found)
-            # If not, all is fine
-            pass
-
     def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
     ) -> Sequence[tuple[Location, AnchorTarget]]:

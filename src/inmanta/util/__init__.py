@@ -559,7 +559,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
 
     from inmanta.data.model import BaseModel
 
-    if isinstance(o, BaseModel):
+    if isinstance(o, (BaseModel, pydantic.BaseModel)):
         return o.model_dump(by_alias=True)
 
     if dataclasses.is_dataclass(o) and not isinstance(o, type):
@@ -845,7 +845,7 @@ def ensure_event_loop() -> asyncio.AbstractEventLoop:
     """
     try:
         # nothing needs to be done if this thread already has an event loop
-        return asyncio.get_event_loop()
+        return asyncio.get_running_loop()
     except RuntimeError:
         # asyncio.set_event_loop sets the event loop for this thread only
         new_loop = asyncio.new_event_loop()

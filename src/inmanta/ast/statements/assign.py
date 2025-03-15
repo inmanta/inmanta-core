@@ -21,7 +21,7 @@ import typing
 from collections import abc
 from itertools import chain
 from string import Formatter
-from typing import Optional, TypeVar
+from typing import TYPE_CHECKING, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
@@ -61,12 +61,6 @@ from inmanta.execute.runtime import (
 from inmanta.execute.util import Unknown
 
 from . import ReferenceStatement
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
-
 
 if TYPE_CHECKING:
     from inmanta.ast.statements.generator import WrappedKwargs  # noqa: F401
@@ -537,7 +531,7 @@ class ShortIndexLookup(IndexLookup):
                 self, "short index lookup is only possible on bi-drectional relations, %s is unidirectional" % relation
             )
 
-        self.type = relation.type
+        self.type = relation.type_internal
 
         self.type.lookup_index(
             list(

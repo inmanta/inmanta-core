@@ -39,8 +39,27 @@ def _normalize_name(name: str) -> str:
     return name.replace("_", "-")
 
 
+def _get_env_var_name_for_config_option(section: str, name: str) -> str:
+    """
+    Return the name of the environment variable that belongs to the given config option.
+    """
+    env_var_name = f"INMANTA_{section}_{name}"
+    # The names of config sections and config options can be written using both - and _ characters in config files.
+    # For environment variables we support _ only.
+    env_var_name = env_var_name.replace("-", "_")
+    # The configuration section lsm.callback has a dot in its name. This character is not supported
+    # in the name of an environment variable. As such, we use an _ instead.
+    env_var_name = env_var_name.replace(".", "_")
+    return env_var_name.upper()
+
+
 def _get_from_env(section: str, name: str) -> Optional[str]:
-    return os.environ.get(f"INMANTA_{section}_{name}".replace("-", "_").upper(), default=None)
+    """
+    Return the value of the given config option set via an environment variable, or None if the config
+    option was not set via an environment variable.
+    """
+    env_var_name = _get_env_var_name_for_config_option(section, name)
+    return os.environ.get(env_var_name, default=None)
 
 
 class LenientConfigParser(ConfigParser):
@@ -403,7 +422,7 @@ class Option(Generic[T]):
         """
         Return the environment variable associated with this config option.
         """
-        return f"INMANTA_{self.section}_{self.name.replace('-', '_')}".upper()
+        return _get_env_var_name_for_config_option(self.section, self.name)
 
     def get_default_desc(self) -> str:
         defa = self.default

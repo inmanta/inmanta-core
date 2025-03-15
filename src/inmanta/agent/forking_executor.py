@@ -622,7 +622,7 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
         return f"Executor Process {self.name} for PID {self.process.pid}"
 
     def render_id(self, member_id: executor.ExecutorId) -> str:
-        return f"Executor for {member_id.agent_name}"
+        return f"executor for {member_id.agent_name}"
 
     def get_lock_name_for(self, member_id: executor.ExecutorId) -> str:
         return member_id.identity()
@@ -884,7 +884,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         return "Process pool"
 
     def render_id(self, member: executor.ExecutorBlueprint) -> str:
-        return "Process for code hash: " + member.blueprint_hash()
+        return "process for code hash: " + member.blueprint_hash()
 
     def get_lock_name_for(self, member_id: executor.ExecutorBlueprint) -> str:
         return member_id.blueprint_hash()
@@ -921,32 +921,38 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         return ext_id
 
     async def create_member(self, blueprint: executor.ExecutorBlueprint) -> MPProcess:
-
         venv = await self.environment_manager.get_environment(blueprint.to_env_blueprint())
         executor = await self.make_child_and_connect(blueprint, venv)
-        LOGGER.debug(
-            "Child forked (pid: %s) for %s",
-            executor.process.pid,
-            self.render_id(blueprint),
-        )
-        storage_for_blueprint = os.path.join(self.code_folder, blueprint.blueprint_hash())
-        os.makedirs(storage_for_blueprint, exist_ok=True)
-        failed_types = await executor.connection.call(
-            InitCommand(
-                venv.env_path,
-                storage_for_blueprint,
-                self.session_gid,
-                [x.for_transport() for x in blueprint.sources],
-                self.venv_checkup_interval,
+        try:
+            LOGGER.debug(
+                "Child forked (pid: %s) for %s",
+                executor.process.pid,
+                self.render_id(blueprint),
             )
-        )
-        LOGGER.debug(
-            "Child initialized (pid: %s) for %s",
-            executor.process.pid,
-            self.render_id(blueprint),
-        )
-        executor.failed_resource_results = failed_types
-        return executor
+            storage_for_blueprint = os.path.join(self.code_folder, blueprint.blueprint_hash())
+            os.makedirs(storage_for_blueprint, exist_ok=True)
+            failed_types = await executor.connection.call(
+                InitCommand(
+                    venv.env_path,
+                    storage_for_blueprint,
+                    self.session_gid,
+                    [x.for_transport() for x in blueprint.sources],
+                    self.venv_checkup_interval,
+                )
+            )
+            LOGGER.debug(
+                "Child initialized (pid: %s) for %s",
+                executor.process.pid,
+                self.render_id(blueprint),
+            )
+            executor.failed_resource_results = failed_types
+            return executor
+        except Exception:
+            # Make sure to cleanup the executor process if its initialization fails.
+            await executor.request_shutdown()
+            raise Exception(
+                f"Failed to initialize scheduler process (pid: {executor.process.pid}) for {self.render_id(blueprint)}"
+            )
 
     async def make_child_and_connect(
         self, executor_id: executor.ExecutorBlueprint, venv: executor.ExecutorVirtualEnvironment
@@ -1030,7 +1036,7 @@ class MPManager(
         return ext_id
 
     def render_id(self, member: executor.ExecutorId) -> str:
-        return f"Executor for {member.agent_name}"
+        return f"executor for {member.agent_name}"
 
     def my_name(self) -> str:
         return "Executor Manager"

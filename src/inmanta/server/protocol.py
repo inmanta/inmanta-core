@@ -191,7 +191,7 @@ class ServerSlice(inmanta.protocol.common.CallTarget, TaskHandler[Result | None]
     * :func:`ServerSlice.stop`
     * :func:`ServerSlice.get_dependencies`
 
-    To register endpoints that server static content, either use :func:'add_static_handler' or :func:'add_static_content'
+    To register endpoints that serve static content, either use :func:'add_static_handler' or :func:'add_static_content'
     To create endpoints, use the annotation based mechanism
 
     To schedule recurring tasks, use :func:`schedule` or `self._sched`
