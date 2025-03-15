@@ -601,7 +601,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                 }
 
                 for agent, resource_id in waiting_agents:
-                    aclient = self.agentmanager_service.get_agent_client(env.id, agent)
+                    aclient = self.agentmanager_service.get_agent_client(env.id)
                     if aclient is not None:
                         if change is None:
                             my_change = const.Change.nochange
@@ -876,7 +876,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         dto = result.to_dto()
         return dto
 
-    @protocol.handle(methods_v2.discovered_resources_get_batch, env="tid")
+    @handle(methods_v2.discovered_resources_get_batch, env="tid")
     async def discovered_resources_get_batch(
         self,
         env: data.Environment,

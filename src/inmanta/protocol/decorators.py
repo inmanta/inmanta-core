@@ -34,7 +34,7 @@ class handle:
     :param method: A subclass of method that defines the method
     :param api_version: When specific this handler is only associated with a method of the specific api version. If the
                         version is not defined, the handler is not associated with a rest endpoint.
-    :param kwargs: Map arguments in the message from one name to an other
+    :param kwargs: Map arguments in the message from one name to another
     """
 
     def __init__(self, method: Callable[..., Apireturn], api_version: Optional[int] = None, **kwargs: str) -> None:
