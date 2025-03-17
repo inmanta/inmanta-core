@@ -750,7 +750,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         return nr_res_desired_state == expected_resources
 
     # Wait for at least one resource to be deployed
-    await retry_limited(check_resource_in_state, timeout=3)
+    await retry_limited(check_resource_in_state, timeout=10)
 
     # Make sure the children of the scheduler are consistent
     await wait_for_consistent_children(

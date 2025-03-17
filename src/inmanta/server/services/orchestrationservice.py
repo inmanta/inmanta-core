@@ -22,7 +22,7 @@ import logging
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Sequence
-from typing import Literal, Optional, cast
+from typing import Literal, Optional, cast, TYPE_CHECKING
 
 import asyncpg
 import asyncpg.connection
@@ -46,7 +46,11 @@ from inmanta.data.model import (
 )
 from inmanta.db.util import ConnectionInTransaction
 
-from inmanta.loader import PythonModule
+if TYPE_CHECKING:
+    from inmanta.loader import PythonModule
+
+
+
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
@@ -882,7 +886,7 @@ class OrchestrationService(protocol.ServerSlice):
                             environment,
                             type_to_agent[resource_type],
                             module_name,
-                            module_version_info[module_name],
+                            module_version_info[module_name]["version"],
                         )
                         for resource_type in type_to_agent.keys()
                         for module_name in type_to_module_data[resource_type]

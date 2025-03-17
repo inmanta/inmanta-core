@@ -21,6 +21,7 @@ import sys
 import uuid
 from typing import Collection
 
+from inmanta import protocol
 import inmanta.data.sqlalchemy as models
 from inmanta.agent import executor
 from inmanta.agent.executor import ModuleInstallSpec
@@ -139,7 +140,7 @@ class CodeManager:
                             requirements=res.requirements,
                             sources=[
                                 ModuleSource(
-                                    name=res.module_name,
+                                    name=file.file_path,
                                     source=file.content,
                                     hash_value=file.file_content_hash,
                                     is_byte_code=False,

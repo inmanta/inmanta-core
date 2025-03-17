@@ -17,11 +17,13 @@ Contact: code@inmanta.com
 """
 
 import logging
+from pathlib import Path
 from typing import cast
 
-from inmanta import data
+from inmanta import data, const
 from inmanta.data import get_session, model
 from inmanta.data.sqlalchemy import FilesInModule, Module
+from inmanta.loader import convert_relative_path_to_module
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
@@ -73,12 +75,19 @@ class CodeService(protocol.ServerSlice):
             requirements: set[str] = set()
 
             for file in python_module["files_in_module"]:
+                parts = Path(file["path"]).parts
+                if const.PLUGINS_PACKAGE in parts:
+                    file_path = str(Path(*parts[parts.index(const.PLUGINS_PACKAGE):]))
+                else:
+                    relative_path = Path(*parts[parts.index(module_name):])
+                    file_path = convert_relative_path_to_module(str(relative_path))
+
                 file_in_module = {
                     "module_name": module_name,
                     "module_version": python_module["version"],
                     "environment": env.id,
                     "file_content_hash": file["hash"],
-                    "file_path": file["path"],
+                    "file_path": file_path,
                 }
                 requirements.update(file["requires"])
                 files_in_module_data.append(file_in_module)

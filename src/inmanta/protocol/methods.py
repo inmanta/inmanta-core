@@ -20,17 +20,19 @@ Module defining the v1 rest api
 
 import datetime
 import uuid
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional, Union, TYPE_CHECKING
 
 import inmanta.types
 from inmanta import const, data, resources
 from inmanta.const import ResourceState
 from inmanta.data import model
 from inmanta.data.model import PipConfig
+
 from inmanta.protocol import exceptions
 from inmanta.protocol.common import ArgOption
 from inmanta.protocol.decorators import method, typedmethod
 from inmanta.types import JsonType, PrimitiveTypes
+
 
 
 async def convert_environment(env: uuid.UUID, metadata: dict) -> "data.Environment":
@@ -531,7 +533,7 @@ def put_version(
     compiler_version: Optional[str] = None,
     resource_sets: dict[inmanta.types.ResourceIdStr, Optional[str]] = {},
     pip_config: Optional[PipConfig] = None,
-    module_version_info: Optional[dict[str, "PythonModule"]] = None,
+    module_version_info: Optional[dict[str, Any]] = None,
     type_to_module_data: Optional[dict[str, set[str]]] = None,
 ):
     """
