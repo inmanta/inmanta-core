@@ -45,7 +45,8 @@ from inmanta.data.model import (
     SchedulerStatusReport,
 )
 from inmanta.db.util import ConnectionInTransaction
-# from inmanta.loader import PythonModule
+
+from inmanta.loader import PythonModule
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError

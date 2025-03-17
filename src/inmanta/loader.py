@@ -15,6 +15,7 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
+
 import asyncio
 import base64
 import functools
@@ -37,12 +38,12 @@ from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
-from lazy_object_proxy.utils import await_
 from pydantic import BaseModel, computed_field
 
 from inmanta import const, module
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
+from lazy_object_proxy.utils import await_
 
 if TYPE_CHECKING:
     from inmanta import protocol
@@ -314,6 +315,7 @@ class CodeLoader:
         else:
             LOGGER.debug("Trying to import %s", mod_name)
             import os
+
             cwd = os.getcwd()
             LOGGER.debug(f"In {cwd=}")
             mod = importlib.import_module(mod_name)
@@ -680,7 +682,6 @@ def unload_modules_for_path(path: str) -> None:
     for mod_name in loaded_modules:
         del sys.modules[mod_name]
     importlib.invalidate_caches()
-
 
 
 @dataclass(frozen=True)

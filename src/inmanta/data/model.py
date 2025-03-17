@@ -967,5 +967,3 @@ class DataBaseReport(BaseModel):
             free_connections=self.free_connections + other.free_connections,
             pool_exhaustion_time=self.pool_exhaustion_time + other.pool_exhaustion_time,
         )
-
-

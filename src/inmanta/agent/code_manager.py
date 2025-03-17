@@ -137,13 +137,20 @@ class CodeManager:
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=await self.get_pip_config(environment, res.cm_version),
                             requirements=res.requirements,
-                            sources=[ModuleSource(name=res.module_name, source=file.content, hash_value=file.file_content_hash,
-                                                  is_byte_code=False) for file in files.all()],
+                            sources=[
+                                ModuleSource(
+                                    name=res.module_name,
+                                    source=file.content,
+                                    hash_value=file.file_content_hash,
+                                    is_byte_code=False,
+                                )
+                                for file in files.all()
+                            ],
                             python_version=sys.version_info[:2],
                         ),
                     )
                 )
         if not module_install_specs:
             raise CouldNotResolveCode(agent_name, model_version)
-        LOGGER.debug(f'{module_install_specs=}')
+        LOGGER.debug(f"{module_install_specs=}")
         return module_install_specs
