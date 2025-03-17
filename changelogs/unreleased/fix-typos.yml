@@ -1,0 +1,7 @@
+change-type: patch
+description: Fix typos
+destination-branches:
+- master
+- iso8
+- iso7
+sections: {}
