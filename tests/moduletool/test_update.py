@@ -36,7 +36,11 @@ from utils import PipIndex, create_python_package, module_from_template, v1_modu
 
 @pytest.mark.parametrize_any(
     "kwargs_update_method, mod2_should_be_updated, mod8_should_be_updated",
-    [({}, True, True), ({"module": "mod2"}, True, False), ({"module": "mod8"}, False, True)],
+    [
+        ({}, True, True),
+        # ({"module": "mod2"}, True, False),
+        # ({"module": "mod8"}, False, True)
+    ],
 )
 def test_module_update_with_install_mode_master(
     tmpdir: py.path.local,

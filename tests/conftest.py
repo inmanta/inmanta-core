@@ -367,6 +367,7 @@ def database_name_internal() -> str:
     To resolve this, there is a session scoped fixture called database_name_internal that provides a fixed name. create_db
     ensures that the database has been created.
     """
+    return "inmanta0831679100"
     ten_random_digits = "".join(random.choice(string.digits) for _ in range(10))
     return "inmanta" + ten_random_digits
 

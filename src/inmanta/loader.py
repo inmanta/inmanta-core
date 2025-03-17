@@ -15,7 +15,7 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
-
+import asyncio
 import base64
 import functools
 import hashlib
@@ -28,7 +28,7 @@ import pathlib
 import shutil
 import sys
 import types
-from collections import abc
+from collections import abc, defaultdict
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from functools import cached_property
@@ -37,6 +37,7 @@ from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
+from lazy_object_proxy.utils import await_
 from pydantic import BaseModel, computed_field
 
 from inmanta import const, module
@@ -93,7 +94,7 @@ class CodeManager:
 
         # Map of [Union[resouce_type, handler_type], str]
         # Maps a type to the module it lives in
-        self.__type_to_module: dict[str, str] = {}
+        self.__type_to_module: dict[str, list[str]] = defaultdict(list)
 
         # Cache of module to source info
         self.__module_to_source_info: dict[str, list[SourceInfo]] = {}
@@ -122,7 +123,9 @@ class CodeManager:
         module_name = get_inmanta_module_name(instance.__module__)
 
         all_plugin_files: list[SourceInfo] = self._get_source_info_for_module(module_name)
-        self.__type_to_module[type_name] = module_name
+        LOGGER.debug(f"Registering {type_name=} from {instance=} in {module_name=}")
+        # fqn_module_name = next(module.Project.get().modules[module_name].get_plugin_files())[0]
+        self.__type_to_module[type_name].append(module_name)
 
         self.__type_file[type_name].update(source_info.path for source_info in all_plugin_files)
 
@@ -182,11 +185,12 @@ class CodeManager:
 
         return self.__modules_data
 
-    def get_module_version_info(self) -> dict[str, str]:
+    def get_module_version_info(self) -> dict[str, "PythonModule"]:
         """Return all module version info"""
-        return {module_data.name: module_data.version for module_data in self.get_modules_data().values()}
+        return self.get_modules_data()
+        # return {module_data.name: module_data.version for module_data in self.get_modules_data().values()}
 
-    def get_type_to_module(self) -> dict[str, str]:
+    def get_type_to_module(self) -> dict[str, list[str]]:
         """Return all module source info"""
         return self.__type_to_module
 
@@ -308,6 +312,10 @@ class CodeLoader:
             LOGGER.debug("Module %s is already loaded", mod_name)
             return
         else:
+            LOGGER.debug("Trying to import %s", mod_name)
+            import os
+            cwd = os.getcwd()
+            LOGGER.debug(f"In {cwd=}")
             mod = importlib.import_module(mod_name)
         self.__modules[mod_name] = (hv, mod)
         LOGGER.info("Loaded module %s", mod_name)
@@ -342,6 +350,10 @@ class CodeLoader:
                 with pre-2020.4 inmanta clients because they don't necessarily upload the whole package.
                 """
                 normdir: str = os.path.normpath(directory)
+                # LOGGER.debug("BP1")
+                # LOGGER.debug(f"{directory=}")
+                # LOGGER.debug(f"{normdir=}")
+                # LOGGER.debug(f"{package_dir=}")
                 if normdir == package_dir:
                     return
                 if not os.path.exists(os.path.join(normdir, "__init__.py")) and not os.path.exists(
@@ -352,6 +364,7 @@ class CodeLoader:
 
             # ensure correct package structure
             os.makedirs(module_dir, exist_ok=True)
+            LOGGER.debug(f"touch inists {module_dir=}")
             touch_inits(os.path.dirname(module_dir))
             source_file = os.path.join(module_dir, init_file)
 
@@ -373,13 +386,14 @@ class CodeLoader:
             # write the new source
             source_code = module_source.get_source_code()
             with open(source_file, "wb+") as fd:
+                LOGGER.debug(f"writing source to {source_file}")
                 fd.write(source_code)
         else:
             LOGGER.debug(
                 "Not deploying code (hv=%s, module=%s) because of cache hit", module_source.hash_value, module_source.name
             )
 
-    def deploy_version(self, module_sources: Iterable[ModuleSource]) -> None:
+    def deploy_version(self, module_sources: Iterable[ModuleSource], module_name: str) -> None:
         """
         Ensure the given module sources are available on disk.
         """
@@ -666,6 +680,7 @@ def unload_modules_for_path(path: str) -> None:
     for mod_name in loaded_modules:
         del sys.modules[mod_name]
     importlib.invalidate_caches()
+
 
 
 @dataclass(frozen=True)

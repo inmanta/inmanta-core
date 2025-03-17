@@ -45,6 +45,7 @@ from inmanta.data.model import (
     SchedulerStatusReport,
 )
 from inmanta.db.util import ConnectionInTransaction
+# from inmanta.loader import PythonModule
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
@@ -667,7 +668,7 @@ class OrchestrationService(protocol.ServerSlice):
         *,
         connection: asyncpg.connection.Connection,
         module_version_info: Optional[dict[str, str]],
-        type_to_module_data: Optional[dict[str, str]],
+        type_to_module_data: Optional[dict[str, set[str]]],
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -828,10 +829,14 @@ class OrchestrationService(protocol.ServerSlice):
                 cm_version: int,
                 environment: uuid.UUID,
                 module_version_info: dict[str, str] | None,
-                type_to_module_data: dict[str, str] | None,
+                type_to_module_data: dict[str, set[str]] | None,
                 type_to_agent: dict[str, str] | None,
                 connection: Connection,
             ) -> None:
+                LOGGER.debug("populate_join_table")
+                LOGGER.debug(f"{module_version_info=}")
+                LOGGER.debug(f"{type_to_module_data=}")
+                LOGGER.debug(f"{type_to_agent=}")
                 if not all([module_version_info, type_to_module_data, rid_to_resource, type_to_agent]):
                     LOGGER.debug(
                         "Cannot populate join table modules_for_agent. The following arguments are not set: %s"
@@ -866,21 +871,28 @@ class OrchestrationService(protocol.ServerSlice):
                                 $3,
                                 $4,
                                 $5
-                            );
+                            )
+                            ON CONFLICT DO NOTHING;
                         """
                 async with connection.transaction():
+                    values = [
+                        (
+                            cm_version,
+                            environment,
+                            type_to_agent[resource_type],
+                            module_name,
+                            module_version_info[module_name],
+                        )
+                        for resource_type in type_to_agent.keys()
+                        for module_name in type_to_module_data[resource_type]
+                    ]
+                    LOGGER.debug("Populating join table... %s", query)
+                    LOGGER.debug(f"{query=}")
+                    LOGGER.debug(f"{values=}")
+
                     await connection.executemany(
                         query,
-                        [
-                            (
-                                cm_version,
-                                environment,
-                                type_to_agent[resource_type],
-                                type_to_module_data[resource_type],
-                                module_version_info[type_to_module_data[resource_type]],
-                            )
-                            for resource_type in type_to_agent.keys()
-                        ],
+                        values,
                     )
 
             await populate_join_table(version, env.id, module_version_info, type_to_module_data, type_to_agent, connection)
@@ -958,8 +970,8 @@ class OrchestrationService(protocol.ServerSlice):
         compiler_version: Optional[str] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
-        module_version_info: Optional[dict[str, str]] = None,
-        type_to_module_data: Optional[dict[str, str]] = None,
+        module_version_info: Optional[dict[str, "PythonModule"]] = None,
+        type_to_module_data: Optional[dict[str, set[str]]] = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure

@@ -26,6 +26,7 @@ from inmanta.agent import executor
 from inmanta.agent.executor import ModuleInstallSpec
 from inmanta.data import get_session
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
+from inmanta.loader import ModuleSource
 from inmanta.protocol import Client
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
@@ -74,13 +75,12 @@ class CodeManager:
         """
 
         module_install_specs = []
-        stmt = (
+        modules_for_agent = (
             select(
                 models.ModulesForAgent.module_name,
                 models.ModulesForAgent.module_version,
                 models.ModulesForAgent.cm_version,
                 models.Module.requirements,
-                models.FilesInModule.file_content_hash,
             )
             .join_from(
                 models.ModulesForAgent,
@@ -106,22 +106,44 @@ class CodeManager:
                 models.ModulesForAgent.cm_version == model_version,
             )
         )
+
         async with get_session() as session:
-            result_execute = await session.execute(stmt)
-            for res in result_execute.all():
+            modules_for_agent = await session.execute(modules_for_agent)
+            for res in modules_for_agent.all():
+                files_in_module = (
+                    select(
+                        models.FilesInModule.file_path,
+                        models.FilesInModule.file_content_hash,
+                        models.File.content,
+                    )
+                    .join_from(
+                        models.FilesInModule,
+                        models.File,
+                    )
+                    .where(
+                        models.FilesInModule.environment == environment,
+                        models.FilesInModule.module_name == res.module_name,
+                        models.FilesInModule.module_version == res.module_version,
+                    )
+                )
+                #
+                files = await session.execute(files_in_module)
+
                 module_install_specs.append(
                     ModuleInstallSpec(
                         module_name=res.module_name,
                         module_version=res.module_version,
                         model_version=res.cm_version,
                         blueprint=executor.ExecutorBlueprint(
-                            pip_config=await self.get_pip_config(environment, model_version),
+                            pip_config=await self.get_pip_config(environment, res.cm_version),
                             requirements=res.requirements,
-                            sources=[],  # TODO
+                            sources=[ModuleSource(name=res.module_name, source=file.content, hash_value=file.file_content_hash,
+                                                  is_byte_code=False) for file in files.all()],
                             python_version=sys.version_info[:2],
                         ),
                     )
                 )
         if not module_install_specs:
             raise CouldNotResolveCode(agent_name, model_version)
+        LOGGER.debug(f'{module_install_specs=}')
         return module_install_specs

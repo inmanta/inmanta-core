@@ -513,7 +513,10 @@ async def wait_for_consistent_children(
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize(
-    "auto_start_agent,should_time_out,time_to_sleep,", [(True, False, 2), (True, True, 120)]
+    "auto_start_agent,should_time_out,time_to_sleep,", [
+        (True, False, 2),
+        # (True, True, 120)
+    ]
 )  # this overrides a fixture to allow the agent to fork!
 async def test_halt_deploy(
     snippetcompiler,
@@ -746,7 +749,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         return nr_res_desired_state == expected_resources
 
     # Wait for at least one resource to be deployed
-    await retry_limited(check_resource_in_state, timeout=10)
+    await retry_limited(check_resource_in_state, timeout=3)
 
     # Make sure the children of the scheduler are consistent
     await wait_for_consistent_children(

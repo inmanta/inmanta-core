@@ -602,13 +602,13 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                 try:
                     # Install required python packages and the list of ``ModuleSource`` with the provided pip config
                     self.logger.debug(
-                        "Installing handler %s version=%d",
+                        "Installing module %s version=%d",
                         module_install_spec.module_name,
                         module_install_spec.model_version,
                     )
-                    await self._install(module_install_spec.blueprint)
+                    await self._install(module_install_spec.module_name, module_install_spec.blueprint)
                     self.logger.debug(
-                        "Installed handler %s version=%d",
+                        "Installed module %s version=%d",
                         module_install_spec.module_name,
                         module_install_spec.model_version,
                     )
@@ -616,20 +616,20 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     self._last_loaded_version[module_install_spec.module_name] = module_install_spec.blueprint
                 except Exception as e:
                     self.logger.exception(
-                        "Failed to install handler %s version=%d",
+                        "Failed to install module %s version=%d",
                         module_install_spec.module_name,
                         module_install_spec.model_version,
                     )
                     if module_install_spec.module_name not in failed_to_load:
                         failed_to_load[module_install_spec.module_name] = Exception(
-                            f"Failed to install handler {module_install_spec.module_name} "
+                            f"Failed to install module {module_install_spec.module_name} "
                             f"version={module_install_spec.model_version}: {e}"
                         ).with_traceback(e.__traceback__)
                     self._last_loaded_version[module_install_spec.module_name] = None
 
         return failed_to_load
 
-    async def _install(self, blueprint: executor.ExecutorBlueprint) -> None:
+    async def _install(self, module_name: str, blueprint: executor.ExecutorBlueprint) -> None:
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
@@ -641,4 +641,4 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                 inmanta.util.parse_requirements(blueprint.requirements),
                 blueprint.pip_config,
             )
-            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)
+            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources, module_name)
