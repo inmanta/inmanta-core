@@ -79,7 +79,7 @@ class DeprecatedResourceState(str, Enum):
 
 """
 The following consts are considered to be part of the stable API.
-Modifying them may consist a breaking change for some libraries:
+Modifying them may break some libraries:
     - UNDEPLOYABLE_STATES
     - UNDEPLOYABLE_NAMES
     - TRANSIENT_STATES
