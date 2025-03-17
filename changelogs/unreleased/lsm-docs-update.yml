@@ -1,0 +1,7 @@
+change-type: patch
+description: Improve the LSM documentation.
+destination-branches:
+- master
+- iso8
+- iso7
+sections: {}
