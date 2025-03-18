@@ -445,7 +445,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         # then try to import them
         for module_source in in_place:
             try:
-                LOGGER.debug("Zzz Zzz Zzz")
                 await loop.run_in_executor(
                     context.threadpool,
                     functools.partial(loader.load_module, module_source.name, module_source.hash_value),
@@ -955,9 +954,6 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
             executor.failed_resource_results = failed_types
             return executor
         except Exception as e:
-            LOGGER.error(
-                f"FAILFAILFAILFAIL {str(e)}",
-            )
             # Make sure to cleanup the executor process if its initialization fails.
             await executor.request_shutdown()
             raise Exception(
