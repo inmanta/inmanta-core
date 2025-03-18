@@ -434,7 +434,7 @@ class CLIGitProvider(GitProvider):
         return sorted(result)
 
     def checkout_tag(self, repo: str, tag: str) -> None:
-        subprocess.check_call(["git", "checkout", tag], cwd=repo, stdout=sys.stdout, stderr=sys.stdout)
+        subprocess.check_call(["git", "checkout", tag], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def commit(
         self,

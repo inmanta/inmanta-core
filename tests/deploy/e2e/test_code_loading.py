@@ -31,13 +31,14 @@ from typing import Any
 
 import pytest
 
-from inmanta import config
+from inmanta import config, loader
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.data import PipConfig
 from inmanta.env import process_env
+from inmanta.loader import PythonModule, SourceInfo
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
@@ -78,7 +79,7 @@ async def agent(server, environment, deactive_venv):
 
 
 async def make_source_structure(
-    into: dict[str, dict[str, str, list[dict[str, Any]]]],
+    into: dict[str, PythonModule],
     file: str,
     module: str,
     source: str,
@@ -135,26 +136,36 @@ async def make_source_structure(
                 data = fh.read()
             file_name = pyc_file
         else:
+            py_file = os.path.join(tmpdirname, "test.py")
             data = source.encode()
             file_name = file
 
         sha1sum = hashlib.new("sha1")
         sha1sum.update(data)
         hv: str = sha1sum.hexdigest()
-        into[module] = {
-            "name": module,
-            "version": hv,  # only one file: module hash == file hash
-            "files_in_module": [
-                {
-                    "path": file_name,
-                    "module_name": module,
-                    "hash": hv,
-                    "requires": dependencies,
-                }
-            ],
-        }
+        into[module] = PythonModule(
+            name=module,
+            version=hv,
+            files_in_module=[
+                SourceInfo(
+                    path=file_name,
+                    module_name=loader.convert_relative_path_to_module(os.path.join(module, loader.PLUGIN_DIR, "__init__.py"))
+                )
+            ]
+        )
+        #     "name": module,
+        #     "version": hv,  # only one file: module hash == file hash
+        #     "files_in_module": [
+        #         {
+        #             "path": file_name,
+        #             "module_name": module,
+        #             "hash": hv,
+        #             "requires": dependencies,
+        #         }
+        #     ],
+        # }
         await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
-        dict[str, "PythonModule"]
+
         return hv
 
 
@@ -184,12 +195,12 @@ class Res(Resource):
 
     modules_data = {}
     type_to_module_data = {
-        "test::Resource": "inmanta_plugins.test",
+        "test::Resource": "test",
     }
     await make_source_structure(
         modules_data,
-        "inmanta_plugins/test/__init__.py",
-        "inmanta_plugins.test",
+        "__init__.py",
+        "test",
         code,
         dependencies=["pkg[optional-a]"],
         client=client,
@@ -217,7 +228,7 @@ class Res(Resource):
         resources=resources,
         pip_config=PipConfig(index_url=index_with_pkgs_containing_optional_deps),
         compiler_version=get_compiler_version(),
-        module_version_info=module_version_info,
+        module_version_info=modules_data,
         type_to_module_data=type_to_module_data,
     )
     assert res.code == 200
@@ -276,8 +287,8 @@ async def test_agent_code_loading_with_failure(
     }
     module_version = await make_source_structure(
         modules_data,
-        "inmanta_plugins/test/__init__.py",
-        "inmanta_plugins.test",
+        "test/__init__.py",
+        "test",
         "",
         client=client,
     )
@@ -403,3 +414,4 @@ raise Exception("Fail code loading")
         for resource_action in result.result["data"]
         for log_line in resource_action["messages"]
     )
+''

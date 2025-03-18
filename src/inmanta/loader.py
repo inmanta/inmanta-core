@@ -130,16 +130,16 @@ class CodeManager:
 
         self.__type_file[type_name].update(source_info.path for source_info in all_plugin_files)
 
-    def _get_source_info_for_module(self, module_name: str) -> list["SourceInfo"]:
-        if module_name in self.__module_to_source_info:
-            return self.__module_to_source_info[module_name]
+    def _get_source_info_for_module(self, inmanta_module_name: str) -> list["SourceInfo"]:
+        if inmanta_module_name in self.__module_to_source_info:
+            return self.__module_to_source_info[inmanta_module_name]
 
         sources = [
-            SourceInfo(path=path, module_name=module_name)
-            for path, module_name in module.Project.get().modules[module_name].get_plugin_files()
+            SourceInfo(path=absolute_path, module_name=fqn_module_name)
+            for absolute_path, fqn_module_name in module.Project.get().modules[inmanta_module_name].get_plugin_files()
         ]
 
-        self.__module_to_source_info[module_name] = sources
+        self.__module_to_source_info[inmanta_module_name] = sources
 
         # Register files
         for file_info in sources:

@@ -36,6 +36,7 @@ from inmanta.agent import executor
 from inmanta.agent.executor import ExecutorBlueprint
 from inmanta.agent.forking_executor import MPManager
 from inmanta.data import PipConfig
+from inmanta.loader import PythonModule, SourceInfo
 from inmanta.protocol.ipc_light import ConnectionLost
 from utils import NOISY_LOGGERS, log_contains, retry_limited
 
@@ -98,7 +99,7 @@ def set_custom_executor_policy(server_config):
     inmanta.agent.config.agent_executor_retention_time.set(str(old_retention_value))
 
 
-async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client, caplog):
+async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client, caplog, environment):
     """
     Test the MPManager, this includes
 
@@ -158,6 +159,15 @@ def test():
     # Upload
     res = await client.upload_file(id=server_content_hash, content=base64.b64encode(server_content).decode("ascii"))
     assert res.code == 200
+    modules_data = {
+        "test": PythonModule(
+            name="test",
+            version=server_content_hash,
+            files_in_module=[SourceInfo(path="test/plugins/testB", module_name="inmanta_plugins.test")]
+        )
+    }
+    res = await client.upload_modules(tid=environment, modules_data=modules_data)
+    assert res.code == 200
 
     # Dummy executor to test executor cap:
     # Create this one first to make sure this is the one being stopped
@@ -177,13 +187,14 @@ def test():
     )
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
-    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
+    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test", 1, 5, dummy)])
+    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test",1, 5, full)])
 
     assert oldest_executor.id in manager.pool
 
     # assert loaded
     result2 = await full_runner.call(TestLoader())
+    # assert ["DIRECT"] == result2
     assert ["DIRECT", "server"] == result2
 
     # assert they are distinct
