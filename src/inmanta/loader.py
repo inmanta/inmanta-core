@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import asyncio
 import base64
 import functools
 import hashlib
@@ -43,7 +42,6 @@ from pydantic import BaseModel, computed_field
 from inmanta import const, module
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
-from lazy_object_proxy.utils import await_
 
 if TYPE_CHECKING:
     from inmanta import protocol
@@ -696,8 +694,9 @@ class SourceInfo(BaseModel):
 
     path: str
     module_name: str
-    def __str__(self):
-        return f'SourceInfo ({self.path=}, {self.module_name=}'
+
+    # def __str__(self):
+    #     return f"SourceInfo ({self.path=}, {self.module_name=}"
 
     @computed_field  # type: ignore[prop-decorator]
     @cached_property

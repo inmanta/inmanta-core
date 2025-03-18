@@ -20,7 +20,7 @@ import logging
 from pathlib import Path
 from typing import cast
 
-from inmanta import data, const
+from inmanta import const, data
 from inmanta.data import get_session, model
 from inmanta.data.sqlalchemy import FilesInModule, Module
 from inmanta.loader import convert_relative_path_to_module
@@ -77,9 +77,9 @@ class CodeService(protocol.ServerSlice):
             for file in python_module["files_in_module"]:
                 parts = Path(file["path"]).parts
                 if const.PLUGINS_PACKAGE in parts:
-                    file_path = str(Path(*parts[parts.index(const.PLUGINS_PACKAGE):]))
+                    file_path = str(Path(*parts[parts.index(const.PLUGINS_PACKAGE) :]))
                 else:
-                    relative_path = Path(*parts[parts.index(module_name):])
+                    relative_path = Path(*parts[parts.index(module_name) :])
                     file_path = convert_relative_path_to_module(str(relative_path))
 
                 file_in_module = {

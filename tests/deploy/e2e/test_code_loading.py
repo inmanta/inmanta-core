@@ -27,7 +27,6 @@ import tempfile
 import uuid
 from collections.abc import Sequence
 from logging import DEBUG
-from typing import Any
 
 import pytest
 
@@ -149,9 +148,9 @@ async def make_source_structure(
             files_in_module=[
                 SourceInfo(
                     path=file_name,
-                    module_name=loader.convert_relative_path_to_module(os.path.join(module, loader.PLUGIN_DIR, "__init__.py"))
+                    module_name=loader.convert_relative_path_to_module(os.path.join(module, loader.PLUGIN_DIR, "__init__.py")),
                 )
-            ]
+            ],
         )
         #     "name": module,
         #     "version": hv,  # only one file: module hash == file hash
@@ -209,7 +208,7 @@ class Res(Resource):
     res = await client.upload_modules(tid=environment, modules_data=modules_data)
     assert res.code == 200
 
-    module_version_info = {module_name: data["version"] for module_name, data in modules_data.items()}
+    # module_version_info = {module_name: data["version"] for module_name, data in modules_data.items()}
     version = await clienthelper.get_version()
     resources = [
         {
@@ -285,7 +284,7 @@ async def test_agent_code_loading_with_failure(
         "test::Test": "inmanta_plugins.test",
         "test::Test2": "inmanta_plugins.test",
     }
-    module_version = await make_source_structure(
+    await make_source_structure(
         modules_data,
         "test/__init__.py",
         "test",
@@ -414,4 +413,6 @@ raise Exception("Fail code loading")
         for resource_action in result.result["data"]
         for log_line in resource_action["messages"]
     )
-''
+
+
+""

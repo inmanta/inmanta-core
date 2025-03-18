@@ -36,7 +36,6 @@ from inmanta.agent import executor
 from inmanta.agent.executor import ExecutorBlueprint
 from inmanta.agent.forking_executor import MPManager
 from inmanta.data import PipConfig
-from inmanta.loader import PythonModule, SourceInfo
 from inmanta.protocol.ipc_light import ConnectionLost
 from utils import NOISY_LOGGERS, log_contains, retry_limited
 
@@ -127,7 +126,9 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
     simplest_blueprint = executor.ExecutorBlueprint(
         pip_config=inmanta.data.PipConfig(), requirements=[], sources=[], python_version=sys.version_info[:2]
     )  # No pip
-    simplest = await manager.get_executor("agent1", "test", [executor.ResourceInstallSpec("test::Test", 5, simplest_blueprint)])
+    simplest = await manager.get_executor(
+        "agent1", "test", [executor.ModuleInstallSpec("test", "123456", 5, simplest_blueprint)]
+    )
 
     # check communications
     result = await simplest.call(Echo(["aaaa"]))
@@ -155,19 +156,19 @@ def test():
         "utf-8"
     )
     server_content_hash = inmanta.util.hash_file(server_content)
-    via_server = inmanta.loader.ModuleSource("inmanta_plugins.test.testB", server_content_hash, False)
+    via_server = inmanta.loader.ModuleSource("inmanta_plugins.test.testB", server_content_hash, False, server_content)
     # Upload
     res = await client.upload_file(id=server_content_hash, content=base64.b64encode(server_content).decode("ascii"))
     assert res.code == 200
-    modules_data = {
-        "test": PythonModule(
-            name="test",
-            version=server_content_hash,
-            files_in_module=[SourceInfo(path="test/plugins/testB", module_name="inmanta_plugins.test")]
-        )
-    }
-    res = await client.upload_modules(tid=environment, modules_data=modules_data)
-    assert res.code == 200
+    # modules_data = {
+    #     "test": PythonModule(
+    #         name="test",
+    #         version=server_content_hash,
+    #         files_in_module=[SourceInfo(path="test/plugins/testB", module_name="inmanta_plugins.test")],
+    #     )
+    # }
+    # res = await client.upload_modules(tid=environment, modules_data=modules_data)
+    # assert res.code == 200
 
     # Dummy executor to test executor cap:
     # Create this one first to make sure this is the one being stopped
@@ -188,7 +189,7 @@ def test():
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
     oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test", 1, 5, dummy)])
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test",1, 5, full)])
+    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", 1, 5, full)])
 
     assert oldest_executor.id in manager.pool
 

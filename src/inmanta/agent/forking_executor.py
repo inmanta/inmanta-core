@@ -953,7 +953,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
             )
             executor.failed_resource_results = failed_types
             return executor
-        except Exception as e:
+        except Exception:
             # Make sure to cleanup the executor process if its initialization fails.
             await executor.request_shutdown()
             raise Exception(

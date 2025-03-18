@@ -22,7 +22,7 @@ import logging
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Sequence
-from typing import Literal, Optional, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, Optional, cast
 
 import asyncpg
 import asyncpg.connection
@@ -48,8 +48,6 @@ from inmanta.db.util import ConnectionInTransaction
 
 if TYPE_CHECKING:
     from inmanta.loader import PythonModule
-
-
 
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings

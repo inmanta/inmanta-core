@@ -21,7 +21,6 @@ import sys
 import uuid
 from typing import Collection
 
-from inmanta import protocol
 import inmanta.data.sqlalchemy as models
 from inmanta.agent import executor
 from inmanta.agent.executor import ModuleInstallSpec
