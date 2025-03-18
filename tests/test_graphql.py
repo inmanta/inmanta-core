@@ -57,6 +57,15 @@ async def setup_database(project_default):
         await session.flush()
 
 
+async def test_graphql_introspection(server, client):
+    """
+    Tests to see if the introspection endpoint is working
+    """
+    result = await client.graphql_introspection()
+    assert result.code == 200
+    assert result.result["data"]["__schema"]  # Not sure what to assert here
+
+
 async def test_query_is_expert_mode(server, client, setup_database, project_default):
     """
     Tests the custom attribute isExpertMode

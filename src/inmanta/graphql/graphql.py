@@ -42,3 +42,8 @@ class GraphQLSlice(protocol.ServerSlice):
     async def graphql(self, query: str) -> Any:  # Actual return type: strawberry.types.execution.ExecutionResult
         assert self.context is not None
         return await get_schema(self.context).execute(query)
+
+    @handle(methods_v2.graphql_schema)
+    async def graphql_schema(self) -> dict[str, Any]:
+        assert self.context is not None
+        return get_schema(self.context).introspect()
