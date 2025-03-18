@@ -81,13 +81,9 @@ class DeprecatedResourceState(str, Enum):
 The following consts are considered to be part of the stable API.
 Modifying them may break some libraries:
     - UNDEPLOYABLE_STATES
-    - UNDEPLOYABLE_NAMES
     - TRANSIENT_STATES
     - NOT_DONE_STATES
     - DONE_STATES
-    - INITIAL_STATES
-    - TERMINAL_STATES
-    - VALID_STATES_ON_UPDATE
 """
 # undeployable
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]

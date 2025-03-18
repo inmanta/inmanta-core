@@ -2,13 +2,9 @@ change-type: patch
 description: >
   Adds the following consts to the stable api:
     - UNDEPLOYABLE_STATES
-    - UNDEPLOYABLE_NAMES
     - TRANSIENT_STATES
     - NOT_DONE_STATES
     - DONE_STATES
-    - INITIAL_STATES
-    - TERMINAL_STATES
-    - VALID_STATES_ON_UPDATE
 
 destination-branches: [master]
 sections:
