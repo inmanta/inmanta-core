@@ -85,7 +85,7 @@ class Task(abc.ABC):
         :param agent_name: agent name.
         :param version: The version of the code to load on the executor.
         """
-
+        LOGGER.debug(f"TASK get_executor")
         code = await task_manager.code_manager.get_code(
             environment=task_manager.environment, model_version=version, agent_name=agent_name
         )
@@ -94,6 +94,7 @@ class Task(abc.ABC):
         my_executor: executor.Executor = await task_manager.executor_manager.get_executor(
             agent_name=agent_name, agent_uri="NO_URI", code=code
         )
+        LOGGER.debug(f"get_executor {my_executor=}")
 
         return my_executor
 

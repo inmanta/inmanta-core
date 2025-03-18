@@ -299,7 +299,9 @@ class ConfigurationModel(Base):
     dryrun: Mapped[List["Dryrun"]] = relationship("Dryrun", back_populates="configurationmodel")
     resource: Mapped[List["Resource"]] = relationship("Resource", back_populates="configurationmodel")
     resourceaction: Mapped[List["ResourceAction"]] = relationship("ResourceAction", back_populates="configurationmodel")
-    unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", back_populates="configurationmodel")
+    unknownparameter: Mapped[List["UnknownParameter"]] = relationship(
+        "UnknownParameter", back_populates="configurationmodel", overlaps="unknownparameter"
+    )
 
 
 class DiscoveredResource(Base):
@@ -661,8 +663,12 @@ class UnknownParameter(Base):
     metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column("metadata", JSONB)
     resolved: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
-    configurationmodel: Mapped["ConfigurationModel"] = relationship("ConfigurationModel", back_populates="unknownparameter")
-    environment_: Mapped["Environment"] = relationship("Environment", back_populates="unknownparameter")
+    configurationmodel: Mapped["ConfigurationModel"] = relationship(
+        "ConfigurationModel", back_populates="unknownparameter", overlaps="unknownparameter"
+    )
+    environment_: Mapped["Environment"] = relationship(
+        "Environment", back_populates="unknownparameter", overlaps="configurationmodel,unknownparameter"
+    )
 
 
 class Agent(Base):
