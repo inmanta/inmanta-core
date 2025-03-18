@@ -108,8 +108,8 @@ class CodeManager:
         )
 
         async with get_session() as session:
-            modules_for_agent = await session.execute(modules_for_agent)
-            for res in modules_for_agent.all():
+            result = await session.execute(modules_for_agent)
+            for res in result.all():
                 files_in_module = (
                     select(
                         models.FilesInModule.file_path,

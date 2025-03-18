@@ -697,6 +697,10 @@ class SourceInfo(BaseModel):
 
     # def __str__(self):
     #     return f"SourceInfo ({self.path=}, {self.module_name=}"
+    #
+    # def __repr__(self):
+    #     return f"SourceInfo ({self.path=}, {self.module_name=}"
+
 
     @computed_field  # type: ignore[prop-decorator]
     @cached_property

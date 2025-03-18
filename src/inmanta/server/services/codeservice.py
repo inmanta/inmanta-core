@@ -60,7 +60,7 @@ class CodeService(protocol.ServerSlice):
         :param modules_data: dict with key module name and value loader.PythonModule
         :return:
         """
-        # LOGGER.debug(f"{env=}")
+        LOGGER.debug(f"{env=}")
         # LOGGER.debug(f"{modules_data=}")
         module_stmt = insert(Module).on_conflict_do_nothing()
 

@@ -670,7 +670,7 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
-        module_version_info: Optional[dict[str, str]],
+        module_version_info: Optional[dict[str, "PythonModule"]],
         type_to_module_data: Optional[dict[str, set[str]]],
     ) -> None:
         """
@@ -831,7 +831,7 @@ class OrchestrationService(protocol.ServerSlice):
             async def populate_join_table(
                 cm_version: int,
                 environment: uuid.UUID,
-                module_version_info: dict[str, str] | None,
+                module_version_info: dict[str, "PythonModule"] | None,
                 type_to_module_data: dict[str, set[str]] | None,
                 type_to_agent: dict[str, str] | None,
                 connection: Connection,

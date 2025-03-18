@@ -516,7 +516,7 @@ async def wait_for_consistent_children(
     "auto_start_agent,should_time_out,time_to_sleep,",
     [
         (True, False, 2),
-        # (True, True, 120)
+        (True, True, 120)
     ],
 )  # this overrides a fixture to allow the agent to fork!
 async def test_halt_deploy(
