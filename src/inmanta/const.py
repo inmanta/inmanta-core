@@ -77,6 +77,14 @@ class DeprecatedResourceState(str, Enum):
     processing_events = "processing_events"
 
 
+"""
+The following consts are considered to be part of the stable API.
+Modifying them may break some libraries:
+    - UNDEPLOYABLE_STATES
+    - TRANSIENT_STATES
+    - NOT_DONE_STATES
+    - DONE_STATES
+"""
 # undeployable
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
 UNDEPLOYABLE_NAMES = [s.name for s in UNDEPLOYABLE_STATES]
