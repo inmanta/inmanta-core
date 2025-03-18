@@ -163,7 +163,7 @@ def test():
     # Load the module to register it in the loader cache
     cl.load_module(source_1.name, source_1.hash_value)
     # Subsequent deploys of the same module will result in a cache hit
-    cl.deploy_version([source_1])
+    cl.deploy_version([source_1], source_1.name)
     assert any(
         f"Not deploying code (hv={source_1.hash_value}, module={source_1.name}) because of cache hit" in message
         for message in caplog.messages
@@ -176,7 +176,7 @@ def test():
     return 20
         """
     source_2 = get_module_source("inmanta_plugins.inmanta_unit_test", code)
-    cl.deploy_version([source_2])
+    cl.deploy_version([source_2], source_2.name)
 
     assert any("Deploying code " in message for message in caplog.messages)
 

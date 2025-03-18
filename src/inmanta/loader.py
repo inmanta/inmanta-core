@@ -124,7 +124,7 @@ class CodeManager:
         module_name = get_inmanta_module_name(instance.__module__)
 
         all_plugin_files: list[SourceInfo] = self._get_source_info_for_module(module_name)
-        LOGGER.debug(f"Registering {type_name=} from {instance=} in {module_name=}")
+        LOGGER.debug(f"Registering {type_name=} from {instance=} in {module_name=} {all_plugin_files=}")
         # fqn_module_name = next(module.Project.get().modules[module_name].get_plugin_files())[0]
         self.__type_to_module[type_name].append(module_name)
 
@@ -696,6 +696,8 @@ class SourceInfo(BaseModel):
 
     path: str
     module_name: str
+    def __str__(self):
+        return f'SourceInfo ({self.path=}, {self.module_name=}'
 
     @computed_field  # type: ignore[prop-decorator]
     @cached_property

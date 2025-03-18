@@ -154,6 +154,7 @@ async def make_source_structure(
             ],
         }
         await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
+        dict[str, "PythonModule"]
         return hv
 
 
@@ -307,7 +308,7 @@ async def test_agent_code_loading_with_failure(
                 },
             ],
             module_version_info={
-                "inmanta_plugins.test": module_version,
+                "inmanta_plugins.test": modules_data["inmanta_plugins.test"],
             },
             type_to_module_data=type_to_module_data,
             compiler_version=get_compiler_version(),
