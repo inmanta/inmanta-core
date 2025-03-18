@@ -419,17 +419,13 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
 
-        # sync_client = inmanta.protocol.SyncClient(client=context.client, ioloop=loop)
-        # sources = [s.with_client(sync_client) for s in self.sources]
+        sync_client = inmanta.protocol.SyncClient(client=context.client, ioloop=loop)
+        sources = [s.with_client(sync_client) for s in self.sources]
 
         failed: list[inmanta.loader.FailedModuleSource] = []
         in_place: list[inmanta.loader.ModuleSource] = []
         # First put all files on disk
-        all_sources_names = []
-        for module_source in self.sources:
-            all_sources_names.append(module_source.name)
-
-        for module_source in self.sources:
+        for module_source in sources:
             try:
                 await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
                 in_place.append(module_source)
@@ -445,7 +441,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         # then try to import them
         for module_source in in_place:
             try:
-                LOGGER.debug("Zzz Zzz Zzz")
                 await loop.run_in_executor(
                     context.threadpool,
                     functools.partial(loader.load_module, module_source.name, module_source.hash_value),
@@ -954,10 +949,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
             )
             executor.failed_resource_results = failed_types
             return executor
-        except Exception as e:
-            LOGGER.error(
-                f"FAILFAILFAILFAIL {str(e)}",
-            )
+        except Exception:
             # Make sure to cleanup the executor process if its initialization fails.
             await executor.request_shutdown()
             raise Exception(
