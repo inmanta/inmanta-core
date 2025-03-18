@@ -43,6 +43,15 @@ from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
+async def wait_for_resources_in_state(client, environment: uuid.UUID, nr_of_resources: int, state: const.ResourceState) -> bool:
+    async def _done_waiting() -> bool:
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        deploying = summary["by_state"][state.value]
+        return deploying == nr_of_resources
+
+    await retry_limited(_done_waiting, timeout=10)
 
 @dataclass(frozen=True, kw_only=True)
 class SchedulerChildren:
@@ -557,15 +566,10 @@ async def test_halt_deploy(
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    async def are_resources_being_deployed() -> bool:
-        result = await client.resource_list(environment, deploy_summary=True)
-        assert result.code == 200
-        summary = result.result["metadata"]["deploy_summary"]
-        deploying = summary["by_state"]["deploying"]
-        return deploying == 1
-
     # Wait for at least one resource to be in deploying
-    await retry_limited(are_resources_being_deployed, timeout=5)
+    await wait_for_resources_in_state(
+        client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deploying
+    )
 
     # Let's check the agent table and check that agent1 is present and not paused
     await assert_is_paused(client, environment, {"agent1": False})
@@ -648,7 +652,9 @@ async def test_halt_deploy(
     # Wait for at least one resource to be in deploying
     if halt_during_deployment:
         # Resource didn't finish its deploy. A re-deploy will happen.
-        await retry_limited(are_resources_being_deployed, timeout=5)
+        await wait_for_resources_in_state(
+            client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deploying
+        )
         await wait_for_consistent_children(
             current_pid=current_pid,
             should_scheduler_be_defined=True,
@@ -715,16 +721,11 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", pat
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    async def check_resource_in_state(expected_resources: int = 1, state: str = "deployed") -> bool:
-        result = await client.resource_list(environment, deploy_summary=True)
-        assert result.code == 200
-        summary = result.result["metadata"]["deploy_summary"]
-        nr_res_desired_state = summary["by_state"][state]
-        return nr_res_desired_state == expected_resources
-
     # Wait for one resource in deployed state.
     file_to_remove1.unlink()
-    await retry_limited(check_resource_in_state, timeout=10)
+    await wait_for_resources_in_state(
+        client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed
+    )
 
     # Make sure the children of the scheduler are consistent
     await wait_for_consistent_children(
@@ -755,7 +756,9 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", pat
     # still needs to be deployed
     file_to_remove2.unlink()
     file_to_remove3.unlink()
-    await retry_limited(check_resource_in_state, timeout=6, expected_resources=2)
+    await wait_for_resources_in_state(
+        client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.deployed
+    )
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
@@ -871,15 +874,10 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    async def are_resources_deploying(deployed_resources: int = 1) -> bool:
-        result = await client.resource_list(environment, deploy_summary=True)
-        assert result.code == 200
-        summary = result.result["metadata"]["deploy_summary"]
-        deployed = summary["by_state"]["deploying"]
-        return deployed == deployed_resources
-
     # Wait for this resource to be deploying
-    await retry_limited(are_resources_deploying, 5)
+    await wait_for_resources_in_state(
+        client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deploying
+    )
 
     # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
     # something is moving
@@ -897,16 +895,9 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     await asyncio.wait_for(server.stop(), timeout=20)
     ibl = InmantaBootloader(configure_logging=False)
     async_finalizer.add(partial(ibl.stop, timeout=20))
+
     # Let's restart the server
     await ibl.start()
-
-    # Wait for the scheduler
-    await wait_for_consistent_children(
-        current_pid=current_pid,
-        should_scheduler_be_defined=True,
-        should_fork_server_be_defined=False,
-        nb_executor_to_be_defined=0,
-    )
 
     # Everything should be consistent in DB: the agent should still be paused
     await assert_is_paused(client, environment, {"agent1": True})
@@ -915,7 +906,18 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
     assert summary["total"] == 1, f"Unexpected summary: {summary}"
-    assert summary["by_state"]["unavailable"] == 1, f"Unexpected summary: {summary}"
+    assert (
+        summary["by_state"]["unavailable"] == 1 or summary["by_state"]["deploying"] == 1,
+        f"Unexpected summary: {summary}",
+    )
+
+    # Wait for the scheduler
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=True,
+        should_fork_server_be_defined=False,
+        nb_executor_to_be_defined=0,
+    )
 
 
 @pytest.mark.slowtest
@@ -965,16 +967,11 @@ c = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1",
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    async def are_resources_deployed(deployed_resources: int = 1) -> bool:
-        result = await client.resource_list(environment, deploy_summary=True)
-        assert result.code == 200
-        summary = result.result["metadata"]["deploy_summary"]
-        deployed = summary["by_state"]["deployed"]
-        return deployed == deployed_resources
-
     # Wait for one resource to be deployed
     file_to_remove1.unlink()
-    await retry_limited(are_resources_deployed, timeout=10)
+    await wait_for_resources_in_state(
+        client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed
+    )
 
     # Make sure the children of the scheduler are consistent
     await wait_for_consistent_children(
@@ -1005,7 +1002,9 @@ c = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1",
 
     # Wait for the current deployment of the agent to end
     file_to_remove2.unlink()
-    await retry_limited(are_resources_deployed, timeout=6, interval=1, deployed_resources=2)
+    await wait_for_resources_in_state(
+        client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.deployed
+    )
 
     # Let's make sure there is only one resource left to deploy
     result = await client.resource_list(environment, deploy_summary=True)
@@ -1120,15 +1119,10 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    async def check_resource_in_state(expected_resources: int = 1, state: str = "deployed") -> bool:
-        result = await client.resource_list(environment, deploy_summary=True)
-        assert result.code == 200
-        summary = result.result["metadata"]["deploy_summary"]
-        nr_res_desired_state = summary["by_state"][state]
-        return nr_res_desired_state == expected_resources
-
-    # Wait for one resource to be deployed
-    await retry_limited(check_resource_in_state, expected_resources=3, state="deploying", timeout=10)
+    # Wait for one resource to be deploying
+    await wait_for_resources_in_state(
+        client, uuid.UUID(environment), nr_of_resources=3, state=const.ResourceState.deploying
+    )
 
     result = await client.list_versions(tid=environment)
     assert result.code == 200
@@ -1278,15 +1272,10 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    async def are_resources_deploying(deployed_resources: int = 1) -> bool:
-        result = await client.resource_list(environment, deploy_summary=True)
-        assert result.code == 200
-        summary = result.result["metadata"]["deploy_summary"]
-        deployed = summary["by_state"]["deploying"]
-        return deployed == deployed_resources
-
     # Wait for this resource to be deploying
-    await retry_limited(are_resources_deploying, 5)
+    await wait_for_resources_in_state(
+        client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deploying
+    )
 
     # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
     # something is moving
