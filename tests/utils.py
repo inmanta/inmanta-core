@@ -416,6 +416,7 @@ async def wait_until_deployment_finishes(
         assert result.code == 200
 
         summary = result.result["metadata"]["deploy_summary"]
+        print(summary)
 
         # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
         #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}

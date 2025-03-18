@@ -24,6 +24,7 @@ import json
 import logging
 import multiprocessing
 import os
+import os.path
 import uuid
 from dataclasses import dataclass, field
 from functools import partial
@@ -514,7 +515,7 @@ async def wait_for_consistent_children(
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize(
-    "auto_start_agent,should_time_out,time_to_sleep,", [(True, False, 2), (True, True, 120)]
+    "auto_start_agent,halt_during_deployment", [(True, False), (True, True)]
 )  # this overrides a fixture to allow the agent to fork!
 async def test_halt_deploy(
     snippetcompiler,
@@ -523,18 +524,20 @@ async def test_halt_deploy(
     client,
     clienthelper,
     environment,
+    tmp_path,
     auto_start_agent: bool,
-    should_time_out: bool,
-    time_to_sleep: int,
+    halt_during_deployment: bool,
 ):
     """
     Verify that the new scheduler can actually halt an ongoing deployment and can resume it when the user requests it
     Two cases are tested:
-        - If the deployment gets through before halting the environment
-        - If the deployment is taking too much time, the halting of the environment will stop the active deployment. We will
-        assert that this deployment is started again once the environment is resumed
+        - If the deployment finishes before halting the environment.
+        - If the environment is halted during a deployment.
     """
     current_pid = os.getpid()
+
+    file_to_remove = tmp_path / "file"
+    file_to_remove.touch()
 
     # First, configure everything
     config.Config.set("config", "environment", environment)
@@ -542,20 +545,12 @@ async def test_halt_deploy(
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
 
-    # Retrieve the actual processes before deploying anything
-    start_state = construct_scheduler_children(current_pid)
-    for child in start_state.children:
-        assert child.is_running()
+    model = f"""
+        import minimalwaitingmodule
+        minimalwaitingmodule::WaitForFileRemoval(name="test", agent="agent1", path="{file_to_remove}")
+    """
 
-    snippetcompiler.setup_for_snippet(
-        f"""
-import minimalwaitingmodule
-
-a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep={time_to_sleep})
-""",
-        ministd=True,
-        index_url="https://pypi.org/simple",
-    )
+    snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
 
     # Now, let's deploy some resources
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
@@ -583,26 +578,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         nb_executor_to_be_defined=1,
     )
 
-    # Wait for something to be deployed
-    try:
-        await clienthelper.wait_for_deployed(timeout=5)
-        assert not should_time_out, f"This was supposed to time out with a deployment sleep set to {time_to_sleep}!"
-    except (asyncio.TimeoutError, AssertionError):
-        result = await client.list_agents(tid=environment)
-        assert result.code == 200
-        assert should_time_out, f"This wasn't supposed to time out with a deployment sleep set to {time_to_sleep}!"
-    finally:
-        # Retrieve the current processes, we should have more processes than `start_children`
-        await wait_for_consistent_children(
-            current_pid=current_pid,
-            should_scheduler_be_defined=True,
-            should_fork_server_be_defined=True,
-            nb_executor_to_be_defined=1,
-        )
-
-    state_after_deployment = construct_scheduler_children(current_pid)
-    for child in state_after_deployment.children:
-        assert child.is_running()
+    children_during_deployment = construct_scheduler_children(current_pid)
 
     # The number of resources for this version should match
     result = await client.list_versions(tid=environment)
@@ -613,19 +589,19 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     # Let's check the agent table and check that agent1 is present and not paused
     await assert_is_paused(client, environment, {"agent1": False})
 
+    if not halt_during_deployment:
+        file_to_remove.unlink()
+        await wait_until_deployment_finishes(client, environment, version=1, timeout=30)
+
     # Now let's halt the environment
     result = await client.halt_environment(tid=environment)
     assert result.code == 200
 
-    snippetcompiler.setup_for_snippet(
-        f"""
-    import minimalwaitingmodule
+    # Unblock the deployment
+    if halt_during_deployment:
+        file_to_remove.unlink()
 
-    a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep={time_to_sleep})
-    """,
-        ministd=True,
-        index_url="https://pypi.org/simple",
-    )
+    snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
@@ -633,20 +609,19 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     # Let's recheck the agent table and check that the scheduler and agent1 are present and paused
     await assert_is_paused(client, environment, {"agent1": True})
 
-    # Let's wait for the executor to die (
+    # Let's wait for the executor to die
     await retry_limited(
         wait_for_terminated_status,
         timeout=const.EXECUTOR_GRACE_HARD + 2,
-        current_children=state_after_deployment.children,
+        current_children=children_during_deployment.children,
         expected_terminated_process=3,
     )
 
     # Let's recheck the number of processes after pausing the environment
-    halted_state = construct_scheduler_children(current_pid)
-
+    children_while_halted = construct_scheduler_children(current_pid)
     assert (
-        len(halted_state.children) == 0
-    ), "The Scheduler and the fork server and the executor created by the scheduler should have been killed!"
+        len(children_while_halted.children) == 0
+    ), "The Scheduler and the fork server and the executor created by the scheduler should have been stopped!"
 
     result = await client.get_agents(environment)
     assert result.code == 200
@@ -664,13 +639,15 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     }
     assert actual_data[0] == expected_data
 
+    file_to_remove.touch()
     await client.resume_environment(environment)
 
     # Let's check the agent table and check that the scheduler and agent1 are present and not paused
     await assert_is_paused(client, environment, {"agent1": False})
 
-    if should_time_out:
-        # Wait for at least one resource to be in deploying
+    # Wait for at least one resource to be in deploying
+    if halt_during_deployment:
+        # Resource didn't finish its deploy. A re-deploy will happen.
         await retry_limited(are_resources_being_deployed, timeout=5)
         await wait_for_consistent_children(
             current_pid=current_pid,
@@ -678,19 +655,16 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
             should_fork_server_be_defined=True,
             nb_executor_to_be_defined=1,
         )
-        current_state = construct_scheduler_children(current_pid)
-        assert len(current_state.children) == len(state_after_deployment.children)
-
+        children_redeployment = construct_scheduler_children(current_pid)
+        assert len(children_redeployment.children) == len(children_during_deployment.children)
     else:
-        with pytest.raises(AssertionError):  # Nothing should get deployed
-            await retry_limited(are_resources_being_deployed, timeout=1)
-
-        await wait_for_consistent_children(
-            current_pid=current_pid,
-            should_scheduler_be_defined=True,
-            should_fork_server_be_defined=False,
-            nb_executor_to_be_defined=0,
-        )
+        # Resource was already deployed
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        deploying = summary["by_state"]["deployed"]
+        assert deploying == 1
+    file_to_remove.unlink()
 
 
 @pytest.mark.slowtest
@@ -703,6 +677,7 @@ async def test_pause_agent_deploy(
     clienthelper,
     environment,
     auto_start_agent: bool,
+    tmp_path,
 ):
     """
     Verify that the new scheduler can pause running agent:
@@ -711,24 +686,25 @@ async def test_pause_agent_deploy(
     """
     current_pid = os.getpid()
 
+    file_to_remove1 = tmp_path / "file1"
+    file_to_remove2 = tmp_path / "file2"
+    file_to_remove3 = tmp_path / "file3"
+    for f in [file_to_remove1, file_to_remove2, file_to_remove3]:
+        f.touch()
+
     # First, configure everything
     config.Config.set("config", "environment", environment)
     # Make sure the session with the Scheduler is there
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
 
-    # Retrieve the actual processes before deploying anything
-    start_state = construct_scheduler_children(current_pid)
-    for children in start_state.children:
-        assert children.is_running()
-
     snippetcompiler.setup_for_snippet(
-        """
+        f"""
 import minimalwaitingmodule
 
-a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=5)
-b = minimalwaitingmodule::Sleep(name="test_sleep2", agent="agent1", time_to_sleep=5)
-c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sleep=5)
+a = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove1}")
+b = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep2", agent="agent1", path="{file_to_remove2}", requires=[a])
+minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", path="{file_to_remove3}", requires=[b])
 """,
         ministd=True,
         index_url="https://pypi.org/simple",
@@ -746,7 +722,8 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         nr_res_desired_state = summary["by_state"][state]
         return nr_res_desired_state == expected_resources
 
-    # Wait for at least one resource to be deployed
+    # Wait for one resource in deployed state.
+    file_to_remove1.unlink()
     await retry_limited(check_resource_in_state, timeout=10)
 
     # Make sure the children of the scheduler are consistent
@@ -756,11 +733,6 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         should_fork_server_be_defined=True,
         nb_executor_to_be_defined=1,
     )
-
-    # Retrieve the current processes, we should have more processes than `start_children`
-    state_after_deployment = construct_scheduler_children(current_pid)
-    for children in state_after_deployment.children:
-        assert children.is_running()
 
     # The number of resources for this version should match
     result = await client.list_versions(tid=environment)
@@ -781,6 +753,8 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     # Let's also check if the state of resources are consistent with what we expect:
     # The agent finished deploying resource n°2 before pausing and resource n°3
     # still needs to be deployed
+    file_to_remove2.unlink()
+    file_to_remove3.unlink()
     await retry_limited(check_resource_in_state, timeout=6, expected_resources=2)
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
@@ -789,17 +763,24 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
-    # Let's wait for the executor to be cleaned up
-    with pytest.raises(AssertionError):
-        await retry_limited(check_resource_in_state, state="deploying", timeout=1, interval=0.3)
+    # Let's wait for the executor to be stopped
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=True,
+        should_fork_server_be_defined=True,
+        nb_executor_to_be_defined=0,
+    )
+
+    for f in [file_to_remove1, file_to_remove2, file_to_remove3]:
+        f.touch()
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.unpause.value)
     assert result.code == 200
 
-    # Everything should be back online
+    # The agent should no longer be paused.
     await assert_is_paused(client, environment, {"agent1": False})
 
-    # Nothing should have changed concerning the state of our resources, yet!
+    # Assert resource state.
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
@@ -809,17 +790,13 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     ), f"Unexpected summary: {summary}"
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
-    # Let's wait for the new executor to kick in
+    # Verify that the executor starts
     await wait_for_consistent_children(
         current_pid=current_pid,
         should_scheduler_be_defined=True,
         should_fork_server_be_defined=True,
         nb_executor_to_be_defined=1,
     )
-
-    resumed_state = construct_scheduler_children(current_pid)
-    for children in resumed_state.children:
-        assert children.is_running()
 
     # Let's make sure that we cannot interact directly with the Scheduler agent!
     result = await client.agent_action(tid=environment, name=const.AGENT_SCHEDULER_ID, action=AgentAction.pause.value)
@@ -844,6 +821,9 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     }
     assert actual_data[0] == expected_data
 
+    for f in [file_to_remove1, file_to_remove2, file_to_remove3]:
+        f.unlink()
+
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
@@ -856,6 +836,7 @@ async def test_agent_paused_scheduler_server_restart(
     environment,
     auto_start_agent: bool,
     async_finalizer,
+    tmp_path,
 ):
     """
     Verify that the new scheduler does not alter the state of agent after a restart:
@@ -866,22 +847,20 @@ async def test_agent_paused_scheduler_server_restart(
     """
     current_pid = os.getpid()
 
+    file_to_remove = tmp_path / "file1"
+    file_to_remove.touch()
+
     # First, configure everything
     config.Config.set("config", "environment", environment)
     # Make sure the session with the Scheduler is there
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
 
-    # Retrieve the actual processes before deploying anything
-    start_state = construct_scheduler_children(current_pid)
-    for children in start_state.children:
-        assert children.is_running()
-
     snippetcompiler.setup_for_snippet(
-        """
+        f"""
 import minimalwaitingmodule
 
-a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
+minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove}")
 """,
         ministd=True,
         index_url="https://pypi.org/simple",
@@ -899,7 +878,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         deployed = summary["by_state"]["deploying"]
         return deployed == deployed_resources
 
-    # Wait for this resource to be deployed
+    # Wait for this resource to be deploying
     await retry_limited(are_resources_deploying, 5)
 
     # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
@@ -910,11 +889,6 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         should_fork_server_be_defined=True,
         nb_executor_to_be_defined=1,
     )
-
-    # Retrieve the current processes, we should have more processes than `start_children`
-    children_after_deployment = construct_scheduler_children(current_pid)
-    for children in children_after_deployment.children:
-        assert children.is_running()
 
     result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
     assert result.code == 200
@@ -937,11 +911,6 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
     # Everything should be consistent in DB: the agent should still be paused
     await assert_is_paused(client, environment, {"agent1": True})
 
-    # Let's recheck the number of processes after restarting the server
-    state_after_restart = construct_scheduler_children(current_pid)
-    for children in state_after_restart.children:
-        assert children.is_running()
-
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
@@ -959,12 +928,19 @@ async def test_agent_paused_should_remain_paused_after_environment_resume(
     clienthelper,
     environment,
     auto_start_agent: bool,
+    tmp_path,
 ):
     """
-    Verify that the new scheduler does not alter the state of agent after resuming the environment (if the agent was flag to
-        not be impacted by such event)
+    Verify that the new scheduler does not alter the state of the agent after resuming the environment
+    (if the agent was flagged to not be impacted by such event).
     """
     current_pid = os.getpid()
+
+    file_to_remove1 = tmp_path / "file1"
+    file_to_remove2 = tmp_path / "file2"
+    file_to_remove3 = tmp_path / "file3"
+    for f in [file_to_remove1, file_to_remove2, file_to_remove3]:
+        f.touch()
 
     # First, configure everything
     config.Config.set("config", "environment", environment)
@@ -972,18 +948,13 @@ async def test_agent_paused_should_remain_paused_after_environment_resume(
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
 
-    # Retrieve the actual processes before deploying anything
-    start_state = construct_scheduler_children(current_pid)
-    for children in start_state.children:
-        assert children.is_running()
-
     snippetcompiler.setup_for_snippet(
-        """
+        f"""
 import minimalwaitingmodule
 
-a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=5)
-b = minimalwaitingmodule::Sleep(name="test_sleep2", agent="agent1", time_to_sleep=5)
-c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sleep=5)
+a = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove1}")
+b = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep2", agent="agent1", path="{file_to_remove2}", requires=[a])
+c = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", path="{file_to_remove3}", requires=[b])
 """,
         ministd=True,
         index_url="https://pypi.org/simple",
@@ -1001,7 +972,8 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         deployed = summary["by_state"]["deployed"]
         return deployed == deployed_resources
 
-    # Wait for at least one resource to be deployed
+    # Wait for one resource to be deployed
+    file_to_remove1.unlink()
     await retry_limited(are_resources_deployed, timeout=10)
 
     # Make sure the children of the scheduler are consistent
@@ -1032,6 +1004,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     await assert_is_paused(client, environment, {"agent1": True})
 
     # Wait for the current deployment of the agent to end
+    file_to_remove2.unlink()
     await retry_limited(are_resources_deployed, timeout=6, interval=1, deployed_resources=2)
 
     # Let's make sure there is only one resource left to deploy
@@ -1043,7 +1016,12 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
     assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
     # Let's wait for the executor to be cleaned up
-    await retry_limited(wait_for_terminated_status, timeout=10, current_children=state_after_deployment.children)
+    await retry_limited(
+        wait_for_terminated_status,
+        timeout=10,
+        current_children=state_after_deployment.children,
+        expected_terminated_process=1,  # Executor
+    )
 
     # Let's halt the environment to be able to set `keep_paused_on_resume` flag on agent1
     result = await client.halt_environment(tid=environment)
@@ -1058,7 +1036,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_slee
         wait_for_terminated_status,
         timeout=const.EXECUTOR_GRACE_HARD + 2,
         current_children=state_after_deployment.children,
-        expected_terminated_process=3,
+        expected_terminated_process=3, # Scheduler + executor + forkserver
     )
 
     # Let's recheck the number of processes after pausing the environment
@@ -1111,10 +1089,14 @@ async def test_pause_unpause_all_agents_deploy(
     clienthelper,
     environment,
     auto_start_agent: bool,
+    tmp_path,
 ):
     """
     Verify that the new scheduler can pause and unpause all agents
     """
+    file_to_remove = tmp_path / "file"
+    file_to_remove.touch()
+
     # First, configure everything
     config.Config.set("config", "environment", environment)
     # Make sure the session with the Scheduler is there
@@ -1122,12 +1104,12 @@ async def test_pause_unpause_all_agents_deploy(
     assert len(agentmanager.sessions) == 1
 
     snippetcompiler.setup_for_snippet(
-        """
+        f"""
 import minimalwaitingmodule
 
-a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=5)
-b = minimalwaitingmodule::Sleep(name="test_sleep2", agent="agent2", time_to_sleep=5)
-c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_sleep=5)
+minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove}")
+minimalwaitingmodule::WaitForFileRemoval(name="test_sleep2", agent="agent2", path="{file_to_remove}")
+minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", path="{file_to_remove}")
 """,
         ministd=True,
         index_url="https://pypi.org/simple",
@@ -1145,7 +1127,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
         nr_res_desired_state = summary["by_state"][state]
         return nr_res_desired_state == expected_resources
 
-    # Wait for at least one resource to be deployed
+    # Wait for one resource to be deployed
     await retry_limited(check_resource_in_state, expected_resources=3, state="deploying", timeout=10)
 
     result = await client.list_versions(tid=environment)
@@ -1158,6 +1140,7 @@ c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_slee
 
     await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
     assert result.code == 200
+    file_to_remove.unlink()
 
     # Let's check the agent table and check that all agents are presents and paused
     await assert_is_paused(client, environment, {"agent1": True, "agent2": True, "agent3": True})
@@ -1261,6 +1244,7 @@ async def test_scheduler_killed(
     environment,
     auto_start_agent: bool,
     async_finalizer,
+    tmp_path,
 ):
     """
     Verify that the AgentView is updated accordingly to the state of the Scheduler:
@@ -1268,6 +1252,9 @@ async def test_scheduler_killed(
         - If the scheduler come back online, it will override inconsistent resource states
     """
     current_pid = os.getpid()
+
+    file_to_remove = tmp_path / "file"
+    file_to_remove.touch()
 
     # First, configure everything
     config.Config.set("config", "environment", environment)
@@ -1280,15 +1267,11 @@ async def test_scheduler_killed(
     for children in start_state.children:
         assert children.is_running()
 
-    snippetcompiler.setup_for_snippet(
-        """
+    model = f"""
 import minimalwaitingmodule
-
-a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
-""",
-        ministd=True,
-        index_url="https://pypi.org/simple",
-    )
+minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove}")
+"""
+    snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
 
     # Now, let's deploy a resource
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
@@ -1302,7 +1285,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         deployed = summary["by_state"]["deploying"]
         return deployed == deployed_resources
 
-    # Wait for this resource to be deployed
+    # Wait for this resource to be deploying
     await retry_limited(are_resources_deploying, 5)
 
     # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
@@ -1314,7 +1297,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
         nb_executor_to_be_defined=1,
     )
 
-    # Retrieve the current processes, we should have more processes than `start_children`
+    # Retrieve the current processes, we should have more processes than `start_state_children`
     children_after_deployment = construct_scheduler_children(current_pid)
     for children in children_after_deployment.children:
         assert children.is_running()
@@ -1341,10 +1324,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
             return False
         return actual_data[0]["status"] == "down"
 
-    await retry_limited(
-        wait_for_down_status,
-        timeout=5,
-    )
+    await retry_limited(wait_for_down_status, timeout=5)
 
     result = await client.get_agents(environment)
     assert result.code == 200
@@ -1364,15 +1344,7 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 
     await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
 
-    snippetcompiler.setup_for_snippet(
-        """
-    import minimalwaitingmodule
-
-a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
-    """,
-        ministd=True,
-        index_url="https://pypi.org/simple",
-    )
+    snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200

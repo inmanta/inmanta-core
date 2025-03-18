@@ -17,10 +17,10 @@ Contact: code@inmanta.com
 """
 
 import time
+import os.path
 
 from inmanta import resources
 from inmanta.agent.handler import provider, CRUDHandler, HandlerContext, ResourcePurged
-
 
 @resources.resource("minimalwaitingmodule::Sleep", agent="agent", id_attribute="name")
 class SleepResource(resources.PurgeableResource):
@@ -42,4 +42,31 @@ class SleepHandler(CRUDHandler):
 
     def create_resource(self, ctx: HandlerContext, resource: SleepResource) -> None:
         time.sleep(resource.time_to_sleep)
+        ctx.set_created()
+
+
+@resources.resource("minimalwaitingmodule::WaitForFileRemoval", agent="agent", id_attribute="name")
+class WaitForFileRemoval(resources.PurgeableResource):
+    """
+    A resource that remains in the deploying state as long as the file at `path` exists.
+    """
+
+    name: str
+    agent: str
+    path = str
+
+    fields = ("name", "agent", "path")
+
+
+@provider("minimalwaitingmodule::WaitForFileRemoval", name="wait_for_file_removal")
+class SleepHandler(CRUDHandler):
+    def read_resource(self, ctx: HandlerContext, resource: WaitForFileRemoval) -> None:
+        if os.path.exists(resource.path):
+            raise ResourcePurged()
+
+    def create_resource(self, ctx: HandlerContext, resource: WaitForFileRemoval) -> None:
+        file_exists = os.path.exists(resource.path)
+        while file_exists:
+            time.sleep(0.05)
+            file_exists = os.path.exists(resource.path)
         ctx.set_created()
