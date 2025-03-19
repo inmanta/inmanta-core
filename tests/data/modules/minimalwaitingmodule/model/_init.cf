@@ -1,4 +1,4 @@
-entity WaitForFileRemoval std::PurgeableResource:
+entity WaitForFileRemoval extends std::PurgeableResource:
     """
     Resource that will remain in the deploying state until
     the file at the given path doesn't exist anymore.
