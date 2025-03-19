@@ -514,10 +514,7 @@ async def wait_for_consistent_children(
 @pytest.mark.slowtest
 @pytest.mark.parametrize(
     "auto_start_agent,should_time_out,time_to_sleep,",
-    [
-        (True, False, 2),
-        (True, True, 120)
-    ],
+    [(True, False, 2), (True, True, 120)],
 )  # this overrides a fixture to allow the agent to fork!
 async def test_halt_deploy(
     snippetcompiler,

@@ -28,21 +28,35 @@ import uuid
 from collections.abc import Sequence
 from logging import DEBUG
 
+import py
 import pytest
 
-from inmanta import config, loader
+import inmanta
+from inmanta import config, loader, module
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
+from inmanta.const import PLUGINS_PACKAGE
 from inmanta.data import PipConfig
 from inmanta.env import process_env
 from inmanta.loader import PythonModule, SourceInfo
+from inmanta.module import ModuleV2
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
 from inmanta.util import get_compiler_version
-from utils import ClientHelper, DummyCodeManager, log_index, retry_limited, wait_until_deployment_finishes
+from moduletool import common
+from packaging.version import Version
+from utils import (
+    ClientHelper,
+    DummyCodeManager,
+    PipIndex,
+    log_index,
+    module_from_template,
+    retry_limited,
+    wait_until_deployment_finishes,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -173,40 +187,68 @@ async def test_agent_installs_dependency_containing_extras(
     server_pre_start,
     server,
     client,
-    environment,
     monkeypatch,
     index_with_pkgs_containing_optional_deps: str,
     clienthelper,
+    environment,
     agent,
+    modules_v2_dir,
+    tmpdir,
+    snippetcompiler_clean,
 ) -> None:
     """
     Test whether the agent code loading works correctly when a python dependency is provided that contains extras.
     """
     code = """
-def test():
-    return 10
-
 @resource("test::Resource", agent="agent1", id_attribute="key")
 class Res(Resource):
     fields = ("agent", "key", "value")
 
     """
+    # project: module.Project = snippetcompiler_clean.setup_for_snippet("")
 
-    modules_data = {}
-    type_to_module_data = {
-        "test::Resource": "test",
-    }
-    await make_source_structure(
-        modules_data,
-        "__init__.py",
-        "test",
-        code,
-        dependencies=["pkg[optional-a]"],
-        client=client,
+    module_name = "myv2mod"
+    module_dir = str(tmpdir.join("myv2mod"))
+
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    # Add dependency pkg[optional-a] to module
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        module_dir,
+        new_name="myv2mod",
+        new_version=Version("1.0.0"),
+        new_requirements=[inmanta.util.parse_requirement(requirement="pkg[optional-a]")],
+        publish_index=index,
     )
+    with open(os.path.join(module_dir, PLUGINS_PACKAGE, "test_mod.py"), "w+") as fh:
+        fh.write(code)
+    with open(os.path.join(module_dir, "__init__.py"), "w+") as fh:
+        fh.write("")
 
-    res = await client.upload_modules(tid=environment, modules_data=modules_data)
-    assert res.code == 200
+    module_v2 = ModuleV2(project=None, path=module_dir)
+
+    sources = [
+        SourceInfo(path=absolute_path, module_name=fqn_module_name)
+        for absolute_path, fqn_module_name in module_v2.get_plugin_files()
+    ]
+
+    all_files_hashes = [file.hash for file in sorted(sources, key=lambda f: f.hash)]
+
+    module_version_hash = hashlib.new("sha1")
+    for file_hash in all_files_hashes:
+        module_version_hash.update(file_hash.encode())
+
+    module_version = module_version_hash.hexdigest()
+    modules_data: dict[str, PythonModule] = {}
+    modules_data[module_name] = PythonModule(
+        name=module_name,
+        version=module_version,
+        files_in_module=sources,
+    )
+    type_to_module_data = {"test::Resource": module_name}
+    # res = await client.upload_modules(tid=environment, modules_data=)
+    # assert res.code == 200
 
     # module_version_info = {module_name: data["version"] for module_name, data in modules_data.items()}
     version = await clienthelper.get_version()
@@ -267,6 +309,7 @@ async def test_agent_code_loading_with_failure(
     environment: uuid.UUID,
     monkeypatch,
     clienthelper: ClientHelper,
+    tmpdir: py.path.local,
 ) -> None:
     """
     Test goal: make sure that failed resources are correctly returned by `get_code` and `ensure_code` methods.
@@ -284,17 +327,22 @@ async def test_agent_code_loading_with_failure(
         "test::Test": "inmanta_plugins.test",
         "test::Test2": "inmanta_plugins.test",
     }
+    file_path = os.path.join(tmpdir, "test/plugins/__init__.py")
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    with open(file_path, "w") as f:
+        f.write("")
+
     await make_source_structure(
         modules_data,
-        "test/__init__.py",
+        file_path,
         "test",
         "",
         client=client,
     )
 
-    res = await client.upload_modules(tid=environment, modules_data=modules_data)
-
-    assert res.code == 200
+    # res = await client.upload_modules(tid=environment, modules_data=modules_data)
+    #
+    # assert res.code == 200
 
     async def get_version() -> int:
         version = await clienthelper.get_version()
@@ -317,9 +365,7 @@ async def test_agent_code_loading_with_failure(
                     "name": "test",
                 },
             ],
-            module_version_info={
-                "inmanta_plugins.test": modules_data["inmanta_plugins.test"],
-            },
+            module_version_info=modules_data,
             type_to_module_data=type_to_module_data,
             compiler_version=get_compiler_version(),
             pip_config=PipConfig(),
@@ -413,6 +459,3 @@ raise Exception("Fail code loading")
         for resource_action in result.result["data"]
         for log_line in resource_action["messages"]
     )
-
-
-""
