@@ -232,7 +232,7 @@ class DatabaseService(protocol.ServerSlice):
     async def connect_database(self) -> None:
         """Connect to the database"""
 
-        inmanta_logger_options = inmanta_logging.InmantaLoggerConfig.get_instance()._options_applied
+        inmanta_logger_options = inmanta_logging.InmantaLoggerConfig.get_instance().get_applied_options()
         echo = getattr(inmanta_logger_options, "echo_sqlalchemy_logging", False)
         await initialize_sql_alchemy_engine(
             database_host=opt.db_host.get(),
