@@ -518,8 +518,8 @@ def convert_module_to_relative_path(full_mod_name: str) -> str:
 
     module_parts.insert(1, PLUGIN_DIR)
 
-    if module_parts[-1] == "__init__":
-        module_parts = module_parts[:-1]
+    # if module_parts[-1] == "__init__":
+    #     module_parts = module_parts[:-1]
 
     return os.path.join(*module_parts)
 
@@ -700,7 +700,6 @@ class SourceInfo(BaseModel):
     #
     # def __repr__(self):
     #     return f"SourceInfo ({self.path=}, {self.module_name=}"
-
 
     @computed_field  # type: ignore[prop-decorator]
     @cached_property

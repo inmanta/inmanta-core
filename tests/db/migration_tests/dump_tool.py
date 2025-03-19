@@ -139,7 +139,7 @@ async def test_dump_db(
     version = sorted([v.version for v in DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, None)._get_update_functions()])[
         -1
     ]
-    outfile = os.path.join(os.path.dirname(__file__), "dumps", f"v{version}.sql")
+    outfile = os.path.join(os.path.dirname(__file__), "dumps", f"v{version}.sql_NEW_CODE_DUMP")
     print("Project at: ", project_dir)
 
     shutil.copytree(project_source, project_dir)
@@ -309,6 +309,8 @@ async def test_dump_db(
             "test::Resource[agent1,key=key6]": const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
+        module_version_info=module_version_info,
+        type_to_module_data=type_to_module_data,
     )
     assert res.code == 200
     res = await client.release_version(

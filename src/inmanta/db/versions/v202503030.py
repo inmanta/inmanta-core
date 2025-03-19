@@ -16,7 +16,14 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import hashlib
+from collections import defaultdict
+from pathlib import Path
+from typing import NewType
+
 from asyncpg import Connection
+
+from inmanta import const
 
 
 async def update(connection: Connection) -> None:
@@ -28,6 +35,8 @@ async def update(connection: Connection) -> None:
     * Create the modules_for_agent table, that keeps track of which inmanta modules are required
       by which agent.
     """
+    # TODO Is this resilient to files moving location within a module?
+
     schema = """
         CREATE TABLE public.module (
             name varchar NOT NULL,
@@ -72,4 +81,143 @@ async def update(connection: Connection) -> None:
         ON public.modules_for_agent (environment, module_name, module_version);
 
     """
+
     await connection.execute(schema)
+
+    env_id = NewType("env_id", str)
+    model_version = NewType("model_version", int)
+    module_name = NewType("module_name", str)
+    module_version = NewType("module_version", str)
+
+    code_data: dict[env_id, dict[model_version, dict[module_name, set[tuple[str, str, str, set[str]]]]]] = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(set))
+    )
+    model_to_module_version_map: dict[int, dict[module_name, module_version]] = defaultdict(dict)
+
+    resource_type_to_module: dict[model_version, dict[str, set[module_name]]] = defaultdict(lambda: defaultdict(set))
+
+    async def fetch_code_data(code_data, resource_type_to_module) -> None:
+        fetch_source_refs_query = """
+    SELECT DISTINCT environment, version, source_refs, resource from public.code
+        """
+
+        # Env -> inmanta_module_name -> files_in_module
+        result = await connection.fetch(fetch_source_refs_query)
+        for res in result:
+            env = res["environment"]
+            model_version = res["version"]
+            source_refs = res["source_refs"]
+            resource_type = res["resource"]
+
+            # 'ca7f66803b24e0b831d6728f882f5a79af2f33c2': [
+            #     '/tmp/tmpku6yczqo/server/a8317edd-74d8-40fc-8933-9aedb77cfed4/compiler/.env-py3.12/lib/python3.12/site-packages/inmanta_plugins/fs/json_file.py',
+            #     'inmanta_plugins.fs.json_file',
+            #     ['inmanta-module-std', 'inmanta-module-mitogen']
+            #  ]
+
+            # 'inmanta_plugins.fs.json_file' --> fs/plugins/json_file
+
+            for file_hash, file_data in source_refs.items():
+                file_path, python_module_name, requirements = file_data
+                inmanta_module_name = python_module_name.split(".")[1]
+                code_data[env][model_version][inmanta_module_name].add(
+                    tuple((file_hash, file_path, python_module_name, frozenset(requirements)))
+                )
+
+                resource_type_to_module[model_version][resource_type].add(inmanta_module_name)
+
+    def build_module_data(code_data, module_data, files_in_module_data, model_to_module_version_map) -> None:
+
+        def compute_version_requirements(
+            source_info: list[tuple[str, str, str, list[str]]],
+        ) -> tuple[str, set[str]]:
+            """
+            Helper method
+            """
+            reqs = set()
+            module_version_hash = hashlib.new("sha1")
+
+            for file_hash, _, _, requirements in sorted(source_info, key=lambda x: x[0]):
+                # sort by hash to compute inmanta module version
+                module_version_hash.update(file_hash.encode())
+                reqs.update(requirements)
+
+            module_version = module_version_hash.hexdigest()
+            return module_version, list(reqs)
+
+        def compute_files_in_module(source_info, module_name, environment, module_version, files_in_module_data):
+            """
+            Helper method
+            """
+            for file_hash, file_path, _, _ in source_info:
+                parts = Path(file_path).parts
+                relative_path = str(Path(*parts[parts.index(const.PLUGINS_PACKAGE) :]))
+                files_in_module_data.append((module_name, module_version, environment, file_hash, relative_path))
+
+        for env, env_data in code_data.items():
+            for cm_version, version_data in env_data.items():
+                for module_name, module_source_data in version_data.items():
+                    module_version, requirements = compute_version_requirements(module_source_data)
+                    compute_files_in_module(module_source_data, module_name, env, module_version, files_in_module_data)
+                    module_data.append((module_name, module_version, env, requirements))
+                    model_to_module_version_map[cm_version][module_name] = module_version
+
+    async def build_modules_in_agent_data(resource_type_to_module, model_to_module_version_map, modules_for_agent_data):
+        fetch_agent_for_resource_query = """
+        SELECT DISTINCT environment, model, agent, resource_type from public.resource
+            """
+        result = await connection.fetch(fetch_agent_for_resource_query)
+        for res in result:
+            model_version = res["model"]
+            environment = res["environment"]
+            agent_name = res["agent"]
+            resource_type = res["resource_type"]
+
+            for module_name in resource_type_to_module[model_version][resource_type]:
+                module_version = model_to_module_version_map[model_version][module_name]
+                modules_for_agent_data.append((model_version, environment, agent_name, module_name, module_version))
+
+    module_data: list[tuple[str, str, str, list[str]]] = []
+    files_in_module_data: list[tuple[str, str, str, str, str]] = []
+    modules_for_agent_data: list[tuple[str, str, str, str, str]] = []
+    await fetch_code_data(code_data, resource_type_to_module)
+    build_module_data(code_data, module_data, files_in_module_data, model_to_module_version_map)
+    await build_modules_in_agent_data(resource_type_to_module, model_to_module_version_map, modules_for_agent_data)
+    insert_module = """
+INSERT INTO public.module (
+    name,
+    version,
+    environment,
+    requirements
+    )
+VALUES ($1,$2,$3,$4)
+ON CONFLICT DO NOTHING
+"""
+    await connection.executemany(insert_module, module_data)
+
+    insert_files_in_module = """
+    INSERT INTO public.files_in_module (
+        module_name,
+        module_version,
+        environment,
+        file_content_hash,
+        file_path
+    )
+    VALUES ($1,$2,$3,$4,$5)
+    ON CONFLICT DO NOTHING
+    """
+    await connection.executemany(insert_files_in_module, files_in_module_data)
+
+    insert_modules_for_agent = """
+    INSERT INTO public.modules_for_agent (
+        cm_version,
+        environment,
+        agent_name,
+        module_name,
+        module_version
+    )
+    VALUES ($1,$2,$3,$4,$5)
+    ON CONFLICT DO NOTHING
+    """
+    await connection.executemany(insert_modules_for_agent, modules_for_agent_data)
+
