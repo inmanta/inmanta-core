@@ -1382,6 +1382,23 @@ def upload_modules(tid: uuid.UUID, **kwargs: object) -> ReturnValue[int]:
     """
 
 
+@typedmethod(
+    path="/code/<version>",
+    operation="GET",
+    agent_server=True,
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> list[model.Source]:
+    """
+    Get the code for the given version and the given resource
+    :param tid: The id of the environment
+    :param version: The id of the model version
+    :param resource_type: The type name of the resource
+    :raises NotFound: Raised when the version or type is not found
+    """
+
 
 @typedmethod(
     path="/pip/config/<version>",

@@ -16,8 +16,6 @@ import datetime
 import uuid
 from typing import Any, List, Optional
 
-import asyncpg
-
 from inmanta.data.model import EnvSettingType
 from sqlalchemy import (
     ARRAY,
@@ -166,6 +164,7 @@ class Environment(Base):
     project_: Mapped["Project"] = relationship("Project", back_populates="environment")
 
     agentprocess: Mapped[List["AgentProcess"]] = relationship("AgentProcess", back_populates="environment_")
+    code: Mapped[List["Code"]] = relationship("Code", back_populates="environment_")
     compile: Mapped[List["Compile"]] = relationship("Compile", back_populates="environment_")
     configurationmodel: Mapped[List["ConfigurationModel"]] = relationship("ConfigurationModel", back_populates="environment_")
     discoveredresource: Mapped[List["DiscoveredResource"]] = relationship("DiscoveredResource", back_populates="environment_")
@@ -205,6 +204,20 @@ class AgentProcess(Base):
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="agentprocess")
     agentinstance: Mapped[List["AgentInstance"]] = relationship("AgentInstance", back_populates="agentprocess")
 
+
+class Code(Base):
+    __tablename__ = "code"
+    __table_args__ = (
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="code_environment_fkey"),
+        PrimaryKeyConstraint("environment", "version", "resource", name="code_pkey"),
+    )
+
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
+    resource: Mapped[str] = mapped_column(String, primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_refs: Mapped[Optional[dict[str, tuple[str, str, list[str]]]]] = mapped_column(JSONB)
+
+    environment_: Mapped["Environment"] = relationship("Environment", back_populates="code")
 
 
 class Compile(Base):
