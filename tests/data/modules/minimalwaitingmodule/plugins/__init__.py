@@ -22,6 +22,7 @@ import os.path
 from inmanta import resources
 from inmanta.agent.handler import provider, CRUDHandler, HandlerContext, ResourcePurged
 
+
 @resources.resource("minimalwaitingmodule::WaitForFileRemoval", agent="agent", id_attribute="name")
 class WaitForFileRemoval(resources.PurgeableResource):
     """
