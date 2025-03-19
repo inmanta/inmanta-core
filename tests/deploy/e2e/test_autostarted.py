@@ -45,12 +45,14 @@ logger = logging.getLogger("inmanta.test.server_agent")
 
 
 async def wait_for_resources_in_state(client, environment: uuid.UUID, nr_of_resources: int, state: const.ResourceState) -> bool:
+    """
+    Wait until the given number of resources in environment have the given resource state (exact match).
+    """
     async def _done_waiting() -> bool:
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
-        deploying = summary["by_state"][state.value]
-        return deploying == nr_of_resources
+        return summary["by_state"][state.value] == nr_of_resources
 
     await retry_limited(_done_waiting, timeout=10)
 
@@ -605,14 +607,6 @@ async def test_halt_deploy(
     if halt_during_deployment:
         file_to_remove.unlink()
 
-    snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
-    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
-    result = await client.release_version(environment, version, push=False)
-    assert result.code == 200
-
-    # Let's recheck the agent table and check that the scheduler and agent1 are present and paused
-    await assert_is_paused(client, environment, {"agent1": True})
-
     # Let's wait for the executor to die
     await retry_limited(
         wait_for_terminated_status,
@@ -620,6 +614,14 @@ async def test_halt_deploy(
         current_children=children_during_deployment.children,
         expected_terminated_process=3,
     )
+
+    snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    # Let's recheck the agent table and check that the scheduler and agent1 are present and paused
+    await assert_is_paused(client, environment, {"agent1": True})
 
     # Let's recheck the number of processes after pausing the environment
     children_while_halted = construct_scheduler_children(current_pid)
@@ -649,7 +651,6 @@ async def test_halt_deploy(
     # Let's check the agent table and check that the scheduler and agent1 are present and not paused
     await assert_is_paused(client, environment, {"agent1": False})
 
-    # Wait for at least one resource to be in deploying
     if halt_during_deployment:
         # Resource didn't finish its deploy. A re-deploy will happen.
         await wait_for_resources_in_state(
