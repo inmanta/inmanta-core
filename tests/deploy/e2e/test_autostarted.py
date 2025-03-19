@@ -35,7 +35,7 @@ from psutil import NoSuchProcess, Process
 
 from inmanta import config, const, data
 from inmanta.const import AgentAction
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_CODE
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from typing_extensions import Optional
@@ -48,6 +48,7 @@ async def wait_for_resources_in_state(client, environment: uuid.UUID, nr_of_reso
     """
     Wait until the given number of resources in environment have the given resource state (exact match).
     """
+
     async def _done_waiting() -> bool:
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
@@ -845,6 +846,7 @@ async def test_agent_paused_scheduler_server_restart(
         - The server (and thus the scheduler) is (are) restarted
         - The agent should remain paused (the Scheduler shouldn't do anything after the restart)
     """
+
     async def return_none(*args, **kwargs):
         return None
 
