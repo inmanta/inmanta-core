@@ -22,6 +22,7 @@ from typing import Mapping, Optional
 from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
 
+from inmanta import logging as inmanta_logging
 from inmanta.data import (
     CORE_SCHEMA_NAME,
     PACKAGE_WITH_UPDATE_FILES,
@@ -230,6 +231,9 @@ class DatabaseService(protocol.ServerSlice):
 
     async def connect_database(self) -> None:
         """Connect to the database"""
+
+        inmanta_logger_options = inmanta_logging.InmantaLoggerConfig.get_instance()._options_applied
+        echo = getattr(inmanta_logger_options, "echo_sqlalchemy_logging", False)
         await initialize_sql_alchemy_engine(
             database_host=opt.db_host.get(),
             database_port=opt.db_port.get(),
@@ -240,6 +244,7 @@ class DatabaseService(protocol.ServerSlice):
             connection_pool_min_size=opt.server_db_connection_pool_min_size.get(),
             connection_pool_max_size=opt.server_db_connection_pool_max_size.get(),
             connection_timeout=opt.server_db_connection_timeout.get(),
+            echo=echo,
         )
         async with get_connection_ctx_mgr() as connection:
             # Check if JIT is enabled
@@ -267,6 +272,7 @@ async def initialize_sql_alchemy_engine(
     connection_pool_min_size: int = 10,
     connection_pool_max_size: int = 10,
     connection_timeout: float = 60.0,
+    echo: bool = False,
 ) -> None:
     """
     Initialize the sql alchemy engine for the current process.
@@ -280,6 +286,7 @@ async def initialize_sql_alchemy_engine(
     :param connection_pool_min_size: Initialize the pool with this number of connections .
     :param connection_pool_max_size: Limit the size of the pool to this number of connections .
     :param connection_timeout: Connection timeout (in seconds) when interacting with the database.
+    :param echo: Also output the logging to stdout (only set to true in testing environments).
     """
 
     await start_engine(
@@ -291,7 +298,7 @@ async def initialize_sql_alchemy_engine(
         pool_size=connection_pool_min_size,
         max_overflow=connection_pool_max_size - connection_pool_min_size,
         pool_timeout=connection_timeout,
-        echo=True,
+        echo=echo,
     )
 
     if create_db_schema:

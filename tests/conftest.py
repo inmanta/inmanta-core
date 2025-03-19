@@ -398,6 +398,7 @@ def sqlalchemy_url_parameters(postgres_db, database_name_internal: str) -> dict[
         "database_host": postgres_db.host,
         "database_port": postgres_db.port,
         "database_name": database_name_internal,
+        "echo": True,
     }
 
 
@@ -421,6 +422,7 @@ async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_res
         database_username=postgres_db.user,
         database_password=postgres_db.password,
         create_db_schema=True,
+        echo=True,
     )
     yield
     await stop_engine()

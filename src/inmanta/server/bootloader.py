@@ -95,7 +95,7 @@ class InmantaBootloader:
 
         if configure_logging:
             inmanta_logger_config = inmanta_logging.InmantaLoggerConfig.get_instance()
-            inmanta_logger_config.apply_options(inmanta_logging.Options())
+            inmanta_logger_config.apply_options(inmanta_logging.Options(echo_sqlalchemy_logging=True))
 
     async def start(self) -> None:
         self.start_loggers_for_extensions()
