@@ -949,9 +949,6 @@ class InmantaLoggerConfig:
         complete_config = self._loaded_config.join(logging_config, allow_overwrite=True)
         self._apply_logging_config(complete_config)
 
-    def get_applied_options(self) -> Options | None:
-        return self._options_applied
-
 
 @stable_api
 class MultiLineFormatter(colorlog.ColoredFormatter):

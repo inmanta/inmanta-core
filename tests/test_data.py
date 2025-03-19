@@ -83,7 +83,6 @@ async def test_connection_failure(postgres_db, unused_tcp_port_factory, database
         database_host=postgres_db.host,
         database_port=wrong_port,
         database_name=database_name,
-        echo=True,
     )
     engine = get_engine()
     with pytest.raises(ConnectionRefusedError):
