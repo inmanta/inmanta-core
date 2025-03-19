@@ -1150,7 +1150,6 @@ class OrchestrationService(protocol.ServerSlice):
 
                 # add shared resources
                 merged_resources = partial_update_merger.merge_updated_and_shared_resources(list(rid_to_resource.values()))
-                await data.Code.copy_versions(env.id, base_version, version, connection=con)
 
                 merged_unknowns = await partial_update_merger.merge_unknowns(
                     unknowns_in_partial_compile=self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
