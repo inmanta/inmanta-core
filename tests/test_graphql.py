@@ -86,6 +86,15 @@ async def setup_database(project_default):
         await session.flush()
 
 
+async def test_graphql_schema(server, client):
+    """
+    Tests to see if the graphql schema endpoint is working
+    """
+    result = await client.graphql_schema()
+    assert result.code == 200
+    assert result.result["data"]["__schema"]
+
+
 async def test_query_is_expert_mode(server, client, setup_database, project_default):
     """
     Tests the custom attribute isExpertMode

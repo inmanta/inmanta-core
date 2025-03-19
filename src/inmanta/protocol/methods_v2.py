@@ -1618,11 +1618,21 @@ def graphql(query: str) -> Any:  # Actual return type: strawberry.types.executio
     GraphQL endpoint for Inmanta.
     Supports paging, filtering and sorting on certain attributes.
 
-    Available queries:
-        - "environments" - Gets a list of created environments.
-            Supports filter and sorting on "id" and "name".
-        - "notifications" - Gets a list of notifications.
-            Supports filters on "cleared" and "environment"
-            Supports sorting on "created"
+    To check which queries are enabled, use the /graphql/introspection endpoint
+    """
+    pass
+
+
+@typedmethod(
+    path="/graphql/schema",
+    operation="POST",
+    client_types=[ClientType.api],
+    api_version=2,
+    strict_typing=False,
+)
+def graphql_schema() -> dict[str, Any]:
+    """
+    Endpoint to retrieve schema details for the GraphQL endpoint.
+    To actually execute a query, use /graphql
     """
     pass
