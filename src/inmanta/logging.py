@@ -282,7 +282,6 @@ class Options(Namespace):
                               instead of the component of the compiler that was executing while the log record was created
                               or the name of the module that created the log message.
     :param logging_config: Path to the dict-based logging config file.
-    :param echo_sqlalchemy_logging: Output SqlAlchemy logs to stdout.
     """
 
     log_file: Optional[str] = None
@@ -291,7 +290,6 @@ class Options(Namespace):
     timed: bool = False
     keep_logger_names: bool = False
     logging_config: Optional[str] = None
-    echo_sqlalchemy_logging: bool = False
 
 
 class LoggingConfigBuilderExtension(abc.ABC):
