@@ -22,29 +22,6 @@ import os.path
 from inmanta import resources
 from inmanta.agent.handler import provider, CRUDHandler, HandlerContext, ResourcePurged
 
-@resources.resource("minimalwaitingmodule::Sleep", agent="agent", id_attribute="name")
-class SleepResource(resources.PurgeableResource):
-    """
-    This class represents a service on a system.
-    """
-
-    name: str
-    agent: str
-    time_to_sleep: int
-
-    fields = ("name", "agent", "time_to_sleep")
-
-
-@provider("minimalwaitingmodule::Sleep", name="mysleephandler")
-class SleepHandler(CRUDHandler):
-    def read_resource(self, ctx: HandlerContext, resource: SleepResource) -> None:
-        raise ResourcePurged()
-
-    def create_resource(self, ctx: HandlerContext, resource: SleepResource) -> None:
-        time.sleep(resource.time_to_sleep)
-        ctx.set_created()
-
-
 @resources.resource("minimalwaitingmodule::WaitForFileRemoval", agent="agent", id_attribute="name")
 class WaitForFileRemoval(resources.PurgeableResource):
     """
