@@ -123,7 +123,6 @@ class CodeManager:
 
         all_plugin_files: list[SourceInfo] = self._get_source_info_for_module(module_name)
         LOGGER.debug(f"Registering {type_name=} from {instance=} in {module_name=} {all_plugin_files=}")
-        # fqn_module_name = next(module.Project.get().modules[module_name].get_plugin_files())[0]
         self.__type_to_module[type_name].append(module_name)
 
         self.__type_file[type_name].update(source_info.path for source_info in all_plugin_files)
@@ -311,11 +310,6 @@ class CodeLoader:
             LOGGER.debug("Module %s is already loaded", mod_name)
             return
         else:
-            LOGGER.debug("Trying to import %s", mod_name)
-            import os
-
-            cwd = os.getcwd()
-            LOGGER.debug(f"In {cwd=}")
             mod = importlib.import_module(mod_name)
         self.__modules[mod_name] = (hv, mod)
         LOGGER.info("Loaded module %s", mod_name)
@@ -350,10 +344,6 @@ class CodeLoader:
                 with pre-2020.4 inmanta clients because they don't necessarily upload the whole package.
                 """
                 normdir: str = os.path.normpath(directory)
-                # LOGGER.debug("BP1")
-                # LOGGER.debug(f"{directory=}")
-                # LOGGER.debug(f"{normdir=}")
-                # LOGGER.debug(f"{package_dir=}")
                 if normdir == package_dir:
                     return
                 if not os.path.exists(os.path.join(normdir, "__init__.py")) and not os.path.exists(
@@ -364,7 +354,6 @@ class CodeLoader:
 
             # ensure correct package structure
             os.makedirs(module_dir, exist_ok=True)
-            LOGGER.debug(f"touch inists {module_dir=}")
             touch_inits(os.path.dirname(module_dir))
             source_file = os.path.join(module_dir, init_file)
 
@@ -517,9 +506,6 @@ def convert_module_to_relative_path(full_mod_name: str) -> str:
         return ""
 
     module_parts.insert(1, PLUGIN_DIR)
-
-    # if module_parts[-1] == "__init__":
-    #     module_parts = module_parts[:-1]
 
     return os.path.join(*module_parts)
 
@@ -694,12 +680,6 @@ class SourceInfo(BaseModel):
 
     path: str
     module_name: str
-
-    # def __str__(self):
-    #     return f"SourceInfo ({self.path=}, {self.module_name=}"
-    #
-    # def __repr__(self):
-    #     return f"SourceInfo ({self.path=}, {self.module_name=}"
 
     @computed_field  # type: ignore[prop-decorator]
     @cached_property

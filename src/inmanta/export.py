@@ -500,8 +500,6 @@ class Exporter:
 
         # Load both resource definition and handlers
         for type_name, resource_definition in resource.get_resources():
-            LOGGER.debug("deploy_code resource definition")
-            LOGGER.debug(f"{type_name=} {resource_definition=}")
             code_manager.register_code(type_name, resource_definition)
             types.add(type_name)
 

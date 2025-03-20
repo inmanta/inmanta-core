@@ -165,17 +165,6 @@ async def make_source_structure(
                 )
             ],
         )
-        #     "name": module,
-        #     "version": hv,  # only one file: module hash == file hash
-        #     "files_in_module": [
-        #         {
-        #             "path": file_name,
-        #             "module_name": module,
-        #             "hash": hv,
-        #             "requires": dependencies,
-        #         }
-        #     ],
-        # }
         await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
 
         return hv

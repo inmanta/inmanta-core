@@ -19,6 +19,7 @@ Module defining the v2 rest api
 """
 
 import datetime
+import typing
 import uuid
 from typing import Any, Literal, Optional, Union
 
@@ -40,6 +41,7 @@ from inmanta.types import PrimitiveTypes, ResourceIdStr
     client_types=[ClientType.compiler],
     api_version=2,
     varkw=True,
+    strict_typing=False
 )
 def put_partial(
     tid: uuid.UUID,
@@ -49,7 +51,7 @@ def put_partial(
     removed_resource_sets: Optional[list[str]] = None,
     pip_config: Optional[PipConfig] = None,
     module_version_info: Optional[dict[str, Any]] = None,
-    type_to_module_data: Optional[dict[str, set[str]]] = None,
+    type_to_module_data: Optional[dict[str, Any]] = None,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> ReturnValue[int]:
     """

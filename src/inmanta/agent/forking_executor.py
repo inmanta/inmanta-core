@@ -419,16 +419,10 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
 
-        # sync_client = inmanta.protocol.SyncClient(client=context.client, ioloop=loop)
-        # sources = [s.with_client(sync_client) for s in self.sources]
 
         failed: list[inmanta.loader.FailedModuleSource] = []
         in_place: list[inmanta.loader.ModuleSource] = []
         # First put all files on disk
-        all_sources_names = []
-        for module_source in self.sources:
-            all_sources_names.append(module_source.name)
-
         for module_source in self.sources:
             try:
                 await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))

@@ -61,7 +61,6 @@ class CodeService(protocol.ServerSlice):
         :return:
         """
         LOGGER.debug(f"{env=}")
-        # LOGGER.debug(f"{modules_data=}")
         module_stmt = insert(Module).on_conflict_do_nothing()
 
         files_in_module_stmt = insert(FilesInModule).on_conflict_do_nothing()

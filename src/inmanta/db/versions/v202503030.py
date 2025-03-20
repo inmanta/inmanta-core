@@ -99,22 +99,12 @@ async def update(connection: Connection) -> None:
         fetch_source_refs_query = """
     SELECT DISTINCT environment, version, source_refs, resource from public.code
         """
-
-        # Env -> inmanta_module_name -> files_in_module
         result = await connection.fetch(fetch_source_refs_query)
         for res in result:
             env = res["environment"]
             model_version = res["version"]
             source_refs = res["source_refs"]
             resource_type = res["resource"]
-
-            # 'ca7f66803b24e0b831d6728f882f5a79af2f33c2': [
-            #     '/tmp/tmpku6yczqo/server/a8317edd-74d8-40fc-8933-9aedb77cfed4/compiler/.env-py3.12/lib/python3.12/site-packages/inmanta_plugins/fs/json_file.py',
-            #     'inmanta_plugins.fs.json_file',
-            #     ['inmanta-module-std', 'inmanta-module-mitogen']
-            #  ]
-
-            # 'inmanta_plugins.fs.json_file' --> fs/plugins/json_file
 
             for file_hash, file_data in source_refs.items():
                 file_path, python_module_name, requirements = file_data

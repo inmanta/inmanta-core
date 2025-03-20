@@ -836,10 +836,6 @@ class OrchestrationService(protocol.ServerSlice):
                 type_to_agent: dict[str, str] | None,
                 connection: Connection,
             ) -> None:
-                LOGGER.debug("populating join table modules_for_agent")
-                LOGGER.debug(f"{module_version_info=}")
-                LOGGER.debug(f"{type_to_module_data=}")
-                LOGGER.debug(f"{type_to_agent=}")
                 if not all([module_version_info, type_to_module_data, rid_to_resource, type_to_agent]):
                     LOGGER.debug(
                         "Cannot populate join table modules_for_agent. The following arguments are not set: %s"
@@ -889,9 +885,6 @@ class OrchestrationService(protocol.ServerSlice):
                         for resource_type in type_to_agent.keys()
                         for module_name in type_to_module_data[resource_type]
                     ]
-                    LOGGER.debug("Populating join table... %s", query)
-                    LOGGER.debug(f"{query=}")
-                    LOGGER.debug(f"{values=}")
 
                     await connection.executemany(
                         query,
