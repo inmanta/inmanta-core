@@ -31,7 +31,7 @@ class WaitForFileRemoval(resources.PurgeableResource):
 
     name: str
     agent: str
-    path = str
+    path: str
 
     fields = ("name", "agent", "path")
 
