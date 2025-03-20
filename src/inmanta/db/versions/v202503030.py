@@ -35,7 +35,6 @@ async def update(connection: Connection) -> None:
     * Create the modules_for_agent table, that keeps track of which inmanta modules are required
       by which agent.
     """
-    # TODO Is this resilient to files moving location within a module?
 
     schema = """
         CREATE TABLE public.module (
@@ -184,15 +183,15 @@ async def update(connection: Connection) -> None:
     build_module_data(code_data, module_data, files_in_module_data, model_to_module_version_map)
     await build_modules_in_agent_data(resource_type_to_module, model_to_module_version_map, modules_for_agent_data)
     insert_module = """
-INSERT INTO public.module (
-    name,
-    version,
-    environment,
-    requirements
-    )
-VALUES ($1,$2,$3,$4)
-ON CONFLICT DO NOTHING
-"""
+    INSERT INTO public.module (
+        name,
+        version,
+        environment,
+        requirements
+        )
+    VALUES ($1,$2,$3,$4)
+    ON CONFLICT DO NOTHING
+    """
     await connection.executemany(insert_module, module_data)
 
     insert_files_in_module = """
@@ -220,4 +219,3 @@ ON CONFLICT DO NOTHING
     ON CONFLICT DO NOTHING
     """
     await connection.executemany(insert_modules_for_agent, modules_for_agent_data)
-
