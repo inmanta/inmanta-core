@@ -161,7 +161,6 @@ def test():
     res = await client.upload_file(id=server_content_hash, content=base64.b64encode(server_content).decode("ascii"))
     assert res.code == 200
 
-
     # Dummy executor to test executor cap:
     # Create this one first to make sure this is the one being stopped
     # when the cap is reached

@@ -419,7 +419,6 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
 
-
         failed: list[inmanta.loader.FailedModuleSource] = []
         in_place: list[inmanta.loader.ModuleSource] = []
         # First put all files on disk
