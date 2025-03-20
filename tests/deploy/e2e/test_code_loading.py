@@ -32,7 +32,7 @@ import py
 import pytest
 
 import inmanta
-from inmanta import config, loader, module
+from inmanta import config, loader
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
@@ -46,7 +46,6 @@ from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
 from inmanta.util import get_compiler_version
-from moduletool import common
 from packaging.version import Version
 from utils import (
     ClientHelper,
