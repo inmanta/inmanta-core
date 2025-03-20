@@ -1,0 +1,4 @@
+---
+description: "Improve the stability and speed of tests in `tests/deploy/e2e/test_autostarted.py`"
+change-type: patch
+destination-branches: [master, iso8]
