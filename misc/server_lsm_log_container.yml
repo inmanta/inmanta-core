@@ -55,6 +55,11 @@ loggers:
     - core_tornado_debug_log_handler
     level: DEBUG
     propagate: true
+  sqlalchemy.engine:
+    handlers:
+      - server_handler
+    level: INFO
+    propagate: true
 root:
   handlers:
   - server_handler

@@ -6628,9 +6628,6 @@ async def start_engine(
     """
     Start the SQL Alchemy engine for this process
     """
-    # Configure logging to emit sqlalchemy logs without relying on the echo flag.
-    # The echo flag also writes to stdout which results in duplicate logs
-    logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
 
     url_object = URL.create(
         drivername="postgresql+asyncpg",
