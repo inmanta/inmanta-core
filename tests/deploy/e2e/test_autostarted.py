@@ -553,7 +553,8 @@ import minimalwaitingmodule
 
 a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep={time_to_sleep})
 """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
 
     # Now, let's deploy some resources
@@ -622,7 +623,8 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 
     a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep={time_to_sleep})
     """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
     result = await client.release_version(environment, version, push=False)
@@ -728,7 +730,8 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 b = minimalwaitingmodule::Sleep(name="test_sleep2", agent="agent1", time_to_sleep=5)
 c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sleep=5)
 """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
 
     # Now, let's deploy some resources
@@ -880,7 +883,8 @@ import minimalwaitingmodule
 
 a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
 """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
 
     # Now, let's deploy a resource
@@ -981,7 +985,8 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 b = minimalwaitingmodule::Sleep(name="test_sleep2", agent="agent1", time_to_sleep=5)
 c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent1", time_to_sleep=5)
 """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
 
     # Now, let's deploy some resources
@@ -1124,7 +1129,8 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 b = minimalwaitingmodule::Sleep(name="test_sleep2", agent="agent2", time_to_sleep=5)
 c = minimalwaitingmodule::Sleep(name="test_sleep3", agent="agent3", time_to_sleep=5)
 """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
 
     # Now, let's deploy some resources
@@ -1280,7 +1286,8 @@ import minimalwaitingmodule
 
 a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
 """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
 
     # Now, let's deploy a resource
@@ -1363,7 +1370,8 @@ a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep
 
 a = minimalwaitingmodule::Sleep(name="test_sleep", agent="agent1", time_to_sleep=120)
     """,
-        autostd=True,
+        ministd=True,
+        index_url="https://pypi.org/simple",
     )
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
     result = await client.release_version(environment, version, push=False)

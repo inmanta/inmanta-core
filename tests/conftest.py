@@ -1369,7 +1369,7 @@ class SnippetCompilationTest(KeepOnFail):
         project_requires = project_requires if project_requires is not None else []
         python_requires = python_requires if python_requires is not None else []
         relation_precedence_rules = relation_precedence_rules if relation_precedence_rules else []
-        ministd_path = os.path.join(__file__, "..", "data/mini_str_container")
+        ministd_path = os.path.join(__file__, "..", "data/mini_std_container")
         if ministd:
             add_to_module_path += ministd_path
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
