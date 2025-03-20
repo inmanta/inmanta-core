@@ -22,7 +22,7 @@ import logging
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Literal, Optional, cast
+from typing import TYPE_CHECKING, Any, Literal, Optional, cast
 
 import asyncpg
 import asyncpg.connection
@@ -828,7 +828,7 @@ class OrchestrationService(protocol.ServerSlice):
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
-            async def populate_join_table(
+            async def register_code(
                 cm_version: int,
                 environment: uuid.UUID,
                 module_version_info: dict[str, "PythonModule"] | None,
@@ -836,7 +836,7 @@ class OrchestrationService(protocol.ServerSlice):
                 type_to_agent: dict[str, str] | None,
                 connection: Connection,
             ) -> None:
-                LOGGER.debug("populate_join_table")
+                LOGGER.debug("populating join table modules_for_agent")
                 LOGGER.debug(f"{module_version_info=}")
                 LOGGER.debug(f"{type_to_module_data=}")
                 LOGGER.debug(f"{type_to_agent=}")
@@ -898,7 +898,49 @@ class OrchestrationService(protocol.ServerSlice):
                         values,
                     )
 
-            await populate_join_table(version, env.id, module_version_info, type_to_module_data, type_to_agent, connection)
+            async def check_version_info(
+                partial_base_version,
+                environment,
+                module_version_info: dict[str, "PythonModule"] | None,
+                type_to_module_data,
+                type_to_agent,
+                connection,
+            ) -> None:
+                query = """
+                    SELECT
+                        agent_name,
+                        module_name,
+                        module_version
+                    FROM
+                        modules_for_agent
+                    WHERE
+                        cm_version=$1
+                    AND
+                        environment=$2
+                    )
+                 """
+                async with connection.transaction():
+                    values = [partial_base_version, environment]
+                    in_db_module_data = {}
+                    async for record in connection.cursor(query, *values):
+                        in_db_module_data[record["module_name"]] = (record["module_version"], record["agent_name"])
+
+                for resource_type, modules in type_to_module_data.items():
+                    for module_name in modules:
+                        expected_module_version = module_version_info[module_name].version
+                        expected_agent = type_to_agent[resource_type]
+
+                        if in_db_module_data[module_name] != (expected_module_version, expected_agent):
+                            raise BadRequest(
+                                "Cannot perform partial export because of version mismatch for module %s." % module_name
+                            )
+
+            if is_partial_update:
+                await check_version_info(
+                    partial_base_version, env.id, module_version_info, type_to_module_data, type_to_agent, connection
+                )
+            else:
+                await register_code(version, env.id, module_version_info, type_to_module_data, type_to_agent, connection)
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
             all_rvids = [i.resource_version_str() for i in all_ids]
@@ -1033,6 +1075,8 @@ class OrchestrationService(protocol.ServerSlice):
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         removed_resource_sets: Optional[list[str]] = None,
         pip_config: Optional[PipConfig] = None,
+        module_version_info: Optional[dict[str, Any]] = None,
+        type_to_module_data: Optional[dict[str, set[str]]] = None,
     ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure
@@ -1146,8 +1190,8 @@ class OrchestrationService(protocol.ServerSlice):
                     removed_resource_sets=removed_resource_sets,
                     pip_config=pip_config,
                     connection=con,
-                    module_version_info={},
-                    type_to_module_data={},
+                    module_version_info=module_version_info,
+                    type_to_module_data=type_to_module_data,
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)

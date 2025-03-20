@@ -484,11 +484,13 @@ class Exporter:
 
         return resources
 
-    def deploy_code(
+    def register_code(
         self,
         conn: protocol.SyncClient,
         tid: uuid.UUID,
         code_manager: loader.CodeManager,
+        *,
+        do_upload: bool,
     ) -> None:
         """Deploy code to the server"""
 
@@ -514,9 +516,10 @@ class Exporter:
                 if not type_name.startswith("core::"):
                     code_manager.register_code(resource_type, obj)
 
-        LOGGER.info("Uploading source files")
+        if do_upload:
+            LOGGER.info("Uploading source files")
 
-        upload_code(conn, tid, code_manager)
+            upload_code(conn, tid, code_manager)
 
     def commit_resources(
         self,
@@ -545,8 +548,7 @@ class Exporter:
         code_manager = loader.CodeManager()
 
         # partial exports use the same code as the version they're based on
-        if not partial_compile:
-            self.deploy_code(conn, tid, code_manager)
+        self.register_code(conn, tid, code_manager, do_upload=not partial_compile)
 
         LOGGER.info("Uploading %d files" % len(self._file_store))
 
@@ -595,6 +597,8 @@ class Exporter:
                     resource_state=self._resource_state,
                     version_info=version_info,
                     removed_resource_sets=resource_sets_to_remove,
+                    type_to_module_data=code_manager.get_type_to_module(),
+                    module_version_info=code_manager.get_module_version_info(),
                     **kwargs,
                 )
             else:

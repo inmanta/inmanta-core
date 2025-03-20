@@ -48,6 +48,8 @@ def put_partial(
     resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[list[str]] = None,
     pip_config: Optional[PipConfig] = None,
+    module_version_info: Optional[dict[str, Any]] = None,
+    type_to_module_data: Optional[dict[str, set[str]]] = None,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> ReturnValue[int]:
     """
