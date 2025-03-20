@@ -37,7 +37,7 @@ class WaitForFileRemoval(resources.PurgeableResource):
 
 
 @provider("minimalwaitingmodule::WaitForFileRemoval", name="wait_for_file_removal")
-class SleepHandler(CRUDHandler):
+class WaitForFileRemovalHandler(CRUDHandler):
     def read_resource(self, ctx: HandlerContext, resource: WaitForFileRemoval) -> None:
         if os.path.exists(resource.path):
             raise ResourcePurged()
