@@ -17,7 +17,9 @@ Contact: code@inmanta.com
 """
 
 import asyncio
+import base64
 import datetime
+import hashlib
 import uuid
 from collections import abc
 from typing import Optional
@@ -26,6 +28,7 @@ import utils
 from inmanta import const, data, util
 from inmanta.agent import executor
 from inmanta.deploy import persistence, state
+from inmanta.loader import PythonModule, SourceInfo
 from inmanta.protocol.common import Result
 from inmanta.resources import Id
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
@@ -228,6 +231,25 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
     resource_sets = {
         "test::Resource[agent1,key=key1]": "set-a",
     }
+    mock_source_info = SourceInfo(
+        path="inmanta_plugins/test/__init__.py",
+        module_name="test",
+    )
+    content = "# test"
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(content.encode())
+    hv: str = sha1sum.hexdigest()
+    await client.upload_file(hv, content=base64.b64encode(content.encode()).decode("ascii"))
+
+    mock_source_info.content = content
+    mock_source_info.hash = hv
+    mock_source_info.requires = []
+
+    client.upload_file
+    module_version_info = {"test": PythonModule(name="test", version="0.0.0", files_in_module=[mock_source_info])}
+    type_to_module_data = {"test::Resource": ["test"]}
+    res = await client.upload_modules(tid=environment, modules_data=module_version_info)
+    assert res.code == 200
 
     result = await client.put_version(
         tid=environment,
@@ -238,6 +260,8 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
+        module_version_info=module_version_info,
+        type_to_module_data=type_to_module_data,
     )
     assert result.code == 200
     resources_partial = [
@@ -260,6 +284,8 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
         resource_sets={
             "test::Resource[agent1,key=key2]": "set-a",
         },
+        module_version_info=module_version_info,
+        type_to_module_data=type_to_module_data,
     )
 
     assert result.code == 200, result.result

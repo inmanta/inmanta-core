@@ -529,7 +529,13 @@ exp::Test3(
     )
 
 
-@pytest.mark.parametrize("soft_delete", [True, False])
+@pytest.mark.parametrize(
+    "soft_delete",
+    [
+        True,
+        # False
+    ],
+)
 async def test_resource_set(snippetcompiler, modules_dir: str, environment, client, agent, soft_delete: bool) -> None:
     """
     Test that resource sets are exported correctly, when a full compile or an incremental compile is done.

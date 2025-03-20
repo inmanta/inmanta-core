@@ -910,7 +910,7 @@ class OrchestrationService(protocol.ServerSlice):
                         cm_version=$1
                     AND
                         environment=$2
-                    )
+
                  """
                 async with connection.transaction():
                     values = [partial_base_version, environment]
@@ -918,10 +918,9 @@ class OrchestrationService(protocol.ServerSlice):
                     async for record in connection.cursor(query, *values):
                         in_db_module_data[record["module_name"]] = (record["module_version"], record["agent_name"])
 
-                for resource_type, modules in type_to_module_data.items():
-                    for module_name in modules:
-                        expected_module_version = module_version_info[module_name].version
-                        expected_agent = type_to_agent[resource_type]
+                for resource_type, expected_agent in type_to_agent.items():
+                    for module_name in type_to_module_data[resource_type]:
+                        expected_module_version = module_version_info[module_name]["version"]
 
                         if in_db_module_data[module_name] != (expected_module_version, expected_agent):
                             raise BadRequest(
@@ -932,8 +931,7 @@ class OrchestrationService(protocol.ServerSlice):
                 await check_version_info(
                     partial_base_version, env.id, module_version_info, type_to_module_data, type_to_agent, connection
                 )
-            else:
-                await register_code(version, env.id, module_version_info, type_to_module_data, type_to_agent, connection)
+            await register_code(version, env.id, module_version_info, type_to_module_data, type_to_agent, connection)
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
             all_rvids = [i.resource_version_str() for i in all_ids]
