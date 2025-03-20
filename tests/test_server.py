@@ -1711,6 +1711,8 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
                 resources=resources,
                 unknowns=[],
                 version_info={},
+                module_version_info={},
+                type_to_module_data={},
             )
             assert result.code == 200
             return result.result["data"]
@@ -1722,6 +1724,8 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
                 unknowns=[],
                 version_info={},
                 compiler_version=get_compiler_version(),
+                module_version_info={},
+                type_to_module_data={},
             )
             assert result.code == 200
             return version

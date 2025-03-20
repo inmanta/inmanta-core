@@ -531,10 +531,7 @@ exp::Test3(
 
 @pytest.mark.parametrize(
     "soft_delete",
-    [
-        True,
-        # False
-    ],
+    [True, False],
 )
 async def test_resource_set(snippetcompiler, modules_dir: str, environment, client, agent, soft_delete: bool) -> None:
     """

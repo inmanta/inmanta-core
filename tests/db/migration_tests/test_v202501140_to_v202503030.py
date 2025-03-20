@@ -20,7 +20,6 @@ import os
 import re
 from collections import abc
 
-import asyncpg
 import pytest
 
 import inmanta.data.sqlalchemy as models
@@ -33,7 +32,6 @@ part = file_name_regex.match(__name__)[1]
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
 async def test_add_tables_for_agent_code_transport_rework(
-    postgresql_client: asyncpg.Connection,
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
     get_tables_in_db: abc.Callable[[], abc.Awaitable[list[str]]],
 ) -> None:
