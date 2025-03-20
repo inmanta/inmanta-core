@@ -25,6 +25,7 @@ import json
 import logging
 import math
 import os
+import queue
 import random
 import shutil
 import uuid
@@ -33,7 +34,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timezone
 from logging import LogRecord
-from typing import Any, Collection, Mapping, Optional, Set, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Collection, Mapping, Optional, Set, TypeVar, Union
 
 import pytest
 import yaml
@@ -59,6 +60,7 @@ from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
+from inmanta.server.services.compilerservice import CompilerService
 from inmanta.types import Apireturn, ResourceIdStr
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
@@ -66,6 +68,9 @@ from libpip2pi.commands import dir2pi
 T = TypeVar("T")
 
 LOGGER = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from conftest import CompileRunnerMock
 
 
 def get_all_subclasses(cls: type[T]) -> set[type[T]]:
@@ -332,7 +337,7 @@ async def wait_until_version_is_released(client, environment: uuid.UUID, version
     await retry_limited(_is_version_released, timeout=10)
 
 
-async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
+async def wait_for_version(client, environment, cnt: int, compile_timeout: int = 30):
     """
     :param compile_timeout: Raise an AssertionError if the compilation didn't finish after this amount of seconds.
     """
@@ -340,12 +345,13 @@ async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     # Wait until the server is no longer compiling
     # wait for it to finish
     async def compile_done():
-        compiling = await client.is_compiling(environment)
-        code = compiling.code
-        return code == 204
+        result = await client.get_reports(environment)
+        assert result.code == 200
+        return all(r["success"] is not None for r in result.result["reports"])
 
     await retry_limited(compile_done, compile_timeout)
 
+    # Output compile report for debugging purposes
     reports = await client.get_reports(environment)
     for report in reports.result["reports"]:
         data = await client.get_report(report["id"])
@@ -1045,3 +1051,34 @@ def assert_resource_persistent_state(
         f"{resource_persistent_state.resource_id}"
         f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance})"
     )
+
+
+async def run_compile_and_wait_until_compile_is_done(
+    compiler_service: CompilerService,
+    compiler_queue: queue.Queue["CompileRunnerMock"],
+    env_id: uuid.UUID,
+    fail: Optional[bool] = None,
+    fail_on_pull=False,
+) -> "CompileRunnerMock":
+    """
+    Unblock the first compile in the compiler queue and wait until the compile finishes.
+    """
+    # prevent race conditions where compile request is not yet in queue
+    await retry_limited(lambda: not compiler_queue.empty(), timeout=10)
+    run = compiler_queue.get(block=True)
+    if fail is not None:
+        run._make_compile_fail = fail
+    run._make_pull_fail = fail_on_pull
+
+    current_task = compiler_service._env_to_compile_task[env_id]
+    run.block = False
+
+    def _is_compile_finished() -> bool:
+        if env_id not in compiler_service._env_to_compile_task:
+            return True
+        if current_task is not compiler_service._env_to_compile_task[env_id]:
+            return True
+        return False
+
+    await retry_limited(_is_compile_finished, timeout=10)
+    return run
