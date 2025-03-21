@@ -39,10 +39,12 @@ async def test_add_tables_for_agent_code_transport_rework(
     assert "module" not in await get_tables_in_db()
     assert "files_in_module" not in await get_tables_in_db()
     assert "modules_for_agent" not in await get_tables_in_db()
+    assert "code" in await get_tables_in_db()
     await migrate_db_from()
     assert "module" in await get_tables_in_db()
     assert "files_in_module" in await get_tables_in_db()
     assert "modules_for_agent" in await get_tables_in_db()
+    assert "code" not in await get_tables_in_db()
 
     async with get_session() as session:
         files_in_module_stmt = select(

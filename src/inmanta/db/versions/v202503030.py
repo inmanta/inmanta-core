@@ -215,3 +215,8 @@ async def update(connection: Connection) -> None:
     ON CONFLICT DO NOTHING
     """
     await connection.executemany(insert_modules_for_agent, modules_for_agent_data)
+
+    drop_code_table = """
+    DROP TABLE public.code
+    """
+    await connection.execute(drop_code_table)

@@ -831,31 +831,12 @@ class OrchestrationService(protocol.ServerSlice):
             async def register_code(
                 cm_version: int,
                 environment: uuid.UUID,
-                module_version_info: dict[str, "PythonModule"] | None,
-                type_to_module_data: dict[str, set[str]] | None,
-                type_to_agent: dict[str, str] | None,
+                module_version_info: dict[str, "PythonModule"],
+                type_to_module_data: dict[str, set[str]],
+                type_to_agent: dict[str, str],
                 connection: Connection,
             ) -> None:
-                if not all([module_version_info, type_to_module_data, rid_to_resource, type_to_agent]):
-                    LOGGER.debug(
-                        "Cannot populate join table modules_for_agent. The following arguments are not set: %s"
-                        % ", ".join(
-                            [
-                                arg_name
-                                for arg_name, arg in zip(
-                                    ["module_version_info", "type_to_module_data", "rid_to_resource", "type_to_agent"],
-                                    [module_version_info, type_to_module_data, rid_to_resource, type_to_agent],
-                                )
-                                if not arg
-                            ]
-                        )
-                    )
-                    return
 
-                assert module_version_info
-                assert type_to_module_data
-                assert rid_to_resource
-                assert type_to_agent
 
                 query = """
                             INSERT INTO modules_for_agent(
@@ -894,7 +875,7 @@ class OrchestrationService(protocol.ServerSlice):
             async def check_version_info(
                 partial_base_version,
                 environment,
-                module_version_info: dict[str, "PythonModule"] | None,
+                module_version_info: dict[str, "PythonModule"],
                 type_to_module_data,
                 type_to_agent,
                 connection,
@@ -910,7 +891,6 @@ class OrchestrationService(protocol.ServerSlice):
                         cm_version=$1
                     AND
                         environment=$2
-
                  """
                 async with connection.transaction():
                     values = [partial_base_version, environment]
@@ -927,11 +907,17 @@ class OrchestrationService(protocol.ServerSlice):
                                 "Cannot perform partial export because of version mismatch for module %s." % module_name
                             )
 
+            if type_to_agent and not all([module_version_info, type_to_module_data]):
+                raise BadRequest(f"Missing source information for version {version}. Please make sure the following arguments "
+                                 f"are set when calling put_version: module_version_info, type_to_module_data")
+
             if is_partial_update:
                 await check_version_info(
                     partial_base_version, env.id, module_version_info, type_to_module_data, type_to_agent, connection
                 )
+
             await register_code(version, env.id, module_version_info, type_to_module_data, type_to_agent, connection)
+
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
             all_rvids = [i.resource_version_str() for i in all_ids]
