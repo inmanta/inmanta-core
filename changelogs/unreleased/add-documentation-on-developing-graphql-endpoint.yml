@@ -1,0 +1,3 @@
+description: Add documentation on developing the GraphQL endpoint.
+change-type: patch
+destination-branches: [master]
