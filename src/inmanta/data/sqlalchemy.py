@@ -16,8 +16,6 @@ import datetime
 import uuid
 from typing import Any, List, Optional
 
-import asyncpg
-
 from inmanta.data.model import EnvSettingType
 from sqlalchemy import (
     ARRAY,

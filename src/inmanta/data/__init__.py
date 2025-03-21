@@ -46,7 +46,6 @@ from asyncpg import Connection
 from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
 
-import inmanta.data.sqlalchemy as models
 import inmanta.db.versions
 import inmanta.protocol
 import inmanta.types

@@ -1864,52 +1864,6 @@ async def test_data_document_recursion(init_dataclasses_and_load_schema):
     await ra.insert()
 
 
-async def test_code(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    version = int(time.time())
-    cm = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm.insert()
-
-    version2 = version + 1
-    cm2 = data.ConfigurationModel(
-        environment=env.id,
-        version=version2,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm2.insert()
-
-    # Test behavior of copy_versions. Create second environment to verify the method is restricted to the first one
-    env2 = data.Environment(name="dev2", project=project.id, repo_url="", repo_branch="")
-    await env2.insert()
-    await data.ConfigurationModel(environment=env2.id, version=code3.version, is_suitable_for_partial_compiles=False).insert()
-
-    def assert_match_code(code1, code2):
-        assert code1 is not None
-        assert code2 is not None
-        assert code1.environment == code1.environment
-        assert code1.resource == code2.resource
-        assert code1.version == code2.version
-        shared_keys_source_refs = [
-            k for k in code1.source_refs if k in code2.source_refs and code1.source_refs[k] == code2.source_refs[k]
-        ]
-        assert len(shared_keys_source_refs) == len(code1.source_refs.keys())
-
-
 @pytest.mark.parametrize("halted", [True, False])
 async def test_get_updated_before_active_env(init_dataclasses_and_load_schema, halted):
     # verify the call to "get_updated_before". If the env is halted it shouldn't return any result
