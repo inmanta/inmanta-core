@@ -46,6 +46,7 @@ from asyncpg import Connection
 from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
 
+import inmanta.data.sqlalchemy as models
 import inmanta.db.versions
 import inmanta.protocol
 import inmanta.types
@@ -60,7 +61,6 @@ from inmanta.const import (
     ResourceState,
 )
 from inmanta.data import model as m
-import inmanta.data.sqlalchemy as models
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
@@ -2695,15 +2695,9 @@ class Environment(BaseDocument):
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
 
-            await self._execute_query(
-                "DELETE FROM public.module WHERE environment=$1", self.id, connection=con
-            )
-            await self._execute_query(
-                "DELETE FROM public.files_in_module WHERE environment=$1", self.id, connection=con
-            )
-            await self._execute_query(
-                "DELETE FROM public.modules_for_agent WHERE environment=$1", self.id, connection=con
-            )
+            await self._execute_query("DELETE FROM public.module WHERE environment=$1", self.id, connection=con)
+            await self._execute_query("DELETE FROM public.files_in_module WHERE environment=$1", self.id, connection=con)
+            await self._execute_query("DELETE FROM public.modules_for_agent WHERE environment=$1", self.id, connection=con)
 
             await DiscoveredResource.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsGauge.delete_all(environment=self.id, connection=con)
@@ -5956,7 +5950,11 @@ class ConfigurationModel(BaseDocument):
                     WHERE environment=$1
                     AND cm_version=$2
                 )
-                """, self.environment, self.version, connection=con)
+                """,
+                self.environment,
+                self.version,
+                connection=con,
+            )
             await self._execute_query(
                 """
                 DELETE FROM public.module
@@ -5966,10 +5964,16 @@ class ConfigurationModel(BaseDocument):
                     WHERE environment=$1
                     AND cm_version=$2
                 )
-                """, self.environment, self.version, connection=con
+                """,
+                self.environment,
+                self.version,
+                connection=con,
             )
             await self._execute_query(
-                "DELETE FROM public.modules_for_agent WHERE environment=$1 AND cm_version=$2", self.environment, self.version, connection=con
+                "DELETE FROM public.modules_for_agent WHERE environment=$1 AND cm_version=$2",
+                self.environment,
+                self.version,
+                connection=con,
             )
             await UnknownParameter.delete_all(environment=self.environment, version=self.version, connection=con)
             await self._execute_query(
@@ -6234,8 +6238,6 @@ class ConfigurationModel(BaseDocument):
         if new_total is None:
             raise KeyError(f"Configurationmodel {self.version} in environment {self.environment} was deleted.")
         self.total = new_total
-
-
 
 
 class DryRun(BaseDocument):
@@ -6570,7 +6572,6 @@ _classes = [
     ResourceAction,
     ResourcePersistentState,
     ConfigurationModel,
-    Code,
     Parameter,
     DryRun,
     Compile,

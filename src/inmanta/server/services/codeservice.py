@@ -21,15 +21,15 @@ from pathlib import Path
 from typing import cast
 
 from inmanta import const, data
-from inmanta.data import get_session, model
+from inmanta.data import get_session
 from inmanta.data.sqlalchemy import FilesInModule, Module
 from inmanta.loader import convert_relative_path_to_module
-from inmanta.protocol import handle, methods, methods_v2
+from inmanta.protocol import handle, methods_v2
 from inmanta.protocol.common import ReturnValue
-from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.services.fileservice import FileService
-from inmanta.types import Apireturn, JsonType
+from inmanta.types import JsonType
 from sqlalchemy.dialects.postgresql import insert
 
 LOGGER = logging.getLogger(__name__)
@@ -106,5 +106,3 @@ class CodeService(protocol.ServerSlice):
             await session.commit()
 
         return ReturnValue(response=None)
-
-

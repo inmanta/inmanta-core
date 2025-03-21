@@ -203,7 +203,6 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
             await res1.insert()
             resource_ids.append((res1.environment, res1.resource_version_id))
 
-
         unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
         await unknown_parameter.insert()
 
@@ -325,7 +324,6 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
         started=datetime.datetime.now(),
     )
     await resource_action.insert()
-
 
     unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
     await unknown_parameter.insert()
@@ -940,7 +938,6 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     key = "std::testing::NullResource[agent1,name=" + name + "]"
     resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
     await resource.insert()
-
 
     unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
     await unknown_parameter.insert()
@@ -1885,7 +1882,6 @@ async def test_code(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
-
     version2 = version + 1
     cm2 = data.ConfigurationModel(
         environment=env.id,
@@ -1896,7 +1892,6 @@ async def test_code(init_dataclasses_and_load_schema):
         is_suitable_for_partial_compiles=False,
     )
     await cm2.insert()
-
 
     # Test behavior of copy_versions. Create second environment to verify the method is restricted to the first one
     env2 = data.Environment(name="dev2", project=project.id, repo_url="", repo_branch="")
@@ -1913,7 +1908,6 @@ async def test_code(init_dataclasses_and_load_schema):
             k for k in code1.source_refs if k in code2.source_refs and code1.source_refs[k] == code2.source_refs[k]
         ]
         assert len(shared_keys_source_refs) == len(code1.source_refs.keys())
-
 
 
 @pytest.mark.parametrize("halted", [True, False])

@@ -1385,7 +1385,6 @@ def upload_modules(tid: uuid.UUID, **kwargs: object) -> ReturnValue[int]:
     """
 
 
-
 @typedmethod(
     path="/pip/config/<version>",
     operation="GET",

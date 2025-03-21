@@ -841,8 +841,6 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
     """
 
 
-
-
 # Generate download the diff of two hashes
 
 

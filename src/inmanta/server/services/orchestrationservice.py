@@ -837,7 +837,6 @@ class OrchestrationService(protocol.ServerSlice):
                 connection: Connection,
             ) -> None:
 
-
                 query = """
                             INSERT INTO modules_for_agent(
                                 cm_version,
@@ -908,8 +907,10 @@ class OrchestrationService(protocol.ServerSlice):
                             )
 
             if type_to_agent and not all([module_version_info, type_to_module_data]):
-                raise BadRequest(f"Missing source information for version {version}. Please make sure the following arguments "
-                                 f"are set when calling put_version: module_version_info, type_to_module_data")
+                raise BadRequest(
+                    f"Missing source information for version {version}. Please make sure the following arguments "
+                    f"are set when calling put_version: module_version_info, type_to_module_data"
+                )
 
             if is_partial_update:
                 await check_version_info(

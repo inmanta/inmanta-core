@@ -206,7 +206,6 @@ class AgentProcess(Base):
     agentinstance: Mapped[List["AgentInstance"]] = relationship("AgentInstance", back_populates="agentprocess")
 
 
-
 class Compile(Base):
     __tablename__ = "compile"
     __table_args__ = (
