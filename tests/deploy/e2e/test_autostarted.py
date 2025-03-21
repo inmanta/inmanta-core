@@ -138,7 +138,8 @@ async def setup_environment_with_agent(client, project_name):
     ]
 
     result = await client.put_version(
-        tid=env_id, version=version, resources=resources, unknowns=[], version_info={}, compiler_version=get_compiler_version()
+        tid=env_id, version=version, resources=resources, unknowns=[], version_info={}, compiler_version=get_compiler_version(),        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
 

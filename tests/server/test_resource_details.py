@@ -575,6 +575,8 @@ async def test_move_to_available_state(server, environment, client, clienthelper
         resources=resources_v1,
         resource_state={"test::Resource[agent1,key=test4]": const.ResourceState.undefined},
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200, result.result
 
@@ -665,6 +667,8 @@ async def test_move_to_available_state(server, environment, client, clienthelper
         resources=resources_v2,
         resource_state={},
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200, result.result
 

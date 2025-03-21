@@ -432,6 +432,7 @@ raise Exception("Fail code loading")
         module_version_info={
             "inmanta_plugins.test": "2bf2115acde296712916b76cab9b6b96791ba295",
         },
+        type_to_module_data={"test::Test":"agent"},
     )
     assert res.code == 200
 

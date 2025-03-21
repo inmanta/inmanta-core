@@ -49,6 +49,8 @@ async def test_resource_sets_via_put_version(server, client, environment, client
         resource_sets={
             "test::Resource[agent1,key=key1]": "set-a",
         },
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 400
     assert (

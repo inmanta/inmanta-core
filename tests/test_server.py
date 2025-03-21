@@ -117,6 +117,8 @@ async def test_create_too_many_versions(client, server, no_agent, n_versions_to_
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
+            type_to_module_data={},
         )
         assert res.code == 200
 
@@ -175,6 +177,8 @@ async def test_purge_versions(server, client, environment, has_released_versions
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
+            type_to_module_data={},
         )
         assert res.code == 200
 
@@ -253,6 +257,8 @@ async def test_n_versions_env_setting_scope(client, server):
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
+            type_to_module_data={},
         )
         assert res.code == 200
 
@@ -263,6 +269,8 @@ async def test_n_versions_env_setting_scope(client, server):
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
+            type_to_module_data={},
         )
         assert res.code == 200
 
@@ -346,6 +354,8 @@ async def test_resource_action_update(server_multi, client_multi, environment_mu
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert res.code == 200
 
@@ -430,6 +440,8 @@ async def test_get_environment(client, clienthelper, server, environment):
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
+            type_to_module_data={},
         )
         assert res.code == 200
 
@@ -472,6 +484,8 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert res.code == 200
 
@@ -552,7 +566,8 @@ async def test_clear_environment(client, server, clienthelper, environment):
     """
     version = await clienthelper.get_version()
     result = await client.put_version(
-        tid=environment, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+        tid=environment, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version(), module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -886,6 +901,8 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert res.code == 200
 
@@ -1643,6 +1660,8 @@ async def test_serialization_attributes_of_resource_to_api(client, server, envir
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -1772,6 +1791,8 @@ async def test_set_fact_v2(
         unknowns=[],
         version_info={},
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
 
