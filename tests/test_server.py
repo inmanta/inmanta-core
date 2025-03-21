@@ -31,12 +31,11 @@ from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import config, const, data, loader, resources, util
-from inmanta.agent import executor, handler
+from inmanta.agent import executor
 from inmanta.const import ParameterSource
 from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import persistence, state
-from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
@@ -118,6 +117,8 @@ async def test_create_too_many_versions(client, server, no_agent, n_versions_to_
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
+            type_to_module_data={},
         )
         assert res.code == 200
 
@@ -176,6 +177,8 @@ async def test_purge_versions(server, client, environment, has_released_versions
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
+            type_to_module_data={},
         )
         assert res.code == 200
 
@@ -254,6 +257,8 @@ async def test_n_versions_env_setting_scope(client, server):
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
+            type_to_module_data={},
         )
         assert res.code == 200
 
@@ -264,6 +269,8 @@ async def test_n_versions_env_setting_scope(client, server):
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
+            type_to_module_data={},
         )
         assert res.code == 200
 
@@ -347,6 +354,8 @@ async def test_resource_action_update(server_multi, client_multi, environment_mu
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert res.code == 200
 
@@ -431,6 +440,8 @@ async def test_get_environment(client, clienthelper, server, environment):
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
+            type_to_module_data={},
         )
         assert res.code == 200
 
@@ -473,6 +484,8 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert res.code == 200
 
@@ -553,7 +566,14 @@ async def test_clear_environment(client, server, clienthelper, environment):
     """
     version = await clienthelper.get_version()
     result = await client.put_version(
-        tid=environment, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+        tid=environment,
+        version=version,
+        resources=[],
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -641,16 +661,6 @@ async def test_batched_code_upload(
     version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
 
     code_manager = loader.CodeManager()
-
-    for type_name, resource_definition in resources.resource.get_resources():
-        code_manager.register_code(type_name, resource_definition)
-
-    for type_name, handler_definition in handler.Commander.get_providers():
-        code_manager.register_code(type_name, handler_definition)
-
-    await asyncio.get_event_loop().run_in_executor(
-        None, lambda: upload_code(sync_client_multi, environment_multi, version, code_manager)
-    )
 
     for name, source_info in code_manager.get_types():
         assert len(source_info) >= 2
@@ -897,6 +907,8 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert res.code == 200
 
@@ -1654,6 +1666,8 @@ async def test_serialization_attributes_of_resource_to_api(client, server, envir
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -1722,6 +1736,8 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
                 resources=resources,
                 unknowns=[],
                 version_info={},
+                module_version_info={},
+                type_to_module_data={},
             )
             assert result.code == 200
             return result.result["data"]
@@ -1733,6 +1749,8 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
                 unknowns=[],
                 version_info={},
                 compiler_version=get_compiler_version(),
+                module_version_info={},
+                type_to_module_data={},
             )
             assert result.code == 200
             return version
@@ -1779,6 +1797,8 @@ async def test_set_fact_v2(
         unknowns=[],
         version_info={},
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
 

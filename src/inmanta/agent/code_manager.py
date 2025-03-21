@@ -16,28 +16,28 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import asyncio
 import logging
 import sys
 import uuid
 from typing import Collection
 
-from inmanta import protocol
+import inmanta.data.sqlalchemy as models
 from inmanta.agent import executor
-from inmanta.agent.executor import ResourceInstallSpec
+from inmanta.agent.executor import ModuleInstallSpec
+from inmanta.data import get_session
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.loader import ModuleSource
-from inmanta.protocol import Client, SyncClient
-from inmanta.types import ResourceType
+from inmanta.protocol import Client
 from inmanta.util.async_lru import async_lru_cache
+from sqlalchemy import and_, select
 
 LOGGER = logging.getLogger(__name__)
 
 
 class CouldNotResolveCode(Exception):
 
-    def __init__(self, resource_type: str, version: int, error_message: str) -> None:
-        self.msg = f"Failed to get source code for {resource_type} version={version}, result={error_message}"
+    def __init__(self, agent_name: str, version: int) -> None:
+        self.msg = f"Failed to get source code for {agent_name} version={version}"
         super().__init__(self.msg)
 
 
@@ -63,71 +63,94 @@ class CodeManager:
         return PipConfig(**pip_config)
 
     @async_lru_cache(maxsize=1024)
-    async def get_code_for_type(self, environment: uuid.UUID, version: int, resource_type: ResourceType) -> ResourceInstallSpec:
-        result: protocol.Result = await self._client.get_source_code(environment, version, resource_type)
-        if result.code == 200 and result.result is not None:
-            sync_client = SyncClient(client=self._client, ioloop=asyncio.get_running_loop())
-            requirements: set[str] = set()
-            sources: list["ModuleSource"] = []
-            # Encapsulate source code details in ``ModuleSource`` objects
-            for source in result.result["data"]:
-                sources.append(
-                    ModuleSource(
-                        name=source["module_name"],
-                        is_byte_code=source["is_byte_code"],
-                        hash_value=source["hash"],
-                        _client=sync_client,
-                    )
-                )
-                requirements.update(source["requirements"])
-            resource_install_spec = ResourceInstallSpec(
-                resource_type,
-                version,
-                executor.ExecutorBlueprint(
-                    pip_config=await self.get_pip_config(environment, version),
-                    requirements=list(requirements),
-                    sources=sources,
-                    python_version=sys.version_info[:2],
-                ),
-            )
-            return resource_install_spec
-        else:
-            raise CouldNotResolveCode(resource_type, version, str(result.get_result()))
-
-    async def get_code(
-        self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
-    ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
+    async def get_code(self, environment: uuid.UUID, model_version: int, agent_name: str) -> Collection[ModuleInstallSpec]:
         """
         Get the collection of installation specifications (i.e. pip config, python package dependencies,
-        Inmanta modules sources) required to deploy a given version for the provided resource types.
-
-        Expects at least one resource type.
+        Inmanta modules sources) required to deploy resources on a given agent for a given configuration
+        model version.
 
         :return: Tuple of:
             - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
             - set of invalid resource_types (no handler code and/or invalid pip config)
         """
-        if not resource_types:
-            raise ValueError(f"{self.__class__.__name__}.get_code() expects at least one resource type")
 
-        resource_install_specs: list[ResourceInstallSpec] = []
-        invalid_resources: executor.FailedResources = {}
-        for resource_type in set(resource_types):
-            try:
-                resource_install_specs.append(await self.get_code_for_type(environment, version, resource_type))
-            except CouldNotResolveCode as e:
-                LOGGER.error(
-                    "%s",
-                    e.msg,
-                )
-                invalid_resources[resource_type] = e
-            except Exception as e:
-                LOGGER.error(
-                    "Failed to get source code for %s version=%d",
-                    resource_type,
-                    version,
-                    exc_info=True,
-                )
-                invalid_resources[resource_type] = e
+        module_install_specs = []
+        modules_for_agent = (
+            select(
+                models.ModulesForAgent.module_name,
+                models.ModulesForAgent.module_version,
+                models.ModulesForAgent.cm_version,
+                models.Module.requirements,
+            )
+            .join_from(
+                models.ModulesForAgent,
+                models.Module,
+                and_(
+                    models.ModulesForAgent.module_name == models.Module.name,
+                    models.ModulesForAgent.module_version == models.Module.version,
+                    models.ModulesForAgent.environment == models.Module.environment,
+                ),
+            )
+            .join_from(
+                models.Module,
+                models.FilesInModule,
+                and_(
+                    models.Module.name == models.FilesInModule.module_name,
+                    models.Module.version == models.FilesInModule.module_version,
+                    models.Module.environment == models.FilesInModule.environment,
+                ),
+            )
+            .where(
+                models.ModulesForAgent.environment == environment,
+                models.ModulesForAgent.agent_name == agent_name,
+                models.ModulesForAgent.cm_version == model_version,
+            )
+        )
 
-        return resource_install_specs, invalid_resources
+        async with get_session() as session:
+            result = await session.execute(modules_for_agent)
+            for res in result.all():
+                files_in_module = (
+                    select(
+                        models.FilesInModule.file_path,
+                        models.FilesInModule.file_content_hash,
+                        models.File.content,
+                    )
+                    .join_from(
+                        models.FilesInModule,
+                        models.File,
+                    )
+                    .where(
+                        models.FilesInModule.environment == environment,
+                        models.FilesInModule.module_name == res.module_name,
+                        models.FilesInModule.module_version == res.module_version,
+                    )
+                )
+
+                files = await session.execute(files_in_module)
+
+                module_install_specs.append(
+                    ModuleInstallSpec(
+                        module_name=res.module_name,
+                        module_version=res.module_version,
+                        model_version=res.cm_version,
+                        blueprint=executor.ExecutorBlueprint(
+                            pip_config=await self.get_pip_config(environment, res.cm_version),
+                            requirements=res.requirements,
+                            sources=[
+                                ModuleSource(
+                                    name=file.file_path,
+                                    source=file.content,
+                                    hash_value=file.file_content_hash,
+                                    is_byte_code=False,
+                                )
+                                for file in files.all()
+                            ],
+                            python_version=sys.version_info[:2],
+                        ),
+                    )
+                )
+        if not module_install_specs:
+            raise CouldNotResolveCode(agent_name, model_version)
+        LOGGER.debug(f"{module_install_specs=}")
+        return module_install_specs

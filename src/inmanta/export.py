@@ -78,7 +78,7 @@ class DependencyCycleException(Exception):
         return "Cycle in dependencies: %s" % self.cycle
 
 
-def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_manager: loader.CodeManager) -> None:
+def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, code_manager: loader.CodeManager) -> None:
     res = conn.stat_files(list(code_manager.get_file_hashes()))
     if res is None or res.code != 200:
         raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
@@ -89,27 +89,10 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
         if res is None or res.code != 200:
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
-    # Example of what a source_map may look like:
-    # Type Name: mymodule::Mytype"
-    # Source Files:
-    #   /path/to/__init__.py (hash: 'abc123', module: 'inmanta_plugins.mymodule.Mytype')
-    #   /path/to/utils.py (hash: 'def456', module: 'inmanta_plugins.mymodule.Mytype')
-    #
-    # source_map = {
-    #    "mymodule::Mytype": {
-    #      'abc123': ('/path/to/__init__.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>),
-    #      'def456': ('/path/to/utils.py', 'inmanta_plugins.mymodule.Mytype', <requirements if any>)
-    #    },
-    # ...other types would be included as well
-    # }
-    source_map = {
-        resource_name: {source.hash: (source.path, source.module_name, source.requires) for source in sources}
-        for resource_name, sources in code_manager.get_types()
-    }
-
-    res = conn.upload_code_batched(tid=tid, id=version, resources=source_map)
+    modules_data = code_manager.get_modules_data()
+    res = conn.upload_modules(tid=tid, modules_data=modules_data)
     if res is None or res.code != 200:
-        raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
+        raise Exception(f"Unable to upload plugin code to the server (msg: %s)\n{modules_data=}" % res.result)
 
 
 class Exporter:
@@ -501,12 +484,16 @@ class Exporter:
 
         return resources
 
-    def deploy_code(self, conn: protocol.SyncClient, tid: uuid.UUID, version: Optional[int] = None) -> None:
+    def register_code(
+        self,
+        conn: protocol.SyncClient,
+        tid: uuid.UUID,
+        code_manager: loader.CodeManager,
+        *,
+        do_upload: bool,
+    ) -> None:
         """Deploy code to the server"""
-        if version is None:
-            version = int(time.time())
 
-        code_manager = loader.CodeManager()
         LOGGER.info("Sending resources and handler source to server")
 
         types = set()
@@ -527,9 +514,10 @@ class Exporter:
                 if not type_name.startswith("core::"):
                     code_manager.register_code(resource_type, obj)
 
-        LOGGER.info("Uploading source files")
+        if do_upload:
+            LOGGER.info("Uploading source files")
 
-        upload_code(conn, tid, version, code_manager)
+            upload_code(conn, tid, code_manager)
 
     def commit_resources(
         self,
@@ -555,9 +543,10 @@ class Exporter:
 
         conn = protocol.SyncClient("compiler")
 
+        code_manager = loader.CodeManager()
+
         # partial exports use the same code as the version they're based on
-        if not partial_compile:
-            self.deploy_code(conn, tid, version)
+        self.register_code(conn, tid, code_manager, do_upload=not partial_compile)
 
         LOGGER.info("Uploading %d files" % len(self._file_store))
 
@@ -606,6 +595,8 @@ class Exporter:
                     resource_state=self._resource_state,
                     version_info=version_info,
                     removed_resource_sets=resource_sets_to_remove,
+                    type_to_module_data=code_manager.get_type_to_module(),
+                    module_version_info=code_manager.get_module_version_info(),
                     **kwargs,
                 )
             else:
@@ -618,6 +609,8 @@ class Exporter:
                     resource_state=self._resource_state,
                     version_info=version_info,
                     compiler_version=get_compiler_version(),
+                    type_to_module_data=code_manager.get_type_to_module(),
+                    module_version_info=code_manager.get_module_version_info(),
                     **kwargs,
                 )
             return result

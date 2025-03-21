@@ -28,21 +28,34 @@ import uuid
 from collections.abc import Sequence
 from logging import DEBUG
 
+import py
 import pytest
 
-from inmanta import config
+import inmanta
+from inmanta import config, loader
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
-from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import ResourceInstallSpec
+from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
+from inmanta.const import PLUGINS_PACKAGE
 from inmanta.data import PipConfig
 from inmanta.env import process_env
+from inmanta.loader import PythonModule, SourceInfo
+from inmanta.module import ModuleV2
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
 from inmanta.util import get_compiler_version
-from utils import ClientHelper, DummyCodeManager, log_index, retry_limited, wait_until_deployment_finishes
+from packaging.version import Version
+from utils import (
+    ClientHelper,
+    DummyCodeManager,
+    PipIndex,
+    log_index,
+    module_from_template,
+    retry_limited,
+    wait_until_deployment_finishes,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -78,7 +91,7 @@ async def agent(server, environment, deactive_venv):
 
 
 async def make_source_structure(
-    into: dict[str, tuple[str, str, list[str]]],
+    into: dict[str, PythonModule],
     file: str,
     module: str,
     source: str,
@@ -88,8 +101,41 @@ async def make_source_structure(
 ) -> str:
     """
     :param into: dict to populate:
-        - key = hash value of the file
-        - value = tuple (file_name, module, dependencies)
+        # - key = hash value of the file
+        # - value = tuple (file_name, module, dependencies)
+        - key = module name eg std
+        - value = dict{
+            module_name eg std -> TODO  can go maybe ?
+            module_version
+            files_in_module : list [
+                dict {
+                    path: str
+                    fq mod name inmanta_plugins.std.resources',
+                    hash: str
+                    requires list[str]
+                }
+            ]
+        }
+
+        'module_name': 'std',
+        'module_version': '6e929def427efefe814ce4ae0c00a9653628fdcb',
+        'files_in_module': [{
+                                'path': '/tmp/tmpskd9n7zx/std/plugins/resources.py',
+                                'module_name': 'inmanta_plugins.std.resources',
+                                'hash': '783979f77d1a40fa9b9c54c445c6f090de5797a1',
+                                'requires': ['Jinja2>=3.1,<4', 'email_validator>=1.3,<3', 'pydantic>=1.10,<3',
+                                             'inmanta-core>=8.7.0.dev']}, {
+                                'path': '/tmp/tmpskd9n7zx/std/plugins/types.py',
+                                'module_name': 'inmanta_plugins.std.types',
+                                'hash': '4ac629bdc461bf185971b82b4fc3dd457fba3fdd',
+                                'requires': ['Jinja2>=3.1,<4', 'email_validator>=1.3,<3', 'pydantic>=1.10,<3',
+                                             'inmanta-core>=8.7.0.dev']}, {
+                                'path': '/tmp/tmpskd9n7zx/std/plugins/__init__.py',
+                                'module_name': 'inmanta_plugins.std',
+                                'hash': '835f0e49da1e099d13e87b95d7f296ff68b57348',
+                                'requires': ['Jinja2>=3.1,<4', 'email_validator>=1.3,<3', 'pydantic>=1.10,<3',
+                                             'inmanta-core>=8.7.0.dev']}]}}
+
     """
     with tempfile.TemporaryDirectory() as tmpdirname:
         if byte_code:
@@ -102,14 +148,25 @@ async def make_source_structure(
                 data = fh.read()
             file_name = pyc_file
         else:
+            py_file = os.path.join(tmpdirname, "test.py")
             data = source.encode()
             file_name = file
 
         sha1sum = hashlib.new("sha1")
         sha1sum.update(data)
         hv: str = sha1sum.hexdigest()
-        into[hv] = (file_name, module, dependencies)
+        into[module] = PythonModule(
+            name=module,
+            version=hv,
+            files_in_module=[
+                SourceInfo(
+                    path=file_name,
+                    module_name=loader.convert_relative_path_to_module(os.path.join(module, loader.PLUGIN_DIR, "__init__.py")),
+                )
+            ],
+        )
         await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
+
         return hv
 
 
@@ -118,50 +175,99 @@ async def test_agent_installs_dependency_containing_extras(
     server_pre_start,
     server,
     client,
-    environment,
     monkeypatch,
     index_with_pkgs_containing_optional_deps: str,
     clienthelper,
+    environment,
     agent,
+    modules_v2_dir,
+    tmpdir,
+    snippetcompiler_clean,
 ) -> None:
     """
     Test whether the agent code loading works correctly when a python dependency is provided that contains extras.
     """
     code = """
-def test():
-    return 10
+@resource("test::Resource", agent="agent1", id_attribute="key")
+class Res(Resource):
+    fields = ("agent", "key", "value")
+
     """
+    # project: module.Project = snippetcompiler_clean.setup_for_snippet("")
 
-    sources = {}
-    await make_source_structure(
-        sources,
-        "inmanta_plugins/test/__init__.py",
-        "inmanta_plugins.test",
-        code,
-        dependencies=["pkg[optional-a]"],
-        client=client,
+    module_name = "myv2mod"
+    module_dir = str(tmpdir.join("myv2mod"))
+
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    # Add dependency pkg[optional-a] to module
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        module_dir,
+        new_name="myv2mod",
+        new_version=Version("1.0.0"),
+        new_requirements=[inmanta.util.parse_requirement(requirement="pkg[optional-a]")],
+        publish_index=index,
     )
+    with open(os.path.join(module_dir, PLUGINS_PACKAGE, "test_mod.py"), "w+") as fh:
+        fh.write(code)
+    with open(os.path.join(module_dir, "__init__.py"), "w+") as fh:
+        fh.write("")
 
+    module_v2 = ModuleV2(project=None, path=module_dir)
+
+    sources = [
+        SourceInfo(path=absolute_path, module_name=fqn_module_name)
+        for absolute_path, fqn_module_name in module_v2.get_plugin_files()
+    ]
+
+    all_files_hashes = [file.hash for file in sorted(sources, key=lambda f: f.hash)]
+
+    module_version_hash = hashlib.new("sha1")
+    for file_hash in all_files_hashes:
+        module_version_hash.update(file_hash.encode())
+
+    module_version = module_version_hash.hexdigest()
+    modules_data: dict[str, PythonModule] = {}
+    modules_data[module_name] = PythonModule(
+        name=module_name,
+        version=module_version,
+        files_in_module=sources,
+    )
+    type_to_module_data = {"test::Resource": module_name}
+    # res = await client.upload_modules(tid=environment, modules_data=)
+    # assert res.code == 200
+
+    # module_version_info = {module_name: data["version"] for module_name, data in modules_data.items()}
     version = await clienthelper.get_version()
-
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "receive_events": False,
+            "purged": False,
+            "requires": [],
+        }
+    ]
     res = await client.put_version(
         tid=environment,
         version=version,
-        resources=[],
+        resources=resources,
         pip_config=PipConfig(index_url=index_with_pkgs_containing_optional_deps),
         compiler_version=get_compiler_version(),
+        module_version_info=modules_data,
+        type_to_module_data=type_to_module_data,
     )
-    assert res.code == 200
-
-    res = await client.upload_code_batched(tid=environment, id=version, resources={"test::Test": sources})
     assert res.code == 200
 
     codemanager = CodeManager(agent._client)
 
-    install_spec, _ = await codemanager.get_code(
-        environment=environment,
-        version=version,
-        resource_types=["test::Test"],
+    install_spec = await codemanager.get_code(
+        environment=uuid.UUID(environment),
+        model_version=version,
+        agent_name="agent1",
     )
     await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
 
@@ -191,69 +297,84 @@ async def test_agent_code_loading_with_failure(
     environment: uuid.UUID,
     monkeypatch,
     clienthelper: ClientHelper,
+    tmpdir: py.path.local,
 ) -> None:
     """
     Test goal: make sure that failed resources are correctly returned by `get_code` and `ensure_code` methods.
     The failed resources should have the right exception contained in the returned object.
+
+    TODO: update docstrings of all updated tests
+    TODO: remove old transport mechanism parts
+
     """
 
     caplog.set_level(DEBUG)
 
-    sources = {}
+    modules_data = {}
+    type_to_module_data = {
+        "test::Test": "inmanta_plugins.test",
+        "test::Test2": "inmanta_plugins.test",
+    }
+    file_path = os.path.join(tmpdir, "test/plugins/__init__.py")
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    with open(file_path, "w") as f:
+        f.write("")
+
+    await make_source_structure(
+        modules_data,
+        file_path,
+        "test",
+        "",
+        client=client,
+    )
+
+    # res = await client.upload_modules(tid=environment, modules_data=modules_data)
+    #
+    # assert res.code == 200
 
     async def get_version() -> int:
         version = await clienthelper.get_version()
         res = await client.put_version(
             tid=environment,
             version=version,
-            resources=[],
-            pip_config=PipConfig(),
+            resources=[
+                {
+                    "id": "test::Test[agent1,name=test],v=%d" % version,
+                    "purged": False,
+                    "requires": [],
+                    "version": version,
+                    "name": "test",
+                },
+                {
+                    "id": "test::Test2[agent1,name=test],v=%d" % version,
+                    "purged": False,
+                    "requires": [],
+                    "version": version,
+                    "name": "test",
+                },
+            ],
+            module_version_info=modules_data,
+            type_to_module_data=type_to_module_data,
             compiler_version=get_compiler_version(),
+            pip_config=PipConfig(),
         )
         assert res.code == 200
         return version
 
     version_1 = await get_version()
 
-    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test": sources})
-    assert res.code == 200
-
-    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test2": sources})
-    assert res.code == 200
-
-    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test3": sources})
-    assert res.code == 200
-
     config.Config.set("agent", "executor-mode", "threaded")
-
-    resource_install_specs_1: list[ResourceInstallSpec]
-    resource_install_specs_2: list[ResourceInstallSpec]
 
     codemanager = CodeManager(agent._client)
 
     # We want to test
     nonexistent_version = -1
-    resource_install_specs_1, invalid_resources_1 = await codemanager.get_code(
-        environment=environment, version=nonexistent_version, resource_types=["test::Test", "test::Test2", "test::Test3"]
-    )
-    assert len(invalid_resources_1.keys()) == 3
-    for resource_type, exception in invalid_resources_1.items():
-        assert (
-            "Failed to get source code for " + resource_type + " version=-1, result={'message': 'Request or "
-            "referenced resource does not exist: The version of the code does not exist. "
-            + resource_type
-            + ", "
-            + str(nonexistent_version)
-            + "'}"
-        ) == str(exception)
+    with pytest.raises(CouldNotResolveCode):
+        _ = await codemanager.get_code(
+            environment=environment, model_version=nonexistent_version, agent_name="dummy_agent_name"
+        )
 
-    await agent.executor_manager.ensure_code(
-        code=resource_install_specs_1,
-    )
-
-    resource_install_specs_2, _ = await codemanager.get_code(
-        environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"]
-    )
+    module_install_specs_2 = await codemanager.get_code(environment=environment, model_version=version_1, agent_name="agent1")
 
     async def _install(blueprint: executor.ExecutorBlueprint) -> None:
         raise Exception("MKPTCH: Unable to load code when agent is started with code loading disabled.")
@@ -261,9 +382,9 @@ async def test_agent_code_loading_with_failure(
     monkeypatch.setattr(agent.executor_manager, "_install", _install)
 
     failed_to_load = await agent.executor_manager.ensure_code(
-        code=resource_install_specs_2,
+        code=module_install_specs_2,
     )
-    assert len(failed_to_load) == 2
+    assert len(failed_to_load) == 1
     for handler, exception in failed_to_load.items():
         assert str(exception) == (
             f"Failed to install handler {handler} version=1: "
@@ -272,16 +393,7 @@ async def test_agent_code_loading_with_failure(
 
     monkeypatch.undo()
 
-    idx1 = log_index(
-        caplog,
-        "inmanta.agent.code_manager",
-        logging.ERROR,
-        "Failed to get source code for test::Test2 version=-1",
-    )
-
-    log_index(caplog, "test_code_loading", logging.ERROR, "Failed to install handler test::Test version=1", idx1)
-
-    log_index(caplog, "test_code_loading", logging.ERROR, "Failed to install handler test::Test2 version=1", idx1)
+    log_index(caplog, "test_code_loading", logging.ERROR, "Failed to install handler inmanta_plugins.test version=1")
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
@@ -317,10 +429,11 @@ raise Exception("Fail code loading")
             }
         ],
         compiler_version=get_compiler_version(),
+        module_version_info={
+            "inmanta_plugins.test": "2bf2115acde296712916b76cab9b6b96791ba295",
+        },
+        type_to_module_data={"test::Test": "agent"},
     )
-    assert res.code == 200
-
-    res = await client.upload_code_batched(tid=environment, id=version, resources={"test::Test": sources})
     assert res.code == 200
 
     res = await client.release_version(tid=environment, id=version)

@@ -45,6 +45,66 @@ class Base(DeclarativeBase):
     pass
 
 
+class Module(Base):
+    __tablename__ = "module"
+
+    __table_args__ = (
+        PrimaryKeyConstraint("name", "version", "environment", name="module_pkey"),
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="code_environment_fkey"),
+    )
+
+    name: Mapped[str] = mapped_column(String)
+    version: Mapped[str] = mapped_column(String)
+    environment: Mapped[uuid.UUID] = mapped_column(UUID)
+    requirements: Mapped[list[str]] = mapped_column(ARRAY(String()))
+
+
+class FilesInModule(Base):
+    __tablename__ = "files_in_module"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["module_name", "module_version", "environment"],
+            ["module.name", "module.version", "module.environment"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="files_in_module_environment_fkey"),
+        ForeignKeyConstraint(
+            ["file_content_hash"], ["file.content_hash"], ondelete="RESTRICT", name="files_in_module_file_content_hash_fkey"
+        ),  # todo add test for restrict behaviour on delete
+        UniqueConstraint("module_name", "module_version", "environment", "file_path"),
+    )
+    __mapper_args__ = {"primary_key": ["module_name", "module_version", "environment", "file_path"]}
+
+    module_name: Mapped[str] = mapped_column(String)
+    module_version: Mapped[str] = mapped_column(String)
+    environment: Mapped[uuid.UUID] = mapped_column(UUID)
+    file_content_hash: Mapped[str] = mapped_column(String)
+    file_path: Mapped[str] = mapped_column(String)
+
+
+class ModulesForAgent(Base):
+    __tablename__ = "modules_for_agent"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["cm_version", "environment"], ["configurationmodel.version", "configurationmodel.environment"], ondelete="CASCADE"
+        ),  # TODO add test for deletion: check this deleted when cm is deleted via regular api (non-sqlalchemy api)
+        ForeignKeyConstraint(["agent_name", "environment"], ["agent.name", "agent.environment"], ondelete="CASCADE"),
+        ForeignKeyConstraint(
+            ["module_name", "module_version", "environment"],
+            ["module.name", "module.version", "module.environment"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("cm_version", "environment", "agent_name", "module_name"),
+    )
+    __mapper_args__ = {"primary_key": ["cm_version", "environment", "agent_name", "module_name"]}
+
+    cm_version: Mapped[int] = mapped_column(Integer)
+    environment: Mapped[uuid.UUID] = mapped_column(UUID)
+    agent_name: Mapped[str] = mapped_column(String)
+    module_name: Mapped[str] = mapped_column(String)
+    module_version: Mapped[str] = mapped_column(String)
+
+
 class File(Base):
     __tablename__ = "file"
     __table_args__ = (PrimaryKeyConstraint("content_hash", name="file_pkey"),)
@@ -104,7 +164,6 @@ class Environment(Base):
     project_: Mapped["Project"] = relationship("Project", back_populates="environment")
 
     agentprocess: Mapped[List["AgentProcess"]] = relationship("AgentProcess", back_populates="environment_")
-    code: Mapped[List["Code"]] = relationship("Code", back_populates="environment_")
     compile: Mapped[List["Compile"]] = relationship("Compile", back_populates="environment_")
     configurationmodel: Mapped[List["ConfigurationModel"]] = relationship("ConfigurationModel", back_populates="environment_")
     discoveredresource: Mapped[List["DiscoveredResource"]] = relationship("DiscoveredResource", back_populates="environment_")
@@ -143,21 +202,6 @@ class AgentProcess(Base):
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="agentprocess")
     agentinstance: Mapped[List["AgentInstance"]] = relationship("AgentInstance", back_populates="agentprocess")
-
-
-class Code(Base):
-    __tablename__ = "code"
-    __table_args__ = (
-        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="code_environment_fkey"),
-        PrimaryKeyConstraint("environment", "version", "resource", name="code_pkey"),
-    )
-
-    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    resource: Mapped[str] = mapped_column(String, primary_key=True)
-    version: Mapped[int] = mapped_column(Integer, primary_key=True)
-    source_refs: Mapped[Optional[dict[str, tuple[str, str, list[str]]]]] = mapped_column(JSONB)
-
-    environment_: Mapped["Environment"] = relationship("Environment", back_populates="code")
 
 
 class Compile(Base):
@@ -239,7 +283,9 @@ class ConfigurationModel(Base):
     dryrun: Mapped[List["Dryrun"]] = relationship("Dryrun", back_populates="configurationmodel")
     resource: Mapped[List["Resource"]] = relationship("Resource", back_populates="configurationmodel")
     resourceaction: Mapped[List["ResourceAction"]] = relationship("ResourceAction", back_populates="configurationmodel")
-    unknownparameter: Mapped[List["UnknownParameter"]] = relationship("UnknownParameter", back_populates="configurationmodel")
+    unknownparameter: Mapped[List["UnknownParameter"]] = relationship(
+        "UnknownParameter", back_populates="configurationmodel", overlaps="unknownparameter"
+    )
 
 
 class DiscoveredResource(Base):
@@ -601,8 +647,12 @@ class UnknownParameter(Base):
     metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column("metadata", JSONB)
     resolved: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
-    configurationmodel: Mapped["ConfigurationModel"] = relationship("ConfigurationModel", back_populates="unknownparameter")
-    environment_: Mapped["Environment"] = relationship("Environment", back_populates="unknownparameter")
+    configurationmodel: Mapped["ConfigurationModel"] = relationship(
+        "ConfigurationModel", back_populates="unknownparameter", overlaps="unknownparameter"
+    )
+    environment_: Mapped["Environment"] = relationship(
+        "Environment", back_populates="unknownparameter", overlaps="configurationmodel,unknownparameter"
+    )
 
 
 class Agent(Base):
