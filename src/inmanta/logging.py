@@ -449,7 +449,15 @@ class LoggingConfigBuilder:
 
         if component == "server":
             # Fully generic
-            pass
+            loggers.update(
+                {
+                    "sqlalchemy.engine": {
+                        "level": "INFO",
+                        "propagate": True,
+                        "handlers": ["server_handler"],
+                    }
+                }
+            )
         elif component == "scheduler":
             # Resource action log
             handlers.update(
@@ -473,6 +481,11 @@ class LoggingConfigBuilder:
                         "propagate": True,
                         "handlers": ["scheduler_resource_action_handler"],
                     },
+                    "sqlalchemy.engine": {
+                        "level": "INFO",
+                        "propagate": True,
+                        "handlers": ["scheduler_handler"],
+                    }
                 }
             )
 
