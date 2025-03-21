@@ -126,7 +126,7 @@ class CodeManager:
                         models.FilesInModule.module_version == res.module_version,
                     )
                 )
-                #
+
                 files = await session.execute(files_in_module)
 
                 module_install_specs.append(

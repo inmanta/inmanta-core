@@ -186,7 +186,6 @@ class CodeManager:
     def get_module_version_info(self) -> dict[str, "PythonModule"]:
         """Return all module version info"""
         return self.get_modules_data()
-        # return {module_data.name: module_data.version for module_data in self.get_modules_data().values()}
 
     def get_type_to_module(self) -> dict[str, list[str]]:
         """Return all module source info"""
@@ -375,7 +374,6 @@ class CodeLoader:
             # write the new source
             source_code = module_source.get_source_code()
             with open(source_file, "wb+") as fd:
-                LOGGER.debug(f"writing source to {source_file}")
                 fd.write(source_code)
         else:
             LOGGER.debug(
