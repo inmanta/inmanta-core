@@ -51,11 +51,11 @@ LOGGER = logging.getLogger(__name__)
 async def agent(server, environment, deactive_venv):
     """Construct an agent that can execute using the resource container"""
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    a = Agent(environment)
+    env = uuid.UUID(environment)
+    a = Agent(env)
     loop = asyncio.get_running_loop()
     executor = InProcessExecutorManager(
-        environment,
+        env,
         a._client,
         loop,
         LOGGER,
