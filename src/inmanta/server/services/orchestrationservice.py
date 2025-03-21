@@ -854,17 +854,21 @@ class OrchestrationService(protocol.ServerSlice):
                             ON CONFLICT DO NOTHING;
                         """
                 async with connection.transaction():
-                    values = [
-                        (
-                            cm_version,
-                            environment,
-                            type_to_agent[resource_type],
-                            module_name,
-                            module_version_info[module_name]["version"],
-                        )
-                        for resource_type in type_to_agent.keys()
-                        for module_name in type_to_module_data[resource_type]
-                    ]
+                    values = []
+                    for resource_type in type_to_agent.keys():
+                        if resource_type not in type_to_module_data:
+                            LOGGER.warning("No inmanta module information was provided for resource type %s." % resource_type)
+                            continue
+                        for module_name in type_to_module_data[resource_type]:
+                            values.append(
+                                (
+                                    cm_version,
+                                    environment,
+                                    type_to_agent[resource_type],
+                                    module_name,
+                                    module_version_info[module_name]["version"],
+                                )
+                            )
 
                     await connection.executemany(
                         query,
@@ -898,6 +902,9 @@ class OrchestrationService(protocol.ServerSlice):
                         in_db_module_data[record["module_name"]] = (record["module_version"], record["agent_name"])
 
                 for resource_type, expected_agent in type_to_agent.items():
+                    if resource_type not in type_to_module_data:
+                        LOGGER.warning("No inmanta module information was provided for resource type %s." % resource_type)
+                        continue
                     for module_name in type_to_module_data[resource_type]:
                         expected_module_version = module_version_info[module_name]["version"]
 
@@ -906,7 +913,7 @@ class OrchestrationService(protocol.ServerSlice):
                                 "Cannot perform partial export because of version mismatch for module %s." % module_name
                             )
 
-            if type_to_agent and not all([module_version_info, type_to_module_data]):
+            if type_to_agent and not all([module_version_info is not None, type_to_module_data is not None]):
                 raise BadRequest(
                     f"Missing source information for version {version}. Please make sure the following arguments "
                     f"are set when calling put_version: module_version_info, type_to_module_data"
