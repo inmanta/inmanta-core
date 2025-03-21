@@ -17,13 +17,14 @@ Contact: code@inmanta.com
 """
 
 import hashlib
+import os
 from collections import defaultdict
 from pathlib import Path
 from typing import NewType
 
 from asyncpg import Connection
 
-from inmanta import const
+from inmanta import const, loader
 
 
 async def update(connection: Connection) -> None:
@@ -140,7 +141,12 @@ async def update(connection: Connection) -> None:
             """
             for file_hash, file_path, _, _ in source_info:
                 parts = Path(file_path).parts
-                relative_path = str(Path(*parts[parts.index(const.PLUGINS_PACKAGE) :]))
+                if f"{module_name}/plugins" in file_path:
+                    # V1 module
+                    rel_py_file = os.path.relpath(file_path, start="plugins")
+                    relative_path = os.path.join(module_name, loader.PLUGIN_DIR, rel_py_file)
+                else:
+                    relative_path = str(Path(*parts[parts.index(const.PLUGINS_PACKAGE) :]))
                 files_in_module_data.append((module_name, module_version, environment, file_hash, relative_path))
 
         for env, env_data in code_data.items():
