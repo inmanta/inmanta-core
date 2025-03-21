@@ -566,7 +566,13 @@ async def test_clear_environment(client, server, clienthelper, environment):
     """
     version = await clienthelper.get_version()
     result = await client.put_version(
-        tid=environment, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version(), module_version_info={},
+        tid=environment,
+        version=version,
+        resources=[],
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        module_version_info={},
         type_to_module_data={},
     )
     assert result.code == 200

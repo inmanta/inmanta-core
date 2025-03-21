@@ -330,8 +330,15 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
 
 
 async def test_old_compiler(server, client, environment):
-    result = await client.put_version(tid=environment, version=123456, resources=[], unknowns=[], version_info={}, module_version_info={},
-        type_to_module_data={},)
+    result = await client.put_version(
+        tid=environment,
+        version=123456,
+        resources=[],
+        unknowns=[],
+        version_info={},
+        module_version_info={},
+        type_to_module_data={},
+    )
     assert result.code == 400
 
 
