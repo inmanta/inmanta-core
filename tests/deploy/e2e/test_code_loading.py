@@ -209,10 +209,15 @@ class Res(Resource):
         new_requirements=[inmanta.util.parse_requirement(requirement="pkg[optional-a]")],
         publish_index=index,
     )
-    with open(os.path.join(module_dir, PLUGINS_PACKAGE, "test_mod.py"), "w+") as fh:
+    plugin_file = os.path.join(module_dir, PLUGINS_PACKAGE, "test_mod.py")
+    init_file = os.path.join(module_dir, "__init__.py")
+
+    with open(plugin_file, "w+") as fh:
         fh.write(code)
-    with open(os.path.join(module_dir, "__init__.py"), "w+") as fh:
+    with open(init_file, "w+") as fh:
         fh.write("")
+    os.chmod(plugin_file, 0o775)
+    os.chmod(init_file, 0o775)
 
     module_v2 = ModuleV2(project=None, path=module_dir)
 
