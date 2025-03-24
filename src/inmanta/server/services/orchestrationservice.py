@@ -897,18 +897,18 @@ class OrchestrationService(protocol.ServerSlice):
                  """
                 async with connection.transaction():
                     values = [partial_base_version, environment]
-                    in_db_module_data = {}
+                    in_db_module_data = defaultdict(dict)
                     async for record in connection.cursor(query, *values):
-                        in_db_module_data[record["module_name"]] = (record["module_version"], record["agent_name"])
+                        in_db_module_data[record["module_name"]][record["agent_name"]] = record["module_version"]
 
-                for resource_type, expected_agent in type_to_agent.items():
+                for resource_type, agent_name in type_to_agent.items():
                     if resource_type not in type_to_module_data:
                         LOGGER.debug("No inmanta module information was provided for resource type %s." % resource_type)
                         continue
                     for module_name in type_to_module_data[resource_type]:
                         expected_module_version = module_version_info[module_name]["version"]
 
-                        if in_db_module_data[module_name] != (expected_module_version, expected_agent):
+                        if in_db_module_data[module_name][agent_name] != expected_module_version:
                             raise BadRequest(
                                 "Cannot perform partial export because of version mismatch for module %s." % module_name
                             )
