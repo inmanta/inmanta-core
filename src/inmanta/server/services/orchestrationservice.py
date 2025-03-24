@@ -857,7 +857,7 @@ class OrchestrationService(protocol.ServerSlice):
                     values = []
                     for resource_type in type_to_agent.keys():
                         if resource_type not in type_to_module_data:
-                            LOGGER.warning("No inmanta module information was provided for resource type %s." % resource_type)
+                            LOGGER.debug("No inmanta module information was provided for resource type %s." % resource_type)
                             continue
                         for module_name in type_to_module_data[resource_type]:
                             values.append(
@@ -903,7 +903,7 @@ class OrchestrationService(protocol.ServerSlice):
 
                 for resource_type, expected_agent in type_to_agent.items():
                     if resource_type not in type_to_module_data:
-                        LOGGER.warning("No inmanta module information was provided for resource type %s." % resource_type)
+                        LOGGER.debug("No inmanta module information was provided for resource type %s." % resource_type)
                         continue
                     for module_name in type_to_module_data[resource_type]:
                         expected_module_version = module_version_info[module_name]["version"]
