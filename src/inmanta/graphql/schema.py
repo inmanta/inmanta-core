@@ -141,7 +141,7 @@ class StrawberryFilter:
 
 class StrawberryOrder:
     """
-    This class determines what fields we allow our users to sort the results.
+    This class determines what fields we allow our users to sort the results on.
     Only one field is allowed to be sorted on at any time (for simplicity's sake).
     We use `asc` or `desc` to determine if we are sorting in ascending or descending order.
     The sorting is applied with the `add_filter_and_sort` function.
