@@ -768,6 +768,8 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 version_info={},
                 resources=attributes,
                 resource_sets=resource_sets,
+                module_version_info={},
+                type_to_module_data={},
             )
             assert result.code == 200
             version = result.result["data"]

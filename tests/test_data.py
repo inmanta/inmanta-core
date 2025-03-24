@@ -208,9 +208,7 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
 
         return project, env, agent_proc, [agi1, agi2], agent, resource_ids, unknown_parameter
 
-    async def assert_project_exists(
-        project, env, agent_proc, agent_instances, agent, resource_ids, code, unknown_parameter, exists
-    ):
+    async def assert_project_exists(project, env, agent_proc, agent_instances, agent, resource_ids, unknown_parameter, exists):
         def func(x):
             if exists:
                 return x is not None
