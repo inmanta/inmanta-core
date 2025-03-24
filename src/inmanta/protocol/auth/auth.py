@@ -1,5 +1,5 @@
 """
-Copyright 2024 Inmanta
+Copyright 2025 Inmanta
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 from inmanta import config, const
 from inmanta.server import config as server_config
 
-from . import exceptions
+from .. import exceptions
 
 claim_type = Mapping[str, str | Sequence[str]]
 

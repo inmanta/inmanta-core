@@ -44,7 +44,7 @@ from tornado import web
 
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
-from inmanta.protocol import auth
+from inmanta.protocol.auth import auth
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
@@ -452,6 +452,16 @@ class MethodProperties:
 
         self._validate_function_types(typed)
         self.argument_validator = self.arguments_to_pydantic()
+
+    def is_agent_only_endpoint(self) -> bool:
+        """
+        Return True iff this endpoint should only be used by agents.
+        """
+        if self.client_types == [const.ClientType.agent]:
+            return True
+        if (self._agent_server or self._server_agent) and not self._api:
+            return True
+        return False
 
     @property
     def varkw(self) -> bool:

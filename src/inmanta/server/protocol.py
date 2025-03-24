@@ -31,9 +31,10 @@ from typing import TYPE_CHECKING, Callable, Mapping, Optional, Union
 from tornado import gen, queues, routing, web
 
 import inmanta.protocol.endpoints
-from inmanta import tracing
+from inmanta import tracing, const
 from inmanta.data.model import ExtensionStatus
 from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods
+from inmanta.protocol.auth import decorators as auth_decorators
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
@@ -164,6 +165,17 @@ class Server(endpoints.Endpoint):
         self._slice_sequence = self._order_slices()
         return self._slice_sequence
 
+    def _validate():
+        """
+        Validate whether the server is in a consistent state.
+        """
+        for method_name, method_properties in common.MethodProperties.methods.items():
+            # All endpoints that are not agent-specific, must have an @auth annotation.
+            is_agent_only_endpoint = method_properties.is_agent_only_endpoint()
+            has_auth_annotation = auth_decorators.AuthorizationMetadata.has_metadata_for(method_name)
+            if not is_agent_only_endpoint and not has_auth_annotation:
+                raise Exception(f"API endpoint {method_name} is missing an @auth annotation.")
+
     async def start(self) -> None:
         """
         Start the transport.
@@ -175,6 +187,7 @@ class Server(endpoints.Endpoint):
         if self.running:
             return
         LOGGER.debug("Starting Server Rest Endpoint")
+        self._validate()
         self.running = True
 
         for my_slice in self._get_slice_sequence():

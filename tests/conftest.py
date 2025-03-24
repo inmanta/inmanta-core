@@ -37,6 +37,7 @@ from inmanta.data import get_engine, start_engine, stop_engine
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
+from inmanta.protocol.auth import decorators as auth_decorators
 from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
 from inmanta.server.services.databaseservice import initialize_sql_alchemy_engine
@@ -557,10 +558,12 @@ async def clean_reset(create_db, clean_db, deactive_venv):
     reset_all_objects()
     config.Config._reset()
     methods = inmanta.protocol.common.MethodProperties.methods.copy()
+    authorization_metadata = auth_decorators.AuthorizationMetadata.metadata.copy()
     loader.unload_inmanta_plugins()
     default_settings = dict(data.Environment._settings)
     yield
     inmanta.protocol.common.MethodProperties.methods = methods
+    auth_decorators.AuthorizationMetadata.metadata = authorization_metadata
     config.Config._reset()
     reset_all_objects()
     loader.unload_inmanta_plugins()
