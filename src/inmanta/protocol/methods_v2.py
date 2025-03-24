@@ -1628,7 +1628,7 @@ def graphql(query: str) -> Any:  # Actual return type: strawberry.types.executio
 
 @typedmethod(
     path="/graphql/schema",
-    operation="POST",
+    operation="GET",
     client_types=[ClientType.api],
     api_version=2,
     strict_typing=False,
