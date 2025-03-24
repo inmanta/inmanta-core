@@ -6678,6 +6678,7 @@ async def get_connection_ctx_mgr() -> AsyncIterator[Connection]:
         raw_asyncio_connection = connection_fairy.driver_connection
         assert isinstance(raw_asyncio_connection, Connection)
         yield raw_asyncio_connection
+        await raw_asyncio_connection.reset()
 
 
 async def stop_engine() -> None:
