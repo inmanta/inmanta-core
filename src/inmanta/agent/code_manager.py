@@ -37,7 +37,7 @@ LOGGER = logging.getLogger(__name__)
 class CouldNotResolveCode(Exception):
 
     def __init__(self, agent_name: str, version: int) -> None:
-        self.msg = f"Failed to get source code for {agent_name} version={version}"
+        self.msg = f"Failed to get source code for agent `{agent_name}` on version {version}."
         super().__init__(self.msg)
 
 
@@ -152,5 +152,5 @@ class CodeManager:
                 )
         if not module_install_specs:
             raise CouldNotResolveCode(agent_name, model_version)
-        LOGGER.debug(f"{module_install_specs=}")
+        LOGGER.debug(f"module_install_specs{module_install_specs=}")
         return module_install_specs

@@ -45,7 +45,7 @@ from inmanta.module import ModuleV2
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
-from inmanta.util import get_compiler_version
+from inmanta.util import get_compiler_version, hash_file
 from packaging.version import Version
 from utils import (
     ClientHelper,
@@ -315,27 +315,37 @@ async def test_agent_code_loading_with_failure(
 
     caplog.set_level(DEBUG)
 
-    modules_data = {}
-    type_to_module_data = {
-        "test::Test": "inmanta_plugins.test",
-        "test::Test2": "inmanta_plugins.test",
+    content = "file content".encode()
+    hash = hash_file(content)
+    body = base64.b64encode(content).decode("ascii")
+
+    mocked_module_version_info = {
+        "test": PythonModule(
+            name="test",
+            version="abc",
+            files_in_module=[
+                {
+                    "path": "dummy/path/test/plugins/dummy_file",
+                    "module_name": "test",
+                    "hash": hash,
+                    "content": "file content",
+                    "requires": [],
+                }
+            ],
+        )
     }
-    file_path = os.path.join(tmpdir, "test/plugins/__init__.py")
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    with open(file_path, "w") as f:
-        f.write("")
 
-    await make_source_structure(
-        modules_data,
-        file_path,
-        "test",
-        "",
-        client=client,
-    )
+    mocked_type_to_module_data = {
+        "test::Test": ["test"],
+        "test::Test2": ["test"],
+    }
 
-    # res = await client.upload_modules(tid=environment, modules_data=modules_data)
-    #
-    # assert res.code == 200
+    res = await client.upload_file(id=hash, content=body)
+    assert res.code == 200
+
+    res = await client.upload_modules(tid=environment, modules_data=mocked_module_version_info)
+
+    assert res.code == 200
 
     async def get_version() -> int:
         version = await clienthelper.get_version()
@@ -358,8 +368,8 @@ async def test_agent_code_loading_with_failure(
                     "name": "test",
                 },
             ],
-            module_version_info=modules_data,
-            type_to_module_data=type_to_module_data,
+            module_version_info=mocked_module_version_info,
+            type_to_module_data=mocked_type_to_module_data,
             compiler_version=get_compiler_version(),
             pip_config=PipConfig(),
         )
@@ -381,7 +391,7 @@ async def test_agent_code_loading_with_failure(
 
     module_install_specs_2 = await codemanager.get_code(environment=environment, model_version=version_1, agent_name="agent1")
 
-    async def _install(blueprint: executor.ExecutorBlueprint) -> None:
+    async def _install(module_name: str, blueprint: executor.ExecutorBlueprint) -> None:
         raise Exception("MKPTCH: Unable to load code when agent is started with code loading disabled.")
 
     monkeypatch.setattr(agent.executor_manager, "_install", _install)
@@ -392,13 +402,13 @@ async def test_agent_code_loading_with_failure(
     assert len(failed_to_load) == 1
     for handler, exception in failed_to_load.items():
         assert str(exception) == (
-            f"Failed to install handler {handler} version=1: "
+            f"Failed to install module {handler} version=1: "
             f"MKPTCH: Unable to load code when agent is started with code loading disabled."
         )
 
     monkeypatch.undo()
 
-    log_index(caplog, "test_code_loading", logging.ERROR, "Failed to install handler inmanta_plugins.test version=1")
+    log_index(caplog, "test_code_loading", logging.ERROR, "Failed to install module test version=1")
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
@@ -406,20 +416,6 @@ async def test_logging_on_code_loading_failure(server, client, environment, clie
     """
     This test case ensures that if handler code cannot be loaded, this is reported in the resource action log.
     """
-    code = """
-raise Exception("Fail code loading")
-    """
-
-    sources = {}
-    await make_source_structure(
-        sources,
-        "inmanta_plugins/test/__init__.py",
-        "inmanta_plugins.test",
-        code,
-        dependencies=[],
-        client=client,
-    )
-
     version = await clienthelper.get_version()
 
     res = await client.put_version(
@@ -434,10 +430,8 @@ raise Exception("Fail code loading")
             }
         ],
         compiler_version=get_compiler_version(),
-        module_version_info={
-            "inmanta_plugins.test": "2bf2115acde296712916b76cab9b6b96791ba295",
-        },
-        type_to_module_data={"test::Test": "agent"},
+        module_version_info={},
+        type_to_module_data={},
     )
     assert res.code == 200
 

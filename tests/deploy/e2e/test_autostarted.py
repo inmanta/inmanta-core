@@ -855,11 +855,8 @@ async def test_agent_paused_scheduler_server_restart(
     """
 
     async def return_none(*args, **kwargs):
+        print("returning NONE")
         return None
-
-    # Make sure that the resource goes into the unavailable state on deployment.
-    get_version_old = data.Code.get_version
-    monkeypatch.setattr(data.Code, "get_version", return_none)
 
     current_pid = os.getpid()
 
@@ -910,9 +907,6 @@ std::testing::NullResource(name="test", agentname="agent1", value="test")
         should_fork_server_be_defined=False,
         nb_executor_to_be_defined=0,
     )
-
-    # Make sure the resource can get out of the unavailable state.
-    monkeypatch.setattr(data.Code, "get_version", get_version_old)
 
     # Let's restart the server
     await ibl.start()
