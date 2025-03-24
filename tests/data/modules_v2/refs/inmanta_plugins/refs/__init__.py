@@ -137,8 +137,6 @@ def create_bad_reference(name: Reference[str] | str) -> Reference[str]:
     return BadReference(name=name)
 
 
-
-
 @resource("refs::DeepResource", agent="agentname", id_attribute="name")
 class Deep(ManagedResource, PurgeableResource):
     fields = ("name", "agentname", "value")
@@ -146,6 +144,7 @@ class Deep(ManagedResource, PurgeableResource):
     @classmethod
     def get_value(cls, _, resource) -> dict[str, object]:
         return {"inner": resource.value}
+
 
 @provider("refs::DeepResource", name="null")
 class NullProvider(CRUDHandler[Deep]):
@@ -161,7 +160,5 @@ class NullProvider(CRUDHandler[Deep]):
     def delete_resource(self, ctx: HandlerContext, resource: Deep) -> None:
         ctx.set_purged()
 
-    def update_resource(
-        self, ctx: HandlerContext, changes: dict, resource: Deep
-    ) -> None:
+    def update_resource(self, ctx: HandlerContext, changes: dict, resource: Deep) -> None:
         ctx.set_updated()
