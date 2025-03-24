@@ -123,6 +123,15 @@ async def test_deploy_end_to_end(
                agentname="test",
                fail=refs::create_bool_reference(name="testx"),
            )
+
+           # Deeper mutator should also work
+            refs::DeepResource(
+               name="test3",
+               agentname="test",
+               value=refs::create_string_reference(name="testx"),
+           )
+
+
            """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
     )
@@ -137,6 +146,11 @@ async def test_deploy_end_to_end(
     assert details.status == ReleasedResourceState.failed
 
     result = await client.resource_details(environment, "std::testing::NullResource[test,name=test2]")
+    assert result.code == 200
+    details = ReleasedResourceDetails(**result.result["data"])
+    assert details.status == ReleasedResourceState.deployed
+
+    result = await client.resource_details(environment, "refs::DeepResource[test,name=test3]")
     assert result.code == 200
     details = ReleasedResourceDetails(**result.result["data"])
     assert details.status == ReleasedResourceState.deployed

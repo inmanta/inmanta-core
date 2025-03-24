@@ -1,7 +1,7 @@
 import os
 import dataclasses
 
-from inmanta.agent.handler import LoggerABC
+from inmanta.agent.handler import LoggerABC, provider, CRUDHandler, HandlerContext
 from inmanta.references import reference, Reference, is_reference_of
 from inmanta.plugins import plugin
 from inmanta.resources import resource, ManagedResource, PurgeableResource
@@ -135,3 +135,33 @@ class BadReference(Reference[str]):
 @plugin
 def create_bad_reference(name: Reference[str] | str) -> Reference[str]:
     return BadReference(name=name)
+
+
+
+
+@resource("refs::DeepResource", agent="agentname", id_attribute="name")
+class Deep(ManagedResource, PurgeableResource):
+    fields = ("name", "agentname", "value")
+
+    @classmethod
+    def get_value(cls, _, resource) -> dict[str, object]:
+        return {"inner": resource.value}
+
+@provider("refs::DeepResource", name="null")
+class NullProvider(CRUDHandler[Deep]):
+    """Does nothing at all"""
+
+    def read_resource(self, ctx: HandlerContext, resource: Deep) -> None:
+        ctx.debug("Observed value: %(value)s", value=resource.value)
+        return
+
+    def create_resource(self, ctx: HandlerContext, resource: Deep) -> None:
+        ctx.set_created()
+
+    def delete_resource(self, ctx: HandlerContext, resource: Deep) -> None:
+        ctx.set_purged()
+
+    def update_resource(
+        self, ctx: HandlerContext, changes: dict, resource: Deep
+    ) -> None:
+        ctx.set_updated()
