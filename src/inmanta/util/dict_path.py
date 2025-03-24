@@ -272,7 +272,7 @@ class WildDictPath(abc.ABC):
         pass
 
     def _validate_container(
-        self, container: object, set: bool = False, remove: bool = False
+        self, container: object, set: bool = False, remove: bool = False, with_items: bool = False
     ) -> TypeGuard[dict[object, object]]:
         """Validate that the container supports the required mapping protocol operations"""
         # To be refined in https://github.com/inmanta/inmanta-core/issues/8398
@@ -284,6 +284,9 @@ class WildDictPath(abc.ABC):
             return False
 
         if remove and not hasattr(container, "__delitem__"):
+            return False
+
+        if with_items and not hasattr(container, "items"):
             return False
 
         return True
@@ -340,7 +343,7 @@ class WildInDict(WildDictPath):
         self.key: Union[NormalValue, WildCardValue] = key_value
 
     def get_elements(self, container: object) -> list[object]:
-        if self._validate_container(container):
+        if self._validate_container(container, with_items=True):
             try:
                 return [value for key, value in container.items() if self.key.matches(key)]
             except KeyError:
@@ -377,9 +380,9 @@ class WildInDict(WildDictPath):
             ]
 
         """
-        if self._validate_container(container):
+        if self._validate_container(container, with_items=True):
             try:
-                return [WildInDict(str(key)) for key in container if self.key.matches(key)]
+                return [WildInDict(str(key)) for key, value in container.items() if self.key.matches(key)]
             except KeyError:
                 return []
         else:
@@ -922,11 +925,9 @@ class InDict(DictPath, WildInDict):
         elements = WildInDict.get_elements(self, container)
 
         if not elements and construct:
-            if self._validate_container(container):
-                container[self.key.value] = {}
-                return container[self.key.value]
-            else:
-                raise ContainerStructureException(f"{container} is not a Dict")
+            value: dict[object, object] = {}
+            self.set_element(container, value)
+            return value
 
         if len(elements) != 1:
             raise KeyError(f"Found no or multiple items matching {self.to_str()} in {container}: {elements}")
@@ -946,8 +947,8 @@ class InDict(DictPath, WildInDict):
         return self.key.value
 
     def remove(self, container: object) -> None:
-        if self._validate_container(container, remove=True):
-            for key in list(container.keys()):
+        if self._validate_container(container, remove=True, with_items=True):
+            for key, _ in list(container.items()):
                 if self.key.matches(key):
                     del container[key]
         else:
@@ -1135,7 +1136,7 @@ class NullPath(DictPath, WildNullPath):
     def set_element(self, container: object, value: object, construct: bool = True) -> None:
         if not self._validate_container(container, set=True, remove=True):
             raise ContainerStructureException(f"Argument container is not a Dict: {container}")
-        if not self._validate_container(value):
+        if not self._validate_container(value, with_items=True):
             raise ContainerStructureException(f"Argument value is not a Dict: {container}")
         assert isinstance(container, dict)
         assert isinstance(value, dict)

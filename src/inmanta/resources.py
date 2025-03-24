@@ -543,6 +543,10 @@ class Resource(metaclass=ResourceMeta):
 
         raise KeyError()
 
+    def items(self) -> Iterator[tuple[str, object]]:
+        for key in self.fields:
+            yield key, getattr(self, key)
+
     def get_reference_value(self, id: uuid.UUID, logger: "handler.LoggerABC") -> "references.RefValue":
         """Get a value of a reference"""
         if id not in self._references:
