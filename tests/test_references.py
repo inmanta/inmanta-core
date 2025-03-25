@@ -31,6 +31,7 @@ from inmanta.ast import ExternalException, RuntimeException, TypingException
 from inmanta.data.model import ReleasedResourceDetails, ReleasedResourceState
 from inmanta.export import ResourceDict
 from inmanta.references import ReferenceCycleException
+from inmanta.util.dict_path import Mapping, MutableMapping
 from utils import ClientHelper, log_contains
 
 if typing.TYPE_CHECKING:
@@ -123,12 +124,27 @@ async def test_deploy_end_to_end(
                agentname="test",
                fail=refs::create_bool_reference(name="testx"),
            )
+
+           # Deeper mutator should also work
+            refs::DeepResource(
+               name="test3",
+               agentname="test",
+               value=refs::create_string_reference(name="testx"),
+           )
+
+
            """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
     )
 
     await clienthelper.set_auto_deploy()
-    await snippetcompiler.do_export_and_deploy()
+    version, resource = await snippetcompiler.do_export_and_deploy()
+
+    # All resource must be dictpath compatible for the mutators to work!
+    for resource in resource.values():
+        assert isinstance(resource, Mapping)
+        assert isinstance(resource, MutableMapping)
+
     await clienthelper.wait_for_released()
     await clienthelper.wait_for_deployed()
     result = await client.resource_details(environment, "std::testing::NullResource[test,name=test]")
@@ -137,6 +153,11 @@ async def test_deploy_end_to_end(
     assert details.status == ReleasedResourceState.failed
 
     result = await client.resource_details(environment, "std::testing::NullResource[test,name=test2]")
+    assert result.code == 200
+    details = ReleasedResourceDetails(**result.result["data"])
+    assert details.status == ReleasedResourceState.deployed
+
+    result = await client.resource_details(environment, "refs::DeepResource[test,name=test3]")
     assert result.code == 200
     details = ReleasedResourceDetails(**result.result["data"])
     assert details.status == ReleasedResourceState.deployed

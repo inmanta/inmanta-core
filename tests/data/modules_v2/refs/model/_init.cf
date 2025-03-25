@@ -17,3 +17,15 @@ entity NullResource extends std::ManagedResource, std::PurgeableResource:
 end
 
 implement NullResource using std::none
+
+
+entity DeepResource extends std::ManagedResource, std::PurgeableResource:
+    """
+        Copied from std to have no index
+    """
+    string name = "null"
+    string agentname = "internal"
+    string value = ""
+end
+
+implement DeepResource using std::none
