@@ -36,7 +36,7 @@ TWCP = TypeVar("TWCP", bound="WildComposedPath")
 @runtime_checkable
 class Mapping(Protocol):
     """
-    Specific Mapping type for this module, simplified wrt collections.anc.Mapping[str, object]
+    Specific Mapping type for this module, simplified wrt collections.abc.Mapping[str, object]
 
     For getting items from dicts, this is the interface that is used by this module
     """
@@ -49,7 +49,7 @@ class Mapping(Protocol):
 @runtime_checkable
 class MutableMapping(Mapping, Protocol):
     """
-    Specific MutableMapping type for this module, simplified wrt collections.anc.MutableMapping[str, object]
+    Specific MutableMapping type for this module, simplified wrt collections.abc.MutableMapping[str, object]
 
     For manipulating dicts, this is the interface that is used by this module
     """
@@ -301,26 +301,6 @@ class WildDictPath(abc.ABC):
     @abc.abstractmethod
     def parse(cls: type[TWDP], inp: str) -> Optional[TWDP]:
         pass
-
-    def _validate_container(
-        self, container: object, set: bool = False, remove: bool = False, with_items: bool = False
-    ) -> TypeGuard[dict[object, object]]:
-        """Validate that the container supports the required mapping protocol operations"""
-        # To be refined in https://github.com/inmanta/inmanta-core/issues/8398
-
-        if not hasattr(container, "__getitem__"):
-            return False
-
-        if set and not hasattr(container, "__setitem__"):
-            return False
-
-        if remove and not hasattr(container, "__delitem__"):
-            return False
-
-        if with_items and not hasattr(container, "items"):
-            return False
-
-        return True
 
 
 @stable_api
