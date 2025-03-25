@@ -36,7 +36,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 from inmanta import config, const
 from inmanta.server import config as server_config
 
-from .. import exceptions
+from inmanta.protocol import exceptions
 
 claim_type = Mapping[str, str | Sequence[str]]
 

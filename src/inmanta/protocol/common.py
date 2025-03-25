@@ -453,9 +453,10 @@ class MethodProperties:
         self._validate_function_types(typed)
         self.argument_validator = self.arguments_to_pydantic()
 
-    def is_agent_only_endpoint(self) -> bool:
+    def is_internal_endpoint(self) -> bool:
         """
-        Return True iff this endpoint should only be used by agents.
+        Returns True iff it's an internal endpoint (for communication between the server and the agents)
+        and is not part of the public API.
         """
         if self.client_types == [const.ClientType.agent]:
             return True

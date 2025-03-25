@@ -165,13 +165,14 @@ class Server(endpoints.Endpoint):
         self._slice_sequence = self._order_slices()
         return self._slice_sequence
 
-    def _validate():
+    def _validate(self) -> None:
         """
         Validate whether the server is in a consistent state.
+        Raises an exception if an inconsistency if found.
         """
         for method_name, method_properties in common.MethodProperties.methods.items():
             # All endpoints that are not agent-specific, must have an @auth annotation.
-            is_agent_only_endpoint = method_properties.is_agent_only_endpoint()
+            is_agent_only_endpoint = method_properties.is_internal_endpoint()
             has_auth_annotation = auth_decorators.AuthorizationMetadata.has_metadata_for(method_name)
             if not is_agent_only_endpoint and not has_auth_annotation:
                 raise Exception(f"API endpoint {method_name} is missing an @auth annotation.")

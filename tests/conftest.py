@@ -36,7 +36,7 @@ from inmanta.config import log_dir
 from inmanta.data import get_engine, start_engine, stop_engine
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
-from inmanta.protocol import auth
+from inmanta.protocol.auth import auth
 from inmanta.protocol.auth import decorators as auth_decorators
 from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
