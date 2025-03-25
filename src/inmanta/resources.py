@@ -20,7 +20,7 @@ import logging
 import re
 import typing
 import uuid
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, MutableMapping, Sequence
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
 
 import inmanta.ast
@@ -543,6 +543,12 @@ class Resource(metaclass=ResourceMeta):
 
         raise KeyError()
 
+    def __delitem__(self, key: str) -> None:
+        raise Exception("Deleting fields is not allowed on a resource")
+
+    def clear(self) -> None:
+        raise Exception("Deleting fields is not allowed on a resource")
+
     def items(self) -> Iterator[tuple[str, object]]:
         for key in self.fields:
             yield key, getattr(self, key)
@@ -634,6 +640,9 @@ class Resource(metaclass=ResourceMeta):
 
     def is_type(self, type_name: str) -> bool:
         return str(self.model._get_instance().get_type()) == type_name
+
+
+MutableMapping.register(Resource)
 
 
 @stable_api
