@@ -17,10 +17,11 @@ Contact: code@inmanta.com
 """
 
 from typing import Callable, Sequence
+import inspect
 from inmanta import const
 from inmanta.protocol.common import MethodProperties
 
-def auth(auth_label: str, read_only: bool, environment_param: str | None = None, disable_auth: bool = False) -> Callable[..., Callable]:
+def auth(auth_label: str, read_only: bool, environment_param: str | None = None) -> Callable[..., Callable]:
     """
     A decorator used to add authorization-related metadata to a API endpoint.
     This metadata can be used when writing an authorization policy. The @auth
@@ -36,12 +37,20 @@ def auth(auth_label: str, read_only: bool, environment_param: str | None = None,
                               the environment on which the endpoint is acting.
                               Or None if it's an environment-agnostic endpoint.
     """
+
     def wrapper(fnc: Callable[..., Callable]) -> Callable[..., Callable]:
-        # TODO: Validate whether environment_param is part of method.
-        # TODO: Validate API endpoints without @auth decorator applied. (check agent_server or server_agent flag?
-        method_properties = MethodProperties.methods[fnc.__name__]
-        assert len(method_properties) == 1
-        method_properties = method_properties[0]
+        if not hasattr(fnc, "__method_properties__"):
+            raise Exception(
+                f"@method decorator not found on method {fnc.__name__}."
+                " Make sure the @auth decorator is always set above the @method decorator"
+            )
+        if environment_param is not None:
+            signature = inspect.signature(fnc)
+            if environment_param not in signature.parameters:
+                raise Exception(
+                    f"environment_param {environment_param} is not a parameter of the API endpoint {fnc.__name__}"
+                )
+        method_properties = fnc.__method_properties__
         client_types = list(method_properties.client_types)
         metadata = AuthorizationMetadata(fnc.__name__, auth_label, read_only, environment_param, client_types)
         AuthorizationMetadata.register_auth_metadata(metadata)

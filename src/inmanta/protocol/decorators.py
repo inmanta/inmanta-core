@@ -126,6 +126,7 @@ def method(
             enforce_auth=enforce_auth,
         )
         common.MethodProperties.register_method(properties)
+        func.__method_properties__ = properties
         return func
 
     return wrapper
