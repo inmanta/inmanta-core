@@ -642,9 +642,6 @@ class Resource(metaclass=ResourceMeta):
         return str(self.model._get_instance().get_type()) == type_name
 
 
-MutableMapping.register(Resource)
-
-
 @stable_api
 class PurgeableResource(Resource):
     """
