@@ -40,6 +40,8 @@ def auth(auth_label: str, read_only: bool, environment_param: str | None = None,
         # TODO: Validate whether environment_param is part of method.
         # TODO: Validate API endpoints without @auth decorator applied. (check agent_server or server_agent flag?
         method_properties = MethodProperties.methods[fnc.__name__]
+        assert len(method_properties) == 1
+        method_properties = method_properties[0]
         client_types = list(method_properties.client_types)
         metadata = AuthorizationMetadata(fnc.__name__, auth_label, read_only, environment_param, client_types)
         AuthorizationMetadata.register_auth_metadata(metadata)

@@ -29,6 +29,7 @@ from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConf
 from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
+from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.types import PrimitiveTypes, ResourceIdStr
 
