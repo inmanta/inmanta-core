@@ -180,68 +180,40 @@ async def test_agent_installs_dependency_containing_extras(
     clienthelper,
     environment,
     agent,
-    modules_v2_dir,
-    tmpdir,
-    snippetcompiler_clean,
 ) -> None:
     """
     Test whether the agent code loading works correctly when a python dependency is provided that contains extras.
     """
-    code = """
-@resource("test::Resource", agent="agent1", id_attribute="key")
-class Res(Resource):
-    fields = ("agent", "key", "value")
+    content = "file content".encode()
+    hash = hash_file(content)
+    body = base64.b64encode(content).decode("ascii")
 
-    """
-    # project: module.Project = snippetcompiler_clean.setup_for_snippet("")
+    mocked_module_version_info = {
+        "test": PythonModule(
+            name="test",
+            version="abc",
+            files_in_module=[
+                {
+                    "path": "dummy/path/test/plugins/dummy_file",
+                    "module_name": "test",
+                    "hash": hash,
+                    "content": "file content",
+                    "requires": ["pkg[optional-a]"],
+                }
+            ],
+        )
+    }
 
-    module_name = "myv2mod"
-    module_dir = str(tmpdir.join("myv2mod"))
+    mocked_type_to_module_data = {
+        "test::Resource": ["test"],
+    }
 
-    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+    res = await client.upload_file(id=hash, content=body)
+    assert res.code == 200
 
-    # Add dependency pkg[optional-a] to module
-    module_from_template(
-        os.path.join(modules_v2_dir, "minimalv2module"),
-        module_dir,
-        new_name="myv2mod",
-        new_version=Version("1.0.0"),
-        new_requirements=[inmanta.util.parse_requirement(requirement="pkg[optional-a]")],
-        publish_index=index,
-    )
-    plugin_file = os.path.join(module_dir, PLUGINS_PACKAGE, "test_mod.py")
-    init_file = os.path.join(module_dir, "__init__.py")
+    res = await client.upload_modules(tid=environment, modules_data=mocked_module_version_info)
 
-    with open(plugin_file, "w+") as fh:
-        fh.write(code)
-    with open(init_file, "w+") as fh:
-        fh.write("")
-    os.chmod(plugin_file, 0o775)
-    os.chmod(init_file, 0o775)
-
-    module_v2 = ModuleV2(project=None, path=module_dir)
-
-    sources = [
-        SourceInfo(path=absolute_path, module_name=fqn_module_name)
-        for absolute_path, fqn_module_name in module_v2.get_plugin_files()
-    ]
-
-    all_files_hashes = [file.hash for file in sorted(sources, key=lambda f: f.hash)]
-
-    module_version_hash = hashlib.new("sha1")
-    for file_hash in all_files_hashes:
-        module_version_hash.update(file_hash.encode())
-
-    module_version = module_version_hash.hexdigest()
-    modules_data: dict[str, PythonModule] = {}
-    modules_data[module_name] = PythonModule(
-        name=module_name,
-        version=module_version,
-        files_in_module=sources,
-    )
-    type_to_module_data = {"test::Resource": module_name}
-    # res = await client.upload_modules(tid=environment, modules_data=)
-    # assert res.code == 200
+    assert res.code == 200
 
     # module_version_info = {module_name: data["version"] for module_name, data in modules_data.items()}
     version = await clienthelper.get_version()
@@ -262,8 +234,8 @@ class Res(Resource):
         resources=resources,
         pip_config=PipConfig(index_url=index_with_pkgs_containing_optional_deps),
         compiler_version=get_compiler_version(),
-        module_version_info=modules_data,
-        type_to_module_data=type_to_module_data,
+        module_version_info=mocked_module_version_info,
+        type_to_module_data=mocked_type_to_module_data,
     )
     assert res.code == 200
 

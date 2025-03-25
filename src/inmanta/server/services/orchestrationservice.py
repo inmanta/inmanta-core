@@ -744,7 +744,7 @@ class OrchestrationService(protocol.ServerSlice):
         ]
         updated_resource_sets: abc.Set[str] = {sr for sr in resource_sets.values() if sr is not None}
         deleted_resource_sets_as_set: abc.Set[str] = set(removed_resource_sets)
-        async with connection.transaction():
+        async with (connection.transaction()):
             try:
                 if is_partial_update:
                     # Make mypy happy
@@ -822,7 +822,9 @@ class OrchestrationService(protocol.ServerSlice):
             all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
             all_agents.add(const.AGENT_SCHEDULER_ID)
 
-            type_to_agent: dict[str, str] = {str(res.resource_type): res.agent for res in rid_to_resource.values()}
+            type_to_agent: dict[str, set[str]] = defaultdict(set)
+            for res in rid_to_resource.values():
+                type_to_agent[str(res.resource_type)].add(res.agent)
             LOGGER.debug(module_version_info)
 
             for agent in all_agents:
@@ -856,19 +858,20 @@ class OrchestrationService(protocol.ServerSlice):
                 async with connection.transaction():
                     values = []
                     for resource_type in type_to_agent.keys():
-                        if resource_type not in type_to_module_data:
-                            LOGGER.debug("No inmanta module information was provided for resource type %s." % resource_type)
-                            continue
-                        for module_name in type_to_module_data[resource_type]:
-                            values.append(
-                                (
-                                    cm_version,
-                                    environment,
-                                    type_to_agent[resource_type],
-                                    module_name,
-                                    module_version_info[module_name]["version"],
+                        for agent_name in type_to_agent[resource_type]:
+                            if resource_type not in type_to_module_data:
+                                LOGGER.debug("No inmanta module information was provided for resource type %s." % resource_type)
+                                continue
+                            for module_name in type_to_module_data[resource_type]:
+                                values.append(
+                                    (
+                                        cm_version,
+                                        environment,
+                                        agent_name,
+                                        module_name,
+                                        module_version_info[module_name]["version"],
+                                    )
                                 )
-                            )
 
                     await connection.executemany(
                         query,
