@@ -904,17 +904,18 @@ class OrchestrationService(protocol.ServerSlice):
                     async for record in connection.cursor(query, *values):
                         in_db_module_data[record["module_name"]][record["agent_name"]] = record["module_version"]
 
-                for resource_type, agent_name in type_to_agent.items():
-                    if resource_type not in type_to_module_data:
-                        LOGGER.debug("No inmanta module information was provided for resource type %s." % resource_type)
-                        continue
-                    for module_name in type_to_module_data[resource_type]:
-                        expected_module_version = module_version_info[module_name]["version"]
+                for resource_type in type_to_agent.keys():
+                    for agent_name in type_to_agent[resource_type]:
+                        if resource_type not in type_to_module_data:
+                            LOGGER.debug("No inmanta module information was provided for resource type %s." % resource_type)
+                            continue
+                        for module_name in type_to_module_data[resource_type]:
+                            expected_module_version = module_version_info[module_name]["version"]
 
-                        if in_db_module_data[module_name][agent_name] != expected_module_version:
-                            raise BadRequest(
-                                "Cannot perform partial export because of version mismatch for module %s." % module_name
-                            )
+                            if in_db_module_data[module_name][agent_name] != expected_module_version:
+                                raise BadRequest(
+                                    "Cannot perform partial export because of version mismatch for module %s." % module_name
+                                )
 
             if type_to_agent and not all([module_version_info is not None, type_to_module_data is not None]):
                 raise BadRequest(
