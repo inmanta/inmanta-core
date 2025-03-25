@@ -744,7 +744,7 @@ class OrchestrationService(protocol.ServerSlice):
         ]
         updated_resource_sets: abc.Set[str] = {sr for sr in resource_sets.values() if sr is not None}
         deleted_resource_sets_as_set: abc.Set[str] = set(removed_resource_sets)
-        async with (connection.transaction()):
+        async with connection.transaction():
             try:
                 if is_partial_update:
                     # Make mypy happy

@@ -31,31 +31,19 @@ from logging import DEBUG
 import py
 import pytest
 
-import inmanta
 from inmanta import config, loader
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
-from inmanta.const import PLUGINS_PACKAGE
 from inmanta.data import PipConfig
 from inmanta.env import process_env
 from inmanta.loader import PythonModule, SourceInfo
-from inmanta.module import ModuleV2
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
 from inmanta.util import get_compiler_version, hash_file
-from packaging.version import Version
-from utils import (
-    ClientHelper,
-    DummyCodeManager,
-    PipIndex,
-    log_index,
-    module_from_template,
-    retry_limited,
-    wait_until_deployment_finishes,
-)
+from utils import ClientHelper, DummyCodeManager, log_index, retry_limited, wait_until_deployment_finishes
 
 LOGGER = logging.getLogger(__name__)
 

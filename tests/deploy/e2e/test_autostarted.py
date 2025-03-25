@@ -39,7 +39,7 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from typing_extensions import Optional
-from utils import ClientHelper, retry_limited, wait_until_deployment_finishes, LOGGER
+from utils import LOGGER, ClientHelper, retry_limited, wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
