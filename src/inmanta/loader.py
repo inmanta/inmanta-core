@@ -448,6 +448,7 @@ def strip_py(module: list[str]) -> list[str]:
         return list(chain(init, [last[:-4]]))
     return module
 
+
 def split(path: str) -> Iterator[str]:
     """
     Returns an iterator over path's parts.
@@ -458,6 +459,7 @@ def split(path: str) -> Iterator[str]:
     yield from split(init)
     if last != "":
         yield last
+
 
 def convert_module_path_to_namespace(path: str) -> str:
     """
@@ -474,8 +476,10 @@ def convert_module_path_to_namespace(path: str) -> str:
     parts: list[str] = list(split(path))
 
     if len(parts) == 1 or parts[0] != const.PLUGINS_PACKAGE:
-        raise Exception(f"Error parsing module path: expected '{const.PLUGINS_PACKAGE}/some_module/some_submodule_file', got {path}")
-    return ".".join([const.PLUGINS_PACKAGE,  *strip_py(parts[1:])])
+        raise Exception(
+            f"Error parsing module path: expected '{const.PLUGINS_PACKAGE}/some_module/some_submodule_file', got {path}"
+        )
+    return ".".join([const.PLUGINS_PACKAGE, *strip_py(parts[1:])])
 
 
 def convert_relative_path_to_module(path: str) -> str:
@@ -497,8 +501,6 @@ def convert_relative_path_to_module(path: str) -> str:
 
     if len(parts) == 1 or parts[1] != PLUGIN_DIR:
         raise Exception(f"Error parsing module path: expected 'some_module/{PLUGIN_DIR}/some_submodule', got {path}")
-
-
 
     top_level_inmanta_module: str = parts[0]
     inmanta_submodule: list[str] = parts[2:]
