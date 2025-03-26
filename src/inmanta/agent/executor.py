@@ -170,7 +170,7 @@ class ExecutorBlueprint(EnvBlueprint):
     def from_specs(cls, code: typing.Collection["ModuleInstallSpec"]) -> "ExecutorBlueprint":
         """
         Create a single ExecutorBlueprint by combining the blueprint(s) of several
-        ResourceInstallSpec by merging respectively their module sources and their
+        ModuleInstallSpec by merging respectively their module sources and their
         requirements and making sure they all share the same pip config.
         """
 
@@ -277,28 +277,12 @@ class ModuleInstallSpec:
     :ivar module_name: fully qualified name for this module
     :ivar module_version: the version of the module to use
     :ivar model_version: the version of the model to use
-    :ivar blueprint: the associate install blueprint
+    :ivar blueprint: the associated install blueprint
 
     """
 
     module_name: str
     module_version: str
-    model_version: int
-    blueprint: ExecutorBlueprint
-
-
-@dataclass(frozen=True)
-class ResourceInstallSpec:
-    """
-    This class encapsulates the requirements for a specific resource type for a specific model version.
-
-    :ivar resource_type: fully qualified name for this resource type e.g. std::testing::NullResource
-    :ivar model_version: the version of the model to use
-    :ivar blueprint: the associate install blueprint
-
-    """
-
-    resource_type: ResourceType
     model_version: int
     blueprint: ExecutorBlueprint
 
@@ -565,7 +549,7 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
-    failed_modules: FailedModules  # TODO still useful ?
+    failed_modules: FailedModules
 
     @abc.abstractmethod
     async def execute(

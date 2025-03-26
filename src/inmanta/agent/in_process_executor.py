@@ -554,9 +554,9 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param agent_uri: The name of the host on which the agent is running.
-        :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
-            which resource types it can act on and all necessary information to install the relevant
-            handler code in its venv. Must have at least one element.
+        :param code: Collection of ModuleInstallSpec defining the configuration for the Executor i.e.
+            all necessary information to install the relevant handler code in its venv. Must have
+            at least one element.
         :return: An Executor instance
         """
         if not self._running:

@@ -932,11 +932,11 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
             os.makedirs(storage_for_blueprint, exist_ok=True)
             failed_types = await executor.connection.call(
                 InitCommand(
-                    venv.env_path,
-                    storage_for_blueprint,
-                    self.session_gid,
-                    [x.for_transport() for x in blueprint.sources],
-                    self.venv_checkup_interval,
+                    venv_path=venv.env_path,
+                    storage_folder=storage_for_blueprint,
+                    session_gid=self.session_gid,
+                    sources=[x.for_transport() for x in blueprint.sources],
+                    venv_touch_interval=self.venv_checkup_interval,
                 )
             )
             LOGGER.debug(
@@ -1054,7 +1054,7 @@ class MPManager(
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param agent_uri: The name of the host on which the agent is running.
-        :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
+        :param code: Collection of ModuleInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
             handler code in its venv. Must have at least one element.
         :return: An Executor instance

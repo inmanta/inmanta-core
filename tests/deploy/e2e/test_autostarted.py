@@ -883,52 +883,52 @@ std::testing::NullResource(name="test", agentname="agent1", value="test")
 
     # Wait for this resource to enter the unavailable state
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
-
+    assert False
     # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
     # something is moving
-    await wait_for_consistent_children(
-        current_pid=current_pid,
-        should_scheduler_be_defined=True,
-        should_fork_server_be_defined=False,
-        nb_executor_to_be_defined=0,
-    )
+    # await wait_for_consistent_children(
+    #     current_pid=current_pid,
+    #     should_scheduler_be_defined=True,
+    #     should_fork_server_be_defined=False,
+    #     nb_executor_to_be_defined=0,
+    # )
 
-    result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
-    assert result.code == 200
-
-    # Let's pretend that the server crashes
-    await asyncio.wait_for(server.stop(), timeout=20)
-    ibl = InmantaBootloader(configure_logging=False)
-    async_finalizer.add(partial(ibl.stop, timeout=20))
-
-    # Wait for the scheduler to shut down
-    await wait_for_consistent_children(
-        current_pid=current_pid,
-        should_scheduler_be_defined=False,
-        should_fork_server_be_defined=False,
-        nb_executor_to_be_defined=0,
-    )
-
-    # Let's restart the server
-    await ibl.start()
-
-    # Everything should be consistent in DB: the agent should still be paused
-    await assert_is_paused(client, environment, {"agent1": True})
-
-    # Wait for the scheduler to start
-    await wait_for_consistent_children(
-        current_pid=current_pid,
-        should_scheduler_be_defined=True,
-        should_fork_server_be_defined=False,
-        nb_executor_to_be_defined=0,
-    )
-
-    # Assert that the resource is not being deployed and remains in the unavailable state.
-    result = await client.resource_list(environment, deploy_summary=True)
-    assert result.code == 200
-    summary = result.result["metadata"]["deploy_summary"]
-    assert summary["total"] == 1, f"Unexpected summary: {summary}"
-    assert summary["by_state"]["unavailable"] == 1, f"Unexpected summary: {summary}"
+    # result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
+    # assert result.code == 200
+    #
+    # # Let's pretend that the server crashes
+    # await asyncio.wait_for(server.stop(), timeout=20)
+    # ibl = InmantaBootloader(configure_logging=False)
+    # async_finalizer.add(partial(ibl.stop, timeout=20))
+    #
+    # # Wait for the scheduler to shut down
+    # await wait_for_consistent_children(
+    #     current_pid=current_pid,
+    #     should_scheduler_be_defined=False,
+    #     should_fork_server_be_defined=False,
+    #     nb_executor_to_be_defined=0,
+    # )
+    #
+    # # Let's restart the server
+    # await ibl.start()
+    #
+    # # Everything should be consistent in DB: the agent should still be paused
+    # await assert_is_paused(client, environment, {"agent1": True})
+    #
+    # # Wait for the scheduler to start
+    # await wait_for_consistent_children(
+    #     current_pid=current_pid,
+    #     should_scheduler_be_defined=True,
+    #     should_fork_server_be_defined=False,
+    #     nb_executor_to_be_defined=0,
+    # )
+    #
+    # # Assert that the resource is not being deployed and remains in the unavailable state.
+    # result = await client.resource_list(environment, deploy_summary=True)
+    # assert result.code == 200
+    # summary = result.result["metadata"]["deploy_summary"]
+    # assert summary["total"] == 1, f"Unexpected summary: {summary}"
+    # assert summary["by_state"]["unavailable"] == 1, f"Unexpected summary: {summary}"
 
 
 @pytest.mark.slowtest

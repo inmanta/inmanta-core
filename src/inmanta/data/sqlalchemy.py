@@ -87,7 +87,7 @@ class ModulesForAgent(Base):
     __table_args__ = (
         ForeignKeyConstraint(
             ["cm_version", "environment"], ["configurationmodel.version", "configurationmodel.environment"], ondelete="CASCADE"
-        ),  # TODO add test for deletion: check this deleted when cm is deleted via regular api (non-sqlalchemy api)
+        ),
         ForeignKeyConstraint(["agent_name", "environment"], ["agent.name", "agent.environment"], ondelete="CASCADE"),
         ForeignKeyConstraint(
             ["module_name", "module_version", "environment"],
@@ -284,7 +284,7 @@ class ConfigurationModel(Base):
     resource: Mapped[List["Resource"]] = relationship("Resource", back_populates="configurationmodel")
     resourceaction: Mapped[List["ResourceAction"]] = relationship("ResourceAction", back_populates="configurationmodel")
     unknownparameter: Mapped[List["UnknownParameter"]] = relationship(
-        "UnknownParameter", back_populates="configurationmodel", overlaps="unknownparameter"
+        "UnknownParameter", back_populates="configurationmodel"
     )
 
 
@@ -648,10 +648,10 @@ class UnknownParameter(Base):
     resolved: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
     configurationmodel: Mapped["ConfigurationModel"] = relationship(
-        "ConfigurationModel", back_populates="unknownparameter", overlaps="unknownparameter"
+        "ConfigurationModel", back_populates="unknownparameter"
     )
     environment_: Mapped["Environment"] = relationship(
-        "Environment", back_populates="unknownparameter", overlaps="configurationmodel,unknownparameter"
+        "Environment", back_populates="unknownparameter"
     )
 
 

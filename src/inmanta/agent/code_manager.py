@@ -26,7 +26,7 @@ from inmanta.agent import executor
 from inmanta.agent.executor import ModuleInstallSpec
 from inmanta.data import get_session
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
-from inmanta.loader import ModuleSource
+from inmanta.loader import ModuleSource, convert_relative_path_to_module, convert_module_path_to_namespace
 from inmanta.protocol import Client
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
@@ -69,9 +69,7 @@ class CodeManager:
         Inmanta modules sources) required to deploy resources on a given agent for a given configuration
         model version.
 
-        :return: Tuple of:
-            - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
-            - set of invalid resource_types (no handler code and/or invalid pip config)
+        :return: collection of ModuleInstallSpec for this agent and this model version.
         """
 
         module_install_specs = []
@@ -150,7 +148,8 @@ class CodeManager:
                         ),
                     )
                 )
+
+        LOGGER.debug(f"{module_install_specs=}")
         if not module_install_specs:
             raise CouldNotResolveCode(agent_name, model_version)
-        LOGGER.debug(f"module_install_specs{module_install_specs=}")
         return module_install_specs

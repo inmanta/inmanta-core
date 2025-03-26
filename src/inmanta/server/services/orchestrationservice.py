@@ -840,21 +840,21 @@ class OrchestrationService(protocol.ServerSlice):
             ) -> None:
 
                 query = """
-                            INSERT INTO modules_for_agent(
-                                cm_version,
-                                environment,
-                                agent_name,
-                                module_name,
-                                module_version
-                            ) VALUES(
-                                $1,
-                                $2,
-                                $3,
-                                $4,
-                                $5
-                            )
-                            ON CONFLICT DO NOTHING;
-                        """
+                    INSERT INTO modules_for_agent(
+                        cm_version,
+                        environment,
+                        agent_name,
+                        module_name,
+                        module_version
+                    ) VALUES(
+                        $1,
+                        $2,
+                        $3,
+                        $4,
+                        $5
+                    )
+                    ON CONFLICT DO NOTHING;
+                """
                 async with connection.transaction():
                     values = []
                     for resource_type in type_to_agent.keys():

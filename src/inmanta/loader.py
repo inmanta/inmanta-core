@@ -433,6 +433,51 @@ class ByteCodePluginModuleLoader(SourcelessFileLoader):
         return self.path == ""
 
 
+def strip_py(module: list[str]) -> list[str]:
+    """
+    Strip __init__.py or .py file extension from module parts.
+    """
+    if module == []:
+        return []
+    init, last = module[:-1], module[-1]
+    if last == "__init__.py" or last == "__init__.pyc":
+        return init
+    if last.endswith(".py"):
+        return list(chain(init, [last[:-3]]))
+    if last.endswith(".pyc"):
+        return list(chain(init, [last[:-4]]))
+    return module
+
+def split(path: str) -> Iterator[str]:
+    """
+    Returns an iterator over path's parts.
+    """
+    if path == "":
+        return iter(())
+    init, last = os.path.split(path)
+    yield from split(init)
+    if last != "":
+        yield last
+
+def convert_module_path_to_namespace(path: str) -> str:
+    """
+    Returns the fully qualified module name given a path, relative to the module directory.
+    For example
+        convert_module_path_to_namespace("inmanta_plugins/my_mod/my_submod")
+        == convert_module_path_to_namespace("inmanta_plugins/my_mod/my_submod.py")
+        == convert_module_path_to_namespace("inmanta_plugins/my_mod/my_submod/__init__.py")
+        == "inmanta_plugins.my_mod.my_submod".
+    """
+    if path.startswith("/"):
+        raise Exception("Error parsing module path: expected relative path, got %s" % path)
+
+    parts: list[str] = list(split(path))
+
+    if len(parts) == 1 or parts[0] != const.PLUGINS_PACKAGE:
+        raise Exception(f"Error parsing module path: expected '{const.PLUGINS_PACKAGE}/some_module/some_submodule_file', got {path}")
+    return ".".join([const.PLUGINS_PACKAGE,  *strip_py(parts[1:])])
+
+
 def convert_relative_path_to_module(path: str) -> str:
     """
     Returns the fully qualified module name given a path, relative to the module directory.
@@ -445,17 +490,6 @@ def convert_relative_path_to_module(path: str) -> str:
     if path.startswith("/"):
         raise Exception("Error parsing module path: expected relative path, got %s" % path)
 
-    def split(path: str) -> Iterator[str]:
-        """
-        Returns an iterator over path's parts.
-        """
-        if path == "":
-            return iter(())
-        init, last = os.path.split(path)
-        yield from split(init)
-        if last != "":
-            yield last
-
     parts: list[str] = list(split(path))
 
     if parts == []:
@@ -464,20 +498,7 @@ def convert_relative_path_to_module(path: str) -> str:
     if len(parts) == 1 or parts[1] != PLUGIN_DIR:
         raise Exception(f"Error parsing module path: expected 'some_module/{PLUGIN_DIR}/some_submodule', got {path}")
 
-    def strip_py(module: list[str]) -> list[str]:
-        """
-        Strip __init__.py or .py file extension from module parts.
-        """
-        if module == []:
-            return []
-        init, last = module[:-1], module[-1]
-        if last == "__init__.py" or last == "__init__.pyc":
-            return init
-        if last.endswith(".py"):
-            return list(chain(init, [last[:-3]]))
-        if last.endswith(".pyc"):
-            return list(chain(init, [last[:-4]]))
-        return module
+
 
     top_level_inmanta_module: str = parts[0]
     inmanta_submodule: list[str] = parts[2:]
@@ -676,7 +697,9 @@ class PythonModule:
 class SourceInfo(BaseModel):
     """This class is used to store information related to source code information"""
 
+    # absolute path to this file
     path: str
+    # python module name e.g. "inmanta_plugins.my_mod.my_submod"
     module_name: str
 
     @computed_field  # type: ignore[prop-decorator]

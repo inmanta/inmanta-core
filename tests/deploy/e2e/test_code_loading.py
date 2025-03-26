@@ -183,7 +183,7 @@ async def test_agent_installs_dependency_containing_extras(
             files_in_module=[
                 {
                     "path": "dummy/path/test/plugins/dummy_file",
-                    "module_name": "test",
+                    "module_name": "inmanta_plugins.test",
                     "hash": hash,
                     "content": "file content",
                     "requires": ["pkg[optional-a]"],
@@ -286,7 +286,7 @@ async def test_agent_code_loading_with_failure(
             files_in_module=[
                 {
                     "path": "dummy/path/test/plugins/dummy_file",
-                    "module_name": "test",
+                    "module_name": "inmanta_plugins.test",
                     "hash": hash,
                     "content": "file content",
                     "requires": [],
