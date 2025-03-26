@@ -385,6 +385,7 @@ class MethodProperties:
         strict_typing: bool = True,
         enforce_auth: bool = True,
         varkw: bool = False,
+        set_method_properties_on_fnc: bool = True,
     ) -> None:
         """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -452,6 +453,11 @@ class MethodProperties:
 
         self._validate_function_types(typed)
         self.argument_validator = self.arguments_to_pydantic()
+
+        if set_method_properties_on_fnc:
+            if hasattr(self.function, "__method_properties__"):
+                raise Exception(f"Method properties already set on method {self.function.__name__}")
+            self.function.__method_properties__ = self
 
     def is_internal_endpoint(self) -> bool:
         """
