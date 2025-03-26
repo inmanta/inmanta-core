@@ -75,7 +75,7 @@ class AuthorizationMetadata:
 
     @classmethod
     def register_auth_metadata(cls, metadata: "AuthorizationMetadata") -> None:
-        cls.metadata[metadata.method_properties.function.__name] = metadata
+        cls.metadata[metadata.method_properties.function_name] = metadata
 
     @classmethod
     def has_metadata_for(cls, method_name: str) -> bool:
