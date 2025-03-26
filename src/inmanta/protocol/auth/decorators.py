@@ -51,8 +51,7 @@ def auth(auth_label: str, read_only: bool, environment_param: str | None = None)
                     f"environment_param {environment_param} is not a parameter of the API endpoint {fnc.__name__}"
                 )
         method_properties = fnc.__method_properties__
-        client_types = list(method_properties.client_types)
-        metadata = AuthorizationMetadata(fnc.__name__, auth_label, read_only, environment_param, client_types)
+        metadata = AuthorizationMetadata(method_properties, auth_label, read_only, environment_param)
         AuthorizationMetadata.register_auth_metadata(metadata)
         return fnc
     return wrapper
@@ -64,22 +63,39 @@ class AuthorizationMetadata:
 
     def __init__(
         self,
-        fnc_name: str,
+        method_properties: MethodProperties,
         auth_label: str,
         read_only: bool,
         environment_param: str | None,
-        client_types: Sequence[const.ClientType],
     ) -> None:
-        self.fnc_name = fnc_name
+        self.method_properties = method_properties
         self.auth_label = auth_label
         self.read_only = read_only
         self.environment_param = environment_param
-        self.client_types = client_types
 
     @classmethod
     def register_auth_metadata(cls, metadata: "AuthorizationMetadata") -> None:
-        cls.metadata[metadata.fnc_name] = metadata
+        cls.metadata[metadata.method_properties.function.__name] = metadata
 
     @classmethod
     def has_metadata_for(cls, method_name: str) -> bool:
         return method_name in cls.metadata
+
+    @classmethod
+    def get_open_policy_agent_data(cls) -> dict[str, object]:
+        """
+        Return the information about the different endpoints that exist
+        in the format required by the open policy agent policy engine.
+        """
+        endpoints = {}
+        for md in cls.metadata:
+            method_properties = md.method_properties
+            endpoint_id = f"{method_properties.operation} {method_properties.path}"
+            endpoints[endpoint_id] = {
+                "client_types": method_properties.client_types,
+                "auth_label": md.auth_label,
+                "read_only": md.read_only,
+                "environment_param": md.environment_param,
+            }
+        return {"endpoints": endpoints}
+

@@ -355,14 +355,14 @@ class MethodProperties:
         Register new method properties. Multiple properties on a method is supported but the (URL, API version) combination has
         to be unique.
         """
-        current_list = [(x.path, x.api_version) for x in cls.methods[properties.function.__name__]]
+        current_list = [(x.path, x.api_version) for x in cls.methods[properties.function_name]]
         if (properties.path, properties.api_version) in current_list:
             raise Exception(
-                f"Method {properties.function.__name__} already has a "
+                f"Method {properties.function_name} already has a "
                 f"method definition for api path {properties.path} and API version {properties.api_version}"
             )
 
-        cls.methods[properties.function.__name__].append(properties)
+        cls.methods[properties.function_name].append(properties)
 
     def __init__(
         self,
@@ -439,6 +439,7 @@ class MethodProperties:
         self._strict_typing = strict_typing
         self._enforce_auth = enforce_auth
         self.function = function
+        self.function_name = function.__name__
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
         self._return_type: Optional[type] = None
@@ -456,7 +457,7 @@ class MethodProperties:
 
         if set_method_properties_on_fnc:
             if hasattr(self.function, "__method_properties__"):
-                raise Exception(f"Method properties already set on method {self.function.__name__}")
+                raise Exception(f"Method properties already set on method {self.function_name}")
             self.function.__method_properties__ = self
 
     def is_internal_endpoint(self) -> bool:
@@ -514,7 +515,7 @@ class MethodProperties:
                 return (param.annotation, None)
 
         return create_model(
-            f"{self.function.__name__}_arguments",
+            f"{self.function_name}_arguments",
             **{param.name: to_tuple(param) for param in sig.parameters.values() if param.name != self._varkw_name},
             __base__=DateTimeNormalizerModel,
         )
