@@ -126,6 +126,8 @@ def method(
             enforce_auth=enforce_auth,
         )
         common.MethodProperties.register_method(properties)
+        if hasattr(func, "__method_properties__"):
+            raise Exception(f"Method properties already set on method {fnc.__name__}")
         func.__method_properties__ = properties
         return func
 
@@ -183,6 +185,8 @@ def typedmethod(
     """
 
     def wrapper(func: MethodT) -> MethodT:
+        if hasattr(func, "__method_properties__"):
+            raise Exception(f"Method properties already set on method {fnc.__name__}")
         paths = path if isinstance(path, list) else [path]
         for current_path in paths:
             properties = common.MethodProperties(
@@ -207,6 +211,8 @@ def typedmethod(
                 varkw=varkw,
             )
             common.MethodProperties.register_method(properties)
+            if not hasattr(func, "__method_properties__"):
+                func.__method_properties__ = properties
         return func
 
     return wrapper

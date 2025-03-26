@@ -172,10 +172,10 @@ class Server(endpoints.Endpoint):
         """
         for method_name, method_properties in common.MethodProperties.methods.items():
             for properties in method_properties:
-                # All endpoints that are not agent-specific, must have an @auth annotation.
-                is_agent_only_endpoint = properties.is_internal_endpoint()
+                # All external endpoints, must have an @auth annotation.
+                is_internal_endpoint = properties.is_internal_endpoint()
                 has_auth_annotation = auth_decorators.AuthorizationMetadata.has_metadata_for(method_name)
-                if not is_agent_only_endpoint and not has_auth_annotation:
+                if not is_internal_endpoint and not has_auth_annotation:
                     raise Exception(f"API endpoint {method_name} is missing an @auth annotation.")
 
     async def start(self) -> None:

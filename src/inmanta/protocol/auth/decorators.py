@@ -23,7 +23,7 @@ from inmanta.protocol.common import MethodProperties
 
 def auth(auth_label: str, read_only: bool, environment_param: str | None = None) -> Callable[..., Callable]:
     """
-    A decorator used to add authorization-related metadata to a API endpoint.
+    A decorator used to add authorization-related metadata to an API endpoint.
     This metadata can be used when writing an authorization policy. The @auth
     decorator always needs to be defined above the @method or @typedmethod
     decorator.
@@ -41,8 +41,8 @@ def auth(auth_label: str, read_only: bool, environment_param: str | None = None)
     def wrapper(fnc: Callable[..., Callable]) -> Callable[..., Callable]:
         if not hasattr(fnc, "__method_properties__"):
             raise Exception(
-                f"@method decorator not found on method {fnc.__name__}."
-                " Make sure the @auth decorator is always set above the @method decorator"
+                f"@method/@typedmethod decorator not found on method {fnc.__name__}."
+                " Make sure the @auth decorator is always set above the @method/@typedmethod decorator."
             )
         if environment_param is not None:
             signature = inspect.signature(fnc)
