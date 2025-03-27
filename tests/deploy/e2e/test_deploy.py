@@ -492,26 +492,20 @@ async def test_deploy_to_empty(server, client, clienthelper, environment, agent,
     env_id = environment
     scheduler = agent.scheduler
 
-    async def make_version(is_different=False):
-        """
-
-        :param is_different: make the standard version or one with a change
-        :return:
-        """
+    async def make_version():
         version = await clienthelper.get_version()
         agent = "agent1"
         resources = [
-                    {
-                        "key": "key1",
-                        "value": "value",
-                        "id": "test::Resourcex[%s,key=key1],v=%d" % (agent, version),
-                        "requires": [],
-                        "purged": False,
-                        "send_event": False,
-                        "attributes": {"A": "B"},
-                    }
-
-            ]
+            {
+                "key": "key1",
+                "value": "value",
+                "id": "test::Resourcex[%s,key=key1],v=%d" % (agent, version),
+                "requires": [],
+                "purged": False,
+                "send_event": False,
+                "attributes": {"A": "B"},
+            }
+        ]
         return version, resources
 
     logger.info("setup done")
