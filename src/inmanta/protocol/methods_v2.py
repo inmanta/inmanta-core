@@ -701,8 +701,7 @@ def resource_list(
                 For example: `filter.status=!orphaned` will return all the resources that are not in 'orphaned' state.
                 If multiple values are provided to the inverted filter, resources are returned if they don't match
                 any of the filter values.
-                For example: `?filter.status=!deployed&filter.status=!available` returns instances whose status
-                is neither deployed nor available.
+                For example: `?filter.status=!deployed&filter.status=!available` returns all instances except those whose status is deployed or available.
                 The values for the 'agent', 'resource_type' and 'value' filters are matched partially.
     :param sort: Return the results sorted according to the parameter value.
                 It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `resource_type.desc`
