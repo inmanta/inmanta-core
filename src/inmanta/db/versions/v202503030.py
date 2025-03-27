@@ -20,11 +20,8 @@ import hashlib
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import NewType, Any
-from collections.abc import Sequence
 
 from asyncpg import Connection
-from typing_extensions import TypeVar
 
 from inmanta import const, loader
 
@@ -86,7 +83,6 @@ async def update(connection: Connection) -> None:
 
     await connection.execute(schema)
 
-
     code_data: dict[str, dict[int, dict[str, set[tuple[str, str, str, set[str]]]]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(set))
     )
@@ -109,7 +105,6 @@ async def update(connection: Connection) -> None:
             resource_type: str = str(res["resource"])
 
             assert isinstance(model_version, int)
-
 
             for file_hash, file_data in source_refs.items():  # type: ignore
                 file_path, python_module_name, requirements = file_data
@@ -146,7 +141,7 @@ async def update(connection: Connection) -> None:
             return module_version, list(reqs)
 
         def compute_files_in_module(
-            source_info:set[tuple[str, str, str, set[str]]],
+            source_info: set[tuple[str, str, str, set[str]]],
             module_name: str,
             environment: str,
             module_version: str,
