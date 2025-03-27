@@ -485,7 +485,7 @@ class LoggingConfigBuilder:
                         "level": "INFO",
                         "propagate": True,
                         "handlers": ["scheduler_handler"],
-                    }
+                    },
                 }
             )
 

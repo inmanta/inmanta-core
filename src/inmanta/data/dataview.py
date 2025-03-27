@@ -509,9 +509,9 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
         status_filter_type, status_filter_fields = self.filter.get("status", (None, {}))
         assert status_filter_type is None or status_filter_type == inmanta.data.QueryType.COMBINED
         assert isinstance(status_filter_fields, dict)
-        self.drop_orphans = ("orphaned" in status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []) or (
+        self.drop_orphans = "orphaned" in status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []) or (
             "orphaned" not in status_filter_fields.get(inmanta.data.QueryType.CONTAINS, ["orphaned"])
-        )) and len(status_filter_fields.keys()) == 1
+        )
 
         if self.drop_orphans:
             # clean filter for orphans
