@@ -322,7 +322,7 @@ class CodeLoader:
             LOGGER.info("Deploying code (hv=%s, module=%s)", module_source.hash_value, module_source.name)
 
             all_modules_dir: str = os.path.join(self.__code_dir, MODULE_DIR)
-            relative_module_path: str = module_source.name
+            relative_module_path: str = convert_module_to_relative_path(module_source.name)
             # Treat all modules as a package for simplicity: module is a dir with source in __init__.py
             module_dir: str = os.path.join(all_modules_dir, relative_module_path)
 
