@@ -472,6 +472,8 @@ def convert_module_path_to_namespace(path: str) -> str:
     """
     if path.startswith("/"):
         raise Exception("Error parsing module path: expected relative path, got %s" % path)
+    if path.startswith(f"{const.PLUGINS_PACKAGE}."):
+        return path
 
     parts: list[str] = list(split(path))
 
@@ -479,7 +481,7 @@ def convert_module_path_to_namespace(path: str) -> str:
         raise Exception(
             f"Error parsing module path: expected '{const.PLUGINS_PACKAGE}/some_module/some_submodule_file', got {path}"
         )
-    return ".".join([const.PLUGINS_PACKAGE, *strip_py(parts[1:])])
+    return ".".join(strip_py(parts))
 
 
 def convert_relative_path_to_module(path: str) -> str:
