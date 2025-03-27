@@ -473,6 +473,87 @@ async def test_deploy_empty(server, client, clienthelper, environment, agent):
     assert result.code == 200
     assert result.result["model"]["released"]
 
+    async def is_active():
+        r_versions = await client.list_desired_state_versions(environment)
+        assert r_versions.code == 200
+        versions = r_versions.result["data"]
+        assert len(versions) == 1
+        return versions[0]["status"] == "active"
+
+    await retry_limited(is_active, 1)
+
+
+async def test_deploy_to_empty(server, client, clienthelper, environment, agent, resource_container):
+    """
+    Test deployment of empty model after a not-empty model
+
+    Ensure we unload all resources
+    """
+    env_id = environment
+    scheduler = agent.scheduler
+
+    async def make_version():
+        version = await clienthelper.get_version()
+        agent = "agent1"
+        resources = [
+            {
+                "key": "key1",
+                "value": "value",
+                "id": "test::Resourcex[%s,key=key1],v=%d" % (agent, version),
+                "requires": [],
+                "purged": False,
+                "send_event": False,
+                "attributes": {"A": "B"},
+            }
+        ]
+        return version, resources
+
+    logger.info("setup done")
+    version1, resources = await make_version()
+    await clienthelper.put_version_simple(version=version1, resources=resources)
+
+    logger.info("first version pushed")
+
+    # deploy and wait until one is ready
+    result = await client.release_version(env_id, version1)
+    assert result.code == 200
+
+    await clienthelper.wait_for_released(version1)
+
+    logger.info("first version released")
+
+    await clienthelper.wait_for_deployed(version=1)
+
+    assert len(scheduler._state.resource_state) == 1
+
+    version = await clienthelper.get_version()
+    resources = []
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+
+    # do a deploy
+    result = await client.release_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["released"]
+
+    async def is_active():
+        r_versions = await client.list_desired_state_versions(environment)
+        assert r_versions.code == 200
+        versions = r_versions.result["data"]
+        assert len(versions) == 2
+        return versions[0]["status"] == "active"
+
+    await retry_limited(is_active, 1)
+    assert len(scheduler._state.resource_state) == 0
+
 
 async def test_deploy_with_undefined(server, client, resource_container, agent, environment, clienthelper):
     """
