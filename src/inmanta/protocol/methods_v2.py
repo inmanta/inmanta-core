@@ -702,7 +702,7 @@ def resource_list(
                 If multiple values are provided to the inverted filter, resources are returned if they don't match
                 any of the filter values.
                 For example: `?filter.status=!deployed&filter.status=!available`
-                make foreturns all instances except those whose status is deployed or available.
+                returns all instances except those whose status is deployed or available.
                 The values for the 'agent', 'resource_type' and 'value' filters are matched partially.
     :param sort: Return the results sorted according to the parameter value.
                 It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `resource_type.desc`
