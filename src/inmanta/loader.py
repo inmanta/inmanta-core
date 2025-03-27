@@ -330,6 +330,11 @@ class CodeLoader:
                 os.path.join(all_modules_dir, pathlib.PurePath(pathlib.PurePath(relative_module_path).parts[0]))
             )
 
+            LOGGER.debug(f"install_source {all_modules_dir=}")
+            LOGGER.debug(f"install_source {relative_module_path=}")
+            LOGGER.debug(f"install_source {module_dir=}")
+            LOGGER.debug(f"install_source {package_dir=}")
+
             if module_source.is_byte_code:
                 init_file = "__init__.pyc"
                 alternate_file = "__init__.py"
@@ -342,6 +347,8 @@ class CodeLoader:
                 Make sure __init__.py files exist for this package and all parent packages. Required for compatibility
                 with pre-2020.4 inmanta clients because they don't necessarily upload the whole package.
                 """
+                LOGGER.debug(f"touch_inits {directory=}")
+
                 normdir: str = os.path.normpath(directory)
                 if normdir == package_dir:
                     return
