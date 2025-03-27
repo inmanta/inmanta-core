@@ -1,0 +1,6 @@
+description: Ensure empty versions are correctly passed to the scheduler
+issue-nr: 8799
+change-type: patch
+destination-branches: [master, iso8]
+sections:
+  bugfix: "{{description}}"
