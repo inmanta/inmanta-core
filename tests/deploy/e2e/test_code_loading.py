@@ -18,12 +18,8 @@ Contact: code@inmanta.com
 
 import asyncio
 import base64
-import hashlib
 import logging
-import os
 import pathlib
-import py_compile
-import tempfile
 import uuid
 from collections.abc import Sequence
 from logging import DEBUG
@@ -31,14 +27,14 @@ from logging import DEBUG
 import py
 import pytest
 
-from inmanta import config, loader
+from inmanta import config
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.data import PipConfig
 from inmanta.env import process_env
-from inmanta.loader import PythonModule, SourceInfo
+from inmanta.loader import PythonModule
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
@@ -76,86 +72,6 @@ async def agent(server, environment, deactive_venv):
     yield a
 
     await a.stop()
-
-
-async def make_source_structure(
-    into: dict[str, PythonModule],
-    file: str,
-    module: str,
-    source: str,
-    client: Client,
-    byte_code: bool = False,
-    dependencies: list[str] = [],
-) -> str:
-    """
-    :param into: dict to populate:
-        # - key = hash value of the file
-        # - value = tuple (file_name, module, dependencies)
-        - key = module name eg std
-        - value = dict{
-            module_name eg std -> TODO  can go maybe ?
-            module_version
-            files_in_module : list [
-                dict {
-                    path: str
-                    fq mod name inmanta_plugins.std.resources',
-                    hash: str
-                    requires list[str]
-                }
-            ]
-        }
-
-        'module_name': 'std',
-        'module_version': '6e929def427efefe814ce4ae0c00a9653628fdcb',
-        'files_in_module': [{
-                                'path': '/tmp/tmpskd9n7zx/std/plugins/resources.py',
-                                'module_name': 'inmanta_plugins.std.resources',
-                                'hash': '783979f77d1a40fa9b9c54c445c6f090de5797a1',
-                                'requires': ['Jinja2>=3.1,<4', 'email_validator>=1.3,<3', 'pydantic>=1.10,<3',
-                                             'inmanta-core>=8.7.0.dev']}, {
-                                'path': '/tmp/tmpskd9n7zx/std/plugins/types.py',
-                                'module_name': 'inmanta_plugins.std.types',
-                                'hash': '4ac629bdc461bf185971b82b4fc3dd457fba3fdd',
-                                'requires': ['Jinja2>=3.1,<4', 'email_validator>=1.3,<3', 'pydantic>=1.10,<3',
-                                             'inmanta-core>=8.7.0.dev']}, {
-                                'path': '/tmp/tmpskd9n7zx/std/plugins/__init__.py',
-                                'module_name': 'inmanta_plugins.std',
-                                'hash': '835f0e49da1e099d13e87b95d7f296ff68b57348',
-                                'requires': ['Jinja2>=3.1,<4', 'email_validator>=1.3,<3', 'pydantic>=1.10,<3',
-                                             'inmanta-core>=8.7.0.dev']}]}}
-
-    """
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        if byte_code:
-            py_file = os.path.join(tmpdirname, "test.py")
-            pyc_file = os.path.join(tmpdirname, "test.pyc")
-            with open(py_file, "w+") as fh:
-                fh.write(source)
-            py_compile.compile(py_file, cfile=pyc_file)
-            with open(pyc_file, "rb") as fh:
-                data = fh.read()
-            file_name = pyc_file
-        else:
-            py_file = os.path.join(tmpdirname, "test.py")
-            data = source.encode()
-            file_name = file
-
-        sha1sum = hashlib.new("sha1")
-        sha1sum.update(data)
-        hv: str = sha1sum.hexdigest()
-        into[module] = PythonModule(
-            name=module,
-            version=hv,
-            files_in_module=[
-                SourceInfo(
-                    path=file_name,
-                    module_name=loader.convert_relative_path_to_module(os.path.join(module, loader.PLUGIN_DIR, "__init__.py")),
-                )
-            ],
-        )
-        await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
-
-        return hv
 
 
 @pytest.mark.slowtest
@@ -203,7 +119,6 @@ async def test_agent_installs_dependency_containing_extras(
 
     assert res.code == 200
 
-    # module_version_info = {module_name: data["version"] for module_name, data in modules_data.items()}
     version = await clienthelper.get_version()
     resources = [
         {

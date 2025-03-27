@@ -37,7 +37,7 @@ from inmanta.const import AgentAction
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.util import get_compiler_version
 from typing_extensions import Optional
-from utils import LOGGER, ClientHelper, retry_limited, wait_until_deployment_finishes
+from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -51,7 +51,6 @@ async def wait_for_resources_in_state(client, environment: uuid.UUID, nr_of_reso
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
-        LOGGER.debug(summary)
         return summary["by_state"][state.value] == nr_of_resources
 
     await retry_limited(_done_waiting, timeout=10)
@@ -854,7 +853,6 @@ async def test_agent_paused_scheduler_server_restart(
     """
 
     async def return_none(*args, **kwargs):
-        print("returning NONE")
         return None
 
     # current_pid = os.getpid()

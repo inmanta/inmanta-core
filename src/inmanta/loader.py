@@ -122,7 +122,6 @@ class CodeManager:
         module_name = get_inmanta_module_name(instance.__module__)
 
         all_plugin_files: list[SourceInfo] = self._get_source_info_for_module(module_name)
-        LOGGER.debug(f"Registering {type_name=} from {instance=} in {module_name=} {all_plugin_files=}")
         self.__type_to_module[type_name].append(module_name)
 
         self.__type_file[type_name].update(source_info.path for source_info in all_plugin_files)

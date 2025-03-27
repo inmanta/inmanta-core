@@ -149,7 +149,6 @@ class CodeManager:
                     )
                 )
 
-        LOGGER.debug(f"{module_install_specs=}")
         if not module_install_specs:
             raise CouldNotResolveCode(agent_name, model_version)
         return module_install_specs
