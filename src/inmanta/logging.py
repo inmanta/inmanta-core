@@ -434,14 +434,8 @@ class LoggingConfigBuilder:
                     "class": "inmanta.logging.TornadoDebugLogHandler",
                     "level": "DEBUG",
                 },
-                "sqlalchemy_engine_log_handler": {"class": "inmanta.logging.SQLAlchemyEngineLogHandler", "level": "DEBUG"},
             }
         )
-
-        sqlalchemy_logger = logging.getLogger("sqlalchemy.engine")
-
-        for handler in sqlalchemy_logger.handlers[:]:
-            sqlalchemy_logger.removeHandler(handler)
 
         loggers.update(
             {
@@ -453,7 +447,7 @@ class LoggingConfigBuilder:
                 "sqlalchemy.engine": {
                     "level": "INFO",
                     "propagate": True,
-                    "handlers": ["sqlalchemy_engine_log_handler"],
+                    "handlers": [handler_root_logger],
                 },
             }
         )
@@ -1156,12 +1150,3 @@ class TornadoDebugLogHandler(logging.Handler):
             and record.msg.startswith("max_clients limit reached")
         ):
             self.logger.warning(record.msg)  # Log Tornado log as inmanta warnings
-
-
-class SQLAlchemyEngineLogHandler(logging.Handler):
-    def __init__(self, level: int = logging.NOTSET) -> None:
-        super().__init__(level)
-        self.logger = logging.getLogger("inmanta.sqlalchemy.engine")
-
-    def emit(self, record: logging.LogRecord) -> None:
-        pass
