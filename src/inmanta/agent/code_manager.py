@@ -137,7 +137,7 @@ class CodeManager:
                             requirements=res.requirements,
                             sources=[
                                 ModuleSource(
-                                    name=file.file_path,
+                                    name=convert_module_path_to_namespace(file.file_path),
                                     source=file.content,
                                     hash_value=file.file_content_hash,
                                     is_byte_code=False,
