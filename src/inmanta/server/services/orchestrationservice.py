@@ -1174,9 +1174,6 @@ class OrchestrationService(protocol.ServerSlice):
                     # This has to be done after the resources outside of the increment have been marked as deployed.
                     await model.update_fields(released=True, connection=connection)
 
-            if model.total == 0:
-                return 200, {"model": model}
-
             if connection.is_in_transaction():
                 raise RuntimeError(
                     "The release of a new version cannot be in a transaction! "
