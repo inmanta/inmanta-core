@@ -27,7 +27,6 @@ import os
 import os.path
 import uuid
 from dataclasses import dataclass, field
-from functools import partial
 
 import psutil
 import pytest
@@ -36,7 +35,6 @@ from psutil import NoSuchProcess, Process
 from inmanta import config, const, data
 from inmanta.const import AgentAction
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
-from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from typing_extensions import Optional
 from utils import LOGGER, ClientHelper, retry_limited, wait_until_deployment_finishes
@@ -859,7 +857,7 @@ async def test_agent_paused_scheduler_server_restart(
         print("returning NONE")
         return None
 
-    current_pid = os.getpid()
+    # current_pid = os.getpid()
 
     # First, configure everything
     config.Config.set("config", "environment", environment)

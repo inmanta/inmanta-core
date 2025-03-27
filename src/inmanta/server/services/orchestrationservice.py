@@ -670,7 +670,7 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
-        module_version_info: Optional[dict[str, "PythonModule"]],
+        module_version_info: Optional[dict[str, dict[str, Any]]],
         type_to_module_data: Optional[dict[str, set[str]]],
     ) -> None:
         """
@@ -833,9 +833,9 @@ class OrchestrationService(protocol.ServerSlice):
             async def register_code(
                 cm_version: int,
                 environment: uuid.UUID,
-                module_version_info: dict[str, "PythonModule"],
+                module_version_info: dict[str, dict[str, Any]],
                 type_to_module_data: dict[str, set[str]],
-                type_to_agent: dict[str, str],
+                type_to_agent:  dict[str, set[str]],
                 connection: Connection,
             ) -> None:
 
@@ -879,12 +879,12 @@ class OrchestrationService(protocol.ServerSlice):
                     )
 
             async def check_version_info(
-                partial_base_version,
-                environment,
-                module_version_info: dict[str, "PythonModule"],
-                type_to_module_data,
-                type_to_agent,
-                connection,
+                partial_base_version: int,
+                environment: uuid.UUID,
+                module_version_info: dict[str, dict[str, Any]],
+                type_to_module_data: dict[str, set[str]],
+                type_to_agent:  dict[str, set[str]],
+                connection: Connection,
             ) -> None:
                 query = """
                     SELECT
@@ -900,9 +900,9 @@ class OrchestrationService(protocol.ServerSlice):
                  """
                 async with connection.transaction():
                     values = [partial_base_version, environment]
-                    in_db_module_data = defaultdict(dict)
+                    in_db_module_data: dict[str, dict[str, str]] = defaultdict(dict)
                     async for record in connection.cursor(query, *values):
-                        in_db_module_data[record["module_name"]][record["agent_name"]] = record["module_version"]
+                        in_db_module_data[str(record["module_name"])][str(record["agent_name"])] = str(record["module_version"])
 
                 for resource_type in type_to_agent.keys():
                     for agent_name in type_to_agent[resource_type]:
@@ -922,8 +922,11 @@ class OrchestrationService(protocol.ServerSlice):
                     f"Missing source information for version {version}. Please make sure the following arguments "
                     f"are set when calling put_version: module_version_info, type_to_module_data"
                 )
+            assert module_version_info is not None
+            assert type_to_module_data is not None
 
             if is_partial_update:
+                assert partial_base_version is not None
                 await check_version_info(
                     partial_base_version, env.id, module_version_info, type_to_module_data, type_to_agent, connection
                 )
@@ -1004,7 +1007,7 @@ class OrchestrationService(protocol.ServerSlice):
         compiler_version: Optional[str] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
-        module_version_info: Optional[dict[str, "PythonModule"]] = None,
+        module_version_info: Optional[dict[str, dict[str, Any]]] = None,
         type_to_module_data: Optional[dict[str, set[str]]] = None,
     ) -> Apireturn:
         """

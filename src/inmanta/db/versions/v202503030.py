@@ -20,9 +20,11 @@ import hashlib
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import NewType
+from typing import NewType, Any
+from collections.abc import Sequence
 
 from asyncpg import Connection
+from typing_extensions import TypeVar
 
 from inmanta import const, loader
 
@@ -84,43 +86,51 @@ async def update(connection: Connection) -> None:
 
     await connection.execute(schema)
 
-    env_id = NewType("env_id", str)
-    model_version = NewType("model_version", int)
-    module_name = NewType("module_name", str)
-    module_version = NewType("module_version", str)
 
-    code_data: dict[env_id, dict[model_version, dict[module_name, set[tuple[str, str, str, set[str]]]]]] = defaultdict(
+    code_data: dict[str, dict[int, dict[str, set[tuple[str, str, str, set[str]]]]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(set))
     )
-    model_to_module_version_map: dict[int, dict[module_name, module_version]] = defaultdict(dict)
+    model_to_module_version_map: dict[int, dict[str, str]] = defaultdict(dict)
 
-    resource_type_to_module: dict[model_version, dict[str, set[module_name]]] = defaultdict(lambda: defaultdict(set))
+    resource_type_to_module: dict[int, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
 
-    async def fetch_code_data(code_data, resource_type_to_module) -> None:
+    async def fetch_code_data(
+        code_data: dict[str, dict[int, dict[str, set[tuple[str, str, str, set[str]]]]]],
+        resource_type_to_module: dict[int, dict[str, set[str]]],
+    ) -> None:
         fetch_source_refs_query = """
     SELECT DISTINCT environment, version, source_refs, resource from public.code
         """
         result = await connection.fetch(fetch_source_refs_query)
         for res in result:
-            env = res["environment"]
+            env: str = str(res["environment"])
             model_version = res["version"]
             source_refs = res["source_refs"]
-            resource_type = res["resource"]
+            resource_type: str = str(res["resource"])
 
-            for file_hash, file_data in source_refs.items():
+            assert isinstance(model_version, int)
+
+
+            for file_hash, file_data in source_refs.items():  # type: ignore
                 file_path, python_module_name, requirements = file_data
                 inmanta_module_name = python_module_name.split(".")[1]
+                assert isinstance(inmanta_module_name, str)
                 code_data[env][model_version][inmanta_module_name].add(
                     tuple((file_hash, file_path, python_module_name, frozenset(requirements)))
                 )
 
                 resource_type_to_module[model_version][resource_type].add(inmanta_module_name)
 
-    def build_module_data(code_data, module_data, files_in_module_data, model_to_module_version_map) -> None:
+    def build_module_data(
+        code_data: dict[str, dict[int, dict[str, set[tuple[str, str, str, set[str]]]]]],
+        module_data: list[tuple[str, str, str, list[str]]],
+        files_in_module_data: list[tuple[str, str, str, str, str]],
+        model_to_module_version_map: dict[int, dict[str, str]],
+    ) -> None:
 
         def compute_version_requirements(
-            source_info: list[tuple[str, str, str, list[str]]],
-        ) -> tuple[str, set[str]]:
+            source_info: set[tuple[str, str, str, set[str]]],
+        ) -> tuple[str, list[str]]:
             """
             Helper method
             """
@@ -135,7 +145,13 @@ async def update(connection: Connection) -> None:
             module_version = module_version_hash.hexdigest()
             return module_version, list(reqs)
 
-        def compute_files_in_module(source_info, module_name, environment, module_version, files_in_module_data):
+        def compute_files_in_module(
+            source_info:set[tuple[str, str, str, set[str]]],
+            module_name: str,
+            environment: str,
+            module_version: str,
+            files_in_module_data: list[tuple[str, str, str, str, str]],
+        ) -> None:
             """
             Helper method
             """
@@ -157,24 +173,29 @@ async def update(connection: Connection) -> None:
                     module_data.append((module_name, module_version, env, requirements))
                     model_to_module_version_map[cm_version][module_name] = module_version
 
-    async def build_modules_in_agent_data(resource_type_to_module, model_to_module_version_map, modules_for_agent_data):
+    async def build_modules_in_agent_data(
+        resource_type_to_module: dict[int, dict[str, set[str]]],
+        model_to_module_version_map: dict[int, dict[str, str]],
+        modules_for_agent_data: list[tuple[int, str, str, str, str]],
+    ) -> None:
         fetch_agent_for_resource_query = """
         SELECT DISTINCT environment, model, agent, resource_type from public.resource
             """
         result = await connection.fetch(fetch_agent_for_resource_query)
         for res in result:
             model_version = res["model"]
-            environment = res["environment"]
-            agent_name = res["agent"]
-            resource_type = res["resource_type"]
+            environment = str(res["environment"])
+            agent_name = str(res["agent"])
+            resource_type = str(res["resource_type"])
 
+            assert isinstance(model_version, int)
             for module_name in resource_type_to_module[model_version][resource_type]:
                 module_version = model_to_module_version_map[model_version][module_name]
                 modules_for_agent_data.append((model_version, environment, agent_name, module_name, module_version))
 
     module_data: list[tuple[str, str, str, list[str]]] = []
     files_in_module_data: list[tuple[str, str, str, str, str]] = []
-    modules_for_agent_data: list[tuple[str, str, str, str, str]] = []
+    modules_for_agent_data: list[tuple[int, str, str, str, str]] = []
     await fetch_code_data(code_data, resource_type_to_module)
     build_module_data(code_data, module_data, files_in_module_data, model_to_module_version_map)
     await build_modules_in_agent_data(resource_type_to_module, model_to_module_version_map, modules_for_agent_data)

@@ -46,7 +46,7 @@ from inmanta.data.model import AttributeStateChange, PipConfig
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
-from inmanta.types import JsonType, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
