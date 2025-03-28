@@ -17,15 +17,20 @@ Contact: code@inmanta.com
 """
 
 import logging
+from pathlib import Path
 from typing import cast
 
-from inmanta import data
-from inmanta.data import model
-from inmanta.protocol import handle, methods, methods_v2
-from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
+from inmanta import const, data
+from inmanta.data import get_session
+from inmanta.data.sqlalchemy import FilesInModule, Module
+from inmanta.loader import convert_relative_path_to_module
+from inmanta.protocol import handle, methods_v2
+from inmanta.protocol.common import ReturnValue
+from inmanta.protocol.exceptions import BadRequest
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.services.fileservice import FileService
-from inmanta.types import Apireturn, JsonType
+from inmanta.types import JsonType
+from sqlalchemy.dialects.postgresql import insert
 
 LOGGER = logging.getLogger(__name__)
 
@@ -48,71 +53,56 @@ class CodeService(protocol.ServerSlice):
         await super().prestart(server)
         self.file_slice = cast(FileService, server.get_slice(SLICE_FILE))
 
-    @handle(methods.upload_code_batched, code_id="id", env="tid")
-    async def upload_code_batched(self, env: data.Environment, code_id: int, resources: JsonType) -> Apireturn:
-        # validate
-        for rtype, sources in resources.items():
-            if not isinstance(rtype, str):
-                raise BadRequest("All keys in the resources map must be strings")
-            if not isinstance(sources, dict):
-                raise BadRequest("All values in the resources map must be dicts")
+    @handle(methods_v2.upload_modules, env="tid")
+    async def upload_modules(self, env: data.Environment, modules_data: JsonType) -> ReturnValue[None]:
+        """
 
-            for name, refs in sources.items():
-                if not isinstance(name, str):
-                    raise BadRequest("All keys in the sources map must be strings")
-                if not isinstance(refs, (list, tuple)):
-                    raise BadRequest("All values in the sources map must be lists or tuple")
-                if (
-                    len(refs) != 3
-                    or not isinstance(refs[0], str)
-                    or not isinstance(refs[1], str)
-                    or not isinstance(refs[2], list)
-                ):
-                    raise BadRequest("The values in the source map should be of the form (filename, module, [requirements])")
+        :param modules_data: dict with key module name and value loader.PythonModule
+        :return:
+        """
+        LOGGER.debug(f"{env=}")
+        module_stmt = insert(Module).on_conflict_do_nothing()
 
-        # list of file hashes
-        allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.keys()]
+        files_in_module_stmt = insert(FilesInModule).on_conflict_do_nothing()
 
-        val = await self.file_slice.stat_file_internal(allrefs)
+        if not modules_data:
+            raise BadRequest("No modules were provided")
+        module_data = []
+        files_in_module_data = []
+        for module_name, python_module in modules_data.items():
 
-        if len(val) != 0:
-            raise BadRequest("Not all file references provided are valid", details={"references": val})
+            requirements: set[str] = set()
 
-        code = await data.Code.get_versions(environment=env.id, version=code_id)
-        oldmap: dict[str, data.Code] = {c.resource: c for c in code}
+            for file in python_module["files_in_module"]:
+                parts = Path(file["path"]).parts
+                if const.PLUGINS_PACKAGE in parts:
+                    file_path = str(Path(*parts[parts.index(const.PLUGINS_PACKAGE) :]))
+                else:
+                    relative_path = Path(*parts[parts.index(module_name) :])
+                    file_path = convert_relative_path_to_module(str(relative_path))
 
-        new = {k: v for k, v in resources.items() if k not in oldmap}
-        conflict = [k for k, v in resources.items() if k in oldmap and oldmap[k].source_refs != v]
+                file_in_module = {
+                    "module_name": module_name,
+                    "module_version": python_module["version"],
+                    "environment": env.id,
+                    "file_content_hash": file["hash"],
+                    "file_path": file_path,
+                }
+                requirements.update(file["requires"])
+                files_in_module_data.append(file_in_module)
 
-        if len(conflict) > 0:
-            raise ServerError(
-                "Some of these items already exists, but with different source files", details={"references": conflict}
-            )
+            module = {
+                "name": module_name,
+                "version": python_module["version"],
+                "environment": env.id,
+                "requirements": requirements,
+            }
 
-        newcodes = [
-            data.Code(environment=env.id, version=code_id, resource=resource, source_refs=hashes)
-            for resource, hashes in new.items()
-        ]
+            module_data.append(module)
 
-        await data.Code.insert_many(newcodes)
+        async with get_session() as session:
+            await session.execute(module_stmt, module_data)
+            await session.execute(files_in_module_stmt, files_in_module_data)
+            await session.commit()
 
-        return 200
-
-    @handle(methods_v2.get_source_code, env="tid")
-    async def get_source_code(self, env: data.Environment, version: int, resource_type: str) -> list[model.Source]:
-        code = await data.Code.get_version(environment=env.id, version=version, resource=resource_type)
-        if code is None:
-            raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
-
-        sources = []
-
-        # Get all module code pertaining to this env/version/resource
-        if code.source_refs is not None:
-            for code_hash, (file_name, module, requires) in code.source_refs.items():
-                sources.append(
-                    model.Source(
-                        hash=code_hash, is_byte_code=file_name.endswith(".pyc"), module_name=module, requirements=requires
-                    )
-                )
-
-        return sources
+        return ReturnValue(response=None)

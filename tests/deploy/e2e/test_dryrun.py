@@ -106,6 +106,8 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -446,6 +448,8 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
     # Pause agent3

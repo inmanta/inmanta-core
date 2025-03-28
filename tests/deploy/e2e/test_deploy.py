@@ -465,6 +465,8 @@ async def test_deploy_empty(server, client, clienthelper, environment, agent):
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -617,6 +619,8 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -692,6 +696,8 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -767,6 +773,8 @@ async def test_unknown_parameters(
         unknowns=unknowns,
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -1014,6 +1022,8 @@ async def test_deploy_and_events(
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -1072,6 +1082,8 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -1217,6 +1229,8 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
+            type_to_module_data={},
         )
         assert result.code == 200, result.result
 

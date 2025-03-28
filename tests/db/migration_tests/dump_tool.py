@@ -309,6 +309,8 @@ async def test_dump_db(
             "test::Resource[agent1,key=key6]": const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert res.code == 200
     res = await client.release_version(
@@ -345,6 +347,8 @@ async def test_dump_db(
             "test::Resource[agent1,key=key7]": const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert res.code == 200
     res = await client.release_version(
@@ -393,6 +397,8 @@ async def test_dump_db(
             "test::Resource[agent1,key=key8]": const.ResourceState.available,
         },
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
+        type_to_module_data={},
     )
     assert res.code == 200
 
