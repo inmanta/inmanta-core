@@ -107,8 +107,8 @@ async def connect_to_db() -> None:
         database_host=server_config.db_host.get(),
         database_port=server_config.db_port.get(),
         database_name=server_config.db_name.get(),
-        pool_size=connection_pool_min_size,
-        max_overflow=connection_pool_max_size - connection_pool_min_size,
+        connection_pool_min_size=connection_pool_min_size,
+        connection_pool_max_size=connection_pool_max_size,
         pool_timeout=connection_timeout,
         echo=True,
     )

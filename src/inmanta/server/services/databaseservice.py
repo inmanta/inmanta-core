@@ -269,7 +269,8 @@ async def initialize_sql_alchemy_engine(
     connection_timeout: float = 60.0,
 ) -> None:
     """
-    Initialize the sql alchemy engine for the current process.
+    Initialize the sql alchemy engine for the current process and return the underlying
+    asyncpg database connection pool.
 
     :param database_host: Database host address.
     :param database_port: Port number to connect to at the server host.

@@ -45,6 +45,7 @@ import typing_inspect
 from asyncpg import Connection
 from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
+from sqlalchemy.pool import ConnectionPoolEntry
 
 import inmanta.db.versions
 import inmanta.protocol
@@ -67,7 +68,7 @@ from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-from sqlalchemy import URL, AsyncAdaptedQueuePool
+from sqlalchemy import URL, AsyncAdaptedQueuePool, NullPool
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 """
@@ -6621,8 +6622,8 @@ async def start_engine(
     database_host: str,
     database_port: int,
     database_name: str,
-    pool_size: int = 10,
-    max_overflow: int = 0,
+    connection_pool_min_size: int = 10,
+    connection_pool_max_size: int = 10,
     pool_timeout: float = 60.0,
     echo: bool = False,
 ) -> None:
@@ -6639,6 +6640,25 @@ async def start_engine(
         database=database_name,
     )
 
+    pool = await asyncpg.create_pool(
+        host=database_host,
+        port=database_port,
+        user=database_username,
+        password=database_password,
+        database=database_name,
+        min_size=connection_pool_min_size,
+        max_size=connection_pool_max_size,
+        timeout=pool_timeout,
+    )
+
+
+    async def bridge_creator():
+        return await pool.acquire()
+
+    class NullerPool(NullPool):
+        def _do_return_conn(self, record: ConnectionPoolEntry) -> None:
+             record.dbapi_connection.run_async(pool.release)
+
     global ENGINE
     global SESSION_FACTORY
 
@@ -6649,11 +6669,10 @@ async def start_engine(
     try:
         ENGINE = create_async_engine(
             url=url_object,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
             echo=echo,
             pool_pre_ping=True,
+            poolclass=NullerPool,
+            async_creator=bridge_creator
         )
         SESSION_FACTORY = async_sessionmaker(ENGINE)
     except Exception as e:
