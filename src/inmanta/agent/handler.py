@@ -743,14 +743,15 @@ class HandlerAPI(ABC, Generic[TResource]):
 
         return f.result()
 
-    def get_client(self) -> protocol.SessionClient:
+    def get_client(self) -> protocol.Client:
         """
         Get the client instance that identifies itself with the agent session.
 
         :return: A client that is associated with the session of the agent that executes this handler.
         """
         if self._client is None:
-            self._client = protocol.SessionClient("agent", self._agent.sessionid)
+            # TODO: use the correct client
+            self._client = protocol.Client("agent", self._agent.sessionid)
         return self._client
 
     def get_file(self, hash_id: str) -> Optional[bytes]:
