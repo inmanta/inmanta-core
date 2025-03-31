@@ -28,7 +28,7 @@ from tornado import routing, web
 
 from inmanta import config, const, data
 from inmanta.const import ApiDocsFormat
-from inmanta.data.model import FeatureStatus, SliceStatus, StatusResponse
+from inmanta.data.model import FeatureStatus, StatusResponse
 from inmanta.protocol import exceptions, handle, methods, methods_v2
 from inmanta.protocol.common import HTML_CONTENT_WITH_UTF8_CHARSET, ReturnValue, attach_warnings
 from inmanta.protocol.openapi.converter import OpenApiConverter
@@ -133,30 +133,7 @@ class Server(protocol.ServerSlice):
                 "Is inmanta installed? Use setuptools install or setuptools dev to install."
             )
 
-        async def collect_for_slice(slice_name: str, slice: protocol.ServerSlice) -> SliceStatus:
-            try:
-                return SliceStatus(
-                    name=slice_name,
-                    status=await asyncio.wait_for(slice.get_status(), self.GET_SERVER_STATUS_TIMEOUT),
-                )
-            except asyncio.TimeoutError:
-                return SliceStatus(
-                    name=slice_name,
-                    status={
-                        "error": f"timeout on data collection for {slice_name}, "
-                        "consult the server log for additional information"
-                    },
-                )
-            except Exception:
-                LOGGER.error(
-                    f"The following error occurred while trying to determine the status of slice {slice_name}",
-                    exc_info=True,
-                )
-                return SliceStatus(name=slice_name, status={"error": "An unexpected error occurred, reported to server log"})
-
-        slices = await asyncio.gather(
-            *(collect_for_slice(slice_name, slice) for slice_name, slice in self._server.get_slices().items())
-        )
+        slices = await asyncio.gather(*(slice.get_slice_status() for slice in self._server.get_slices().values()))
 
         response = StatusResponse(
             product=product_metadata.product,

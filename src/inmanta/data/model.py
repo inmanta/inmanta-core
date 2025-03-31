@@ -87,6 +87,12 @@ class ExtensionStatus(BaseModel):
     package: str
 
 
+class ReportedStatus(Enum):
+    OK = 1
+    Warning = 2
+    Error = 3
+
+
 class SliceStatus(BaseModel):
     """
     Status response for slices loaded in the server
@@ -94,6 +100,8 @@ class SliceStatus(BaseModel):
 
     name: str
     status: Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]
+    reported_status: ReportedStatus
+    message: str | None = None
 
 
 class FeatureStatus(BaseModel):
@@ -118,6 +126,14 @@ class StatusResponse(BaseModel):
     extensions: list[ExtensionStatus]
     slices: list[SliceStatus]
     features: list[FeatureStatus]
+
+    @property
+    def status(self):
+        """
+        Returns the status of the response.
+        It is the worst of the reported slice statuses.
+        """
+        return ReportedStatus(max([slice.reported_status.value for slice in self.slices]))
 
 
 @stable_api
