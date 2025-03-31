@@ -55,9 +55,6 @@ class Server(protocol.ServerSlice):
     compiler: "CompilerService"
     _server: protocol.Server
 
-    # The number of seconds after which the call to the get_status() endpoint of a server slice should time out.
-    GET_SERVER_STATUS_TIMEOUT: int = 1
-
     def __init__(self) -> None:
         super().__init__(name=SLICE_SERVER)
         LOGGER.info("Starting server endpoint")

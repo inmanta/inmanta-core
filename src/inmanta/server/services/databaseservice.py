@@ -258,8 +258,12 @@ class DatabaseService(protocol.ServerSlice):
             - Warning: The pool has less than 5 connections or 10% of the max pool size
             - OK: Otherwise
         """
-        status = await self._db_monitor.get_status()
-        if not status.connected:
+
+        try:
+            assert self._db_monitor
+            status = await self._db_monitor.get_status()
+            assert status.connected
+        except Exception:
             return ReportedStatus.Error, "Database is not connected"
 
         if status.free_pool < min(5, status.max_pool // 10):

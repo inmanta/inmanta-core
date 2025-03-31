@@ -128,7 +128,7 @@ class StatusResponse(BaseModel):
     features: list[FeatureStatus]
 
     @property
-    def status(self):
+    def status(self) -> ReportedStatus:
         """
         Returns the status of the response.
         It is the worst of the reported slice statuses.

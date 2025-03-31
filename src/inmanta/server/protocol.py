@@ -239,7 +239,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | No
     feature_manager: "FeatureManager"
 
     # The number of seconds after which the call to the get_status() endpoint of this server slice should time out.
-    GET_SERVER_STATUS_TIMEOUT: int = 1
+    GET_SLICE_STATUS_TIMEOUT: int = 1
 
     def __init__(self, name: str) -> None:
         super().__init__()
@@ -422,7 +422,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | No
             status, message = await self.get_reported_status()
             return SliceStatus(
                 name=self.name,
-                status=await asyncio.wait_for(self.get_status(), self.GET_SERVER_STATUS_TIMEOUT),
+                status=await asyncio.wait_for(self.get_status(), self.GET_SLICE_STATUS_TIMEOUT),
                 reported_status=status,
                 message=message,
             )
