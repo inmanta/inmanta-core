@@ -79,6 +79,10 @@ class CodeManager:
                 models.ModulesForAgent.inmanta_module_version,
                 models.ModulesForAgent.cm_version,
                 models.InmantaModule.requirements,
+                models.FilesInModule.python_module_name,
+                models.FilesInModule.file_content_hash,
+                models.FilesInModule.is_byte_code,
+                models.File.content,
             )
             .join_from(
                 models.ModulesForAgent,
@@ -98,6 +102,15 @@ class CodeManager:
                     models.InmantaModule.environment == models.FilesInModule.environment,
                 ),
             )
+            .join_from(
+                models.FilesInModule,
+                models.File,
+                and_(
+                    models.FilesInModule.file_content_hash == models.File.content_hash,
+                    models.InmantaModule.version == models.FilesInModule.inmanta_module_version,
+                    models.InmantaModule.environment == models.FilesInModule.environment,
+                ),
+            )
             .where(
                 models.ModulesForAgent.environment == environment,
                 models.ModulesForAgent.agent_name == agent_name,
@@ -108,26 +121,6 @@ class CodeManager:
         async with get_session() as session:
             result = await session.execute(modules_for_agent)
             for res in result.all():
-                files_in_module = (
-                    select(
-                        models.FilesInModule.python_module_name,
-                        models.FilesInModule.file_content_hash,
-                        models.FilesInModule.is_byte_code,
-                        models.File.content,
-                    )
-                    .join_from(
-                        models.FilesInModule,
-                        models.File,
-                    )
-                    .where(
-                        models.FilesInModule.environment == environment,
-                        models.FilesInModule.inmanta_module_name == res.inmanta_module_name,
-                        models.FilesInModule.inmanta_module_version == res.inmanta_module_version,
-                    )
-                )
-
-                files = await session.execute(files_in_module)
-
                 module_install_specs.append(
                     ModuleInstallSpec(
                         module_name=res.inmanta_module_name,
@@ -138,12 +131,11 @@ class CodeManager:
                             requirements=res.requirements,
                             sources=[
                                 ModuleSource(
-                                    name=file.python_module_name,
-                                    source=file.content,
-                                    hash_value=file.file_content_hash,
-                                    is_byte_code=file.is_byte_code,
+                                    name=res.python_module_name,
+                                    source=res.content,
+                                    hash_value=res.file_content_hash,
+                                    is_byte_code=res.is_byte_code,
                                 )
-                                for file in files.all()
                             ],
                             python_version=sys.version_info[:2],
                         ),

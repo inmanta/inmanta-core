@@ -27,18 +27,19 @@ from logging import DEBUG
 import py
 import pytest
 
-from inmanta import config
+from inmanta import config, data
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
-from inmanta.data import PipConfig
+from inmanta.data import FilesInModule, InmantaModule, ModulesForAgent, PipConfig, get_session
 from inmanta.env import process_env
 from inmanta.loader import PythonModule
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
 from inmanta.util import get_compiler_version, hash_file
+from sqlalchemy.dialects.postgresql import insert
 from utils import ClientHelper, DummyCodeManager, log_index, retry_limited, wait_until_deployment_finishes
 
 LOGGER = logging.getLogger(__name__)
@@ -166,17 +167,123 @@ async def test_agent_installs_dependency_containing_extras(
     check_packages(package_list=installed_packages, must_contain={"pkg", "dep-a"}, must_not_contain={"dep-b", "dep-c"})
 
 
-# async def test_get_code(
-#     server,
-#     agent,
-#     environment: uuid.UUID,
-# ) -> None:
-# codemanager = CodeManager(agent._client)
-#
-# # populate tables:
-#
-# v1 = 1
-# module_install_specs_2 = await codemanager.get_code(environment=environment, model_version=v1, agent_name="agent1")
+async def test_get_code(
+    server,
+    agent,
+    client,
+) -> None:
+    codemanager = CodeManager(agent._client)
+
+    # Create project
+    result = await client.create_project("test_project")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    # Create environment
+    result = await client.create_environment(project_id=project_id, name="env_1")
+    env_id = result.result["environment"]["id"]
+    assert result.code == 200
+
+    clienthelper = ClientHelper(client, env_id)
+    v1 = await clienthelper.get_version()
+    v2 = await clienthelper.get_version()
+    v3 = await clienthelper.get_version()
+    await clienthelper.put_version_simple(resources=[], version=v1, wait_for_released=False)
+    await clienthelper.put_version_simple(resources=[], version=v2, wait_for_released=False)
+    await clienthelper.put_version_simple(resources=[], version=v3, wait_for_released=False)
+
+    agents = ["agent_1", "agent_2"]
+    inmanta_modules = ["inmanta_module_1", "inmanta_module_2", "inmanta_module_3"]
+    inmanta_module_versions = ["v1.0.0", "v2.0.0", "v3.0.0"]
+    model_versions = [v1, v2, v3]
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    env = await data.Environment.get_by_id(env_id)
+    for agent_name in agents:
+        await agent_manager.ensure_agent_registered(env=env, nodename=agent_name)
+
+    content = "".encode()
+    hash = hash_file(content)
+    body = base64.b64encode(content).decode("ascii")
+
+    result = await client.upload_file(id=hash, content=body)
+    assert result.code == 200
+
+    # Setup each module version with a number of file corresponding to its index:
+    #  module version:   v1.0.0  v2.0.0  v3.0.0
+    #         n_files:      1       2       3
+
+    files_in_module_data = [
+        {
+            "inmanta_module_name": inmanta_module_name,
+            "inmanta_module_version": inmanta_module_version,
+            "environment": env_id,
+            "file_content_hash": hash,
+            "python_module_name": python_module_name,
+            "is_byte_code": False,
+        }
+        for inmanta_module_name in inmanta_modules
+        for n_files_to_create, inmanta_module_version in enumerate(inmanta_module_versions)
+        for python_module_name in [
+            f"inmanta_plugins.{inmanta_module_name}.{py_module}"
+            for py_module in [
+                f"top_module{suffix}" for suffix in [".sub" * i for i in range(1 + n_files_to_create)][: 1 + n_files_to_create]
+            ]
+        ]
+    ]
+
+    module_data = [
+        {
+            "name": inmanta_module_name,
+            "version": inmanta_module_version,
+            "environment": env_id,
+            "requirements": requirements,
+        }
+        for inmanta_module_name in inmanta_modules
+        for inmanta_module_version in inmanta_module_versions
+        for requirements in [[], ["dummy-inmanta-module~=1.0.0"]]
+    ]
+
+    # Setup each agent with the following modules:
+
+    #            model version:      1        2       3
+    #  module list for agent_1:     [1]     [1, 2]   [1, 2, 3]
+    #  module list for agent_2:  [1, 2, 3]  [1, 2]   [1]
+
+    modules_for_agent_data = [
+        {
+            "cm_version": cm_version,
+            "environment": env_id,
+            "agent_name": agent_name,
+            "inmanta_module_name": inmanta_module_name,
+            "inmanta_module_version": inmanta_module_version,
+        }
+        for cm_version, inmanta_module_version, n_modules_in_version in zip(model_versions, inmanta_module_versions, [1, 2, 3])
+        for agent_name in agents
+        for inmanta_module_name in (
+            inmanta_modules[:n_modules_in_version] if agent_name == "agent_1" else inmanta_modules[: 4 - n_modules_in_version]
+        )
+    ]
+
+    module_stmt = insert(InmantaModule).on_conflict_do_nothing()
+    files_in_module_stmt = insert(FilesInModule).on_conflict_do_nothing()
+    modules_for_agent_stmt = insert(ModulesForAgent).on_conflict_do_nothing()
+
+    async with get_session() as session:
+        await session.execute(module_stmt, module_data)
+        await session.execute(files_in_module_stmt, files_in_module_data)
+        await session.execute(modules_for_agent_stmt, modules_for_agent_data)
+        await session.commit()
+
+    for version in model_versions:
+        module_install_specs = await codemanager.get_code(environment=env_id, model_version=version, agent_name="agent_1")
+        # Agent 1 is set up to have |version| files per module version and |version| modules per model version:
+        assert len(module_install_specs) == version * version
+
+    for version in model_versions:
+        module_install_specs = await codemanager.get_code(environment=env_id, model_version=version, agent_name="agent_2")
+        # Agent 2 is set up to have |version| files per module version and (4-|version|) modules per model version:
+        assert len(module_install_specs) == version * (4 - version)
 
 
 async def test_agent_code_loading_with_failure(

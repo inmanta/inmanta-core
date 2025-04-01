@@ -101,7 +101,7 @@ class ModulesForAgent(Base):
             ["inmanta_module.name", "inmanta_module.version", "inmanta_module.environment"],
             ondelete="RESTRICT",
         ),
-        UniqueConstraint("cm_version", "environment", "agent_name", "inmanta_module_name"),
+        UniqueConstraint("cm_version", "environment", "agent_name", "inmanta_module_name", "inmanta_module_version"),
     )
     __mapper_args__ = {"primary_key": ["cm_version", "environment", "agent_name", "inmanta_module_name"]}
 
