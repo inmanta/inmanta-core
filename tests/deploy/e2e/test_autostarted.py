@@ -27,6 +27,8 @@ import os
 import os.path
 import uuid
 from dataclasses import dataclass, field
+from functools import partial
+from pathlib import Path
 
 import psutil
 import pytest
@@ -35,6 +37,7 @@ from psutil import NoSuchProcess, Process
 from inmanta import config, const, data
 from inmanta.const import AgentAction
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
+from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from typing_extensions import Optional
 from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
@@ -843,19 +846,37 @@ async def test_agent_paused_scheduler_server_restart(
     auto_start_agent: bool,
     async_finalizer,
     monkeypatch,
+    tmp_path,
 ):
     """
     Verify that the new scheduler does not alter the state of agent after a restart:
         - The agent is deploying something that takes a lot of time
-        - The agent is paused
+        - agent1 is paused
         - The server (and thus the scheduler) is (are) restarted
-        - The agent should remain paused (the Scheduler shouldn't do anything after the restart)
-    """
+        - The agents' paused status should remain untouched (the Scheduler shouldn't do anything after the restart)
 
-    async def return_none(*args, **kwargs):
-        return None
 
-    # current_pid = os.getpid()
+
+            Timeline:             t0              t1              t2              t3                t4                 t5              t6
+       Resource
+    agent1_file_1        set file_1 FAIL       deploying     unavailable     Pause agent1   set file_1 SUCCESS    Restart Server    unavailable
+    agent1_file_2        set file_2 SUCCESS    deploying     deployed        Pause agent1                         Restart Server    deployed
+    agent2_file_1        set file_1 FAIL       deploying     unavailable                    set file_1 SUCCESS    Restart Server    deployed
+
+    """  # noqa: E501
+    current_pid = os.getpid()
+
+    control_failure_file_1 = tmp_path / "control_file_1.json"
+    control_failure_file_2 = tmp_path / "control_file_2.json"
+
+    def set_resource_deployable_state(fail_deploy: bool, control_file: Path) -> None:
+        content = {"fail_deploy": fail_deploy}
+        json_content = json.dumps(content)
+        with open(control_file, "w") as json_file:
+            json_file.write(json_content)
+
+    set_resource_deployable_state(fail_deploy=True, control_file=control_failure_file_1)
+    set_resource_deployable_state(fail_deploy=False, control_file=control_failure_file_2)
 
     # First, configure everything
     config.Config.set("config", "environment", environment)
@@ -864,67 +885,78 @@ async def test_agent_paused_scheduler_server_restart(
     assert len(agentmanager.sessions) == 1
 
     snippetcompiler.setup_for_snippet(
-        """
-import std::testing
-std::testing::NullResource(name="test", agentname="agent1", value="test")
-        """,
+        f"""
+import minimaldeployfailuremodule
+
+agent1_file_1 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fail_1", agent="agent1", control_failure_file="{control_failure_file_1}")
+agent1_file_2 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fail_2", agent="agent1", control_failure_file="{control_failure_file_2}")
+agent2_file_1 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fail_3", agent="agent2", control_failure_file="{control_failure_file_1}")
+    """,  # noqa: E501
         ministd=True,
         index_url="https://pypi.org/simple",
     )
 
-    # Now, let's deploy a resource
+    # Now, let's deploy resources
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    # Wait for this resource to enter the unavailable state
-    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
-    assert False
+    # Wait for the following resource state:
+    # agent1_file_1, agent2_file_1 -> unavailable
+    # agent1_file_2 -> deployed
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.unavailable)
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
     # Executors are reporting to be deploying before deploying the first executor, we need to wait for them to be sure that
     # something is moving
-    # await wait_for_consistent_children(
-    #     current_pid=current_pid,
-    #     should_scheduler_be_defined=True,
-    #     should_fork_server_be_defined=False,
-    #     nb_executor_to_be_defined=0,
-    # )
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=True,
+        should_fork_server_be_defined=True,
+        nb_executor_to_be_defined=1,
+    )
 
-    # result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
-    # assert result.code == 200
-    #
-    # # Let's pretend that the server crashes
-    # await asyncio.wait_for(server.stop(), timeout=20)
-    # ibl = InmantaBootloader(configure_logging=False)
-    # async_finalizer.add(partial(ibl.stop, timeout=20))
-    #
-    # # Wait for the scheduler to shut down
-    # await wait_for_consistent_children(
-    #     current_pid=current_pid,
-    #     should_scheduler_be_defined=False,
-    #     should_fork_server_be_defined=False,
-    #     nb_executor_to_be_defined=0,
-    # )
-    #
-    # # Let's restart the server
-    # await ibl.start()
-    #
-    # # Everything should be consistent in DB: the agent should still be paused
-    # await assert_is_paused(client, environment, {"agent1": True})
-    #
-    # # Wait for the scheduler to start
-    # await wait_for_consistent_children(
-    #     current_pid=current_pid,
-    #     should_scheduler_be_defined=True,
-    #     should_fork_server_be_defined=False,
-    #     nb_executor_to_be_defined=0,
-    # )
-    #
-    # # Assert that the resource is not being deployed and remains in the unavailable state.
-    # result = await client.resource_list(environment, deploy_summary=True)
-    # assert result.code == 200
-    # summary = result.result["metadata"]["deploy_summary"]
-    # assert summary["total"] == 1, f"Unexpected summary: {summary}"
-    # assert summary["by_state"]["unavailable"] == 1, f"Unexpected summary: {summary}"
+    result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
+    assert result.code == 200
+
+    # Let's pretend that the server crashes
+    await asyncio.wait_for(server.stop(), timeout=20)
+    ibl = InmantaBootloader(configure_logging=False)
+    async_finalizer.add(partial(ibl.stop, timeout=20))
+
+    # Wait for the scheduler to shut down
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=False,
+        should_fork_server_be_defined=False,
+        nb_executor_to_be_defined=0,
+    )
+
+    set_resource_deployable_state(fail_deploy=False, control_file=control_failure_file_1)
+
+    # Let's restart the server
+    await ibl.start()
+
+    # Everything should be consistent in DB: the agents' paused status should remain untouched
+    await assert_is_paused(client, environment, {"agent1": True, "agent2": False})
+
+    # Wait for the scheduler to start
+    await wait_for_consistent_children(
+        current_pid=current_pid,
+        should_scheduler_be_defined=True,
+        should_fork_server_be_defined=True,
+        nb_executor_to_be_defined=1,
+    )
+
+    # Assert that the resource is not being deployed and remains in the unavailable state.
+    # Wait for the following resource state:
+    # agent1_file_1 -> unavailable
+    # agent1_file_2, agent2_file_1 -> deployed
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    summary = result.result["metadata"]["deploy_summary"]
+    assert summary["total"] == 3, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["unavailable"] == 1, f"Unexpected summary: {summary}"
+    assert summary["by_state"]["deployed"] == 2, f"Unexpected summary: {summary}"
 
 
 @pytest.mark.slowtest

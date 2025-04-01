@@ -15,12 +15,12 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
+
 import json
-import time
 import os.path
 
 from inmanta import resources, const
-from inmanta.agent.handler import provider, CRUDHandler, HandlerContext, ResourcePurged
+from inmanta.agent.handler import provider, CRUDHandler, HandlerContext
 
 
 @resources.resource("minimaldeployfailuremodule::FailBasedOnFileContent", agent="agent", id_attribute="name")
@@ -49,9 +49,7 @@ class FailBasedOnFileContentHandler(CRUDHandler):
         with open(control_file) as fh:
             return json.load(fh)
 
-    def execute(
-        self, ctx: HandlerContext, resource: FailBasedOnFileContent, dry_run: bool = False
-    ) -> None:
+    def execute(self, ctx: HandlerContext, resource: FailBasedOnFileContent, dry_run: bool = False) -> None:
         deploy_options = self.read_file(ctx, resource.control_failure_file)
         if not deploy_options or deploy_options.get("fail_deploy"):
             ctx.exception(
