@@ -972,6 +972,7 @@ class OrchestrationService(protocol.ServerSlice):
                     partial_base_version, env.id, module_version_info, type_to_module_data, type_to_agent, connection
                 )
             else:
+                # TODO this should use the same connection
                 await upload_modules(env.id, module_version_info)
 
             await register_code(version, env.id, module_version_info, type_to_module_data, type_to_agent, connection)

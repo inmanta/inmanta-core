@@ -98,11 +98,12 @@ async def test_agent_installs_dependency_containing_extras(
             version="abc",
             files_in_module=[
                 {
-                    "path": "dummy/path/test/plugins/dummy_file",
+                    "path": "dummy/path/test/plugins/dummy_file.py",
                     "module_name": "inmanta_plugins.test",
                     "hash": hash,
                     "content": "file content",
                     "requires": ["pkg[optional-a]"],
+                    "is_byte_code": False,
                 }
             ],
         )
@@ -113,10 +114,6 @@ async def test_agent_installs_dependency_containing_extras(
     }
 
     res = await client.upload_file(id=hash, content=body)
-    assert res.code == 200
-
-    res = await client.upload_modules(tid=environment, modules_data=mocked_module_version_info)
-
     assert res.code == 200
 
     version = await clienthelper.get_version()
@@ -167,6 +164,19 @@ async def test_agent_installs_dependency_containing_extras(
         assert not must_contain
 
     check_packages(package_list=installed_packages, must_contain={"pkg", "dep-a"}, must_not_contain={"dep-b", "dep-c"})
+
+
+# async def test_get_code(
+#     server,
+#     agent,
+#     environment: uuid.UUID,
+# ) -> None:
+# codemanager = CodeManager(agent._client)
+#
+# # populate tables:
+#
+# v1 = 1
+# module_install_specs_2 = await codemanager.get_code(environment=environment, model_version=v1, agent_name="agent1")
 
 
 async def test_agent_code_loading_with_failure(
