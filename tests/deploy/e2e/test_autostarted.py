@@ -946,7 +946,8 @@ agent2_file_1 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fa
         should_fork_server_be_defined=True,
         nb_executor_to_be_defined=1,
     )
-
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.deployed)
     # Assert that the resource is not being deployed and remains in the unavailable state.
     # Wait for the following resource state:
     # agent1_file_1 -> unavailable
