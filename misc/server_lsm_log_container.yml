@@ -56,8 +56,6 @@ loggers:
     level: DEBUG
     propagate: true
   sqlalchemy.engine:
-    handlers:
-      - server_handler
     level: INFO
     propagate: true
 root:

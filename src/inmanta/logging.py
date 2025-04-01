@@ -447,7 +447,6 @@ class LoggingConfigBuilder:
                 "sqlalchemy.engine": {
                     "level": "INFO",
                     "propagate": True,
-                    "handlers": [handler_root_logger],
                 },
             }
         )
