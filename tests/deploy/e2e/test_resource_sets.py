@@ -253,11 +253,8 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
     mock_source_info.hash = hv
     mock_source_info.requires = []
 
-    client.upload_file
     module_version_info = {"test": PythonModule(name="test", version="0.0.0", files_in_module=[mock_source_info])}
     type_to_module_data = {"test::Resource": ["test"]}
-    res = await client.upload_modules(tid=environment, modules_data=module_version_info)
-    assert res.code == 200
 
     result = await client.put_version(
         tid=environment,

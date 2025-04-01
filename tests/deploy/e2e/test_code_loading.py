@@ -200,7 +200,7 @@ async def test_agent_code_loading_with_failure(
             version="abc",
             files_in_module=[
                 {
-                    "path": "dummy/path/test/plugins/dummy_file",
+                    "path": "dummy/path/test/plugins/dummy_file.py",
                     "module_name": "inmanta_plugins.test",
                     "hash": hash,
                     "content": "file content",
@@ -216,10 +216,6 @@ async def test_agent_code_loading_with_failure(
     }
 
     res = await client.upload_file(id=hash, content=body)
-    assert res.code == 200
-
-    res = await client.upload_modules(tid=environment, modules_data=mocked_module_version_info)
-
     assert res.code == 200
 
     async def get_version() -> int:

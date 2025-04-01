@@ -5944,8 +5944,8 @@ class ConfigurationModel(BaseDocument):
             await self._execute_query(
                 """
                 DELETE FROM public.files_in_module
-                WHERE (environment, module_name, module_version) IN (
-                    SELECT environment, module_name, module_version
+                WHERE (environment, inmanta_module_name, inmanta_module_version) IN (
+                    SELECT environment, inmanta_module_name, inmanta_module_version
                     FROM public.modules_for_agent
                     WHERE environment=$1
                     AND cm_version=$2
@@ -5957,9 +5957,9 @@ class ConfigurationModel(BaseDocument):
             )
             await self._execute_query(
                 """
-                DELETE FROM public.module
+                DELETE FROM public.inmanta_module
                 WHERE (environment, name, version) IN (
-                    SELECT environment, module_name, module_version
+                    SELECT environment, inmanta_module_name, inmanta_module_version
                     FROM public.modules_for_agent
                     WHERE environment=$1
                     AND cm_version=$2

@@ -886,8 +886,8 @@ class OrchestrationService(protocol.ServerSlice):
                 query = """
                     SELECT
                         agent_name,
-                        module_name,
-                        module_version
+                        inmanta_module_name,
+                        inmanta_module_version
                     FROM
                         modules_for_agent
                     WHERE
@@ -899,7 +899,9 @@ class OrchestrationService(protocol.ServerSlice):
                     values = [partial_base_version, environment]
                     in_db_module_data: dict[str, dict[str, str]] = defaultdict(dict)
                     async for record in connection.cursor(query, *values):
-                        in_db_module_data[str(record["module_name"])][str(record["agent_name"])] = str(record["module_version"])
+                        in_db_module_data[str(record["inmanta_module_name"])][str(record["agent_name"])] = str(
+                            record["inmanta_module_version"]
+                        )
 
                 for resource_type in type_to_agent.keys():
                     for agent_name in type_to_agent[resource_type]:
