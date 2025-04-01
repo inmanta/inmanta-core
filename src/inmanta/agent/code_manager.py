@@ -26,7 +26,7 @@ from inmanta.agent import executor
 from inmanta.agent.executor import ModuleInstallSpec
 from inmanta.data import get_session
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
-from inmanta.loader import ModuleSource, convert_module_path_to_namespace
+from inmanta.loader import ModuleSource
 from inmanta.protocol import Client
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
@@ -112,6 +112,7 @@ class CodeManager:
                     select(
                         models.FilesInModule.python_module_name,
                         models.FilesInModule.file_content_hash,
+                        models.FilesInModule.is_byte_code,
                         models.File.content,
                     )
                     .join_from(
@@ -129,18 +130,18 @@ class CodeManager:
 
                 module_install_specs.append(
                     ModuleInstallSpec(
-                        module_name=res.module_name,
-                        module_version=res.module_version,
+                        module_name=res.inmanta_module_name,
+                        module_version=res.inmanta_module_version,
                         model_version=res.cm_version,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=await self.get_pip_config(environment, res.cm_version),
                             requirements=res.requirements,
                             sources=[
                                 ModuleSource(
-                                    name=convert_module_path_to_namespace(file.file_path),
+                                    name=file.python_module_name,
                                     source=file.content,
                                     hash_value=file.file_content_hash,
-                                    is_byte_code=False,
+                                    is_byte_code=file.is_byte_code,
                                 )
                                 for file in files.all()
                             ],

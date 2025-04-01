@@ -841,8 +841,8 @@ class OrchestrationService(protocol.ServerSlice):
                         cm_version,
                         environment,
                         agent_name,
-                        module_name,
-                        module_version
+                        inmanta_module_name,
+                        inmanta_module_version
                     ) VALUES(
                         $1,
                         $2,
@@ -940,8 +940,8 @@ class OrchestrationService(protocol.ServerSlice):
                                 )
 
                         file_in_module = {
-                            "module_name": inmanta_module_name,
-                            "module_version": python_module["version"],
+                            "inmanta_module_name": inmanta_module_name,
+                            "inmanta_module_version": python_module["version"],
                             "environment": env,
                             "file_content_hash": file["hash"],
                             "python_module_name": file["module_name"],
@@ -963,7 +963,6 @@ class OrchestrationService(protocol.ServerSlice):
                     await session.execute(module_stmt, module_data)
                     await session.execute(files_in_module_stmt, files_in_module_data)
                     await session.commit()
-
 
             if type_to_agent and not all([module_version_info is not None, type_to_module_data is not None]):
                 raise BadRequest(
