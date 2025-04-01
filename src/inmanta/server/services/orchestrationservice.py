@@ -668,8 +668,8 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
-        module_version_info: Optional[dict[str, dict[str, Any]]],
-        type_to_module_data: Optional[dict[str, set[str]]],
+        module_version_info: dict[str, dict[str, Any]],
+        type_to_module_data: dict[str, set[str]],
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -915,6 +915,8 @@ class OrchestrationService(protocol.ServerSlice):
                                 )
 
             async def upload_modules(env: uuid.UUID, module_version_info: dict[str, dict[str, Any]]) -> None:
+                if not module_version_info:
+                    return
                 module_stmt = insert(InmantaModule).on_conflict_do_nothing()
 
                 files_in_module_stmt = insert(FilesInModule).on_conflict_do_nothing()
@@ -961,14 +963,6 @@ class OrchestrationService(protocol.ServerSlice):
                     await session.execute(module_stmt, module_data)
                     await session.execute(files_in_module_stmt, files_in_module_data)
                     await session.commit()
-
-            if type_to_agent and not all([module_version_info is not None, type_to_module_data is not None]):
-                raise BadRequest(
-                    f"Missing source information for version {version}. Please make sure the following arguments "
-                    f"are set when calling put_version: module_version_info, type_to_module_data"
-                )
-            assert module_version_info is not None
-            assert type_to_module_data is not None
 
             if is_partial_update:
                 assert partial_base_version is not None
@@ -1094,8 +1088,8 @@ class OrchestrationService(protocol.ServerSlice):
                     resource_sets,
                     pip_config=pip_config,
                     connection=con,
-                    module_version_info=module_version_info,
-                    type_to_module_data=type_to_module_data,
+                    module_version_info=module_version_info or {},
+                    type_to_module_data=type_to_module_data or {},
                 )
             # This must be outside all transactions, as it relies on the result of _put_version
             # and it starts a background task, so it can't re-use this connection
@@ -1228,8 +1222,8 @@ class OrchestrationService(protocol.ServerSlice):
                     removed_resource_sets=removed_resource_sets,
                     pip_config=pip_config,
                     connection=con,
-                    module_version_info=module_version_info,
-                    type_to_module_data=type_to_module_data,
+                    module_version_info=module_version_info or {},
+                    type_to_module_data=type_to_module_data or {},
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)

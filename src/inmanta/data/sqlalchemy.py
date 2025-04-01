@@ -16,6 +16,8 @@ import datetime
 import uuid
 from typing import Any, List, Optional
 
+import asyncpg
+
 from inmanta.data.model import EnvSettingType
 from sqlalchemy import (
     ARRAY,
@@ -43,6 +45,10 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
     pass
+
+    @classmethod
+    async def delete_all(cls, environment: uuid.UUID, connection: asyncpg.connection.Connection) -> None:
+        await connection.execute("DELETE FROM %s WHERE environment=$1" % cls.__tablename__, environment)
 
 
 class InmantaModule(Base):

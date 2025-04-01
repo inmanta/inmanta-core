@@ -62,6 +62,7 @@ from inmanta.const import (
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
+from inmanta.data.sqlalchemy import FilesInModule, InmantaModule, ModulesForAgent
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.stable_api import stable_api
@@ -2694,9 +2695,9 @@ class Environment(BaseDocument):
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
 
-            await self._execute_query("DELETE FROM public.module WHERE environment=$1", self.id, connection=con)
-            await self._execute_query("DELETE FROM public.files_in_module WHERE environment=$1", self.id, connection=con)
-            await self._execute_query("DELETE FROM public.modules_for_agent WHERE environment=$1", self.id, connection=con)
+            await InmantaModule.delete_all(environment=self.id, connection=con)
+            await FilesInModule.delete_all(environment=self.id, connection=con)
+            await ModulesForAgent.delete_all(environment=self.id, connection=con)
 
             await DiscoveredResource.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsGauge.delete_all(environment=self.id, connection=con)
