@@ -87,10 +87,18 @@ class ExtensionStatus(BaseModel):
     package: str
 
 
-class ReportedStatus(Enum):
-    OK = 1
-    Warning = 2
-    Error = 3
+class ReportedStatus(StrEnum):
+    OK = "OK"
+    Warning = "Warning"
+    Error = "Error"
+
+
+# Determines the order of severity of the reported status
+STATUS_ORDER = {
+    ReportedStatus.OK: 0,
+    ReportedStatus.Warning: 1,
+    ReportedStatus.Error: 2,
+}
 
 
 class SliceStatus(BaseModel):
@@ -126,14 +134,7 @@ class StatusResponse(BaseModel):
     extensions: list[ExtensionStatus]
     slices: list[SliceStatus]
     features: list[FeatureStatus]
-
-    @property
-    def status(self) -> ReportedStatus:
-        """
-        Returns the status of the response.
-        It is the worst of the reported slice statuses.
-        """
-        return ReportedStatus(max([slice.reported_status.value for slice in self.slices]))
+    status: ReportedStatus
 
 
 @stable_api

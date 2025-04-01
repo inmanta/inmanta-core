@@ -22,6 +22,7 @@ import uuid
 import pytest
 
 from inmanta.data import stop_engine
+from inmanta.data.model import ReportedStatus
 from inmanta.server.services.compilerservice import CompilerService
 
 
@@ -65,6 +66,14 @@ async def test_server_status_database_unreachable(server, client):
 
 
 async def test_server_status_timeout(server, client, monkeypatch):
+    """
+    Test timeout of get status and how the overall status changes if a timeout happens.
+    """
+    # Everything is OK
+    result = await client.get_server_status()
+    assert result.code == 200
+    assert result.result["data"]["status"] == ReportedStatus.OK
+
     monkeypatch.setattr(CompilerService, "GET_SLICE_STATUS_TIMEOUT", 0.1)
 
     async def hang(self):
@@ -75,6 +84,8 @@ async def test_server_status_timeout(server, client, monkeypatch):
 
     result = await client.get_server_status()
     assert result.code == 200
+    # Error because CompilerService is in the Error state
+    assert result.result["data"]["status"] == ReportedStatus.Error
     compiler_slice = None
     for slice in result.result["data"]["slices"]:
         if slice["name"] == "core.compiler":
