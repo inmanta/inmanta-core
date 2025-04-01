@@ -914,16 +914,14 @@ class OrchestrationService(protocol.ServerSlice):
                                     "Cannot perform partial export because of version mismatch for module %s." % module_name
                                 )
 
-            async def upload_modules(env: uuid.UUID, modules_data: JsonType) -> None:
+            async def upload_modules(env: uuid.UUID, module_version_info: dict[str, dict[str, Any]]) -> None:
                 module_stmt = insert(InmantaModule).on_conflict_do_nothing()
 
                 files_in_module_stmt = insert(FilesInModule).on_conflict_do_nothing()
 
-                if not modules_data:
-                    raise BadRequest("No modules were provided")
                 module_data = []
                 files_in_module_data = []
-                for inmanta_module_name, python_module in modules_data.items():
+                for inmanta_module_name, python_module in module_version_info.items():
 
                     requirements: set[str] = set()
 
