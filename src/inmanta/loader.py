@@ -83,7 +83,7 @@ class CodeManager:
         # Old implementation
         # Use by external code
 
-        # Map of [Union[resouce_type, handler_type], set[path]]
+        # Map of types (i.e. resource types or handler types) to file paths
         # Which python files are required by each type
         self.__type_file: dict[str, set[str]] = {}
 
@@ -91,8 +91,8 @@ class CodeManager:
         # To which python module do these python files belong
         self.__file_info: dict[str, SourceInfo] = {}
 
-        # Map of [Union[resouce_type, handler_type], str]
-        # Maps a type to the module it lives in
+        # Map of types (i.e. resource types or handler types) to inmanta modules
+        # Maps a type to the modules required to execute it.
         self.__type_to_module: dict[str, list[str]] = defaultdict(list)
 
         # Cache of module to source info
@@ -158,7 +158,8 @@ class CodeManager:
         """Return all module source info"""
         return self.__module_to_source_info
 
-    def get_modules_data(self) -> dict[str, "PythonModule"]:
+    def get_module_version_info(self) -> dict[str, "PythonModule"]:
+        """Return all module version info"""
         if self.__modules_data:
             return self.__modules_data
 
@@ -166,11 +167,16 @@ class CodeManager:
 
         modules_data = {}
         for module_name, files_in_module in source_info.items():
-            all_files_hashes = [file.hash for file in sorted(files_in_module, key=lambda f: f.hash)]
 
+            requirements = set()
             module_version_hash = hashlib.new("sha1")
-            for file_hash in all_files_hashes:
-                module_version_hash.update(file_hash.encode())
+
+            for file in sorted(files_in_module, key=lambda f: f.hash):
+                module_version_hash.update(file.hash.encode())
+                requirements.update(file.requires)
+
+            for requirement in sorted(requirements):
+                module_version_hash.update(str(requirement).encode())
 
             module_version = module_version_hash.hexdigest()
             modules_data[module_name] = PythonModule(
@@ -181,10 +187,6 @@ class CodeManager:
         self.__modules_data = modules_data
 
         return self.__modules_data
-
-    def get_module_version_info(self) -> dict[str, "PythonModule"]:
-        """Return all module version info"""
-        return self.get_modules_data()
 
     def get_type_to_module(self) -> dict[str, list[str]]:
         """Return all module source info"""

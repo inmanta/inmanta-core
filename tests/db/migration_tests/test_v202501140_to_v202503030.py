@@ -36,47 +36,47 @@ async def test_add_tables_for_agent_code_transport_rework(
     get_tables_in_db: abc.Callable[[], abc.Awaitable[list[str]]],
 ) -> None:
 
-    assert "module" not in await get_tables_in_db()
+    assert "inmanta_module" not in await get_tables_in_db()
     assert "files_in_module" not in await get_tables_in_db()
     assert "modules_for_agent" not in await get_tables_in_db()
     assert "code" in await get_tables_in_db()
     await migrate_db_from()
-    assert "module" in await get_tables_in_db()
+    assert "inmanta_module" in await get_tables_in_db()
     assert "files_in_module" in await get_tables_in_db()
     assert "modules_for_agent" in await get_tables_in_db()
     assert "code" not in await get_tables_in_db()
 
     async with get_session() as session:
         files_in_module_stmt = select(
-            models.FilesInModule.file_path,
-        ).order_by(models.FilesInModule.file_path)
+            models.FilesInModule.python_module_name,
+        ).order_by(models.FilesInModule.python_module_name)
         files = await session.scalars(files_in_module_stmt)
         assert files.all() == [
-            "inmanta_plugins/fs/__init__.py",
-            "inmanta_plugins/fs/json_file.py",
-            "inmanta_plugins/fs/resources.py",
-            "inmanta_plugins/std/__init__.py",
-            "inmanta_plugins/std/resources.py",
-            "inmanta_plugins/std/types.py",
+            "inmanta_plugins.fs",
+            "inmanta_plugins.fs.json_file",
+            "inmanta_plugins.fs.resources",
+            "inmanta_plugins.std",
+            "inmanta_plugins.std.resources",
+            "inmanta_plugins.std.types",
         ]
 
         modules_stmt = select(
-            models.Module.name,
-        ).order_by(models.Module.name)
+            models.InmantaModule.name,
+        ).order_by(models.InmantaModule.name)
         modules = await session.scalars(modules_stmt)
         assert modules.all() == ["fs", "std"]
 
         modules_for_agent_stmt = (
             select(
                 models.ModulesForAgent.agent_name,
-                models.ModulesForAgent.module_name,
-                models.ModulesForAgent.module_version,
+                models.ModulesForAgent.inmanta_module_name,
+                models.ModulesForAgent.inmanta_module_version,
             )
             .order_by(models.ModulesForAgent.agent_name)
             .where(models.ModulesForAgent.cm_version == 1)
         )
         modules_for_agent = await session.execute(modules_for_agent_stmt)
         assert modules_for_agent.all() == [
-            ("internal", "std", "cbe17aef6300a8f88b8044cd5f1891809b0d0bf4"),
-            ("localhost", "fs", "98418787b3a998d6778588156bf05cedaa5c122e"),
+            ("internal", "std", "d95a4a8894881c79b1c791fb94824db2dd961d08"),
+            ("localhost", "fs", "a8ecaac2c9448803a18a5d9e16bbd87f133a06fc"),
         ]

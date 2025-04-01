@@ -78,7 +78,7 @@ class DependencyCycleException(Exception):
         return "Cycle in dependencies: %s" % self.cycle
 
 
-def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, code_manager: loader.CodeManager) -> None:
+def upload_code(conn: protocol.SyncClient, code_manager: loader.CodeManager) -> None:
     res = conn.stat_files(list(code_manager.get_file_hashes()))
     if res is None or res.code != 200:
         raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
@@ -88,11 +88,6 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, code_manager: loader.
         res = conn.upload_file(id=file, content=base64.b64encode(content).decode("ascii"))
         if res is None or res.code != 200:
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
-
-    modules_data = code_manager.get_modules_data()
-    res = conn.upload_modules(tid=tid, modules_data=modules_data)
-    if res is None or res.code != 200:
-        raise Exception(f"Unable to upload plugin code to the server (msg: %s)\n{modules_data=}" % res.result)
 
 
 class Exporter:
@@ -515,7 +510,7 @@ class Exporter:
                     code_manager.register_code(resource_type, obj)
 
         if do_upload:
-            upload_code(conn, tid, code_manager)
+            upload_code(conn, code_manager)
 
     def commit_resources(
         self,

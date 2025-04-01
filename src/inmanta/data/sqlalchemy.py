@@ -45,8 +45,8 @@ class Base(DeclarativeBase):
     pass
 
 
-class Module(Base):
-    __tablename__ = "module"
+class InmantaModule(Base):
+    __tablename__ = "inmanta_module"
 
     __table_args__ = (
         PrimaryKeyConstraint("name", "version", "environment", name="module_pkey"),
@@ -63,23 +63,24 @@ class FilesInModule(Base):
     __tablename__ = "files_in_module"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["module_name", "module_version", "environment"],
-            ["module.name", "module.version", "module.environment"],
+            ["inmanta_module_name", "inmanta_module_version", "environment"],
+            ["inmanta_module.name", "inmanta_module.version", "inmanta_module.environment"],
             ondelete="CASCADE",
         ),
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="files_in_module_environment_fkey"),
         ForeignKeyConstraint(
             ["file_content_hash"], ["file.content_hash"], ondelete="RESTRICT", name="files_in_module_file_content_hash_fkey"
         ),  # todo add test for restrict behaviour on delete
-        UniqueConstraint("module_name", "module_version", "environment", "file_path"),
+        UniqueConstraint("inmanta_module_name", "inmanta_module_version", "environment", "python_module_name"),
     )
-    __mapper_args__ = {"primary_key": ["module_name", "module_version", "environment", "file_path"]}
+    __mapper_args__ = {"primary_key": ["inmanta_module_name", "inmanta_module_version", "environment", "python_module_name"]}
 
-    module_name: Mapped[str] = mapped_column(String)
-    module_version: Mapped[str] = mapped_column(String)
+    inmanta_module_name: Mapped[str] = mapped_column(String)
+    inmanta_module_version: Mapped[str] = mapped_column(String)
     environment: Mapped[uuid.UUID] = mapped_column(UUID)
     file_content_hash: Mapped[str] = mapped_column(String)
-    file_path: Mapped[str] = mapped_column(String)
+    python_module_name: Mapped[str] = mapped_column(String)
+    is_byte_code: Mapped[bool] = mapped_column(Boolean)
 
 
 class ModulesForAgent(Base):
@@ -90,19 +91,19 @@ class ModulesForAgent(Base):
         ),
         ForeignKeyConstraint(["agent_name", "environment"], ["agent.name", "agent.environment"], ondelete="CASCADE"),
         ForeignKeyConstraint(
-            ["module_name", "module_version", "environment"],
-            ["module.name", "module.version", "module.environment"],
+            ["inmanta_module_name", "inmanta_module_version", "environment"],
+            ["inmanta_module.name", "inmanta_module.version", "inmanta_module.environment"],
             ondelete="RESTRICT",
         ),
-        UniqueConstraint("cm_version", "environment", "agent_name", "module_name"),
+        UniqueConstraint("cm_version", "environment", "agent_name", "inmanta_module_name"),
     )
-    __mapper_args__ = {"primary_key": ["cm_version", "environment", "agent_name", "module_name"]}
+    __mapper_args__ = {"primary_key": ["cm_version", "environment", "agent_name", "inmanta_module_name"]}
 
     cm_version: Mapped[int] = mapped_column(Integer)
     environment: Mapped[uuid.UUID] = mapped_column(UUID)
     agent_name: Mapped[str] = mapped_column(String)
-    module_name: Mapped[str] = mapped_column(String)
-    module_version: Mapped[str] = mapped_column(String)
+    inmanta_module_name: Mapped[str] = mapped_column(String)
+    inmanta_module_version: Mapped[str] = mapped_column(String)
 
 
 class File(Base):

@@ -34,7 +34,7 @@ import inmanta.exceptions
 import inmanta.util
 from inmanta import const, data, tracing
 from inmanta.const import ResourceState
-from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode
+from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode, get_session
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
@@ -44,6 +44,7 @@ from inmanta.data.model import (
     ResourceMinimal,
     SchedulerStatusReport,
 )
+from inmanta.data.sqlalchemy import FilesInModule, InmantaModule
 from inmanta.db.util import ConnectionInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
@@ -63,6 +64,7 @@ from inmanta.server import diff, protocol
 from inmanta.server.services import resourceservice
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
+from sqlalchemy.dialects.postgresql import insert
 
 LOGGER = logging.getLogger(__name__)
 PLOGGER = logging.getLogger("performance")
@@ -912,6 +914,57 @@ class OrchestrationService(protocol.ServerSlice):
                                     "Cannot perform partial export because of version mismatch for module %s." % module_name
                                 )
 
+            async def upload_modules(env: uuid.UUID, modules_data: JsonType) -> None:
+                module_stmt = insert(InmantaModule).on_conflict_do_nothing()
+
+                files_in_module_stmt = insert(FilesInModule).on_conflict_do_nothing()
+
+                if not modules_data:
+                    raise BadRequest("No modules were provided")
+                module_data = []
+                files_in_module_data = []
+                for inmanta_module_name, python_module in modules_data.items():
+
+                    requirements: set[str] = set()
+
+                    for file in python_module["files_in_module"]:
+                        file_path = file["path"]
+                        match file_path:
+                            case _ if file_path.endswith(".py"):
+                                is_byte_code = False
+                            case _ if file_path.endswith(".pyc"):
+                                is_byte_code = True
+                            case _:
+                                raise ServerError(
+                                    "Invalid file extension for plugin file %s. Expecting `.py` or `.pyc`." % file_path
+                                )
+
+                        file_in_module = {
+                            "module_name": inmanta_module_name,
+                            "module_version": python_module["version"],
+                            "environment": env,
+                            "file_content_hash": file["hash"],
+                            "python_module_name": file["module_name"],
+                            "is_byte_code": is_byte_code,
+                        }
+                        requirements.update(file["requires"])
+                        files_in_module_data.append(file_in_module)
+
+                    module = {
+                        "name": inmanta_module_name,
+                        "version": python_module["version"],
+                        "environment": env,
+                        "requirements": requirements,
+                    }
+
+                    module_data.append(module)
+
+                async with get_session() as session:
+                    await session.execute(module_stmt, module_data)
+                    await session.execute(files_in_module_stmt, files_in_module_data)
+                    await session.commit()
+
+
             if type_to_agent and not all([module_version_info is not None, type_to_module_data is not None]):
                 raise BadRequest(
                     f"Missing source information for version {version}. Please make sure the following arguments "
@@ -925,6 +978,8 @@ class OrchestrationService(protocol.ServerSlice):
                 await check_version_info(
                     partial_base_version, env.id, module_version_info, type_to_module_data, type_to_agent, connection
                 )
+            else:
+                await upload_modules(env.id, module_version_info)
 
             await register_code(version, env.id, module_version_info, type_to_module_data, type_to_agent, connection)
 

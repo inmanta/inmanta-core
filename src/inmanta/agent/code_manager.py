@@ -75,27 +75,27 @@ class CodeManager:
         module_install_specs = []
         modules_for_agent = (
             select(
-                models.ModulesForAgent.module_name,
-                models.ModulesForAgent.module_version,
+                models.ModulesForAgent.inmanta_module_name,
+                models.ModulesForAgent.inmanta_module_version,
                 models.ModulesForAgent.cm_version,
-                models.Module.requirements,
+                models.InmantaModule.requirements,
             )
             .join_from(
                 models.ModulesForAgent,
-                models.Module,
+                models.InmantaModule,
                 and_(
-                    models.ModulesForAgent.module_name == models.Module.name,
-                    models.ModulesForAgent.module_version == models.Module.version,
-                    models.ModulesForAgent.environment == models.Module.environment,
+                    models.ModulesForAgent.inmanta_module_name == models.InmantaModule.name,
+                    models.ModulesForAgent.inmanta_module_version == models.InmantaModule.version,
+                    models.ModulesForAgent.environment == models.InmantaModule.environment,
                 ),
             )
             .join_from(
-                models.Module,
+                models.InmantaModule,
                 models.FilesInModule,
                 and_(
-                    models.Module.name == models.FilesInModule.module_name,
-                    models.Module.version == models.FilesInModule.module_version,
-                    models.Module.environment == models.FilesInModule.environment,
+                    models.InmantaModule.name == models.FilesInModule.inmanta_module_name,
+                    models.InmantaModule.version == models.FilesInModule.inmanta_module_version,
+                    models.InmantaModule.environment == models.FilesInModule.environment,
                 ),
             )
             .where(
@@ -110,7 +110,7 @@ class CodeManager:
             for res in result.all():
                 files_in_module = (
                     select(
-                        models.FilesInModule.file_path,
+                        models.FilesInModule.python_module_name,
                         models.FilesInModule.file_content_hash,
                         models.File.content,
                     )
@@ -120,8 +120,8 @@ class CodeManager:
                     )
                     .where(
                         models.FilesInModule.environment == environment,
-                        models.FilesInModule.module_name == res.module_name,
-                        models.FilesInModule.module_version == res.module_version,
+                        models.FilesInModule.inmanta_module_name == res.inmanta_module_name,
+                        models.FilesInModule.inmanta_module_version == res.inmanta_module_version,
                     )
                 )
 
