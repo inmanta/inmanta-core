@@ -205,7 +205,7 @@ def typedmethod(
                 strict_typing=strict_typing,
                 enforce_auth=enforce_auth,
                 varkw=varkw,
-                set_method_properties_on_fnc=(index == 0),
+                set_method_properties_on_fnc=(index == 0),  # Prevent setting method properties twice
             )
             common.MethodProperties.register_method(properties)
         return func

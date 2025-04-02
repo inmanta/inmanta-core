@@ -75,7 +75,10 @@ class AuthorizationMetadata:
 
     @classmethod
     def register_auth_metadata(cls, metadata: "AuthorizationMetadata") -> None:
-        cls.metadata[metadata.method_properties.function_name] = metadata
+        function_name = metadata.method_properties.function_name
+        if function_name in cls.metadata:
+            raise Exception(f"Authorization metadata already set for method {function_name}.")
+        cls.metadata[function_name] = metadata
 
     @classmethod
     def has_metadata_for(cls, method_name: str) -> bool:
@@ -85,7 +88,7 @@ class AuthorizationMetadata:
     def get_open_policy_agent_data(cls) -> dict[str, object]:
         """
         Return the information about the different endpoints that exist
-        in the format required by the open policy agent policy engine.
+        in the format used as input to Open Policy Agent.
         """
         endpoints = {}
         for md in cls.metadata:
