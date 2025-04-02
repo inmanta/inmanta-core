@@ -115,10 +115,10 @@ async def test_database_service_status(monkeypatch, server, client):
     max_pool = monitor_status["max_pool"]
     mocked_free_pool = max_pool // 10 - 1
 
-    def return_free_pool(self, pool):
+    def return_free_pool(self):
         return mocked_free_pool
 
-    monkeypatch.setattr(databaseservice.DatabaseMonitor, "get_free_connections", return_free_pool)
+    monkeypatch.setattr(databaseservice.DatabaseMonitor, "get_pool_free", return_free_pool)
 
     status = await database_slice.get_slice_status()
     assert status.reported_status == ReportedStatus.Warning
