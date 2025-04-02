@@ -167,6 +167,25 @@ world
     assert expected == out
 
 
+def test_escaping_rules_fstrings(snippetcompiler, capsys):
+    """
+    Check that new line characters are correctly interpreted in f-strings
+    """
+    snippetcompiler.setup_for_snippet(
+        r"""
+a = 1
+std::print(f"test\ntest{a}")
+""",
+        ministd=True,
+    )
+    expected = r"""test
+test1
+"""
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert expected == out
+
+
 def test_fstring_float_formatting(snippetcompiler, capsys):
     snippetcompiler.setup_for_snippet(
         """
