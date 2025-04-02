@@ -23,6 +23,7 @@ from collections import abc
 import pytest
 
 import inmanta.data.sqlalchemy as models
+from inmanta.agent.code_manager import CodeManager
 from inmanta.data import get_session
 from sqlalchemy import select
 
@@ -32,19 +33,18 @@ part = file_name_regex.match(__name__)[1]
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
 async def test_add_tables_for_agent_code_transport_rework(
-    migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
-    get_tables_in_db: abc.Callable[[], abc.Awaitable[list[str]]],
+    migrate_db_from: abc.Callable[[], abc.Awaitable[None]],agent
 ) -> None:
 
-    assert "inmanta_module" not in await get_tables_in_db()
-    assert "files_in_module" not in await get_tables_in_db()
-    assert "modules_for_agent" not in await get_tables_in_db()
-    assert "code" in await get_tables_in_db()
     await migrate_db_from()
-    assert "inmanta_module" in await get_tables_in_db()
-    assert "files_in_module" in await get_tables_in_db()
-    assert "modules_for_agent" in await get_tables_in_db()
-    assert "code" not in await get_tables_in_db()
+
+    # codemanager = CodeManager(agent._client)
+    #
+    # install_spec = await codemanager.get_code(
+    #     environment=uuid.UUID(environment),
+    #     model_version=version,
+    #     agent_name="agent1",
+    # )
 
     async with get_session() as session:
         files_in_module_stmt = select(

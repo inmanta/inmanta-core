@@ -2695,9 +2695,9 @@ class Environment(BaseDocument):
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
 
+            await ModulesForAgent.delete_all(environment=self.id, connection=con)
             await InmantaModule.delete_all(environment=self.id, connection=con)
             await FilesInModule.delete_all(environment=self.id, connection=con)
-            await ModulesForAgent.delete_all(environment=self.id, connection=con)
 
             await DiscoveredResource.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsGauge.delete_all(environment=self.id, connection=con)
@@ -5942,15 +5942,7 @@ class ConfigurationModel(BaseDocument):
             await Compile.delete_all(environment=self.environment, version=self.version, connection=con)
             await DryRun.delete_all(environment=self.environment, model=self.version, connection=con)
             await self._execute_query(
-                """
-                DELETE FROM public.files_in_module
-                WHERE (environment, inmanta_module_name, inmanta_module_version) IN (
-                    SELECT environment, inmanta_module_name, inmanta_module_version
-                    FROM public.modules_for_agent
-                    WHERE environment=$1
-                    AND cm_version=$2
-                )
-                """,
+                "DELETE FROM public.modules_for_agent WHERE environment=$1 AND cm_version=$2",
                 self.environment,
                 self.version,
                 connection=con,
@@ -5970,11 +5962,21 @@ class ConfigurationModel(BaseDocument):
                 connection=con,
             )
             await self._execute_query(
-                "DELETE FROM public.modules_for_agent WHERE environment=$1 AND cm_version=$2",
+                """
+                DELETE FROM public.files_in_module
+                WHERE (environment, inmanta_module_name, inmanta_module_version) IN (
+                    SELECT environment, inmanta_module_name, inmanta_module_version
+                    FROM public.modules_for_agent
+                    WHERE environment=$1
+                    AND cm_version=$2
+                )
+                """,
                 self.environment,
                 self.version,
                 connection=con,
             )
+
+
             await UnknownParameter.delete_all(environment=self.environment, version=self.version, connection=con)
             await self._execute_query(
                 "DELETE FROM public.resourceaction_resource WHERE environment=$1 AND resource_version=$2",

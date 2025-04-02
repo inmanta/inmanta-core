@@ -935,7 +935,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                     venv_path=venv.env_path,
                     storage_folder=storage_for_blueprint,
                     session_gid=self.session_gid,
-                    sources=[x.for_transport() for x in blueprint.sources],
+                    sources=blueprint.sources,
                     venv_touch_interval=self.venv_checkup_interval,
                 )
             )

@@ -212,15 +212,13 @@ class ModuleSource:
     :param name: the name of the python module. e.g. inmanta_plugins.model.x
     :param is_byte_code: is this content python byte code or python source
     :param source: the content of the file
-    :param _client: a protocol client, required when source is not set
 
     """
 
     name: str
     hash_value: str
     is_byte_code: bool
-    source: Optional[bytes] = None
-    _client: Optional["protocol.SyncClient"] = None
+    source: bytes
 
     def __lt__(self, other):
         if not isinstance(other, ModuleSource):
@@ -231,28 +229,6 @@ class ModuleSource:
         if not isinstance(other, ModuleSource):
             return False
         return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
-
-    def get_source_code(self) -> bytes:
-        """Load the source code"""
-        if self.source is not None:
-            return self.source
-
-        if self._client is None:
-            raise Exception("_client should be set to use this method.")
-
-        response: protocol.Result = self._client.get_file(self.hash_value)
-        if response.code != 200 or response.result is None:
-            raise Exception(f"Failed to fetch code for {self.name} with hash {self.hash_value}.")
-
-        return base64.b64decode(response.result["content"])
-
-    def for_transport(self) -> "ModuleSource":
-        return ModuleSource(name=self.name, hash_value=self.hash_value, is_byte_code=self.is_byte_code, source=self.source)
-
-    def with_client(self, client: "protocol.SyncClient") -> "ModuleSource":
-        return ModuleSource(
-            name=self.name, hash_value=self.hash_value, is_byte_code=self.is_byte_code, source=self.source, _client=client
-        )
 
 
 @dataclass(frozen=True)
@@ -373,9 +349,8 @@ class CodeLoader:
                     return
 
             # write the new source
-            source_code = module_source.get_source_code()
             with open(source_file, "wb+") as fd:
-                fd.write(source_code)
+                fd.write(module_source.source)
         else:
             LOGGER.debug(
                 "Not deploying code (hv=%s, module=%s) because of cache hit", module_source.hash_value, module_source.name
