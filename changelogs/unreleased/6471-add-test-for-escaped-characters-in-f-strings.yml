@@ -1,0 +1,4 @@
+change-type: patch
+description: Add test for escaped characters in f-strings
+issue-nr: 6471
+destination-branches: [master, iso8, iso7]
