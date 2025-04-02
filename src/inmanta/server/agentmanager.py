@@ -179,7 +179,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         # Try to get more info from scheduler, but make sure not to timeout
         schedulers = self.get_all_schedulers()
-        deadline = 0.9 * Server.GET_SERVER_STATUS_TIMEOUT
+        deadline = 0.9 * Server.GET_SLICE_STATUS_TIMEOUT
 
         async def get_report(env: uuid.UUID, session: protocol.Session) -> tuple[uuid.UUID, DataBaseReport]:
             result = await asyncio.wait_for(session.client.get_db_status(), deadline)
