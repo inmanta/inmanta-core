@@ -40,6 +40,7 @@ from inmanta.types import PrimitiveTypes, ResourceIdStr
     client_types=[ClientType.compiler],
     api_version=2,
     varkw=True,
+    strict_typing=False,
 )
 def put_partial(
     tid: uuid.UUID,
@@ -48,6 +49,8 @@ def put_partial(
     resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[list[str]] = None,
     pip_config: Optional[PipConfig] = None,
+    module_version_info: Optional[dict[str, Any]] = None,
+    type_to_module_data: Optional[dict[str, Any]] = None,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> ReturnValue[int]:
     """
@@ -1366,24 +1369,6 @@ def update_notification(
     :param cleared: Whether the notification has been cleared
     :return: The updated notification
     :raise NotFound: When the referenced environment or notification is not found
-    """
-
-
-@typedmethod(
-    path="/code/<version>",
-    operation="GET",
-    agent_server=True,
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> list[model.Source]:
-    """
-    Get the code for the given version and the given resource
-    :param tid: The id of the environment
-    :param version: The id of the model version
-    :param resource_type: The type name of the resource
-    :raises NotFound: Raised when the version or type is not found
     """
 
 

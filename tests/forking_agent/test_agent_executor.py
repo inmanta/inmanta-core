@@ -32,8 +32,8 @@ from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
 logger = logging.getLogger(__name__)
 
 
-def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpec]:
-    return [executor.ResourceInstallSpec("test::Test", 5, bp)]
+def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ModuleInstallSpec]:
+    return [executor.ModuleInstallSpec("test", "abcdef", 5, bp)]
 
 
 async def test_process_manager(environment, pip_index, mpmanager_light: forking_executor.MPManager) -> None:

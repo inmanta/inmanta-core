@@ -46,12 +46,12 @@ from inmanta.data.model import AttributeStateChange, PipConfig
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Id
-from inmanta.types import JsonType, ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
 
-FailedResources: typing.TypeAlias = dict[ResourceType, Exception]
+FailedModules: typing.TypeAlias = dict[str, Exception]
 
 
 class AgentInstance(abc.ABC):
@@ -167,10 +167,10 @@ class ExecutorBlueprint(EnvBlueprint):
         self.sources = sorted(set(self.sources))
 
     @classmethod
-    def from_specs(cls, code: typing.Collection["ResourceInstallSpec"]) -> "ExecutorBlueprint":
+    def from_specs(cls, code: typing.Collection["ModuleInstallSpec"]) -> "ExecutorBlueprint":
         """
         Create a single ExecutorBlueprint by combining the blueprint(s) of several
-        ResourceInstallSpec by merging respectively their module sources and their
+        ModuleInstallSpec by merging respectively their module sources and their
         requirements and making sure they all share the same pip config.
         """
 
@@ -270,17 +270,19 @@ class ExecutorId:
 
 
 @dataclass(frozen=True)
-class ResourceInstallSpec:
+class ModuleInstallSpec:
     """
-    This class encapsulates the requirements for a specific resource type for a specific model version.
+    This class encapsulates the requirements for a specific (module_name, module_version) for a specific model version.
 
-    :ivar resource_type: fully qualified name for this resource type e.g. std::testing::NullResource
+    :ivar module_name: fully qualified name for this module
+    :ivar module_version: the version of the module to use
     :ivar model_version: the version of the model to use
-    :ivar blueprint: the associate install blueprint
+    :ivar blueprint: the associated install blueprint
 
     """
 
-    resource_type: ResourceType
+    module_name: str
+    module_version: str
     model_version: int
     blueprint: ExecutorBlueprint
 
@@ -547,7 +549,7 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
-    failed_resources: FailedResources
+    failed_modules: FailedModules
 
     @abc.abstractmethod
     async def execute(
@@ -607,14 +609,14 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
     """
 
     @abc.abstractmethod
-    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]) -> E:
+    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ModuleInstallSpec]) -> E:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
         If an Executor does not exist for the given configuration, a new one is created.
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param agent_uri: The name of the host on which the agent is running.
-        :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
+        :param code: Collection of ModuleInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
             handler code in its venv. Must have at least one element.
         :return: An Executor instance

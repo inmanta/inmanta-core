@@ -47,12 +47,21 @@ def get_module_source(module: str, code: str) -> ModuleSource:
     return ModuleSource(module, hv, False, data)
 
 
-def test_code_manager(tmpdir: py.path.local, deactive_venv):
+@pytest.mark.parametrize(
+    "install_all_dependencies,expected_dependencies",
+    [
+        (True, ["inmanta-module-std", "lorem"]),
+        (False, ["lorem"]),
+    ],
+)
+def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependencies, expected_dependencies):
     """Verify the code manager"""
     original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
     shutil.copytree(original_project_dir, project_dir)
     project: Project = Project(project_dir, venv_path=os.path.join(project_dir, ".env"))
+    project._metadata.agent_install_dependency_modules = install_all_dependencies
+
     Project.set(project)
     project.install_modules()
     project.load()
@@ -107,12 +116,7 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv):
     # verify requirements behavior
     source_info: SourceInfo = single_type_list[0]
     # by default also install dependencies on other modules
-    assert source_info.requires == ["inmanta-module-std", "lorem"]
-    project._metadata.agent_install_dependency_modules = False
-    # reset cache
-    source_info._requires = None
-    # when disabled only install non-module dependencies
-    assert source_info.requires == ["lorem"]
+    assert source_info.requires == expected_dependencies
 
 
 def test_code_loader(tmp_path, caplog):
@@ -135,7 +139,7 @@ def test():
     source_1 = get_module_source("inmanta_plugins.inmanta_unit_test", code)
 
     # Ensure source is present on disk
-    cl.deploy_version([source_1])
+    cl.deploy_version([source_1], module_name="inmanta_unit_test")
 
     assert any("Deploying code " in message for message in caplog.messages)
     caplog.clear()
@@ -146,7 +150,7 @@ def test():
     assert inmanta_plugins.inmanta_unit_test.test() == 10
 
     # deploy same version
-    cl.deploy_version([source_1])
+    cl.deploy_version([source_1], module_name="inmanta_unit_test")
 
     assert inmanta_plugins.inmanta_unit_test.test() == 10
     assert any("Deploying code " in message for message in caplog.messages)
@@ -159,7 +163,7 @@ def test():
     # Load the module to register it in the loader cache
     cl.load_module(source_1.name, source_1.hash_value)
     # Subsequent deploys of the same module will result in a cache hit
-    cl.deploy_version([source_1])
+    cl.deploy_version([source_1], source_1.name)
     assert any(
         f"Not deploying code (hv={source_1.hash_value}, module={source_1.name}) because of cache hit" in message
         for message in caplog.messages
@@ -172,7 +176,7 @@ def test():
     return 20
         """
     source_2 = get_module_source("inmanta_plugins.inmanta_unit_test", code)
-    cl.deploy_version([source_2])
+    cl.deploy_version([source_2], source_2.name)
 
     assert any("Deploying code " in message for message in caplog.messages)
 
@@ -214,7 +218,7 @@ def helper():
         """,
     )
 
-    cl.deploy_version([source_tests, source_helpers, source_init])
+    cl.deploy_version([source_tests, source_helpers, source_init], module_name="inmanta_unit_test_modular")
 
     import inmanta_plugins.inmanta_unit_test_modular.tests  # NOQA
 
@@ -229,7 +233,7 @@ def test_2312_code_loader_missing_init(tmp_path) -> None:
 def test():
     return 10
         """
-    cl.deploy_version([get_module_source("inmanta_plugins.my_module.my_sub_mod", code)])
+    cl.deploy_version([get_module_source("inmanta_plugins.my_module.my_sub_mod", code)], module_name="my_module")
 
     import inmanta_plugins.my_module.my_sub_mod as sm
 
@@ -249,7 +253,7 @@ def test():
         import inmanta_plugins.inmanta_bad_unit_test  # NOQA
 
     caplog.clear()
-    cl.deploy_version([get_module_source("inmanta_plugins.inmanta_bad_unit_test", code)])
+    cl.deploy_version([get_module_source("inmanta_plugins.inmanta_bad_unit_test", code)], module_name="inmanta_bad_unit_test")
 
     with pytest.raises(ModuleNotFoundError):
         import inmanta_plugins.inmanta_bad_unit_test  # NOQA

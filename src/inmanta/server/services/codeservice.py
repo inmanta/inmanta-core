@@ -19,13 +19,8 @@ Contact: code@inmanta.com
 import logging
 from typing import cast
 
-from inmanta import data
-from inmanta.data import model
-from inmanta.protocol import handle, methods, methods_v2
-from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.services.fileservice import FileService
-from inmanta.types import Apireturn, JsonType
 
 LOGGER = logging.getLogger(__name__)
 
@@ -47,72 +42,3 @@ class CodeService(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
         self.file_slice = cast(FileService, server.get_slice(SLICE_FILE))
-
-    @handle(methods.upload_code_batched, code_id="id", env="tid")
-    async def upload_code_batched(self, env: data.Environment, code_id: int, resources: JsonType) -> Apireturn:
-        # validate
-        for rtype, sources in resources.items():
-            if not isinstance(rtype, str):
-                raise BadRequest("All keys in the resources map must be strings")
-            if not isinstance(sources, dict):
-                raise BadRequest("All values in the resources map must be dicts")
-
-            for name, refs in sources.items():
-                if not isinstance(name, str):
-                    raise BadRequest("All keys in the sources map must be strings")
-                if not isinstance(refs, (list, tuple)):
-                    raise BadRequest("All values in the sources map must be lists or tuple")
-                if (
-                    len(refs) != 3
-                    or not isinstance(refs[0], str)
-                    or not isinstance(refs[1], str)
-                    or not isinstance(refs[2], list)
-                ):
-                    raise BadRequest("The values in the source map should be of the form (filename, module, [requirements])")
-
-        # list of file hashes
-        allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.keys()]
-
-        val = await self.file_slice.stat_file_internal(allrefs)
-
-        if len(val) != 0:
-            raise BadRequest("Not all file references provided are valid", details={"references": val})
-
-        code = await data.Code.get_versions(environment=env.id, version=code_id)
-        oldmap: dict[str, data.Code] = {c.resource: c for c in code}
-
-        new = {k: v for k, v in resources.items() if k not in oldmap}
-        conflict = [k for k, v in resources.items() if k in oldmap and oldmap[k].source_refs != v]
-
-        if len(conflict) > 0:
-            raise ServerError(
-                "Some of these items already exists, but with different source files", details={"references": conflict}
-            )
-
-        newcodes = [
-            data.Code(environment=env.id, version=code_id, resource=resource, source_refs=hashes)
-            for resource, hashes in new.items()
-        ]
-
-        await data.Code.insert_many(newcodes)
-
-        return 200
-
-    @handle(methods_v2.get_source_code, env="tid")
-    async def get_source_code(self, env: data.Environment, version: int, resource_type: str) -> list[model.Source]:
-        code = await data.Code.get_version(environment=env.id, version=version, resource=resource_type)
-        if code is None:
-            raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
-
-        sources = []
-
-        # Get all module code pertaining to this env/version/resource
-        if code.source_refs is not None:
-            for code_hash, (file_name, module, requires) in code.source_refs.items():
-                sources.append(
-                    model.Source(
-                        hash=code_hash, is_byte_code=file_name.endswith(".pyc"), module_name=module, requirements=requires
-                    )
-                )
-
-        return sources
