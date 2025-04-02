@@ -66,7 +66,7 @@ from inmanta.export import cfg_env
 from inmanta.logging import InmantaLoggerConfig, _is_on_tty
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.services.databaseservice import initialize_sql_alchemy_engine
+from inmanta.server.services.databaseservice import initialize_database_connection
 from inmanta.server.services.metricservice import MetricsService
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.util import get_compiler_version
@@ -148,7 +148,7 @@ def start_scheduler(options: argparse.Namespace) -> None:
 
     async def start() -> None:
 
-        await initialize_sql_alchemy_engine(
+        await initialize_database_connection(
             database_host=opt.db_host.get(),
             database_port=opt.db_port.get(),
             database_name=opt.db_name.get(),

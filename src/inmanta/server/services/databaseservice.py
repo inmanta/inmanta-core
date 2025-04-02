@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import logging
 from typing import Mapping, Optional
 
+import asyncpg
 from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
 
@@ -46,10 +47,11 @@ class DatabaseMonitor:
 
     def __init__(
         self,
+        pool: asyncpg.pool.Pool,
         db_name: str,
         db_host: str,
-        max_overflow: int,
     ) -> None:
+        self._pool = pool
         self._scheduler = Scheduler(f"Database monitor for {db_name}")
         self.dn_name = db_name
         self.db_host = db_host
@@ -57,7 +59,6 @@ class DatabaseMonitor:
         self._db_exhaustion_check_interval = 0.2
         self._exhausted_pool_events_count: int = 0
         self._last_report: int = 0
-        self._max_overflow = max_overflow
 
     def _report_and_reset(self) -> None:
         """
@@ -75,8 +76,7 @@ class DatabaseMonitor:
         """
         Checks if the database pool is exhausted
         """
-        pool = get_pool()
-        pool_exhausted: bool = pool.checkedin() == 0 and pool.overflow() == self._max_overflow
+        pool_exhausted: bool = (self._pool.get_size() == self._pool.get_max_size()) and self._pool.get_idle_size() == 0
         if pool_exhausted:
             self._exhausted_pool_events_count += 1
 
@@ -109,44 +109,21 @@ class DatabaseMonitor:
         """Get the status of the database connection"""
         connected = await self.get_connection_status()
 
-        if not connected:
-            return DataBaseReport(
-                connected=connected,
-                database=self.dn_name,
-                host=self.db_host,
-                max_pool=0,
-                free_pool=0,
-                open_connections=0,
-                free_connections=0,
-                pool_exhaustion_time=self._exhausted_pool_events_count * self._db_exhaustion_check_interval,
-            )
-
-        pool = get_pool()
-
         return DataBaseReport(
             connected=connected,
             database=self.dn_name,
             host=self.db_host,
-            max_pool=pool.size() + self._max_overflow,
-            free_pool=self.get_free_connections(pool),
-            open_connections=pool.checkedin() + max(0, pool.overflow()),
-            free_connections=pool.checkedin(),
+            max_pool=self._pool.get_max_size(),
+            free_pool=self.get_pool_free(),
+            open_connections=self._pool.get_size(),
+            free_connections=self._pool.get_idle_size(),
             pool_exhaustion_time=self._exhausted_pool_events_count * self._db_exhaustion_check_interval,
         )
 
-    def get_free_connections(self, pool: Optional[AsyncAdaptedQueuePool] = None) -> int:
-        """
-        Return all available connections for the given pool:
-          "idle" connections waiting in the pool + possible overflow connections.
-
-        If no pool is passed as an argument, the one associated with the running sql
-        alchemy engine for this process will try to be used.
-        """
-        if pool is None:
-            pool = get_pool()
-        if pool is None:
+    def get_pool_free(self) -> int:
+        if self._pool is None or self._pool._closing:
             return 0
-        return pool.checkedin() + self._max_overflow - max(0, pool.overflow())
+        return self._pool.get_max_size() - self._pool.get_size() + self._pool.get_idle_size()
 
     def _add_gauge(self, name: str, the_gauge: CallbackGauge) -> None:
         """Helper to register gauges and keep track of registrations"""
@@ -158,25 +135,24 @@ class DatabaseMonitor:
 
         self._add_gauge(
             "db.connected",
-            CallbackGauge(callback=lambda: 1 if (get_pool() is not None) else 0),
-        )
-        self._add_gauge(
-            "db.max_pool",
-            CallbackGauge(callback=lambda: get_pool().size() + self._max_overflow if get_pool() is not None else 0),
-        )
-        self._add_gauge(
-            "db.open_connections",
             CallbackGauge(
-                callback=lambda: (get_pool().checkedin() + max(0, get_pool().overflow()) if get_pool() is not None else 0)
+                callback=lambda: 1 if (self._pool is not None and not self._pool._closing and not self._pool._closed) else 0
             ),
         )
         self._add_gauge(
+            "db.max_pool", CallbackGauge(callback=lambda: self._pool.get_max_size() if self._pool is not None else 0)
+        )
+        self._add_gauge(
+            "db.open_connections",
+            CallbackGauge(callback=lambda: self._pool.get_size() if self._pool is not None else 0),
+        )
+        self._add_gauge(
             "db.free_connections",
-            CallbackGauge(callback=lambda: (get_pool().checkedin() if get_pool() is not None else 0)),
+            CallbackGauge(callback=lambda: self._pool.get_idle_size() if self._pool is not None else 0),
         )
         self._add_gauge(
             "db.free_pool",
-            CallbackGauge(callback=self.get_free_connections),
+            CallbackGauge(callback=self.get_pool_free),
         )
         self._add_gauge(
             "db.pool_exhaustion_count",
@@ -195,12 +171,12 @@ class DatabaseMonitor:
         self.registered_gauges.clear()
 
     async def get_connection_status(self) -> bool:
-        try:
-            async with get_connection_ctx_mgr() as conn:
-                res = await conn.fetchval("SELECT 1;")
-                return res == 1
-        except Exception:
-            LOGGER.exception("Connection to PostgreSQL failed")
+        if self._pool is not None and not self._pool._closing and not self._pool._closed:
+            try:
+                async with self._pool.acquire(timeout=10):
+                    return True
+            except Exception:
+                LOGGER.exception("Connection to PostgreSQL failed")
         return False
 
 
@@ -209,14 +185,15 @@ class DatabaseService(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(SLICE_DATABASE)
+        self._pool: Optional[asyncpg.pool.Pool] = None
         self._db_monitor: Optional[DatabaseMonitor] = None
 
     async def start(self) -> None:
         await super().start()
         await self.connect_database()
 
-        max_overflow = opt.server_db_connection_pool_max_size.get() - opt.server_db_connection_pool_min_size.get()
-        self._db_monitor = DatabaseMonitor(opt.db_name.get(), opt.db_host.get(), max_overflow)
+        assert self._pool is not None  # Make mypy happy
+        self._db_monitor = DatabaseMonitor(self._pool, opt.db_name.get(), opt.db_host.get())
         self._db_monitor.start()
 
     async def stop(self) -> None:
@@ -224,13 +201,14 @@ class DatabaseService(protocol.ServerSlice):
         if self._db_monitor is not None:
             await self._db_monitor.stop()
         await self.disconnect_database()
+        self._pool = None
 
     def get_dependencies(self) -> list[str]:
         return []
 
     async def connect_database(self) -> None:
         """Connect to the database"""
-        await initialize_sql_alchemy_engine(
+        await initialize_database_connection(
             database_host=opt.db_host.get(),
             database_port=opt.db_port.get(),
             database_name=opt.db_name.get(),
@@ -257,7 +235,7 @@ class DatabaseService(protocol.ServerSlice):
         return (await self._db_monitor.get_status()).dict()
 
 
-async def initialize_sql_alchemy_engine(
+async def initialize_database_connection(
     database_host: str,
     database_port: int,
     database_name: str,
@@ -289,8 +267,8 @@ async def initialize_sql_alchemy_engine(
         database_host=database_host,
         database_port=database_port,
         database_name=database_name,
-        pool_size=connection_pool_min_size,
-        max_overflow=connection_pool_max_size - connection_pool_min_size,
+        connection_pool_min_size=connection_pool_min_size,
+        connection_pool_max_size=connection_pool_max_size,
         pool_timeout=connection_timeout,
         echo=True,
     )

@@ -1219,6 +1219,7 @@ class BaseDocument(metaclass=DocumentMeta):
       strings.
     """
 
+    _connection_pool: Optional[asyncpg.pool.Pool] = None
     _fields_metadata: dict[str, Field]
     __primary_key__: tuple[str, ...]
     __ignore_fields__: tuple[str, ...]
@@ -1239,10 +1240,14 @@ class BaseDocument(metaclass=DocumentMeta):
         wrapped around that connection instance. This allows for transparent usage, regardless of whether a connection has
         already been acquired.
         """
-        if connection is None:
-            return get_connection_ctx_mgr()
+        if connection is not None:
+            return util.nullcontext(connection)
 
-        return util.nullcontext(connection)
+        # Make mypy happy
+
+        assert cls._connection_pool is not None
+
+        return cls._connection_pool.acquire()
 
     @classmethod
     def table_name(cls) -> str:
@@ -1431,6 +1436,34 @@ class BaseDocument(metaclass=DocumentMeta):
         Generate a new ID. Override to use something else than uuid4
         """
         return uuid.uuid4()
+
+    @classmethod
+    def set_connection_pool(cls, pool: asyncpg.pool.Pool) -> None:
+        if cls._connection_pool:
+            raise Exception(f"Connection already set on {cls} ({cls._connection_pool}!")
+        cls._connection_pool = pool
+
+    @classmethod
+    async def close_connection_pool(cls) -> None:
+        if not cls._connection_pool:
+            return
+        try:
+            await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
+        except asyncio.TimeoutError:
+            cls._connection_pool.terminate()
+            # Don't propagate this exception but just write a log message. This way:
+            #   * A timeout here still makes sure that the other server slices get stopped
+            #   * The tests don't fail when this timeout occurs
+            LOGGER.exception("A timeout occurred while closing the connection pool to the database")
+        except asyncio.CancelledError:
+            cls._connection_pool.terminate()
+            # Propagate cancel
+            raise
+        except Exception:
+            LOGGER.exception("An unexpected exception occurred while closing the connection pool to the database")
+            raise
+        finally:
+            cls._connection_pool = None
 
     def __setattr__(self, name: str, value: object) -> None:
         if name[0] == "_":
@@ -6615,6 +6648,62 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
+def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
+    LOGGER.debug("Connecting data classes")
+
+    for cls in _classes:
+        cls.set_connection_pool(pool)
+
+
+async def connect(
+    host: str,
+    port: int,
+    database: str,
+    username: str,
+    password: str,
+    create_db_schema: bool = True,
+    connection_pool_min_size: int = 10,
+    connection_pool_max_size: int = 10,
+    connection_timeout: float = 60,
+) -> asyncpg.pool.Pool:
+    pool = await asyncpg.create_pool(
+        host=host,
+        port=port,
+        database=database,
+        user=username,
+        password=password,
+        min_size=connection_pool_min_size,
+        max_size=connection_pool_max_size,
+        timeout=connection_timeout,
+    )
+    try:
+        set_connection_pool(pool)
+        if create_db_schema:
+            async with pool.acquire() as con:
+                await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, con).ensure_db_schema()
+            # expire connections after db schema migration to ensure cache consistency
+            await pool.expire_connections()
+        return pool
+    except Exception as e:
+        await pool.close()
+        await disconnect()
+        raise e
+
+
+async def disconnect() -> None:
+    LOGGER.debug("Disconnecting data classes")
+
+    # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
+
+    # or until the gather itself is cancelled.
+
+    result = await asyncio.gather(*[cls.close_connection_pool() for cls in _classes], return_exceptions=True)
+
+    exceptions = [r for r in result if r is not None and isinstance(r, Exception)]
+
+    if exceptions:
+        raise exceptions[0]
+
 async def start_engine(
     *,
     database_username: str,
@@ -6651,7 +6740,7 @@ async def start_engine(
         timeout=pool_timeout,
     )
 
-
+    set_connection_pool(pool)
     async def bridge_creator():
         return await pool.acquire()
 

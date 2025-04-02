@@ -39,7 +39,7 @@ from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
-from inmanta.server.services.databaseservice import initialize_sql_alchemy_engine
+from inmanta.server.services.databaseservice import initialize_database_connection
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -414,7 +414,7 @@ async def sql_alchemy_engine(sqlalchemy_url_parameters: Mapping[str, str]) -> As
 
 @pytest.fixture(scope="function")
 async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_reset):
-    await initialize_sql_alchemy_engine(
+    await initialize_database_connection(
         database_host=postgres_db.host,
         database_port=postgres_db.port,
         database_name=database_name,
