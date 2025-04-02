@@ -28,7 +28,7 @@ from tornado import routing, web
 
 from inmanta import config, const, data
 from inmanta.const import ApiDocsFormat
-from inmanta.data.model import STATUS_ORDER, FeatureStatus, StatusResponse
+from inmanta.data.model import FeatureStatus, ReportedStatus, StatusResponse
 from inmanta.protocol import exceptions, handle, methods, methods_v2
 from inmanta.protocol.common import HTML_CONTENT_WITH_UTF8_CHARSET, ReturnValue, attach_warnings
 from inmanta.protocol.openapi.converter import OpenApiConverter
@@ -143,7 +143,7 @@ class Server(protocol.ServerSlice):
                 FeatureStatus(slice=feature.slice, name=feature.name, value=self.feature_manager.get_value(feature))
                 for feature in self.feature_manager.get_features()
             ],
-            status=max(slices, key=lambda slice: STATUS_ORDER[slice.reported_status]).reported_status,
+            status=max(ReportedStatus(slice.reported_status) for slice in slices),
         )
 
         return response

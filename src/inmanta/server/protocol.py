@@ -430,7 +430,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | No
             return SliceStatus(
                 name=self.name,
                 status={
-                    "error": f"timeout on data collection for {self.name}, " "consult the server log for additional information"
+                    "error": f"Timeout on data collection for {self.name}, consult the server log for additional information"
                 },
                 reported_status=ReportedStatus.Error,
                 message="Timeout on data collection",

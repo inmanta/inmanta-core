@@ -92,13 +92,12 @@ class ReportedStatus(StrEnum):
     Warning = "Warning"
     Error = "Error"
 
-
-# Determines the order of severity of the reported status
-STATUS_ORDER = {
-    ReportedStatus.OK: 0,
-    ReportedStatus.Warning: 1,
-    ReportedStatus.Error: 2,
-}
+    def __gt__(self, other: str) -> bool:
+        # Determines the order of severity of the reported status
+        order: list[str] = [ReportedStatus.OK, ReportedStatus.Warning, ReportedStatus.Error]
+        if self not in order or other not in order:
+            raise ValueError
+        return order.index(self) > order.index(other)
 
 
 class SliceStatus(BaseModel):
