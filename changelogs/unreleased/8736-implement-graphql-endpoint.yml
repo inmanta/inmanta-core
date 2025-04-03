@@ -1,0 +1,7 @@
+description: Implemented a GraphQL endpoint.
+  Added a query to fetch environments that supports filtering, sorting and paging.
+issue-nr: 8736
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}"

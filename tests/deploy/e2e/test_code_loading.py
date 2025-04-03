@@ -1,19 +1,19 @@
 """
-    Copyright 2022 Inmanta
+Copyright 2022 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -42,7 +42,7 @@ from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
 from inmanta.util import get_compiler_version
-from utils import ClientHelper, DummyCodeManager, log_index, retry_limited
+from utils import ClientHelper, DummyCodeManager, log_index, retry_limited, wait_until_deployment_finishes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -282,3 +282,56 @@ async def test_agent_code_loading_with_failure(
     log_index(caplog, "test_code_loading", logging.ERROR, "Failed to install handler test::Test version=1", idx1)
 
     log_index(caplog, "test_code_loading", logging.ERROR, "Failed to install handler test::Test2 version=1", idx1)
+
+
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_logging_on_code_loading_failure(server, client, environment, clienthelper):
+    """
+    This test case ensures that if handler code cannot be loaded, this is reported in the resource action log.
+    """
+    code = """
+raise Exception("Fail code loading")
+    """
+
+    sources = {}
+    await make_source_structure(
+        sources,
+        "inmanta_plugins/test/__init__.py",
+        "inmanta_plugins.test",
+        code,
+        dependencies=[],
+        client=client,
+    )
+
+    version = await clienthelper.get_version()
+
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=[
+            {
+                "id": "test::Test[agent,name=test],v=%d" % version,
+                "purged": False,
+                "requires": [],
+                "version": version,
+            }
+        ],
+        compiler_version=get_compiler_version(),
+    )
+    assert res.code == 200
+
+    res = await client.upload_code_batched(tid=environment, id=version, resources={"test::Test": sources})
+    assert res.code == 200
+
+    res = await client.release_version(tid=environment, id=version)
+    assert res.code == 200
+
+    await wait_until_deployment_finishes(client, environment, version=version)
+
+    result = await client.get_resource_actions(tid=environment, resource_type="test::Test", agent="agent", log_severity="ERROR")
+    assert result.code == 200
+    assert any(
+        "All resources of type `test::Test` failed to load handler code or install handler code dependencies" in log_line["msg"]
+        for resource_action in result.result["data"]
+        for log_line in resource_action["messages"]
+    )

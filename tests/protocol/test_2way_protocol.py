@@ -1,19 +1,19 @@
 """
-    Copyright 2016 Inmanta
+Copyright 2016 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -32,7 +32,7 @@ from inmanta.protocol import method
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.server import SLICE_SESSION_MANAGER
 from inmanta.server.protocol import Server, ServerSlice, SessionListener
-from utils import configure, configure_auth, retry_limited
+from utils import configure_auth, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -174,10 +174,8 @@ async def check_sessions(sessions):
 
 
 @pytest.mark.slowtest
-async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, postgres_db, database_name):
+async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
     from inmanta.config import Config
-
-    configure(unused_tcp_port, database_name, postgres_db.port)
 
     Config.set("server", "agent-timeout", "1")
 
@@ -236,10 +234,8 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
 
 
 @pytest.mark.slowtest
-async def test_server_timeout(unused_tcp_port, no_tid_check, async_finalizer, postgres_db, database_name):
+async def test_server_timeout(server_config, no_tid_check, async_finalizer):
     from inmanta.config import Config
-
-    configure(unused_tcp_port, database_name, postgres_db.port)
 
     Config.set("server", "agent-timeout", "1")
 

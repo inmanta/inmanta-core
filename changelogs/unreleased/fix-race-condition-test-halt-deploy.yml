@@ -1,0 +1,4 @@
+---
+description: Fix race condition in the test_halt_deploy test case where the scheduler process is not detected correctly.
+change-type: patch
+destination-branches: [master, iso8]

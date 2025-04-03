@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -29,9 +29,9 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Callable, Collection, Iterable, Sequence, Set
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Iterable, Sequence, Set
 from configparser import RawConfigParser
-from contextlib import AbstractAsyncContextManager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from itertools import chain
 from re import Pattern
 from typing import Generic, NewType, Optional, TypeVar, Union, cast, overload
@@ -64,10 +64,29 @@ from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
-from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
+from sqlalchemy import URL, AsyncAdaptedQueuePool
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+
+"""
+Global reference to the SQL Alchemy engine
+Main APIs to interact with it:
+- start_engine()
+- get_connection_ctx_mgr()
+- stop_engine()
+"""
+ENGINE: AsyncEngine | None = None
+
+"""
+Object that creates async sessions.
+Used mainly by our GraphQL implementation via these APIs:
+- get_session_factory()
+- get_session()
+"""
+SESSION_FACTORY: async_sessionmaker[AsyncSession] | None = None
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -468,7 +487,6 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
 
     # Configuration methods
     @classmethod
-    # TODO: cache this!
     def get_valid_sort_columns(cls) -> dict[ColumnNameStr, ColumnType]:
         """Return all valid columns for lookup and their type"""
         raise NotImplementedError()
@@ -1134,6 +1152,8 @@ class Field(Generic[T]):
         if isinstance(value, str) and issubclass(self.field_type, pydantic.BaseModel):
             jsv = json.loads(value)
             return self.field_type(**jsv)
+        if isinstance(value, dict) and issubclass(self.field_type, pydantic.BaseModel):
+            return self.field_type(**value)
         if self.field_type == pydantic.AnyHttpUrl:
             return pydantic.TypeAdapter(pydantic.AnyHttpUrl).validate_python(value)
 
@@ -1198,7 +1218,6 @@ class BaseDocument(metaclass=DocumentMeta):
       strings.
     """
 
-    _connection_pool: Optional[asyncpg.pool.Pool] = None
     _fields_metadata: dict[str, Field]
     __primary_key__: tuple[str, ...]
     __ignore_fields__: tuple[str, ...]
@@ -1219,11 +1238,10 @@ class BaseDocument(metaclass=DocumentMeta):
         wrapped around that connection instance. This allows for transparent usage, regardless of whether a connection has
         already been acquired.
         """
-        if connection is not None:
-            return util.nullcontext(connection)
-        # Make mypy happy
-        assert cls._connection_pool is not None
-        return cls._connection_pool.acquire()
+        if connection is None:
+            return get_connection_ctx_mgr()
+
+        return util.nullcontext(connection)
 
     @classmethod
     def table_name(cls) -> str:
@@ -1412,34 +1430,6 @@ class BaseDocument(metaclass=DocumentMeta):
         Generate a new ID. Override to use something else than uuid4
         """
         return uuid.uuid4()
-
-    @classmethod
-    def set_connection_pool(cls, pool: asyncpg.pool.Pool) -> None:
-        if cls._connection_pool:
-            raise Exception(f"Connection already set on {cls} ({cls._connection_pool}!")
-        cls._connection_pool = pool
-
-    @classmethod
-    async def close_connection_pool(cls) -> None:
-        if not cls._connection_pool:
-            return
-        try:
-            await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
-        except asyncio.TimeoutError:
-            cls._connection_pool.terminate()
-            # Don't propagate this exception but just write a log message. This way:
-            #   * A timeout here still makes sure that the other server slices get stopped
-            #   * The tests don't fail when this timeout occurs
-            LOGGER.exception("A timeout occurred while closing the connection pool to the database")
-        except asyncio.CancelledError:
-            cls._connection_pool.terminate()
-            # Propagate cancel
-            raise
-        except Exception:
-            LOGGER.exception("An unexpected exception occurred while closing the connection pool to the database")
-            raise
-        finally:
-            cls._connection_pool = None
 
     def __setattr__(self, name: str, value: object) -> None:
         if name[0] == "_":
@@ -3876,20 +3866,16 @@ class Compile(BaseDocument):
             version=requested_compile["version"],
             do_export=requested_compile["do_export"],
             force_update=requested_compile["force_update"],
-            metadata=json.loads(requested_compile["metadata"]) if requested_compile["metadata"] else {},
-            environment_variables=(
-                json.loads(requested_compile["used_environment_variables"])
-                if requested_compile["used_environment_variables"] is not None
-                else {}
-            ),
-            requested_environment_variables=(json.loads(requested_compile["requested_environment_variables"])),
-            mergeable_environment_variables=(json.loads(requested_compile["mergeable_environment_variables"])),
+            metadata=requested_compile["metadata"] or {},
+            environment_variables=requested_compile["used_environment_variables"] or {},
+            requested_environment_variables=requested_compile["requested_environment_variables"],
+            mergeable_environment_variables=requested_compile["mergeable_environment_variables"],
             partial=requested_compile["partial"],
             removed_resource_sets=requested_compile["removed_resource_sets"],
             exporter_plugin=requested_compile["exporter_plugin"],
             notify_failed_compile=requested_compile["notify_failed_compile"],
             failed_compile_message=requested_compile["failed_compile_message"],
-            compile_data=json.loads(requested_compile["compile_data"]) if requested_compile["compile_data"] else None,
+            compile_data=requested_compile["compile_data"],
             reports=reports,
         )
 
@@ -4046,7 +4032,6 @@ class ResourceAction(BaseDocument):
         if from_postgres and self.messages:
             new_messages = []
             for message in self.messages:
-                message = json.loads(message)
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
@@ -5075,7 +5060,6 @@ class Resource(BaseDocument):
                 async for record in con.cursor(query, *values):
                     if no_obj:
                         record = dict(record)
-                        record["attributes"] = json.loads(record["attributes"])
                         cls.__mangle_dict(record)
                         resources_list.append(record)
                     else:
@@ -5098,11 +5082,7 @@ class Resource(BaseDocument):
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
         resource_records = await cls._fetch_query(query, *values, connection=connection)
-        resources = [dict(record) for record in resource_records]
-        for res in resources:
-            if "attributes" in res:
-                res["attributes"] = json.loads(res["attributes"])
-        return resources
+        return [dict(record) for record in resource_records]
 
     @classmethod
     async def get_resources_since_version_raw(
@@ -5140,8 +5120,6 @@ class Resource(BaseDocument):
                     # left join produced no resources
                     continue
                 resource: dict[str, object] = dict(raw_resource)
-                if "attributes" in resource:
-                    resource["attributes"] = json.loads(resource["attributes"])
                 if projection is not None:
                     assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
@@ -5185,13 +5163,7 @@ class Resource(BaseDocument):
         WHERE r.environment=$1 AND r.model = $2;
         """
         resource_records = await cls._fetch_query(query, environment, version, connection=connection)
-        resources = [dict(record) for record in resource_records]
-        for res in resources:
-            if project_attributes:
-                for k in project_attributes:
-                    if res[k]:
-                        res[k] = json.loads(res[k])
-        return resources
+        return [dict(record) for record in resource_records]
 
     @classmethod
     async def get_latest_version(cls, environment: uuid.UUID, resource_id: ResourceIdStr) -> Optional["Resource"]:
@@ -5326,7 +5298,7 @@ class Resource(BaseDocument):
             return None
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
-        attributes = json.loads(record["attributes"])
+        attributes = record["attributes"]
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
@@ -6209,38 +6181,6 @@ class ConfigurationModel(BaseDocument):
         }
         return outset, negative, last_deployed
 
-    @classmethod
-    def active_version_subquery(cls, environment: uuid.UUID) -> tuple[str, list[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""
-            SELECT max(version)
-            """,
-            from_clause=f" FROM {cls.table_name()} ",
-            filter_statements=[" environment = $1 AND released = TRUE"],
-            values=[cls._get_value(environment)],
-        )
-        return query_builder.build()
-
-    @classmethod
-    def desired_state_versions_subquery(cls, environment: uuid.UUID) -> tuple[str, list[object]]:
-        active_version, values = cls.active_version_subquery(environment)
-        # Coalesce to 0 in case there is no active version
-        active_version = f"(SELECT COALESCE(({active_version}), 0))"
-        query_builder = SimpleQueryBuilder(
-            select_clause=f"""SELECT cm.version, cm.date, cm.total,
-                                     version_info -> 'export_metadata' ->> 'message' as message,
-                                     version_info -> 'export_metadata' ->> 'type' as type,
-                                        (CASE WHEN cm.version = {active_version} THEN 'active'
-                                            WHEN cm.version > {active_version} THEN 'candidate'
-                                            WHEN cm.version < {active_version} AND cm.released=TRUE THEN 'retired'
-                                            ELSE 'skipped_candidate'
-                                        END) as status""",
-            from_clause=f" FROM {cls.table_name()} as cm",
-            filter_statements=[" environment = $1 "],
-            values=values,
-        )
-        return query_builder.build()
-
     async def recalculate_total(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         Make the total field of this ConfigurationModel in-line with the number
@@ -6667,22 +6607,6 @@ _classes = [
 ]
 
 
-def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
-    LOGGER.debug("Connecting data classes")
-    for cls in _classes:
-        cls.set_connection_pool(pool)
-
-
-async def disconnect() -> None:
-    LOGGER.debug("Disconnecting data classes")
-    # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
-    # or until the gather itself is cancelled.
-    result = await asyncio.gather(*[cls.close_connection_pool() for cls in _classes], return_exceptions=True)
-    exceptions = [r for r in result if r is not None and isinstance(r, Exception)]
-    if exceptions:
-        raise exceptions[0]
-
-
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 
 # Name of core schema in the DB schema verions
@@ -6690,36 +6614,106 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
-async def connect(
-    host: str,
-    port: int,
-    database: str,
-    username: str,
-    password: str,
-    create_db_schema: bool = True,
-    connection_pool_min_size: int = 10,
-    connection_pool_max_size: int = 10,
-    connection_timeout: float = 60,
-) -> asyncpg.pool.Pool:
-    pool = await asyncpg.create_pool(
-        host=host,
-        port=port,
-        database=database,
-        user=username,
-        password=password,
-        min_size=connection_pool_min_size,
-        max_size=connection_pool_max_size,
-        timeout=connection_timeout,
+async def start_engine(
+    *,
+    database_username: str,
+    database_password: str,
+    database_host: str,
+    database_port: int,
+    database_name: str,
+    pool_size: int = 10,
+    max_overflow: int = 0,
+    pool_timeout: float = 60.0,
+    echo: bool = False,
+) -> None:
+    """
+    Start the SQL Alchemy engine for this process
+    """
+
+    url_object = URL.create(
+        drivername="postgresql+asyncpg",
+        username=database_username,
+        password=database_password,
+        host=database_host,
+        port=database_port,
+        database=database_name,
     )
+
+    global ENGINE
+    global SESSION_FACTORY
+
+    if ENGINE is not None:
+        raise Exception("Engine already running: cannot call start_engine twice.")
+
+    LOGGER.debug("Creating engine...")
     try:
-        set_connection_pool(pool)
-        if create_db_schema:
-            async with pool.acquire() as con:
-                await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, con).ensure_db_schema()
-            # expire connections after db schema migration to ensure cache consistency
-            await pool.expire_connections()
-        return pool
+        ENGINE = create_async_engine(
+            url=url_object,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            echo=echo,
+            pool_pre_ping=True,
+        )
+        SESSION_FACTORY = async_sessionmaker(ENGINE)
     except Exception as e:
-        await pool.close()
-        await disconnect()
+        await stop_engine()
         raise e
+
+
+@asynccontextmanager
+async def get_connection_ctx_mgr() -> AsyncIterator[Connection]:
+    """
+    Retrieve an asyncpg connection from the sqlalchemy engine's
+    connection pool. This method is expected to be used as an
+    async context manager.
+    """
+    if ENGINE is None:
+        raise Exception("SQL Alchemy engine was not initialized")
+    async with ENGINE.connect() as connection:
+        connection_fairy = await connection.get_raw_connection()
+
+        # the really-real innermost driver connection is available
+        # from the .driver_connection attribute
+        raw_asyncio_connection = connection_fairy.driver_connection
+        assert isinstance(raw_asyncio_connection, Connection)
+        yield raw_asyncio_connection
+        # Pool can't handle naked asycpg
+        # https://github.com/sqlalchemy/sqlalchemy/discussions/12460
+        await raw_asyncio_connection.reset()
+
+
+async def stop_engine() -> None:
+    """
+    Stop the sql alchemy engine.
+    """
+    global ENGINE
+    global SESSION_FACTORY
+    if ENGINE is not None:
+        await ENGINE.dispose(close=True)
+    ENGINE = None
+    SESSION_FACTORY = None
+
+
+def get_pool() -> AsyncAdaptedQueuePool:
+    pool = get_engine().pool
+    assert pool is not None, "SQL Alchemy engine's pool was not initialized"
+    assert isinstance(pool, AsyncAdaptedQueuePool)
+    return pool
+
+
+def get_engine() -> AsyncEngine:
+    assert ENGINE is not None, "SQL Alchemy engine was not initialized"
+    return ENGINE
+
+
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    assert SESSION_FACTORY is not None, "SQL Alchemy engine and session factory were not initialized"
+    return SESSION_FACTORY
+
+
+@asynccontextmanager
+async def get_session() -> AsyncIterator[AsyncSession]:
+    assert SESSION_FACTORY is not None, "SQL Alchemy engine and session factory were not initialized"
+    async with SESSION_FACTORY() as session:
+        yield session

@@ -1,9 +1,13 @@
-entity Sleep extends std::PurgeableResource:
+entity WaitForFileRemoval extends std::PurgeableResource:
+    """
+    Resource that will remain in the deploying state until
+    the file at the given path doesn't exist anymore.
+    """
     string name
     string agent
-    int time_to_sleep=120
+    string path
     bool managed=true
     bool purged=false
 end
 
-implement Sleep using std::none
+implement WaitForFileRemoval using std::none

@@ -1,27 +1,28 @@
 """
-    Copyright 2020 Inmanta
+Copyright 2020 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import logging
 
 import pytest
-from asyncpg import Connection
 
 from inmanta import data
+from inmanta.data import get_connection_ctx_mgr
+from inmanta.data.model import ReportedStatus
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server import config as opt
 from inmanta.server.services import databaseservice
@@ -80,15 +81,10 @@ async def test_pool_exhaustion_watcher(set_pool_size_to_one, server, caplog):
     with caplog.at_level(logging.WARNING, "inmanta.server.services.databaseservice"):
         database_slice = server.get_slice(databaseservice.SLICE_DATABASE)
 
-        pool = database_slice._pool
-        assert pool is not None
-        connection: Connection = await pool.acquire()
-        try:
+        async with get_connection_ctx_mgr():
             # Make sure _check_database_pool_exhaustion gets called (scheduled to run every 200ms)
             # and records some exhaustion events.
             await retry_limited(exhaustion_events_recorded, 1)
-        finally:
-            await connection.close()
 
         # Call _report_database_pool_exhaustion manually (scheduled to run every 24h)
         database_slice._db_monitor._report_and_reset()
@@ -99,3 +95,38 @@ async def test_pool_exhaustion_watcher(set_pool_size_to_one, server, caplog):
             logging.WARNING,
             "Database pool was exhausted",
         )
+
+
+async def test_database_service_status(monkeypatch, server, client):
+    """
+    Test the status of the database service and if it changes with the reduction of the connection pool
+    or if we are not connected to the database.
+    """
+    database_slice = server.get_slice(databaseservice.SLICE_DATABASE)
+    status = await database_slice.get_slice_status()
+    assert status.reported_status == ReportedStatus.OK
+
+    monitor_status = status.status
+    max_pool = monitor_status["max_pool"]
+    mocked_free_pool = max_pool // 10 - 1
+
+    def return_free_pool(self, pool):
+        return mocked_free_pool
+
+    monkeypatch.setattr(databaseservice.DatabaseMonitor, "get_free_connections", return_free_pool)
+
+    status = await database_slice.get_slice_status()
+    assert status.reported_status == ReportedStatus.Warning
+    assert status.message == f"Only {mocked_free_pool} connections left in the pool."
+
+    original_get_status = database_slice._db_monitor.get_status
+
+    async def modified_get_status(self):
+        status = await original_get_status()
+        status.connected = False
+        return status
+
+    monkeypatch.setattr(databaseservice.DatabaseMonitor, "get_status", modified_get_status)
+
+    status = await database_slice.get_slice_status()
+    assert status.reported_status == ReportedStatus.Error

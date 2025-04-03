@@ -1,32 +1,32 @@
 """
-    Copyright 2023 Inmanta
+Copyright 2023 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
 import secrets
 import socket
 
-import asyncpg
 import click
 from asyncpg import PostgresError
 
 import nacl.pwhash
 from inmanta import config, data
 from inmanta.const import MIN_PASSWORD_LENGTH
+from inmanta.data import start_engine, stop_engine
 from inmanta.data.model import AuthMethod
 from inmanta.protocol import auth
 from inmanta.server import config as server_config
@@ -92,43 +92,36 @@ def validate_server_setup() -> None:
         raise click.ClickException("The user setup was aborted as it was not executed locally on the orchestrator")
 
 
-async def get_connection_pool() -> asyncpg.pool.Pool:
+async def connect_to_db() -> None:
     """
-    connect to a connection pool. It is the responsibility of the caller to close the return connection pool
+    Connect to the database
     """
-    try:
-        database_host = server_config.db_host.get()
-        database_port = server_config.db_port.get()
 
-        database_username = server_config.db_username.get()
-        database_password = server_config.db_password.get()
-        connection_pool_min_size = server_config.server_db_connection_pool_min_size.get()
-        connection_pool_max_size = server_config.server_db_connection_pool_max_size.get()
-        connection_timeout = server_config.db_connection_timeout.get()
-        return await data.connect(
-            database_host,
-            database_port,
-            server_config.db_name.get(),
-            database_username,
-            database_password,
-            create_db_schema=False,
-            connection_pool_min_size=connection_pool_min_size,
-            connection_pool_max_size=connection_pool_max_size,
-            connection_timeout=connection_timeout,
-        )
-    except Exception:
-        raise ConnectionPoolException()
+    connection_pool_min_size = server_config.server_db_connection_pool_min_size.get()
+    connection_pool_max_size = server_config.server_db_connection_pool_max_size.get()
+    connection_timeout = server_config.db_connection_timeout.get()
+
+    await start_engine(
+        database_username=server_config.db_username.get(),
+        database_password=server_config.db_password.get(),
+        database_host=server_config.db_host.get(),
+        database_port=server_config.db_port.get(),
+        database_name=server_config.db_name.get(),
+        pool_size=connection_pool_min_size,
+        max_overflow=connection_pool_max_size - connection_pool_min_size,
+        pool_timeout=connection_timeout,
+        echo=True,
+    )
 
 
 async def do_user_setup() -> None:
     """Perform the user setup that requires the database interaction"""
-    connection = None
     try:
         click.echo(
             f"{'Trying to connect to DB:': <50}"
             f"{('%s (%s:%s)' % (server_config.db_name.get(), server_config.db_host.get(), server_config.db_port.get()))}"
         )
-        connection = await get_connection_pool()
+        await connect_to_db()
         click.echo(f"{'Connection to database' : <50}{click.style('success', fg='green')}")
         users = await data.User.get_list()
 
@@ -162,10 +155,8 @@ async def do_user_setup() -> None:
             "The version of the database is out of date: start the server to upgrade the database "
             "schema to the lastest version."
         )
-
     finally:
-        if connection is not None:
-            await data.disconnect()
+        await stop_engine()
 
     click.echo("Make sure to (re)start the orchestrator to activate all changes.")
 
