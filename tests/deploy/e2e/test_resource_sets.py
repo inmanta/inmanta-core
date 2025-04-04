@@ -50,7 +50,6 @@ async def test_resource_sets_via_put_version(server, client, environment, client
             "test::Resource[agent1,key=key1]": "set-a",
         },
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 400
     assert (
@@ -107,7 +106,6 @@ async def test_resource_sets_via_put_version(server, client, environment, client
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -169,7 +167,6 @@ async def test_put_partial_version_allocation(server, client, environment, clien
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -182,7 +179,6 @@ async def test_put_partial_version_allocation(server, client, environment, clien
             version_info={},
             resource_sets=resource_sets,
             module_version_info={},
-            type_to_module_data={},
         )
         if expected_error is not None:
             code, message = expected_error
@@ -254,7 +250,6 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
     mock_source_info.requires = []
 
     module_version_info = {"test": InmantaModuleDTO(name="test", version="0.0.0", files_in_module=[mock_source_info])}
-    type_to_module_data = {"test::Resource": ["test"]}
 
     result = await client.put_version(
         tid=environment,
@@ -266,7 +261,6 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info=module_version_info,
-        type_to_module_data=type_to_module_data,
     )
     assert result.code == 200
     resources_partial = [
@@ -290,7 +284,6 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
             "test::Resource[agent1,key=key2]": "set-a",
         },
         module_version_info=module_version_info,
-        type_to_module_data=type_to_module_data,
     )
 
     assert result.code == 200, result.result
@@ -336,7 +329,6 @@ async def test_put_partial_resources_in_resource_set(server, client, environment
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
     resources_partial = [
@@ -361,7 +353,6 @@ async def test_put_partial_resources_in_resource_set(server, client, environment
             "test::Resource[agent1,key=key2]": "set-a",
         },
         module_version_info={},
-        type_to_module_data={},
     )
 
     assert result.code == 400, result.result
@@ -398,7 +389,6 @@ async def test_put_partial_merge_not_in_resource_set(server, client, environment
         compiler_version=get_compiler_version(),
         resource_sets={},
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
     resources_partial = [
@@ -420,7 +410,6 @@ async def test_put_partial_merge_not_in_resource_set(server, client, environment
         version_info=None,
         resource_sets={},
         module_version_info={},
-        type_to_module_data={},
     )
 
     assert result.code == 200
@@ -470,7 +459,6 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         compiler_version=get_compiler_version(),
         resource_sets={"test::Resource[agent1,key=key1]": "set-a-old", "test::Resource[agent1,key=key2]": "set-b-old"},
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
     resources_partial = [
@@ -500,7 +488,6 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         version_info=None,
         resource_sets={"test::Resource[agent1,key=key1]": "set-a-new", "test::Resource[agent1,key=key2]": "set-b-new"},
         module_version_info={},
-        type_to_module_data={},
     )
 
     assert result.code == 400
@@ -539,7 +526,6 @@ async def test_put_partial_update_not_in_resource_set(server, client, environmen
         compiler_version=get_compiler_version(),
         resource_sets={},
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
     resources_partial = [
@@ -561,7 +547,6 @@ async def test_put_partial_update_not_in_resource_set(server, client, environmen
         version_info=None,
         resource_sets={},
         module_version_info={},
-        type_to_module_data={},
     )
 
     assert result.code == 400
@@ -609,7 +594,6 @@ async def test_put_partial_update_multiple_resource_set(server, client, environm
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
     resources_partial = [
@@ -642,7 +626,6 @@ async def test_put_partial_update_multiple_resource_set(server, client, environm
             "test::Resource[agent1,key=key2]": "set-b",
         },
         module_version_info={},
-        type_to_module_data={},
     )
 
     assert result.code == 200
@@ -685,7 +668,6 @@ async def test_resource_sets_dependency_graph(server, client, environment, clien
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 400
     assert result.result["message"] == (
@@ -806,7 +788,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
     resources_partial = [
@@ -871,7 +852,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
         },
         removed_resource_sets=["set-c"],
         module_version_info={},
-        type_to_module_data={},
     )
 
     assert result.code == 200, result.result
@@ -995,7 +975,6 @@ async def test_put_partial_validation_error(server, client, environment, clienth
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
     resources_partial = ["key1", "key2"]
@@ -1011,7 +990,6 @@ async def test_put_partial_validation_error(server, client, environment, clienth
             "test::Resource[agent1,key=key2]": "set-b",
         },
         module_version_info={},
-        type_to_module_data={},
     )
 
     assert result.code == 400
@@ -1059,7 +1037,6 @@ async def test_put_partial_verify_params(server, client, environment, clienthelp
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
     resources_partial = [
@@ -1093,7 +1070,6 @@ async def test_put_partial_verify_params(server, client, environment, clienthelp
             "hello": "set-c",
         },
         module_version_info={},
-        type_to_module_data={},
     )
 
     assert result.code == 400
@@ -1143,7 +1119,6 @@ async def test_put_partial_different_env(server, client):
         compiler_version=get_compiler_version(),
         resource_sets={},
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200, result.result
 
@@ -1157,7 +1132,6 @@ async def test_put_partial_different_env(server, client):
         compiler_version=get_compiler_version(),
         resource_sets={},
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -1180,7 +1154,6 @@ async def test_put_partial_different_env(server, client):
         version_info=None,
         resource_sets={},
         module_version_info={},
-        type_to_module_data={},
     )
 
     assert result.code == 200
@@ -1250,7 +1223,6 @@ async def test_put_partial_removed_rs_in_rs(server, client, environment, clienth
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
     resources_partial = [
@@ -1275,7 +1247,6 @@ async def test_put_partial_removed_rs_in_rs(server, client, environment, clienth
         },
         removed_resource_sets=["set-b"],
         module_version_info={},
-        type_to_module_data={},
     )
 
     assert result.code == 400
@@ -1340,7 +1311,6 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200, result.result
 
@@ -1428,7 +1398,6 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
         version_info=None,
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -1530,7 +1499,6 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200, result.result
 
@@ -1607,7 +1575,6 @@ async def test_put_partial_with_undeployable_resources(server, client, environme
         version_info=None,
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200, result.result
     version = result.result["data"]
@@ -1664,7 +1631,6 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -1701,7 +1667,6 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
         version_info=None,
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -1778,7 +1743,6 @@ async def test_put_partial_dep_on_shared_set_removed(server, client, environment
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -1803,7 +1767,6 @@ async def test_put_partial_dep_on_shared_set_removed(server, client, environment
         version_info=None,
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -1864,7 +1827,6 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -1889,7 +1851,6 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
         version_info=None,
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -1947,7 +1908,6 @@ async def test_put_partial_dep_on_non_existing_resource(server, client, environm
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -1989,7 +1949,6 @@ async def test_put_partial_dep_on_non_existing_resource(server, client, environm
         version_info=None,
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 400
     assert (
@@ -2040,7 +1999,6 @@ async def test_put_partial_inter_set_dependency(server, client, environment, cli
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -2065,7 +2023,6 @@ async def test_put_partial_inter_set_dependency(server, client, environment, cli
         version_info=None,
         resource_sets=resource_sets,
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 400
     assert (
@@ -2135,7 +2092,6 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
             compiler_version=get_compiler_version(),
             resource_sets=resource_sets,
             module_version_info={},
-            type_to_module_data={},
         )
         assert result.code == 200
         return version
@@ -2172,7 +2128,6 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
             resource_sets=resource_sets,
             removed_resource_sets=["set2"],
             module_version_info={},
-            type_to_module_data={},
         )
         if not should_fail:
             assert result.code == 200

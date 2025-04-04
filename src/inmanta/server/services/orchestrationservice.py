@@ -22,7 +22,7 @@ import logging
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Sequence
-from typing import Any, Literal, Optional, cast
+from typing import Literal, Optional, cast
 
 import asyncpg
 import asyncpg.connection
@@ -41,18 +41,18 @@ from inmanta.data import (
     ModulesForAgent,
     ResourcePersistentState,
     RowLockMode,
-    get_session,
 )
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
+    InmantaModuleDTO,
     PipConfig,
     PromoteTriggerMethod,
     ResourceDiff,
     ResourceMinimal,
     SchedulerStatusReport,
 )
-from inmanta.data.sqlalchemy import FilesInModule, InmantaModule
+from inmanta.data.sqlalchemy import InmantaModule
 from inmanta.db.util import ConnectionInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
@@ -72,7 +72,6 @@ from inmanta.server import diff, protocol
 from inmanta.server.services import resourceservice
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
-from sqlalchemy.dialects.postgresql import insert
 
 LOGGER = logging.getLogger(__name__)
 PLOGGER = logging.getLogger("performance")
@@ -676,7 +675,7 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
-        module_version_info: dict[str, "InmantaModuleDTO"],
+        module_version_info: dict[str, InmantaModuleDTO],
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -837,7 +836,7 @@ class OrchestrationService(protocol.ServerSlice):
             async def check_version_info(
                 partial_base_version: int,
                 environment: uuid.UUID,
-                module_version_info: dict[str, "InmantaModuleDTO"],
+                module_version_info: dict[str, InmantaModuleDTO],
                 connection: Connection,
             ) -> None:
                 """
@@ -945,7 +944,7 @@ class OrchestrationService(protocol.ServerSlice):
         compiler_version: Optional[str] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
-        module_version_info: dict[str, "InmantaModuleDTO"] | None = None,
+        module_version_info: dict[str, InmantaModuleDTO] | None = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
@@ -1003,7 +1002,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         removed_resource_sets: Optional[list[str]] = None,
         pip_config: Optional[PipConfig] = None,
-        module_version_info: dict[tuple["inm_mod_name", "inm_mod_version"], "InmantaModuleDTO"] | None = None,
+        module_version_info: dict[str, InmantaModuleDTO] | None = None,
     ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure

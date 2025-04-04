@@ -25,8 +25,8 @@ import pytest
 import inmanta
 import inmanta.data.sqlalchemy as models
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import ModuleInstallSpec, ExecutorBlueprint
-from inmanta.data import get_session, PipConfig
+from inmanta.agent.executor import ExecutorBlueprint, ModuleInstallSpec
+from inmanta.data import PipConfig, get_session
 from inmanta.loader import ModuleSource
 from sqlalchemy import select
 

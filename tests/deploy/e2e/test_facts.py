@@ -118,7 +118,6 @@ async def test_purged_facts(resource_container, client, clienthelper, agent, env
         version_info={},
         compiler_version=get_compiler_version(),
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
@@ -267,7 +266,6 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
         resource_state=resource_states,
         compiler_version=get_compiler_version(),
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 

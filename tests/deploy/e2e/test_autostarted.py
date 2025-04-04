@@ -146,7 +146,6 @@ async def setup_environment_with_agent(client, project_name):
         version_info={},
         compiler_version=get_compiler_version(),
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 

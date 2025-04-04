@@ -16,8 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import base64
-import functools
 import hashlib
 import importlib
 import importlib.util
@@ -35,17 +33,14 @@ from functools import cached_property
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 from pydantic import BaseModel, computed_field
 
 from inmanta import const, module
-from inmanta.data.model import ModuleSource, InmantaModuleDTO, ModuleSourceMetadata
+from inmanta.data.model import InmantaModuleDTO, ModuleSource, ModuleSourceMetadata
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
-
-if TYPE_CHECKING:
-    from inmanta import protocol
 
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
@@ -77,18 +72,18 @@ class CodeManager:
                  in this dictionary are ``SourceInfo`` objects.
     """
 
-    def __init__(self, types_to_agent: dict[str, str] | None = None) -> None:
+    def __init__(self, types_to_agent: dict[str, set[str]] | None = None) -> None:
         # Old implementation
         # Use by external code
 
         # Map of [path, SourceInfo]
         # To which python module do these python files belong
         self.__file_info: dict[str, SourceInfo] = {}
-        self.__module_to_agents: dict[str, list[str]] = defaultdict(list)
+        self.__module_to_agents: dict[str, set[str]] = defaultdict(set)
 
         # Cache of module to source info
         self.__module_to_source_info: dict[str, list[SourceInfo]] = defaultdict(list)
-        self._types_to_agent = types_to_agent or {}
+        self._types_to_agent: dict[str, set[str]] = types_to_agent or {}
 
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
@@ -104,13 +99,11 @@ class CodeManager:
         # get the module
         module_name = get_inmanta_module_name(instance.__module__)
 
-        agent_name: str | None = self._types_to_agent.get(type_name)
-        if agent_name is None:
-            raise Exception(f"No agent was set on instance {instance} of entity type {type_name}.")
+        registered_agents: Sequence[str] = self._types_to_agent.get(type_name, [])
+        self._get_source_info_for_module(module_name, registered_agents)
 
-        self._get_source_info_for_module(module_name, agent_name)
-
-    def _get_source_info_for_module(self, inmanta_module_name: str, agent_name: str) -> None:
+    def _get_source_info_for_module(self, inmanta_module_name: str, registered_agents: Sequence[str]) -> None:
+        # TODO rename + docstring
         if inmanta_module_name in self.__module_to_source_info:
             # This module was already registered
             return
@@ -118,7 +111,8 @@ class CodeManager:
         for absolute_path, fqn_module_name in module.Project.get().modules[inmanta_module_name].get_plugin_files():
             source_info = SourceInfo(path=absolute_path, module_name=fqn_module_name)
             self.__file_info[absolute_path] = source_info
-            self.__module_to_agents[inmanta_module_name].append(agent_name)
+            for agent_name in registered_agents:
+                self.__module_to_agents[inmanta_module_name].add(agent_name)
 
             self.__module_to_source_info[inmanta_module_name].append(source_info)
 
@@ -168,7 +162,7 @@ class CodeManager:
                 version=module_version,
                 files_in_module=files_metadata,
                 requirements=list(requirements),
-                required_by=self.__module_to_agents[module_name] # TODO get agents for this module
+                required_by=list(self.__module_to_agents[module_name]),
             )
         self.__modules_data = modules_data
 
@@ -181,9 +175,6 @@ class CodeManager:
                 return info.content
 
         raise KeyError("No file found with this hash")
-
-
-
 
 
 @dataclass(frozen=True)
@@ -597,8 +588,6 @@ def unload_modules_for_path(path: str) -> None:
     for mod_name in loaded_modules:
         del sys.modules[mod_name]
     importlib.invalidate_caches()
-
-
 
 
 class SourceInfo(BaseModel):

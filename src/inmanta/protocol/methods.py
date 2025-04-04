@@ -27,8 +27,6 @@ from inmanta import const, data, resources
 from inmanta.const import ResourceState
 from inmanta.data import model
 from inmanta.data.model import PipConfig
-
-# from inmanta.loader import InmantaModuleDTO
 from inmanta.protocol import exceptions
 from inmanta.protocol.common import ArgOption
 from inmanta.protocol.decorators import method, typedmethod

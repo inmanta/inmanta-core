@@ -14,7 +14,7 @@ Contact: code@inmanta.com
 
 import datetime
 import uuid
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from typing import Any, List, Optional
 
 import asyncpg
@@ -39,8 +39,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
-
 
 # Currently, these models don't offer any additional validation, besides typing, so it's best to avoid inserting/modifying
 # DB entries directly using these models.

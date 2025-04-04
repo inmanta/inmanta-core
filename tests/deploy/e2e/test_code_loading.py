@@ -110,10 +110,6 @@ async def test_agent_installs_dependency_containing_extras(
         )
     }
 
-    mocked_type_to_module_data = {
-        "test::Resource": ["test"],
-    }
-
     res = await client.upload_file(id=hash, content=body)
     assert res.code == 200
 
@@ -136,7 +132,6 @@ async def test_agent_installs_dependency_containing_extras(
         pip_config=PipConfig(index_url=index_with_pkgs_containing_optional_deps),
         compiler_version=get_compiler_version(),
         module_version_info=mocked_module_version_info,
-        type_to_module_data=mocked_type_to_module_data,
     )
     assert res.code == 200
 
@@ -327,11 +322,6 @@ async def test_agent_code_loading_with_failure(
         )
     }
 
-    mocked_type_to_module_data = {
-        "test::Test": ["test"],
-        "test::Test2": ["test"],
-    }
-
     res = await client.upload_file(id=hash, content=body)
     assert res.code == 200
 
@@ -357,7 +347,6 @@ async def test_agent_code_loading_with_failure(
                 },
             ],
             module_version_info=mocked_module_version_info,
-            type_to_module_data=mocked_type_to_module_data,
             compiler_version=get_compiler_version(),
             pip_config=PipConfig(),
         )
@@ -419,7 +408,6 @@ async def test_logging_on_code_loading_failure(server, client, environment, clie
         ],
         compiler_version=get_compiler_version(),
         module_version_info={},
-        type_to_module_data={},
     )
     assert res.code == 200
 

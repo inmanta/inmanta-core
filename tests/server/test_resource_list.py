@@ -757,7 +757,6 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 compiler_version=inmanta.util.get_compiler_version(),
                 resource_sets=resource_sets,
                 module_version_info={},
-                type_to_module_data={},
             )
             assert result.code == 200
         else:
@@ -769,7 +768,6 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 resources=attributes,
                 resource_sets=resource_sets,
                 module_version_info={},
-                type_to_module_data={},
             )
             assert result.code == 200
             version = result.result["data"]

@@ -21,7 +21,7 @@ import base64
 import itertools
 import logging
 import time
-import uuid
+from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any, Callable, Optional, Union
 
@@ -535,7 +535,16 @@ class Exporter:
 
         conn = protocol.SyncClient("compiler")
 
-        resource_type_to_agent = {Id.parse_resource_version_id(res["id"]).get_entity_type():res["agentname"] for res in resources}
+        # Construct a map of which agents are registered to deploy which resource type.
+        # This map is later used to construct a map of which agents need to load
+        # which Inmanta module(s).
+        resource_type_to_agent: dict[str, set[str]] = defaultdict(set)
+        for res in resources:
+            resource_type = Id.parse_resource_version_id(res["id"]).get_entity_type()
+            _, resource_options = resource.get_class(resource_type)
+            agent_field_name = resource_options["agent"]
+            resource_type_to_agent[resource_type].add(res[agent_field_name])
+
         code_manager = loader.CodeManager(resource_type_to_agent)
 
         # partial exports use the same code as the version they're based on

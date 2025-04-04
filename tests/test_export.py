@@ -337,7 +337,6 @@ async def test_old_compiler(server, client, environment):
         unknowns=[],
         version_info={},
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 400
 

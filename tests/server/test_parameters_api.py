@@ -307,7 +307,6 @@ async def test_dont_renew_old_facts(server, client, environment, clienthelper, c
         version_info={},
         compiler_version=get_compiler_version(),
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -346,7 +345,6 @@ async def test_dont_renew_old_facts(server, client, environment, clienthelper, c
         version_info={},
         compiler_version=get_compiler_version(),
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
     result = await client.release_version(tid=environment, id=version)

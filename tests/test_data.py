@@ -2915,7 +2915,6 @@ async def test_get_current_resource_state(server, environment, client, clienthel
         resource_state={},
         compiler_version=util.get_compiler_version(),
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200, result.result
 
@@ -2952,7 +2951,6 @@ async def test_get_current_resource_state(server, environment, client, clienthel
         resource_state={"std::testing::NullResource[agent1,name=test1]": const.ResourceState.undefined},
         compiler_version=util.get_compiler_version(),
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200, result.result
 

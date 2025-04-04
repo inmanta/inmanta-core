@@ -108,7 +108,6 @@ async def test_discovery_resource_handler_basic_test(
         version_info={},
         compiler_version=util.get_compiler_version(),
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200
 
@@ -259,7 +258,6 @@ async def test_discovery_resource_requires_provides(
         version_info={},
         compiler_version=util.get_compiler_version(),
         module_version_info={},
-        type_to_module_data={},
     )
     assert result.code == 200, result.result
 
