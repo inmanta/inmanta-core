@@ -292,7 +292,7 @@ class ReferenceLike:
                     try:
                         arguments.append(JsonArgument(name=name, value=value))
                     except ValidationError:
-                        raise ValueError(f"The {name} attribute of {self} is not json serializable {value}")
+                        raise ValueError(f"The {name} attribute of {self} is not json serializable: {value}")
                 case Reference():
                     model = value.serialize()
                     arguments.append(ReferenceArgument(name=name, id=model.id))
