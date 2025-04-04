@@ -124,7 +124,7 @@ class LiteralArgument(Argument):
 
 
 class JsonArgument(Argument):
-    """Literal argument to a reference"""
+    """Json-like argument to a reference"""
 
     type: typing.Literal["json"] = "json"
     value: StrictJson
