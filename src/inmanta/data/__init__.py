@@ -3845,24 +3845,27 @@ class Compile(BaseDocument):
             return None
         requested_compile = records[0]
 
-        # Reports should be included from the substituted compile (as well)
+        # Concatenate the links of the requested compile and all substitute compiles
+        links: m.JsonApiLinks = {}
         reports = []
-        links = cast(m.JsonApiLinks, requested_compile.get("links", {}))
-        for report in result:
-            if report.get("report_id"):
+        for compile in result:
+            # Reports should be included from the substituted compile (as well)
+            if compile.get("report_id"):
                 reports.append(
                     m.CompileRunReport(
-                        id=report["report_id"],
-                        started=report["report_started"],
-                        completed=report["report_completed"],
-                        command=report["command"],
-                        name=report["name"],
-                        errstream=report["errstream"],
-                        outstream=report["outstream"],
-                        returncode=report["returncode"],
+                        id=compile["report_id"],
+                        started=compile["report_started"],
+                        completed=compile["report_completed"],
+                        command=compile["command"],
+                        name=compile["name"],
+                        errstream=compile["errstream"],
+                        outstream=compile["outstream"],
+                        returncode=compile["returncode"],
                     )
                 )
-                links.update(cast(m.JsonApiLinks, report.get("links", {})))
+            links.update(cast(m.JsonApiLinks, compile.get("links", {})))
+        # If there are repeated links, keep the ones on the requested compile
+        links.update(cast(m.JsonApiLinks, requested_compile.get("links", {})))
 
         return m.CompileDetails(
             id=requested_compile["id"],

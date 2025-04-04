@@ -729,6 +729,8 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             they contain resources that are being exported.
         :param mergeable_env_vars: a set of env vars that can be compacted over multiple compiles.
             If multiple values are compacted, they will be joined using spaces.
+        :param links: An object that contains relevant links to this compile.
+            Conforms with the json api: https://jsonapi.org/format/#document-links
         :return: the compile id of the requested compile and any warnings produced during the request
         """
         if in_db_transaction and not connection:
@@ -745,6 +747,8 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             env_vars = {}
         if mergeable_env_vars is None:
             mergeable_env_vars = {}
+        if links is None:
+            links = {}
 
         server_compile: bool = bool(await env.get(data.SERVER_COMPILE))
         if not server_compile:
