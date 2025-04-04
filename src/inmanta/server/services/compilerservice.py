@@ -710,6 +710,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         connection: Optional[Connection] = None,
         soft_delete: bool = False,
         mergeable_env_vars: Optional[Mapping[str, str]] = None,
+        links: Optional[model.JsonApiLinks] = None,
     ) -> tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
@@ -774,6 +775,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             notify_failed_compile=notify_failed_compile,
             failed_compile_message=failed_compile_message,
             soft_delete=soft_delete,
+            links=links,
         )
         if not in_db_transaction:
             async with self._queue_count_cache_lock:

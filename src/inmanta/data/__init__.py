@@ -3578,6 +3578,8 @@ class Compile(BaseDocument):
         By default, notifications are enabled only for exporting compiles.
     :param failed_compile_message: Optional message to use when a notification for a failed compile is created
     :param soft_delete: Prevents deletion of resources in removed_resource_sets if they are being exported.
+    :param links: An object that contains relevant links to this compile.
+        Conforms with the json api: https://jsonapi.org/format/#document-links
     """
 
     __primary_key__ = ("id",)
@@ -3615,6 +3617,7 @@ class Compile(BaseDocument):
     failed_compile_message: Optional[str] = None
 
     soft_delete: bool = False
+    links: m.JsonApiLinks = {}
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID, connection: Optional[Connection] = None) -> Optional["Compile"]:
@@ -3774,6 +3777,7 @@ class Compile(BaseDocument):
                 c.exporter_plugin,
                 c.notify_failed_compile,
                 c.failed_compile_message,
+                c.links,
                 r.id as report_id,
                 r.started report_started,
                 r.completed report_completed,
@@ -3809,6 +3813,7 @@ class Compile(BaseDocument):
                     comp.exporter_plugin,
                     comp.notify_failed_compile,
                     comp.failed_compile_message,
+                    comp.links,
                     rep.id as report_id,
                     rep.started as report_started,
                     rep.completed as report_completed,
@@ -3841,20 +3846,24 @@ class Compile(BaseDocument):
         requested_compile = records[0]
 
         # Reports should be included from the substituted compile (as well)
-        reports = [
-            m.CompileRunReport(
-                id=report["report_id"],
-                started=report["report_started"],
-                completed=report["report_completed"],
-                command=report["command"],
-                name=report["name"],
-                errstream=report["errstream"],
-                outstream=report["outstream"],
-                returncode=report["returncode"],
-            )
-            for report in result
-            if report.get("report_id")
-        ]
+        reports = []
+        links = cast(m.JsonApiLinks, requested_compile.get("links", {}))
+        for report in result:
+            if report.get("report_id"):
+                reports.append(
+                    m.CompileRunReport(
+                        id=report["report_id"],
+                        started=report["report_started"],
+                        completed=report["report_completed"],
+                        command=report["command"],
+                        name=report["name"],
+                        errstream=report["errstream"],
+                        outstream=report["outstream"],
+                        returncode=report["returncode"],
+                    )
+                )
+                links.update(cast(m.JsonApiLinks, report.get("links", {})))
+
         return m.CompileDetails(
             id=requested_compile["id"],
             remote_id=requested_compile["remote_id"],
@@ -3877,6 +3886,7 @@ class Compile(BaseDocument):
             failed_compile_message=requested_compile["failed_compile_message"],
             compile_data=requested_compile["compile_data"],
             reports=reports,
+            links=links,
         )
 
     def to_dto(self) -> m.CompileRun:
@@ -3898,6 +3908,7 @@ class Compile(BaseDocument):
             exporter_plugin=self.exporter_plugin,
             notify_failed_compile=self.notify_failed_compile,
             failed_compile_message=self.failed_compile_message,
+            links=self.links,
         )
 
     def to_dict(self) -> JsonType:
