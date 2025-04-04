@@ -1004,7 +1004,11 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     # request a compile
     remote_id1 = uuid.uuid4()
     await compilerslice.request_recompile(
-        env=env, force_update=False, do_export=False, remote_id=remote_id1, env_vars={"my_unique_var": "1"}
+        env=env,
+        force_update=False,
+        do_export=False,
+        remote_id=remote_id1,
+        env_vars={"my_unique_var": "1"},
     )
 
     # api should return one
@@ -1052,7 +1056,12 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
 
     # request a compile with do_export=False -> expect merge with compile2
     remote_id4 = uuid.uuid4()
-    compile_id4, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=remote_id4)
+    compile_id4, _ = await compilerslice.request_recompile(
+        env=env,
+        force_update=False,
+        do_export=False,
+        remote_id=remote_id4,
+    )
 
     # Queue = [
     #   remote_id1 (Running),
