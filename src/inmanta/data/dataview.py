@@ -759,6 +759,7 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                 exporter_plugin=compile["exporter_plugin"],
                 notify_failed_compile=compile["notify_failed_compile"],
                 failed_compile_message=compile["failed_compile_message"],
+                links=compile["links"],
             )
             for compile in records
         ]

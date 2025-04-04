@@ -184,6 +184,8 @@ class CompileRunBase(BaseModel):
             These env vars can be compacted over multiple compiles.
             If multiple values are compacted, they will be joined using spaces.
     :param environment_variables: environment variables passed to the compiler
+    :param links: An object that contains relevant links to this compile.
+        Conforms with the json api: https://jsonapi.org/format/#document-links
     """
 
     id: uuid.UUID

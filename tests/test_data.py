@@ -2254,7 +2254,7 @@ async def test_compile_get_report(init_dataclasses_and_load_schema):
     await report12.insert()
 
     # Compile 2
-    compile2 = data.Compile(environment=env.id)
+    compile2 = data.Compile(environment=env.id, links={"self": "my-link"})
     await compile2.insert()
     report21 = data.Report(
         started=datetime.datetime.now(), completed=datetime.datetime.now(), command="cmd", name="test", compile=compile2.id
@@ -2274,6 +2274,8 @@ async def test_compile_get_report(init_dataclasses_and_load_schema):
     report_of_compile = await data.Compile.get_report(compile2.id)
     reports = report_of_compile["reports"]
     assert len(reports) == 1
+    # Assert that links are passed to the CompileReport
+    assert report_of_compile["links"] == {"self": "my-link"}
 
 
 async def test_match_tables_in_db_against_table_definitions_in_orm(
