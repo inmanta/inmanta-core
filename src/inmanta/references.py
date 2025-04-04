@@ -28,11 +28,12 @@ from typing import Literal, Tuple
 
 import pydantic
 import typing_inspect
+from pydantic import ValidationError
 
 import inmanta
 import inmanta.resources
 from inmanta import util
-from inmanta.types import ResourceIdStr
+from inmanta.types import ResourceIdStr, StrictJson
 from inmanta.util import dict_path
 
 ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z0-9_]+::)+[A-Z][A-z0-9_-]*$")]
@@ -122,6 +123,20 @@ class LiteralArgument(Argument):
         return self.value
 
 
+class JsonArgument(Argument):
+    """Literal argument to a reference"""
+
+    type: typing.Literal["json"] = "json"
+    value: StrictJson
+
+    def get_arg_value(
+        self,
+        resource: "inmanta.resources.Resource",
+        logger: "handler.LoggerABC",
+    ) -> object:
+        return self.value
+
+
 class ReferenceArgument(Argument):
     """Use the value of another reference as an argument for the reference"""
 
@@ -186,7 +201,7 @@ class ResourceArgument(Argument):
 
 
 ArgumentTypes = typing.Annotated[
-    LiteralArgument | ReferenceArgument | GetArgument | PythonTypeArgument | ResourceArgument,
+    LiteralArgument | ReferenceArgument | GetArgument | PythonTypeArgument | ResourceArgument | JsonArgument,
     pydantic.Field(discriminator="type"),
 ]
 """ A list of all specific types of arguments. Pydantic uses this to instantiate the correct argument class
@@ -273,13 +288,16 @@ class ReferenceLike:
             match value:
                 case str() | int() | float() | bool():
                     arguments.append(LiteralArgument(name=name, value=value))
-
+                case dict() | list():
+                    try:
+                        arguments.append(JsonArgument(name=name, value=value))
+                    except ValidationError:
+                        raise ValueError(f"The {name} attribute of {self} is not json serializable {value}")
                 case Reference():
                     model = value.serialize()
                     arguments.append(ReferenceArgument(name=name, id=model.id))
-
-                case inmanta.resources.Resource():
-                    arguments.append(ResourceArgument(name=name, id=value.id.resource_str()))
+                case inmanta.resources.Resource() as v:
+                    arguments.append(ResourceArgument(name=name, id=v.id.resource_str()))
 
                 case type() if value in [str, float, int, bool]:
                     arguments.append(PythonTypeArgument(name=name, value=value.__name__))
