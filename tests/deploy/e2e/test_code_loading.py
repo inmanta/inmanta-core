@@ -33,6 +33,7 @@ from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.data import FilesInModule, InmantaModule, ModulesForAgent, PipConfig, get_session
+from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import process_env
 from inmanta.loader import InmantaModuleDTO
 from inmanta.protocol import Client
@@ -311,14 +312,10 @@ async def test_agent_code_loading_with_failure(
             name="test",
             version="abc",
             files_in_module=[
-                {
-                    "path": "dummy/path/test/plugins/dummy_file.py",
-                    "module_name": "inmanta_plugins.test",
-                    "hash": hash,
-                    "content": "file content",
-                    "requires": [],
-                }
+                ModuleSourceMetadata(name="dummy.path.test.plugins.dummy_file", hash_value=hash, is_byte_code=False)
             ],
+            requirements=[],
+            required_by=["agent1"],
         )
     }
 

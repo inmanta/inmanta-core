@@ -1377,16 +1377,16 @@ class Test(Resource):
     )
     await snippetcompiler.do_export_and_deploy(do_raise=False)
 
-    code_manager = loader.CodeManager()
+    code_manager = loader.CodeManager(types_to_agent={"modulev1::Test": {"def"}})
     for type_name, resource_definition in resources.resource.get_resources():
         code_manager.register_code(type_name, resource_definition)
 
     module_code = False
-    for name, source_info in code_manager.get_types():
-        for info in source_info:
-            if info.module_name == "inmanta_plugins.modulev1":
+    for name, inmanta_module_dto in code_manager.get_module_version_info().items():
+        for module_source in inmanta_module_dto.files_in_module:
+            if module_source.name == "inmanta_plugins.modulev1":
                 module_code = True
-                assert info.path[-4:] == ".pyc"
+                assert module_source.is_byte_code
 
     assert module_code
 

@@ -145,8 +145,11 @@ def test():
     """.encode(
         "utf-8"
     )
-    direct = inmanta.loader.ModuleSource(
-        "inmanta_plugins.test.testA", inmanta.util.hash_file(direct_content), False, direct_content
+    direct = inmanta.data.model.ModuleSource(
+        name="inmanta_plugins.test.testA",
+        hash_value=inmanta.util.hash_file(direct_content),
+        is_byte_code=False,
+        source=direct_content,
     )
     # Via server: source is sent via server
     server_content = """
@@ -156,7 +159,9 @@ def test():
         "utf-8"
     )
     server_content_hash = inmanta.util.hash_file(server_content)
-    via_server = inmanta.loader.ModuleSource("inmanta_plugins.test.testB", server_content_hash, False, server_content)
+    via_server = inmanta.data.model.ModuleSource(
+        name="inmanta_plugins.test.testB", hash_value=server_content_hash, is_byte_code=False, source=server_content
+    )
     # Upload
     res = await client.upload_file(id=server_content_hash, content=base64.b64encode(server_content).decode("ascii"))
     assert res.code == 200
@@ -295,7 +300,7 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
 
 
 def test_hash_with_duplicates():
-    source = inmanta.loader.ModuleSource("test", "aaaaa", False, None, None)
+    source = inmanta.data.model.ModuleSource(name="test", hash_value="aaaaa", is_byte_code=False, source="foo".encode())
     requirement = "setuptools"
     simple = ExecutorBlueprint(
         pip_config=PipConfig(), requirements=[requirement], sources=[source], python_version=sys.version_info[:2]

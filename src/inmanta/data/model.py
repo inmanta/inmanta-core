@@ -994,7 +994,7 @@ class ModuleSourceMetadata(BaseModel):
         return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
 
 
-class ModuleSource(ModuleSourceMetadata, BaseModel):
+class ModuleSource(ModuleSourceMetadata):
     """
     :param source: the content of the file
     """

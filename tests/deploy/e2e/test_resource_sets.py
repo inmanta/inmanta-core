@@ -27,8 +27,9 @@ from typing import Optional
 import utils
 from inmanta import const, data, util
 from inmanta.agent import executor
+from inmanta.data.model import ModuleSource
 from inmanta.deploy import persistence, state
-from inmanta.loader import InmantaModuleDTO, SourceInfo
+from inmanta.loader import InmantaModuleDTO
 from inmanta.protocol.common import Result
 from inmanta.resources import Id
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
@@ -235,21 +236,25 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
     resource_sets = {
         "test::Resource[agent1,key=key1]": "set-a",
     }
-    mock_source_info = SourceInfo(
-        path="inmanta_plugins/test/__init__.py",
-        module_name="test",
-    )
+
     content = "# test"
     sha1sum = hashlib.new("sha1")
     sha1sum.update(content.encode())
     hv: str = sha1sum.hexdigest()
     await client.upload_file(hv, content=base64.b64encode(content.encode()).decode("ascii"))
 
-    mock_source_info.content = content
-    mock_source_info.hash = hv
-    mock_source_info.requires = []
+    module_source = ModuleSource(
+        name="inmanta_plugins.test",
+        hash_value=hv,
+        is_byte_code=False,
+        source=content.encode(),
+    )
 
-    module_version_info = {"test": InmantaModuleDTO(name="test", version="0.0.0", files_in_module=[mock_source_info])}
+    module_version_info = {
+        "test": InmantaModuleDTO(
+            name="test", version="0.0.0", files_in_module=[module_source], requirements=[], required_by=["agent1"]
+        )
+    }
 
     result = await client.put_version(
         tid=environment,
