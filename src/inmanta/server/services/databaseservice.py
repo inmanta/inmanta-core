@@ -311,7 +311,6 @@ async def initialize_sql_alchemy_engine(
         pool_size=connection_pool_min_size,
         max_overflow=connection_pool_max_size - connection_pool_min_size,
         pool_timeout=connection_timeout,
-        echo=True,
     )
 
     if create_db_schema:
