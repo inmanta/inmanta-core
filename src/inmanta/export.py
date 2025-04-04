@@ -482,7 +482,6 @@ class Exporter:
     def register_code(
         self,
         conn: protocol.SyncClient,
-        tid: uuid.UUID,
         code_manager: loader.CodeManager,
         *,
         do_upload: bool,
@@ -536,10 +535,11 @@ class Exporter:
 
         conn = protocol.SyncClient("compiler")
 
-        code_manager = loader.CodeManager()
+        resource_type_to_agent = {Id.parse_resource_version_id(res["id"]).get_entity_type():res["agentname"] for res in resources}
+        code_manager = loader.CodeManager(resource_type_to_agent)
 
         # partial exports use the same code as the version they're based on
-        self.register_code(conn, tid, code_manager, do_upload=not partial_compile)
+        self.register_code(conn, code_manager, do_upload=not partial_compile)
 
         LOGGER.info("Uploading %d files" % len(self._file_store))
 
@@ -588,7 +588,6 @@ class Exporter:
                     resource_state=self._resource_state,
                     version_info=version_info,
                     removed_resource_sets=resource_sets_to_remove,
-                    type_to_module_data=code_manager.get_type_to_module(),
                     module_version_info=code_manager.get_module_version_info(),
                     **kwargs,
                 )
@@ -602,7 +601,6 @@ class Exporter:
                     resource_state=self._resource_state,
                     version_info=version_info,
                     compiler_version=get_compiler_version(),
-                    type_to_module_data=code_manager.get_type_to_module(),
                     module_version_info=code_manager.get_module_version_info(),
                     **kwargs,
                 )

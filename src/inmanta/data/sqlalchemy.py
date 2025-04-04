@@ -14,11 +14,12 @@ Contact: code@inmanta.com
 
 import datetime
 import uuid
+from collections import defaultdict, namedtuple
 from typing import Any, List, Optional
 
 import asyncpg
 
-from inmanta.data.model import EnvSettingType
+from inmanta.data.model import EnvSettingType, InmantaModuleDTO
 from sqlalchemy import (
     ARRAY,
     Boolean,
@@ -39,12 +40,13 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+
+
 # Currently, these models don't offer any additional validation, besides typing, so it's best to avoid inserting/modifying
 # DB entries directly using these models.
 
 
 class Base(DeclarativeBase):
-    pass
 
     @classmethod
     async def delete_all(cls, environment: uuid.UUID, connection: asyncpg.connection.Connection) -> None:
@@ -63,6 +65,74 @@ class InmantaModule(Base):
     version: Mapped[str] = mapped_column(String)
     environment: Mapped[uuid.UUID] = mapped_column(UUID)
     requirements: Mapped[list[str]] = mapped_column(ARRAY(String()))
+
+    @classmethod
+    async def register_modules(
+        cls, environment: uuid.UUID, module_version_info: dict[str, InmantaModuleDTO], connection: asyncpg.Connection
+    ) -> None:
+        """
+        Register modules
+        :param environment: The environment for which to register inmanta modules.
+        :param module_version_info: Map of module name to inmanta module data.
+        :param connection: The asyncpg connection to use.
+        """
+
+        insert_modules_query = f"""
+            INSERT INTO {InmantaModule.__tablename__}(
+                name,
+                version,
+                environment,
+                requirements
+            ) VALUES(
+                $1,
+                $2,
+                $3,
+                $4
+            )
+            ON CONFLICT DO NOTHING;
+        """
+
+        insert_files_query = f"""
+            INSERT INTO {FilesInModule.__tablename__}(
+                inmanta_module_name,
+                inmanta_module_version,
+                environment,
+                file_content_hash,
+                python_module_name,
+                is_byte_code
+            ) VALUES(
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                $6
+            )
+            ON CONFLICT DO NOTHING;
+        """
+        async with connection.transaction():
+            await connection.executemany(
+                insert_modules_query,
+                [
+                    (inmanta_module_name, inmanta_module_data["version"], environment, inmanta_module_data["requirements"])
+                    for inmanta_module_name, inmanta_module_data in module_version_info.items()
+                ],
+            )
+            await connection.executemany(
+                insert_files_query,
+                [
+                    (
+                        inmanta_module_name,
+                        inmanta_module_data["version"],
+                        environment,
+                        file["hash_value"],
+                        file["name"],
+                        file["is_byte_code"],
+                    )
+                    for inmanta_module_name, inmanta_module_data in module_version_info.items()
+                    for file in inmanta_module_data["files_in_module"]
+                ],
+            )
 
 
 class FilesInModule(Base):
@@ -110,6 +180,98 @@ class ModulesForAgent(Base):
     agent_name: Mapped[str] = mapped_column(String)
     inmanta_module_name: Mapped[str] = mapped_column(String)
     inmanta_module_version: Mapped[str] = mapped_column(String)
+
+    @classmethod
+    async def get_agents_per_module(
+        cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
+    ) -> dict[tuple[str, str], list[str]]:
+        """
+        # TODO don't need agent info ??
+        Retrieve the list of agents that require each inmanta module (name, version)
+        as a map of (inmanta_module_name, inmanta_module_version) to list[agent_name]
+
+        This method is meant to be used in a context where we want to use an already open
+        asyncpg connection.
+
+
+        :param model_version: The model version for which to retrieve agents per module.
+        :param environment: The environment for which to retrieve agents per module.
+        :param connection: The asyncpg connection to use.
+        :return: A map of (inmanta_module_name, inmanta_module_version) to list[agent_name]
+        """
+        query = f"""
+            SELECT
+                agent_name,
+                inmanta_module_name,
+                inmanta_module_version
+            FROM
+                {ModulesForAgent.__tablename__}
+            WHERE
+                cm_version=$1
+            AND
+                environment=$2
+         """
+        async with connection.transaction():
+            values = [model_version, environment]
+            in_db_module_data: dict[tuple[str, str], list[str]] = defaultdict(list)
+            async for record in connection.cursor(query, *values):
+                in_db_module_data[record["inmanta_module_name"], record["inmanta_module_version"]].append(record["agent_name"])
+            return in_db_module_data
+
+    @classmethod
+    async def register_modules_for_agents(
+        cls,
+        model_version: int,
+        environment: uuid.UUID,
+        module_version_info: dict[str, InmantaModuleDTO],
+        connection: asyncpg.Connection,
+    ):
+        """
+        Register inmanta modules (name, version) required by each agent.
+
+        This method is meant to be used in a context where we want to use an already open
+        asyncpg connection.
+
+        :param model_version: The model version for which to register modules per agent.
+        :param environment: The environment for which to register modules per agent.
+        :param module_version_info: Map of module name to inmanta module data.
+        :param connection: The asyncpg connection to use.
+        :return:
+        """
+        query = f"""
+            INSERT INTO {ModulesForAgent.__tablename__}(
+                cm_version,
+                environment,
+                agent_name,
+                inmanta_module_name,
+                inmanta_module_version
+            ) VALUES(
+                $1,
+                $2,
+                $3,
+                $4,
+                $5
+            )
+            ON CONFLICT DO NOTHING;
+        """
+        async with connection.transaction():
+            values = []
+            for inmanta_module_name, inmanta_module_data in module_version_info.items():
+                for agent_name in inmanta_module_data["required_by"]:
+                    values.append(
+                        (
+                            model_version,
+                            environment,
+                            agent_name,
+                            inmanta_module_name,
+                            inmanta_module_data["version"],
+                        )
+                    )
+
+            await connection.executemany(
+                query,
+                values,
+            )
 
 
 class File(Base):

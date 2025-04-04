@@ -5976,7 +5976,6 @@ class ConfigurationModel(BaseDocument):
                 connection=con,
             )
 
-
             await UnknownParameter.delete_all(environment=self.environment, version=self.version, connection=con)
             await self._execute_query(
                 "DELETE FROM public.resourceaction_resource WHERE environment=$1 AND resource_version=$2",

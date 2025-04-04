@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Optional
 from pydantic import BaseModel, computed_field
 
 from inmanta import const, module
+from inmanta.data.model import ModuleSource, InmantaModuleDTO, ModuleSourceMetadata
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -72,33 +73,22 @@ class CodeManager:
     """This class is responsible for loading and packaging source code for types (resources, handlers, ...) that need to be
     available in a remote process (e.g. agent).
 
-    __type_file: Maps Inmanta type names (e.g., ``std::testing::NullResource``, ``mymodule::Mytype``)
-                 to sets of filenames containing
-                 the necessary source code (all plugin files in the module).
     __file_info: Stores metadata about each individual source code file. The keys are file paths and the values
                  in this dictionary are ``SourceInfo`` objects.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, types_to_agent: dict[str, str] | None = None) -> None:
         # Old implementation
         # Use by external code
-
-        # Map of types (i.e. resource types or handler types) to file paths
-        # Which python files are required by each type
-        self.__type_file: dict[str, set[str]] = {}
 
         # Map of [path, SourceInfo]
         # To which python module do these python files belong
         self.__file_info: dict[str, SourceInfo] = {}
-
-        # Map of types (i.e. resource types or handler types) to inmanta modules
-        # Maps a type to the modules required to execute it.
-        self.__type_to_module: dict[str, list[str]] = defaultdict(list)
+        self.__module_to_agents: dict[str, list[str]] = defaultdict(list)
 
         # Cache of module to source info
-        self.__module_to_source_info: dict[str, list[SourceInfo]] = {}
-
-        self.__modules_data: dict[str, "PythonModule"] = {}
+        self.__module_to_source_info: dict[str, list[SourceInfo]] = defaultdict(list)
+        self._types_to_agent = types_to_agent or {}
 
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
@@ -111,37 +101,26 @@ class CodeManager:
         if file_name is None:
             raise SourceNotFoundException(f"Unable to locate source code of instance {instance} for entity {type_name}")
 
-        if type_name not in self.__type_file:
-            self.__type_file[type_name] = set()
-
-        # if file_name is in there, all plugin files should be in there => return
-        if file_name in self.__type_file[type_name]:
-            return
-
         # get the module
         module_name = get_inmanta_module_name(instance.__module__)
 
-        all_plugin_files: list[SourceInfo] = self._get_source_info_for_module(module_name)
-        self.__type_to_module[type_name].append(module_name)
+        agent_name: str | None = self._types_to_agent.get(type_name)
+        if agent_name is None:
+            raise Exception(f"No agent was set on instance {instance} of entity type {type_name}.")
 
-        self.__type_file[type_name].update(source_info.path for source_info in all_plugin_files)
+        self._get_source_info_for_module(module_name, agent_name)
 
-    def _get_source_info_for_module(self, inmanta_module_name: str) -> list["SourceInfo"]:
+    def _get_source_info_for_module(self, inmanta_module_name: str, agent_name: str) -> None:
         if inmanta_module_name in self.__module_to_source_info:
-            return self.__module_to_source_info[inmanta_module_name]
+            # This module was already registered
+            return
 
-        sources = [
-            SourceInfo(path=absolute_path, module_name=fqn_module_name)
-            for absolute_path, fqn_module_name in module.Project.get().modules[inmanta_module_name].get_plugin_files()
-        ]
+        for absolute_path, fqn_module_name in module.Project.get().modules[inmanta_module_name].get_plugin_files():
+            source_info = SourceInfo(path=absolute_path, module_name=fqn_module_name)
+            self.__file_info[absolute_path] = source_info
+            self.__module_to_agents[inmanta_module_name].append(agent_name)
 
-        self.__module_to_source_info[inmanta_module_name] = sources
-
-        # Register files
-        for file_info in sources:
-            self.__file_info[file_info.path] = file_info
-
-        return sources
+            self.__module_to_source_info[inmanta_module_name].append(source_info)
 
     def get_object_source(self, instance: object) -> Optional[str]:
         """Get the path of the source file in which type_object is defined"""
@@ -158,39 +137,42 @@ class CodeManager:
         """Return all module source info"""
         return self.__module_to_source_info
 
-    def get_module_version_info(self) -> dict[str, "PythonModule"]:
+    def get_module_version_info(self) -> dict[str, "InmantaModuleDTO"]:
         """Return all module version info"""
-        if self.__modules_data:
-            return self.__modules_data
-
-        source_info = self.get_module_source_info()
+        source_info: dict[str, list[SourceInfo]] = self.get_module_source_info()
 
         modules_data = {}
         for module_name, files_in_module in source_info.items():
 
             requirements = set()
             module_version_hash = hashlib.new("sha1")
+            files_metadata = []
 
             for file in sorted(files_in_module, key=lambda f: f.hash):
                 module_version_hash.update(file.hash.encode())
                 requirements.update(file.requires)
+                files_metadata.append(
+                    ModuleSourceMetadata(
+                        name=file.module_name,
+                        hash_value=file.hash,
+                        is_byte_code=file.path.endswith(".pyc"),
+                    )
+                )
 
             for requirement in sorted(requirements):
                 module_version_hash.update(str(requirement).encode())
 
             module_version = module_version_hash.hexdigest()
-            modules_data[module_name] = PythonModule(
+            modules_data[module_name] = InmantaModuleDTO(
                 name=module_name,
                 version=module_version,
-                files_in_module=files_in_module,
+                files_in_module=files_metadata,
+                requirements=list(requirements),
+                required_by=self.__module_to_agents[module_name] # TODO get agents for this module
             )
         self.__modules_data = modules_data
 
         return self.__modules_data
-
-    def get_type_to_module(self) -> dict[str, list[str]]:
-        """Return all module source info"""
-        return self.__type_to_module
 
     def get_file_content(self, hash: str) -> bytes:
         """Get the file content for the given hash"""
@@ -200,35 +182,8 @@ class CodeManager:
 
         raise KeyError("No file found with this hash")
 
-    def get_types(self) -> Iterable[tuple[str, list["SourceInfo"]]]:
-        """Get a list of all registered types"""
-        return ((type_name, [self.__file_info[path] for path in files]) for type_name, files in self.__type_file.items())
 
 
-@dataclass(frozen=True)
-@functools.total_ordering
-class ModuleSource:
-    """
-    :param name: the name of the python module. e.g. inmanta_plugins.model.x
-    :param is_byte_code: is this content python byte code or python source
-    :param source: the content of the file
-
-    """
-
-    name: str
-    hash_value: str
-    is_byte_code: bool
-    source: bytes
-
-    def __lt__(self, other):
-        if not isinstance(other, ModuleSource):
-            return NotImplemented
-        return (self.name, self.hash_value, self.is_byte_code) < (other.name, other.hash_value, other.is_byte_code)
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ModuleSource):
-            return False
-        return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
 
 
 @dataclass(frozen=True)
@@ -356,7 +311,7 @@ class CodeLoader:
                 "Not deploying code (hv=%s, module=%s) because of cache hit", module_source.hash_value, module_source.name
             )
 
-    def deploy_version(self, module_sources: Iterable[ModuleSource], module_name: str) -> None:
+    def deploy_version(self, module_sources: Iterable[ModuleSource]) -> None:
         """
         Ensure the given module sources are available on disk.
         """
@@ -435,29 +390,6 @@ def split(path: str) -> Iterator[str]:
     yield from split(init)
     if last != "":
         yield last
-
-
-def convert_module_path_to_namespace(path: str) -> str:
-    """
-    Returns the fully qualified module name given a path, relative to the module directory.
-    For example
-        convert_module_path_to_namespace("inmanta_plugins/my_mod/my_submod")
-        == convert_module_path_to_namespace("inmanta_plugins/my_mod/my_submod.py")
-        == convert_module_path_to_namespace("inmanta_plugins/my_mod/my_submod/__init__.py")
-        == "inmanta_plugins.my_mod.my_submod".
-    """
-    if path.startswith("/"):
-        raise Exception("Error parsing module path: expected relative path, got %s" % path)
-    if path.startswith(f"{const.PLUGINS_PACKAGE}."):
-        return path
-
-    parts: list[str] = list(split(path))
-
-    if len(parts) == 1 or parts[0] != const.PLUGINS_PACKAGE:
-        raise Exception(
-            f"Error parsing module path: expected '{const.PLUGINS_PACKAGE}/some_module/some_submodule_file', got {path}"
-        )
-    return ".".join(strip_py(parts))
 
 
 def convert_relative_path_to_module(path: str) -> str:
@@ -667,11 +599,6 @@ def unload_modules_for_path(path: str) -> None:
     importlib.invalidate_caches()
 
 
-@dataclass(frozen=True)
-class PythonModule:
-    name: str
-    version: str
-    files_in_module: list["SourceInfo"]
 
 
 class SourceInfo(BaseModel):

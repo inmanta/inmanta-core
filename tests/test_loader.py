@@ -139,7 +139,7 @@ def test():
     source_1 = get_module_source("inmanta_plugins.inmanta_unit_test", code)
 
     # Ensure source is present on disk
-    cl.deploy_version([source_1], module_name="inmanta_unit_test")
+    cl.deploy_version([source_1])
 
     assert any("Deploying code " in message for message in caplog.messages)
     caplog.clear()
@@ -150,7 +150,7 @@ def test():
     assert inmanta_plugins.inmanta_unit_test.test() == 10
 
     # deploy same version
-    cl.deploy_version([source_1], module_name="inmanta_unit_test")
+    cl.deploy_version([source_1])
 
     assert inmanta_plugins.inmanta_unit_test.test() == 10
     assert any("Deploying code " in message for message in caplog.messages)
@@ -163,7 +163,7 @@ def test():
     # Load the module to register it in the loader cache
     cl.load_module(source_1.name, source_1.hash_value)
     # Subsequent deploys of the same module will result in a cache hit
-    cl.deploy_version([source_1], source_1.name)
+    cl.deploy_version([source_1])
     assert any(
         f"Not deploying code (hv={source_1.hash_value}, module={source_1.name}) because of cache hit" in message
         for message in caplog.messages
@@ -176,7 +176,7 @@ def test():
     return 20
         """
     source_2 = get_module_source("inmanta_plugins.inmanta_unit_test", code)
-    cl.deploy_version([source_2], source_2.name)
+    cl.deploy_version([source_2])
 
     assert any("Deploying code " in message for message in caplog.messages)
 
@@ -218,7 +218,7 @@ def helper():
         """,
     )
 
-    cl.deploy_version([source_tests, source_helpers, source_init], module_name="inmanta_unit_test_modular")
+    cl.deploy_version([source_tests, source_helpers, source_init])
 
     import inmanta_plugins.inmanta_unit_test_modular.tests  # NOQA
 
@@ -233,7 +233,7 @@ def test_2312_code_loader_missing_init(tmp_path) -> None:
 def test():
     return 10
         """
-    cl.deploy_version([get_module_source("inmanta_plugins.my_module.my_sub_mod", code)], module_name="my_module")
+    cl.deploy_version([get_module_source("inmanta_plugins.my_module.my_sub_mod", code)])
 
     import inmanta_plugins.my_module.my_sub_mod as sm
 
@@ -253,7 +253,7 @@ def test():
         import inmanta_plugins.inmanta_bad_unit_test  # NOQA
 
     caplog.clear()
-    cl.deploy_version([get_module_source("inmanta_plugins.inmanta_bad_unit_test", code)], module_name="inmanta_bad_unit_test")
+    cl.deploy_version([get_module_source("inmanta_plugins.inmanta_bad_unit_test", code)])
 
     with pytest.raises(ModuleNotFoundError):
         import inmanta_plugins.inmanta_bad_unit_test  # NOQA

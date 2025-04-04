@@ -34,7 +34,7 @@ from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.data import FilesInModule, InmantaModule, ModulesForAgent, PipConfig, get_session
 from inmanta.env import process_env
-from inmanta.loader import PythonModule
+from inmanta.loader import InmantaModuleDTO
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
@@ -94,7 +94,7 @@ async def test_agent_installs_dependency_containing_extras(
     body = base64.b64encode(content).decode("ascii")
 
     mocked_module_version_info = {
-        "test": PythonModule(
+        "test": InmantaModuleDTO(
             name="test",
             version="abc",
             files_in_module=[
@@ -269,11 +269,11 @@ async def test_get_code(
     files_in_module_stmt = insert(FilesInModule).on_conflict_do_nothing()
     modules_for_agent_stmt = insert(ModulesForAgent).on_conflict_do_nothing()
 
-    async with get_session() as session:
+    async with get_session() as session, session.begin():
         await session.execute(module_stmt, module_data)
         await session.execute(files_in_module_stmt, files_in_module_data)
         await session.execute(modules_for_agent_stmt, modules_for_agent_data)
-        await session.commit()
+        # await session.commit()
 
     for version in model_versions:
         module_install_specs = await codemanager.get_code(environment=env_id, model_version=version, agent_name="agent_1")
@@ -312,7 +312,7 @@ async def test_agent_code_loading_with_failure(
     body = base64.b64encode(content).decode("ascii")
 
     mocked_module_version_info = {
-        "test": PythonModule(
+        "test": InmantaModuleDTO(
             name="test",
             version="abc",
             files_in_module=[

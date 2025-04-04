@@ -641,4 +641,4 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                 inmanta.util.parse_requirements(blueprint.requirements),
                 blueprint.pip_config,
             )
-            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources, module_name)
+            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)

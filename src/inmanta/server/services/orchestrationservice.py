@@ -34,7 +34,15 @@ import inmanta.exceptions
 import inmanta.util
 from inmanta import const, data, tracing
 from inmanta.const import ResourceState
-from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode, get_session
+from inmanta.data import (
+    APILIMIT,
+    AVAILABLE_VERSIONS_TO_KEEP,
+    InvalidSort,
+    ModulesForAgent,
+    ResourcePersistentState,
+    RowLockMode,
+    get_session,
+)
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
@@ -668,8 +676,7 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
-        module_version_info: dict[str, dict[str, Any]],
-        type_to_module_data: dict[str, set[str]],
+        module_version_info: dict[str, "InmantaModuleDTO"],
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -683,7 +690,7 @@ class OrchestrationService(protocol.ServerSlice):
         :param removed_resource_sets: When a partial compile is done, this parameter should indicate the names of the resource
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
-        :param module_version_info: Mapping of module name to module version.
+        :param module_version_info: Mapping of (module name, module version) to module DTO.
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -827,155 +834,42 @@ class OrchestrationService(protocol.ServerSlice):
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
-            async def register_code(
-                cm_version: int,
-                environment: uuid.UUID,
-                module_version_info: dict[str, dict[str, Any]],
-                type_to_module_data: dict[str, set[str]],
-                type_to_agent: dict[str, set[str]],
-                connection: Connection,
-            ) -> None:
-
-                query = """
-                    INSERT INTO modules_for_agent(
-                        cm_version,
-                        environment,
-                        agent_name,
-                        inmanta_module_name,
-                        inmanta_module_version
-                    ) VALUES(
-                        $1,
-                        $2,
-                        $3,
-                        $4,
-                        $5
-                    )
-                    ON CONFLICT DO NOTHING;
-                """
-                async with connection.transaction():
-                    values = []
-                    for resource_type in type_to_agent.keys():
-                        for agent_name in type_to_agent[resource_type]:
-                            if resource_type not in type_to_module_data:
-                                LOGGER.debug("No inmanta module information was provided for resource type %s." % resource_type)
-                                continue
-                            for module_name in type_to_module_data[resource_type]:
-                                values.append(
-                                    (
-                                        cm_version,
-                                        environment,
-                                        agent_name,
-                                        module_name,
-                                        module_version_info[module_name]["version"],
-                                    )
-                                )
-
-                    await connection.executemany(
-                        query,
-                        values,
-                    )
-
             async def check_version_info(
                 partial_base_version: int,
                 environment: uuid.UUID,
-                module_version_info: dict[str, dict[str, Any]],
-                type_to_module_data: dict[str, set[str]],
-                type_to_agent: dict[str, set[str]],
+                module_version_info: dict[str, "InmantaModuleDTO"],
                 connection: Connection,
             ) -> None:
-                query = """
-                    SELECT
-                        agent_name,
-                        inmanta_module_name,
-                        inmanta_module_version
-                    FROM
-                        modules_for_agent
-                    WHERE
-                        cm_version=$1
-                    AND
-                        environment=$2
-                 """
-                async with connection.transaction():
-                    values = [partial_base_version, environment]
-                    in_db_module_data: dict[str, dict[str, str]] = defaultdict(dict)
-                    async for record in connection.cursor(query, *values):
-                        in_db_module_data[str(record["inmanta_module_name"])][str(record["agent_name"])] = str(
-                            record["inmanta_module_version"]
+                """
+                Retrieve which inmanta modules (name, version) are registered for all agents
+                for a given model version and a given environment.
+
+                Make sure that the same module versions are used in this partial version.
+                """
+
+                base_version_data: dict[tuple[str, str], list[str]] = await ModulesForAgent.get_agents_per_module(
+                    model_version=partial_base_version, environment=environment, connection=connection
+                )
+                for inmanta_module_name, inmanta_module_version, _ in base_version_data.items():
+                    if (
+                        inmanta_module_name not in module_version_info
+                        or module_version_info[inmanta_module_name]["version"] != inmanta_module_version
+                    ):
+                        raise BadRequest(
+                            "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
                         )
-
-                for resource_type in type_to_agent.keys():
-                    for agent_name in type_to_agent[resource_type]:
-                        if resource_type not in type_to_module_data:
-                            LOGGER.debug("No inmanta module information was provided for resource type %s." % resource_type)
-                            continue
-                        for module_name in type_to_module_data[resource_type]:
-                            expected_module_version = module_version_info[module_name]["version"]
-
-                            if in_db_module_data[module_name][agent_name] != expected_module_version:
-                                raise BadRequest(
-                                    "Cannot perform partial export because of version mismatch for module %s." % module_name
-                                )
-
-            async def upload_modules(env: uuid.UUID, module_version_info: dict[str, dict[str, Any]]) -> None:
-                if not module_version_info:
-                    return
-                module_stmt = insert(InmantaModule).on_conflict_do_nothing()
-
-                files_in_module_stmt = insert(FilesInModule).on_conflict_do_nothing()
-
-                module_data = []
-                files_in_module_data = []
-                for inmanta_module_name, python_module in module_version_info.items():
-
-                    requirements: set[str] = set()
-
-                    for file in python_module["files_in_module"]:
-                        file_path = file["path"]
-                        match file_path:
-                            case _ if file_path.endswith(".py"):
-                                is_byte_code = False
-                            case _ if file_path.endswith(".pyc"):
-                                is_byte_code = True
-                            case _:
-                                raise ServerError(
-                                    "Invalid file extension for plugin file %s. Expecting `.py` or `.pyc`." % file_path
-                                )
-
-                        file_in_module = {
-                            "inmanta_module_name": inmanta_module_name,
-                            "inmanta_module_version": python_module["version"],
-                            "environment": env,
-                            "file_content_hash": file["hash"],
-                            "python_module_name": file["module_name"],
-                            "is_byte_code": is_byte_code,
-                        }
-                        requirements.update(file["requires"])
-                        files_in_module_data.append(file_in_module)
-
-                    module = {
-                        "name": inmanta_module_name,
-                        "version": python_module["version"],
-                        "environment": env,
-                        "requirements": requirements,
-                    }
-
-                    module_data.append(module)
-
-                async with get_session() as session:
-                    await session.execute(module_stmt, module_data)
-                    await session.execute(files_in_module_stmt, files_in_module_data)
-                    await session.commit()
 
             if is_partial_update:
                 assert partial_base_version is not None
-                await check_version_info(
-                    partial_base_version, env.id, module_version_info, type_to_module_data, type_to_agent, connection
-                )
+                await check_version_info(partial_base_version, env.id, module_version_info, connection)
             else:
-                # TODO this should use the same connection
-                await upload_modules(env.id, module_version_info)
+                await InmantaModule.register_modules(
+                    environment=env.id, module_version_info=module_version_info, connection=connection
+                )
 
-            await register_code(version, env.id, module_version_info, type_to_module_data, type_to_agent, connection)
+            await ModulesForAgent.register_modules_for_agents(
+                model_version=version, environment=env.id, module_version_info=module_version_info, connection=connection
+            )
 
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
@@ -1051,8 +945,7 @@ class OrchestrationService(protocol.ServerSlice):
         compiler_version: Optional[str] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
-        module_version_info: Optional[dict[str, dict[str, Any]]] = None,
-        type_to_module_data: Optional[dict[str, set[str]]] = None,
+        module_version_info: dict[str, "InmantaModuleDTO"] | None = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
@@ -1092,7 +985,6 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                     module_version_info=module_version_info or {},
-                    type_to_module_data=type_to_module_data or {},
                 )
             # This must be outside all transactions, as it relies on the result of _put_version
             # and it starts a background task, so it can't re-use this connection
@@ -1111,8 +1003,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         removed_resource_sets: Optional[list[str]] = None,
         pip_config: Optional[PipConfig] = None,
-        module_version_info: Optional[dict[str, Any]] = None,
-        type_to_module_data: Optional[dict[str, set[str]]] = None,
+        module_version_info: dict[tuple["inm_mod_name", "inm_mod_version"], "InmantaModuleDTO"] | None = None,
     ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure
@@ -1226,7 +1117,6 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                     module_version_info=module_version_info or {},
-                    type_to_module_data=type_to_module_data or {},
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)

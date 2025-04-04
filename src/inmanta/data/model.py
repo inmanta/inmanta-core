@@ -17,12 +17,14 @@ Contact: code@inmanta.com
 """
 
 import datetime
+import functools
 import json
 import typing
 import urllib
 import uuid
 from collections import abc
 from collections.abc import Sequence
+from dataclasses import dataclass
 from enum import Enum, StrEnum
 from typing import ClassVar, Mapping, Optional, Self, Union
 
@@ -967,3 +969,45 @@ class DataBaseReport(BaseModel):
             free_connections=self.free_connections + other.free_connections,
             pool_exhaustion_time=self.pool_exhaustion_time + other.pool_exhaustion_time,
         )
+
+
+@dataclass(frozen=True)
+@functools.total_ordering
+class ModuleSourceMetadata:
+    """
+    :param name: the name of the python module. e.g. inmanta_plugins.model.x
+    :param is_byte_code: is this content python byte code or python source
+
+    """
+
+    name: str
+    hash_value: str
+    is_byte_code: bool
+
+    def __lt__(self, other: object):
+        if not isinstance(other, ModuleSourceMetadata):
+            return NotImplemented
+        return (self.name, self.hash_value, self.is_byte_code) < (other.name, other.hash_value, other.is_byte_code)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ModuleSourceMetadata):
+            return False
+        return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
+
+
+@dataclass(frozen=True)
+class ModuleSource(ModuleSourceMetadata):
+    """
+    :param source: the content of the file
+    """
+
+    source: bytes
+
+
+@dataclass(frozen=True)
+class InmantaModuleDTO:
+    name: str
+    version: str
+    files_in_module: list[ModuleSourceMetadata]
+    requirements: list[str]
+    required_by: list[str]

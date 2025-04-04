@@ -27,6 +27,8 @@ from inmanta import const, data, resources
 from inmanta.const import ResourceState
 from inmanta.data import model
 from inmanta.data.model import PipConfig
+
+# from inmanta.loader import InmantaModuleDTO
 from inmanta.protocol import exceptions
 from inmanta.protocol.common import ArgOption
 from inmanta.protocol.decorators import method, typedmethod
@@ -531,8 +533,8 @@ def put_version(
     compiler_version: Optional[str] = None,
     resource_sets: dict[inmanta.types.ResourceIdStr, Optional[str]] = {},
     pip_config: Optional[PipConfig] = None,
-    module_version_info: Optional[dict[str, Any]] = None,
-    type_to_module_data: Optional[dict[str, set[str]]] = None,
+    module_version_info: dict[str, Any] | None = None,
+    # module_version_info: dict[tuple["inm_mod_name", "inm_mod_version"], "InmantaModuleDTO"] | None = None,
 ):
     """
     Store a new version of the configuration model
@@ -549,6 +551,8 @@ def put_version(
     :param compiler_version: Optional. version of the compiler, if not provided, this call will return an error
     :param resource_sets: Optional. a dictionary describing which resource belongs to which resource set
     :param pip_config: Optional. Pip config used by this version
+    :param module_version_info: Optional map of (module name, module version) to InmantaModuleDTO
+
     """
 
 

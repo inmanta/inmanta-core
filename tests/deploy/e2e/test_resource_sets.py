@@ -28,7 +28,7 @@ import utils
 from inmanta import const, data, util
 from inmanta.agent import executor
 from inmanta.deploy import persistence, state
-from inmanta.loader import PythonModule, SourceInfo
+from inmanta.loader import InmantaModuleDTO, SourceInfo
 from inmanta.protocol.common import Result
 from inmanta.resources import Id
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
@@ -253,7 +253,7 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
     mock_source_info.hash = hv
     mock_source_info.requires = []
 
-    module_version_info = {"test": PythonModule(name="test", version="0.0.0", files_in_module=[mock_source_info])}
+    module_version_info = {"test": InmantaModuleDTO(name="test", version="0.0.0", files_in_module=[mock_source_info])}
     type_to_module_data = {"test::Resource": ["test"]}
 
     result = await client.put_version(
