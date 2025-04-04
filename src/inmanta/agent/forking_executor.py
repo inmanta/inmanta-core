@@ -75,7 +75,7 @@ import threading
 import typing
 import uuid
 from asyncio import Future, transports
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Awaitable
 
@@ -85,6 +85,7 @@ import inmanta.agent.executor
 import inmanta.agent.in_process_executor
 import inmanta.config
 import inmanta.const
+import inmanta.data
 import inmanta.env
 import inmanta.loader
 import inmanta.logging
@@ -386,7 +387,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         venv_path: str,
         storage_folder: str,
         session_gid: uuid.UUID,
-        sources: list[inmanta.loader.ModuleSource],
+        sources: Sequence[inmanta.data.model.ModuleSource],
         venv_touch_interval: float = 60.0,
     ):
         """
@@ -420,7 +421,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         loader = inmanta.loader.CodeLoader(self.storage_folder)
 
         failed: list[inmanta.loader.FailedModuleSource] = []
-        in_place: list[inmanta.loader.ModuleSource] = []
+        in_place: list[inmanta.data.model.ModuleSource] = []
         # First put all files on disk
         for module_source in self.sources:
             try:

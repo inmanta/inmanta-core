@@ -540,8 +540,11 @@ class Exporter:
         # which Inmanta module(s).
         resource_type_to_agent: dict[str, set[str]] = defaultdict(set)
         for res in resources:
-            resource_type = Id.parse_resource_version_id(res["id"]).get_entity_type()
+            resource_type = Id.parse_resource_version_id(ResourceVersionIdStr(res["id"])).get_entity_type()
             _, resource_options = resource.get_class(resource_type)
+            if resource_options is None or "agent" not in resource_options:
+                # Should never happen
+                raise Exception("No agent is set for resource %s", res["id"])
             agent_field_name = resource_options["agent"]
             resource_type_to_agent[resource_type].add(res[agent_field_name])
 

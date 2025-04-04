@@ -72,7 +72,7 @@ class CodeManager:
                  in this dictionary are ``SourceInfo`` objects.
     """
 
-    def __init__(self, types_to_agent: dict[str, set[str]] | None = None) -> None:
+    def __init__(self, types_to_agent: dict[str, set[str]]) -> None:
         # Old implementation
         # Use by external code
 
@@ -83,7 +83,7 @@ class CodeManager:
 
         # Cache of module to source info
         self.__module_to_source_info: dict[str, list[SourceInfo]] = defaultdict(list)
-        self._types_to_agent: dict[str, set[str]] = types_to_agent or {}
+        self._types_to_agent: dict[str, set[str]] = types_to_agent
 
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
@@ -99,10 +99,10 @@ class CodeManager:
         # get the module
         module_name = get_inmanta_module_name(instance.__module__)
 
-        registered_agents: Sequence[str] = self._types_to_agent.get(type_name, [])
+        registered_agents: set[str] = self._types_to_agent.get(type_name, set())
         self._get_source_info_for_module(module_name, registered_agents)
 
-    def _get_source_info_for_module(self, inmanta_module_name: str, registered_agents: Sequence[str]) -> None:
+    def _get_source_info_for_module(self, inmanta_module_name: str, registered_agents: set[str]) -> None:
         # TODO rename + docstring
         if inmanta_module_name in self.__module_to_source_info:
             # This module was already registered

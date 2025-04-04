@@ -112,7 +112,7 @@ class InmantaModule(Base):
             await connection.executemany(
                 insert_modules_query,
                 [
-                    (inmanta_module_name, inmanta_module_data["version"], environment, inmanta_module_data["requirements"])
+                    (inmanta_module_name, inmanta_module_data.version, environment, inmanta_module_data.requirements)
                     for inmanta_module_name, inmanta_module_data in module_version_info.items()
                 ],
             )
@@ -121,14 +121,14 @@ class InmantaModule(Base):
                 [
                     (
                         inmanta_module_name,
-                        inmanta_module_data["version"],
+                        inmanta_module_data.version,
                         environment,
-                        file["hash_value"],
-                        file["name"],
-                        file["is_byte_code"],
+                        file.hash_value,
+                        file.name,
+                        file.is_byte_code,
                     )
                     for inmanta_module_name, inmanta_module_data in module_version_info.items()
-                    for file in inmanta_module_data["files_in_module"]
+                    for file in inmanta_module_data.files_in_module
                 ],
             )
 
@@ -213,7 +213,9 @@ class ModulesForAgent(Base):
             values = [model_version, environment]
             in_db_module_data: dict[tuple[str, str], list[str]] = defaultdict(list)
             async for record in connection.cursor(query, *values):
-                in_db_module_data[record["inmanta_module_name"], record["inmanta_module_version"]].append(record["agent_name"])
+                in_db_module_data[str(record["inmanta_module_name"]), str(record["inmanta_module_version"])].append(
+                    str(record["agent_name"])
+                )
             return in_db_module_data
 
     @classmethod
@@ -223,7 +225,7 @@ class ModulesForAgent(Base):
         environment: uuid.UUID,
         module_version_info: dict[str, InmantaModuleDTO],
         connection: asyncpg.Connection,
-    ):
+    ) -> None:
         """
         Register inmanta modules (name, version) required by each agent.
 
@@ -255,14 +257,14 @@ class ModulesForAgent(Base):
         async with connection.transaction():
             values = []
             for inmanta_module_name, inmanta_module_data in module_version_info.items():
-                for agent_name in inmanta_module_data["required_by"]:
+                for agent_name in inmanta_module_data.required_by:
                     values.append(
                         (
                             model_version,
                             environment,
                             agent_name,
                             inmanta_module_name,
-                            inmanta_module_data["version"],
+                            inmanta_module_data.version,
                         )
                     )
 

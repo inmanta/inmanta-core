@@ -34,14 +34,7 @@ import inmanta.exceptions
 import inmanta.util
 from inmanta import const, data, tracing
 from inmanta.const import ResourceState
-from inmanta.data import (
-    APILIMIT,
-    AVAILABLE_VERSIONS_TO_KEEP,
-    InvalidSort,
-    ModulesForAgent,
-    ResourcePersistentState,
-    RowLockMode,
-)
+from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
@@ -52,7 +45,7 @@ from inmanta.data.model import (
     ResourceMinimal,
     SchedulerStatusReport,
 )
-from inmanta.data.sqlalchemy import InmantaModule
+from inmanta.data.sqlalchemy import InmantaModule, ModulesForAgent
 from inmanta.db.util import ConnectionInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
@@ -849,10 +842,10 @@ class OrchestrationService(protocol.ServerSlice):
                 base_version_data: dict[tuple[str, str], list[str]] = await ModulesForAgent.get_agents_per_module(
                     model_version=partial_base_version, environment=environment, connection=connection
                 )
-                for inmanta_module_name, inmanta_module_version, _ in base_version_data.items():
+                for (inmanta_module_name, inmanta_module_version), _ in base_version_data.items():
                     if (
                         inmanta_module_name not in module_version_info
-                        or module_version_info[inmanta_module_name]["version"] != inmanta_module_version
+                        or module_version_info[inmanta_module_name].version != inmanta_module_version
                     ):
                         raise BadRequest(
                             "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name

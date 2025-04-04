@@ -49,7 +49,7 @@ def put_partial(
     resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[list[str]] = None,
     pip_config: Optional[PipConfig] = None,
-    module_version_info: dict[str, Any] | None = None,
+    module_version_info: dict[str, model.InmantaModuleDTO] | None = None,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> ReturnValue[int]:
     """
