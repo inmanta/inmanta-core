@@ -112,7 +112,7 @@ class Server(endpoints.Endpoint):
         self.sessions_handler = SessionManager()
         self.add_slice(self.sessions_handler)
 
-        self._transport = server.RESTServer(self.sessions_handler, self.id)
+        self._transport = server.RESTServer(self.sessions_handler, self.id, self)
         self.add_slice(TransportSlice(self))
         self.running = False
 

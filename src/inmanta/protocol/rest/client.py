@@ -28,7 +28,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResp
 from inmanta import config as inmanta_config
 from inmanta import tracing
 from inmanta.protocol import common
-from inmanta.protocol.rest import RESTBase
+from inmanta.protocol.rest import RESTBase, CallArguments
 
 if TYPE_CHECKING:
     from inmanta.protocol.endpoints import Endpoint
@@ -177,3 +177,9 @@ class RESTClient(RESTBase):
         else:
             # Any other content-type will leave the encoding unchanged
             return common.Result(code=response.code, result=response.body)
+
+    async def authorize_request(self, auth_enabled: bool, call_arguments: CallArguments) -> None:
+        # We are not running on the server, so there is no policy engine.
+        # We cannot check the authorization policy.
+        return
+

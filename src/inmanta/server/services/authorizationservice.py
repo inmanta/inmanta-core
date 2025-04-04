@@ -17,7 +17,7 @@ Contact: code@inmanta.com
 """
 import os
 import logging
-import tornado import httpclient
+from tornado import httpclient
 import asyncio
 import asyncio.subprocess
 import subprocess
@@ -33,20 +33,20 @@ from tornado.httpclient import HTTPRequest, HTTPError
 
 LOGGER = logging.getLogger(__name__)
 
-policy_file = Option("policy-engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the authorization policy.", is_str)
-policy_engine_bind_address = Option("policy-engine", "bind-address", "127.0.0.1", "Address on which the policy engine will listen for incoming connections.", is_str)
-policy_engine_bind_port = Option("policy-engine", "bind-port", 8181, "Port on which the policy engine will listen for incoming connections.", is_int)
-policy_engine_log = Option("logging", "policy-engine", "/var/log/inmanta/policy_engine.log", "Path to the log file of the policy engine.", is_str)
+policy_file = config.Option("policy-engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the authorization policy.", config.is_str)
+policy_engine_bind_address = config.Option("policy-engine", "bind-address", "127.0.0.1", "Address on which the policy engine will listen for incoming connections.", config.is_str)
+policy_engine_bind_port = config.Option("policy-engine", "bind-port", 8181, "Port on which the policy engine will listen for incoming connections.", config.is_int)
+policy_engine_log = config.Option("logging", "policy-engine", "/var/log/inmanta/policy_engine.log", "Path to the log file of the policy engine.", config.is_str)
 
 
 class AuthorizationSlice(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(server.SLICE_AUTHORIZATION)
-        state_dir = await self._initialize_storage()
+        state_dir = self._initialize_storage()
         self._opa_process = OpaServer(state_dir)
 
-    async def _initialize_storage() -> str:
+    def _initialize_storage(self) -> str:
         """
         Make sure the required directories exist in the state directory for the policy engine.
         """
@@ -64,13 +64,11 @@ class AuthorizationSlice(protocol.ServerSlice):
         await self._opa_process.stop()
 
     def get_depended_by(self) -> list[str]:
-        return [SLICE_TRANSPORT]
+        return [server.SLICE_TRANSPORT]
 
-    def evaluate_policy(input_data: dict[str, object]) -> bool:
+    async def does_satisfy_authorization_policy(self, input_data: dict[str, object]) -> bool:
         """
         Return True iff the policy evaluates to True.
-
-        Raises an exception if the policy cannot be evaluated.
         """
         client = SimpleAsyncHTTPClient()
         policy_engine_addr = self._opa_process.get_addr_policy_engine()
@@ -78,28 +76,27 @@ class AuthorizationSlice(protocol.ServerSlice):
             url=f"http://{policy_engine_addr}/v1/data/policy/allowed",
             method="POST",
             headers={"Content-Type": "application/json"},
-            body=input_data,
+            body=json.dumps(input_data),
         )
         try:
             response = await client.fetch(request)
-        except HTTPError:
-            LOGGER.exception("Failed to evaluate authorization policy for %s.", input_data)
-            raise Exception("Failed to evaluate authorization policy.")
-        else:
             if reponse.code != 200:
                 LOGGER.error("Failed to evaluate authorization policy for %s.", input_data)
-                raise Exception("Failed to evaluate authorization policy.")
+                return False
             response_body = json.load(response.body.decode())
             return "result" in response_body and response_body["result"] is True
+        except Exception:
+            LOGGER.exception("Failed to evaluate authorization policy for %s.", input_data)
+            return False
 
 
 class OpaServer:
 
-    def __init__(state_dir: str) -> None:
+    def __init__(self, state_dir: str) -> None:
         self._state_dir = state_dir
         self.process: asyncio.subprocess.Process = None
 
-    async def get_addr_policy_engine() -> str:
+    async def get_addr_policy_engine(self) -> str:
         return f"{policy_engine_bind_address.get()}:{policy_engine_bind_port.get()}",
 
     async def start(self) -> None:
@@ -134,7 +131,7 @@ class OpaServer:
                 log_file_handle.close()
         await self._wait_until_opa_server_is_up()
 
-    async def _wait_until_opa_server_is_up() -> None:
+    async def _wait_until_opa_server_is_up(self) -> None:
         client = httpclient.AsyncHTTPClient()
         server_is_up = False
         now: float = time.time()

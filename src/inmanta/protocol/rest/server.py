@@ -24,7 +24,7 @@ from asyncio import CancelledError
 from collections import defaultdict
 from collections.abc import MutableMapping, Sequence
 from json import JSONDecodeError
-from typing import Optional, Union
+from typing import Optional, Union, TYPE_CHECKING
 
 import tornado
 from pyformance import timer
@@ -34,10 +34,14 @@ import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta import const, tracing
 from inmanta.protocol import common, exceptions
-from inmanta.protocol.rest import RESTBase
+from inmanta.server import SLICE_AUTHORIZATION
+from inmanta.protocol.rest import RESTBase, CallArguments
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
 from inmanta.types import ReturnTypes
+
+if TYPE_CHECKING:
+    from inmanta.server import protocol
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -237,7 +241,7 @@ class RESTServer(RESTBase):
 
     _http_server: Optional[httpserver.HTTPServer]
 
-    def __init__(self, session_manager: common.SessionManagerInterface, id: str) -> None:
+    def __init__(self, session_manager: common.SessionManagerInterface, id: str, server: "protocol.Server") -> None:
         super().__init__()
 
         self._id = id
@@ -250,6 +254,7 @@ class RESTServer(RESTBase):
         self.idle_event.set()
         self.running = False
         self._http_server = None
+        self._server = server
 
     def start_request(self) -> None:
         self.idle_event.clear()
@@ -327,3 +332,8 @@ class RESTServer(RESTBase):
         await self.idle_event.wait()
         if self._http_server is not None:
             await self._http_server.close_all_connections()
+
+    async def authorize_request(self, auth_enabled: bool, call_arguments: CallArguments) -> None:
+        authorization_slice = self._server.get_slice(name=SLICE_AUTHORIZATION)
+        await call_arguments.validate_authorization_policy(auth_enabled, authorization_slice)
+

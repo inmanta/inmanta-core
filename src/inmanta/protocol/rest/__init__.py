@@ -22,6 +22,7 @@ import logging
 import uuid
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
+import abc
 
 import pydantic
 import typing_inspect
@@ -29,10 +30,14 @@ from tornado import escape
 
 from inmanta import const, tracing, util
 from inmanta.data.model import BaseModel
-from inmanta.protocol import auth, common, exceptions
+from inmanta.protocol import common, exceptions
+from inmanta.protocol.auth import auth
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import config as server_config
 from inmanta.types import Apireturn, JsonType
+
+if TYPE_CHECKING:
+    from inmanta.server.services.authorizationservice import AuthorizationSlice
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -536,8 +541,8 @@ class CallArguments:
             # We only need a valid token when the endpoint enforces authentication
             raise exceptions.UnauthorizedException()
 
-    def authorize_request(self, auth_enabled: bool) -> None:
-        """Authorize a request based on the given data
+    async def validate_authorization_policy(self, auth_enabled: bool, authorization_slice: "AuthorizationSlice") -> None:
+        """Validate the authorization policy for the request based on the given data.
 
         :param auth_enabled: is authentication enabled?
         """
@@ -550,31 +555,27 @@ class CallArguments:
                 raise exceptions.UnauthorizedException()
             return None
 
-        # Enforce environment restrictions
-        env_key: str = const.INMANTA_URN + "env"
-        if env_key in self._auth_token:
-            if env_key not in self.metadata:
-                raise exceptions.Forbidden("The authorization token is scoped to a specific environment.")
+        input_data = self._get_input_for_policy_engine()
+        if not await authorization_slice.does_satisfy_authorization_policy(input_data):
+            raise exceptions.Forbidden("Request doesn't satisfy the authorization policy.")
 
-            if self.metadata[env_key] != "all" and self._auth_token[env_key] != self.metadata[env_key]:
-                raise exceptions.Forbidden("The authorization token is not valid for the requested environment.")
-
-        # Enforce client_types restrictions
-        ok: bool = False
-        ct_key: str = const.INMANTA_URN + "ct"
-        for ct in self._auth_token[ct_key]:
-            if ct in self._config.properties.client_types:
-                ok = True
-
-        if not ok:
-            raise exceptions.Forbidden(
-                "The authorization token does not have a valid client type for this call."
-                + f" ({self._auth_token[ct_key]} provided, {self._config.properties.client_types} expected"
-            )
+    def _get_input_for_policy_engine() -> Mapping[str, object]:
+        """
+        Returns the input that should be provided to the policy engine to validate
+        whether this call is authorized or not.
+        """
+        method_properties = self._config.properties
+        return {
+            "request": {
+                "endpoint_id": f"{method_properties.operation} {method_properties.path}",
+                "parameters": self.call_args,
+            },
+            "token": self._auth_token,
+        }
 
 
 # Shared
-class RESTBase(util.TaskHandler[None]):
+class RESTBase(util.TaskHandler[None], abc.ABC):
     """
     Base class for REST based client and servers
     """
@@ -621,7 +622,7 @@ class RESTBase(util.TaskHandler[None]):
             arguments = CallArguments(config, message, request_headers)
             arguments.authenticate(server_config.server_enable_auth.get())
             await arguments.process()
-            arguments.authorize_request(server_config.server_enable_auth.get())
+            await self.authorize_request(auth_enabled=server_config.server_enable_auth.get(), call_arguments=arguments)
 
             LOGGER.debug(
                 "Calling method %s(%s) user=%s",
@@ -645,3 +646,11 @@ class RESTBase(util.TaskHandler[None]):
         except Exception as e:
             LOGGER.exception("An exception occurred during the request.")
             raise exceptions.ServerError(str(e.args))
+
+    @abc.abstractmethod
+    async def authorize_request(self, auth_enabled: bool, call_arguments: CallArguments) -> None:
+        """
+        This method raises a Forbidden() exception if the request is not allowed by the authorization policy.
+        An UnauthorizedException() is raised if no access token is found.
+        """
+        raise NotImplementedError()

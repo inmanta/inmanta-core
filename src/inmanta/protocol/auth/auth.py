@@ -41,92 +41,6 @@ from inmanta.protocol import exceptions
 claim_type = Mapping[str, str | Sequence[str]]
 
 
-class ClaimMatch:
-    """A base class for all claim matching"""
-
-    claim: str
-    operator: str
-    value: str
-
-    @abc.abstractmethod
-    def match_claim(self, claims: claim_type) -> bool:
-        """Match the claim
-
-        :param claims: A dict of all claims
-        """
-        logging.getLogger(__name__).info(f"Matching claims against: '{self}'")
-        return False
-
-
-@dataclasses.dataclass
-class InClaim(ClaimMatch):
-    """An in claim: exact match of a string in a claim that is a list"""
-
-    claim: str
-    value: str
-    operator: Literal["in"] = "in"
-
-    def match_claim(self, claims: claim_type) -> bool:
-        super().match_claim(claims)
-
-        if self.claim not in claims:
-            return False
-
-        claim_value = claims[self.claim]
-
-        if not isinstance(claim_value, list):
-            raise ValueError(f"claim {self.claim} should be of type list and not {type(claim_value)}")
-
-        return self.value in claim_value
-
-    def __repr__(self) -> str:
-        return f"{self.value} {self.operator} {self.claim}"
-
-
-@dataclasses.dataclass
-class IsClaim(ClaimMatch):
-    """An is claim: exact match of a string claim"""
-
-    claim: str
-    value: str
-    operator: Literal["is"] = "is"
-
-    def match_claim(self, claims: claim_type) -> bool:
-        super().match_claim(claims)
-
-        if self.claim not in claims:
-            return False
-
-        claim_value = claims[self.claim]
-
-        if not isinstance(claim_value, str):
-            raise ValueError(f"claim {self.claim} should be of type str and not {type(claim_value)}")
-
-        return self.value == claim_value
-
-    def __repr__(self) -> str:
-        return f"{self.claim} {self.operator} {self.value}"
-
-
-def check_custom_claims(claims: claim_type, claim_constraints: list[ClaimMatch]) -> bool:
-    """Check if the given dict of claims matches the list of constraints. If any of the
-    constraints fail, it will return false. If the wrong operation is used on a claim
-    it will also result in false. For example, the in operator on a string instead of a
-    list of strings
-
-    :param claims: The dict of claims to validate
-    :param claim_constraints: A list of all constraints
-    :return: The result of the check
-    """
-    try:
-        return all(constraint.match_claim(claims) for constraint in claim_constraints)
-    except Exception as e:
-        logging.getLogger(__name__).info(
-            f"The configured claim constraints failed to evaluate against the provided claims: {e}"
-        )
-        return False
-
-
 def encode_token(
     client_types: list[str],
     environment: Optional[str] = None,
@@ -227,9 +141,6 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
         decoded_payload[ct_key] = [x.strip() for x in ct_value.split(",")]
     except Exception as e:
         raise exceptions.Forbidden(*e.args)
-
-    if not check_custom_claims(claims=decoded_payload, claim_constraints=cfg.claims):
-        raise exceptions.Forbidden("The configured claims constraints did not match. See logs for details.")
 
     return decoded_payload, cfg
 
@@ -357,7 +268,6 @@ class AuthJWTConfig:
         self.section: str = section
         self.keys: dict[str, bytes] = {}
         self._config: configparser.SectionProxy = config
-        self.claims: list[ClaimMatch] = []
 
         self.jwt_username_claim: str = "sub"
         self.expire: int = 0
@@ -404,25 +314,10 @@ class AuthJWTConfig:
         else:
             self.audience = self.issuer
 
-        if "claims" in self._config:
-            self.parse_claim_matching(self._config["claims"])
-
         if "jwt-username-claim" in self._config:
             if self.sign:
                 raise ValueError(f"auth config {self.section} used for signing cannot use a custom claim.")
             self.jwt_username_claim = self._config["jwt-username-claim"]
-
-    def parse_claim_matching(self, claim_conf: str) -> None:
-        """Parse claim matching expressions"""
-        items = re.findall(AUTH_JWT_CLAIM_RE, claim_conf, re.MULTILINE)
-        for item in items:
-            match item:
-                case (claim, "is", value):
-                    self.claims.append(IsClaim(claim, value))
-                case (value, "in", claim):
-                    self.claims.append(InClaim(claim, value))
-                case _:
-                    raise ValueError(f"Invalid claim match '{' '.join(item)}' in {self.section}")
 
     def validate_hs265(self) -> None:
         """
