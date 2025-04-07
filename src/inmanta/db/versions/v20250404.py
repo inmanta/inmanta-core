@@ -21,7 +21,7 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Rename some rps columns and values
+    Add links column to compile table
     """
     schema = """
         ALTER TABLE public.compile ADD COLUMN links jsonb DEFAULT '{}' NOT NULL;
