@@ -1377,7 +1377,7 @@ class Test(Resource):
     )
     await snippetcompiler.do_export_and_deploy(do_raise=False)
 
-    code_manager = loader.CodeManager(types_to_agent={"modulev1::Test": {"def"}})
+    code_manager = loader.CodeManager()
     for type_name, resource_definition in resources.resource.get_resources():
         code_manager.register_code(type_name, resource_definition)
 

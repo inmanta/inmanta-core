@@ -71,7 +71,7 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependen
     import inmanta_plugins.multiple_plugin_files.handlers as multi
     import inmanta_plugins.single_plugin_file as single
 
-    mgr = loader.CodeManager(types_to_agent={})
+    mgr = loader.CodeManager()
     mgr.register_code("std::testing::NullResource", single.MyHandler)
     mgr.register_code("multiple_plugin_files::NullResourceBis", multi.MyHandler)
 

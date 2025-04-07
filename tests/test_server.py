@@ -643,7 +643,7 @@ async def test_batched_code_upload(
     server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
 ):
     """Test uploading all code definitions at once"""
-    # TODO remove this test ?
+    # TODO remove or adapt this test ?
     snippetcompiler.setup_for_snippet(
         """
     import std::testing

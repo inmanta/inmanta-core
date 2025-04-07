@@ -39,6 +39,7 @@ from pydantic import BaseModel, computed_field
 
 from inmanta import const, module
 from inmanta.data.model import InmantaModuleDTO, ModuleSource, ModuleSourceMetadata
+from inmanta.resources import Id, Resource, resource
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -72,7 +73,7 @@ class CodeManager:
                  in this dictionary are ``SourceInfo`` objects.
     """
 
-    def __init__(self, types_to_agent: dict[str, set[str]]) -> None:
+    def __init__(self) -> None:
         # Old implementation
         # Use by external code
 
@@ -83,7 +84,21 @@ class CodeManager:
 
         # Cache of module to source info
         self.__module_to_source_info: dict[str, list[SourceInfo]] = defaultdict(list)
-        self._types_to_agent: dict[str, set[str]] = types_to_agent
+        self._types_to_agent: dict[str, set[str]] = defaultdict(set)
+
+    def build_agent_map(self, resources: dict[Id, Resource]) -> None:
+        """
+        Construct a map of which agents are registered to deploy which resource type.
+        This map is later used to construct a map of which agents need to load
+        which Inmanta module(s).
+        """
+        for id, res in resources.items():
+            _, resource_options = resource.get_class(id.entity_type)
+            if resource_options is None or "agent" not in resource_options:
+                # Should never happen
+                raise Exception("No agent is set for resource %s", id)
+            agent_field_name = resource_options["agent"]
+            self._types_to_agent[id.entity_type].add(str(res[agent_field_name]))
 
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.

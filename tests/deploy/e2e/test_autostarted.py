@@ -54,6 +54,7 @@ async def wait_for_resources_in_state(client, environment: uuid.UUID, nr_of_reso
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
+        logger.error(f"{summary=}")
         return summary["by_state"][state.value] == nr_of_resources
 
     await retry_limited(_done_waiting, timeout=10)

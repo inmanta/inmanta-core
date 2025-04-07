@@ -21,7 +21,6 @@ import base64
 import itertools
 import logging
 import time
-from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any, Callable, Optional, Union
 
@@ -535,22 +534,8 @@ class Exporter:
 
         conn = protocol.SyncClient("compiler")
 
-        # Construct a map of which agents are registered to deploy which resource type.
-        # This map is later used to construct a map of which agents need to load
-        # which Inmanta module(s).
-        resource_type_to_agent: dict[str, set[str]] = defaultdict(set)
-        for res in self._resources.values():
-            # resource_type = Id.parse_resource_version_id(ResourceVersionIdStr(res["id"])).get_entity_type()
-            # _, resource_options = resource.get_class(resource_type)
-            # if resource_options is None or "agent" not in resource_options:
-            #     # Should never happen
-            #     raise Exception("No agent is set for resource %s", res["id"])
-            # agent_field_name = resource_options["agent"]
-            LOGGER.error(f"{res=}")
-            # LOGGER.error(f"{agent_field_name=}")
-            resource_type_to_agent[res.id.entity_type].add(res.agent)
-
-        code_manager = loader.CodeManager(resource_type_to_agent)
+        code_manager = loader.CodeManager()
+        code_manager.build_agent_map(self._resources)
 
         # partial exports use the same code as the version they're based on
         self.register_code(conn, code_manager, do_upload=not partial_compile)
