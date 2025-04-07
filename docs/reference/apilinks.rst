@@ -17,3 +17,5 @@ The following table documents all these links and their format:
      - ``/api/v2/compilereport/<compile_id>``
    * - Managed resource
      - ``/api/v2/resource/<resource_id>``
+   * - Service instance
+     - ``/lsm/v1/service_inventory/<service_entity>/<service_id>``
