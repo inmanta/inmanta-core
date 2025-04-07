@@ -6,4 +6,3 @@ issue-nr: 6056
 destination-branches:
   - master
   - iso8
-  - iso7
