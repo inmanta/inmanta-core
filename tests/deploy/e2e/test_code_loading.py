@@ -273,12 +273,16 @@ async def test_get_code(
     for version in model_versions:
         module_install_specs = await codemanager.get_code(environment=env_id, model_version=version, agent_name="agent_1")
         # Agent 1 is set up to have |version| files per module version and |version| modules per model version:
-        assert len(module_install_specs) == version * version
+        assert len(module_install_specs) == version
+        for spec in module_install_specs:
+            assert len(spec.blueprint.sources) == version
 
     for version in model_versions:
         module_install_specs = await codemanager.get_code(environment=env_id, model_version=version, agent_name="agent_2")
         # Agent 2 is set up to have |version| files per module version and (4-|version|) modules per model version:
-        assert len(module_install_specs) == version * (4 - version)
+        assert len(module_install_specs) == (4 - version)
+        for spec in module_install_specs:
+            assert len(spec.blueprint.sources) == version
 
 
 async def test_agent_code_loading_with_failure(
