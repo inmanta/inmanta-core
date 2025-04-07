@@ -20,9 +20,6 @@ Contact: code@inmanta.com
 Tests to verify correctness/compatibility of code snippets in the docs.
 """
 
-import inmanta.types
-from inmanta import compiler
-
 import os
 import textwrap
 import uuid
@@ -31,27 +28,22 @@ from collections import abc, defaultdict
 import py
 import pytest
 
-from inmanta import data
+import inmanta.types
+from inmanta import compiler, data
 from utils import v1_module_from_template, wait_until_deployment_finishes
 
 DOCS_DIR: str = os.path.join(os.path.dirname(__file__), "..", "docs")
 
 
 @pytest.mark.slowtest
-async def test_docs_snippets_language_unknowns(
-    snippetcompiler, capsys
-) -> None:
+async def test_docs_snippets_language_unknowns(snippetcompiler, capsys) -> None:
     """
     Test the code snippets that explain how unknowns flow through the model.
     """
-    with open(
-        os.path.join(os.path.dirname(__file__), "../docs/language/unknowns_simple.cf")
-    ) as fh:
+    with open(os.path.join(os.path.dirname(__file__), "../docs/language/unknowns_simple.cf")) as fh:
         simple_model: str = fh.read()
 
-    with open(
-        os.path.join(os.path.dirname(__file__), "../docs/language/unknowns_multi.cf")
-    ) as fh:
+    with open(os.path.join(os.path.dirname(__file__), "../docs/language/unknowns_multi.cf")) as fh:
         list_model: str = fh.read()
 
     # TODO: convert_unknowns typing port
