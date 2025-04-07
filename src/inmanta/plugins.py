@@ -310,6 +310,8 @@ class ModelType:
 
 
 def parse_dsl_type(dsl_type: str, location: Range, resolver: Namespace) -> inmanta_type.Type:
+    if dsl_type in PLUGIN_TYPES:
+        return PLUGIN_TYPES[dsl_type]
     locatable_type: LocatableString = LocatableString(dsl_type, location, 0, resolver)
     return inmanta_type.resolve_type(locatable_type, resolver)
 
