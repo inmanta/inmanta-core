@@ -17,14 +17,17 @@ Contact: code@inmanta.com
 """
 
 import pytest
+import os
 
 from inmanta import config, const
-from inmanta.protocol import auth, endpoints
+from inmanta.protocol import endpoints
+from inmanta.protocol.auth import auth
 from inmanta.server import SLICE_USER, protocol
+from inmanta.server.services.authorizationservice import policy_file
 
 
 @pytest.fixture
-def server_pre_start(server_config):
+def server_pre_start(server_config, tmpdir):
     """Ensure that the server started by the server fixtures have authentication enabled with auth_method database"""
     config.Config.set("server", "auth", "true")
     config.Config.set("server", "auth_method", "database")
@@ -35,6 +38,18 @@ def server_pre_start(server_config):
     config.Config.set("auth_jwt_default", "expire", "0")
     config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
     config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
+
+    # Configure an authorization policy that allows everything
+    os.mkdir(os.path.join(tmpdir, "policy_engine"))
+    authorization_policy = os.path.join(tmpdir, "policy_engine", "policy.rego")
+    with open(authorization_policy, "w") as fh:
+        fh.write("""
+            package policy
+
+            # Allow everything
+            default allowed:=true
+        """)
+    policy_file.set(authorization_policy)
 
 
 @pytest.fixture

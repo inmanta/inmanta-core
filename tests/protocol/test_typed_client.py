@@ -24,12 +24,14 @@ from inmanta import protocol
 from inmanta.data.model import BaseModel
 from inmanta.protocol import exceptions
 from inmanta.server.protocol import LocalClient, Server, ServerSlice, common
+from inmanta.protocol.auth.decorators import auth
 
 
 async def test_local_client(server_config, async_finalizer) -> None:
     """Test the local client"""
 
     class ProjectServer(ServerSlice):
+        @auth(auth_label="test", read_only=True, environment_param=None)
         @protocol.typedmethod(path="/test/<name>", operation="POST", client_types=["api"])
         def test_method(name: str, project: str) -> str:  # NOQA
             pass

@@ -25,7 +25,7 @@ import time
 from importlib.resources import files
 import json
 
-from inmanta.server import protocol
+from inmanta.server import protocol, config as server_config
 from inmanta import server, const, config
 from inmanta.protocol.auth import decorators
 from tornado.simple_httpclient import SimpleAsyncHTTPClient
@@ -36,28 +36,18 @@ LOGGER = logging.getLogger(__name__)
 policy_file = config.Option("policy-engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the authorization policy.", config.is_str)
 policy_engine_bind_address = config.Option("policy-engine", "bind-address", "127.0.0.1", "Address on which the policy engine will listen for incoming connections.", config.is_str)
 policy_engine_bind_port = config.Option("policy-engine", "bind-port", 8181, "Port on which the policy engine will listen for incoming connections.", config.is_int)
-policy_engine_log = config.Option("logging", "policy-engine", "/var/log/inmanta/policy_engine.log", "Path to the log file of the policy engine.", config.is_str)
 
 
 class AuthorizationSlice(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(server.SLICE_AUTHORIZATION)
-        state_dir = self._initialize_storage()
-        self._opa_process = OpaServer(state_dir)
-
-    def _initialize_storage(self) -> str:
-        """
-        Make sure the required directories exist in the state directory for the policy engine.
-        """
-        state_dir = config.state_dir.get()
-        policy_engine_state_dir = os.path.join(state_dir, "policy_engine")
-        os.makedirs(policy_engine_state_dir, exist_ok=True)
-        return policy_engine_state_dir
+        self._opa_process = OpaServer()
 
     async def start(self) -> None:
         await super().start()
-        await self._opa_process.start()
+        if server_config.server_enable_auth.get():
+            await self._opa_process.start()
 
     async def stop(self) -> None:
         await super().stop()
@@ -70,8 +60,13 @@ class AuthorizationSlice(protocol.ServerSlice):
         """
         Return True iff the policy evaluates to True.
         """
+        if not self._opa_process.running:
+            raise Exception("Policy engine is not running. Call OpaServer.start() first.")
+        if not server_config.server_enable_auth.get():
+            LOGGER.warning("An evaluation of the authorization policy was requested while config option server.auth=False")
+            return True
         client = SimpleAsyncHTTPClient()
-        policy_engine_addr = self._opa_process.get_addr_policy_engine()
+        policy_engine_addr = await self._opa_process.get_addr_policy_engine()
         request = HTTPRequest(
             url=f"http://{policy_engine_addr}/v1/data/policy/allowed",
             method="POST",
@@ -80,10 +75,10 @@ class AuthorizationSlice(protocol.ServerSlice):
         )
         try:
             response = await client.fetch(request)
-            if reponse.code != 200:
+            if response.code != 200:
                 LOGGER.error("Failed to evaluate authorization policy for %s.", input_data)
                 return False
-            response_body = json.load(response.body.decode())
+            response_body = json.loads(response.body.decode())
             return "result" in response_body and response_body["result"] is True
         except Exception:
             LOGGER.exception("Failed to evaluate authorization policy for %s.", input_data)
@@ -92,25 +87,38 @@ class AuthorizationSlice(protocol.ServerSlice):
 
 class OpaServer:
 
-    def __init__(self, state_dir: str) -> None:
-        self._state_dir = state_dir
+    def __init__(self) -> None:
         self.process: asyncio.subprocess.Process = None
+        self.running = False
 
     async def get_addr_policy_engine(self) -> str:
-        return f"{policy_engine_bind_address.get()}:{policy_engine_bind_port.get()}",
+        return f"{policy_engine_bind_address.get()}:{policy_engine_bind_port.get()}"
+
+    def _initialize_storage(self) -> str:
+        """
+        Make sure the required directories exist in the state directory for the policy engine.
+        """
+        state_dir = config.state_dir.get()
+        policy_engine_state_dir = os.path.join(state_dir, "policy_engine")
+        os.makedirs(policy_engine_state_dir, exist_ok=True)
+        return policy_engine_state_dir
 
     async def start(self) -> None:
+        state_dir = self._initialize_storage()
+
         # Write data to state directory
-        data_file = os.path.join(self._state_dir, "data.json")
+        data_file = os.path.join(state_dir, "data.json")
         data = decorators.AuthorizationMetadata.get_open_policy_agent_data()
         with open(data_file, "w") as fh:
             json.dump(data, fh)
 
         # Start policy engine
         opa_binary = str(files('inmanta.opa').joinpath('opa').absolute())
+        log_dir = config.log_dir.get()
+        policy_engine_log = os.path.join(log_dir, "policy_engine.log")
         log_file_handle = None
         try:
-            log_file_handle = open(policy_engine_log.get(), "wb+")
+            log_file_handle = open(policy_engine_log, "wb+")
             self.process = await asyncio.create_subprocess_exec(
                 opa_binary,
                 "run",
@@ -129,30 +137,35 @@ class OpaServer:
         finally:
             if log_file_handle is not None:
                 log_file_handle.close()
-        await self._wait_until_opa_server_is_up()
+        await self._wait_until_opa_server_is_up(policy_engine_log)
+        self.running = True
 
-    async def _wait_until_opa_server_is_up(self) -> None:
+    async def _wait_until_opa_server_is_up(self, policy_engine_log_file: str) -> None:
         client = httpclient.AsyncHTTPClient()
-        server_is_up = False
         now: float = time.time()
         policy_engine_addr = await self.get_addr_policy_engine()
-        health_endpoint = "http://{policy_engine_addr}/health?plugins&bundles"
-        while not server_is_up and (time.time() - now) < const.POLICY_ENGINE_STARTUP_TIMEOUT:
+        health_endpoint = f"http://{policy_engine_addr}/health?plugins&bundles"
+        while True:
             try:
                 await client.fetch(health_endpoint)
-            except httpclient.HTTPError:
-                await asyncio.sleep(0.1)
+            except Exception as e:
+                # Server is not yet up
+                timeout_happened = (time.time() - now) >= const.POLICY_ENGINE_STARTUP_TIMEOUT
+                if timeout_happened:
+                    raise Exception(
+                        f"Timeout: Policy engine didn't start in {const.POLICY_ENGINE_STARTUP_TIMEOUT} seconds."
+                        f"\n\n{e}\n\n"
+                        f"Please see {policy_engine_log_file} for more information."
+                    )
+                else:
+                    await asyncio.sleep(0.1)
             else:
-                server_is_up = True
-        if not server_is_up:
-            raise Exception(
-                f"Timeout: Policy engine didn't start in {const.POLICY_ENGINE_STARTUP_TIMEOUT} seconds."
-                f" Please see {policy_engine_log.get()} for more information."
-            )
+                # Server is up
+                return
 
     async def stop(self) -> None:
-        if self.process.returncode is not None:
-            # Process already terminated
+        if self.process is None or self.process.returncode is not None:
+            # Process didn't start or was already terminated.
             self.process = None
             return
         self.process.terminate()
@@ -162,3 +175,4 @@ class OpaServer:
             LOGGER.warning("Policy engine didn't terminate in %d seconds. Killing it.", const.POLICY_ENGINE_GRACE_HARD)
             self.process.kill()
         self.process = None
+        self.running = False

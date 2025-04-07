@@ -559,7 +559,7 @@ class CallArguments:
         if not await authorization_slice.does_satisfy_authorization_policy(input_data):
             raise exceptions.Forbidden("Request doesn't satisfy the authorization policy.")
 
-    def _get_input_for_policy_engine() -> Mapping[str, object]:
+    def _get_input_for_policy_engine(self) -> Mapping[str, object]:
         """
         Returns the input that should be provided to the policy engine to validate
         whether this call is authorized or not.
