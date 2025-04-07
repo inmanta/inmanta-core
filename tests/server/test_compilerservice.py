@@ -2071,7 +2071,7 @@ async def test_venv_upgrade_version_match(tmp_path, caplog):
 async def test_venv_upgrade_version_mismatch(tmp_path, caplog):
     # Make fake venv of wrong version
 
-    caplog.at_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG)
 
     # Old setup
     project = tmp_path / "project2"

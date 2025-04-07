@@ -28,6 +28,7 @@ import json
 from inmanta.server import protocol, config as server_config
 from inmanta import server, const, config
 from inmanta.protocol.auth import decorators
+from inmanta import util
 from tornado.simple_httpclient import SimpleAsyncHTTPClient
 from tornado.httpclient import HTTPRequest, HTTPError
 
@@ -71,7 +72,7 @@ class AuthorizationSlice(protocol.ServerSlice):
             url=f"http://{policy_engine_addr}/v1/data/policy/allowed",
             method="POST",
             headers={"Content-Type": "application/json"},
-            body=json.dumps(input_data),
+            body=json.dumps(input_data, default=util.api_boundary_json_encoder),
         )
         try:
             response = await client.fetch(request)
@@ -104,6 +105,9 @@ class OpaServer:
         return policy_engine_state_dir
 
     async def start(self) -> None:
+        if not os.path.isfile(policy_file.get()):
+            raise Exception(f"Authorization policy file {policy_file.get()} not found.")
+
         state_dir = self._initialize_storage()
 
         # Write data to state directory
@@ -131,8 +135,9 @@ class OpaServer:
                 "debug",
                 data_file,
                 policy_file.get(),
-                stdout=log_file_handle,
-                stderr=subprocess.STDOUT,
+                # TODO: uncomment
+                #stdout=log_file_handle,
+                #stderr=subprocess.STDOUT,
             )
         finally:
             if log_file_handle is not None:

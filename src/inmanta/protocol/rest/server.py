@@ -334,6 +334,7 @@ class RESTServer(RESTBase):
             await self._http_server.close_all_connections()
 
     async def authorize_request(self, auth_enabled: bool, call_arguments: CallArguments) -> None:
-        authorization_slice = self._server.get_slice(name=SLICE_AUTHORIZATION)
-        await call_arguments.validate_authorization_policy(auth_enabled, authorization_slice)
+        if auth_enabled:
+            authorization_slice = self._server.get_slice(name=SLICE_AUTHORIZATION)
+            await call_arguments.validate_authorization_policy(auth_enabled, authorization_slice)
 

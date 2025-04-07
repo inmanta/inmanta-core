@@ -31,7 +31,7 @@ async def test_local_client(server_config, async_finalizer) -> None:
     """Test the local client"""
 
     class ProjectServer(ServerSlice):
-        @auth(auth_label="test", read_only=True, environment_param=None)
+        @auth(auth_label="test", read_only=False)
         @protocol.typedmethod(path="/test/<name>", operation="POST", client_types=["api"])
         def test_method(name: str, project: str) -> str:  # NOQA
             pass
@@ -63,6 +63,7 @@ async def test_return_types(server_config, async_finalizer):
         name: str
 
     class ProjectServer(ServerSlice):
+        @auth(auth_label="test", read_only=False)
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], envelope_key="response")
         def test_method(project: Project) -> common.ReturnValue[Project]:  # NOQA
             pass
@@ -72,6 +73,7 @@ async def test_return_types(server_config, async_finalizer):
             new_project = project.copy()
             return common.ReturnValue(response=new_project)
 
+        @auth(auth_label="test", read_only=False)
         @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"])
         def test_method2(project: Project) -> Project:  # NOQA
             pass

@@ -41,6 +41,7 @@ from inmanta.protocol.auth import decorators as auth_decorators
 from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
 from inmanta.server.services.databaseservice import initialize_sql_alchemy_engine
+from inmanta.server.services.authorizationservice import policy_file
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -821,6 +822,20 @@ async def server_multi(
         config.Config.set("agent", "executor-mode", "forking")
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
+
+        if auth:
+            # Configure an authorization policy that allows everything
+            os.mkdir(os.path.join(state_dir, "policy_engine"))
+            authorization_policy = os.path.join(state_dir, "policy_engine", "policy.rego")
+            with open(authorization_policy, "w") as fh:
+                fh.write("""
+                    package policy
+
+                    # Allow everything
+                    default allowed:=true
+                """)
+            policy_file.set(authorization_policy)
+
 
         ibl = InmantaBootloader(configure_logging=True)
 
