@@ -2040,7 +2040,7 @@ async def test_venv_upgrade_version_match(tmp_path, caplog):
     1. Make a venv in the old layout and upgrade it
     2. Test we can handle re-creation of the venv
     """
-    caplog.at_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG)
 
     # Set up mock
     project = tmp_path / "project"

@@ -566,11 +566,13 @@ class CallArguments:
         """
         method_properties = self._config.properties
         return {
-            "request": {
-                "endpoint_id": f"{method_properties.operation} {method_properties.path}",
-                "parameters": self.call_args,
-            },
-            "token": self._auth_token,
+            "input": {
+                "request": {
+                    "endpoint_id": f"{method_properties.operation} {method_properties.path}",
+                    "parameters": self.call_args,
+                },
+                "token": self._auth_token,
+            }
         }
 
 
