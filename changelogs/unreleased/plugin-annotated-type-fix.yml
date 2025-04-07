@@ -1,4 +1,4 @@
-description: "Bugfix for annotated plugin types: look up model type in builtin types dict"
+description: "Bugfix for annotated plugin types: look up model type in special types dict"
 change-type: patch
 destination-branches:
   - master
