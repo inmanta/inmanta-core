@@ -760,7 +760,7 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                 exporter_plugin=compile["exporter_plugin"],
                 notify_failed_compile=compile["notify_failed_compile"],
                 failed_compile_message=compile["failed_compile_message"],
-                links=cast(JsonApiLinks, compile["links"]),
+                links=cast(JsonApiLinks, compile.get("links", {})),
             )
             for compile in records
         ]
