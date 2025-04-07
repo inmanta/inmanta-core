@@ -930,7 +930,7 @@ Unknowns
 ========
 
 Wherever the configuration model interacts with the outside world (e.g. to fetch external values) :term:`unknown` values
-may be present. These unknowns represent values we don't know yet, such as the IP address of a machine that hasn't been created yet. Because the compiler can handle unknowns, developers can write models as if all information is present up front, even when this is not the case. These unknowns are propagated through the model to finally end up in the resources that require these unknowns.
+may be present. These unknowns represent values we don't know yet, such as the IP address of a machine that hasn't been created yet. Because the compiler can handle unknowns, developers can write models as if all information is present up front, even when this is not the case. These unknowns are propagated through the model to finally end up in the resources that require these unknowns. When exported, these resources are marked as undefined until their values become known.
 values. This section describes how unknown values flow through the model, and perhaps equally importantly, where they do not
 flow at all.
 
@@ -948,45 +948,11 @@ respective blocks for unknowns.
 
 The model below presents some examples of how an unknown propagates.
 
-.. code-block:: inmanta
+.. literalinclude:: language/unknowns_simple.cf
+    :language: inmanta
+    :caption: my_project/main.cf
+    :linenos:
 
-    # std::env returns an unknown if the environment variable is not (yet) set
-    my_unknown = std::get_env("THIS_ENV_VAR_DOES_NOT_EXIST")
-
-    a = my_unknown  # a is unknown
-    b = [1, 2, my_unknown, 3]  # b is a list with 1 unknown element
-    c = my_unknown is defined  # we can not know if c is null, so c is also unknown
-    d = true or my_unknown  # value of my_unknown is irrelevant -> d is true
-    e = my_unknown or true  # lazy boolean operator can not compute result without knowing the value -> e is unknown
-    f = (e == my_unknown)  # both e and my_unknown are unknown but they aren't necessarily the same value -> f is unknown
-
-    if my_unknown:
-        # this block is never executed
-        std::print("This message is never printed!")
-    else:
-        # neither is this one
-        std::print("This message is never printed!")
-    end
-
-    for x in my_unknown:
-        # neither is this one
-        std::print("This message is never printed!")
-    end
-
-    for x in [1, 2, my_unknown]:
-        # this block is executed twice: x=1 and x=2
-        std::print(f"This message is printed twice! x={x}")
-    end
-
-    g = my_unknown ? true : false  # condition is unknown -> neither branch is executed, result is unknown
-
-    entity E:
-        int n
-    end
-    implement E using std::none
-
-    h = [E(n=x) for x in [1, 2, my_unknown]]  # the constructor is executed once with n=1 and once with n=2. Unknown is propagated as is -> h = [E(n=1), E(n=2), unknown]
-    i = [E(n=x) for x in [1, 2, my_unknown] if not std::is_unknown(x)]  # the unknown is filtered out -> i = [E(n=1), E(n=2)]
 
 Now that we've covered how unknowns flow through the model, we can discuss what an unknown value actually means. In most cases
 it simply represents an unknown value. But because of the propagation semantics outlined above, if it happens to occur in a
@@ -996,17 +962,7 @@ For example, consider a list comprehension that filters a list on some condition
 can not know if the filter applies so it will propagate the unknown to the result. When the unknown eventually becomes known,
 it might remain in the result, or it might be filtered out, depending on whether it matches the condition.
 
-.. code-block:: inmanta
-
-    my_unknown = std::get_env("THIS_ENV_VAR_DOES_NOT_EXIST")
-    my_unknown2 = std::get_env("THIS_ENV_VAR_DOES_NOT_EXIST2")
-
-    l = [1, my_unknown, 3, my_unknown2, 5]
-    a = [x for x in l if x > 2]  # l = [unknown, 3, unknown, 5]
-
-    # an unknown can even represent more than one unknown value
-    b = my_unknown == 0 ? [1, 2] : [3, 4]  # b = unknown -> when it becomes known it will be either [1, 2] or [3, 4]
-    # or none at all
-    c = [x for x in l if x > 1000]  # c = [unknown, unknown] -> would become [] if the env var values are <= 1000
-
-    d = std::len(l)  # d = unknown (l contains unknowns, so its length is also unknown)
+.. literalinclude:: language/unknowns_multi.cf
+    :language: inmanta
+    :caption: my_project/main.cf
+    :linenos:
