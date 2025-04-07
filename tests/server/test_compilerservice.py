@@ -2015,7 +2015,7 @@ class Mockreport:
 
 
 async def test_venv_use_and_reuse(tmp_path, caplog):
-    caplog.at_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG)
 
     # Set up mock
     project = tmp_path / "project"
