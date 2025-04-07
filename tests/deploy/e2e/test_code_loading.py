@@ -94,20 +94,19 @@ async def test_agent_installs_dependency_containing_extras(
     hash = hash_file(content)
     body = base64.b64encode(content).decode("ascii")
 
-    mocked_module_version_info = {
+    module_version_info = {
         "test": InmantaModuleDTO(
             name="test",
             version="abc",
             files_in_module=[
-                {
-                    "path": "dummy/path/test/plugins/dummy_file.py",
-                    "module_name": "inmanta_plugins.test",
-                    "hash": hash,
-                    "content": "file content",
-                    "requires": ["pkg[optional-a]"],
-                    "is_byte_code": False,
-                }
+                ModuleSourceMetadata(
+                    name="inmanta_plugins.test",
+                    is_byte_code=False,
+                    hash_value=hash,
+                )
             ],
+            requirements=["pkg[optional-a]"],
+            required_by=["agent1"],
         )
     }
 
@@ -132,7 +131,7 @@ async def test_agent_installs_dependency_containing_extras(
         resources=resources,
         pip_config=PipConfig(index_url=index_with_pkgs_containing_optional_deps),
         compiler_version=get_compiler_version(),
-        module_version_info=mocked_module_version_info,
+        module_version_info=module_version_info,
     )
     assert res.code == 200
 

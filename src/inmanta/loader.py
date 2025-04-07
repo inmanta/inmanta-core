@@ -39,7 +39,7 @@ from pydantic import BaseModel, computed_field
 
 from inmanta import const, module
 from inmanta.data.model import InmantaModuleDTO, ModuleSource, ModuleSourceMetadata
-from inmanta.resources import Id, Resource, resource
+from inmanta.resources import Id, Resource
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -92,13 +92,8 @@ class CodeManager:
         This map is later used to construct a map of which agents need to load
         which Inmanta module(s).
         """
-        for id, res in resources.items():
-            _, resource_options = resource.get_class(id.entity_type)
-            if resource_options is None or "agent" not in resource_options:
-                # Should never happen
-                raise Exception("No agent is set for resource %s", id)
-            agent_field_name = resource_options["agent"]
-            self._types_to_agent[id.entity_type].add(str(res[agent_field_name]))
+        for id in resources:
+            self._types_to_agent[id.entity_type].add(id.agent_name)
 
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.

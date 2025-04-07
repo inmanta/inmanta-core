@@ -23,12 +23,7 @@ from collections import abc
 import pytest
 
 import inmanta
-import inmanta.data.sqlalchemy as models
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import ExecutorBlueprint, ModuleInstallSpec
-from inmanta.data import PipConfig, get_session
-from inmanta.loader import ModuleSource
-from sqlalchemy import select
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
@@ -40,62 +35,23 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
     await migrate_db_from()
 
     client = inmanta.protocol.Client("client")
-
     codemanager = CodeManager(client)
-    install_spec = await codemanager.get_code(
+    install_spec_1 = await codemanager.get_code(
         environment="a8317edd-74d8-40fc-8933-9aedb77cfed4",
         model_version=1,
         agent_name="internal",
     )
-    expected_install_spec = ModuleInstallSpec(
+    assert len(install_spec_1) == 1
+    assert ["inmanta_plugins.std", "inmanta_plugins.std.resources", "inmanta_plugins.std.types"] == [
+        module.name for module in install_spec_1[0].blueprint.sources
+    ]
+
+    install_spec_2 = await codemanager.get_code(
+        environment="a8317edd-74d8-40fc-8933-9aedb77cfed4",
         model_version=1,
-        module_name="std",
-        module_version="d95a4a8894881c79b1c791fb94824db2dd961d08",
-        blueprint=ExecutorBlueprint(
-            pip_config=PipConfig(index_url=None, extra_index_url=[], pre=None, use_system_config=True),
-            python_version=(3, 12),
-            requirements=["Jinja2>=3.1,<4", "email_validator>=1.3,<3", "inmanta-core>=8.7.0.dev", "pydantic>=1.10,<3"],
-            sources=ModuleSource(
-                name="inmanta_plugins.std.types",
-                hash_value="10d63b01c1ec8269f9b10edcb9740cf3519299dc",
-                is_byte_code=False,
-                source="Module source code",
-            ),
-        ),
+        agent_name="localhost",
     )
-    assert install_spec == expected_install_spec
-
-    async with get_session() as session:
-        files_in_module_stmt = select(
-            models.FilesInModule.python_module_name,
-        ).order_by(models.FilesInModule.python_module_name)
-        files = await session.scalars(files_in_module_stmt)
-        assert files.all() == [
-            "inmanta_plugins.fs",
-            "inmanta_plugins.fs.json_file",
-            "inmanta_plugins.fs.resources",
-            "inmanta_plugins.std",
-            "inmanta_plugins.std.resources",
-            "inmanta_plugins.std.types",
-        ]
-
-        modules_stmt = select(
-            models.InmantaModule.name,
-        ).order_by(models.InmantaModule.name)
-        modules = await session.scalars(modules_stmt)
-        assert modules.all() == ["fs", "std"]
-
-        modules_for_agent_stmt = (
-            select(
-                models.ModulesForAgent.agent_name,
-                models.ModulesForAgent.inmanta_module_name,
-                models.ModulesForAgent.inmanta_module_version,
-            )
-            .order_by(models.ModulesForAgent.agent_name)
-            .where(models.ModulesForAgent.cm_version == 1)
-        )
-        modules_for_agent = await session.execute(modules_for_agent_stmt)
-        assert modules_for_agent.all() == [
-            ("internal", "std", "d95a4a8894881c79b1c791fb94824db2dd961d08"),
-            ("localhost", "fs", "a8ecaac2c9448803a18a5d9e16bbd87f133a06fc"),
-        ]
+    assert len(install_spec_2) == 1
+    assert ["inmanta_plugins.fs", "inmanta_plugins.fs.json_file", "inmanta_plugins.fs.resources"] == [
+        module.name for module in install_spec_2[0].blueprint.sources
+    ]

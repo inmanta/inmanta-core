@@ -104,13 +104,12 @@ async def update(connection: Connection) -> None:
         # Maps environments to model versions
         environments: defaultdict[str, ModulesPerVersion] = field(default_factory=lambda: defaultdict(ModulesPerVersion))
 
-    async def fetch_code_data(
-        code_data: VersionsPerEnv,
-        resource_type_to_module: dict[int, dict[str, set[str]]],
-    ) -> None:
+    async def fetch_code_data() -> tuple[VersionsPerEnv, dict[int, dict[str, set[str]]]]:
         """
         Read from the Code table and populate the two data containers passed as argument
         """
+        code_data: VersionsPerEnv = VersionsPerEnv()
+        resource_type_to_module: dict[int, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
         fetch_source_refs_query = """
     SELECT DISTINCT environment, version, source_refs, resource from public.code
         """
@@ -133,17 +132,22 @@ async def update(connection: Connection) -> None:
                     source_info
                 )
                 resource_type_to_module[model_version][resource_type].add(inmanta_module_name)
+        return code_data, resource_type_to_module
 
     def build_module_data(
         code_data: VersionsPerEnv,
-        module_data: list[tuple[str, str, str, list[str]]],
-        files_in_module_data: list[tuple[str, str, str, str, str, bool]],
-        model_to_module_version_map: dict[int, dict[str, str]],
-    ) -> None:
+    ) -> tuple[
+        list[tuple[str, str, str, list[str]]],
+        list[tuple[str, str, str, str, str, bool]],
+        dict[int, dict[str, str]],
+    ]:
         """
         Use the data from the `code_data` container to populate the `module_data`, `files_in_module_data` and
         `model_to_module_version_map` data containers.
         """
+        module_data: list[tuple[str, str, str, list[str]]] = []
+        files_in_module_data: list[tuple[str, str, str, str, str, bool]] = []
+        model_to_module_version_map: dict[int, dict[str, str]] = defaultdict(dict)
 
         def compute_version_requirements(
             source_info: set[SourceInfo],
@@ -174,12 +178,12 @@ async def update(connection: Connection) -> None:
             module_name: str,
             environment: str,
             module_version: str,
-            files_in_module_data: list[tuple[str, str, str, str, str, bool]],
-        ) -> None:
+        ) -> list[tuple[str, str, str, str, str, bool]]:
             """
             Helper function to populate the `files_in_module_data` data container using
             the other arguments.
             """
+            files_in_module_data: list[tuple[str, str, str, str, str, bool]] = []
             for file_hash, file_path, python_module_name, _ in source_info:
                 is_byte_code: bool
                 match file_path:
@@ -193,22 +197,25 @@ async def update(connection: Connection) -> None:
                 files_in_module_data.append(
                     (module_name, module_version, environment, file_hash, python_module_name, is_byte_code)
                 )
+            return files_in_module_data
 
         for environment, modules_per_version in code_data.environments.items():
             for cm_version, version_data in modules_per_version.model_versions.items():
                 for module_name, module_source_data in version_data.inmanta_modules.items():
                     module_version, requirements = compute_version_requirements(module_source_data.sources)
-                    compute_files_in_module(
-                        module_source_data.sources, module_name, environment, module_version, files_in_module_data
+                    files_in_module_data.extend(
+                        compute_files_in_module(module_source_data.sources, module_name, environment, module_version)
                     )
                     module_data.append((module_name, module_version, environment, requirements))
                     model_to_module_version_map[cm_version][module_name] = module_version
 
+        return module_data, files_in_module_data, model_to_module_version_map
+
     async def build_modules_in_agent_data(
         resource_type_to_module: dict[int, dict[str, set[str]]],
         model_to_module_version_map: dict[int, dict[str, str]],
-        modules_for_agent_data: list[tuple[int, str, str, str, str]],
-    ) -> None:
+    ) -> list[tuple[int, str, str, str, str]]:
+        modules_for_agent_data: list[tuple[int, str, str, str, str]] = []
         fetch_agent_for_resource_query = """
         SELECT DISTINCT environment, model, agent, resource_type from public.resource
             """
@@ -224,24 +231,20 @@ async def update(connection: Connection) -> None:
                 module_version = model_to_module_version_map[model_version][module_name]
                 modules_for_agent_data.append((model_version, environment, agent_name, module_name, module_version))
 
+        return modules_for_agent_data
+
     # Data containers to help compute the data to insert into the newly created tables
 
     # Maps environment -> model version -> inmanta module name -> set of sources
     code_data: VersionsPerEnv = VersionsPerEnv()
     # Maps model versions -> resource type -> set of inmanta modules
-    resource_type_to_module: dict[int, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    resource_type_to_module: dict[int, dict[str, set[str]]]
     # Maps model versions -> inmanta module name -> inmanta module version
-    model_to_module_version_map: dict[int, dict[str, str]] = defaultdict(dict)
 
-    await fetch_code_data(code_data, resource_type_to_module)
+    code_data, resource_type_to_module = await fetch_code_data()
 
-    # Data containers used to populate the corresponding tables.
-    inmanta_module_data: list[tuple[str, str, str, list[str]]] = []
-    files_in_module_data: list[tuple[str, str, str, str, str, bool]] = []
-    modules_for_agent_data: list[tuple[int, str, str, str, str]] = []
-
-    build_module_data(code_data, inmanta_module_data, files_in_module_data, model_to_module_version_map)
-    await build_modules_in_agent_data(resource_type_to_module, model_to_module_version_map, modules_for_agent_data)
+    inmanta_module_data, files_in_module_data, model_to_module_version_map = build_module_data(code_data)
+    modules_for_agent_data = await build_modules_in_agent_data(resource_type_to_module, model_to_module_version_map)
 
     insert_module = """
     INSERT INTO public.inmanta_module (

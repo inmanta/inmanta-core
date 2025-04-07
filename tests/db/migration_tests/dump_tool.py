@@ -153,9 +153,7 @@ async def test_dump_db(
     versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=80)
     v1 = versions["versions"][0]["version"]
 
-    check_result(
-        await client.release_version(env_id_1, v1, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
-    )
+    check_result(await client.release_version(env_id_1, v1))
 
     await wait_until_deployment_finishes(client, env_id_1, timeout=20)
 
@@ -172,11 +170,7 @@ async def test_dump_db(
     env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
 
-    check_result(
-        await client.release_version(
-            env_id_1, env_1_version, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-        )
-    )
+    check_result(await client.release_version(env_id_1, env_1_version))
 
     await wait_until_deployment_finishes(client, env_id_1, timeout=20)
 
@@ -185,11 +179,7 @@ async def test_dump_db(
 
     env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
-    check_result(
-        await client.release_version(
-            env_id_1, env_1_version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-        )
-    )
+    check_result(await client.release_version(env_id_1, env_1_version))
 
     await populate_facts_and_parameters(client, env_id_1)
 
@@ -312,9 +302,7 @@ async def test_dump_db(
         module_version_info={},
     )
     assert res.code == 200
-    res = await client.release_version(
-        env_id_3, id=1, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-    )
+    res = await client.release_version(env_id_3, id=1)
     assert res.code == 200
     await wait_until_deployment_finishes(client, env_id_3)
 
@@ -349,9 +337,7 @@ async def test_dump_db(
         module_version_info={},
     )
     assert res.code == 200
-    res = await client.release_version(
-        env_id_3, id=2, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-    )
+    res = await client.release_version(env_id_3, id=2)
     assert res.code == 200
     await wait_until_deployment_finishes(client, env_id_3)
 
