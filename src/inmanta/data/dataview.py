@@ -63,6 +63,7 @@ from inmanta.data.model import (
     DesiredStateLabel,
     DesiredStateVersion,
     Fact,
+    JsonApiLinks,
     LatestReleasedResource,
     PagingBoundaries,
     ResourceHistory,
@@ -759,7 +760,7 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                 exporter_plugin=compile["exporter_plugin"],
                 notify_failed_compile=compile["notify_failed_compile"],
                 failed_compile_message=compile["failed_compile_message"],
-                links=compile["links"],
+                links=cast(JsonApiLinks, compile["links"]),
             )
             for compile in records
         ]

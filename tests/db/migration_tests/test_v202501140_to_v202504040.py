@@ -41,6 +41,7 @@ from collections import abc
 import asyncpg
 import pytest
 
+from inmanta.data import Environment
 from inmanta.protocol import Client
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
@@ -55,8 +56,12 @@ async def test_add_column(
     # This migration script adds a column.
     await migrate_db_from()
 
+    env = await Environment.get_one(name="dev-1")
+    assert env
+
     client = Client("client")
-    result = await client.get()
-    assert len(result.result["environments"]) > 0
-    for env in result.result["environments"]:
-        assert env["is_marked_for_deletion"] is False
+
+    reports = await client.get_reports(env.id)
+    assert reports.code == 200
+    for report in reports.result["reports"]:
+        assert report["links"] == {}
