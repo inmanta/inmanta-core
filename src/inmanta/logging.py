@@ -443,7 +443,11 @@ class LoggingConfigBuilder:
                     "level": "DEBUG",
                     "propagate": True,
                     "handlers": ["core_tornado_debug_log_handler"],
-                }
+                },
+                "sqlalchemy.engine": {
+                    "level": python_log_level_to_name(log_level),
+                    "propagate": True,
+                },
             }
         )
 
