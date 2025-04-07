@@ -878,6 +878,9 @@ def get_reports(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] 
     """
     Return compile reports newer then start
 
+    The returned compile run objects may carry links to other objects, e.g. a service instance. The full list of supported links
+    can be found :ref:`here <api_self_referencing_links>`.
+
     :param tid: The id of the environment to get a report from
     :param start: Optional. Reports after start
     :param end: Optional. Reports before end
@@ -890,6 +893,9 @@ def get_reports(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] 
 def get_report(id: uuid.UUID):
     """
     Get a compile report from the server
+
+    The returned compile report object may carry links to other objects, e.g. a service instance.
+    The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
 
     :param id: The id of the compile and its reports to fetch.
     """
@@ -1059,6 +1065,9 @@ def get_server_status() -> model.StatusResponse:
 def get_compile_queue(tid: uuid.UUID) -> list[model.CompileRun]:
     """
     Get the current compiler queue on the server, ordered by increasing `requested` timestamp.
+
+    The returned compile run object may carry links to other objects, e.g. a service instance. The full list of supported links
+    can be found :ref:`here <api_self_referencing_links>`.
 
     :param tid: The id of the environment for which to retrieve the compile queue.
 
