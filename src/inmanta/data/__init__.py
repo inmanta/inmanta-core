@@ -6624,7 +6624,6 @@ async def start_engine(
     pool_size: int = 10,
     max_overflow: int = 0,
     pool_timeout: float = 60.0,
-    echo: bool = False,
 ) -> None:
     """
     Start the SQL Alchemy engine for this process
@@ -6652,7 +6651,6 @@ async def start_engine(
             pool_size=pool_size,
             max_overflow=max_overflow,
             pool_timeout=pool_timeout,
-            echo=echo,
             pool_pre_ping=True,
         )
         SESSION_FACTORY = async_sessionmaker(ENGINE)
@@ -6678,6 +6676,9 @@ async def get_connection_ctx_mgr() -> AsyncIterator[Connection]:
         raw_asyncio_connection = connection_fairy.driver_connection
         assert isinstance(raw_asyncio_connection, Connection)
         yield raw_asyncio_connection
+        # Pool can't handle naked asycpg
+        # https://github.com/sqlalchemy/sqlalchemy/discussions/12460
+        await raw_asyncio_connection.reset()
 
 
 async def stop_engine() -> None:

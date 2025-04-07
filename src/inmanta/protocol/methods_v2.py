@@ -728,8 +728,13 @@ def resource_list(
                 resource_type: filter by the type of the resource
                 resource_id_value: filter by the attribute values of the resource
                 status: filter by the current status of the resource.
-                For status filters it's also possible to invert the condition with '!', for example
-                `filter.status=!orphaned` will return all the resources that are not in 'orphaned' state
+                For status filters it's also possible to invert the condition with '!'.
+                The inverted status filter works as a separate filter from the normal status filter.
+                For example: `filter.status=!orphaned` will return all the resources that are not in 'orphaned' state.
+                If multiple values are provided to the inverted filter, resources are returned if they don't match
+                any of the filter values.
+                For example: `?filter.status=!deployed&filter.status=!available`
+                returns all instances except those whose status is deployed or available.
                 The values for the 'agent', 'resource_type' and 'value' filters are matched partially.
     :param sort: Return the results sorted according to the parameter value.
                 It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `resource_type.desc`
@@ -1691,7 +1696,7 @@ def graphql(query: str) -> Any:  # Actual return type: strawberry.types.executio
 @auth(auth_label=const.AuthorizationLabel.GRAPHQL_READ, read_only=True)
 @typedmethod(
     path="/graphql/schema",
-    operation="POST",
+    operation="GET",
     client_types=[ClientType.api],
     api_version=2,
     strict_typing=False,

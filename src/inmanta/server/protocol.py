@@ -32,7 +32,7 @@ from tornado import gen, queues, routing, web
 
 import inmanta.protocol.endpoints
 from inmanta import tracing, const
-from inmanta.data.model import ExtensionStatus
+from inmanta.data.model import ExtensionStatus, ReportedStatus, SliceStatus
 from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods
 from inmanta.protocol.auth import decorators as auth_decorators
 from inmanta.protocol.exceptions import ShutdownInProgress
@@ -253,6 +253,9 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | No
 
     feature_manager: "FeatureManager"
 
+    # The number of seconds after which the call to the get_status() endpoint of this server slice should time out.
+    GET_SLICE_STATUS_TIMEOUT: int = 1
+
     def __init__(self, name: str) -> None:
         super().__init__()
 
@@ -419,6 +422,45 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | No
         Get the status of this slice.
         """
         return {}
+
+    async def get_reported_status(self) -> tuple[ReportedStatus, Optional[str]]:
+        """
+        Get the reported status of this slice as well as a message if applicable.
+        """
+        return ReportedStatus.OK, None
+
+    async def get_slice_status(self) -> SliceStatus:
+        """
+        Get the reported status of this slice
+        """
+        try:
+            status, message = await self.get_reported_status()
+            return SliceStatus(
+                name=self.name,
+                status=await asyncio.wait_for(self.get_status(), self.GET_SLICE_STATUS_TIMEOUT),
+                reported_status=status,
+                message=message,
+            )
+        except asyncio.TimeoutError:
+            return SliceStatus(
+                name=self.name,
+                status={
+                    "error": f"Timeout on data collection for {self.name}, consult the server log for additional information"
+                },
+                reported_status=ReportedStatus.Error,
+                message="Timeout on data collection",
+            )
+        except Exception:
+            LOGGER.error(
+                f"The following error occurred while trying to determine the status of slice {self.name}",
+                exc_info=True,
+            )
+            return SliceStatus(
+                name=self.name,
+                status={"error": "An unexpected error occurred, reported to server log"},
+                reported_status=ReportedStatus.Error,
+                message="An unexpected error occurred, reported to server log",
+            )
 
     def define_features(self) -> list["Feature[object]"]:
         """Return a list of feature that this slice offers"""
