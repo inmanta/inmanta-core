@@ -708,12 +708,12 @@ async def test_workon_compile(
         post_activate=textwrap.dedent(
             """
             declare -F inmanta > /dev/null 2>&1 || exit 1  # check that inmanta is a shell function
-            (pip --disable-pip-version-check --no-python-version-warning list | grep lorem > /dev/null 2>&1) \
+            (pip --disable-pip-version-check list | grep lorem > /dev/null 2>&1) \
                 && exit 1  # check that lorem is not installed yet
             echo lorem >> requirements.txt
             # verify that the inmanta command works, accepts options, and is contained within this environment
             inmanta project install > /dev/null 2>&1 || exit 1
-            (pip --disable-pip-version-check --no-python-version-warning list | grep lorem > /dev/null 2>&1) \
+            (pip --disable-pip-version-check list | grep lorem > /dev/null 2>&1) \
                 || exit 1  # check that lorem is now installed
             deactivate
             declare -F inmanta > /dev/null 2>&1

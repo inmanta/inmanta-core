@@ -19,9 +19,7 @@
 import copy
 import functools
 import numbers
-from collections.abc import Sequence
-from typing import Callable
-from typing import List as PythonList
+from collections.abc import Callable, Sequence
 from typing import Optional
 
 from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException
@@ -598,9 +596,9 @@ class Union(Type):
     Instances of this class represent a union of multiple types.
     """
 
-    def __init__(self, types: PythonList[Type]) -> None:
+    def __init__(self, types: Sequence[Type]) -> None:
         Type.__init__(self)
-        self.types: PythonList[Type] = types
+        self.types: Sequence[Type] = types
 
     def validate(self, value: object) -> bool:
         for typ in self.types:
@@ -613,6 +611,11 @@ class Union(Type):
 
     def type_string_internal(self) -> str:
         return "Union[%s]" % ",".join(t.type_string_internal() for t in self.types)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Union):
+            return NotImplemented
+        return self.types == other.types
 
 
 @stable_api

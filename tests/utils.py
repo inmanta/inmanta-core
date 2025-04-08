@@ -247,23 +247,6 @@ def assert_no_warning(caplog, loggers_to_allow: list[str] = NOISY_LOGGERS):
         assert record.levelname != "WARNING" or (record.name in loggers_to_allow), record
 
 
-def configure(unused_tcp_port, database_name, database_port):
-    import inmanta.agent.config  # noqa: F401
-    import inmanta.server.config  # noqa: F401
-    from inmanta.config import Config
-
-    free_port = str(unused_tcp_port)
-    Config.load_config()
-    Config.set("server", "bind-port", free_port)
-    Config.set("agent_rest_transport", "port", free_port)
-    Config.set("compiler_rest_transport", "port", free_port)
-    Config.set("client_rest_transport", "port", free_port)
-    Config.set("cmdline_rest_transport", "port", free_port)
-    Config.set("database", "name", database_name)
-    Config.set("database", "host", "localhost")
-    Config.set("database", "port", str(database_port))
-
-
 def configure_auth(auth: bool, ca: bool, ssl: bool) -> None:
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
     if auth:
@@ -320,7 +303,7 @@ async def wait_until_version_is_released(client, environment: uuid.UUID, version
     await retry_limited(_is_version_released, timeout=10)
 
 
-async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
+async def wait_for_version(client, environment, cnt: int, compile_timeout: int = 30):
     """
     :param compile_timeout: Raise an AssertionError if the compilation didn't finish after this amount of seconds.
     """
@@ -328,12 +311,13 @@ async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     # Wait until the server is no longer compiling
     # wait for it to finish
     async def compile_done():
-        compiling = await client.is_compiling(environment)
-        code = compiling.code
-        return code == 204
+        result = await client.get_reports(environment)
+        assert result.code == 200
+        return all(r["success"] is not None for r in result.result["reports"])
 
     await retry_limited(compile_done, compile_timeout)
 
+    # Output compile report for debugging purposes
     reports = await client.get_reports(environment)
     for report in reports.result["reports"]:
         data = await client.get_report(report["id"])

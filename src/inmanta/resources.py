@@ -379,6 +379,32 @@ class Resource(metaclass=ResourceMeta):
 
         self.version = _id.version
 
+    def __getitem__(self, key: str) -> object:
+        """Support dict like access on the resource"""
+        if key in self.fields:
+            return getattr(self, key)
+
+        raise KeyError()
+
+    def __setitem__(self, key: str, value: object) -> None:
+        """Support dict like access on the resource. It is not possible to create new
+        attributes using setitem
+        """
+        if key in self.fields:
+            return setattr(self, key, value)
+
+        raise KeyError()
+
+    def __delitem__(self, key: str) -> None:
+        raise Exception("Deleting fields is not allowed on a resource")
+
+    def clear(self) -> None:
+        raise Exception("Deleting fields is not allowed on a resource")
+
+    def items(self) -> Iterator[tuple[str, object]]:
+        for key in self.fields:
+            yield key, getattr(self, key)
+
     def populate(self, fields: dict[str, Any], force_fields: bool = False) -> None:
         for field in self.__class__.fields:
             if field in fields or force_fields:

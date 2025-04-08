@@ -32,7 +32,7 @@ from inmanta.protocol import method
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.server import SLICE_SESSION_MANAGER
 from inmanta.server.protocol import Server, ServerSlice, SessionListener
-from utils import configure, configure_auth, retry_limited
+from utils import configure_auth, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -174,10 +174,8 @@ async def check_sessions(sessions):
 
 
 @pytest.mark.slowtest
-async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, postgres_db, database_name):
+async def test_agent_timeout(server_config, no_tid_check, async_finalizer):
     from inmanta.config import Config
-
-    configure(unused_tcp_port, database_name, postgres_db.port)
 
     Config.set("server", "agent-timeout", "1")
 
@@ -236,10 +234,8 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
 
 
 @pytest.mark.slowtest
-async def test_server_timeout(unused_tcp_port, no_tid_check, async_finalizer, postgres_db, database_name):
+async def test_server_timeout(server_config, no_tid_check, async_finalizer):
     from inmanta.config import Config
-
-    configure(unused_tcp_port, database_name, postgres_db.port)
 
     Config.set("server", "agent-timeout", "1")
 

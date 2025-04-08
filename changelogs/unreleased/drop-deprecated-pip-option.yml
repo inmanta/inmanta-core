@@ -1,0 +1,6 @@
+description: Dropped deprecated (and NOOP) pip option
+change-type: patch
+destination-branches:
+  - master
+  - iso8
+  - iso7
