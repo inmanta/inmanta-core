@@ -14,7 +14,7 @@ opentelemetry-instrumentation-asyncpg>=0.46b,<0.51
 packaging==24.2
 pip==25.0.1
 ply==3.11
-pydantic==2.10.6
+pydantic==2.11.3
 pyformance==0.4
 PyJWT==2.10.1
 pynacl==1.5.0
