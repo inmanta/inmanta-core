@@ -24,7 +24,7 @@ from inmanta.protocol.common import MethodProperties
 def auth(auth_label: str, read_only: bool, environment_param: str | None = None) -> Callable[..., Callable]:
     """
     A decorator used to add authorization-related metadata to an API endpoint.
-    This metadata can be used when writing an authorization policy. The @auth
+    This metadata can be used when writing an access policy. The @auth
     decorator always needs to be defined above the @method or @typedmethod
     decorator.
 

@@ -176,7 +176,6 @@ def get_auth_token(headers: MutableMapping[str, str]) -> Optional[claim_type]:
 # auth
 #############################
 AUTH_JWT_PREFIX = "auth_jwt_"
-AUTH_JWT_CLAIM_RE = r"^\s*([^\s].+)\s+(in|is)\s+([^\s].+)\s*$"
 
 
 class AuthJWTConfig:

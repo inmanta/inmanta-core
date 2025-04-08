@@ -541,10 +541,19 @@ class CallArguments:
             # We only need a valid token when the endpoint enforces authentication
             raise exceptions.UnauthorizedException()
 
-    async def validate_authorization_policy(self, auth_enabled: bool, authorization_slice: "AuthorizationSlice") -> None:
-        """Validate the authorization policy for the request based on the given data.
+    def _is_service_token(self) -> bool:
+        """
+        Return True iff self._auth_token is a service token (i.e. a token used by a service instead of a user).
+        """
+        ct_key: str = const.INMANTA_URN + "ct"
+        client_types_token = self._auth_token[ct_key]
+        return any(ct in {const.ClientType.agent.value, const.ClientType.compiler.value} for ct in client_types_token)
+
+    async def authorize_request(self, auth_enabled: bool, authorization_slice: Optional["AuthorizationSlice"]) -> None:
+        """Validate whether the token is authorized to perform this request.
 
         :param auth_enabled: is authentication enabled?
+        :param authorization_slice: The authorization slice of this server or None if we are not running on the server.
         """
         if not auth_enabled:
             return
@@ -555,9 +564,37 @@ class CallArguments:
                 raise exceptions.UnauthorizedException()
             return None
 
-        input_data = self._get_input_for_policy_engine()
-        if not await authorization_slice.does_satisfy_authorization_policy(input_data):
-            raise exceptions.Forbidden("Request doesn't satisfy the authorization policy.")
+        if self._is_service_token():
+            self._authorize_service_token()
+        else:
+            if authorization_slice is None:
+                raise Exception("Authorization slice not found")
+            input_data = self._get_input_for_policy_engine()
+            if not await authorization_slice.does_satisfy_access_policy(input_data):
+                raise exceptions.Forbidden("Request doesn't satisfy the access policy.")
+
+    def _authorize_service_token(self) -> None:
+        """
+        Validate whether self._auth_token is a valid service token.
+        If not, this method raises a Forbidden exception.
+        """
+        assert self._auth_token is not None
+        # Enforce environment restrictions
+        env_key: str = const.INMANTA_URN + "env"
+        if env_key in self._auth_token:
+            if env_key not in self.metadata:
+                raise exceptions.Forbidden("The authorization token is scoped to a specific environment.")
+
+            if self.metadata[env_key] != "all" and self._auth_token[env_key] != self.metadata[env_key]:
+                raise exceptions.Forbidden("The authorization token is not valid for the requested environment.")
+
+        # Enforce client_types restrictions
+        ct_key: str = const.INMANTA_URN + "ct"
+        if not any(ct for ct in self._auth_token[ct_key] if ct in self._config.properties.client_types):
+            raise exceptions.Forbidden(
+                "The authorization token does not have a valid client type for this call."
+                + f" ({self._auth_token[ct_key]} provided, {self._config.properties.client_types} expected)"
+            )
 
     def _get_input_for_policy_engine(self) -> Mapping[str, object]:
         """
@@ -624,7 +661,9 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
             arguments = CallArguments(config, message, request_headers)
             arguments.authenticate(server_config.server_enable_auth.get())
             await arguments.process()
-            await self.authorize_request(auth_enabled=server_config.server_enable_auth.get(), call_arguments=arguments)
+            await arguments.authorize_request(
+                auth_enabled=server_config.server_enable_auth.get(), authorization_slice=await self.get_authorization_slice()
+            )
 
             LOGGER.debug(
                 "Calling method %s(%s) user=%s",
@@ -650,9 +689,8 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
             raise exceptions.ServerError(str(e.args))
 
     @abc.abstractmethod
-    async def authorize_request(self, auth_enabled: bool, call_arguments: CallArguments) -> None:
+    async def get_authorization_slice(self) -> Optional["AuthorizationSlice"]:
         """
-        This method raises a Forbidden() exception if the request is not allowed by the authorization policy.
-        An UnauthorizedException() is raised if no access token is found.
+        Return the authorization slice or None if no such slice exists because we are not running on the server.
         """
         raise NotImplementedError()

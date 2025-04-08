@@ -824,18 +824,17 @@ async def server_multi(
         config.Config.set("agent", "executor-retention-time", "10")
 
         if auth:
-            # Configure an authorization policy that allows everything
+            # Configure an access policy that allows everything
             os.mkdir(os.path.join(state_dir, "policy_engine"))
-            authorization_policy = os.path.join(state_dir, "policy_engine", "policy.rego")
-            with open(authorization_policy, "w") as fh:
+            access_policy_file = os.path.join(state_dir, "policy_engine", "policy.rego")
+            with open(access_policy_file, "w") as fh:
                 fh.write("""
                     package policy
 
                     # Allow everything
                     default allowed:=true
                 """)
-            policy_file.set(authorization_policy)
-
+            policy_file.set(access_policy_file)
 
         ibl = InmantaBootloader(configure_logging=True)
 

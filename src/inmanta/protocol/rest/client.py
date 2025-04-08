@@ -178,8 +178,7 @@ class RESTClient(RESTBase):
             # Any other content-type will leave the encoding unchanged
             return common.Result(code=response.code, result=response.body)
 
-    async def authorize_request(self, auth_enabled: bool, call_arguments: CallArguments) -> None:
-        # We are not running on the server, so there is no policy engine.
-        # We cannot check the authorization policy.
-        return
+    async def get_authorization_slice(self) -> None:
+        # We are not running on the server, so there is no policy engine and no authorization slice.
+        return None
 

@@ -600,7 +600,7 @@ async def test_tokens(server_multi, client_multi, environment_multi, request):
         return
 
     test_token = client_multi._transport_instance.token
-    token = await client_multi.create_token(environment_multi, ["api"], idempotent=True)
+    token = await client_multi.create_token(environment_multi, ["compiler"], idempotent=True)
     jot = token.result["token"]
 
     assert jot != test_token
@@ -608,10 +608,10 @@ async def test_tokens(server_multi, client_multi, environment_multi, request):
     client_multi._transport_instance.token = jot
 
     # try to access a non environment call (global)
-    result = await client_multi.list_environments()
-    assert result.code == 403
+    result = await client_multi.stat_file(id="test")
+    assert result.code == 404
 
-    result = await client_multi.list_versions(environment_multi)
+    result = await client_multi.list_params(environment_multi)
     assert result.code == 200
 
     token = await client_multi.create_token(environment_multi, ["agent"], idempotent=True)

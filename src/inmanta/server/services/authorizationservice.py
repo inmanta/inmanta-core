@@ -34,7 +34,7 @@ from tornado.httpclient import HTTPRequest, HTTPError
 
 LOGGER = logging.getLogger(__name__)
 
-policy_file = config.Option("policy-engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the authorization policy.", config.is_str)
+policy_file = config.Option("policy-engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the access policy.", config.is_str)
 policy_engine_bind_address = config.Option("policy-engine", "bind-address", "127.0.0.1", "Address on which the policy engine will listen for incoming connections.", config.is_str)
 policy_engine_bind_port = config.Option("policy-engine", "bind-port", 8181, "Port on which the policy engine will listen for incoming connections.", config.is_int)
 
@@ -57,14 +57,14 @@ class AuthorizationSlice(protocol.ServerSlice):
     def get_depended_by(self) -> list[str]:
         return [server.SLICE_TRANSPORT]
 
-    async def does_satisfy_authorization_policy(self, input_data: dict[str, object]) -> bool:
+    async def does_satisfy_access_policy(self, input_data: dict[str, object]) -> bool:
         """
         Return True iff the policy evaluates to True.
         """
         if not self._opa_process.running:
             raise Exception("Policy engine is not running. Call OpaServer.start() first.")
         if not server_config.server_enable_auth.get():
-            LOGGER.warning("An evaluation of the authorization policy was requested while config option server.auth=False")
+            LOGGER.warning("An evaluation of the access policy was requested while config option server.auth=False")
             return True
         client = SimpleAsyncHTTPClient()
         policy_engine_addr = await self._opa_process.get_addr_policy_engine()
@@ -77,12 +77,12 @@ class AuthorizationSlice(protocol.ServerSlice):
         try:
             response = await client.fetch(request)
             if response.code != 200:
-                LOGGER.error("Failed to evaluate authorization policy for %s.", input_data)
+                LOGGER.error("Failed to evaluate access policy for %s.", input_data)
                 return False
             response_body = json.loads(response.body.decode())
             return "result" in response_body and response_body["result"] is True
         except Exception:
-            LOGGER.exception("Failed to evaluate authorization policy for %s.", input_data)
+            LOGGER.exception("Failed to evaluate access policy for %s.", input_data)
             return False
 
 
