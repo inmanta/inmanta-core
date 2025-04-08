@@ -16,11 +16,16 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import hashlib
-from collections import defaultdict, namedtuple
+import logging
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 from asyncpg import Connection
+
+from inmanta.data.model import ModuleSourceMetadata
+from inmanta.loader import CodeManager
+
+LOGGER = logging.getLogger("databaseservice")
 
 
 async def update(connection: Connection) -> None:
@@ -56,8 +61,6 @@ async def update(connection: Connection) -> None:
                 REFERENCES public.inmanta_module(environment, name, version) ON DELETE CASCADE
         );
 
-        CREATE INDEX files_in_module_file_content_hash_index
-        ON public.files_in_module (file_content_hash);
 
         CREATE TABLE public.modules_for_agent (
             cm_version integer NOT NULL,
@@ -83,21 +86,22 @@ async def update(connection: Connection) -> None:
 
     await connection.execute(schema)
 
-    SourceInfo = namedtuple("SourceInfo", ["file_hash", "file_path", "python_module_name", "requirements"])
+    # SourceInfo = namedtuple("SourceInfo", ["file_hash", "file_path", "python_module_name", "requirements"])
+    #
+    @dataclass
+    class InmantaModuleData:
+        sources: set[ModuleSourceMetadata] = field(default_factory=lambda: set())
+        requirements: set[str] = field(default_factory=lambda: set())
 
     @dataclass
-    class SetOfSources:
-        sources: set[SourceInfo] = field(default_factory=lambda: set())
-
-    @dataclass
-    class SourcesPerModule:
+    class DataPerModule:
         # Maps inmanta module names to their sources
-        inmanta_modules: defaultdict[str, SetOfSources] = field(default_factory=lambda: defaultdict(SetOfSources))
+        inmanta_modules: defaultdict[str, InmantaModuleData] = field(default_factory=lambda: defaultdict(InmantaModuleData))
 
     @dataclass
     class ModulesPerVersion:
         # Maps model versions to their inmanta modules
-        model_versions: defaultdict[int, SourcesPerModule] = field(default_factory=lambda: defaultdict(SourcesPerModule))
+        model_versions: defaultdict[int, DataPerModule] = field(default_factory=lambda: defaultdict(DataPerModule))
 
     @dataclass
     class VersionsPerEnv:
@@ -106,12 +110,26 @@ async def update(connection: Connection) -> None:
 
     async def fetch_code_data() -> tuple[VersionsPerEnv, dict[int, dict[str, set[str]]]]:
         """
-        Read from the Code table and populate the two data containers passed as argument
+        Read from the Code table and populate the two following data containers:
+
+            1) code_data: a nested map of environment -> model version -> inmanta module name -> set of sources.
+                NOTE: the set of source is flattened compared to the "old" format in the code table i.e.
+                    Old format = {hash : (file_path, module_name, list_of_requirements), ...}   (Map of hash -> tuple)
+                    New format = {(hash, file_path, module_name, list_of_requirements), ...}    (Set of tuple)
+
+            2) resource_type_to_module: a nested map of model version -> resource type -> set of inmanta modules
         """
+
         code_data: VersionsPerEnv = VersionsPerEnv()
         resource_type_to_module: dict[int, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+
         fetch_source_refs_query = """
-    SELECT DISTINCT environment, version, source_refs, resource from public.code
+            SELECT DISTINCT
+                environment,
+                version,
+                source_refs,
+                resource
+            FROM public.code
         """
         result = await connection.fetch(fetch_source_refs_query)
         for res in result:
@@ -126,11 +144,19 @@ async def update(connection: Connection) -> None:
                 file_path, python_module_name, requirements = file_data
                 inmanta_module_name = python_module_name.split(".")[1]
                 assert isinstance(inmanta_module_name, str)
-                source_info = SourceInfo(file_hash, file_path, python_module_name, frozenset(requirements))
+                # source_info = SourceInfo(file_hash, file_path, python_module_name, frozenset(requirements))
+                source_info_meta_data = ModuleSourceMetadata(
+                    name=python_module_name,
+                    is_byte_code=file_path.endswith(".pyc"),
+                    hash_value=file_hash,
+                )
 
                 code_data.environments[env].model_versions[model_version].inmanta_modules[inmanta_module_name].sources.add(
-                    source_info
+                    source_info_meta_data
                 )
+                code_data.environments[env].model_versions[model_version].inmanta_modules[
+                    inmanta_module_name
+                ].requirements.update(requirements)
                 resource_type_to_module[model_version][resource_type].add(inmanta_module_name)
         return code_data, resource_type_to_module
 
@@ -142,39 +168,18 @@ async def update(connection: Connection) -> None:
         dict[int, dict[str, str]],
     ]:
         """
-        Use the data from the `code_data` container to populate the `module_data`, `files_in_module_data` and
-        `model_to_module_version_map` data containers.
+        Use the data from the `code_data` container to populate the following data containers:
+
+        1) module_data: The data that will be used to populate the new inmanta_module table.
+        2) files_in_module_data: The data that will be used to populate the new files_in_module table.
+        3) model_to_module_version_map
         """
         module_data: list[tuple[str, str, str, list[str]]] = []
         files_in_module_data: list[tuple[str, str, str, str, str, bool]] = []
         model_to_module_version_map: dict[int, dict[str, str]] = defaultdict(dict)
 
-        def compute_version_requirements(
-            source_info: set[SourceInfo],
-        ) -> tuple[str, list[str]]:
-            """
-            Compute the version for a set of sources. This version is obtained
-            by hashing the individual file hashes together and the python
-            requirements for these sources.
-
-            Return a tuple of the computed hash and the merged collection of all requirements.
-            """
-            reqs = set()
-            module_version_hash = hashlib.new("sha1")
-
-            for file_hash, _, _, requirements in sorted(source_info, key=lambda x: x[0]):
-                # sort by hash to compute inmanta module version
-                module_version_hash.update(file_hash.encode())
-                reqs.update(requirements)
-
-            for requirement in sorted(reqs):
-                module_version_hash.update(str(requirement).encode())
-
-            module_version = module_version_hash.hexdigest()
-            return module_version, list(reqs)
-
         def compute_files_in_module(
-            source_info: set[SourceInfo],
+            sources_metadata: set[ModuleSourceMetadata],
             module_name: str,
             environment: str,
             module_version: str,
@@ -184,29 +189,22 @@ async def update(connection: Connection) -> None:
             the other arguments.
             """
             files_in_module_data: list[tuple[str, str, str, str, str, bool]] = []
-            for file_hash, file_path, python_module_name, _ in source_info:
-                is_byte_code: bool
-                match file_path:
-                    case _ if file_path.endswith(".py"):
-                        is_byte_code = False
-                    case _ if file_path.endswith(".pyc"):
-                        is_byte_code = True
-                    case _:
-                        raise Exception("Invalid file extension for plugin file %s. Expecting `.py` or `.pyc`." % file_path)
-
+            for metadata in sources_metadata:
                 files_in_module_data.append(
-                    (module_name, module_version, environment, file_hash, python_module_name, is_byte_code)
+                    (module_name, module_version, environment, metadata.hash_value, metadata.name, metadata.is_byte_code)
                 )
             return files_in_module_data
 
         for environment, modules_per_version in code_data.environments.items():
             for cm_version, version_data in modules_per_version.model_versions.items():
                 for module_name, module_source_data in version_data.inmanta_modules.items():
-                    module_version, requirements = compute_version_requirements(module_source_data.sources)
+                    module_version = CodeManager.get_module_version(
+                        module_source_data.requirements, list(module_source_data.sources)
+                    )
                     files_in_module_data.extend(
                         compute_files_in_module(module_source_data.sources, module_name, environment, module_version)
                     )
-                    module_data.append((module_name, module_version, environment, requirements))
+                    module_data.append((module_name, module_version, environment, list(module_source_data.requirements)))
                     model_to_module_version_map[cm_version][module_name] = module_version
 
         return module_data, files_in_module_data, model_to_module_version_map
@@ -215,9 +213,20 @@ async def update(connection: Connection) -> None:
         resource_type_to_module: dict[int, dict[str, set[str]]],
         model_to_module_version_map: dict[int, dict[str, str]],
     ) -> list[tuple[int, str, str, str, str]]:
+        """
+        Use the data from the `resource_type_to_module` and `model_to_module_version_map` containers to populate
+        the following data container:
+
+        modules_for_agent_data: The data that will be used to populate the new modules_for_agent table.
+        """
         modules_for_agent_data: list[tuple[int, str, str, str, str]] = []
         fetch_agent_for_resource_query = """
-        SELECT DISTINCT environment, model, agent, resource_type from public.resource
+        SELECT DISTINCT
+            environment,
+            model,
+            agent,
+            resource_type
+        FROM public.resource
             """
         result = await connection.fetch(fetch_agent_for_resource_query)
         for res in result:
@@ -235,15 +244,13 @@ async def update(connection: Connection) -> None:
 
     # Data containers to help compute the data to insert into the newly created tables
 
-    # Maps environment -> model version -> inmanta module name -> set of sources
-    code_data: VersionsPerEnv = VersionsPerEnv()
-    # Maps model versions -> resource type -> set of inmanta modules
+    code_data: VersionsPerEnv
     resource_type_to_module: dict[int, dict[str, set[str]]]
-    # Maps model versions -> inmanta module name -> inmanta module version
 
     code_data, resource_type_to_module = await fetch_code_data()
 
     inmanta_module_data, files_in_module_data, model_to_module_version_map = build_module_data(code_data)
+
     modules_for_agent_data = await build_modules_in_agent_data(resource_type_to_module, model_to_module_version_map)
 
     insert_module = """

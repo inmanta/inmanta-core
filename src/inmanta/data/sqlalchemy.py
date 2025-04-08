@@ -132,6 +132,24 @@ class InmantaModule(Base):
                 ],
             )
 
+    @classmethod
+    async def delete_version(
+        cls, environment: uuid.UUID, model_version: int, connection: asyncpg.connection.Connection
+    ) -> None:
+        await connection.execute(
+            f"""
+            DELETE FROM {InmantaModule.__tablename__}
+            WHERE (environment, name, version) IN (
+                SELECT environment, inmanta_module_name, inmanta_module_version
+                FROM public.modules_for_agent
+                WHERE environment=$1
+                AND cm_version=$2
+            )
+            """,
+            environment,
+            model_version,
+        )
+
 
 class FilesInModule(Base):
     __tablename__ = "files_in_module"
@@ -155,6 +173,24 @@ class FilesInModule(Base):
     file_content_hash: Mapped[str] = mapped_column(String)
     python_module_name: Mapped[str] = mapped_column(String)
     is_byte_code: Mapped[bool] = mapped_column(Boolean)
+
+    @classmethod
+    async def delete_version(
+        cls, environment: uuid.UUID, model_version: int, connection: asyncpg.connection.Connection
+    ) -> None:
+        await connection.execute(
+            f"""
+            DELETE FROM {FilesInModule.__tablename__}
+            WHERE (environment, inmanta_module_name, inmanta_module_version) IN (
+                SELECT environment, inmanta_module_name, inmanta_module_version
+                FROM {ModulesForAgent.__tablename__}
+                WHERE environment=$1
+                AND cm_version=$2
+            )
+            """,
+            environment,
+            model_version,
+        )
 
 
 class ModulesForAgent(Base):
@@ -272,6 +308,16 @@ class ModulesForAgent(Base):
                 query,
                 values,
             )
+
+    @classmethod
+    async def delete_version(
+        cls, environment: uuid.UUID, model_version: int, connection: asyncpg.connection.Connection
+    ) -> None:
+        await connection.execute(
+            f"DELETE FROM {ModulesForAgent.__tablename__} WHERE environment=$1 AND cm_version=$2",
+            environment,
+            model_version,
+        )
 
 
 class File(Base):

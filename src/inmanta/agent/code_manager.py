@@ -25,7 +25,7 @@ import inmanta.data.sqlalchemy as models
 from inmanta.agent import executor
 from inmanta.agent.executor import ModuleInstallSpec
 from inmanta.data import get_session
-from inmanta.data.model import LEGACY_PIP_DEFAULT, InmantaModuleDTO, ModuleSource, PipConfig
+from inmanta.data.model import LEGACY_PIP_DEFAULT, InmantaModuleDTO, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.protocol import Client
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
@@ -154,19 +154,23 @@ class CodeManager:
                     )
                     previous_module_sources = [
                         ModuleSource(
-                            name=res.python_module_name,
+                            meta_data=ModuleSourceMetadata(
+                                name=res.python_module_name,
+                                hash_value=res.file_content_hash,
+                                is_byte_code=res.is_byte_code,
+                            ),
                             source=res.content,
-                            hash_value=res.file_content_hash,
-                            is_byte_code=res.is_byte_code,
                         )
                     ]
                 else:
                     previous_module_sources.append(
                         ModuleSource(
-                            name=res.python_module_name,
+                            meta_data=ModuleSourceMetadata(
+                                name=res.python_module_name,
+                                hash_value=res.file_content_hash,
+                                is_byte_code=res.is_byte_code,
+                            ),
                             source=res.content,
-                            hash_value=res.file_content_hash,
-                            is_byte_code=res.is_byte_code,
                         )
                     )
             if previous_module_sources:

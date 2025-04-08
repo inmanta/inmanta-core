@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import datetime
 import functools
+import hashlib
 import json
 import typing
 import urllib
@@ -973,7 +974,11 @@ class DataBaseReport(BaseModel):
 @functools.total_ordering
 class ModuleSourceMetadata(BaseModel):
     """
+    This class holds metadata for a given python module. i.e. it doesn't contain
+    the source itself.
+
     :param name: the name of the python module. e.g. inmanta_plugins.model.x
+    :param hash_value: hash of the underlying content
     :param is_byte_code: is this content python byte code or python source
 
     """
@@ -994,67 +999,67 @@ class ModuleSourceMetadata(BaseModel):
         return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
 
 
-class ModuleSource(ModuleSourceMetadata):
+@functools.total_ordering
+class ModuleSource(BaseModel):
     """
+    This class represents a python module (file metadata + the source itself)
     :param source: the content of the file
     """
 
     model_config = ConfigDict(frozen=True)
+    meta_data: ModuleSourceMetadata
     source: bytes
+
+    @classmethod
+    def from_path(cls, absolute_path: str, name: str) -> "ModuleSource":
+        """Get the content of the file"""
+        with open(absolute_path, "rb") as fd:
+            _content = fd.read()
+
+        sha1sum = hashlib.new("sha1")
+        sha1sum.update(_content)
+        _hash = sha1sum.hexdigest()
+
+        return ModuleSource(
+            meta_data=ModuleSourceMetadata(
+                name=name,
+                is_byte_code=absolute_path.endswith(".pyc"),
+                hash_value=_hash,
+            ),
+            source=_content,
+        )
+
+    def __lt__(self, other: object) -> bool | None:
+        if not isinstance(other, ModuleSource):
+            return NotImplemented
+        return self.meta_data < other.meta_data
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ModuleSource):
+            return False
+        return self.meta_data == other.meta_data
 
 
 class InmantaModuleDTO(BaseModel):
+    """
+    This class represents an Inmanta module during code transport.
+    - During upload (e.g. in the exporter) files_in_module are passed as metadata only,
+        the source itself is handled by the File API
+    - During download (e.g. in the deploy task) files_in_module will contain the source
+        so it can be installed on the executors.
+
+    :param name: Name of this inmanta module. e.g. std
+    :param version: Version of this inmanta module. This hash is computed using the hashes of
+        the python files in this module as well as the python requirements of this module.
+    :param files_in_module: The list of python files composing this inmanta module.
+    :param requirements: The list of python requirements this inmanta module requires.
+    :param required_by: The list of agent names that require to install this inmanta module to
+        deploy resources.
+    """
+
     model_config = ConfigDict(frozen=True)
     name: str
     version: str
     files_in_module: list[ModuleSourceMetadata]
     requirements: list[str]
     required_by: list[str]
-
-
-# class ModuleVersionData(BaseModel):
-#     model_config = ConfigDict(frozen=True)
-#     data: dict[str, InmantaModuleDTO]
-
-#
-#
-# @dataclass(frozen=True)
-# @functools.total_ordering
-# class ModuleSourceMetadata:
-#     """
-#     :param name: the name of the python module. e.g. inmanta_plugins.model.x
-#     :param is_byte_code: is this content python byte code or python source
-#
-#     """
-#
-#     name: str
-#     hash_value: str
-#     is_byte_code: bool
-#
-#     def __lt__(self, other: object) -> bool | None:
-#         if not isinstance(other, ModuleSourceMetadata):
-#             return NotImplemented
-#         return (self.name, self.hash_value, self.is_byte_code) < (other.name, other.hash_value, other.is_byte_code)
-#
-#     def __eq__(self, other: object) -> bool:
-#         if not isinstance(other, ModuleSourceMetadata):
-#             return False
-#         return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
-#
-#
-# @dataclass(frozen=True)
-# class ModuleSource(ModuleSourceMetadata):
-#     """
-#     :param source: the content of the file
-#     """
-#
-#     source: bytes
-#
-#
-# @dataclass(frozen=True)
-# class InmantaModuleDTO:
-#     name: str
-#     version: str
-#     files_in_module: list[ModuleSourceMetadata]
-#     requirements: list[str]
-#     required_by: list[str]

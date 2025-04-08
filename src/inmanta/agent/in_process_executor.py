@@ -518,7 +518,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
             self._loader = CodeLoader(code_dir, clean=True)
             # Lock to ensure only one actual install runs at a time
             self._loader_lock: asyncio.Lock = Lock()
-            # Keep track for each resource type of the last loaded version
+            # Keep track for each inmanta module of the last loaded version
             self._last_loaded_version: dict[str, executor.ExecutorBlueprint | None] = defaultdict(lambda: None)
             # Per-resource lock to serialize all actions per resource
             self._resource_loader_lock: NamedLock = NamedLock()
@@ -593,9 +593,9 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                 # The combination of the lock and this check causes the reloads to naturally 'batch up'
                 if self._last_loaded_version[module_install_spec.module_name] == module_install_spec.blueprint:
                     self.logger.debug(
-                        "Handler code already installed for %s version=%d",
+                        "Handler code already installed for module %s version=%d",
                         module_install_spec.module_name,
-                        module_install_spec.model_version,
+                        module_install_spec.module_version,
                     )
                     continue
 
@@ -604,13 +604,13 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     self.logger.debug(
                         "Installing module %s version=%d",
                         module_install_spec.module_name,
-                        module_install_spec.model_version,
+                        module_install_spec.module_version,
                     )
                     await self._install(module_install_spec.module_name, module_install_spec.blueprint)
                     self.logger.debug(
                         "Installed module %s version=%d",
                         module_install_spec.module_name,
-                        module_install_spec.model_version,
+                        module_install_spec.module_version,
                     )
 
                     self._last_loaded_version[module_install_spec.module_name] = module_install_spec.blueprint
@@ -618,12 +618,12 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     self.logger.exception(
                         "Failed to install module %s version=%d",
                         module_install_spec.module_name,
-                        module_install_spec.model_version,
+                        module_install_spec.module_version,
                     )
                     if module_install_spec.module_name not in failed_to_load:
                         failed_to_load[module_install_spec.module_name] = Exception(
                             f"Failed to install module {module_install_spec.module_name} "
-                            f"version={module_install_spec.model_version}: {e}"
+                            f"version={module_install_spec.module_version}: {e}"
                         ).with_traceback(e.__traceback__)
                     self._last_loaded_version[module_install_spec.module_name] = None
 

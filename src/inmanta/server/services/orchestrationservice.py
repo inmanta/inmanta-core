@@ -819,10 +819,6 @@ class OrchestrationService(protocol.ServerSlice):
             all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
             all_agents.add(const.AGENT_SCHEDULER_ID)
 
-            type_to_agent: dict[str, set[str]] = defaultdict(set)
-            for res in rid_to_resource.values():
-                type_to_agent[str(res.resource_type)].add(res.agent)
-
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 

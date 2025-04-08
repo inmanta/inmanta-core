@@ -210,7 +210,10 @@ class ExecutorBlueprint(EnvBlueprint):
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 # Use the hash values and name to create a stable identity
-                "sources": [[source.hash_value, source.name, source.is_byte_code] for source in self.sources],
+                "sources": [
+                    [source.meta_data.hash_value, source.meta_data.name, source.meta_data.is_byte_code]
+                    for source in self.sources
+                ],
                 "python_version": self.python_version,
             }
 

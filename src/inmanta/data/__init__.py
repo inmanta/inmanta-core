@@ -5941,40 +5941,10 @@ class ConfigurationModel(BaseDocument):
             # Delete of compile record triggers cascading delete report table
             await Compile.delete_all(environment=self.environment, version=self.version, connection=con)
             await DryRun.delete_all(environment=self.environment, model=self.version, connection=con)
-            await self._execute_query(
-                "DELETE FROM public.modules_for_agent WHERE environment=$1 AND cm_version=$2",
-                self.environment,
-                self.version,
-                connection=con,
-            )
-            await self._execute_query(
-                """
-                DELETE FROM public.inmanta_module
-                WHERE (environment, name, version) IN (
-                    SELECT environment, inmanta_module_name, inmanta_module_version
-                    FROM public.modules_for_agent
-                    WHERE environment=$1
-                    AND cm_version=$2
-                )
-                """,
-                self.environment,
-                self.version,
-                connection=con,
-            )
-            await self._execute_query(
-                """
-                DELETE FROM public.files_in_module
-                WHERE (environment, inmanta_module_name, inmanta_module_version) IN (
-                    SELECT environment, inmanta_module_name, inmanta_module_version
-                    FROM public.modules_for_agent
-                    WHERE environment=$1
-                    AND cm_version=$2
-                )
-                """,
-                self.environment,
-                self.version,
-                connection=con,
-            )
+
+            await ModulesForAgent.delete_version(environment=self.environment, model_version=self.version, connection=con)
+            await InmantaModule.delete_version(environment=self.environment, model_version=self.version, connection=con)
+            await FilesInModule.delete_version(environment=self.environment, model_version=self.version, connection=con)
 
             await UnknownParameter.delete_all(environment=self.environment, version=self.version, connection=con)
             await self._execute_query(

@@ -29,13 +29,10 @@ import types
 from collections import abc, defaultdict
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
-from functools import cached_property
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
 from typing import Optional
-
-from pydantic import BaseModel, computed_field
 
 from inmanta import const, module
 from inmanta.data.model import InmantaModuleDTO, ModuleSource, ModuleSourceMetadata
@@ -70,20 +67,20 @@ class CodeManager:
     available in a remote process (e.g. agent).
 
     __file_info: Stores metadata about each individual source code file. The keys are file paths and the values
-                 in this dictionary are ``SourceInfo`` objects.
+                 in this dictionary are ``ModuleSource`` objects.
     """
 
     def __init__(self) -> None:
         # Old implementation
         # Use by external code
 
-        # Map of [path, SourceInfo]
+        # Map of [path, ModuleSource]
         # To which python module do these python files belong
-        self.__file_info: dict[str, SourceInfo] = {}
+        self.__file_info: dict[str, ModuleSource] = {}
         self.__module_to_agents: dict[str, set[str]] = defaultdict(set)
 
         # Cache of module to source info
-        self.__module_to_source_info: dict[str, list[SourceInfo]] = defaultdict(list)
+        self.__module_to_source_info: dict[str, list[ModuleSource]] = defaultdict(list)
         self._types_to_agent: dict[str, set[str]] = defaultdict(set)
 
     def build_agent_map(self, resources: dict[Id, Resource]) -> None:
@@ -109,22 +106,23 @@ class CodeManager:
         # get the module
         module_name = get_inmanta_module_name(instance.__module__)
 
-        registered_agents: set[str] = self._types_to_agent.get(type_name, set())
-        self._get_source_info_for_module(module_name, registered_agents)
+        self._register_inmanta_module(module_name)
 
-    def _get_source_info_for_module(self, inmanta_module_name: str, registered_agents: set[str]) -> None:
-        # TODO rename + docstring
+        registered_agents: set[str] = self._types_to_agent.get(type_name, set())
+        self._update_agents_for_module(module_name, registered_agents)
+
+    def _register_inmanta_module(self, inmanta_module_name: str) -> None:
         if inmanta_module_name in self.__module_to_source_info:
             # This module was already registered
             return
 
         for absolute_path, fqn_module_name in module.Project.get().modules[inmanta_module_name].get_plugin_files():
-            source_info = SourceInfo(path=absolute_path, module_name=fqn_module_name)
+            source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
             self.__file_info[absolute_path] = source_info
-            for agent_name in registered_agents:
-                self.__module_to_agents[inmanta_module_name].add(agent_name)
-
             self.__module_to_source_info[inmanta_module_name].append(source_info)
+
+    def _update_agents_for_module(self, inmanta_module_name: str, registered_agents: set[str]) -> None:
+        self.__module_to_agents[inmanta_module_name].update(registered_agents)
 
     def get_object_source(self, instance: object) -> Optional[str]:
         """Get the path of the source file in which type_object is defined"""
@@ -135,38 +133,29 @@ class CodeManager:
 
     def get_file_hashes(self) -> Iterable[str]:
         """Return the hashes of all source files"""
-        return (info.hash for info in self.__file_info.values())
+        return (info.meta_data.hash_value for info in self.__file_info.values())
 
-    def get_module_source_info(self) -> dict[str, list["SourceInfo"]]:
-        """Return all module source info"""
-        return self.__module_to_source_info
+    def get_inmanta_module_requirements(self, module_name: str) -> set[str]:
+        """Get the list of python requirements associated with this inmanta module"""
+        project: module.Project = module.Project.get()
+        mod: module.Module = project.modules[module_name]
+        if project.metadata.agent_install_dependency_modules:
+            _requires = mod.get_all_python_requirements_as_list()
+        else:
+            _requires = mod.get_strict_python_requirements_as_list()
+        return set(_requires)
 
     def get_module_version_info(self) -> dict[str, "InmantaModuleDTO"]:
         """Return all module version info"""
-        source_info: dict[str, list[SourceInfo]] = self.get_module_source_info()
 
         modules_data = {}
-        for module_name, files_in_module in source_info.items():
+        for module_name, module_sources in self.__module_to_source_info.items():
 
-            requirements = set()
-            module_version_hash = hashlib.new("sha1")
-            files_metadata = []
+            requirements = self.get_inmanta_module_requirements(module_name)
+            files_metadata: list[ModuleSourceMetadata] = [module_source.meta_data for module_source in module_sources]
 
-            for file in sorted(files_in_module, key=lambda f: f.hash):
-                module_version_hash.update(file.hash.encode())
-                requirements.update(file.requires)
-                files_metadata.append(
-                    ModuleSourceMetadata(
-                        name=file.module_name,
-                        hash_value=file.hash,
-                        is_byte_code=file.path.endswith(".pyc"),
-                    )
-                )
+            module_version = self.get_module_version(requirements, files_metadata)
 
-            for requirement in sorted(requirements):
-                module_version_hash.update(str(requirement).encode())
-
-            module_version = module_version_hash.hexdigest()
             modules_data[module_name] = InmantaModuleDTO(
                 name=module_name,
                 version=module_version,
@@ -174,15 +163,25 @@ class CodeManager:
                 requirements=list(requirements),
                 required_by=list(self.__module_to_agents[module_name]),
             )
-        self.__modules_data = modules_data
+        return modules_data
 
-        return self.__modules_data
+    @staticmethod
+    def get_module_version(requirements: set[str], module_sources: Sequence[ModuleSourceMetadata]) -> str:
+        module_version_hash = hashlib.new("sha1")
+
+        for module_source in sorted(module_sources, key=lambda f: f.hash_value):
+            module_version_hash.update(module_source.hash_value.encode())
+
+        for requirement in sorted(requirements):
+            module_version_hash.update(str(requirement).encode())
+
+        return module_version_hash.hexdigest()
 
     def get_file_content(self, hash: str) -> bytes:
         """Get the file content for the given hash"""
         for info in self.__file_info.values():
-            if info.hash == hash:
-                return info.content
+            if info.meta_data.hash_value == hash:
+                return info.source
 
         raise KeyError("No file found with this hash")
 
@@ -251,11 +250,14 @@ class CodeLoader:
         Ensure the given module source is available on disk.
         """
         # if the module is new, or update
-        if module_source.name not in self.__modules or module_source.hash_value != self.__modules[module_source.name][0]:
-            LOGGER.info("Deploying code (hv=%s, module=%s)", module_source.hash_value, module_source.name)
+        if (
+            module_source.meta_data.name not in self.__modules
+            or module_source.meta_data.hash_value != self.__modules[module_source.meta_data.name][0]
+        ):
+            LOGGER.info("Deploying code (hv=%s, module=%s)", module_source.meta_data.hash_value, module_source.meta_data.name)
 
             all_modules_dir: str = os.path.join(self.__code_dir, MODULE_DIR)
-            relative_module_path: str = convert_module_to_relative_path(module_source.name)
+            relative_module_path: str = convert_module_to_relative_path(module_source.meta_data.name)
             # Treat all modules as a package for simplicity: module is a dir with source in __init__.py
             module_dir: str = os.path.join(all_modules_dir, relative_module_path)
 
@@ -263,7 +265,7 @@ class CodeLoader:
                 os.path.join(all_modules_dir, pathlib.PurePath(pathlib.PurePath(relative_module_path).parts[0]))
             )
 
-            if module_source.is_byte_code:
+            if module_source.meta_data.is_byte_code:
                 init_file = "__init__.pyc"
                 alternate_file = "__init__.py"
             else:
@@ -296,11 +298,11 @@ class CodeLoader:
             if os.path.exists(source_file):
                 with open(source_file, "rb") as fh:
                     thehash = hash_file_streaming(fh)
-                if thehash == module_source.hash_value:
+                if thehash == module_source.meta_data.hash_value:
                     LOGGER.debug(
                         "Not deploying code (hv=%s, module=%s) because it is already on disk",
-                        module_source.hash_value,
-                        module_source.name,
+                        module_source.meta_data.hash_value,
+                        module_source.meta_data.name,
                     )
                     return
 
@@ -309,7 +311,9 @@ class CodeLoader:
                 fd.write(module_source.source)
         else:
             LOGGER.debug(
-                "Not deploying code (hv=%s, module=%s) because of cache hit", module_source.hash_value, module_source.name
+                "Not deploying code (hv=%s, module=%s) because of cache hit",
+                module_source.meta_data.hash_value,
+                module_source.meta_data.name,
             )
 
     def deploy_version(self, module_sources: Iterable[ModuleSource]) -> None:
@@ -598,43 +602,3 @@ def unload_modules_for_path(path: str) -> None:
     for mod_name in loaded_modules:
         del sys.modules[mod_name]
     importlib.invalidate_caches()
-
-
-class SourceInfo(BaseModel):
-    """This class is used to store information related to source code information"""
-
-    # absolute path to this file
-    path: str
-    # python module name e.g. "inmanta_plugins.my_mod.my_submod"
-    module_name: str
-
-    @computed_field  # type: ignore[prop-decorator]
-    @cached_property
-    def hash(self) -> str:
-        """Get the sha1 hash of the file"""
-        sha1sum = hashlib.new("sha1")
-        sha1sum.update(self.content)
-        return sha1sum.hexdigest()
-
-    @cached_property
-    def content(self) -> bytes:
-        """Get the content of the file"""
-        with open(self.path, "rb") as fd:
-            _content = fd.read()
-        return _content
-
-    def _get_module_name(self) -> str:
-        """Get the name of the inmanta module, derived from the python module name"""
-        return get_inmanta_module_name(self.module_name)
-
-    @computed_field  # type: ignore[prop-decorator]
-    @cached_property
-    def requires(self) -> list[str]:
-        """List of python requirements associated with this source file"""
-        project: module.Project = module.Project.get()
-        mod: module.Module = project.modules[self._get_module_name()]
-        if project.metadata.agent_install_dependency_modules:
-            _requires = mod.get_all_python_requirements_as_list()
-        else:
-            _requires = mod.get_strict_python_requirements_as_list()
-        return _requires
