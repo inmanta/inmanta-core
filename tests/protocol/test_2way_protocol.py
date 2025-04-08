@@ -28,12 +28,14 @@ from tornado.gen import sleep
 # Methods need to be defined before the Client class is loaded by Python
 from inmanta import protocol  # NOQA
 from inmanta import data
+from inmanta.server import SLICE_AUTHORIZATION, SLICE_TRANSPORT
 from inmanta.protocol import method
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.server import SLICE_SESSION_MANAGER
 from inmanta.server.protocol import Server, ServerSlice, SessionListener
 from utils import configure_auth, retry_limited
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -81,6 +83,21 @@ class SessionSpy(SessionListener, ServerSlice):
 
     def get_sessions(self):
         return self._sessions
+
+
+class DummyAuthorizationSlice(ServerSlice):
+    """
+    An authorization slice that doesn't start a policy engine and allows everything.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(SLICE_AUTHORIZATION)
+
+    def get_depended_by(self) -> list[str]:
+        return [SLICE_TRANSPORT]
+
+    async def does_satisfy_access_policy(self, input_data: dict[str, object]) -> bool:
+        return True
 
 
 class Agent(protocol.SessionEndpoint):
@@ -132,7 +149,9 @@ async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgr
     configure_auth(auth=True, ca=False, ssl=False)
     rs = Server()
     server = SessionSpy()
+    dummy_authorization_slice = DummyAuthorizationSlice()
     rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
+    rs.add_slice(dummy_authorization_slice)
     rs.add_slice(server)
     await rs.start()
 

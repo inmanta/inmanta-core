@@ -333,6 +333,8 @@ class RESTServer(RESTBase):
         if self._http_server is not None:
             await self._http_server.close_all_connections()
 
-    async def get_authorization_slice(self) -> "AuthorizationSlice":
+    async def get_authorization_slice(self) -> Optional["AuthorizationSlice"]:
+        if not server_config.server_enable_auth.get():
+            return None
         return self._server.get_slice(name=SLICE_AUTHORIZATION)
 
