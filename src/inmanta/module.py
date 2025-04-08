@@ -2106,7 +2106,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
     def install_modules(self, *, bypass_module_cache: bool = False, update_dependencies: bool = False) -> None:
         """
-        Installs all modules, both v1 and v2.
+        Installs all modules.
 
         :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
         :param update_dependencies: Update all Python dependencies (recursive) to their latest versions.
@@ -2114,23 +2114,28 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         if not self.is_using_virtual_env():
             self.use_virtual_env()
 
-        self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
+        # install all dependencies
+        dependencies: Sequence[inmanta.util.CanonicalRequirement] = self.get_all_python_requirements_as_list()
+        if len(dependencies) > 0:
+            constraints: Sequence[inmanta.util.CanonicalRequirement] = [
+                InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec)).get_python_package_requirement()
+                for spec in self._metadata.requires
+            ]
+            with tempfile.NamedTemporaryFile() as fd:
+                if constraints:
+                    fd.write("\n".join(str(c) for c in constraints).encode())
+                    fd.seek(0)
 
-        # Verify non-python part
-        self.verify_modules_cache()
-        self.verify_module_version_compatibility()
+                # upgrade both direct and transitive module dependencies: eager upgrade strategy
+                self.virtualenv.install_for_config(
+                    dependencies,
+                    constraint_files=[fd.name],
+                    config=self.metadata.pip,
+                    upgrade=update_dependencies,
+                    upgrade_strategy=env.PipUpgradeStrategy.EAGER,
+                )
 
-        # do python install
-        pyreq: list[inmanta.util.CanonicalRequirement] = inmanta.util.parse_requirements(self.collect_python_requirements())
-
-        if len(pyreq) > 0:
-            # upgrade both direct and transitive module dependencies: eager upgrade strategy
-            self.virtualenv.install_for_config(
-                pyreq,
-                config=self.metadata.pip,
-                upgrade=update_dependencies,
-                upgrade_strategy=env.PipUpgradeStrategy.EAGER,
-            )
+        self.load_module_recursive(install=False, bypass_module_cache=bypass_module_cache)
 
         self.verify()
 
@@ -2669,13 +2674,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Get the requires for this project
         """
         # filter on import stmt
-        reqs = []
-        for spec in self._metadata.requires:
-            req = [inmanta.util.parse_requirement(requirement=spec)]
-            if len(req) > 1:
-                print(f"Module file for {self._path} has bad line in requirements specification {spec}")
-            reqe = InmantaModuleRequirement(req[0])
-            reqs.append(reqe)
+        reqs = [
+            InmantaModuleRequirement(inmanta.util.parse_requirement(requirement=spec))
+            for spec in self._metadata.requires
+        ]
         return [*reqs, *self.get_module_v2_requirements()]
 
     def collect_requirements(self) -> "Dict[str, List[InmantaModuleRequirement]]":
@@ -2730,7 +2732,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return out
 
     def get_all_python_requirements_as_list(self) -> list[str]:
-        return self._get_requirements_txt_as_list()
+        # TODO: use const
+        auto: Sequence[str] = ["inmanta_module-std"] if self.autostd else []
+        return [*self._get_requirements_txt_as_list(), *auto]
 
     def module_v2_source_configured(self) -> bool:
         """
