@@ -878,8 +878,8 @@ def get_reports(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] 
     """
     Return compile reports newer then start
 
-    The returned compile report objects may carry links to other objects, e.g. a service instance. The full list of supported links
-    can be found :ref:`here <api_self_referencing_links>`.
+    The returned compile report objects may carry links to other objects, e.g. a service instance.
+    The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
 
     :param tid: The id of the environment to get a report from
     :param start: Optional. Reports after start
