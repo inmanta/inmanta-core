@@ -1,0 +1,7 @@
+change-type: patch
+description: Update database fixtures to use hostname correctly
+destination-branches:
+- master
+- iso8
+- iso7
+sections: {}

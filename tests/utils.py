@@ -247,23 +247,6 @@ def assert_no_warning(caplog, loggers_to_allow: list[str] = NOISY_LOGGERS):
         assert record.levelname != "WARNING" or (record.name in loggers_to_allow), record
 
 
-def configure(unused_tcp_port, database_name, database_port):
-    import inmanta.agent.config  # noqa: F401
-    import inmanta.server.config  # noqa: F401
-    from inmanta.config import Config
-
-    free_port = str(unused_tcp_port)
-    Config.load_config()
-    Config.set("server", "bind-port", free_port)
-    Config.set("agent_rest_transport", "port", free_port)
-    Config.set("compiler_rest_transport", "port", free_port)
-    Config.set("client_rest_transport", "port", free_port)
-    Config.set("cmdline_rest_transport", "port", free_port)
-    Config.set("database", "name", database_name)
-    Config.set("database", "host", "localhost")
-    Config.set("database", "port", str(database_port))
-
-
 def configure_auth(auth: bool, ca: bool, ssl: bool) -> None:
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
     if auth:

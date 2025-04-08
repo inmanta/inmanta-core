@@ -1,0 +1,7 @@
+description: Make sure we only normalize plugins once
+change-type: patch
+# no bugfix section since this should not be user visible
+destination-branches:
+  - master
+  - iso8
+  - iso7
