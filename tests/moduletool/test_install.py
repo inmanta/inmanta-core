@@ -180,43 +180,6 @@ def test_for_repo_without_versions(git_modules_dir, modules_repo):
     ProjectTool().execute("install", [])
 
 
-def test_bad_dep_checkout(git_modules_dir, modules_repo):
-    coroot = os.path.join(git_modules_dir, "baddep")
-    subprocess.check_output(
-        ["git", "clone", os.path.join(git_modules_dir, "repos", "baddep")], cwd=git_modules_dir, stderr=subprocess.STDOUT
-    )
-    os.chdir(coroot)
-    Config.load_config()
-
-    with pytest.raises(CompilerException, match="requirement mod2<2016 on module mod2 not fulfilled, now at version 2016.1"):
-        ProjectTool().execute("install", [])
-
-
-def test_master_checkout(git_modules_dir: str, modules_repo: str, tmpdir):
-    coroot = install_project(git_modules_dir, "masterproject", tmpdir)
-
-    ProjectTool().execute("install", [])
-
-    dirname = os.path.join(coroot, "libs", "mod8")
-    assert os.path.exists(os.path.join(dirname, "devsignal"))
-    assert os.path.exists(os.path.join(dirname, "mastersignal"))
-
-
-def test_dev_checkout(git_modules_dir, modules_repo):
-    coroot = os.path.join(git_modules_dir, "devproject")
-    subprocess.check_output(
-        ["git", "clone", os.path.join(git_modules_dir, "repos", "devproject")], cwd=git_modules_dir, stderr=subprocess.STDOUT
-    )
-    os.chdir(coroot)
-    Config.load_config()
-
-    ProjectTool().execute("install", [])
-
-    dirname = os.path.join(coroot, "libs", "mod8")
-    assert os.path.exists(os.path.join(dirname, "devsignal"))
-    assert not os.path.exists(os.path.join(dirname, "mastersignal"))
-
-
 @pytest.mark.parametrize_any("editable", [True, False])
 def test_module_install(tmpdir, snippetcompiler_clean, modules_v2_dir: str, editable: bool) -> None:
     """
@@ -855,7 +818,7 @@ def test_project_install_incompatible_dependencies(
     with pytest.raises(env.ConflictingRequirements) as e:
         ProjectTool().execute("install", [])
     assert (
-        "inmanta-module-v2mod1~=1.0.0 and inmanta-module-v2mod1~=2.0.0 because these package versions have conflicting "
+        "inmanta-module-v2mod2==1.2.3 and inmanta-module-v2mod3==1.2.3 because these package versions have conflicting "
         "dependencies" in e.value.msg
     )
 
@@ -937,6 +900,8 @@ def test_install_from_index_dont_leak_pip_index(
     # install project
     os.chdir(module.Project.get().path)
     assert os.getenv(env_var) == index.url if env_var != "PIP_CONFIG_FILE" else pip_config_file
+    # TODO: this exception is now no longer raised, instead simple PackageNotFoundException
+    #   => how does end user reporting change????
     with pytest.raises(ModuleNotFoundException):
         ProjectTool().execute("install", [])
     assert os.getenv(env_var) == index.url if env_var != "PIP_CONFIG_FILE" else pip_config_file

@@ -416,84 +416,7 @@ compatible with the dependencies specified by the updated modules.
         else:
             my_project = project
 
-        def do_update(specs: Mapping[str, Sequence[InmantaModuleRequirement]], modules: list[str]) -> None:
-            v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
-
-            v2_python_specs: list[inmanta.util.CanonicalRequirement] = [
-                module_spec.get_python_package_requirement()
-                for module, module_specs in specs.items()
-                for module_spec in module_specs
-                if module in v2_modules
-            ]
-            if v2_python_specs:
-                # Get known requires and add them to prevent invalidating constraints through updates
-                # These could be constraints (-c) as well, but that requires additional sanitation
-                # Because for pip not every valid -r is a valid -c
-                current_requires = my_project.get_strict_python_requirements_as_list()
-                env.process_env.install_for_config(
-                    v2_python_specs + inmanta.util.parse_requirements(current_requires),
-                    my_project.metadata.pip,
-                    upgrade=True,
-                )
-                # Invalidate ast cache so that dependencies of installed modules can be updated as well
-                my_project.invalidate_state()
-
-            for v1_module in set(modules).difference(v2_modules):
-                spec = specs.get(v1_module, [])
-                try:
-                    ModuleV1.update(my_project, v1_module, spec, install_mode=my_project.install_mode)
-                    # Invalidate the state of the updated module
-                    my_project.invalidate_state(v1_module)
-                except Exception:
-                    LOGGER.exception("Failed to update module %s", v1_module)
-
-            # Load the newly installed modules into the modules cache
-            my_project.install_modules(bypass_module_cache=True, update_dependencies=True)
-
-        attempt = 0
-        done = False
-        last_failure: Optional[CompilerException] = None
-
-        while not done and attempt < MAX_UPDATE_ATTEMPT:
-            LOGGER.info("Performing update attempt %d of %d", attempt + 1, MAX_UPDATE_ATTEMPT)
-            try:
-                loaded_mods_pre_update = {module_name: mod.version for module_name, mod in my_project.modules.items()}
-
-                # get AST
-                my_project.load_module_recursive(install=True)
-                # get current full set of requirements
-                specs: dict[str, list[InmantaModuleRequirement]] = my_project.collect_imported_requirements()
-                if module is None:
-                    modules = list(specs.keys())
-                else:
-                    modules = [module]
-                do_update(specs, modules)
-
-                loaded_mods_post_update = {module_name: mod.version for module_name, mod in my_project.modules.items()}
-                if loaded_mods_pre_update == loaded_mods_post_update:
-                    # No changes => state has converged
-                    done = True
-                else:
-                    # New modules were downloaded or existing modules were updated to a new version. Perform another pass to
-                    # make sure that all dependencies, defined in these new modules, are taken into account.
-                    last_failure = CompilerException("Module update did not converge")
-            except CompilerException as e:
-                last_failure = e
-                # model is corrupt
-                LOGGER.info("The model is not currently in an executable state, performing intermediate updates")
-                # get all specs from all already loaded modules
-                specs = my_project.collect_requirements()
-
-                if module is None:
-                    # get all loaded/partly loaded modules
-                    modules = list(my_project.modules.keys())
-                else:
-                    modules = [module]
-                do_update(specs, modules)
-            attempt += 1
-
-        if last_failure is not None and not done:
-            raise last_failure
+        my_project.install_modules(update_dependencies=True)
 
 
 @stable_api
@@ -723,19 +646,14 @@ When a development release is done using the \--dev option, this command:
         )
         release.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
 
-    def add(self, module_req: str, v1: bool = False, v2: bool = False, override: bool = False) -> None:
+    def add(self, module_req: str, v2: bool = True, override: bool = False) -> None:
         """
         Add a module dependency to an Inmanta module or project.
 
         :param module_req: The module to add, optionally with a version constraint.
-        :param v1: Whether the given module should be added as a V1 module or not.
         :param override: If set to True, override the version constraint when the module dependency already exists.
                          If set to False, this method raises an exception when the module dependency already exists.
         """
-        if not v1 and not v2:
-            raise CLIException("Either --v1 or --v2 has to be set", exitcode=1)
-        if v1 and v2:
-            raise CLIException("--v1 and --v2 cannot be set together", exitcode=1)
         module_like: Optional[ModuleLike] = ModuleLike.from_path(path=os.getcwd())
         if module_like is None:
             raise CLIException("Current working directory doesn't contain an Inmanta module or project", exitcode=1)
@@ -748,9 +666,10 @@ When a development release is done using the \--dev option, this command:
                 "A dependency on the given module was already defined, use --override to override the version constraint",
                 exitcode=1,
             )
+        module_like.add_module_requirement_persistent(requirement=module_requirement)
         if isinstance(module_like, Project):
             try:
-                module_like.install_module(module_requirement, install_as_v1_module=v1)
+                module_like.install_modules()
             except ModuleNotFoundException:
                 raise CLIException(
                     f"Failed to install {module_requirement} as a {'v1' if v1 else 'v2'} module.",
@@ -759,7 +678,6 @@ When a development release is done using the \--dev option, this command:
             else:
                 # cached project might have inconsistent state after modifying the environment through another instance
                 self.get_project(load=False).invalidate_state()
-        module_like.add_module_requirement_persistent(requirement=module_requirement, add_as_v1_module=v1)
 
     def v1tov2(self, module: str) -> None:
         """

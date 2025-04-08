@@ -1683,7 +1683,7 @@ class ModuleLike(ABC, Generic[TMetadata]):
         raise NotImplementedError()
 
     @abstractmethod
-    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
+    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement) -> None:
         """
         Add a new module requirement to the files that define requirements on other modules. This could include the
         requirements.txt file next to the metadata file of the project or module. This method updates the files on disk.
@@ -1746,6 +1746,7 @@ class ModuleLike(ABC, Generic[TMetadata]):
         """
         raise NotImplementedError()
 
+    # TODO: strict vs all distinction no longer relevant?
     def get_strict_python_requirements_as_list(self) -> list[str]:
         """
         Returns the strict python requirements specified by this module like, meaning all Python requirements excluding those on
@@ -1968,6 +1969,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
+    # TODO: name update_dependencies implies only dependencies, not modules
     def install_modules(self, *, bypass_module_cache: bool = False, update_dependencies: bool = False) -> None:
         """
         Installs all modules.
@@ -2500,21 +2502,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             for v1_mod in v1_modules:
                 LOGGER.info(f"  {v1_mod.name}: {v1_mod.version}")
 
-    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
-        # Add requirement to metadata file
-        if add_as_v1_module:
-            self.add_module_requirement_to_requires_and_write(requirement)
-            # Refresh in-memory metadata
-            with open(self.get_metadata_file_path(), encoding="utf-8") as fd:
-                self._metadata = ProjectMetadata.parse(fd)
+    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement) -> None:
         # Update requirements.txt file
         requirements_txt_file_path = os.path.join(self._path, "requirements.txt")
-        if not add_as_v1_module:
-            requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
-            requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
-        elif os.path.exists(requirements_txt_file_path):
-            requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path)
-            requirements_txt_file.remove_requirement_and_write(requirement.get_python_package_requirement().name)
+        requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
+        requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
 
     def get_module_requirements(self) -> list[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
@@ -2583,7 +2575,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
     def get_all_python_requirements_as_list(self) -> list[str]:
         # TODO: use const
-        auto: Sequence[str] = ["inmanta_module-std"] if self.autostd else []
+        auto: Sequence[str] = ["inmanta-module-std"] if self.autostd else []
         return [*self._get_requirements_txt_as_list(), *auto]
 
     def module_v2_source_configured(self) -> bool:
@@ -3121,24 +3113,13 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     def get_module_requirements(self) -> list[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
 
-    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
+    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement) -> None:
         requirements_txt_file_path = os.path.join(self._path, "requirements.txt")
-        if add_as_v1_module:
-            # Add requirement to module.yml file
-            self.add_module_requirement_to_requires_and_write(requirement)
-            # Refresh in-memory metadata
-            with open(self.get_metadata_file_path(), encoding="utf-8") as fd:
-                self._metadata = ModuleV1Metadata.parse(fd)
-            # Remove requirement from requirements.txt file
-            if os.path.exists(requirements_txt_file_path):
-                requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path)
-                requirements_txt_file.remove_requirement_and_write(requirement.get_python_package_requirement().name)
-        else:
-            # Add requirement to requirements.txt
-            requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
-            requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
-            # Remove requirement from module.yml file
-            self.remove_module_requirement_from_requires_and_write(requirement.name)
+        # Add requirement to requirements.txt
+        requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
+        requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
+        # Remove requirement from module.yml file
+        self.remove_module_requirement_from_requires_and_write(requirement.name)
 
     def versions(self) -> list[packaging.version.Version]:
         """
@@ -3267,9 +3248,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
     def get_module_requirements(self) -> list[str]:
         return [str(req) for req in self.get_module_v2_requirements()]
 
-    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
-        if add_as_v1_module:
-            raise Exception("Cannot add V1 requirement to a V2 module")
+    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement) -> None:
         # Parse config file
         config_parser = ConfigParser()
         config_parser.read(self.get_metadata_file_path())

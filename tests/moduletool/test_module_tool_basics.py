@@ -231,6 +231,7 @@ ignore = H405,H404,H302,H306,H301,H101,H801,E402,W503,E252,E203
     assert result == expected_result
 
 
+# TODO: can this test be deleted?
 def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir, tmpvenv_active):
     mod9 = make_module_simple(modules_repo, "mod9", [("mod10", None)], version="3.2.0")
     add_file(mod9, "signal", "present", "third commit", minor=True)

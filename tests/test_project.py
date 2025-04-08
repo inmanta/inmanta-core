@@ -529,6 +529,7 @@ def test_project_load_install(snippetcompiler_clean, install: bool) -> None:
     """
     Verify that loading a project only installs modules when install is True.
     """
+    # TODO: this test relies on v1 module installation => switch over to v2
     project: Project = snippetcompiler_clean.setup_for_snippet("import dummy_module", autostd=True, install_project=False)
     if install:
         project.load(install=True)
