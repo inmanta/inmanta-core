@@ -1042,11 +1042,7 @@ class ModuleSource(BaseModel):
 
 class InmantaModuleDTO(BaseModel):
     """
-    This class represents an Inmanta module during code transport.
-    - During upload (e.g. in the exporter) files_in_module are passed as metadata only,
-        the source itself is handled by the File API
-    - During download (e.g. in the deploy task) files_in_module will contain the source
-        so it can be installed on the executors.
+    This class represents an Inmanta module during code upload.
 
     :param name: Name of this inmanta module. e.g. std
     :param version: Version of this inmanta module. This hash is computed using the hashes of

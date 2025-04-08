@@ -86,8 +86,6 @@ async def update(connection: Connection) -> None:
 
     await connection.execute(schema)
 
-    # SourceInfo = namedtuple("SourceInfo", ["file_hash", "file_path", "python_module_name", "requirements"])
-    #
     @dataclass
     class InmantaModuleData:
         sources: set[ModuleSourceMetadata] = field(default_factory=lambda: set())
@@ -112,12 +110,9 @@ async def update(connection: Connection) -> None:
         """
         Read from the Code table and populate the two following data containers:
 
-            1) code_data: a nested map of environment -> model version -> inmanta module name -> set of sources.
-                NOTE: the set of source is flattened compared to the "old" format in the code table i.e.
-                    Old format = {hash : (file_path, module_name, list_of_requirements), ...}   (Map of hash -> tuple)
-                    New format = {(hash, file_path, module_name, list_of_requirements), ...}    (Set of tuple)
+            1) code_data: a nested map of environment -> model version -> inmanta module name -> data.
 
-            2) resource_type_to_module: a nested map of model version -> resource type -> set of inmanta modules
+            2) resource_type_to_module: a nested map of model version -> resource type -> set of inmanta modules.
         """
 
         code_data: VersionsPerEnv = VersionsPerEnv()
@@ -144,7 +139,6 @@ async def update(connection: Connection) -> None:
                 file_path, python_module_name, requirements = file_data
                 inmanta_module_name = python_module_name.split(".")[1]
                 assert isinstance(inmanta_module_name, str)
-                # source_info = SourceInfo(file_hash, file_path, python_module_name, frozenset(requirements))
                 source_info_meta_data = ModuleSourceMetadata(
                     name=python_module_name,
                     is_byte_code=file_path.endswith(".pyc"),
