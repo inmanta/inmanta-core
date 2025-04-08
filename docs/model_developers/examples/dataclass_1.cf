@@ -1,0 +1,10 @@
+entity Virtualmachine extends std::Dataclass:
+    string name
+    int ram
+    int cpus
+end
+
+implement Virtualmachine using std::none
+
+vm = make_virtual_machine()
+std::print(vm.name)

@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import os
@@ -22,6 +22,7 @@ import subprocess
 import sys
 
 import pytest
+from importlib_metadata import distribution
 
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException
@@ -35,16 +36,22 @@ def test_freeze_basic(git_modules_dir: str, modules_repo: str, tmpdir):
     install_project(git_modules_dir, "projecta", tmpdir)
     modtool = ModuleTool()
     cmod = modtool.get_module("modc")
-    assert cmod.get_freeze("modc", recursive=False, mode="==") == {"std": "== 3.2.0", "mode": "== 3.2.0", "modf": "== 3.2.0"}
+    std_version = distribution("inmanta_module_std").version
+
+    assert cmod.get_freeze("modc", recursive=False, mode="==") == {
+        "std": f"== {std_version}",
+        "mode": "== 3.2.0",
+        "modf": "== 3.2.0",
+    }
     assert cmod.get_freeze("modc", recursive=True, mode="==") == {
-        "std": "== 3.2.0",
+        "std": f"== {std_version}",
         "mode": "== 3.2.0",
         "modf": "== 3.2.0",
         "modh": "== 3.2.0",
         "modj": "== 3.2.0",
     }
 
-    assert cmod.get_freeze("modc::a", recursive=False, mode="==") == {"std": "== 3.2.0", "modi": "== 3.2.0"}
+    assert cmod.get_freeze("modc::a", recursive=False, mode="==") == {"std": f"== {std_version}", "modi": "== 3.2.0"}
 
 
 @pytest.mark.slowtest
@@ -52,14 +59,15 @@ def test_project_freeze_basic(git_modules_dir: str, modules_repo: str, tmpdir):
     install_project(git_modules_dir, "projecta", tmpdir)
     modtool = ModuleTool()
     proj = modtool.get_project()
+    std_version = distribution("inmanta_module_std").version
     assert proj.get_freeze(recursive=False, mode="==") == {
-        "std": "== 3.2.0",
+        "std": f"== {std_version}",
         "modb": "== 3.2.0",
         "modc": "== 3.2.0",
         "modd": "== 3.2.0",
     }
     assert proj.get_freeze(recursive=True, mode="==") == {
-        "std": "== 3.2.0",
+        "std": f"== {std_version}",
         "modb": "== 3.2.0",
         "modc": "== 3.2.0",
         "modd": "== 3.2.0",
@@ -84,7 +92,7 @@ def test_project_freeze_bad(git_modules_dir: str, modules_repo: str, tmpdir):
 
 
 @pytest.mark.slowtest
-def test_project_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
+def test_project_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir, tmpvenv_active):
     coroot = install_project(git_modules_dir, "projecta", tmpdir)
 
     app(["project", "freeze", "-o", "-"])
@@ -116,6 +124,7 @@ def test_project_freeze_disk(git_modules_dir: str, modules_repo: str, capsys, tm
     coroot = install_project(git_modules_dir, "projecta", tmpdir)
 
     app(["project", "freeze"])
+    std_version = distribution("inmanta_module_std").version
 
     out, err = capsys.readouterr()
 
@@ -125,7 +134,7 @@ def test_project_freeze_disk(git_modules_dir: str, modules_repo: str, capsys, tm
     with open(os.path.join(coroot, "project.yml"), encoding="utf-8") as fh:
         assert (
             fh.read()
-            == """name: projecta
+            == f"""name: projecta
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
@@ -135,7 +144,7 @@ requires:
 - modb ~= 3.2.0
 - modc ~= 3.2.0
 - modd ~= 3.2.0
-- std ~= 3.2.0
+- std ~= {std_version}
 """
             % modules_repo
         )
@@ -187,7 +196,8 @@ freeze_operator: ==
         assert len(out) == 0, out
 
         with open("project.yml", encoding="utf-8") as fh:
-            assert fh.read() == (
+            out = fh.read()
+            assert out.startswith(
                 """name: projecta
 license: Apache 2.0
 version: 0.0.1
@@ -205,7 +215,6 @@ requires:
 - modg == 3.2.0
 - modh == 3.2.0
 - modj == 3.2.0
-- std == 3.2.0
 """
                 % modules_repo
             )
@@ -219,6 +228,7 @@ requires:
 @pytest.mark.slowtest
 def test_module_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
     coroot = install_project(git_modules_dir, "projecta", tmpdir)
+    std_version = distribution("inmanta_module_std").version
 
     def verify():
         out, err = capsys.readouterr()
@@ -226,14 +236,14 @@ def test_module_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
         assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
         assert len(err) == 0, err
         assert out == (
-            """name: modc
+            f"""name: modc
 license: Apache 2.0
 version: 3.2.0
 requires:
 - mode ~= 3.2.0
 - modf ~= 3.2.0
 - modi ~= 3.2.0
-- std ~= 3.2.0
+- std ~= {std_version}
 """
         )
 
@@ -244,6 +254,7 @@ requires:
 @pytest.mark.slowtest
 def test_module_freeze_self_disk(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
     coroot = install_project(git_modules_dir, "projecta", tmpdir)
+    std_version = distribution("inmanta_module_std").version
 
     def verify():
         out, err = capsys.readouterr()
@@ -258,14 +269,14 @@ def test_module_freeze_self_disk(git_modules_dir: str, modules_repo: str, capsys
         with open(modpath, encoding="utf-8") as fh:
             outf = fh.read()
             assert outf == (
-                """name: modc
+                f"""name: modc
 license: Apache 2.0
 version: 3.2.0
 requires:
 - mode ~= 3.2.0
 - modf ~= 3.2.0
 - modi ~= 3.2.0
-- std ~= 3.2.0
+- std ~= {std_version}
 """
             )
 

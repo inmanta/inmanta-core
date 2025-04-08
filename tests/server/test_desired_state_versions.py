@@ -1,36 +1,136 @@
 """
-    Copyright 2021 Inmanta
+Copyright 2021 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import datetime
 import json
 import uuid
 from operator import itemgetter
+from typing import Any, Optional
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
-from inmanta.data.model import DesiredStateLabel, PromoteTriggerMethod
-from inmanta.server import config
+from inmanta.agent.config import agent_reconnect_delay, server_timeout
+from inmanta.const import AGENT_SCHEDULER_ID
+from inmanta.data import ConfigurationModel, Scheduler
+from inmanta.data.model import DesiredStateLabel
+from inmanta.protocol import SessionEndpoint, methods
+from inmanta.server import SLICE_AGENT_MANAGER, config, protocol
+from inmanta.types import Apireturn
+from utils import retry_limited
+
+
+class MockAgentThatMarksScheduled(SessionEndpoint):
+    """
+    An agent mock that responds to new versions being released by marking them as scheduled
+
+    it will only mark version lower than `limit`
+
+    """
+
+    def __init__(
+        self,
+        environment: Optional[uuid.UUID] = None,
+    ):
+        """
+        :param environment: environment id
+        """
+        super().__init__(name="agent", timeout=server_timeout.get(), reconnect_delay=agent_reconnect_delay.get())
+        self._env_id = environment
+        self.limit = 100  # only scheduler versions lower than this.
+
+    async def start_connected(self) -> None:
+        """
+        Setup our single endpoint
+        """
+        await self.add_end_point_name(AGENT_SCHEDULER_ID)
+
+    @protocol.handle(methods.set_state)
+    async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:
+        return 200
+
+    async def on_reconnect(self) -> None:
+        pass
+
+    async def on_disconnect(self) -> None:
+        pass
+
+    @protocol.handle(methods.trigger, env="tid", agent="id")
+    async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
+        return 200
+
+    @protocol.handle(methods.trigger_read_version, env="tid", agent="id")
+    async def read_version(self, env: uuid.UUID) -> Apireturn:
+        await data.Scheduler._execute_query(
+            f"""
+                                   INSERT INTO {data.Scheduler.table_name()}
+                                   VALUES($1, NULL)
+                                   ON CONFLICT DO NOTHING
+                               """,
+            env,
+        )
+
+        items = await ConfigurationModel.get_list(environment=env, released=True, order_by_column="version", order="DESC")
+        sched = await Scheduler.get_one(environment=env)
+        last_version = sched.last_processed_model_version or 0
+        for cm in items:
+            if cm.version > self.limit:
+                continue
+            if cm.version < last_version:
+                return 200
+            await Scheduler.set_last_processed_model_version(env, cm.version)
+            return 200
+        return 200
+
+    @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
+    async def run_dryrun(self, env: uuid.UUID, dry_run_id: uuid.UUID, agent: str, version: int) -> Apireturn:
+        return 200
+
+    @protocol.handle(methods.get_parameter, env="tid")
+    async def get_facts(self, env: uuid.UUID, agent: str, resource: dict[str, Any]) -> Apireturn:
+        return 200
+
+    @protocol.handle(methods.get_status)
+    async def get_status(self) -> Apireturn:
+        return 200, {}
+
+
+@pytest.fixture(scope="function")
+async def agent_mock_that_schedules(server, environment) -> MockAgentThatMarksScheduled:
+    """Construct an agent that marks versions as scheduled"""
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    a = MockAgentThatMarksScheduled(environment)
+
+    await a.start()
+
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+    await a.stop()
 
 
 @pytest.fixture
-async def environments_with_versions(server, client, null_agent) -> tuple[dict[str, uuid.UUID], list[datetime.datetime]]:
+async def environments_with_versions(
+    server, client, agent_mock_that_schedules: MockAgentThatMarksScheduled
+) -> tuple[dict[str, uuid.UUID], list[datetime.datetime]]:
     project = data.Project(name="test")
     await project.insert()
 
@@ -49,7 +149,7 @@ async def environments_with_versions(server, client, null_agent) -> tuple[dict[s
             version=i,
             date=cm_timestamps[i - 1],
             total=1,
-            released=i in {2, 3, 7},
+            released=i in {2, 3, 7, 8},
             version_info=(
                 {"export_metadata": {"message": "Recompile model because state transition", "type": "lsm_export"}}
                 if i % 2
@@ -67,7 +167,7 @@ async def environments_with_versions(server, client, null_agent) -> tuple[dict[s
     await env2.insert()
     cm = data.ConfigurationModel(
         environment=env2.id,
-        version=11,
+        version=5,
         date=datetime.datetime.now(),
         total=1,
         released=True,
@@ -97,6 +197,10 @@ async def environments_with_versions(server, client, null_agent) -> tuple[dict[s
         "no_released_version": env3.id,
         "no_versions": env4.id,
     }
+
+    agent_mock_that_schedules.limit = 7  # Keep nr 8 waiting to activate
+    await agent_mock_that_schedules.read_version(env.id)
+    await agent_mock_that_schedules.read_version(env2.id)
 
     yield environments, cm_timestamps
 
@@ -153,6 +257,28 @@ async def test_filter_versions(
     assert version_numbers(result.result["data"]) == [8, 9]
 
     result = await client.list_desired_state_versions(
+        env,
+    )
+    assert result.code == 200
+    by_version = {cm["version"]: cm for cm in result.result["data"]}
+    assert by_version[8]["status"] == "candidate"
+    assert by_version[8]["released"] is True
+
+    result = await client.list_desired_state_versions(
+        env, filter={"status": ["candidate"], "released": False}, sort="version.asc"
+    )
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert version_numbers(result.result["data"]) == [9]
+
+    result = await client.list_desired_state_versions(
+        env, filter={"status": ["candidate"], "released": True}, sort="version.asc"
+    )
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert version_numbers(result.result["data"]) == [8]
+
+    result = await client.list_desired_state_versions(
         env, filter={"status": ["active"], "date": [f"le:{cm_timestamps[3].astimezone(datetime.timezone.utc)}"]}
     )
     assert result.code == 200
@@ -166,13 +292,14 @@ async def test_filter_versions(
 
     result = await client.list_desired_state_versions(environments["single_released_version"])
     assert result.code == 200
-    assert result.result["data"][0]["version"] == 11
+    assert result.result["data"][0]["version"] == 5
     assert result.result["data"][0]["status"] == "active"
 
     result = await client.list_desired_state_versions(environments["no_released_version"])
     assert result.code == 200
     assert result.result["data"][0]["version"] == 7
     assert result.result["data"][0]["status"] == "candidate"
+
     # The version_info field of this ConfigurationModel is empty, which should result in an empty label list
     assert result.result["data"][0]["labels"] == []
 
@@ -324,7 +451,7 @@ async def test_filter_validation(
         ({"version": "le:42", "total": 1}, 400),
         ({"date": "le:42"}, 400),
         ({"version": ["le:42", "gt: 1"]}, 200),
-        ({"released": True}, 400),
+        ({"released": True}, 200),
     ]
     for filter, expected_status in filter_status_map:
         result = await client.list_desired_state_versions(env, filter=filter)
@@ -336,11 +463,7 @@ async def test_promote_no_versions(server, client, environment: str):
     assert result.code == 404
 
 
-@pytest.mark.parametrize(
-    "trigger_method",
-    [None, PromoteTriggerMethod.no_push, PromoteTriggerMethod.push_incremental_deploy, PromoteTriggerMethod.push_full_deploy],
-)
-async def test_promote_version(server, client, clienthelper, environment: str, trigger_method, null_agent):
+async def test_promote_version(server, client, clienthelper, environment: str, agent_mock_that_schedules):
     version = await clienthelper.get_version()
     resource_id_wov = "test::Resource[agent1,key=key]"
     resource_id = "%s,v=%d" % (resource_id_wov, version)
@@ -348,9 +471,13 @@ async def test_promote_version(server, client, clienthelper, environment: str, t
     resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
 
     await clienthelper.put_version_simple(resources, version)
-    result = await client.promote_desired_state_version(environment, version=version, trigger_method=trigger_method)
+    result = await client.promote_desired_state_version(environment, version=version)
     assert result.code == 200
-    result = await client.list_desired_state_versions(environment)
-    assert result.code == 200
-    assert len(result.result["data"]) == 1
-    assert result.result["data"][0]["status"] == "active"
+
+    async def is_version_active():
+        result = await client.list_desired_state_versions(environment)
+        assert result.code == 200
+        assert len(result.result["data"]) == 1
+        return result.result["data"][0]["status"] == "active"
+
+    await retry_limited(is_version_active, 50)

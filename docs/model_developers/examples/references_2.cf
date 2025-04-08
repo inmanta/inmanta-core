@@ -1,0 +1,3 @@
+
+one_value = std::create_environment_reference("test")
+std::print(resolve(one_value)) # Will print the value of the 'test' environment variable

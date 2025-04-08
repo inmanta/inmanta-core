@@ -1,19 +1,19 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import abc
@@ -63,10 +63,18 @@ class StaleResource(Exception):
 class ResourceVersionIntent:
     """
     Resource intent for a single resource at a specific version.
+
+    Includes model version and resource intent, as well as the full set of resource types that live on the resource's agent.
+    This list will never be empty, and will always include the resource's own type.
     """
 
     model_version: int
     intent: ResourceIntent
+    # All types that live on this agent. Required to ensure that the executor loads the appropriate code for this version,
+    # even if new versions come in before the executor is constructed.
+    # Should be dropped once this functionality moves to the code manager.
+    # At that point, the state's types_per_agent can be dropped as well.
+    all_types_for_agent: Collection[ResourceType]
 
 
 @dataclass(frozen=True)
@@ -164,12 +172,6 @@ class TaskManager(abc.ABC):
     client: Client
     code_manager: CodeManager
     executor_manager: executor.ExecutorManager[executor.Executor]
-
-    @abstractmethod
-    def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
-        """
-        Returns a collection of all resource types that are known to live on a given agent.
-        """
 
     @abstractmethod
     async def get_resource_version_intent(
@@ -1135,7 +1137,11 @@ class ResourceScheduler(TaskManager):
             resource_intent = self._get_resource_intent(resource)
             if resource_intent is None:
                 return None
-            return ResourceVersionIntent(model_version=self._state.version, intent=resource_intent)
+            return ResourceVersionIntent(
+                model_version=self._state.version,
+                intent=resource_intent,
+                all_types_for_agent=list(self._state.types_per_agent[self._state.intent[resource].id.agent_name]),
+            )
 
     async def deploy_start(self, action_id: uuid.UUID, resource: ResourceIdStr) -> Optional[DeployIntent]:
         async with self._scheduler_lock:
@@ -1151,6 +1157,7 @@ class ResourceScheduler(TaskManager):
                 intent=resource_intent,
                 dependencies=dependencies,
                 deploy_start=datetime.datetime.now().astimezone(),
+                all_types_for_agent=list(self._state.types_per_agent[self._state.intent[resource].id.agent_name]),
             )
             # Update the state in the database.
             await self.state_update_manager.send_in_progress(
@@ -1455,9 +1462,6 @@ class ResourceScheduler(TaskManager):
                 case _:
                     raise Exception(f"Failed to parse the resource state for {dep_id}: {resource_state_object}")
         return dependencies_state
-
-    def get_types_for_agent(self, agent: str) -> Collection[ResourceType]:
-        return list(self._state.types_per_agent[agent])
 
     async def get_resource_state(self) -> SchedulerStatusReport:
         """

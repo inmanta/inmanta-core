@@ -1,19 +1,19 @@
 """
-    Copyright 2018 Inmanta
+Copyright 2018 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import os
@@ -194,7 +194,7 @@ l = tests::length("Hello World!")
     assert location.end_lnr == 4
     assert location.end_char == 18
     assert resolves_to.location.file == os.path.join(snippetcompiler.modules_dir, "tests", "plugins", "__init__.py")
-    assert resolves_to.location.lnr == 14
+    assert resolves_to.location.lnr == 16
 
 
 def test_get_types_and_scopes(snippetcompiler):
@@ -291,8 +291,6 @@ implement Test_no_doc using b
     )
     anchormap = compiler.anchormap()
 
-    assert len(anchormap) == 10
-
     checkmap = {(r.lnr, r.start_char, r.end_char): t.docstring for r, t in anchormap}
 
     def verify_anchor(flnr, s, e, docs):
@@ -300,6 +298,9 @@ implement Test_no_doc using b
 
     for f, t in sorted(anchormap, key=lambda x: x[0].lnr):
         print("%s:%d -> %s docstring: %s" % (f, f.end_char, t, t.docstring))
+
+    assert len(anchormap) == 10
+
     verify_anchor(4, 5, 18, "returns the length of the string")
     verify_anchor(5, 5, 17, None)
     verify_anchor(14, 5, 9, "this is a test entity")

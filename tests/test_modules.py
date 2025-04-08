@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import logging
@@ -268,19 +268,19 @@ def test_module_v2_source_path_for_v1(snippetcompiler) -> None:
     Make sure ModuleV2Source.path_for does not include modules loaded by the v1 module loader.
     """
     # install and load std as v1
-    snippetcompiler.setup_for_snippet("import std")
+    snippetcompiler.setup_for_snippet("import dummy_module")
     module.Project.get().load_plugins()
 
     # make sure the v1 module finder is configured and discovered by env.process_env
     assert PluginModuleFinder.MODULE_FINDER is not None
-    module_info: Optional[tuple[Optional[str], Loader]] = env.process_env.get_module_file("inmanta_plugins.std")
+    module_info: Optional[tuple[Optional[str], Loader]] = env.process_env.get_module_file("inmanta_plugins.dummy_module")
     assert module_info is not None
     path, loader = module_info
     assert path is not None
     assert isinstance(loader, PluginModuleLoader)
 
     source: module.ModuleV2Source = module.ModuleV2Source()
-    assert source.path_for("std") is None
+    assert source.path_for("dummy_module") is None
 
 
 def test_module_v2_from_v1_path(

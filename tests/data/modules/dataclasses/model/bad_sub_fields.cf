@@ -1,0 +1,17 @@
+entity Virtualmachine extends std::Dataclass:
+    """inmanta comment"""
+    string name # normal
+    string[]? os # mismatch on ?[]
+    string it # basetype mismatch
+    string[] ot # basetype mismatch
+    int ram # Missing on other side
+    # int cpus missing here
+    dict disk # wrong key type, unfixable
+    dict other # both loose
+end
+
+
+Virtualmachine.subs [0:] -- Virtualmachine
+
+implement Virtualmachine using std::none
+

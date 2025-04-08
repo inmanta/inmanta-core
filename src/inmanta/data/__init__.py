@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -468,7 +468,6 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
 
     # Configuration methods
     @classmethod
-    # TODO: cache this!
     def get_valid_sort_columns(cls) -> dict[ColumnNameStr, ColumnType]:
         """Return all valid columns for lookup and their type"""
         raise NotImplementedError()
@@ -6208,38 +6207,6 @@ class ConfigurationModel(BaseDocument):
             rid: r["last_deploy"] for rid, r in id_to_resources_all.items()
         }
         return outset, negative, last_deployed
-
-    @classmethod
-    def active_version_subquery(cls, environment: uuid.UUID) -> tuple[str, list[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""
-            SELECT max(version)
-            """,
-            from_clause=f" FROM {cls.table_name()} ",
-            filter_statements=[" environment = $1 AND released = TRUE"],
-            values=[cls._get_value(environment)],
-        )
-        return query_builder.build()
-
-    @classmethod
-    def desired_state_versions_subquery(cls, environment: uuid.UUID) -> tuple[str, list[object]]:
-        active_version, values = cls.active_version_subquery(environment)
-        # Coalesce to 0 in case there is no active version
-        active_version = f"(SELECT COALESCE(({active_version}), 0))"
-        query_builder = SimpleQueryBuilder(
-            select_clause=f"""SELECT cm.version, cm.date, cm.total,
-                                     version_info -> 'export_metadata' ->> 'message' as message,
-                                     version_info -> 'export_metadata' ->> 'type' as type,
-                                        (CASE WHEN cm.version = {active_version} THEN 'active'
-                                            WHEN cm.version > {active_version} THEN 'candidate'
-                                            WHEN cm.version < {active_version} AND cm.released=TRUE THEN 'retired'
-                                            ELSE 'skipped_candidate'
-                                        END) as status""",
-            from_clause=f" FROM {cls.table_name()} as cm",
-            filter_statements=[" environment = $1 "],
-            values=values,
-        )
-        return query_builder.build()
 
     async def recalculate_total(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """

@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import logging
@@ -24,7 +24,7 @@ from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
 
 from inmanta import data
-from inmanta.data.model import DataBaseReport
+from inmanta.data.model import DataBaseReport, ReportedStatus
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
@@ -220,6 +220,26 @@ class DatabaseService(protocol.ServerSlice):
     async def disconnect_database(self) -> None:
         """Disconnect the database"""
         await data.disconnect()
+
+    async def get_reported_status(self) -> tuple[ReportedStatus, Optional[str]]:
+        """
+        Returns the reported status of this slice:
+            - Error: Not Connected
+            - Warning: The pool has less than 5 connections or 10% of the max pool size
+            - OK: Otherwise
+        """
+
+        try:
+            assert self._db_monitor
+            status = await self._db_monitor.get_status()
+            assert status.connected
+        except Exception:
+            return ReportedStatus.Error, "Database is not connected"
+
+        if status.free_pool < min(5, status.max_pool // 10):
+            return ReportedStatus.Warning, f"Only {status.free_pool} connections left in the pool."
+
+        return ReportedStatus.OK, None
 
     async def get_status(self) -> Mapping[str, ArgumentTypes]:
         """Get the status of the database connection"""
