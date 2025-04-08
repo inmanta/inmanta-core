@@ -602,13 +602,13 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                 try:
                     # Install required python packages and the list of ``ModuleSource`` with the provided pip config
                     self.logger.debug(
-                        "Installing module %s version=%d",
+                        "Installing module %s version=%s",
                         module_install_spec.module_name,
                         module_install_spec.module_version,
                     )
                     await self._install(module_install_spec.module_name, module_install_spec.blueprint)
                     self.logger.debug(
-                        "Installed module %s version=%d",
+                        "Installed module %s version=%s",
                         module_install_spec.module_name,
                         module_install_spec.module_version,
                     )
@@ -616,7 +616,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     self._last_loaded_version[module_install_spec.module_name] = module_install_spec.blueprint
                 except Exception as e:
                     self.logger.exception(
-                        "Failed to install module %s version=%d",
+                        "Failed to install module %s version=%s",
                         module_install_spec.module_name,
                         module_install_spec.module_version,
                     )

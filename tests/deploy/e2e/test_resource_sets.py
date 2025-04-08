@@ -27,7 +27,7 @@ from typing import Optional
 import utils
 from inmanta import const, data, util
 from inmanta.agent import executor
-from inmanta.data.model import ModuleSource
+from inmanta.data.model import ModuleSource, ModuleSourceMetadata
 from inmanta.deploy import persistence, state
 from inmanta.loader import InmantaModuleDTO
 from inmanta.protocol.common import Result
@@ -243,16 +243,15 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
     hv: str = sha1sum.hexdigest()
     await client.upload_file(hv, content=base64.b64encode(content.encode()).decode("ascii"))
 
-    module_source = ModuleSource(
-        name="inmanta_plugins.test",
-        hash_value=hv,
-        is_byte_code=False,
-        source=content.encode(),
-    )
+    module_source_metadata =ModuleSourceMetadata(
+            name="inmanta_plugins.test",
+            hash_value=hv,
+            is_byte_code=False,
+        )
 
     module_version_info = {
         "test": InmantaModuleDTO(
-            name="test", version="0.0.0", files_in_module=[module_source], requirements=[], required_by=["agent1"]
+            name="test", version="0.0.0", files_in_module=[module_source_metadata], requirements=[], required_by=["agent1"]
         )
     }
 

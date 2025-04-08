@@ -379,13 +379,13 @@ async def test_agent_code_loading_with_failure(
     assert len(failed_to_load) == 1
     for handler, exception in failed_to_load.items():
         assert str(exception) == (
-            f"Failed to install module {handler} version=1: "
+            f"Failed to install module {handler} version=abc: "
             f"MKPTCH: Unable to load code when agent is started with code loading disabled."
         )
 
     monkeypatch.undo()
 
-    log_index(caplog, "test_code_loading", logging.ERROR, "Failed to install module test version=1")
+    log_index(caplog, "test_code_loading", logging.ERROR, "Failed to install module test version=abc")
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
