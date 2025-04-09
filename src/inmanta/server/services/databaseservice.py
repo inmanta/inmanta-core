@@ -28,7 +28,7 @@ from inmanta.data import (
     start_engine,
     stop_engine,
 )
-from inmanta.data.model import DataBaseReport
+from inmanta.data.model import DataBaseReport, ReportedStatus
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
@@ -227,6 +227,26 @@ class DatabaseService(protocol.ServerSlice):
         """Disconnect the database"""
         await stop_engine()
 
+    async def get_reported_status(self) -> tuple[ReportedStatus, Optional[str]]:
+        """
+        Returns the reported status of this slice:
+            - Error: Not Connected
+            - Warning: The pool has less than 5 connections or 10% of the max pool size
+            - OK: Otherwise
+        """
+
+        try:
+            assert self._db_monitor
+            status = await self._db_monitor.get_status()
+            assert status.connected
+        except Exception:
+            return ReportedStatus.Error, "Database is not connected"
+
+        if status.free_pool < min(5, status.max_pool // 10):
+            return ReportedStatus.Warning, f"Only {status.free_pool} connections left in the pool."
+
+        return ReportedStatus.OK, None
+
     async def get_status(self) -> Mapping[str, ArgumentTypes]:
         """Get the status of the database connection"""
         assert self._db_monitor is not None  # make mypy happy
@@ -276,7 +296,6 @@ async def initialize_database_connection(
         database_host=database_host,
         database_port=database_port,
         database_name=database_name,
-        echo=True,
         pool=pool,
     )
 

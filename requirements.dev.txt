@@ -1,11 +1,11 @@
-inmanta-dev-dependencies[pytest,async,core]==2.155.0
+inmanta-dev-dependencies[pytest,async,core]==2.156.0
 bumpversion==0.6.0
 logfire>=0.46,<4.0
 openapi_spec_validator==0.7.1
 pip2pi==0.8.2
-types-PyYAML==6.0.12.20250326
+types-PyYAML==6.0.12.20250402
 types-python-dateutil==2.9.0.20241206
-types-setuptools==76.0.0.20250313
+types-setuptools==78.1.0.20250329
 types-toml==0.10.8.20240310
 flake8-junit-report==2.1.0
 time-machine==2.16.0
@@ -23,5 +23,5 @@ sphinx-argparse==0.5.2
 sphinx-autodoc-annotation==1.0-1
 sphinx-click==6.0.0
 sphinx-design==0.6.1
-Sphinx-Substitution-Extensions==2025.3.3
+Sphinx-Substitution-Extensions==2025.4.3
 sphinxcontrib.datatemplates==0.11.0

@@ -6712,7 +6712,6 @@ async def start_engine(
     database_host: str,
     database_port: int,
     database_name: str,
-    echo: bool = False,
     pool: asyncpg.pool.Pool
 ) -> None:
     """
@@ -6745,7 +6744,6 @@ async def start_engine(
     try:
         ENGINE = create_async_engine(
             url=url_object,
-            echo=echo,
             pool_pre_ping=True,
             poolclass=NullerPool,
             async_creator=bridge_creator

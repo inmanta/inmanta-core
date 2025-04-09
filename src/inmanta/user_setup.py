@@ -110,7 +110,6 @@ async def connect_to_db() -> None:
         connection_pool_min_size=connection_pool_min_size,
         connection_pool_max_size=connection_pool_max_size,
         pool_timeout=connection_timeout,
-        echo=True,
     )
 
 
