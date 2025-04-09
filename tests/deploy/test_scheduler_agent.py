@@ -2800,7 +2800,6 @@ async def test_multiple_versions_intent_changes(agent: TestAgent, make_resource_
     ) -> ModelVersion:
         requires = requires if requires is not None else {}
         undefined = undefined if undefined is not None else set()
-        global model_version
         result: ModelVersion = ModelVersion(
             version=len(all_models) + 1,
             resources=resources,
