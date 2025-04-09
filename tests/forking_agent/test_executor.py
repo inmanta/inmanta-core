@@ -36,6 +36,7 @@ from inmanta.agent import executor
 from inmanta.agent.executor import ExecutorBlueprint
 from inmanta.agent.forking_executor import MPManager
 from inmanta.data import PipConfig
+from inmanta.data.model import ModuleSourceMetadata
 from inmanta.protocol.ipc_light import ConnectionLost
 from utils import NOISY_LOGGERS, log_contains, retry_limited
 
@@ -146,9 +147,11 @@ def test():
         "utf-8"
     )
     direct = inmanta.data.model.ModuleSource(
-        name="inmanta_plugins.test.testA",
-        hash_value=inmanta.util.hash_file(direct_content),
-        is_byte_code=False,
+        meta_data=ModuleSourceMetadata(
+            name="inmanta_plugins.test.testA",
+            hash_value=inmanta.util.hash_file(direct_content),
+            is_byte_code=False,
+        ),
         source=direct_content,
     )
     # Via server: source is sent via server
@@ -160,7 +163,12 @@ def test():
     )
     server_content_hash = inmanta.util.hash_file(server_content)
     via_server = inmanta.data.model.ModuleSource(
-        name="inmanta_plugins.test.testB", hash_value=server_content_hash, is_byte_code=False, source=server_content
+        meta_data=ModuleSourceMetadata(
+            name="inmanta_plugins.test.testB",
+            hash_value=server_content_hash,
+            is_byte_code=False,
+        ),
+        source=server_content,
     )
     # Upload
     res = await client.upload_file(id=server_content_hash, content=base64.b64encode(server_content).decode("ascii"))
@@ -300,7 +308,14 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
 
 
 def test_hash_with_duplicates():
-    source = inmanta.data.model.ModuleSource(name="test", hash_value="aaaaa", is_byte_code=False, source="foo".encode())
+    source = inmanta.data.model.ModuleSource(
+        meta_data=ModuleSourceMetadata(
+            name="test",
+            hash_value="aaaaa",
+            is_byte_code=False,
+        ),
+        source="foo".encode(),
+    )
     requirement = "setuptools"
     simple = ExecutorBlueprint(
         pip_config=PipConfig(), requirements=[requirement], sources=[source], python_version=sys.version_info[:2]

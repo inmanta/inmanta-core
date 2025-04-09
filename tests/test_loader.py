@@ -33,6 +33,7 @@ from pytest import fixture
 
 import utils
 from inmanta import const, env, loader, moduletool
+from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource
 from inmanta.module import Project
@@ -43,7 +44,14 @@ def get_module_source(module: str, code: str) -> ModuleSource:
     sha1sum = hashlib.new("sha1")
     sha1sum.update(data)
     hv: str = sha1sum.hexdigest()
-    return ModuleSource(name=module, hash_value=hv, is_byte_code=False, source=data)
+    return ModuleSource(
+        meta_data=ModuleSourceMetadata(
+            name=module,
+            hash_value=hv,
+            is_byte_code=False,
+        ),
+        source=data,
+    )
 
 
 @pytest.mark.parametrize(
@@ -156,17 +164,19 @@ def test():
     assert inmanta_plugins.inmanta_unit_test.test() == 10
     assert any("Deploying code " in message for message in caplog.messages)
     assert any(
-        f"Not deploying code (hv={source_1.hash_value}, module={source_1.name}) because it is already on disk" in message
+        f"Not deploying code (hv={source_1.meta_data.hash_value}, module={source_1.meta_data.name}) "
+        "because it is already on disk" in message
         for message in caplog.messages
     )
     caplog.clear()
 
     # Load the module to register it in the loader cache
-    cl.load_module(source_1.name, source_1.hash_value)
+    cl.load_module(source_1.meta_data.name, source_1.meta_data.hash_value)
     # Subsequent deploys of the same module will result in a cache hit
     cl.deploy_version([source_1])
     assert any(
-        f"Not deploying code (hv={source_1.hash_value}, module={source_1.name}) because of cache hit" in message
+        f"Not deploying code (hv={source_1.meta_data.hash_value}, module={source_1.meta_data.name}) because of cache hit"
+        in message
         for message in caplog.messages
     )
     caplog.clear()
@@ -182,9 +192,9 @@ def test():
     assert any("Deploying code " in message for message in caplog.messages)
 
     with pytest.raises(Exception):
-        cl.load_module(source_2.name, source_2.hash_value)
+        cl.load_module(source_2.meta_data.name, source_2.meta_data.hash_value)
         assert any(
-            f"The content of module {source_2.name} changed since it was last imported." in message
+            f"The content of module {source_2.meta_data.name} changed since it was last imported." in message
             for message in caplog.messages
         )
 
