@@ -711,9 +711,31 @@ def log_state_tcp_ports(request, log_file):
     _write_log_line(f"After run test case {request.function.__name__}:")
 
 
+@pytest.fixture
+async def enable_auth() -> bool:
+    """
+    A fixture that indicates whether the server_config fixture should
+    set server.auth to true or false.
+    """
+    return False
+
+
+@pytest.fixture
+async def access_policy() -> str:
+    """
+    A fixture that returns the access policy configured by the server_config fixture.
+    """
+    return """
+        package policy
+
+        # Allow everything
+        default allowed:=true
+    """
+
+
 @pytest.fixture(scope="function")
 async def server_config(
-    inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory, auto_start_agent, no_agent
+        inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory, auto_start_agent, no_agent, access_policy: str, enable_auth: bool
 ):
     reset_metrics()
     agentmanager.assert_no_start_scheduler = not auto_start_agent
@@ -746,7 +768,17 @@ async def server_config(
         config.Config.set("agent", "executor-mode", "forking")
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
+        config.Config.set("server", "auth", str(enable_auth).lower())
+
+        # Configure the access policy. This will only be used if server.auth is enabled.
+        os.mkdir(os.path.join(state_dir, "policy_engine"))
+        access_policy_file = os.path.join(state_dir, "policy_engine", "policy.rego")
+        with open(access_policy_file, "w") as fh:
+            fh.write(access_policy)
+        policy_file.set(access_policy_file)
+
         yield config
+
     agentmanager.assert_no_start_scheduler = False
     agentmanager.no_start_scheduler = False
 
@@ -784,26 +816,13 @@ async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterat
                 with open(file, "r") as fh:
                     logger.debug("%s\n%s", file, fh.read())
 
-@pytest.fixture
-async def access_policy() -> str:
-    """
-    A fixture that returns the access policy installed by the server_multi fixture.
-    """
-    return """
-        package policy
-
-        # Allow everything
-        default allowed:=true
-    """
-
-
 @pytest.fixture(
     scope="function",
     params=[(True, True, False), (True, False, False), (False, True, False), (False, False, False), (True, True, True)],
     ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"],
 )
 async def server_multi(
-    server_pre_start, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory, access_policy: str
+    server_pre_start, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory
 ):
     with tempfile.TemporaryDirectory() as state_dir:
         ssl, auth, ca = request.param
@@ -834,14 +853,6 @@ async def server_multi(
         config.Config.set("agent", "executor-mode", "forking")
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
-
-        if auth:
-            # Configure an access policy that allows everything
-            os.mkdir(os.path.join(state_dir, "policy_engine"))
-            access_policy_file = os.path.join(state_dir, "policy_engine", "policy.rego")
-            with open(access_policy_file, "w") as fh:
-                fh.write(access_policy)
-            policy_file.set(access_policy_file)
 
         ibl = InmantaBootloader(configure_logging=True)
 

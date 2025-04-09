@@ -39,10 +39,10 @@ from inmanta.protocol.rest import RESTBase, CallArguments
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
 from inmanta.types import ReturnTypes
-from inmanta.server.services.policy_engine_service import PolicyEngineSlice
 
 if TYPE_CHECKING:
     from inmanta.server import protocol
+    from inmanta.server.services.policy_engine_service import PolicyEngineSlice
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 

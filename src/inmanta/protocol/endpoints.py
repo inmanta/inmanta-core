@@ -45,17 +45,20 @@ class CallTarget:
     A baseclass for all classes that are target for protocol calls / methods
     """
 
-    def _get_endpoint_metadata(self) -> dict[str, list[tuple[str, Callable]]]:
+    def _get_endpoint_metadata(self) -> dict[str, tuple[str, Callable]]:
         total_dict = {
-            method_name: method
-            for method_name, method in inspect.getmembers(self)
-            if callable(method) and method_name[0] != "_"
+            handle_name: method
+            for handle_name, method in inspect.getmembers(self)
+            if callable(method) and handle_name[0] != "_"
         }
 
         methods: dict[str, list[tuple[str, Callable]]] = defaultdict(list)
-        for name, attr in total_dict.items():
+        for handle_name, attr in total_dict.items():
             if hasattr(attr, "__protocol_method__"):
-                methods[attr.__protocol_method__.__name__].append((name, attr))
+                method_name = attr.__protocol_method__.__name__
+                if method_name in methods:
+                    raise Exception(f"Method with name {method_name} already defined")
+                methods[method_name] = (handle_name, attr)
 
         return methods
 
@@ -67,26 +70,15 @@ class CallTarget:
 
         # Loop over all methods in this class that have a handler annotation. The handler annotation refers to a method
         # definition. This method definition defines how the handler is invoked.
-        for method, handler_list in self._get_endpoint_metadata().items():
-            for method_handlers in handler_list:
-                # Go over all method annotation on the method associated with the handler
-                for properties in common.MethodProperties.methods[method]:
-                    url = properties.get_listen_url()
+        for method_name, (handle_name, fnc) in self._get_endpoint_metadata().items():
+            properties = common.MethodProperties.methods[method_name]
+            url = properties.get_listen_url()
 
-                    # Associate the method with the handler if:
-                    # - the handler does not specific a method version
-                    # - the handler specifies a method version and the method version matches the method properties
-                    if method_handlers[1].__api_version__ is None or (
-                        method_handlers[1].__api_version__ is not None
-                        and properties.api_version == method_handlers[1].__api_version__
-                    ):
-                        # there can only be one
-                        if url in url_map and properties.operation in url_map[url]:
-                            raise Exception(f"A handler is already registered for {properties.operation} {url}. ")
+            # there can only be one
+            if url in url_map and properties.operation in url_map[url]:
+                raise Exception(f"A handler is already registered for {properties.operation} {url}. ")
 
-                        url_map[url][properties.operation] = common.UrlMethod(
-                            properties, self, method_handlers[1], method_handlers[0]
-                        )
+            url_map[url][properties.operation] = common.UrlMethod(properties, self, fnc, handle_name)
         return url_map
 
 
@@ -371,26 +363,11 @@ class Client(Endpoint):
         result = await self._transport_instance.call(method_properties, args, kwargs)
         return result
 
-    def _select_method(self, name) -> Optional[common.MethodProperties]:
-        if name not in common.MethodProperties.methods:
-            return None
-
-        methods = common.MethodProperties.methods[name]
-
-        if self._version_match is VersionMatch.lowest:
-            return min(methods, key=lambda x: x.api_version)
-        elif self._version_match is VersionMatch.highest:
-            return max(methods, key=lambda x: x.api_version)
-        elif self._version_match is VersionMatch.exact:
-            return next((m for m in methods if m.api_version == self._exact_version), None)
-
-        return None
-
     def __getattr__(self, name: str) -> Callable[..., Coroutine[Any, Any, common.Result]]:
         """
         Return a function that will call self._call with the correct method properties associated
         """
-        method = self._select_method(name)
+        method = common.MethodProperties.methods.get(name)
 
         if method is None:
             raise AttributeError("Method with name %s is not defined for this client" % name)

@@ -15,7 +15,7 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
-
+import pytest
 import asyncio
 import json
 import os
@@ -175,6 +175,7 @@ validate_cert=false
         await asyncio.get_event_loop().run_in_executor(None, partial(auth.AuthJWTConfig.get, "auth_jwt_keycloak"))
 
 
+@pytest.mark.parametrize("enable_auth", [True])
 async def test_customer_header_user(tmp_path: pathlib.Path, server: Server) -> None:
     """Test using custom header and users"""
     port = config.Config.get("client_rest_transport", "port")

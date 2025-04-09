@@ -347,22 +347,19 @@ class MethodProperties:
     This class stores the information from a method definition
     """
 
-    methods: dict[str, list["MethodProperties"]] = defaultdict(list)
+    methods: dict[str, "MethodProperties"] = {}
 
     @classmethod
     def register_method(cls, properties: "MethodProperties") -> None:
         """
-        Register new method properties. Multiple properties on a method is supported but the (URL, API version) combination has
-        to be unique.
+        Register new method properties. The name of the method has to be unique.
         """
-        current_list = [(x.path, x.api_version) for x in cls.methods[properties.function_name]]
-        if (properties.path, properties.api_version) in current_list:
+        if properties.function_name in cls.methods:
             raise Exception(
-                f"Method {properties.function_name} already has a "
-                f"method definition for api path {properties.path} and API version {properties.api_version}"
+                f"Method with name {properties.function_name} already defined."
             )
 
-        cls.methods[properties.function_name].append(properties)
+        cls.methods[properties.function_name] = properties
 
     def __init__(
         self,

@@ -603,11 +603,16 @@ class CallArguments:
         whether this call is authorized or not.
         """
         method_properties = self._config.properties
+        call_args = dict(self.call_args)
+        name_call_context_context_arg = self.get_call_context()
+        if name_call_context_context_arg and name_call_context_context_arg in call_args:
+            # Remove the CallContext argument. It cannot be serialized to JSON.
+            del call_args[name_call_context_context_arg]
         return {
             "input": {
                 "request": {
                     "endpoint_id": f"{method_properties.operation} {method_properties.path}",
-                    "parameters": self.call_args,
+                    "parameters": call_args,
                 },
                 "token": self._auth_token,
             }
@@ -663,7 +668,7 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
             arguments.authenticate(server_config.server_enable_auth.get())
             await arguments.process()
             await arguments.authorize_request(
-                auth_enabled=server_config.server_enable_auth.get(), policy_engine_slice=await self.get_policy_engine_slice())
+                auth_enabled=server_config.server_enable_auth.get(), policy_engine_slice=await self.get_policy_engine_slice()
             )
 
             LOGGER.debug(

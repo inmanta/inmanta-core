@@ -32,15 +32,12 @@ class handle:
     Decorator for subclasses of an endpoint to handle protocol methods
 
     :param method: A subclass of method that defines the method
-    :param api_version: When specific this handler is only associated with a method of the specific api version. If the
-                        version is not defined, the handler is not associated with a rest endpoint.
     :param kwargs: Map arguments in the message from one name to an other
     """
 
-    def __init__(self, method: Callable[..., Apireturn], api_version: Optional[int] = None, **kwargs: str) -> None:
+    def __init__(self, method: Callable[..., Apireturn], **kwargs: str) -> None:
         self.method = method
         self.mapping: dict[str, str] = kwargs
-        self._api_version = api_version
 
     def __call__(self, function: FuncT) -> FuncT:
         """
@@ -51,7 +48,6 @@ class handle:
 
         function.__protocol_method__ = self.method
         function.__protocol_mapping__ = self.mapping
-        function.__api_version__ = self._api_version
         return function
 
 

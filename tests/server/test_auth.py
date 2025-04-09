@@ -36,15 +36,24 @@ def server_pre_start(server_config):
     config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
     config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
 
-    # Set an authorization policy
-    state_dir: str = config.state_dir.get()
-    os.mkdir(os.path.join(state_dir, "policy_engine"))
-    access_policy_file = os.path.join(state_dir, "policy_engine", "policy.rego")
-    with open(access_policy_file, "w") as fh:
-        fh.write("""
+@pytest.mark.parametrize(
+    "access_policy",
+    """
+package policy
 
-        """)
-    policy_engine_service.policy_file.set(access_policy_file)
+default allowed := false
+
+
+
+
+    """
+)
+async def test_policy_evaluation(server) -> None:
+    token = auth.encode_token(client_types=[str(const.ClientType.api.value)], expire=None)
+    config.Config.set("client_rest_transport", "token", token)
+    client = protocol.Client("client")
+
+
 
 
 #def get_auth_client(claim_rules: list[str], claims: dict[str, str | list[str]]) -> protocol.Client:

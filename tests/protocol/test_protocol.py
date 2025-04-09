@@ -270,7 +270,7 @@ async def test_method_properties():
         Create a new project
         """
 
-    props = protocol.common.MethodProperties.methods["test_method"][0]
+    props = protocol.common.MethodProperties.methods["test_method"]
     assert "Authorization" in props.get_call_headers()
     assert props.get_listen_url() == "/x/v2/test"
     assert props.get_call_url({}) == "/x/v2/test"
@@ -305,7 +305,7 @@ async def test_call_arguments_defaults():
         """
 
     method = protocol.common.UrlMethod(
-        protocol.common.MethodProperties.methods["test_method"][0],
+        protocol.common.MethodProperties.methods["test_method"],
         protocol.endpoints.CallTarget(),
         test_method,
         "test_method",
@@ -342,7 +342,7 @@ async def test_pydantic():
         """
 
     method = protocol.common.UrlMethod(
-        protocol.common.MethodProperties.methods["test_method"][0],
+        protocol.common.MethodProperties.methods["test_method"],
         protocol.endpoints.CallTarget(),
         test_method,
         "test_method",
@@ -1142,13 +1142,29 @@ async def test_multi_version_method(server_config, async_finalizer):
     class ProjectServer(ServerSlice):
         @auth(auth_label="test", read_only=False)
         @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"], api_version=3)
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=2, envelope_key="data")
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=1, envelope_key="project")
-        def test_method(project: Project) -> Project:  # NOQA
+        def test_method_v3(project: Project) -> Project:  # NOQA
             pass
 
-        @protocol.handle(test_method)
-        async def test_method(self, project: Project) -> Project:  # NOQA
+        @auth(auth_label="test", read_only=False)
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=2, envelope_key="data")
+        def test_method_v2(project: Project) -> Project:  # NOQA
+            pass
+
+        @auth(auth_label="test", read_only=False)
+        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=1, envelope_key="project")
+        def test_method_v1(project: Project) -> Project:  # NOQA
+            pass
+
+        @protocol.handle(test_method_v3)
+        async def test_handle_v3(self, project: Project) -> Project:  # NOQA
+            return project
+
+        @protocol.handle(test_method_v2)
+        async def test_handle_v2(self, project: Project) -> Project:  # NOQA
+            return project
+
+        @protocol.handle(test_method_v1)
+        async def test_handle(self, project: Project) -> Project:  # NOQA
             return project
 
     rs = Server()
@@ -1190,67 +1206,21 @@ async def test_multi_version_method(server_config, async_finalizer):
 
     # client based calls
     client = protocol.Client("client")
-    response = await client.test_method(project=Project(name="a", value="b"))
+    response = await client.test_method_v1(project=Project(name="a", value="b"))
     assert response.code == 200
     assert "project" in response.result
 
-    client = protocol.Client("client", version_match=VersionMatch.highest)
-    response = await client.test_method(project=Project(name="a", value="b"))
+    response = await client.test_method_v3(project=Project(name="a", value="b"))
     assert response.code == 200
     assert "data" in response.result
 
-    client = protocol.Client("client", version_match=VersionMatch.exact, exact_version=1)
-    response = await client.test_method(project=Project(name="a", value="b"))
+    response = await client.test_method_v1(project=Project(name="a", value="b"))
     assert response.code == 200
     assert "project" in response.result
 
-    client = protocol.Client("client", version_match=VersionMatch.exact, exact_version=2)
-    response = await client.test_method(project=Project(name="a", value="b"))
+    response = await client.test_method_v2(project=Project(name="a", value="b"))
     assert response.code == 200
     assert "data" in response.result
-
-
-async def test_multi_version_handler(server_config, async_finalizer):
-    """Test multi version methods"""
-
-    class Project(BaseModel):
-        name: str
-        value: str
-
-    class ProjectServer(ServerSlice):
-        @auth(auth_label="test", read_only=False)
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=2, envelope_key="data")
-        @protocol.typedmethod(path="/test", operation="POST", client_types=["api"], api_version=1, envelope_key="project")
-        def test_method(project: Project) -> Project:  # NOQA
-            pass
-
-        @protocol.handle(test_method, api_version=1)
-        async def test_methodX(self, project: Project) -> Project:  # NOQA
-            return Project(name="v1", value="1")
-
-        @protocol.handle(test_method, api_version=2)
-        async def test_methodY(self, project: Project) -> Project:  # NOQA
-            return Project(name="v2", value="2")
-
-    rs = Server()
-    server = ProjectServer(name="projectserver")
-    rs.add_slice(server)
-    await rs.start()
-    async_finalizer.add(server.stop)
-    async_finalizer.add(rs.stop)
-
-    # client based calls
-    client = protocol.Client("client")
-    response = await client.test_method(project=Project(name="a", value="b"))
-    assert response.code == 200
-    assert "project" in response.result
-    assert response.result["project"]["name"] == "v1"
-
-    client = protocol.Client("client", version_match=VersionMatch.highest)
-    response = await client.test_method(project=Project(name="a", value="b"))
-    assert response.code == 200
-    assert "data" in response.result
-    assert response.result["data"]["name"] == "v2"
 
 
 async def test_simple_return_type(server_config, async_finalizer):
@@ -1514,7 +1484,7 @@ async def test_multiple_path_params(server_config, async_finalizer):
     async_finalizer.add(server.stop)
     async_finalizer.add(rs.stop)
 
-    request = MethodProperties.methods["test_method"][0].build_call(args=[], kwargs={"id": "1", "name": "monty", "age": 42})
+    request = MethodProperties.methods["test_method"].build_call(args=[], kwargs={"id": "1", "name": "monty", "age": 42})
     assert request.url == "/api/v1/test/1/monty?age=42"
 
 
@@ -1723,7 +1693,7 @@ async def test_dict_list_get_roundtrip(server_config, async_finalizer, param_typ
     async_finalizer.add(server.stop)
     async_finalizer.add(rs.stop)
 
-    request = MethodProperties.methods["test_method"][0].build_call(
+    request = MethodProperties.methods["test_method"].build_call(
         args=[], kwargs={"id": "1", "name": "monty", "filter": param_value}
     )
     assert request.url == expected_url
@@ -1752,7 +1722,7 @@ async def test_dict_get_optional(server_config, async_finalizer):
     async_finalizer.add(server.stop)
     async_finalizer.add(rs.stop)
 
-    request = MethodProperties.methods["test_method"][0].build_call(
+    request = MethodProperties.methods["test_method"].build_call(
         args=[], kwargs={"id": "1", "name": "monty", "filter": {"a": "b"}}
     )
     assert request.url == "/api/v1/test/1/monty?filter.a=b"
@@ -1785,7 +1755,7 @@ async def test_dict_list_nested_get_optional(server_config, async_finalizer):
     async_finalizer.add(server.stop)
     async_finalizer.add(rs.stop)
 
-    request = MethodProperties.methods["test_method"][0].build_call(
+    request = MethodProperties.methods["test_method"].build_call(
         args=[], kwargs={"id": "1", "name": "monty", "filter": {"a": ["b"]}}
     )
     assert request.url == "/api/v1/test/1/monty?filter.a=b"
@@ -1858,7 +1828,7 @@ async def test_list_get_optional(server_config, async_finalizer):
     async_finalizer.add(server.stop)
     async_finalizer.add(rs.stop)
 
-    request = MethodProperties.methods["test_method"][0].build_call(
+    request = MethodProperties.methods["test_method"].build_call(
         args=[], kwargs={"id": "1", "name": "monty", "sort": [1, 2]}
     )
     assert request.url == "/api/v1/test/1/monty?sort=1&sort=2"
@@ -1872,7 +1842,7 @@ async def test_list_get_optional(server_config, async_finalizer):
     assert response.code == 200
     assert response.result["data"] == ""
     uuids = [uuid.uuid4(), uuid.uuid4()]
-    request = MethodProperties.methods["test_method_uuid"][0].build_call(args=[], kwargs={"id": "1", "sort": uuids})
+    request = MethodProperties.methods["test_method_uuid"].build_call(args=[], kwargs={"id": "1", "sort": uuids})
     assert request.url == f"/api/v1/test_uuid/1?sort={uuids[0]}&sort={uuids[1]}"
 
 
@@ -1896,7 +1866,7 @@ async def test_dicts_multiple_get(server_config, async_finalizer):
     async_finalizer.add(server.stop)
     async_finalizer.add(rs.stop)
 
-    request = MethodProperties.methods["test_method"][0].build_call(
+    request = MethodProperties.methods["test_method"].build_call(
         args=[], kwargs={"id": "1", "name": "monty", "filter": {"a": ["b", "c"]}, "another_filter": {"d": "e"}}
     )
     assert request.url == "/api/v1/test/1/monty?filter.a=b&filter.a=c&another_filter.d=e"
@@ -2200,14 +2170,14 @@ async def test_get_description_foreach_http_status_code() -> None:
             :raises 500:
             """
 
-    method_properties = protocol.common.MethodProperties.methods["test_method1"][0]
+    method_properties = protocol.common.MethodProperties.methods["test_method1"]
     response_code_to_description: dict[int, str] = method_properties.get_description_foreach_http_status_code()
     assert len(response_code_to_description) == 3
     assert response_code_to_description[200] == "A new project"
     assert response_code_to_description[404] == "The id was not found."
     assert response_code_to_description[500] == "A server error."
 
-    method_properties = protocol.common.MethodProperties.methods["test_method2"][0]
+    method_properties = protocol.common.MethodProperties.methods["test_method2"]
     response_code_to_description: dict[int, str] = method_properties.get_description_foreach_http_status_code()
     assert len(response_code_to_description) == 3
     assert response_code_to_description[200] == ""
