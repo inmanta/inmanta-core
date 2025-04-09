@@ -3901,16 +3901,20 @@ class Compile(BaseDocument):
             version=requested_compile["version"],
             do_export=requested_compile["do_export"],
             force_update=requested_compile["force_update"],
-            metadata=requested_compile["metadata"] or {},
-            environment_variables=requested_compile["used_environment_variables"] or {},
-            requested_environment_variables=requested_compile["requested_environment_variables"],
-            mergeable_environment_variables=requested_compile["mergeable_environment_variables"],
+            metadata=json.loads(requested_compile["metadata"]) if requested_compile["metadata"] else {},
+            environment_variables=(
+                json.loads(requested_compile["used_environment_variables"])
+                if requested_compile["used_environment_variables"] is not None
+                else {}
+            ),
+            requested_environment_variables=(json.loads(requested_compile["requested_environment_variables"])),
+            mergeable_environment_variables=(json.loads(requested_compile["mergeable_environment_variables"])),
             partial=requested_compile["partial"],
             removed_resource_sets=requested_compile["removed_resource_sets"],
             exporter_plugin=requested_compile["exporter_plugin"],
             notify_failed_compile=requested_compile["notify_failed_compile"],
             failed_compile_message=requested_compile["failed_compile_message"],
-            compile_data=requested_compile["compile_data"],
+            compile_data=json.loads(requested_compile["compile_data"]) if requested_compile["compile_data"] else None,
             reports=reports,
         )
 
@@ -4067,6 +4071,7 @@ class ResourceAction(BaseDocument):
         if from_postgres and self.messages:
             new_messages = []
             for message in self.messages:
+                message = json.loads(message)
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
@@ -5095,6 +5100,7 @@ class Resource(BaseDocument):
                 async for record in con.cursor(query, *values):
                     if no_obj:
                         record = dict(record)
+                        record["attributes"] = json.loads(record["attributes"])
                         cls.__mangle_dict(record)
                         resources_list.append(record)
                     else:
@@ -5155,6 +5161,8 @@ class Resource(BaseDocument):
                     # left join produced no resources
                     continue
                 resource: dict[str, object] = dict(raw_resource)
+                if "attributes" in resource:
+                    resource["attributes"] = json.loads(resource["attributes"])
                 if projection is not None:
                     assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
@@ -5198,7 +5206,13 @@ class Resource(BaseDocument):
         WHERE r.environment=$1 AND r.model = $2;
         """
         resource_records = await cls._fetch_query(query, environment, version, connection=connection)
-        return [dict(record) for record in resource_records]
+        resources = [dict(record) for record in resource_records]
+        for res in resources:
+            if project_attributes:
+                for k in project_attributes:
+                    if res[k]:
+                        res[k] = json.loads(res[k])
+        return resources
 
     @classmethod
     async def get_latest_version(cls, environment: uuid.UUID, resource_id: ResourceIdStr) -> Optional["Resource"]:
@@ -5333,7 +5347,7 @@ class Resource(BaseDocument):
             return None
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
-        attributes = record["attributes"]
+        attributes = json.loads(record["attributes"])
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
@@ -6668,11 +6682,6 @@ async def connect_pool(
     connection_timeout: float = 60,
 ) -> asyncpg.pool.Pool:
 
-    async def init_connection(conn):
-        pass
-        await conn.set_type_codec('jsonb', encoder=json.dumps, decoder=json.loads, schema='pg_catalog')
-        # await conn.set_type_codec('json', encoder=json.dumps, decoder=json.loads, schema='pg_catalog')
-
     pool = await asyncpg.create_pool(
         host=host,
         port=port,
@@ -6682,7 +6691,6 @@ async def connect_pool(
         min_size=connection_pool_min_size,
         max_size=connection_pool_max_size,
         timeout=connection_timeout,
-        init=init_connection
     )
     try:
         set_connection_pool(pool)
