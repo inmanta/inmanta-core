@@ -1255,7 +1255,7 @@ def plugin(
                 """
                 return fnc(*args, **kwargs)
 
-            nonlocal name, commands, emits_statements
+            nonlocal name
 
             if name is None:
                 name = fnc.__name__
