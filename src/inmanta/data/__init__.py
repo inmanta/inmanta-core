@@ -65,6 +65,7 @@ from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
+from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
@@ -6655,7 +6656,7 @@ def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
         cls.set_connection_pool(pool)
 
 
-async def connect(
+async def connect_pool(
     host: str,
     port: int,
     database: str,
@@ -6686,11 +6687,11 @@ async def connect(
         return pool
     except Exception as e:
         await pool.close()
-        await disconnect()
+        await disconnect_pool()
         raise e
 
 
-async def disconnect() -> None:
+async def disconnect_pool() -> None:
     LOGGER.debug("Disconnecting data classes")
 
     # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
@@ -6711,10 +6712,8 @@ async def start_engine(
     database_host: str,
     database_port: int,
     database_name: str,
-    connection_pool_min_size: int = 10,
-    connection_pool_max_size: int = 10,
-    pool_timeout: float = 60.0,
     echo: bool = False,
+    pool: asyncpg.pool.Pool
 ) -> None:
     """
     Start the SQL Alchemy engine for this process
@@ -6729,18 +6728,6 @@ async def start_engine(
         database=database_name,
     )
 
-    pool = await asyncpg.create_pool(
-        host=database_host,
-        port=database_port,
-        user=database_username,
-        password=database_password,
-        database=database_name,
-        min_size=connection_pool_min_size,
-        max_size=connection_pool_max_size,
-        timeout=pool_timeout,
-    )
-
-    set_connection_pool(pool)
     async def bridge_creator():
         return await pool.acquire()
 

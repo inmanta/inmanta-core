@@ -23,12 +23,8 @@ import asyncpg
 from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
 
+from inmanta import data
 from inmanta.data import (
-    CORE_SCHEMA_NAME,
-    PACKAGE_WITH_UPDATE_FILES,
-    get_connection_ctx_mgr,
-    get_pool,
-    schema,
     start_engine,
     stop_engine,
 )
@@ -208,7 +204,7 @@ class DatabaseService(protocol.ServerSlice):
 
     async def connect_database(self) -> None:
         """Connect to the database"""
-        await initialize_database_connection(
+        self._pool = await initialize_database_connection(
             database_host=opt.db_host.get(),
             database_port=opt.db_port.get(),
             database_name=opt.db_name.get(),
@@ -219,7 +215,9 @@ class DatabaseService(protocol.ServerSlice):
             connection_pool_max_size=opt.server_db_connection_pool_max_size.get(),
             connection_timeout=opt.server_db_connection_timeout.get(),
         )
-        async with get_connection_ctx_mgr() as connection:
+
+        # Check if JIT is enabled
+        async with self._pool.acquire() as connection:
             # Check if JIT is enabled
             jit_available = await connection.fetchval("SELECT pg_jit_available();")
             if jit_available:
@@ -245,7 +243,7 @@ async def initialize_database_connection(
     connection_pool_min_size: int = 10,
     connection_pool_max_size: int = 10,
     connection_timeout: float = 60.0,
-) -> None:
+) -> asyncpg.pool.Pool:
     """
     Initialize the sql alchemy engine for the current process and return the underlying
     asyncpg database connection pool.
@@ -261,19 +259,26 @@ async def initialize_database_connection(
     :param connection_timeout: Connection timeout (in seconds) when interacting with the database.
     """
 
+    pool = await data.connect_pool(
+        host=database_host,
+        port=database_port,
+        database=database_name,
+        username=database_username,
+        password=database_password,
+        create_db_schema=create_db_schema,
+        connection_pool_min_size=connection_pool_min_size,
+        connection_pool_max_size=connection_pool_max_size,
+        connection_timeout=connection_timeout,
+    )
     await start_engine(
         database_username=database_username,
         database_password=database_password,
         database_host=database_host,
         database_port=database_port,
         database_name=database_name,
-        connection_pool_min_size=connection_pool_min_size,
-        connection_pool_max_size=connection_pool_max_size,
-        pool_timeout=connection_timeout,
         echo=True,
+        pool=pool,
     )
 
-    if create_db_schema:
-        async with get_connection_ctx_mgr() as conn:
-            await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, conn).ensure_db_schema()
     LOGGER.info("Connected to PostgreSQL database %s on %s:%d", database_name, database_host, database_port)
+    return pool

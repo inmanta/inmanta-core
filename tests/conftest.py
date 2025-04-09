@@ -386,8 +386,20 @@ async def postgresql_client(postgres_db, database_name_internal):
     await client.close()
 
 
+@pytest.fixture(scope="function")
+async def postgresql_pool(postgres_db, database_name_internal):
+    pool = await asyncpg.create_pool(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name_internal,
+    )
+    yield pool
+    await pool.close()
+
 @pytest.fixture
-def sqlalchemy_url_parameters(postgres_db, database_name_internal: str) -> dict[str, str]:
+def sqlalchemy_url_parameters(postgres_db, database_name_internal: str, postgresql_pool) -> dict[str, str]:
     """
     Return the dict representation of the parameters to pass to the start_engine
     function to start the sql alchemy engine.
@@ -398,6 +410,7 @@ def sqlalchemy_url_parameters(postgres_db, database_name_internal: str) -> dict[
         "database_host": postgres_db.host,
         "database_port": postgres_db.port,
         "database_name": database_name_internal,
+        "pool": postgresql_pool,
     }
 
 
@@ -414,16 +427,15 @@ async def sql_alchemy_engine(sqlalchemy_url_parameters: Mapping[str, str]) -> As
 
 @pytest.fixture(scope="function")
 async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_reset):
-    await initialize_database_connection(
-        database_host=postgres_db.host,
-        database_port=postgres_db.port,
-        database_name=database_name,
-        database_username=postgres_db.user,
-        database_password=postgres_db.password,
-        create_db_schema=True,
+    await data.connect_pool(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        username=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
     )
     yield
-    await stop_engine()
+    await data.disconnect_pool()
 
 
 @pytest.fixture(scope="function")
@@ -439,7 +451,7 @@ async def hard_clean_db_post(postgresql_client):
 
 
 @pytest.fixture(scope="function")
-async def clean_db(create_db, postgresql_client):
+async def clean_db(postgresql_pool, create_db):
     """
     1) Truncated tables: All tables which are part of the inmanta schema, except for the schemaversion table. The version
                          number stored in the schemaversion table is read by the Inmanta server during startup.
@@ -448,19 +460,19 @@ async def clean_db(create_db, postgresql_client):
     """
     yield
     # By using the connection pool, we can make sure that the connection we use is alive
-
-    tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-    tables_in_db = [x["table_name"] for x in tables_in_db]
-    tables_to_preserve = TABLES_TO_KEEP
-    tables_to_preserve.append(SCHEMA_VERSION_TABLE)
-    tables_to_truncate = [x for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE]
-    tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
-    if tables_to_drop:
-        drop_query = "DROP TABLE %s CASCADE" % ", ".join(tables_to_drop)
-        await postgresql_client.execute(drop_query)
-    if tables_to_truncate:
-        truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
-        await postgresql_client.execute(truncate_query)
+    async with postgresql_pool.acquire() as postgresql_client:
+        tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+        tables_in_db = [x["table_name"] for x in tables_in_db]
+        tables_to_preserve = TABLES_TO_KEEP
+        tables_to_preserve.append(SCHEMA_VERSION_TABLE)
+        tables_to_truncate = [x for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE]
+        tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
+        if tables_to_drop:
+            drop_query = "DROP TABLE %s CASCADE" % ", ".join(tables_to_drop)
+            await postgresql_client.execute(drop_query)
+        if tables_to_truncate:
+            truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
+            await postgresql_client.execute(truncate_query)
 
 
 @pytest.fixture(scope="function")
