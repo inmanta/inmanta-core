@@ -41,7 +41,7 @@ from inmanta.protocol.auth import decorators as auth_decorators
 from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
 from inmanta.server.services.databaseservice import initialize_sql_alchemy_engine
-from inmanta.server.services.authorizationservice import policy_file
+from inmanta.server.services.policy_engine_service import policy_file
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -784,6 +784,18 @@ async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterat
                 with open(file, "r") as fh:
                     logger.debug("%s\n%s", file, fh.read())
 
+@pytest.fixture
+async def access_policy() -> str:
+    """
+    A fixture that returns the access policy installed by the server_multi fixture.
+    """
+    return """
+        package policy
+
+        # Allow everything
+        default allowed:=true
+    """
+
 
 @pytest.fixture(
     scope="function",
@@ -791,7 +803,7 @@ async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterat
     ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"],
 )
 async def server_multi(
-    server_pre_start, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory
+    server_pre_start, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory, access_policy: str
 ):
     with tempfile.TemporaryDirectory() as state_dir:
         ssl, auth, ca = request.param
@@ -828,12 +840,7 @@ async def server_multi(
             os.mkdir(os.path.join(state_dir, "policy_engine"))
             access_policy_file = os.path.join(state_dir, "policy_engine", "policy.rego")
             with open(access_policy_file, "w") as fh:
-                fh.write("""
-                    package policy
-
-                    # Allow everything
-                    default allowed:=true
-                """)
+                fh.write(access_policy)
             policy_file.set(access_policy_file)
 
         ibl = InmantaBootloader(configure_logging=True)

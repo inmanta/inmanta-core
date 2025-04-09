@@ -34,7 +34,7 @@ from inmanta.server.services import (
     projectservice,
     resourceservice,
     userservice,
-    authorizationservice,
+    policy_engine_service,
 )
 
 
@@ -57,4 +57,4 @@ def setup(application: ApplicationContext) -> None:
     application.register_slice(userservice.UserService())
     application.register_slice(environment_metrics_service.EnvironmentMetricsService())
     application.register_slice(GraphQLSlice())
-    application.register_slice(authorizationservice.AuthorizationSlice())
+    application.register_slice(policy_engine_service.PolicyEngineSlice())

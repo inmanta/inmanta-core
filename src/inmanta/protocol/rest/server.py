@@ -34,11 +34,12 @@ import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta import const, tracing
 from inmanta.protocol import common, exceptions
-from inmanta.server import SLICE_AUTHORIZATION
+from inmanta.server import SLICE_POLICY_ENGINE
 from inmanta.protocol.rest import RESTBase, CallArguments
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
 from inmanta.types import ReturnTypes
+from inmanta.server.services.policy_engine_service import PolicyEngineSlice
 
 if TYPE_CHECKING:
     from inmanta.server import protocol
@@ -333,8 +334,8 @@ class RESTServer(RESTBase):
         if self._http_server is not None:
             await self._http_server.close_all_connections()
 
-    async def get_authorization_slice(self) -> Optional["AuthorizationSlice"]:
+    async def get_policy_engine_slice(self) -> Optional["PolicyEngineSlice"]:
         if not server_config.server_enable_auth.get():
             return None
-        return self._server.get_slice(name=SLICE_AUTHORIZATION)
+        return self._server.get_slice(name=SLICE_POLICY_ENGINE)
 

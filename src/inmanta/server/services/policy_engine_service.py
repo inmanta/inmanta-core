@@ -39,10 +39,10 @@ policy_engine_bind_address = config.Option("policy-engine", "bind-address", "127
 policy_engine_bind_port = config.Option("policy-engine", "bind-port", 8181, "Port on which the policy engine will listen for incoming connections.", config.is_int)
 
 
-class AuthorizationSlice(protocol.ServerSlice):
+class PolicyEngineSlice(protocol.ServerSlice):
 
     def __init__(self) -> None:
-        super().__init__(server.SLICE_AUTHORIZATION)
+        super().__init__(server.SLICE_POLICY_ENGINE)
         self._opa_process = OpaServer()
 
     async def start(self) -> None:
@@ -106,7 +106,7 @@ class OpaServer:
 
     async def start(self) -> None:
         if not os.path.isfile(policy_file.get()):
-            raise Exception(f"Authorization policy file {policy_file.get()} not found.")
+            raise Exception(f"Access policy file {policy_file.get()} not found.")
 
         state_dir = self._initialize_storage()
 
@@ -172,6 +172,7 @@ class OpaServer:
         if self.process is None or self.process.returncode is not None:
             # Process didn't start or was already terminated.
             self.process = None
+            self.running = False
             return
         self.process.terminate()
         try:

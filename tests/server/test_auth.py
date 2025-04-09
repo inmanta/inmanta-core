@@ -21,7 +21,7 @@ import pytest
 from inmanta import config, const
 from inmanta.protocol import auth
 from inmanta.server import SLICE_USER, protocol
-
+from inmanta.server.services import policy_engine_service
 
 @pytest.fixture
 def server_pre_start(server_config):
@@ -36,17 +36,26 @@ def server_pre_start(server_config):
     config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
     config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
 
+    # Set an authorization policy
+    state_dir: str = config.state_dir.get()
+    os.mkdir(os.path.join(state_dir, "policy_engine"))
+    access_policy_file = os.path.join(state_dir, "policy_engine", "policy.rego")
+    with open(access_policy_file, "w") as fh:
+        fh.write("""
 
-def get_auth_client(claim_rules: list[str], claims: dict[str, str | list[str]]) -> protocol.Client:
-    config.Config.set("auth_jwt_default", "claims", "\n    ".join(claim_rules) + "\n")
-    auth.AuthJWTConfig.reset()
+        """)
+    policy_engine_service.policy_file.set(access_policy_file)
 
-    token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims=claims)
-    config.Config.set("client_rest_transport", "token", token)
-    auth_client = protocol.Client("client")
-    return auth_client
 
-# TODO: REMOVE
+#def get_auth_client(claim_rules: list[str], claims: dict[str, str | list[str]]) -> protocol.Client:
+#    config.Config.set("auth_jwt_default", "claims", "\n    ".join(claim_rules) + "\n")
+#    auth.AuthJWTConfig.reset()
+#
+#    token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims=claims)
+#    config.Config.set("client_rest_transport", "token", token)
+#    auth_client = protocol.Client("client")
+#    return auth_client
+#
 #async def test_claim_assertions(server: protocol.Server, server_pre_start) -> None:
 #    """test various claim assertions"""
 #    assert server.get_slice(SLICE_USER)
