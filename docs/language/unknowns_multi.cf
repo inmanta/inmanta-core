@@ -1,0 +1,12 @@
+my_unknown = std::get_env("THIS_ENV_VAR_DOES_NOT_EXIST")
+my_unknown2 = std::get_env("THIS_ENV_VAR_DOES_NOT_EXIST2")
+
+l = [1, my_unknown, 3, my_unknown2, 5]
+a = [x for x in l if x > 2]  # l = [unknown, 3, unknown, 5]
+
+# an unknown can even represent more than one unknown value
+b = my_unknown == 0 ? [1, 2] : [3, 4]  # b = unknown -> when it becomes known it will be either [1, 2] or [3, 4]
+# or none at all
+c = [x for x in l if x > 1000]  # c = [unknown, unknown] -> would become [] if the env var values are <= 1000
+
+d = std::len(l)  # d = unknown (l contains unknowns, so its length is also unknown)

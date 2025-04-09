@@ -1,0 +1,4 @@
+change-type: minor
+issue-nr: 6813
+description: Add overall status to the status endpoint
+destination-branches: [iso8]

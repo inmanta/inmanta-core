@@ -1,62 +1,62 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 
 
-    Remote executor framework:
-    - spawns executor processes, each for a specific set of code
-    - each executor process can run several executors
+Remote executor framework:
+- spawns executor processes, each for a specific set of code
+- each executor process can run several executors
 
-    Major components:
-    - IPC mechanism based on inmanta.protocol.ipc_light
-       - ExecutorContext is the remote state store, keeps track of the different executors and connection to the server
-       - ExecutorServer main driver of the remote process:
-            - handles IPC,
-            - manages the connection
-            - controls the remote process shutdown
-       - ExecutorClient agent side handle of the IPC connection, also receives logs from the remote side
-       - Commands: every IPC command has its own class
+Major components:
+- IPC mechanism based on inmanta.protocol.ipc_light
+   - ExecutorContext is the remote state store, keeps track of the different executors and connection to the server
+   - ExecutorServer main driver of the remote process:
+        - handles IPC,
+        - manages the connection
+        - controls the remote process shutdown
+   - ExecutorClient agent side handle of the IPC connection, also receives logs from the remote side
+   - Commands: every IPC command has its own class
 
-    - Client/agent side pool management, based on inmanta.agent.resourcepool
-        - MPExecutor: agent side representation of
-            - an executor
-            - implements the external executor.Executor interface
-            - dispaches calls to the actual executor on the remote side (via the MPProcess)
-            - inhibits shutdown if calls are in flight
-        - MPProcess: agent side representation of
-            - an executor process
-            - contains a multi-processing process that runs an ExecutorServer
-                - it ensure proper shutdown and cleanup of the process
-            - contains the ExecutorClient that connects to the ExecutorServer
-            - it handles a pool of MPExecutor
-                - if the pool becomes empty, it shuts itself down
-                - if the connection drops, it closes all MPExecutors
-        - MPPool: agent side representation of
-            - pool of MPProcess
-            - handles the creation of executor processes via multi-processing fork-server
-                - boots the process into the IPC
-                - sends IPC commands to load code
-            - wrap result in an MPProcess
-        - MPManager: agent side
-            - implementation of the external interface executor.ExecutorManager-
-            - uses a MPPool to hand out MPExecutors
-            - it shuts down old MPExecutors (expiry timer)
-            - it keeps the number of executor per agent below a certain number
+- Client/agent side pool management, based on inmanta.agent.resourcepool
+    - MPExecutor: agent side representation of
+        - an executor
+        - implements the external executor.Executor interface
+        - dispaches calls to the actual executor on the remote side (via the MPProcess)
+        - inhibits shutdown if calls are in flight
+    - MPProcess: agent side representation of
+        - an executor process
+        - contains a multi-processing process that runs an ExecutorServer
+            - it ensure proper shutdown and cleanup of the process
+        - contains the ExecutorClient that connects to the ExecutorServer
+        - it handles a pool of MPExecutor
+            - if the pool becomes empty, it shuts itself down
+            - if the connection drops, it closes all MPExecutors
+    - MPPool: agent side representation of
+        - pool of MPProcess
+        - handles the creation of executor processes via multi-processing fork-server
+            - boots the process into the IPC
+            - sends IPC commands to load code
+        - wrap result in an MPProcess
+    - MPManager: agent side
+        - implementation of the external interface executor.ExecutorManager-
+        - uses a MPPool to hand out MPExecutors
+        - it shuts down old MPExecutors (expiry timer)
+        - it keeps the number of executor per agent below a certain number
 
-      A mock up of this structure is in `test_resource_pool_stacking`
+  A mock up of this structure is in `test_resource_pool_stacking`
 """
 
 import asyncio
@@ -622,7 +622,7 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
         return f"Executor Process {self.name} for PID {self.process.pid}"
 
     def render_id(self, member_id: executor.ExecutorId) -> str:
-        return f"Executor for {member_id.agent_name}"
+        return f"executor for {member_id.agent_name}"
 
     def get_lock_name_for(self, member_id: executor.ExecutorId) -> str:
         return member_id.identity()
@@ -886,7 +886,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         return "Process pool"
 
     def render_id(self, member: executor.ExecutorBlueprint) -> str:
-        return "Process for code hash: " + member.blueprint_hash()
+        return "process for code hash: " + member.blueprint_hash()
 
     def get_lock_name_for(self, member_id: executor.ExecutorBlueprint) -> str:
         return member_id.blueprint_hash()
@@ -923,32 +923,38 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
         return ext_id
 
     async def create_member(self, blueprint: executor.ExecutorBlueprint) -> MPProcess:
-
         venv = await self.environment_manager.get_environment(blueprint.to_env_blueprint())
         executor = await self.make_child_and_connect(blueprint, venv)
-        LOGGER.debug(
-            "Child forked (pid: %s) for %s",
-            executor.process.pid,
-            self.render_id(blueprint),
-        )
-        storage_for_blueprint = os.path.join(self.code_folder, blueprint.blueprint_hash())
-        os.makedirs(storage_for_blueprint, exist_ok=True)
-        failed_types = await executor.connection.call(
-            InitCommand(
-                venv.env_path,
-                storage_for_blueprint,
-                self.session_gid,
-                [x.for_transport() for x in blueprint.sources],
-                self.venv_checkup_interval,
+        try:
+            LOGGER.debug(
+                "Child forked (pid: %s) for %s",
+                executor.process.pid,
+                self.render_id(blueprint),
             )
-        )
-        LOGGER.debug(
-            "Child initialized (pid: %s) for %s",
-            executor.process.pid,
-            self.render_id(blueprint),
-        )
-        executor.failed_resource_results = failed_types
-        return executor
+            storage_for_blueprint = os.path.join(self.code_folder, blueprint.blueprint_hash())
+            os.makedirs(storage_for_blueprint, exist_ok=True)
+            failed_types = await executor.connection.call(
+                InitCommand(
+                    venv.env_path,
+                    storage_for_blueprint,
+                    self.session_gid,
+                    [x.for_transport() for x in blueprint.sources],
+                    self.venv_checkup_interval,
+                )
+            )
+            LOGGER.debug(
+                "Child initialized (pid: %s) for %s",
+                executor.process.pid,
+                self.render_id(blueprint),
+            )
+            executor.failed_resource_results = failed_types
+            return executor
+        except Exception:
+            # Make sure to cleanup the executor process if its initialization fails.
+            await executor.request_shutdown()
+            raise Exception(
+                f"Failed to initialize scheduler process (pid: {executor.process.pid}) for {self.render_id(blueprint)}"
+            )
 
     async def make_child_and_connect(
         self, executor_id: executor.ExecutorBlueprint, venv: executor.ExecutorVirtualEnvironment
@@ -1034,7 +1040,7 @@ class MPManager(
         return ext_id
 
     def render_id(self, member: executor.ExecutorId) -> str:
-        return f"Executor for {member.agent_name}"
+        return f"executor for {member.agent_name}"
 
     def my_name(self) -> str:
         return "Executor Manager"
@@ -1053,9 +1059,12 @@ class MPManager(
         :param agent_uri: The name of the host on which the agent is running.
         :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
-            handler code in its venv.
+            handler code in its venv. Must have at least one element.
         :return: An Executor instance
         """
+        if not code:
+            raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
+
         blueprint = executor.ExecutorBlueprint.from_specs(code)
         executor_id = executor.ExecutorId(agent_name, agent_uri, blueprint)
 

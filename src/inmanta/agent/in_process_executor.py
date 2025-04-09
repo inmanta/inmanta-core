@@ -1,15 +1,15 @@
 """
-    Copyright 2024 Inmanta
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-        http://www.apache.org/licenses/LICENSE-2.0
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
-    Contact: code@inmanta.com
+Copyright 2024 Inmanta
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -181,9 +181,20 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         else:
             # main execution
             try:
+
+                def resolve_and_deploy(
+                    provider: HandlerAPI[Resource],
+                    ctx: handler.HandlerContext,
+                    resource: Resource,
+                    requires: Mapping[ResourceIdStr, const.ResourceState],
+                ) -> None:
+                    resource.resolve_all_references(ctx)
+                    provider.deploy(ctx, resource, requires)
+
                 await asyncio.get_running_loop().run_in_executor(
                     self.thread_pool,
-                    provider.deploy,
+                    resolve_and_deploy,
+                    provider,
                     ctx,
                     resource,
                     requires,
@@ -309,8 +320,17 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                         )
                     else:
                         try:
+
+                            def resolve_and_dryrun(
+                                provider: HandlerAPI[Resource],
+                                ctx: handler.HandlerContext,
+                                resource: Resource,
+                            ) -> None:
+                                resource.resolve_all_references(ctx)
+                                provider.execute(ctx, resource, True)
+
                             await asyncio.get_running_loop().run_in_executor(
-                                self.thread_pool, provider.execute, ctx, resource_obj, True
+                                self.thread_pool, resolve_and_dryrun, provider, ctx, resource_obj
                             )
 
                             changes = ctx.changes
@@ -394,8 +414,17 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 try:
                     with self._cache:
                         provider = await self.get_provider(resource_obj)
+
+                        def resolve_and_getfact(
+                            provider: HandlerAPI[Resource],
+                            ctx: handler.HandlerContext,
+                            resource: Resource,
+                        ) -> dict[str, object]:
+                            resource.resolve_all_references(ctx)
+                            return provider.check_facts(ctx, resource)
+
                         result = await asyncio.get_running_loop().run_in_executor(
-                            self.thread_pool, provider.check_facts, ctx, resource_obj
+                            self.thread_pool, resolve_and_getfact, provider, ctx, resource_obj
                         )
 
                         parameters = [
@@ -527,11 +556,13 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         :param agent_uri: The name of the host on which the agent is running.
         :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
-            handler code in its venv.
+            handler code in its venv. Must have at least one element.
         :return: An Executor instance
         """
         if not self._running:
             raise InvalidStateError("This executor manager is not running")
+        if not code:
+            raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
         if agent_name in self.executors:
             out = self.executors[agent_name]
         else:

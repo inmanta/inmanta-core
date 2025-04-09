@@ -1,19 +1,19 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import uuid
@@ -24,12 +24,10 @@ from inmanta import protocol
 from inmanta.data.model import BaseModel
 from inmanta.protocol import exceptions
 from inmanta.server.protocol import LocalClient, Server, ServerSlice, common
-from utils import configure
 
 
-async def test_local_client(unused_tcp_port: int, postgres_db, database_name: str, async_finalizer) -> None:
+async def test_local_client(server_config, async_finalizer) -> None:
     """Test the local client"""
-    configure(unused_tcp_port, database_name, postgres_db.port)
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<name>", operation="POST", client_types=["api"])
@@ -53,11 +51,10 @@ async def test_local_client(unused_tcp_port: int, postgres_db, database_name: st
     assert response == "y -> x"
 
 
-async def test_return_types(unused_tcp_port, postgres_db, database_name, async_finalizer):
+async def test_return_types(server_config, async_finalizer):
     """
     Test the use and validation of methods that use common.ReturnValue
     """
-    configure(unused_tcp_port, database_name, postgres_db.port)
 
     class Project(BaseModel):
         id: uuid.UUID

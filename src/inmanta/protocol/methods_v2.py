@@ -1,21 +1,21 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 
-    Module defining the v2 rest api
+Module defining the v2 rest api
 """
 
 import datetime
@@ -405,7 +405,7 @@ def get_scheduler_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
     Inspect the scheduler state from the given environment.
 
     :param tid: The id of the environment in which to inspect the scheduler.
-
+    :raise NotFound: No scheduler is running. For example because the environment is halted.
     """
 
 
@@ -696,8 +696,13 @@ def resource_list(
                 resource_type: filter by the type of the resource
                 resource_id_value: filter by the attribute values of the resource
                 status: filter by the current status of the resource.
-                For status filters it's also possible to invert the condition with '!', for example
-                `filter.status=!orphaned` will return all the resources that are not in 'orphaned' state
+                For status filters it's also possible to invert the condition with '!'.
+                The inverted status filter works as a separate filter from the normal status filter.
+                For example: `filter.status=!orphaned` will return all the resources that are not in 'orphaned' state.
+                If multiple values are provided to the inverted filter, resources are returned if they don't match
+                any of the filter values.
+                For example: `?filter.status=!deployed&filter.status=!available`
+                returns all instances except those whose status is deployed or available.
                 The values for the 'agent', 'resource_type' and 'value' filters are matched partially.
     :param sort: Return the results sorted according to the parameter value.
                 It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `resource_type.desc`
@@ -944,7 +949,7 @@ def list_desired_state_versions(
     :param end: The upper limit for the order by column (exclusive).
                 Only one of 'start' and 'end' should be specified at the same time.
     :param filter: Filter the list of returned desired state versions.
-                Filtering by 'version' range, 'date' range and 'status' is supported.
+                Filtering by 'version' range, 'date' range, 'status' and `released` are supported.
     :param sort: Return the results sorted according to the parameter value.
                 Only sorting by 'version' is supported.
                 The following orders are supported: 'asc', 'desc'

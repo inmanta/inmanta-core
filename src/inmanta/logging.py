@@ -1,19 +1,19 @@
 """
-    Copyright 2023 Inmanta
+Copyright 2023 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import abc
@@ -343,6 +343,21 @@ class LoggingConfigBuilder:
         )
         return logging_config_core
 
+    @classmethod
+    def get_log_file_for_scheduler(cls, env: str, log_dir: str, log_file_cli_option: str | None = None) -> str:
+        """
+        Returns the path to the main log file of the scheduler.
+
+        :param env: The environment parameter to use in the name of the log file.
+        :param log_dir: The log directory as configured using the config.log_dir configuration option.
+        :param log_file_cli_option: The value of the --log-file CLI config option or None if the option was not provided.
+        """
+        if log_file_cli_option:
+            return log_file_cli_option
+        else:
+            # use setting as formerly passed by the autostarted agent manager if not set via CLI
+            return os.path.join(log_dir, f"agent-{env}.log")
+
     def get_logging_config_from_options(
         self,
         stream: TextIO,
@@ -364,7 +379,7 @@ class LoggingConfigBuilder:
         handler_root_logger: str
         log_level: int
 
-        log_file_cli_option = options.log_file
+        log_file: Optional[str] = options.log_file
 
         short_names = False
         if component == "compiler":
@@ -375,23 +390,23 @@ class LoggingConfigBuilder:
             if LOG_CONTEXT_VAR_ENVIRONMENT not in context:
                 raise Exception("The scheduler expects an environment as context")
 
-            env = context.get(LOG_CONTEXT_VAR_ENVIRONMENT)
+            env = context[LOG_CONTEXT_VAR_ENVIRONMENT]
 
-            # use setting as formerly passed by the autostarted agent manager if not set via CLI
-            if not log_file_cli_option:
-                log_file_cli_option = os.path.join(config.log_dir.get(), f"agent-{env}.log")
+            log_file = self.get_log_file_for_scheduler(
+                env=env, log_dir=config.log_dir.get(), log_file_cli_option=options.log_file
+            )
 
             # We don't override log-file-level as we can't detect if it is set
 
         # Shared config
-        if log_file_cli_option:
+        if log_file:
             log_level = convert_inmanta_log_level(options.log_file_level)
             handler_root_logger = f"{component}_handler" if component is not None else "root_handler"
             handlers[handler_root_logger] = {
                 "class": "logging.handlers.WatchedFileHandler",
                 "level": python_log_level_to_name(log_level),
                 "formatter": "core_log_formatter",
-                "filename": log_file_cli_option,
+                "filename": log_file,
                 "mode": "a+",
             }
         else:
