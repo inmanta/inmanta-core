@@ -101,15 +101,25 @@ async def connect_to_db() -> None:
     connection_pool_max_size = server_config.server_db_connection_pool_max_size.get()
     connection_timeout = server_config.db_connection_timeout.get()
 
+    pool = await data.connect_pool(
+        host=server_config.db_host.get(),
+        port=server_config.db_port.get(),
+        database=server_config.db_name.get(),
+        username=server_config.db_username.get(),
+        password=server_config.db_password.get(),
+        create_db_schema=False,
+        connection_pool_min_size=connection_pool_min_size,
+        connection_pool_max_size=connection_pool_max_size,
+        connection_timeout=connection_timeout,
+    )
+
     await start_engine(
         database_username=server_config.db_username.get(),
         database_password=server_config.db_password.get(),
         database_host=server_config.db_host.get(),
         database_port=server_config.db_port.get(),
         database_name=server_config.db_name.get(),
-        connection_pool_min_size=connection_pool_min_size,
-        connection_pool_max_size=connection_pool_max_size,
-        pool_timeout=connection_timeout,
+        pool=pool,
     )
 
 

@@ -24,17 +24,13 @@ from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
 
 from inmanta import data
-from inmanta.data import (
-    start_engine,
-    stop_engine,
-)
+from inmanta.data import start_engine, stop_engine
 from inmanta.data.model import DataBaseReport, ReportedStatus
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.types import ArgumentTypes
 from inmanta.util import IntervalSchedule, Scheduler
-from sqlalchemy import AsyncAdaptedQueuePool
 
 LOGGER = logging.getLogger(__name__)
 
@@ -225,6 +221,7 @@ class DatabaseService(protocol.ServerSlice):
 
     async def disconnect_database(self) -> None:
         """Disconnect the database"""
+        await data.disconnect_pool()
         await stop_engine()
 
     async def get_reported_status(self) -> tuple[ReportedStatus, Optional[str]]:

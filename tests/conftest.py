@@ -39,7 +39,6 @@ from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
 from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
-from inmanta.server.services.databaseservice import initialize_database_connection
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -398,6 +397,7 @@ async def postgresql_pool(postgres_db, database_name_internal):
     yield pool
     await pool.close()
 
+
 @pytest.fixture
 def sqlalchemy_url_parameters(postgres_db, database_name_internal: str, postgresql_pool) -> dict[str, str]:
     """
@@ -451,7 +451,7 @@ async def hard_clean_db_post(postgresql_client):
 
 
 @pytest.fixture(scope="function")
-async def clean_db(postgresql_pool, create_db):
+async def clean_db(postgresql_pool, create_db, postgres_db):
     """
     1) Truncated tables: All tables which are part of the inmanta schema, except for the schemaversion table. The version
                          number stored in the schemaversion table is read by the Inmanta server during startup.
@@ -461,7 +461,9 @@ async def clean_db(postgresql_pool, create_db):
     yield
     # By using the connection pool, we can make sure that the connection we use is alive
     async with postgresql_pool.acquire() as postgresql_client:
-        tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+        tables_in_db = await postgresql_client.fetch(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+        )
         tables_in_db = [x["table_name"] for x in tables_in_db]
         tables_to_preserve = TABLES_TO_KEEP
         tables_to_preserve.append(SCHEMA_VERSION_TABLE)
@@ -1090,6 +1092,7 @@ async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str,
         :return: The uuid of the newly created environment as a string.
         """
         result = await client.create_environment(project_id=project_id, name=env_name)
+        assert result.code == 200, result
         env_id = result.result["environment"]["id"]
 
         cfg_env.set(env_id)

@@ -45,7 +45,6 @@ import typing_inspect
 from asyncpg import Connection
 from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
-from sqlalchemy.pool import ConnectionPoolEntry
 
 import inmanta.db.versions
 import inmanta.protocol
@@ -71,6 +70,7 @@ from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType,
 from inmanta.util import parse_timestamp
 from sqlalchemy import URL, AsyncAdaptedQueuePool, NullPool
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import ConnectionPoolEntry
 
 """
 Global reference to the SQL Alchemy engine
@@ -6667,6 +6667,12 @@ async def connect_pool(
     connection_pool_max_size: int = 10,
     connection_timeout: float = 60,
 ) -> asyncpg.pool.Pool:
+
+    async def init_connection(conn):
+        pass
+        await conn.set_type_codec('jsonb', encoder=json.dumps, decoder=json.loads, schema='pg_catalog')
+        # await conn.set_type_codec('json', encoder=json.dumps, decoder=json.loads, schema='pg_catalog')
+
     pool = await asyncpg.create_pool(
         host=host,
         port=port,
@@ -6676,6 +6682,7 @@ async def connect_pool(
         min_size=connection_pool_min_size,
         max_size=connection_pool_max_size,
         timeout=connection_timeout,
+        init=init_connection
     )
     try:
         set_connection_pool(pool)
@@ -6705,6 +6712,7 @@ async def disconnect_pool() -> None:
     if exceptions:
         raise exceptions[0]
 
+
 async def start_engine(
     *,
     database_username: str,
@@ -6712,7 +6720,7 @@ async def start_engine(
     database_host: str,
     database_port: int,
     database_name: str,
-    pool: asyncpg.pool.Pool
+    pool: asyncpg.pool.Pool,
 ) -> None:
     """
     Start the SQL Alchemy engine for this process
@@ -6732,7 +6740,7 @@ async def start_engine(
 
     class NullerPool(NullPool):
         def _do_return_conn(self, record: ConnectionPoolEntry) -> None:
-             record.dbapi_connection.run_async(pool.release)
+            record.dbapi_connection.run_async(pool.release)
 
     global ENGINE
     global SESSION_FACTORY
@@ -6742,12 +6750,7 @@ async def start_engine(
 
     LOGGER.debug("Creating engine...")
     try:
-        ENGINE = create_async_engine(
-            url=url_object,
-            pool_pre_ping=True,
-            poolclass=NullerPool,
-            async_creator=bridge_creator
-        )
+        ENGINE = create_async_engine(url=url_object, pool_pre_ping=True, poolclass=NullerPool, async_creator=bridge_creator)
         SESSION_FACTORY = async_sessionmaker(ENGINE)
     except Exception as e:
         await stop_engine()
