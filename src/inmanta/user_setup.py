@@ -120,6 +120,7 @@ async def connect_to_db() -> None:
         database_port=server_config.db_port.get(),
         database_name=server_config.db_name.get(),
         pool=pool,
+        connection_timeout=connection_timeout,
     )
 
 
@@ -167,7 +168,6 @@ async def do_user_setup() -> None:
     finally:
         await stop_engine()
         await data.disconnect_pool()
-
 
     click.echo("Make sure to (re)start the orchestrator to activate all changes.")
 

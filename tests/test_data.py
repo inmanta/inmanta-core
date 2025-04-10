@@ -15,7 +15,7 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
-
+import asyncio
 import datetime
 import enum
 import logging
@@ -27,6 +27,7 @@ from typing import Optional, cast
 
 import asyncpg
 import pytest
+import sqlalchemy
 from asyncpg import Connection, ForeignKeyViolationError, Pool
 
 import utils
@@ -39,9 +40,6 @@ from inmanta.types import ResourceVersionIdStr
 
 
 async def test_connect_too_small_connection_pool(postgres_db, database_name: str):
-    """
-    Test database connection pool saturation
-    """
     pool: Pool = await data.connect_pool(
         postgres_db.host,
         postgres_db.port,
@@ -50,33 +48,18 @@ async def test_connect_too_small_connection_pool(postgres_db, database_name: str
         postgres_db.password,
         create_db_schema=False,
         connection_pool_min_size=1,
-        connection_pool_max_size=2,
-        connection_timeout=1,
+        connection_pool_max_size=1,
+        connection_timeout=120,
     )
+    assert pool is not None
+    connection: Connection = await pool.acquire()
+    try:
+        with pytest.raises(asyncio.TimeoutError):
+            await pool.acquire(timeout=1.0)
+    finally:
+        await connection.close()
+        await data.disconnect_pool()
 
-    await start_engine(
-        database_username=postgres_db.user,
-        database_password=postgres_db.password,
-        database_host=postgres_db.host,
-        database_port=postgres_db.port,
-        database_name=database_name,
-        pool=pool,
-    )
-    engine = get_engine()
-    assert engine is not None
-    connection1: Connection = await engine.connect()
-    print(f"{connection1=}")
-    connection2 = await engine.connect()
-    print(f"{connection2=}")
-    # TODO FIX
-    # try:
-    #     with pytest.raises(sqlalchemy.exc.TimeoutError):
-    #         pass
-    # finally:
-    #     await connection.close()
-    #     await data.disconnect_pool()
-    #     await pool.close()
-    #     await stop_engine()
 
 
 async def test_connect_default_parameters(sql_alchemy_engine):
