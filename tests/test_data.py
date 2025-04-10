@@ -88,25 +88,13 @@ async def test_connect_default_parameters(sql_alchemy_engine):
         assert connection is not None
 
 
-async def test_connection_failure(postgres_db, unused_tcp_port_factory, database_name, clean_reset):
+async def test_connection_failure(unused_tcp_port_factory, database_name, clean_reset):
     """
     Basic connectivity test: using an incorrect port raises an error
     """
-    wrong_port = unused_tcp_port_factory()
-
-    await start_engine(
-        database_username=postgres_db.user,
-        database_password=postgres_db.password,
-        database_host=postgres_db.host,
-        database_port=wrong_port,
-        database_name=database_name,
-    )
-    engine = get_engine()
-    with pytest.raises(ConnectionRefusedError):
-        async with engine.connect() as _:
-            pass
-
-    await stop_engine()
+    port = unused_tcp_port_factory()
+    with pytest.raises(OSError):
+        await data.connect_pool("localhost", port, database_name, "testuser", None)
 
 
 async def test_postgres_client(postgresql_client):

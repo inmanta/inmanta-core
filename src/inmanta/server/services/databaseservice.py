@@ -221,8 +221,9 @@ class DatabaseService(protocol.ServerSlice):
 
     async def disconnect_database(self) -> None:
         """Disconnect the database"""
-        await data.disconnect_pool()
         await stop_engine()
+        await data.disconnect_pool()
+        self._pool = None
 
     async def get_reported_status(self) -> tuple[ReportedStatus, Optional[str]]:
         """
