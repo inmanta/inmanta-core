@@ -295,7 +295,6 @@ async def initialize_database_connection(
         database_port=database_port,
         database_name=database_name,
         pool=pool,
-        connection_timeout=connection_timeout,
     )
 
     LOGGER.info("Connected to PostgreSQL database %s on %s:%d", database_name, database_host, database_port)

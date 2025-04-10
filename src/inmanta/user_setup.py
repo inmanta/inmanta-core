@@ -120,7 +120,6 @@ async def connect_to_db() -> None:
         database_port=server_config.db_port.get(),
         database_name=server_config.db_name.get(),
         pool=pool,
-        connection_timeout=connection_timeout,
     )
 
 
