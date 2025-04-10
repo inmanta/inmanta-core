@@ -52,6 +52,30 @@ async def test_blueprint_hash_consistency(tmpdir):
     assert hash1 == hash2, "Blueprint hashes should be identical regardless of the order of requirements"
 
 
+async def test_environment_isolation(tmpdir):
+    """
+    Ensure that venvs with the same specification on different Inmanta environments result in a different hash
+    (i.e. use a different on disk Python environment).
+    """
+    pip_index = PipIndex(artifact_dir=str(tmpdir))
+    pip_config = PipConfig(index_url=pip_index.url)
+
+    # Define two sets of requirements, identical but in different orders
+    requirements = ("pkg1", "pkg2")
+
+    blueprint1 = executor.EnvBlueprint(
+        environment_id=uuid.uuid4(), pip_config=pip_config, requirements=requirements, python_version=sys.version_info[:2]
+    )
+    blueprint2 = executor.EnvBlueprint(
+        environment_id=uuid.uuid4(), pip_config=pip_config, requirements=requirements, python_version=sys.version_info[:2]
+    )
+
+    hash1 = blueprint1.blueprint_hash()
+    hash2 = blueprint2.blueprint_hash()
+
+    assert hash1 != hash2
+
+
 @pytest.mark.slowtest
 def test_hash_consistency_across_sessions():
     """
