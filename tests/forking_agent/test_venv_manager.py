@@ -59,8 +59,6 @@ async def test_environment_isolation(tmpdir):
     """
     pip_index = PipIndex(artifact_dir=str(tmpdir))
     pip_config = PipConfig(index_url=pip_index.url)
-
-    # Define two sets of requirements, identical but in different orders
     requirements = ("pkg1", "pkg2")
 
     blueprint1 = executor.EnvBlueprint(
