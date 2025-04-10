@@ -82,18 +82,13 @@ async def test_pool_exhaustion_watcher(set_pool_size_to_one, server, caplog):
         database_slice = server.get_slice(databaseservice.SLICE_DATABASE)
 
         pool = database_slice._pool
-
         assert pool is not None
-
         connection: Connection = await pool.acquire()
-
         try:
             # Make sure _check_database_pool_exhaustion gets called (scheduled to run every 200ms)
             # and records some exhaustion events.
             await retry_limited(exhaustion_events_recorded, 1)
-
         finally:
-
             await connection.close()
         # Call _report_database_pool_exhaustion manually (scheduled to run every 24h)
         database_slice._db_monitor._report_and_reset()

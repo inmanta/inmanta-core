@@ -151,7 +151,7 @@ async def test_create_too_many_versions(client, server, no_agent, n_versions_to_
     "has_released_versions",
     [
         True,
-        # False
+        False
     ],
 )
 async def test_purge_versions(server, client, environment, has_released_versions: bool, agent_no_state_check) -> None:
