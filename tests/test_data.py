@@ -22,7 +22,6 @@ import logging
 import time
 import uuid
 from collections import abc
-from collections.abc import Mapping
 from datetime import UTC
 from typing import Optional, cast
 
@@ -30,7 +29,6 @@ import asyncpg
 import pytest
 from asyncpg import Connection, ForeignKeyViolationError, Pool
 
-import sqlalchemy
 import utils
 from inmanta import const, data, util
 from inmanta.const import AgentStatus, LogLevel
@@ -42,7 +40,7 @@ from inmanta.types import ResourceVersionIdStr
 
 async def test_connect_too_small_connection_pool(postgres_db, database_name: str):
     """
-        Test database connection pool saturation
+    Test database connection pool saturation
     """
     pool: Pool = await data.connect_pool(
         postgres_db.host,
@@ -57,20 +55,20 @@ async def test_connect_too_small_connection_pool(postgres_db, database_name: str
     )
 
     await start_engine(
-        database_username= postgres_db.user,
-        database_password= postgres_db.password,
-        database_host= postgres_db.host,
-        database_port= postgres_db.port,
-        database_name= database_name,
-        pool = pool,
+        database_username=postgres_db.user,
+        database_password=postgres_db.password,
+        database_host=postgres_db.host,
+        database_port=postgres_db.port,
+        database_name=database_name,
+        pool=pool,
     )
     engine = get_engine()
     assert engine is not None
     connection1: Connection = await engine.connect()
-    print(f'{connection1=}')
-    connection2= await engine.connect()
-    print(f'{connection2=}')
-    #TODO FIX
+    print(f"{connection1=}")
+    connection2 = await engine.connect()
+    print(f"{connection2=}")
+    # TODO FIX
     # try:
     #     with pytest.raises(sqlalchemy.exc.TimeoutError):
     #         pass
