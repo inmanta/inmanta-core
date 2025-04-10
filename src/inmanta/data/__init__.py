@@ -5123,7 +5123,11 @@ class Resource(BaseDocument):
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
         resource_records = await cls._fetch_query(query, *values, connection=connection)
-        return [dict(record) for record in resource_records]
+        resources = [dict(record) for record in resource_records]
+        for res in resources:
+            if "attributes" in res:
+                res["attributes"] = json.loads(res["attributes"])
+        return resources
 
     @classmethod
     async def get_resources_since_version_raw(

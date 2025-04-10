@@ -757,7 +757,6 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                 ),
                 requested_environment_variables=json.loads(compile["requested_environment_variables"]),
                 mergeable_environment_variables=json.loads(compile["mergeable_environment_variables"]),
-
                 partial=compile["partial"],
                 removed_resource_sets=compile["removed_resource_sets"],
                 exporter_plugin=compile["exporter_plugin"],
