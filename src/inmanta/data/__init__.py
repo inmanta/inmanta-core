@@ -6747,11 +6747,12 @@ async def start_engine(
         database=database_name,
     )
 
-    async def bridge_creator():
+    async def bridge_creator() -> asyncpg.pool.PoolAcquireContext:
         return await pool.acquire()
 
     class NullerPool(NullPool):
         def _do_return_conn(self, record: ConnectionPoolEntry) -> None:
+            assert record.dbapi_connection is not None
             record.dbapi_connection.run_async(pool.release)
 
     global ENGINE

@@ -914,7 +914,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[ResourceHistory]:
         def get_attributes(record: Record) -> JsonType:
-            attributes = json.loads(record["attributes"])
+            attributes: JsonType = json.loads(record["attributes"])
             if "version" not in attributes:
                 # Due to a bug, the version field has always been present in the attributes dictionary.
                 # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
