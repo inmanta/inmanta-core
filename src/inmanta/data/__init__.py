@@ -68,7 +68,7 @@ from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-from sqlalchemy import URL, AsyncAdaptedQueuePool, NullPool
+from sqlalchemy import URL, AdaptedConnection, AsyncAdaptedQueuePool, NullPool
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import ConnectionPoolEntry
 
@@ -6747,12 +6747,13 @@ async def start_engine(
         database=database_name,
     )
 
-    async def bridge_creator() -> asyncpg.pool.PoolAcquireContext:
+    async def bridge_creator() -> asyncpg.connection.Connection:
         return await pool.acquire()
 
     class NullerPool(NullPool):
         def _do_return_conn(self, record: ConnectionPoolEntry) -> None:
             assert record.dbapi_connection is not None
+            assert isinstance(record.dbapi_connection, AdaptedConnection)
             record.dbapi_connection.run_async(pool.release)
 
     global ENGINE
