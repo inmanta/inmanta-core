@@ -84,6 +84,7 @@ class CodeManager:
                 resource_type,
                 version,
                 executor.ExecutorBlueprint(
+                    environment_id=environment,
                     pip_config=await self.get_pip_config(environment, version),
                     requirements=list(requirements),
                     sources=sources,
