@@ -15,6 +15,7 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
+
 import asyncio
 import datetime
 import enum
@@ -27,13 +28,12 @@ from typing import Optional, cast
 
 import asyncpg
 import pytest
-import sqlalchemy
 from asyncpg import Connection, ForeignKeyViolationError, Pool
 
 import utils
 from inmanta import const, data, util
 from inmanta.const import AgentStatus, LogLevel
-from inmanta.data import ArgumentCollector, QueryType, get_engine, start_engine, stop_engine
+from inmanta.data import ArgumentCollector, QueryType
 from inmanta.deploy import state
 from inmanta.resources import Id
 from inmanta.types import ResourceVersionIdStr
@@ -59,7 +59,6 @@ async def test_connect_too_small_connection_pool(postgres_db, database_name: str
     finally:
         await connection.close()
         await data.disconnect_pool()
-
 
 
 async def test_connect_default_parameters(sql_alchemy_engine):
