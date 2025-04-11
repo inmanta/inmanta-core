@@ -58,6 +58,9 @@ def auth(auth_label: str, read_only: bool, environment_param: str | None = None)
 
 
 class AuthorizationMetadata:
+    """
+    A class that contains authorization-related metadata about API endpoints for users.
+    """
 
     metadata: dict[str, "AuthorizationMetadata"] = {}
 
