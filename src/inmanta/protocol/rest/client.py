@@ -28,7 +28,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResp
 from inmanta import config as inmanta_config
 from inmanta import tracing
 from inmanta.protocol import common
-from inmanta.protocol.rest import RESTBase, CallArguments
+from inmanta.protocol.rest import CallArguments, RESTBase
 
 if TYPE_CHECKING:
     from inmanta.protocol.endpoints import Endpoint
@@ -181,4 +181,3 @@ class RESTClient(RESTBase):
     async def get_policy_engine_slice(self) -> None:
         # We are not running on the server, so there is no policy engine and no policy engine slice.
         return None
-

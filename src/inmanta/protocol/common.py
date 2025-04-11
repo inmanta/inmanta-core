@@ -355,9 +355,7 @@ class MethodProperties:
         Register new method properties. The name of the method has to be unique.
         """
         if properties.function_name in cls.methods:
-            raise Exception(
-                f"Method with name {properties.function_name} already defined."
-            )
+            raise Exception(f"Method with name {properties.function_name} already defined.")
 
         cls.methods[properties.function_name] = properties
 

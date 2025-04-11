@@ -28,9 +28,9 @@ from inmanta.const import ResourceState
 from inmanta.data import model
 from inmanta.data.model import PipConfig
 from inmanta.protocol import exceptions
+from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ArgOption
 from inmanta.protocol.decorators import method, typedmethod
-from inmanta.protocol.auth.decorators import auth
 from inmanta.types import JsonType, PrimitiveTypes
 
 
@@ -912,6 +912,7 @@ def diff(file_id_1: str, file_id_2: str):
 
 
 # Get a list of compile reports
+
 
 @auth(auth_label=const.AuthorizationLabel.COMPILEREPORT_READ, read_only=True, environment_param="tid")
 @method(path="/compilereport", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])

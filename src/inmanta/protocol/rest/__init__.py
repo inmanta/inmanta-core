@@ -16,13 +16,13 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import abc
 import inspect
 import json
 import logging
 import uuid
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
-import abc
 
 import pydantic
 import typing_inspect
@@ -33,9 +33,9 @@ from inmanta.data.model import BaseModel
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.auth import auth
 from inmanta.protocol.common import ReturnValue
+from inmanta.server import SLICE_POLICY_ENGINE
 from inmanta.server import config as server_config
 from inmanta.types import Apireturn, JsonType
-from inmanta.server import SLICE_POLICY_ENGINE
 
 if TYPE_CHECKING:
     from inmanta.server.services.policy_engine_service import PolicyEngineSlice
@@ -572,7 +572,7 @@ class CallArguments:
                 raise exceptions.Forbidden(f"{SLICE_POLICY_ENGINE} slice not found.")
             input_data = self._get_input_for_policy_engine()
             if not await policy_engine_slice.does_satisfy_access_policy(input_data):
-                raise exceptions.Forbidden("Request doesn't satisfy the access policy.")
+                raise exceptions.Forbidden("Request is not allowed by the access policy.")
 
     def _authorize_service_token(self) -> None:
         """

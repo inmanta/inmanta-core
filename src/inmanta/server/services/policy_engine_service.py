@@ -15,28 +15,40 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
-import os
-import logging
-from tornado import httpclient
+
 import asyncio
 import asyncio.subprocess
+import json
+import logging
+import os
 import subprocess
 import time
 from importlib.resources import files
-import json
 
-from inmanta.server import protocol, config as server_config
-from inmanta import server, const, config
-from inmanta.protocol.auth import decorators
-from inmanta import util
+from tornado import httpclient
+from tornado.httpclient import HTTPError, HTTPRequest
 from tornado.simple_httpclient import SimpleAsyncHTTPClient
-from tornado.httpclient import HTTPRequest, HTTPError
+
+from inmanta import config, const, server, util
+from inmanta.protocol.auth import decorators
+from inmanta.server import config as server_config
+from inmanta.server import protocol
 
 LOGGER = logging.getLogger(__name__)
 
-policy_file = config.Option("policy-engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the access policy.", config.is_str)
-policy_engine_bind_address = config.Option("policy-engine", "bind-address", "127.0.0.1", "Address on which the policy engine will listen for incoming connections.", config.is_str)
-policy_engine_bind_port = config.Option("policy-engine", "bind-port", 8181, "Port on which the policy engine will listen for incoming connections.", config.is_int)
+policy_file = config.Option(
+    "policy-engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the access policy.", config.is_str
+)
+policy_engine_bind_address = config.Option(
+    "policy-engine",
+    "bind-address",
+    "127.0.0.1",
+    "Address on which the policy engine will listen for incoming connections.",
+    config.is_str,
+)
+policy_engine_bind_port = config.Option(
+    "policy-engine", "bind-port", 8181, "Port on which the policy engine will listen for incoming connections.", config.is_int
+)
 
 
 class PolicyEngineSlice(protocol.ServerSlice):
@@ -117,7 +129,7 @@ class OpaServer:
             json.dump(data, fh)
 
         # Start policy engine
-        opa_binary = str(files('inmanta.opa').joinpath('opa').absolute())
+        opa_binary = str(files("inmanta.opa").joinpath("opa").absolute())
         log_dir = config.log_dir.get()
         policy_engine_log = os.path.join(log_dir, "policy_engine.log")
         log_file_handle = None
@@ -136,8 +148,8 @@ class OpaServer:
                 data_file,
                 policy_file.get(),
                 # TODO: uncomment
-                #stdout=log_file_handle,
-                #stderr=subprocess.STDOUT,
+                # stdout=log_file_handle,
+                # stderr=subprocess.STDOUT,
             )
         finally:
             if log_file_handle is not None:

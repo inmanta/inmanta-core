@@ -1,5 +1,5 @@
 """
-Copyright 2024 Inmanta
+Copyright 2025 Inmanta
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,16 +16,61 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import os
+import uuid
+
 import pytest
 
 from inmanta import config, const
-from inmanta.protocol import auth
+from inmanta.protocol.auth import auth, decorators
+from inmanta.protocol.decorators import handle, typedmethod
 from inmanta.server import SLICE_USER, protocol
 from inmanta.server.services import policy_engine_service
 
-@pytest.fixture
-def server_pre_start(server_config):
-    """Ensure that the server started by the server fixtures have authentication enabled with auth_method database"""
+
+@pytest.mark.parametrize(
+    "access_policy",
+    [
+        """
+        package policy
+
+        default allowed := false
+
+        # Write the information about the endpoint into a variable
+        # to make the policy easier to read.
+        endpoint_data := data.endpoints[input.request.endpoint_id]
+
+        # The environment used in the request
+        request_environment := input.request.parameters[endpoint_data.environment_param] if {
+            endpoint_data.environment_param != null
+        } else := null
+
+        # Any user can make read-only calls.
+        allowed if {
+            endpoint_data.read_only
+        }
+
+        # If the API endpoint is environment-scoped, users can call it if
+        # they have the read-write role on that environment.
+        allowed if {
+            request_environment != null
+            input.token["urn:inmanta:roles"][request_environment] == "read-write"
+        }
+
+        # Users marked as is-admin can execute any API endpoint.
+        allowed if {
+            input.token["urn:inmanta:is-admin"]
+        }
+        """.strip()
+    ],
+)
+async def test_policy_evaluation(tmpdir, async_finalizer, access_policy: str) -> None:
+    env_id = "11111111-1111-1111-1111-111111111111"
+    state_dir = os.path.join(tmpdir, "state")
+    log_dir = os.path.join(tmpdir, "logs")
+    for directory in [state_dir, log_dir]:
+        os.mkdir(directory)
+
     config.Config.set("server", "auth", "true")
     config.Config.set("server", "auth_method", "database")
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
@@ -35,63 +80,90 @@ def server_pre_start(server_config):
     config.Config.set("auth_jwt_default", "expire", "0")
     config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
     config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
+    config.Config.set("config", "state-dir", state_dir)
+    config.Config.set("config", "log-dir", log_dir)
 
-@pytest.mark.parametrize(
-    "access_policy",
-    """
-package policy
+    config.state_dir.set(str(tmpdir))
 
-default allowed := false
+    os.mkdir(os.path.join(tmpdir, "policy_engine"))
+    access_policy_file = os.path.join(tmpdir, "policy_engine", "policy.rego")
+    with open(access_policy_file, "w") as fh:
+        fh.write(access_policy)
+    policy_engine_service.policy_file.set(access_policy_file)
 
+    @decorators.auth(auth_label="test", read_only=True)
+    @typedmethod(path="/read-only", operation="GET", client_types=["api"])
+    def read_only_method() -> None:  # NOQA
+        pass
 
+    @decorators.auth(auth_label="test", read_only=False, environment_param="env")
+    @typedmethod(path="/environment-scoped", operation="POST", client_types=["api"])
+    def environment_scoped_method(env: uuid.UUID) -> None:  # NOQA
+        pass
 
+    @decorators.auth(auth_label="admin", read_only=False)
+    @typedmethod(path="/admin-only", operation="POST", client_types=["api"])
+    def admin_only_method() -> None:  # NOQA
+        pass
 
-    """
-)
-async def test_policy_evaluation(server) -> None:
-    token = auth.encode_token(client_types=[str(const.ClientType.api.value)], expire=None)
-    config.Config.set("client_rest_transport", "token", token)
-    client = protocol.Client("client")
+    class TestServer(protocol.ServerSlice):
+        @handle(read_only_method)
+        async def handle_read_only_method(self) -> None:  # NOQA
+            return
 
+        @handle(environment_scoped_method)
+        async def handle_environment_scoped_method(self, env: uuid.UUID) -> None:  # NOQA
+            return
 
+        @handle(admin_only_method)
+        async def handle_admin_only_method(self) -> None:  # NOQA
+            return
 
+    rs = protocol.Server()
+    policy_engine_slice = policy_engine_service.PolicyEngineSlice()
+    test_slice = TestServer(name="testserver")
+    for current_slice in [policy_engine_slice, test_slice]:
+        rs.add_slice(current_slice)
+    await rs.start()
+    async_finalizer.add(test_slice.stop)
+    async_finalizer.add(policy_engine_slice.stop)
+    async_finalizer.add(rs.stop)
 
-#def get_auth_client(claim_rules: list[str], claims: dict[str, str | list[str]]) -> protocol.Client:
-#    config.Config.set("auth_jwt_default", "claims", "\n    ".join(claim_rules) + "\n")
-#    auth.AuthJWTConfig.reset()
-#
-#    token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims=claims)
-#    config.Config.set("client_rest_transport", "token", token)
-#    auth_client = protocol.Client("client")
-#    return auth_client
-#
-#async def test_claim_assertions(server: protocol.Server, server_pre_start) -> None:
-#    """test various claim assertions"""
-#    assert server.get_slice(SLICE_USER)
-#
-#    # test claims that match rules
-#    client = get_auth_client(
-#        claim_rules=["prod in environments", "type is dc"], claims=dict(environments=["prod", "lab"], type="dc", username="bob")
-#    )
-#    assert (await client.list_users()).code == 200
-#
-#    # test a wrong claim
-#    client = get_auth_client(
-#        claim_rules=["prod in environments", "type is dc"],
-#        claims=dict(environments=["prod", "lab"], type="lab", username="bob"),
-#    )
-#    assert (await client.list_users()).code == 403
-#
-#    # test a rule that is not correct: use in on string
-#    client = get_auth_client(
-#        claim_rules=["dc in type"],
-#        claims=dict(environments=["prod", "lab"], type="lab", username="bob"),
-#    )
-#    assert (await client.list_users()).code == 403
-#
-#    # test a rule that is not correct: use is on list
-#    client = get_auth_client(
-#        claim_rules=["environments is prod"],
-#        claims=dict(environments=["prod", "lab"], type="lab", username="bob"),
-#    )
-#    assert (await client.list_users()).code == 403
+    def get_client_with_role(env_to_role_dct: dict[str, str], is_admin: bool) -> protocol.Client:
+        """
+        Returns a client that uses an access token for the given role.
+        """
+        token = auth.encode_token(
+            client_types=[str(const.ClientType.api.value)],
+            expire=None,
+            custom_claims={
+                f"{const.INMANTA_URN}roles": env_to_role_dct,
+                f"{const.INMANTA_URN}is-admin": is_admin,
+            },
+        )
+        config.Config.set("client_rest_transport", "token", token)
+        return protocol.Client("client")
+
+    client = get_client_with_role(env_to_role_dct={env_id: "read-only"}, is_admin=False)
+    result = await client.read_only_method()
+    assert result.code == 200
+    result = await client.environment_scoped_method(env_id)
+    assert result.code == 403
+    result = await client.admin_only_method()
+    assert result.code == 403
+
+    client = get_client_with_role(env_to_role_dct={env_id: "read-write"}, is_admin=False)
+    result = await client.read_only_method()
+    assert result.code == 200
+    result = await client.environment_scoped_method(env_id)
+    assert result.code == 200
+    result = await client.admin_only_method()
+    assert result.code == 403
+
+    client = get_client_with_role(env_to_role_dct={}, is_admin=True)
+    result = await client.read_only_method()
+    assert result.code == 200
+    result = await client.environment_scoped_method(env_id)
+    assert result.code == 200
+    result = await client.admin_only_method()
+    assert result.code == 200

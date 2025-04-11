@@ -28,9 +28,9 @@ from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, Parame
 from inmanta.data import model
 from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConfig
 from inmanta.protocol import methods
+from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
-from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.types import PrimitiveTypes, ResourceIdStr
 
@@ -404,6 +404,7 @@ def reserve_version(tid: uuid.UUID) -> int:
 
     :param tid: The id of the environment in which the version number is to be reserved.
     """
+
 
 @auth(auth_label=const.AuthorizationLabel.DOCS_READ, read_only=True)
 @typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2)

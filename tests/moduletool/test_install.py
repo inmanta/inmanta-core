@@ -1153,10 +1153,12 @@ import custom_mod_two
         autostd=False,
     )
 
-    def _validate_moduletool_list_output(output: str, line_custom_mod_one: str, line_custom_mod_two: str, std_version: str) -> None:
+    def _validate_moduletool_list_output(
+        output: str, line_custom_mod_one: str, line_custom_mod_two: str, std_version: str
+    ) -> None:
         table_lines = [l.strip() for l in output.strip().split("\n")]
         assert "\n".join(table_lines[0:6]) == (
-f"""
+            f"""
 +----------------+------+----------+----------------+----------------+---------+
 |      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
 |                |      |          |    version     |    project     |         |
@@ -1180,7 +1182,9 @@ f"""
         elif len(rows_std_pkg) == 2:
             match_second_line = re.match(regex, rows_std_pkg[1])
             assert match_second_line.group("name").strip() == ""
-            assert match.group("installed_version").strip() + match_second_line.group("installed_version").strip() == std_version
+            assert (
+                match.group("installed_version").strip() + match_second_line.group("installed_version").strip() == std_version
+            )
         else:
             raise Exception(f"Invalid table content:\n{out}")
         assert table_lines[-1] == "+----------------+------+----------+----------------+----------------+---------+"

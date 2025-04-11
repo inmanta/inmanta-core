@@ -32,6 +32,7 @@ from inmanta.const import ClientType, ResourceAction
 from inmanta.data import model
 from inmanta.data.model import EnvironmentSetting
 from inmanta.protocol import method
+from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ArgOption, BaseHttpException, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.converter import (
     ArgOptionHandler,
@@ -44,7 +45,7 @@ from inmanta.protocol.openapi.model import MediaType, OpenApiDataTypes, Paramete
 from inmanta.server import SLICE_SERVER, config
 from inmanta.server.extensions import FeatureManager
 from inmanta.server.protocol import Server
-from inmanta.protocol.auth.decorators import auth
+
 
 class DummyException(BaseHttpException):
     def __init__(self):
@@ -211,9 +212,7 @@ def test_filter_api_methods(server, api_methods_fixture, feature_manager):
     post = UrlMethod(properties=MethodProperties.methods["post_method"], slice=None, method_name="post_method", handler=None)
     methods = {
         "POST": post,
-        "GET": UrlMethod(
-            properties=MethodProperties.methods["get_method"], slice=None, method_name="get_method", handler=None
-        ),
+        "GET": UrlMethod(properties=MethodProperties.methods["get_method"], slice=None, method_name="get_method", handler=None),
     }
     openapi = OpenApiConverter(server._transport.get_global_url_map(server.get_slices().values()), feature_manager)
     api_methods = openapi._filter_api_methods(methods)

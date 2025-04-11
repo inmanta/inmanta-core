@@ -1828,9 +1828,7 @@ async def test_list_get_optional(server_config, async_finalizer):
     async_finalizer.add(server.stop)
     async_finalizer.add(rs.stop)
 
-    request = MethodProperties.methods["test_method"].build_call(
-        args=[], kwargs={"id": "1", "name": "monty", "sort": [1, 2]}
-    )
+    request = MethodProperties.methods["test_method"].build_call(args=[], kwargs={"id": "1", "name": "monty", "sort": [1, 2]})
     assert request.url == "/api/v1/test/1/monty?sort=1&sort=2"
 
     client: protocol.Client = protocol.Client("client")

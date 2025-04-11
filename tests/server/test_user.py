@@ -16,8 +16,9 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import pytest
 import os
+
+import pytest
 
 from inmanta import config, const
 from inmanta.protocol import endpoints
@@ -43,12 +44,14 @@ def server_pre_start(server_config, tmpdir):
     os.mkdir(os.path.join(tmpdir, "policy_engine"))
     access_policy_file = os.path.join(tmpdir, "policy_engine", "policy.rego")
     with open(access_policy_file, "w") as fh:
-        fh.write("""
+        fh.write(
+            """
             package policy
 
             # Allow everything
             default allowed:=true
-        """)
+        """
+        )
     policy_file.set(access_policy_file)
 
 

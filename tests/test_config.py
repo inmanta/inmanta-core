@@ -28,8 +28,8 @@ import inmanta.agent.config as cfg
 from inmanta import protocol
 from inmanta.config import Config, Option, option_as_default
 from inmanta.const import ClientType
-from inmanta.server.protocol import Server, ServerSlice
 from inmanta.protocol.auth.decorators import auth
+from inmanta.server.protocol import Server, ServerSlice
 
 
 def test_options(monkeypatch):

@@ -34,9 +34,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
 from inmanta import config, const
-from inmanta.server import config as server_config
-
 from inmanta.protocol import exceptions
+from inmanta.server import config as server_config
 
 claim_type = Mapping[str, str | Sequence[str]]
 
@@ -118,7 +117,7 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
         unsupported = []
         for k, v in jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo]).items():
             match v:
-                case str():
+                case str() | bool():
                     decoded_payload[k] = v
                 case list():
                     for el in v:
@@ -128,6 +127,8 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
                                 f"Element {el} in claim {k} is not a string."
                             )
                     decoded_payload[k] = v
+                case dict():
+                    decoded_payload[k] = dict(v)
                 case _:
                     unsupported.append(k)
 

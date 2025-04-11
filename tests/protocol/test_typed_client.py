@@ -23,8 +23,8 @@ import pytest
 from inmanta import protocol
 from inmanta.data.model import BaseModel
 from inmanta.protocol import exceptions
-from inmanta.server.protocol import LocalClient, Server, ServerSlice, common
 from inmanta.protocol.auth.decorators import auth
+from inmanta.server.protocol import LocalClient, Server, ServerSlice, common
 
 
 async def test_local_client(server_config, async_finalizer) -> None:

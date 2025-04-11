@@ -16,10 +16,12 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-from typing import Callable, Sequence
 import inspect
+from typing import Callable, Sequence
+
 from inmanta import const
 from inmanta.protocol.common import MethodProperties
+
 
 def auth(auth_label: str, read_only: bool, environment_param: str | None = None) -> Callable[..., Callable]:
     """
@@ -47,13 +49,12 @@ def auth(auth_label: str, read_only: bool, environment_param: str | None = None)
         if environment_param is not None:
             signature = inspect.signature(fnc)
             if environment_param not in signature.parameters:
-                raise Exception(
-                    f"environment_param {environment_param} is not a parameter of the API endpoint {fnc.__name__}"
-                )
+                raise Exception(f"environment_param {environment_param} is not a parameter of the API endpoint {fnc.__name__}")
         method_properties = fnc.__method_properties__
         metadata = AuthorizationMetadata(method_properties, auth_label, read_only, environment_param)
         AuthorizationMetadata.register_auth_metadata(metadata)
         return fnc
+
     return wrapper
 
 
@@ -101,4 +102,3 @@ class AuthorizationMetadata:
                 "environment_param": md.environment_param,
             }
         return {"endpoints": endpoints}
-

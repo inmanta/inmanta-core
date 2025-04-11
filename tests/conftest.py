@@ -735,7 +735,15 @@ async def access_policy() -> str:
 
 @pytest.fixture(scope="function")
 async def server_config(
-        inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory, auto_start_agent, no_agent, access_policy: str, enable_auth: bool
+    inmanta_config,
+    postgres_db,
+    database_name,
+    clean_reset,
+    unused_tcp_port_factory,
+    auto_start_agent,
+    no_agent,
+    access_policy: str,
+    enable_auth: bool,
 ):
     reset_metrics()
     agentmanager.assert_no_start_scheduler = not auto_start_agent
@@ -815,6 +823,7 @@ async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterat
             if not os.path.isdir(file):
                 with open(file, "r") as fh:
                     logger.debug("%s\n%s", file, fh.read())
+
 
 @pytest.fixture(
     scope="function",

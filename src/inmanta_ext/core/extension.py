@@ -31,10 +31,10 @@ from inmanta.server.services import (
     notificationservice,
     orchestrationservice,
     paramservice,
+    policy_engine_service,
     projectservice,
     resourceservice,
     userservice,
-    policy_engine_service,
 )
 
 
