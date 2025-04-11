@@ -6668,7 +6668,7 @@ CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
 def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
-    LOGGER.debug("Connecting data classes")
+    LOGGER.debug("Connecting data classes to connection pool")
 
     for cls in _classes:
         cls.set_connection_pool(pool)
@@ -6711,7 +6711,7 @@ async def connect_pool(
 
 
 async def disconnect_pool() -> None:
-    LOGGER.debug("Disconnecting data classes")
+    LOGGER.debug("Disconnecting data classes from connection pool")
 
     # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
 
@@ -6722,7 +6722,7 @@ async def disconnect_pool() -> None:
     exceptions = [r for r in result if r is not None and isinstance(r, Exception)]
 
     if exceptions:
-        raise exceptions[0]
+        raise ExceptionGroup(exceptions)
 
 
 async def start_engine(

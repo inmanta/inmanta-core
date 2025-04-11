@@ -745,6 +745,7 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
 
     # Remove connectivity to the database
     await data.disconnect_pool()
+    await data.stop_engine()
 
     caplog.clear()
 

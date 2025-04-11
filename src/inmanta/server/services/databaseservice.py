@@ -43,6 +43,8 @@ class DatabaseMonitor:
         db_name: str,
         db_host: str,
     ) -> None:
+        if pool.is_closing():
+            raise Exception("Connection pool is closing or closed.")
         self._pool = pool
         self._scheduler = Scheduler(f"Database monitor for {db_name}")
         self.dn_name = db_name
@@ -113,7 +115,7 @@ class DatabaseMonitor:
         )
 
     def get_pool_free(self) -> int:
-        if self._pool is None or self._pool._closing:
+        if self._pool is None or self._pool.is_closing():
             return 0
         return self._pool.get_max_size() - self._pool.get_size() + self._pool.get_idle_size()
 
@@ -128,7 +130,7 @@ class DatabaseMonitor:
         self._add_gauge(
             "db.connected",
             CallbackGauge(
-                callback=lambda: 1 if (self._pool is not None and not self._pool._closing and not self._pool._closed) else 0
+                callback=lambda: 1 if (self._pool is not None and not self._pool.is_closing()) else 0
             ),
         )
         self._add_gauge(
@@ -163,7 +165,7 @@ class DatabaseMonitor:
         self.registered_gauges.clear()
 
     async def get_connection_status(self) -> bool:
-        if self._pool is not None and not self._pool._closing and not self._pool._closed:
+        if self._pool is not None and not self._pool.is_closing():
             try:
                 async with self._pool.acquire(timeout=10):
                     return True
