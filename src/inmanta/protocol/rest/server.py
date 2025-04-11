@@ -34,7 +34,7 @@ import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta import const, tracing
 from inmanta.protocol import common, exceptions
-from inmanta.protocol.rest import CallArguments, RESTBase
+from inmanta.protocol.rest import RESTBase
 from inmanta.server import SLICE_POLICY_ENGINE
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps

@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Callable, Mapping, Optional, Union
 from tornado import gen, queues, routing, web
 
 import inmanta.protocol.endpoints
-from inmanta import const, tracing
+from inmanta import tracing
 from inmanta.data.model import ExtensionStatus, ReportedStatus, SliceStatus
 from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods
 from inmanta.protocol.auth import decorators as auth_decorators

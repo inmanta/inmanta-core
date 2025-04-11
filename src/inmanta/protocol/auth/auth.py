@@ -16,16 +16,13 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import abc
 import base64
 import configparser
-import dataclasses
 import json
 import logging
-import re
 import ssl
 import time
-from typing import Any, Literal, Mapping, MutableMapping, Optional, Sequence
+from typing import Any, Mapping, MutableMapping, Optional, Sequence
 from urllib import error, request
 
 import jwt

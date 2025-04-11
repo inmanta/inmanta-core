@@ -24,7 +24,7 @@ import pytest
 from inmanta import config, const
 from inmanta.protocol.auth import auth, decorators
 from inmanta.protocol.decorators import handle, typedmethod
-from inmanta.server import SLICE_USER, protocol
+from inmanta.server import protocol
 from inmanta.server.services import policy_engine_service
 
 

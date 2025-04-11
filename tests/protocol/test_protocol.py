@@ -39,7 +39,7 @@ from tornado.httputil import url_concat
 from inmanta import config, const, protocol
 from inmanta.const import ClientType
 from inmanta.data.model import BaseModel
-from inmanta.protocol import VersionMatch, exceptions, json_encode
+from inmanta.protocol import exceptions, json_encode
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import (
     HTML_CONTENT,

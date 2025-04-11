@@ -17,9 +17,8 @@ Contact: code@inmanta.com
 """
 
 import inspect
-from typing import Callable, Sequence
+from typing import Callable
 
-from inmanta import const
 from inmanta.protocol.common import MethodProperties
 
 

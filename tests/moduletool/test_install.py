@@ -1156,7 +1156,7 @@ import custom_mod_two
     def _validate_moduletool_list_output(
         output: str, line_custom_mod_one: str, line_custom_mod_two: str, std_version: str
     ) -> None:
-        table_lines = [l.strip() for l in output.strip().split("\n")]
+        table_lines = [line.strip() for line in output.strip().split("\n")]
         assert "\n".join(table_lines[0:6]) == (
             f"""
 +----------------+------+----------+----------------+----------------+---------+
@@ -1168,7 +1168,10 @@ import custom_mod_two
 """.strip()
         )
         rows_std_pkg = table_lines[6:-1]
-        regex = r"\|(?P<name>[^|]+)\|(?P<type>[^|]+)\|(?P<editable>[^|]+)\|(?P<installed_version>[^|]+)\|(?P<expected_project>[^|]+)\|(?P<matched>[^|]+)\|"
+        regex = (
+            r"\|(?P<name>[^|]+)\|(?P<type>[^|]+)\|(?P<editable>[^|]+)"
+            r"\|(?P<installed_version>[^|]+)\|(?P<expected_project>[^|]+)\|(?P<matched>[^|]+)\|"
+        )
         match = re.match(regex, rows_std_pkg[0])
         assert match.group("name").strip() == "std"
         assert match.group("type").strip() == "v2"

@@ -21,12 +21,11 @@ import asyncio.subprocess
 import json
 import logging
 import os
-import subprocess
 import time
 from importlib.resources import files
 
 from tornado import httpclient
-from tornado.httpclient import HTTPError, HTTPRequest
+from tornado.httpclient import HTTPRequest
 from tornado.simple_httpclient import SimpleAsyncHTTPClient
 
 from inmanta import config, const, server, util
