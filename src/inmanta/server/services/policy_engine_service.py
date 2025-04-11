@@ -104,6 +104,9 @@ class OpaServer:
         self.running = False
 
     async def get_addr_policy_engine(self) -> str:
+        """
+        Returns the "<host>:<port>" on which the policy engine should listen for incoming connections.
+        """
         return f"{policy_engine_bind_address.get()}:{policy_engine_bind_port.get()}"
 
     def _initialize_storage(self) -> str:
