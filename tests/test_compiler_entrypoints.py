@@ -194,7 +194,7 @@ l = tests::length("Hello World!")
     assert location.end_lnr == 4
     assert location.end_char == 18
     assert resolves_to.location.file == os.path.join(snippetcompiler.modules_dir, "tests", "plugins", "__init__.py")
-    assert resolves_to.location.lnr == 14
+    assert resolves_to.location.lnr == 16
 
 
 def test_get_types_and_scopes(snippetcompiler):
