@@ -745,7 +745,6 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
 
     # Remove connectivity to the database
     await data.disconnect_pool()
-    await data.stop_engine()
 
     caplog.clear()
 
@@ -754,7 +753,7 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     await a.start()
     async_finalizer(a.stop)
 
-    # Verify that session creation fails and server state is stays consistent
+    # Verify that session creation fails and server state stays consistent
     await retry_limited(lambda: "Heartbeat failed" in caplog.text, 10)
     assert len(agentmanager.sessions) == 0
     assert len(agentmanager.tid_endpoint_to_session) == 0

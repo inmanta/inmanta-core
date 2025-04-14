@@ -202,7 +202,7 @@ class DatabaseService(protocol.ServerSlice):
 
     async def connect_database(self) -> None:
         """Connect to the database"""
-        self._pool = await initialize_database_connection(
+        self._pool = await initialize_database_connection_pool(
             database_host=opt.db_host.get(),
             database_port=opt.db_port.get(),
             database_name=opt.db_name.get(),
@@ -224,7 +224,6 @@ class DatabaseService(protocol.ServerSlice):
     async def disconnect_database(self) -> None:
         """Disconnect the database"""
         await stop_engine()
-        await data.disconnect_pool()
         self._pool = None
 
     async def get_reported_status(self) -> tuple[ReportedStatus, Optional[str]]:
@@ -253,7 +252,7 @@ class DatabaseService(protocol.ServerSlice):
         return (await self._db_monitor.get_status()).dict()
 
 
-async def initialize_database_connection(
+async def initialize_database_connection_pool(
     database_host: str,
     database_port: int,
     database_name: str,
@@ -279,24 +278,17 @@ async def initialize_database_connection(
     :param connection_timeout: Connection timeout (in seconds) when interacting with the database.
     """
 
-    pool = await data.connect_pool(
-        host=database_host,
-        port=database_port,
-        database=database_name,
-        username=database_username,
-        password=database_password,
-        create_db_schema=create_db_schema,
-        connection_pool_min_size=connection_pool_min_size,
-        connection_pool_max_size=connection_pool_max_size,
-        connection_timeout=connection_timeout,
-    )
-    await start_engine(
+
+    pool = await start_engine(
         database_username=database_username,
         database_password=database_password,
         database_host=database_host,
         database_port=database_port,
         database_name=database_name,
-        pool=pool,
+        create_db_schema=create_db_schema,
+        connection_pool_min_size=connection_pool_min_size,
+        connection_pool_max_size=connection_pool_max_size,
+        connection_timeout=connection_timeout,
     )
 
     LOGGER.info("Connected to PostgreSQL database %s on %s:%d", database_name, database_host, database_port)

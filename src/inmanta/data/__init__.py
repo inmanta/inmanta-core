@@ -76,7 +76,6 @@ from sqlalchemy.pool import ConnectionPoolEntry
 Global reference to the SQL Alchemy engine
 Main APIs to interact with it:
 - start_engine()
-- get_connection_ctx_mgr()
 - stop_engine()
 """
 ENGINE: AsyncEngine | None = None
@@ -1441,30 +1440,33 @@ class BaseDocument(metaclass=DocumentMeta):
     @classmethod
     def set_connection_pool(cls, pool: asyncpg.pool.Pool) -> None:
         if cls._connection_pool:
-            raise Exception(f"Connection already set on {cls} ({cls._connection_pool}!")
+            raise Exception(f"Connection already set on {cls} ({cls._connection_pool})!")
         cls._connection_pool = pool
 
     @classmethod
-    async def close_connection_pool(cls) -> None:
+    def remove_connection_pool(cls) -> None:
+
         if not cls._connection_pool:
             return
-        try:
-            await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
-        except asyncio.TimeoutError:
-            cls._connection_pool.terminate()
-            # Don't propagate this exception but just write a log message. This way:
-            #   * A timeout here still makes sure that the other server slices get stopped
-            #   * The tests don't fail when this timeout occurs
-            LOGGER.exception("A timeout occurred while closing the connection pool to the database")
-        except asyncio.CancelledError:
-            cls._connection_pool.terminate()
-            # Propagate cancel
-            raise
-        except Exception:
-            LOGGER.exception("An unexpected exception occurred while closing the connection pool to the database")
-            raise
-        finally:
-            cls._connection_pool = None
+        cls._connection_pool = None
+        #
+        # try:
+        #     await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
+        # except asyncio.TimeoutError:
+        #     cls._connection_pool.terminate()
+        #     # Don't propagate this exception but just write a log message. This way:
+        #     #   * A timeout here still makes sure that the other server slices get stopped
+        #     #   * The tests don't fail when this timeout occurs
+        #     LOGGER.exception("A timeout occurred while closing the connection pool to the database")
+        # except asyncio.CancelledError:
+        #     cls._connection_pool.terminate()
+        #     # Propagate cancel
+        #     raise
+        # except Exception:
+        #     LOGGER.exception("An unexpected exception occurred while closing the connection pool to the database")
+        #     raise
+        # finally:
+        #     cls._connection_pool = None
 
     def __setattr__(self, name: str, value: object) -> None:
         if name[0] == "_":
@@ -6668,10 +6670,12 @@ CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
 def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
-    LOGGER.debug("Connecting data classes to connection pool")
+    BaseDocument.set_connection_pool(pool)
 
-    for cls in _classes:
-        cls.set_connection_pool(pool)
+
+def get_connection_pool() -> asyncpg.pool.Pool:
+    assert BaseDocument._connection_pool is not None
+    return BaseDocument._connection_pool
 
 
 async def connect_pool(
@@ -6705,7 +6709,6 @@ async def connect_pool(
             await pool.expire_connections()
         return pool
     except Exception as e:
-        await pool.close()
         await disconnect_pool()
         raise e
 
@@ -6716,13 +6719,25 @@ async def disconnect_pool() -> None:
     # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
 
     # or until the gather itself is cancelled.
+    try:
+        await asyncio.wait_for(BaseDocument._connection_pool.close(), config.db_connection_timeout.get())
+    except asyncio.TimeoutError:
+        BaseDocument._connection_pool.terminate()
+        # Don't propagate this exception but just write a log message. This way:
+        #   * A timeout here still makes sure that the other server slices get stopped
+        #   * The tests don't fail when this timeout occurs
+        LOGGER.exception("A timeout occurred while closing the connection pool to the database")
+    except asyncio.CancelledError:
+        BaseDocument._connection_pool.terminate()
+        # Propagate cancel
+        raise
+    except Exception:
+        LOGGER.exception("An unexpected exception occurred while closing the connection pool to the database")
+        raise
+    finally:
+        BaseDocument.remove_connection_pool()
 
-    result = await asyncio.gather(*[cls.close_connection_pool() for cls in _classes], return_exceptions=True)
 
-    exceptions = [r for r in result if r is not None and isinstance(r, Exception)]
-
-    if exceptions:
-        raise ExceptionGroup(exceptions)
 
 
 async def start_engine(
@@ -6732,11 +6747,42 @@ async def start_engine(
     database_host: str,
     database_port: int,
     database_name: str,
-    pool: asyncpg.pool.Pool,
-) -> None:
+    create_db_schema: bool = False,
+    connection_pool_min_size: int = 10,
+    connection_pool_max_size: int = 10,
+    connection_timeout: float = 60.0,
+) -> asyncpg.pool.Pool:
+
     """
-    Start the SQL Alchemy engine for this process
+    Start the SQL Alchemy engine for this process.
+
+    We don't delegate pool creation to SQL alchemy (yet?) because at this stage
+    we are still using the low level asyncpg connection object to interact with
+    the DB in most of the code base.
+
+    We create our own asyncpg pool and configure the SQL alchemy engine to use it.
+
+    To this end, we pass the following arguments to `create_async_engine`:
+
+        * async_creator: tell SQL alchemy how it can acquire new DB connections
+            i.e. using pool.acquire()
+
+        * poolclass: use a subclass of NullPool to disable SQL alchemy pool management.
+            The _do_return_conn method will make sure the connection is returned back
+            into the pool.
     """
+
+    pool = await connect_pool(
+        host=database_host,
+        port=database_port,
+        database=database_name,
+        username=database_username,
+        password=database_password,
+        create_db_schema=create_db_schema,
+        connection_pool_min_size=connection_pool_min_size,
+        connection_pool_max_size=connection_pool_max_size,
+        connection_timeout=connection_timeout,
+    )
 
     url_object = URL.create(
         drivername="postgresql+asyncpg",
@@ -6770,46 +6816,20 @@ async def start_engine(
         await stop_engine()
         raise e
 
-
-@asynccontextmanager
-async def get_connection_ctx_mgr() -> AsyncIterator[Connection]:
-    """
-    Retrieve an asyncpg connection from the sqlalchemy engine's
-    connection pool. This method is expected to be used as an
-    async context manager.
-    """
-    if ENGINE is None:
-        raise Exception("SQL Alchemy engine was not initialized")
-    async with ENGINE.connect() as connection:
-        connection_fairy = await connection.get_raw_connection()
-
-        # the really-real innermost driver connection is available
-        # from the .driver_connection attribute
-        raw_asyncio_connection = connection_fairy.driver_connection
-        assert isinstance(raw_asyncio_connection, Connection)
-        yield raw_asyncio_connection
-        # Pool can't handle naked asycpg
-        # https://github.com/sqlalchemy/sqlalchemy/discussions/12460
-        await raw_asyncio_connection.reset()
-
+    return pool
 
 async def stop_engine() -> None:
     """
     Stop the sql alchemy engine.
     """
+    await disconnect_pool()
+
     global ENGINE
     global SESSION_FACTORY
     if ENGINE is not None:
         await ENGINE.dispose(close=True)
     ENGINE = None
     SESSION_FACTORY = None
-
-
-def get_pool() -> AsyncAdaptedQueuePool:
-    pool = get_engine().pool
-    assert pool is not None, "SQL Alchemy engine's pool was not initialized"
-    assert isinstance(pool, AsyncAdaptedQueuePool)
-    return pool
 
 
 def get_engine() -> AsyncEngine:

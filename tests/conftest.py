@@ -33,7 +33,6 @@ from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
-from inmanta.data import get_engine, start_engine, stop_engine
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol import auth
@@ -41,7 +40,6 @@ from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -398,31 +396,6 @@ async def postgresql_pool(postgres_db, database_name_internal):
     await pool.close()
 
 
-@pytest.fixture
-def sqlalchemy_url_parameters(postgres_db, database_name_internal: str, postgresql_pool) -> dict[str, str]:
-    """
-    Return the dict representation of the parameters to pass to the start_engine
-    function to start the sql alchemy engine.
-    """
-    return {
-        "database_username": postgres_db.user,
-        "database_password": postgres_db.password,
-        "database_host": postgres_db.host,
-        "database_port": postgres_db.port,
-        "database_name": database_name_internal,
-        "pool": postgresql_pool,
-    }
-
-
-@pytest.fixture(scope="function")
-async def sql_alchemy_engine(sqlalchemy_url_parameters: Mapping[str, str]) -> AsyncEngine:
-
-    await start_engine(**sqlalchemy_url_parameters)
-    engine = get_engine()
-
-    yield engine
-
-    await stop_engine()
 
 
 @pytest.fixture(scope="function")

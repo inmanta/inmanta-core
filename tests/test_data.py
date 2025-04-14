@@ -61,14 +61,31 @@ async def test_connect_too_small_connection_pool(postgres_db, database_name: str
         await data.disconnect_pool()
 
 
-async def test_connect_default_parameters(sql_alchemy_engine):
-    """
-    Basic connectivity test for the sql alchemy engine
-    """
-    assert sql_alchemy_engine is not None
-    async with sql_alchemy_engine.connect() as connection:
-        assert connection is not None
+async def test_connect_default_parameters(postgres_db, database_name: str, create_db_schema: bool = False):
+    pool: Pool = await data.connect_pool(
+        postgres_db.host, postgres_db.port, database_name, postgres_db.user, postgres_db.password, create_db_schema
+    )
+    assert pool is not None
+    try:
+        async with pool.acquire() as connection:
+            assert connection is not None
+    finally:
+        await data.disconnect_pool()
 
+
+@pytest.mark.parametrize("min_size, max_size", [(-1, 1), (2, 1), (-2, -2)])
+async def test_connect_invalid_parameters(postgres_db, min_size, max_size, database_name: str, create_db_schema: bool = False):
+    with pytest.raises(ValueError):
+        await data.connect_pool(
+            postgres_db.host,
+            postgres_db.port,
+            database_name,
+            postgres_db.user,
+            postgres_db.password,
+            create_db_schema,
+            connection_pool_min_size=min_size,
+            connection_pool_max_size=max_size,
+        )
 
 async def test_connection_failure(unused_tcp_port_factory, database_name, clean_reset):
     """

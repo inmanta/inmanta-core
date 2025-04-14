@@ -166,7 +166,6 @@ async def do_user_setup() -> None:
         )
     finally:
         await stop_engine()
-        await data.disconnect_pool()
 
     click.echo("Make sure to (re)start the orchestrator to activate all changes.")
 
