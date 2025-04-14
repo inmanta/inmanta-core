@@ -23,7 +23,6 @@ import asyncpg
 from pyformance import gauge, global_registry
 from pyformance.meters import CallbackGauge
 
-from inmanta import data
 from inmanta.data import start_engine, stop_engine
 from inmanta.data.model import DataBaseReport, ReportedStatus
 from inmanta.server import SLICE_DATABASE
@@ -129,9 +128,7 @@ class DatabaseMonitor:
 
         self._add_gauge(
             "db.connected",
-            CallbackGauge(
-                callback=lambda: 1 if (self._pool is not None and not self._pool.is_closing()) else 0
-            ),
+            CallbackGauge(callback=lambda: 1 if (self._pool is not None and not self._pool.is_closing()) else 0),
         )
         self._add_gauge(
             "db.max_pool", CallbackGauge(callback=lambda: self._pool.get_max_size() if self._pool is not None else 0)
@@ -277,7 +274,6 @@ async def initialize_database_connection_pool(
     :param connection_pool_max_size: Limit the size of the pool to this number of connections .
     :param connection_timeout: Connection timeout (in seconds) when interacting with the database.
     """
-
 
     pool = await start_engine(
         database_username=database_username,

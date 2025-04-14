@@ -118,7 +118,7 @@ import uuid
 import venv
 import weakref
 from collections import abc, defaultdict, namedtuple
-from collections.abc import AsyncIterator, Awaitable, Iterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
 from typing import Any, Callable, Dict, Generic, Optional, Union
 
@@ -396,8 +396,6 @@ async def postgresql_pool(postgres_db, database_name_internal):
     await pool.close()
 
 
-
-
 @pytest.fixture(scope="function")
 async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_reset):
     await data.connect_pool(
@@ -445,6 +443,7 @@ async def clean_db(create_db, postgresql_client):
     if tables_to_truncate:
         truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
         await postgresql_client.execute(truncate_query)
+
 
 @pytest.fixture(scope="function")
 def get_columns_in_db_table(postgresql_client):

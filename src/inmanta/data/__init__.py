@@ -68,7 +68,7 @@ from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-from sqlalchemy import URL, AdaptedConnection, AsyncAdaptedQueuePool, NullPool
+from sqlalchemy import URL, AdaptedConnection, NullPool
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import ConnectionPoolEntry
 
@@ -6716,9 +6716,8 @@ async def connect_pool(
 async def disconnect_pool() -> None:
     LOGGER.debug("Disconnecting data classes from connection pool")
 
-    # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
-
-    # or until the gather itself is cancelled.
+    if BaseDocument._connection_pool is None:
+        return
     try:
         await asyncio.wait_for(BaseDocument._connection_pool.close(), config.db_connection_timeout.get())
     except asyncio.TimeoutError:
@@ -6738,8 +6737,6 @@ async def disconnect_pool() -> None:
         BaseDocument.remove_connection_pool()
 
 
-
-
 async def start_engine(
     *,
     database_username: str,
@@ -6752,7 +6749,6 @@ async def start_engine(
     connection_pool_max_size: int = 10,
     connection_timeout: float = 60.0,
 ) -> asyncpg.pool.Pool:
-
     """
     Start the SQL Alchemy engine for this process.
 
@@ -6817,6 +6813,7 @@ async def start_engine(
         raise e
 
     return pool
+
 
 async def stop_engine() -> None:
     """

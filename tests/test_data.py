@@ -87,6 +87,7 @@ async def test_connect_invalid_parameters(postgres_db, min_size, max_size, datab
             connection_pool_max_size=max_size,
         )
 
+
 async def test_connection_failure(unused_tcp_port_factory, database_name, clean_reset):
     """
     Basic connectivity test: using an incorrect port raises an error
