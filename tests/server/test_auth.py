@@ -226,7 +226,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     policy_engine_log_file = os.path.join(log_dir, "policy_engine.log")
     assert os.path.isfile(policy_engine_log_file)
     with open(policy_engine_log_file, "r") as fh:
-        assert (fh.read(1))
+        assert fh.read(1)
 
 
 async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, monkeypatch) -> None:

@@ -18,10 +18,10 @@ Contact: code@inmanta.com
 
 import asyncio
 import asyncio.subprocess
-import subprocess
 import json
 import logging
 import os
+import subprocess
 import time
 from importlib.resources import files
 
@@ -31,7 +31,6 @@ from tornado.simple_httpclient import SimpleAsyncHTTPClient
 
 from inmanta import config, const, server, util
 from inmanta.protocol.auth import decorators
-from inmanta.server import config as server_config
 from inmanta.server import protocol
 
 LOGGER = logging.getLogger(__name__)
