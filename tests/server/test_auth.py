@@ -32,9 +32,9 @@ from inmanta.server.services import policy_engine_service
 @pytest.fixture
 async def server_with_test_slice(tmpdir, access_policy: str) -> protocol.Server:
     """
-    A fixture that returns a server with auth enabled that has a TestSlice
-    with several different API endpoints that require authorization through
-    the policy engine.
+    A fixture that returns a server with authentication and authorization enabled
+    that has a TestSlice with several different API endpoints that require authorization
+    through the policy engine.
     """
     # Configure server
     state_dir = os.path.join(tmpdir, "state")
@@ -43,6 +43,7 @@ async def server_with_test_slice(tmpdir, access_policy: str) -> protocol.Server:
         os.mkdir(directory)
 
     config.Config.set("server", "auth", "true")
+    config.Config.set("server", "enforce-access-policy", "true")
     config.Config.set("server", "auth_method", "database")
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
     config.Config.set("auth_jwt_default", "sign", "true")
@@ -220,6 +221,12 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     assert result.code == 200
     result = await client.admin_only_method()
     assert result.code == 200
+
+    log_dir = config.log_dir.get()
+    policy_engine_log_file = os.path.join(log_dir, "policy_engine.log")
+    assert os.path.isfile(policy_engine_log_file)
+    with open(policy_engine_log_file, "r") as fh:
+        assert (fh.read(1))
 
 
 async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, monkeypatch) -> None:

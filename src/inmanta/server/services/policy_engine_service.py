@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import asyncio
 import asyncio.subprocess
+import subprocess
 import json
 import logging
 import os
@@ -35,6 +36,14 @@ from inmanta.server import protocol
 
 LOGGER = logging.getLogger(__name__)
 
+enforce_access_policy = config.Option(
+    "server",
+    "enforce-access-policy",
+    False,
+    "If True, the access policy defined by the policy-engine.policy-file config option will be enforce on the API."
+    " If False, any access will be allowed.",
+    config.is_bool,
+)
 policy_file = config.Option(
     "policy-engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the access policy.", config.is_str
 )
@@ -58,7 +67,7 @@ class PolicyEngineSlice(protocol.ServerSlice):
 
     async def start(self) -> None:
         await super().start()
-        if server_config.server_enable_auth.get():
+        if enforce_access_policy.get():
             await self._opa_process.start()
 
     async def stop(self) -> None:
@@ -72,11 +81,10 @@ class PolicyEngineSlice(protocol.ServerSlice):
         """
         Return True iff the policy evaluates to True.
         """
+        if not enforce_access_policy.get():
+            return True
         if not self._opa_process.running:
             raise Exception("Policy engine is not running. Call OpaServer.start() first.")
-        if not server_config.server_enable_auth.get():
-            LOGGER.warning("An evaluation of the access policy was requested while config option server.auth=False")
-            return True
         client = SimpleAsyncHTTPClient()
         policy_engine_addr = await self._opa_process.get_addr_policy_engine()
         request = HTTPRequest(
@@ -149,9 +157,8 @@ class OpaServer:
                 "debug",
                 data_file,
                 policy_file.get(),
-                # TODO: uncomment
-                # stdout=log_file_handle,
-                # stderr=subprocess.STDOUT,
+                stdout=log_file_handle,
+                stderr=subprocess.STDOUT,
             )
         finally:
             if log_file_handle is not None:
