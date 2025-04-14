@@ -76,7 +76,7 @@ class CallTarget:
 
             # there can only be one
             if url in url_map and properties.operation in url_map[url]:
-                raise Exception(f"A handler is already registered for {properties.operation} {url}. ")
+                raise Exception(f"A handler is already registered for {properties.operation} {url}.")
 
             url_map[url][properties.operation] = common.UrlMethod(properties, self, fnc, handle_name)
         return url_map

@@ -32,7 +32,8 @@ from tornado.simple_httpclient import SimpleAsyncHTTPClient
 
 from inmanta import config, const, server, util
 from inmanta.protocol.auth import decorators
-from inmanta.server import protocol, config as server_config
+from inmanta.server import config as server_config
+from inmanta.server import protocol
 
 LOGGER = logging.getLogger(__name__)
 

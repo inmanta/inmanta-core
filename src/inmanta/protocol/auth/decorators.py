@@ -96,7 +96,7 @@ class AuthorizationMetadata:
         endpoints = {}
         for md in cls.metadata.values():
             method_properties = md.method_properties
-            endpoint_id = f"{method_properties.operation} {method_properties.path}"
+            endpoint_id = f"{method_properties.operation} {method_properties.get_full_path()}"
             endpoints[endpoint_id] = {
                 "client_types": method_properties.client_types,
                 "auth_label": md.auth_label,

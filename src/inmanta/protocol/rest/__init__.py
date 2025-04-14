@@ -611,7 +611,7 @@ class CallArguments:
         return {
             "input": {
                 "request": {
-                    "endpoint_id": f"{method_properties.operation} {method_properties.path}",
+                    "endpoint_id": f"{method_properties.operation} {method_properties.get_full_path()}",
                     "parameters": call_args,
                 },
                 "token": self._auth_token,

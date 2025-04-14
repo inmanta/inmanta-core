@@ -259,7 +259,7 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     assert "request" in input_policy_engine["input"]
     request = input_policy_engine["input"]["request"]
     assert request == {
-        "endpoint_id": "POST /environment-scoped",
+        "endpoint_id": "POST /api/v1/environment-scoped",
         "parameters": {
             "env": uuid.UUID(env_id),
         },
@@ -278,7 +278,7 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     assert "request" in input_policy_engine["input"]
     request = input_policy_engine["input"]["request"]
     assert request == {
-        "endpoint_id": "GET /read-only",
+        "endpoint_id": "GET /api/v1/read-only",
         "parameters": {},
     }
     assert "token" in input_policy_engine["input"]
@@ -305,7 +305,7 @@ async def test_policy_engine_data() -> None:
         pass
 
     data: dict[str, object] = decorators.AuthorizationMetadata.get_open_policy_agent_data()
-    endpoint_id = "GET /read-only"
+    endpoint_id = "GET /api/v1/read-only"
     assert endpoint_id in data["endpoints"]
     read_only_method_metadata = data["endpoints"][endpoint_id]
     assert read_only_method_metadata["auth_label"] == "test"
@@ -313,7 +313,7 @@ async def test_policy_engine_data() -> None:
     assert read_only_method_metadata["client_types"] == ["api"]
     assert read_only_method_metadata["environment_param"] is None
 
-    endpoint_id = "POST /read-write"
+    endpoint_id = "POST /api/v1/read-write"
     assert endpoint_id in data["endpoints"]
     read_write_method_metadata = data["endpoints"][endpoint_id]
     assert read_write_method_metadata["auth_label"] == "other-test"
