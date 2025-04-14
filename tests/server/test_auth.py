@@ -28,7 +28,6 @@ from inmanta.protocol.decorators import handle, typedmethod
 from inmanta.server import protocol
 from inmanta.server.services import policy_engine_service
 
-
 @pytest.mark.parametrize(
     "access_policy",
     [
@@ -73,7 +72,7 @@ from inmanta.server.services import policy_engine_service
         """.strip()
     ],
 )
-async def test_policy_evaluation(tmpdir, async_finalizer, access_policy: str) -> None:
+async def test_policy_evaluation(tmpdir, async_finalizer, access_policy: str, monkeypatch) -> None:
     env_id = "11111111-1111-1111-1111-111111111111"
     state_dir = os.path.join(tmpdir, "state")
     log_dir = os.path.join(tmpdir, "logs")
@@ -201,6 +200,54 @@ async def test_policy_evaluation(tmpdir, async_finalizer, access_policy: str) ->
     assert result.code == 200
     result = await client.admin_only_method()
     assert result.code == 200
+
+    input_policy_engine = None
+    _old_does_satisfy_access_policy = policy_engine_service.PolicyEngineSlice.does_satisfy_access_policy
+
+    async def save_input_data(self, input_data: dict[str, object]) -> bool:
+        """
+        Save the value of the input_data parameter, passed to the PolicyEngineSlice.does_satisfy_access_policy()
+        method, into the local input_policy_engine variable.
+        """
+        nonlocal input_policy_engine
+        input_policy_engine = input_data
+        return _old_does_satisfy_access_policy(self, input_data)
+
+    monkeypatch.setattr(policy_engine_service.PolicyEngineSlice, "does_satisfy_access_policy", save_input_data)
+
+    client = get_client_with_role(env_to_role_dct={env_id: "read-write"}, is_admin=False)
+    result = await client.environment_scoped_method(env_id)
+    assert input_policy_engine is not None
+    assert "input" in input_policy_engine
+    assert "request" in input_policy_engine["input"]
+    request = input_policy_engine["input"]["request"]
+    assert request == {
+        "endpoint_id": "POST /environment-scoped",
+        "parameters": {
+            "env": uuid.UUID(env_id),
+        },
+    }
+    assert "token" in input_policy_engine["input"]
+    token = input_policy_engine["input"]["token"]
+    assert token["urn:inmanta:ct"] == ["api"]
+    assert token["urn:inmanta:roles"] == {env_id: "read-write"}
+    assert token["urn:inmanta:is-admin"] is False
+
+    client = get_client_with_role(env_to_role_dct={}, is_admin=True)
+    input_policy_engine = None
+    result = await client.read_only_method()
+    assert "input" in input_policy_engine
+    assert "request" in input_policy_engine["input"]
+    request = input_policy_engine["input"]["request"]
+    assert request == {
+        "endpoint_id": "GET /read-only",
+        "parameters": {},
+    }
+    assert "token" in input_policy_engine["input"]
+    token = input_policy_engine["input"]["token"]
+    assert token["urn:inmanta:ct"] == ["api"]
+    assert token["urn:inmanta:roles"] == {}
+    assert token["urn:inmanta:is-admin"] is True
 
 
 async def test_policy_engine_data() -> None:
