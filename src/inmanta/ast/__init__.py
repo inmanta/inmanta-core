@@ -18,7 +18,6 @@ Contact: code@inmanta.com
 
 import traceback
 from abc import abstractmethod
-from functools import lru_cache
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from inmanta import warnings
