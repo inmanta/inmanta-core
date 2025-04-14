@@ -200,3 +200,37 @@ async def test_policy_evaluation(tmpdir, async_finalizer, access_policy: str) ->
     assert result.code == 200
     result = await client.admin_only_method()
     assert result.code == 200
+
+
+async def test_policy_engine_data() -> None:
+    """
+    Verify that the data provided to the policy engine, containing
+    authorization metadata about the endpoints, is correct.
+    """
+
+    @decorators.auth(auth_label="test", read_only=True)
+    @typedmethod(path="/read-only", operation="GET", client_types=["api"])
+    def test_read_only() -> None:  # NOQA
+        pass
+
+    @decorators.auth(auth_label="other-test", read_only=False, environment_param="tid")
+    @typedmethod(path="/read-write", operation="POST", client_types=["api", "agent"])
+    def test_read_write(tid: uuid.UUID) -> None:  # NOQA
+        pass
+
+    data: dict[str, object] = decorators.AuthorizationMetadata.get_open_policy_agent_data()
+    endpoint_id = "GET /read-only"
+    assert endpoint_id in data["endpoints"]
+    read_only_method_metadata = data["endpoints"][endpoint_id]
+    assert read_only_method_metadata["auth_label"] == "test"
+    assert read_only_method_metadata["read_only"] is True
+    assert read_only_method_metadata["client_types"] == ["api"]
+    assert read_only_method_metadata["environment_param"] is None
+
+    endpoint_id = "POST /read-write"
+    assert endpoint_id in data["endpoints"]
+    read_write_method_metadata = data["endpoints"][endpoint_id]
+    assert read_write_method_metadata["auth_label"] == "other-test"
+    assert read_write_method_metadata["read_only"] is False
+    assert read_write_method_metadata["client_types"] == ["api", "agent"]
+    assert read_write_method_metadata["environment_param"] == "tid"
