@@ -16,8 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import inmanta.types
-
 """
 Tests to verify correctness/compatibility of code snippets in the docs.
 """
@@ -30,10 +28,69 @@ from collections import abc, defaultdict
 import py
 import pytest
 
-from inmanta import data
+import inmanta.types
+from inmanta import compiler, data
 from utils import v1_module_from_template, wait_until_deployment_finishes
 
 DOCS_DIR: str = os.path.join(os.path.dirname(__file__), "..", "docs")
+
+
+@pytest.mark.slowtest
+async def test_docs_snippets_language_unknowns(snippetcompiler, capsys) -> None:
+    """
+    Test the code snippets that explain how unknowns flow through the model.
+    """
+    with open(os.path.join(os.path.dirname(__file__), "../docs/language/unknowns_simple.cf")) as fh:
+        simple_model: str = fh.read()
+
+    with open(os.path.join(os.path.dirname(__file__), "../docs/language/unknowns_multi.cf")) as fh:
+        list_model: str = fh.read()
+
+    # TODO: convert_unknowns typing port
+    model = textwrap.dedent(
+        f"""\
+        {simple_model}
+
+        import tests
+
+        assert = true
+        assert = std::is_unknown(a)
+        assert = [1, 2, "?", 3] == tests::convert_unknowns(b, "?")
+        assert = std::is_unknown(c)
+        assert = d
+        assert = std::is_unknown(e)
+        assert = std::is_unknown(f)
+        assert = std::is_unknown(g)
+        assert = [1, 2, "?"] == [x == "?" ? x : x.n for x in tests::convert_unknowns(h, "?")]
+        assert = [1, 2] == [x.n for x in i]
+        """
+    )
+    snippetcompiler.setup_for_snippet(model, ministd=True)
+    compiler.do_compile()
+
+    out, _ = capsys.readouterr()
+    assert out == textwrap.dedent(
+        """\
+        This message is printed twice! x=1
+        This message is printed twice! x=2
+        """
+    )
+
+    model = textwrap.dedent(
+        f"""\
+        {list_model}
+
+        import tests
+
+        assert = true
+        assert = ["?", 3, "?", 5] == tests::convert_unknowns(a, "?")
+        assert = std::is_unknown(b)
+        assert = ["?", "?"] == tests::convert_unknowns(c, "?")
+        assert = std::is_unknown(d)
+        """
+    )
+    snippetcompiler.setup_for_snippet(model, ministd=True)
+    compiler.do_compile()
 
 
 @pytest.mark.slowtest

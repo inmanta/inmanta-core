@@ -993,12 +993,14 @@ def make_requires(resources: Mapping[ResourceIdStr, ResourceIntent]) -> Mapping[
     return {k: {req for req in resource.attributes.get("requires", [])} for k, resource in resources.items()}
 
 
-dummyblueprint = ExecutorBlueprint(
-    pip_config=LEGACY_PIP_DEFAULT,
-    requirements=[],
-    python_version=(3, 11),
-    sources=[],
-)
+def _get_dummy_blueprint_for(environment: uuid.UUID) -> ExecutorBlueprint:
+    return ExecutorBlueprint(
+        environment_id=environment,
+        pip_config=LEGACY_PIP_DEFAULT,
+        requirements=[],
+        python_version=(3, 11),
+        sources=[],
+    )
 
 
 class DummyCodeManager(CodeManager):
@@ -1010,6 +1012,7 @@ class DummyCodeManager(CodeManager):
         if not resource_types:
             raise ValueError(f"{self.__class__.__name__}.get_code() expects at least one resource type")
 
+        dummyblueprint: ExecutorBlueprint = _get_dummy_blueprint_for(environment)
         return ([ResourceInstallSpec(rt, version, dummyblueprint) for rt in resource_types], {})
 
 
