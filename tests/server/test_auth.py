@@ -57,6 +57,14 @@ from inmanta.server.services import policy_engine_service
             input.token["urn:inmanta:roles"][request_environment] == "read-write"
         }
 
+        # Users with the user role in a given environment can execute API endpoints
+        # with auth_label="user" in that environment.
+        allowed if {
+            endpoint_data.auth_label == "user"
+            request_environment != null
+            input.token["urn:inmanta:roles"][request_environment] == "user"
+        }
+
         # Users marked as is-admin can execute any API endpoint.
         allowed if {
             input.token["urn:inmanta:is-admin"]
@@ -101,6 +109,11 @@ async def test_policy_evaluation(tmpdir, async_finalizer, access_policy: str) ->
     def environment_scoped_method(env: uuid.UUID) -> None:  # NOQA
         pass
 
+    @decorators.auth(auth_label="user", read_only=False, environment_param="env")
+    @typedmethod(path="/user-endpoint", operation="POST", client_types=["api"])
+    def user_method(env: uuid.UUID) -> None:  # NOQA
+        pass
+
     @decorators.auth(auth_label="admin", read_only=False)
     @typedmethod(path="/admin-only", operation="POST", client_types=["api"])
     def admin_only_method() -> None:  # NOQA
@@ -113,6 +126,10 @@ async def test_policy_evaluation(tmpdir, async_finalizer, access_policy: str) ->
 
         @handle(environment_scoped_method)
         async def handle_environment_scoped_method(self, env: uuid.UUID) -> None:  # NOQA
+            return
+
+        @handle(user_method)
+        async def handle_user_method(self, env: uuid.UUID) -> None:  # NOQA
             return
 
         @handle(admin_only_method)
@@ -149,6 +166,8 @@ async def test_policy_evaluation(tmpdir, async_finalizer, access_policy: str) ->
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
     assert result.code == 403
+    result = await client.user_method(env_id)
+    assert result.code == 403
     result = await client.admin_only_method()
     assert result.code == 403
 
@@ -157,6 +176,18 @@ async def test_policy_evaluation(tmpdir, async_finalizer, access_policy: str) ->
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
     assert result.code == 200
+    result = await client.user_method(env_id)
+    assert result.code == 200
+    result = await client.admin_only_method()
+    assert result.code == 403
+
+    client = get_client_with_role(env_to_role_dct={env_id: "user"}, is_admin=False)
+    result = await client.read_only_method()
+    assert result.code == 200
+    result = await client.environment_scoped_method(env_id)
+    assert result.code == 403
+    result = await client.user_method(env_id)
+    assert result.code == 200
     result = await client.admin_only_method()
     assert result.code == 403
 
@@ -164,6 +195,8 @@ async def test_policy_evaluation(tmpdir, async_finalizer, access_policy: str) ->
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
+    assert result.code == 200
+    result = await client.user_method(env_id)
     assert result.code == 200
     result = await client.admin_only_method()
     assert result.code == 200
