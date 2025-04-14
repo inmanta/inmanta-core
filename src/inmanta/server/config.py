@@ -159,7 +159,14 @@ server_ssl_key = Option(
 server_ssl_cert = Option(
     "server", "ssl_cert_file", None, "SSL certificate file for the server key. Leave blank to disable SSL", is_str_opt
 )
-
+enforce_access_policy = Option(
+    "server",
+    "enforce-access-policy",
+    False,
+    "If True, the access policy defined by the policy-engine.policy-file config option will be enforce on the API."
+    " If False, any access will be allowed.",
+    config.is_bool,
+)
 
 def ssl_enabled():
     """Is ssl enabled on the server, given the current server config"""

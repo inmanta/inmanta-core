@@ -32,18 +32,10 @@ from tornado.simple_httpclient import SimpleAsyncHTTPClient
 
 from inmanta import config, const, server, util
 from inmanta.protocol.auth import decorators
-from inmanta.server import protocol
+from inmanta.server import protocol, config as server_config
 
 LOGGER = logging.getLogger(__name__)
 
-enforce_access_policy = config.Option(
-    "server",
-    "enforce-access-policy",
-    False,
-    "If True, the access policy defined by the policy-engine.policy-file config option will be enforce on the API."
-    " If False, any access will be allowed.",
-    config.is_bool,
-)
 policy_file = config.Option(
     "policy-engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the access policy.", config.is_str
 )
@@ -67,7 +59,7 @@ class PolicyEngineSlice(protocol.ServerSlice):
 
     async def start(self) -> None:
         await super().start()
-        if enforce_access_policy.get():
+        if server_config.enforce_access_policy.get():
             await self._opa_process.start()
 
     async def stop(self) -> None:
@@ -81,7 +73,7 @@ class PolicyEngineSlice(protocol.ServerSlice):
         """
         Return True iff the policy evaluates to True.
         """
-        if not enforce_access_policy.get():
+        if not server_config.enforce_access_policy.get():
             return True
         if not self._opa_process.running:
             raise Exception("Policy engine is not running. Call OpaServer.start() first.")

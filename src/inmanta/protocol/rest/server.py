@@ -335,6 +335,6 @@ class RESTServer(RESTBase):
             await self._http_server.close_all_connections()
 
     async def get_policy_engine_slice(self) -> Optional["PolicyEngineSlice"]:
-        if not server_config.server_enable_auth.get():
+        if not server_config.enforce_access_policy.get():
             return None
         return self._server.get_slice(name=SLICE_POLICY_ENGINE)
