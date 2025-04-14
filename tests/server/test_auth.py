@@ -28,6 +28,7 @@ from inmanta.protocol.decorators import handle, typedmethod
 from inmanta.server import protocol
 from inmanta.server.services import policy_engine_service
 
+
 @pytest.fixture
 async def server_with_test_slice(tmpdir, access_policy: str) -> protocol.Server:
     """
@@ -245,6 +246,7 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     env_id = "11111111-1111-1111-1111-111111111111"
     client = get_client_with_role(env_to_role_dct={env_id: "read-write"}, is_admin=False)
     result = await client.environment_scoped_method(env_id)
+    assert result.code == 200
     assert input_policy_engine is not None
     assert "input" in input_policy_engine
     assert "request" in input_policy_engine["input"]
@@ -264,6 +266,7 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     client = get_client_with_role(env_to_role_dct={}, is_admin=True)
     input_policy_engine = None
     result = await client.read_only_method()
+    assert result.code == 200
     assert "input" in input_policy_engine
     assert "request" in input_policy_engine["input"]
     request = input_policy_engine["input"]["request"]
