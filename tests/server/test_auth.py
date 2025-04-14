@@ -28,6 +28,108 @@ from inmanta.protocol.decorators import handle, typedmethod
 from inmanta.server import protocol
 from inmanta.server.services import policy_engine_service
 
+@pytest.fixture
+async def server_with_test_slice(tmpdir, access_policy: str) -> protocol.Server:
+    """
+    A fixture that returns a server with auth enabled that has a TestSlice
+    with several different API endpoints that require authorization through
+    the policy engine.
+    """
+    # Configure server
+    state_dir = os.path.join(tmpdir, "state")
+    log_dir = os.path.join(tmpdir, "logs")
+    for directory in [state_dir, log_dir]:
+        os.mkdir(directory)
+
+    config.Config.set("server", "auth", "true")
+    config.Config.set("server", "auth_method", "database")
+    config.Config.set("auth_jwt_default", "algorithm", "HS256")
+    config.Config.set("auth_jwt_default", "sign", "true")
+    config.Config.set("auth_jwt_default", "client_types", "agent,compiler,api")
+    config.Config.set("auth_jwt_default", "key", "eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM")
+    config.Config.set("auth_jwt_default", "expire", "0")
+    config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
+    config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
+    config.Config.set("config", "state-dir", state_dir)
+    config.Config.set("config", "log-dir", log_dir)
+    config.state_dir.set(str(tmpdir))
+
+    os.mkdir(os.path.join(tmpdir, "policy_engine"))
+    access_policy_file = os.path.join(tmpdir, "policy_engine", "policy.rego")
+    with open(access_policy_file, "w") as fh:
+        fh.write(access_policy)
+    policy_engine_service.policy_file.set(access_policy_file)
+
+    # Define the TestSlice and its API endpoints
+    @decorators.auth(auth_label="test", read_only=True)
+    @typedmethod(path="/read-only", operation="GET", client_types=["api"])
+    def read_only_method() -> None:  # NOQA
+        pass
+
+    @decorators.auth(auth_label="test", read_only=False, environment_param="env")
+    @typedmethod(path="/environment-scoped", operation="POST", client_types=["api"])
+    def environment_scoped_method(env: uuid.UUID) -> None:  # NOQA
+        pass
+
+    @decorators.auth(auth_label="user", read_only=False, environment_param="env")
+    @typedmethod(path="/user-endpoint", operation="POST", client_types=["api"])
+    def user_method(env: uuid.UUID) -> None:  # NOQA
+        pass
+
+    @decorators.auth(auth_label="admin", read_only=False)
+    @typedmethod(path="/admin-only", operation="POST", client_types=["api"])
+    def admin_only_method() -> None:  # NOQA
+        pass
+
+    class TestSlice(protocol.ServerSlice):
+        @handle(read_only_method)
+        async def handle_read_only_method(self) -> None:  # NOQA
+            return
+
+        @handle(environment_scoped_method)
+        async def handle_environment_scoped_method(self, env: uuid.UUID) -> None:  # NOQA
+            return
+
+        @handle(user_method)
+        async def handle_user_method(self, env: uuid.UUID) -> None:  # NOQA
+            return
+
+        @handle(admin_only_method)
+        async def handle_admin_only_method(self, context: common.CallContext) -> None:  # NOQA
+            return
+
+    # Start the server
+    rs = protocol.Server()
+    policy_engine_slice = policy_engine_service.PolicyEngineSlice()
+    test_slice = TestSlice(name="testslice")
+    for current_slice in [policy_engine_slice, test_slice]:
+        rs.add_slice(current_slice)
+    await rs.start()
+
+    yield rs
+
+    # Stop the server
+    await test_slice.stop()
+    await policy_engine_slice.stop()
+    await rs.stop()
+
+
+def get_client_with_role(env_to_role_dct: dict[str, str], is_admin: bool) -> protocol.Client:
+    """
+    Returns a client that uses an access token for the given role.
+    """
+    token = auth.encode_token(
+        client_types=[str(const.ClientType.api.value)],
+        expire=None,
+        custom_claims={
+            f"{const.INMANTA_URN}roles": env_to_role_dct,
+            f"{const.INMANTA_URN}is-admin": is_admin,
+        },
+    )
+    config.Config.set("client_rest_transport", "token", token)
+    return protocol.Client("client")
+
+
 @pytest.mark.parametrize(
     "access_policy",
     [
@@ -72,94 +174,11 @@ from inmanta.server.services import policy_engine_service
         """.strip()
     ],
 )
-async def test_policy_evaluation(tmpdir, async_finalizer, access_policy: str, monkeypatch) -> None:
+async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> None:
+    """
+    Verify that the server correctly takes into account the defined access policy.
+    """
     env_id = "11111111-1111-1111-1111-111111111111"
-    state_dir = os.path.join(tmpdir, "state")
-    log_dir = os.path.join(tmpdir, "logs")
-    for directory in [state_dir, log_dir]:
-        os.mkdir(directory)
-
-    config.Config.set("server", "auth", "true")
-    config.Config.set("server", "auth_method", "database")
-    config.Config.set("auth_jwt_default", "algorithm", "HS256")
-    config.Config.set("auth_jwt_default", "sign", "true")
-    config.Config.set("auth_jwt_default", "client_types", "agent,compiler,api")
-    config.Config.set("auth_jwt_default", "key", "eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM")
-    config.Config.set("auth_jwt_default", "expire", "0")
-    config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
-    config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
-    config.Config.set("config", "state-dir", state_dir)
-    config.Config.set("config", "log-dir", log_dir)
-
-    config.state_dir.set(str(tmpdir))
-
-    os.mkdir(os.path.join(tmpdir, "policy_engine"))
-    access_policy_file = os.path.join(tmpdir, "policy_engine", "policy.rego")
-    with open(access_policy_file, "w") as fh:
-        fh.write(access_policy)
-    policy_engine_service.policy_file.set(access_policy_file)
-
-    @decorators.auth(auth_label="test", read_only=True)
-    @typedmethod(path="/read-only", operation="GET", client_types=["api"])
-    def read_only_method() -> None:  # NOQA
-        pass
-
-    @decorators.auth(auth_label="test", read_only=False, environment_param="env")
-    @typedmethod(path="/environment-scoped", operation="POST", client_types=["api"])
-    def environment_scoped_method(env: uuid.UUID) -> None:  # NOQA
-        pass
-
-    @decorators.auth(auth_label="user", read_only=False, environment_param="env")
-    @typedmethod(path="/user-endpoint", operation="POST", client_types=["api"])
-    def user_method(env: uuid.UUID) -> None:  # NOQA
-        pass
-
-    @decorators.auth(auth_label="admin", read_only=False)
-    @typedmethod(path="/admin-only", operation="POST", client_types=["api"])
-    def admin_only_method() -> None:  # NOQA
-        pass
-
-    class TestServer(protocol.ServerSlice):
-        @handle(read_only_method)
-        async def handle_read_only_method(self) -> None:  # NOQA
-            return
-
-        @handle(environment_scoped_method)
-        async def handle_environment_scoped_method(self, env: uuid.UUID) -> None:  # NOQA
-            return
-
-        @handle(user_method)
-        async def handle_user_method(self, env: uuid.UUID) -> None:  # NOQA
-            return
-
-        @handle(admin_only_method)
-        async def handle_admin_only_method(self, context: common.CallContext) -> None:  # NOQA
-            return
-
-    rs = protocol.Server()
-    policy_engine_slice = policy_engine_service.PolicyEngineSlice()
-    test_slice = TestServer(name="testserver")
-    for current_slice in [policy_engine_slice, test_slice]:
-        rs.add_slice(current_slice)
-    await rs.start()
-    async_finalizer.add(test_slice.stop)
-    async_finalizer.add(policy_engine_slice.stop)
-    async_finalizer.add(rs.stop)
-
-    def get_client_with_role(env_to_role_dct: dict[str, str], is_admin: bool) -> protocol.Client:
-        """
-        Returns a client that uses an access token for the given role.
-        """
-        token = auth.encode_token(
-            client_types=[str(const.ClientType.api.value)],
-            expire=None,
-            custom_claims={
-                f"{const.INMANTA_URN}roles": env_to_role_dct,
-                f"{const.INMANTA_URN}is-admin": is_admin,
-            },
-        )
-        config.Config.set("client_rest_transport", "token", token)
-        return protocol.Client("client")
 
     client = get_client_with_role(env_to_role_dct={env_id: "read-only"}, is_admin=False)
     result = await client.read_only_method()
@@ -201,6 +220,14 @@ async def test_policy_evaluation(tmpdir, async_finalizer, access_policy: str, mo
     result = await client.admin_only_method()
     assert result.code == 200
 
+
+async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, monkeypatch) -> None:
+    """
+    Verify that the protocol layer correctly composes the JSON document that is fed into the policy
+    engine as input for the policy evaluation.
+    """
+    # Monkeypatch the does_satisfy_access_policy() method of the PolicyEngineSlice so that we can
+    # intercept the value of the input_data dictionary.
     input_policy_engine = None
     _old_does_satisfy_access_policy = policy_engine_service.PolicyEngineSlice.does_satisfy_access_policy
 
@@ -215,6 +242,7 @@ async def test_policy_evaluation(tmpdir, async_finalizer, access_policy: str, mo
 
     monkeypatch.setattr(policy_engine_service.PolicyEngineSlice, "does_satisfy_access_policy", save_input_data)
 
+    env_id = "11111111-1111-1111-1111-111111111111"
     client = get_client_with_role(env_to_role_dct={env_id: "read-write"}, is_admin=False)
     result = await client.environment_scoped_method(env_id)
     assert input_policy_engine is not None
