@@ -1,0 +1,7 @@
+change-type: patch
+description: Remove LRU cache on Namespace
+destination-branches:
+- master
+- iso8
+- iso7
+sections: {}
