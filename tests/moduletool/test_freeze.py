@@ -31,7 +31,7 @@ from moduletool.common import install_project
 from test_app_cli import app
 
 
-# TODO: this whole module
+# TODO: this whole module. Do we still care about freezing v1 modules? Depends which branch this goes into?
 
 
 @pytest.mark.slowtest
