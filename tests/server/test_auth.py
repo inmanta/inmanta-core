@@ -22,6 +22,7 @@ import uuid
 import pytest
 
 from inmanta import config, const
+from inmanta.protocol import common
 from inmanta.protocol.auth import auth, decorators
 from inmanta.protocol.decorators import handle, typedmethod
 from inmanta.server import protocol
@@ -133,7 +134,7 @@ async def test_policy_evaluation(tmpdir, async_finalizer, access_policy: str) ->
             return
 
         @handle(admin_only_method)
-        async def handle_admin_only_method(self) -> None:  # NOQA
+        async def handle_admin_only_method(self, context: common.CallContext) -> None:  # NOQA
             return
 
     rs = protocol.Server()
