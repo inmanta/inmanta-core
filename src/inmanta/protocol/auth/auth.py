@@ -32,9 +32,8 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
 from inmanta import config, const
 from inmanta.protocol import exceptions
-from inmanta.server import config as server_config
 
-claim_type = Mapping[str, str | Sequence[str]]
+claim_type = Mapping[str, str | bool | Sequence[str] | Mapping[str, str]]
 
 
 def encode_token(
@@ -110,7 +109,7 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
 
     try:
         # copy the payload and make sure the type is claim_type
-        decoded_payload: MutableMapping[str, str | Sequence[str]] = {}
+        decoded_payload: MutableMapping[str, str | bool | Sequence[str] | Mapping[str, str]] = {}
         unsupported = []
         for k, v in jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo]).items():
             match v:
@@ -141,33 +140,6 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
         raise exceptions.Forbidden(*e.args)
 
     return decoded_payload, cfg
-
-
-def get_auth_token(headers: MutableMapping[str, str]) -> Optional[claim_type]:
-    """Get the auth token provided by the caller and decode it.
-
-    :return: A mapping of claims
-    """
-    header_name = server_config.server_jwt_header.get()
-    if header_name not in headers:
-        return None
-
-    header_value = headers[header_name]
-    if " " in header_value:
-        parts = header_value.split(" ")
-
-        if len(parts) != 2 or parts[0].lower() != "bearer":
-            logging.getLogger(__name__).warning(
-                f"Invalid JWT token header ({header_name})."
-                f"A bearer token is expected, instead ({header_value} was provided)"
-            )
-            return None
-
-        token_value = parts[1]
-    else:
-        token_value = header_value
-
-    return decode_token(token_value)
 
 
 #############################

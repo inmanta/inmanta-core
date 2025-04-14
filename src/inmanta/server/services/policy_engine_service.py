@@ -24,6 +24,7 @@ import os
 import subprocess
 import time
 from importlib.resources import files
+from typing import Mapping
 
 from tornado import httpclient
 from tornado.httpclient import HTTPRequest
@@ -76,7 +77,7 @@ class PolicyEngineSlice(protocol.ServerSlice):
     def get_depended_by(self) -> list[str]:
         return [server.SLICE_TRANSPORT]
 
-    async def does_satisfy_access_policy(self, input_data: dict[str, object]) -> bool:
+    async def does_satisfy_access_policy(self, input_data: Mapping[str, object]) -> bool:
         """
         Return True iff the policy evaluates to True.
         """
@@ -107,7 +108,7 @@ class PolicyEngineSlice(protocol.ServerSlice):
 class OpaServer:
 
     def __init__(self) -> None:
-        self.process: asyncio.subprocess.Process = None
+        self.process: asyncio.subprocess.Process | None = None
         self.running = False
 
     async def get_addr_policy_engine(self) -> str:

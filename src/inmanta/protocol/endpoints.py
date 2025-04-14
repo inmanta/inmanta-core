@@ -52,7 +52,7 @@ class CallTarget:
             if callable(method) and handle_name[0] != "_"
         }
 
-        methods: dict[str, list[tuple[str, Callable]]] = defaultdict(list)
+        methods: dict[str, tuple[str, Callable]] = {}
         for handle_name, attr in total_dict.items():
             if hasattr(attr, "__protocol_method__"):
                 method_name = attr.__protocol_method__.__name__
