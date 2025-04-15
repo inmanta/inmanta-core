@@ -62,10 +62,7 @@ SimpleTypes = Union["BaseModel", PrimitiveTypes]
 
 JsonType = dict[str, Any]
 ReturnTupple = tuple[int, Optional[JsonType]]
-StrictJson = TypeAliasType(
-    "StrictJson",
-    "Union[dict[str, StrictJson], list[StrictJson], str, int, float, bool, None]",
-)
+type StrictJson = dict[str, StrictJson] | list[StrictJson] | str | int | float | bool | None
 
 
 ArgumentTypes = Union[SimpleTypes, Sequence[SimpleTypes], Mapping[str, SimpleTypes]]
