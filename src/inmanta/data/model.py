@@ -148,32 +148,6 @@ class CompileData(BaseModel):
     """
 
 
-class LinkObject(BaseModel):
-    """
-
-    :param href: a string whose value is a URI-reference pointing to the link’s target.
-
-    :param rel: a string indicating the link’s relation type. The string MUST be a valid link relation type.
-    :param describedby: a link to a description document (e.g. OpenAPI or JSON Schema) for the link target.
-    :param title: a string which serves as a label for the destination of a link
-        such that it can be used as a human-readable identifier (e.g., a menu entry).
-    :param type: a string indicating the media type of the link’s target.
-    :param hreflang: a string or an array of strings indicating the language(s) of the link’s target.
-        An array of strings indicates that the link’s target is available in multiple languages.
-        Each string MUST be a valid language tag [RFC5646].
-    :param meta: a meta object containing non-standard meta-information about the link.
-
-    """
-
-    href: str
-    rel: Optional[str] = None
-    describedby: Optional[str] = None
-    title: Optional[str] = None
-    type: Optional[str] = None
-    hreflang: Optional[str] = None
-    meta: Optional[dict[typing.Any, typing.Any]] = None
-
-
 class CompileRunBase(BaseModel):
     """
     :param requested_environment_variables: environment variables requested to be passed to the compiler
