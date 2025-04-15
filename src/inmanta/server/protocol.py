@@ -208,13 +208,24 @@ class Server(endpoints.Endpoint):
 
         order = list(reversed(self._get_slice_sequence()))
 
+        exceptions: dict[str, Exception] = {}
         for endpoint in order:
-            LOGGER.debug("Pre Stopping %s", endpoint.name)
-            await endpoint.prestop()
+            try:
+                LOGGER.debug("Pre Stopping %s", endpoint.name)
+                await endpoint.prestop()
+            except Exception as e:
+                exceptions[endpoint.name]=e
 
+        LOGGER.debug("The following errors occurred during pre-stopping: %s", str(exceptions))
+        exceptions.clear()
         for endpoint in order:
-            LOGGER.debug("Stopping %s", endpoint.name)
-            await endpoint.stop()
+            try:
+                LOGGER.debug("Stopping %s", endpoint.name)
+                await endpoint.stop()
+            except Exception as e:
+                exceptions[endpoint.name]=e
+
+        LOGGER.debug("The following errors occurred during stopping: %s", str(exceptions))
 
 
 class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | None]):
