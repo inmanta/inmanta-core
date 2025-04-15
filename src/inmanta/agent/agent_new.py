@@ -70,10 +70,8 @@ class Agent(SessionEndpoint):
         self.working = False
 
     async def start(self) -> None:
-        # Make mypy happy
-        assert data.Resource._connection_pool is not None
         self._db_monitor = DatabaseMonitor(
-            data.Resource._connection_pool,
+            data.get_connection_pool(),
             opt.db_name.get(),
             opt.db_host.get(),
         )
