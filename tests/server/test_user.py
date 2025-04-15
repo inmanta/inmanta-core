@@ -16,15 +16,12 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import os
-
 import pytest
 
 from inmanta import config, const
 from inmanta.protocol import endpoints
 from inmanta.protocol.auth import auth
 from inmanta.server import SLICE_USER, protocol
-from inmanta.server.services.policy_engine_service import policy_file
 
 
 @pytest.fixture
