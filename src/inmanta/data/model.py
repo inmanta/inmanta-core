@@ -174,9 +174,6 @@ class LinkObject(BaseModel):
     meta: Optional[dict[typing.Any, typing.Any]] = None
 
 
-JsonApiLinks: typing.TypeAlias = dict[str, Union[str, LinkObject, None]]
-
-
 class CompileRunBase(BaseModel):
     """
     :param requested_environment_variables: environment variables requested to be passed to the compiler
@@ -185,7 +182,8 @@ class CompileRunBase(BaseModel):
             If multiple values are compacted, they will be joined using spaces.
     :param environment_variables: environment variables passed to the compiler
     :param links: An object that contains relevant links to this compile.
-        Conforms with the json api: https://jsonapi.org/format/#document-links
+        It is a dictionary where the key is something that identifies one or more links
+        and the value is a list of urls. i.e. {"instances": ["link-1',"link-2"], "compiles": ["link-3"]}
     """
 
     id: uuid.UUID
@@ -208,7 +206,7 @@ class CompileRunBase(BaseModel):
 
     notify_failed_compile: Optional[bool] = None
     failed_compile_message: Optional[str] = None
-    links: JsonApiLinks = {}
+    links: dict[str, list[str]] = {}
 
     @pydantic.field_validator("environment_variables", mode="before")
     @classmethod

@@ -59,7 +59,7 @@ async def env_with_compiles(client, environment):
             version=1,
             substitute_compile_id=None,
             compile_data={"errors": [{"type": "UnexpectedException", "message": "msg"}]} if i % 2 else None,
-            links={"self": f"my-link{i}", f"test-{i}": f"my-link{i}"},
+            links={"instances": [f"my-link{i}"], f"test-{i}": [f"my-link{i}"]},
         )
         compiles.append(compile)
     compiles[1].substitute_compile_id = compiles[0].id
@@ -109,7 +109,7 @@ async def test_compile_details(server, client, env_with_compiles):
     )
     # Assert that the links are correct
     links = result.result["data"]["links"]
-    assert links == {"self": "my-link0", "test-0": "my-link0"}
+    assert links == {"instances": ["my-link0"], "test-0": ["my-link0"]}
 
     # A compile that is 2 levels deep in substitutions: id2 -> id1 -> id0
     result = await client.compile_details(environment, ids[2])
@@ -124,7 +124,12 @@ async def test_compile_details(server, client, env_with_compiles):
     # Assert that the links of the substitutions are also present
     # Assert that "self" is the link of the requested compile
     links = result.result["data"]["links"]
-    assert links == {"self": "my-link2", "test-0": "my-link0", "test-1": "my-link1", "test-2": "my-link2"}
+    assert links == {
+        "instances": ["my-link0", "my-link1", "my-link2"],
+        "test-0": ["my-link0"],
+        "test-1": ["my-link1"],
+        "test-2": ["my-link2"],
+    }
 
     # A compile that has no reports
     result = await client.compile_details(environment, ids[3])
@@ -133,7 +138,7 @@ async def test_compile_details(server, client, env_with_compiles):
 
     # Assert that even without a report, we still get the correct links
     links = result.result["data"]["links"]
-    assert links == {"self": "my-link3", "test-3": "my-link3"}
+    assert links == {"instances": ["my-link3"], "test-3": ["my-link3"]}
 
     # An id that doesn't exist as a compile
     result = await client.compile_details(environment, uuid.uuid4())
@@ -143,8 +148,8 @@ async def test_compile_details(server, client, env_with_compiles):
     env = await data.Environment.get_by_id(environment)
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
     compile_id, _ = await compilerslice.request_recompile(
-        env, force_update=False, do_export=False, remote_id=uuid.uuid4(), links={"example-link": "localhost:8888"}
+        env, force_update=False, do_export=False, remote_id=uuid.uuid4(), links={"example-link": ["localhost:8888"]}
     )
     result = await client.compile_details(environment, compile_id)
     assert result.code == 200
-    assert result.result["data"]["links"] == {"example-link": "localhost:8888"}
+    assert result.result["data"]["links"] == {"example-link": ["localhost:8888"]}

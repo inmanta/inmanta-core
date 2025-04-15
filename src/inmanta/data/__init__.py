@@ -3579,7 +3579,8 @@ class Compile(BaseDocument):
     :param failed_compile_message: Optional message to use when a notification for a failed compile is created
     :param soft_delete: Prevents deletion of resources in removed_resource_sets if they are being exported.
     :param links: An object that contains relevant links to this compile.
-        Conforms with the json api: https://jsonapi.org/format/#document-links
+        It is a dictionary where the key is something that identifies one or more links
+        and the value is a list of urls. i.e. {"instances": ["link-1',"link-2"], "compiles": ["link-3"]}
     """
 
     __primary_key__ = ("id",)
@@ -3617,7 +3618,7 @@ class Compile(BaseDocument):
     failed_compile_message: Optional[str] = None
 
     soft_delete: bool = False
-    links: m.JsonApiLinks = {}
+    links: dict[str, list[str]] = {}
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID, connection: Optional[Connection] = None) -> Optional["Compile"]:
@@ -3846,7 +3847,7 @@ class Compile(BaseDocument):
         requested_compile = records[0]
 
         # Concatenate the links of the requested compile and all substitute compiles
-        links: m.JsonApiLinks = {}
+        links: dict[str, set[str]] = defaultdict(set)
         reports = []
         for compile in result:
             # Reports should be included from the substituted compile (as well)
@@ -3863,9 +3864,8 @@ class Compile(BaseDocument):
                         returncode=compile["returncode"],
                     )
                 )
-            links.update(cast(m.JsonApiLinks, compile.get("links", {})))
-        # If there are repeated links, keep the ones on the requested compile
-        links.update(cast(m.JsonApiLinks, requested_compile.get("links", {})))
+            for name, url in cast(dict[str, list[str]], compile.get("links", {})).items():
+                links[name].add(*url)
 
         return m.CompileDetails(
             id=requested_compile["id"],
@@ -3889,7 +3889,7 @@ class Compile(BaseDocument):
             failed_compile_message=requested_compile["failed_compile_message"],
             compile_data=requested_compile["compile_data"],
             reports=reports,
-            links=links,
+            links={key: sorted(list(links)) for key, links in links.items()},
         )
 
     def to_dto(self) -> m.CompileRun:
