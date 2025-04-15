@@ -17,6 +17,7 @@ import concurrent.futures
 import json
 import subprocess
 import sys
+import uuid
 
 import pytest
 
@@ -30,6 +31,7 @@ async def test_blueprint_hash_consistency(tmpdir):
     Test to verify that the hashing mechanism for EnvBlueprints is consistent across
     different orders of requirements
     """
+    env_id = uuid.uuid4()
     pip_index = PipIndex(artifact_dir=str(tmpdir))
     pip_config = PipConfig(index_url=pip_index.url)
 
@@ -37,13 +39,39 @@ async def test_blueprint_hash_consistency(tmpdir):
     requirements1 = ("pkg1", "pkg2")
     requirements2 = ("pkg2", "pkg1")
 
-    blueprint1 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements1, python_version=sys.version_info[:2])
-    blueprint2 = executor.EnvBlueprint(pip_config=pip_config, requirements=requirements2, python_version=sys.version_info[:2])
+    blueprint1 = executor.EnvBlueprint(
+        environment_id=env_id, pip_config=pip_config, requirements=requirements1, python_version=sys.version_info[:2]
+    )
+    blueprint2 = executor.EnvBlueprint(
+        environment_id=env_id, pip_config=pip_config, requirements=requirements2, python_version=sys.version_info[:2]
+    )
 
     hash1 = blueprint1.blueprint_hash()
     hash2 = blueprint2.blueprint_hash()
 
     assert hash1 == hash2, "Blueprint hashes should be identical regardless of the order of requirements"
+
+
+async def test_environment_isolation(tmpdir):
+    """
+    Ensure that venvs with the same specification on different Inmanta environments result in a different hash
+    (i.e. use a different on disk Python environment).
+    """
+    pip_index = PipIndex(artifact_dir=str(tmpdir))
+    pip_config = PipConfig(index_url=pip_index.url)
+    requirements = ("pkg1", "pkg2")
+
+    blueprint1 = executor.EnvBlueprint(
+        environment_id=uuid.uuid4(), pip_config=pip_config, requirements=requirements, python_version=sys.version_info[:2]
+    )
+    blueprint2 = executor.EnvBlueprint(
+        environment_id=uuid.uuid4(), pip_config=pip_config, requirements=requirements, python_version=sys.version_info[:2]
+    )
+
+    hash1 = blueprint1.blueprint_hash()
+    hash2 = blueprint2.blueprint_hash()
+
+    assert hash1 != hash2
 
 
 @pytest.mark.slowtest
@@ -61,6 +89,7 @@ def test_hash_consistency_across_sessions():
     4. Comparing the hash value generated in the current session with the one generated in the new interpreter session
        to ensure they are identical.
     """
+    env_id = uuid.uuid4()
     pip_config_dict = {"index_url": "http://example.com", "extra_index_url": [], "pre": None, "use_system_config": False}
     requirements = ["pkg1", "pkg2"]
 
@@ -69,6 +98,7 @@ def test_hash_consistency_across_sessions():
 
     # Python code to execute in subprocess
     python_code = f"""import json
+import uuid
 import sys
 from inmanta.agent.executor import EnvBlueprint, PipConfig
 
@@ -76,7 +106,12 @@ config_str = '''{config_str}'''
 config = json.loads(config_str)
 
 pip_config = PipConfig(**config["pip_config"])
-blueprint = EnvBlueprint(pip_config=pip_config, requirements=config["requirements"], python_version=sys.version_info[:2])
+blueprint = EnvBlueprint(
+    environment_id=uuid.UUID("{env_id}"),
+    pip_config=pip_config,
+    requirements=config["requirements"],
+    python_version=sys.version_info[:2],
+)
 
 # Generate and print the hash
 print(blueprint.blueprint_hash())
@@ -85,7 +120,7 @@ print(blueprint.blueprint_hash())
     # Generate hash in the current session for comparison
     pip_config = PipConfig(**pip_config_dict)
     current_session_blueprint = executor.EnvBlueprint(
-        pip_config=pip_config, requirements=requirements, python_version=sys.version_info[:2]
+        environment_id=env_id, pip_config=pip_config, requirements=requirements, python_version=sys.version_info[:2]
     )
     current_hash = current_session_blueprint.blueprint_hash()
 
@@ -108,6 +143,7 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     only one environment is created for the same blueprint when requested concurrently,
     preventing race conditions and duplicate environment creation.
     """
+    env_id = uuid.uuid4()
     manager = executor.VirtualEnvironmentManager(
         envs_dir=tmpdir,
         thread_pool=concurrent.futures.ThreadPoolExecutor(
@@ -116,10 +152,16 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     )
 
     blueprint1 = executor.EnvBlueprint(
-        pip_config=PipConfig(index_url=pip_index.url), requirements=("pkg1",), python_version=sys.version_info[:2]
+        environment_id=env_id,
+        pip_config=PipConfig(index_url=pip_index.url),
+        requirements=("pkg1",),
+        python_version=sys.version_info[:2],
     )
     blueprint2 = executor.EnvBlueprint(
-        pip_config=PipConfig(index_url=pip_index.url), requirements=(), python_version=sys.version_info[:2]
+        environment_id=env_id,
+        pip_config=PipConfig(index_url=pip_index.url),
+        requirements=(),
+        python_version=sys.version_info[:2],
     )
 
     # Wait for all tasks to complete
