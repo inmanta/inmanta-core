@@ -1445,28 +1445,9 @@ class BaseDocument(metaclass=DocumentMeta):
 
     @classmethod
     def remove_connection_pool(cls) -> None:
-
         if not cls._connection_pool:
             return
         cls._connection_pool = None
-        #
-        # try:
-        #     await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
-        # except asyncio.TimeoutError:
-        #     cls._connection_pool.terminate()
-        #     # Don't propagate this exception but just write a log message. This way:
-        #     #   * A timeout here still makes sure that the other server slices get stopped
-        #     #   * The tests don't fail when this timeout occurs
-        #     LOGGER.exception("A timeout occurred while closing the connection pool to the database")
-        # except asyncio.CancelledError:
-        #     cls._connection_pool.terminate()
-        #     # Propagate cancel
-        #     raise
-        # except Exception:
-        #     LOGGER.exception("An unexpected exception occurred while closing the connection pool to the database")
-        #     raise
-        # finally:
-        #     cls._connection_pool = None
 
     def __setattr__(self, name: str, value: object) -> None:
         if name[0] == "_":
@@ -6714,7 +6695,7 @@ async def connect_pool(
 
 
 async def disconnect_pool() -> None:
-    LOGGER.debug("Disconnecting data classes from connection pool")
+    LOGGER.debug("Disconnecting connection pool")
 
     if BaseDocument._connection_pool is None:
         return
