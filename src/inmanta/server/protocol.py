@@ -214,7 +214,7 @@ class Server(endpoints.Endpoint):
                 LOGGER.debug("Pre Stopping %s", endpoint.name)
                 await endpoint.prestop()
             except Exception as e:
-                exceptions[endpoint.name]=e
+                exceptions[endpoint.name] = e
 
         LOGGER.debug("The following errors occurred during pre-stopping: %s", str(exceptions))
         exceptions.clear()
@@ -223,7 +223,7 @@ class Server(endpoints.Endpoint):
                 LOGGER.debug("Stopping %s", endpoint.name)
                 await endpoint.stop()
             except Exception as e:
-                exceptions[endpoint.name]=e
+                exceptions[endpoint.name] = e
 
         LOGGER.debug("The following errors occurred during stopping: %s", str(exceptions))
 
