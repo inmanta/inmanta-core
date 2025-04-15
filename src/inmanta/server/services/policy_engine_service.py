@@ -61,6 +61,7 @@ class PolicyEngineSlice(protocol.ServerSlice):
     async def start(self) -> None:
         await super().start()
         if server_config.enforce_access_policy.get():
+            LOGGER.info("Starting policy engine")
             await self._opa_process.start()
 
     async def stop(self) -> None:

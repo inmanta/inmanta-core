@@ -556,7 +556,7 @@ class CallArguments:
         :param auth_enabled: is authentication enabled?
         :param policy_engine_slice: The policy-engine slice of this server or None if we are not running on the server.
         """
-        if not auth_enabled:
+        if not server_config.enforce_access_policy.get():
             return
 
         if self._auth_token is None:

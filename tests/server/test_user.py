@@ -40,20 +40,6 @@ def server_pre_start(server_config, tmpdir):
     config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
     config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
 
-    # Configure an access policy that allows everything
-    os.mkdir(os.path.join(tmpdir, "policy_engine"))
-    access_policy_file = os.path.join(tmpdir, "policy_engine", "policy.rego")
-    with open(access_policy_file, "w") as fh:
-        fh.write(
-            """
-            package policy
-
-            # Allow everything
-            default allowed:=true
-        """
-        )
-    policy_file.set(access_policy_file)
-
 
 @pytest.fixture
 def auth_client(server_pre_start):
