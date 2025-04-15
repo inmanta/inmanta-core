@@ -710,6 +710,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         connection: Optional[Connection] = None,
         soft_delete: bool = False,
         mergeable_env_vars: Optional[Mapping[str, str]] = None,
+        links: Optional[dict[str, list[str]]] = None,
     ) -> tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
@@ -728,6 +729,9 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             they contain resources that are being exported.
         :param mergeable_env_vars: a set of env vars that can be compacted over multiple compiles.
             If multiple values are compacted, they will be joined using spaces.
+        :param links: An object that contains relevant links to this compile.
+            It is a dictionary where the key is something that identifies one or more links
+            and the value is a list of urls. i.e. {"instances": ["link-1',"link-2"], "compiles": ["link-3"]}
         :return: the compile id of the requested compile and any warnings produced during the request
         """
         if in_db_transaction and not connection:
@@ -744,6 +748,8 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             env_vars = {}
         if mergeable_env_vars is None:
             mergeable_env_vars = {}
+        if links is None:
+            links = {}
 
         server_compile: bool = bool(await env.get(data.SERVER_COMPILE))
         if not server_compile:
@@ -774,6 +780,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             notify_failed_compile=notify_failed_compile,
             failed_compile_message=failed_compile_message,
             soft_delete=soft_delete,
+            links=links,
         )
         if not in_db_transaction:
             async with self._queue_count_cache_lock:
