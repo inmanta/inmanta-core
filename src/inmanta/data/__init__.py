@@ -6707,6 +6707,7 @@ async def disconnect_pool() -> None:
         #   * A timeout here still makes sure that the other server slices get stopped
         #   * The tests don't fail when this timeout occurs
         LOGGER.exception("A timeout occurred while closing the connection pool to the database")
+        raise
     except asyncio.CancelledError:
         BaseDocument._connection_pool.terminate()
         # Propagate cancel
