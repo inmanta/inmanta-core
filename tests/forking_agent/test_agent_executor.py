@@ -52,7 +52,7 @@ async def test_process_manager(environment, pip_index, mpmanager_light: forking_
         sha1sum.update(code)
         hv: str = sha1sum.hexdigest()
         return ModuleSource(
-            meta_data=ModuleSourceMetadata(
+            metadata=ModuleSourceMetadata(
                 name=name,
                 hash_value=hv,
                 is_byte_code=False,
@@ -256,7 +256,7 @@ def test():
     sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
     module_source1 = ModuleSource(
-        meta_data=ModuleSourceMetadata(
+        metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test",
             hash_value=hv,
             is_byte_code=False,
@@ -331,7 +331,7 @@ def test():
     sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
     module_source1 = ModuleSource(
-        meta_data=ModuleSourceMetadata(
+        metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test",
             hash_value=hv,
             is_byte_code=False,

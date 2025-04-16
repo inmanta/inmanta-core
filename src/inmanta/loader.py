@@ -94,6 +94,7 @@ class CodeManager:
 
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
+        This method assumes the build_agent_map method was called first.
 
         :param type_name: The inmanta type name for which the source of type_object will be registered.
             For example std::testing::NullResource
@@ -133,7 +134,7 @@ class CodeManager:
 
     def get_file_hashes(self) -> Iterable[str]:
         """Return the hashes of all source files"""
-        return (info.meta_data.hash_value for info in self.__file_info.values())
+        return (info.metadata.hash_value for info in self.__file_info.values())
 
     def get_inmanta_module_requirements(self, module_name: str) -> set[str]:
         """Get the list of python requirements associated with this inmanta module"""
@@ -152,7 +153,7 @@ class CodeManager:
         for module_name, module_sources in self.__module_to_source_info.items():
 
             requirements = self.get_inmanta_module_requirements(module_name)
-            files_metadata: list[ModuleSourceMetadata] = [module_source.meta_data for module_source in module_sources]
+            files_metadata: list[ModuleSourceMetadata] = [module_source.metadata for module_source in module_sources]
 
             module_version = self.get_module_version(requirements, files_metadata)
 
@@ -161,7 +162,7 @@ class CodeManager:
                 version=module_version,
                 files_in_module=files_metadata,
                 requirements=list(requirements),
-                required_by=list(self.__module_to_agents[module_name]),
+                for_agents=list(self.__module_to_agents[module_name]),
             )
         return modules_data
 
@@ -180,7 +181,7 @@ class CodeManager:
     def get_file_content(self, hash: str) -> bytes:
         """Get the file content for the given hash"""
         for info in self.__file_info.values():
-            if info.meta_data.hash_value == hash:
+            if info.metadata.hash_value == hash:
                 return info.source
 
         raise KeyError("No file found with this hash")
@@ -251,13 +252,13 @@ class CodeLoader:
         """
         # if the module is new, or update
         if (
-            module_source.meta_data.name not in self.__modules
-            or module_source.meta_data.hash_value != self.__modules[module_source.meta_data.name][0]
+            module_source.metadata.name not in self.__modules
+            or module_source.metadata.hash_value != self.__modules[module_source.metadata.name][0]
         ):
-            LOGGER.info("Deploying code (hv=%s, module=%s)", module_source.meta_data.hash_value, module_source.meta_data.name)
+            LOGGER.info("Deploying code (hv=%s, module=%s)", module_source.metadata.hash_value, module_source.metadata.name)
 
             all_modules_dir: str = os.path.join(self.__code_dir, MODULE_DIR)
-            relative_module_path: str = convert_module_to_relative_path(module_source.meta_data.name)
+            relative_module_path: str = convert_module_to_relative_path(module_source.metadata.name)
             # Treat all modules as a package for simplicity: module is a dir with source in __init__.py
             module_dir: str = os.path.join(all_modules_dir, relative_module_path)
 
@@ -265,7 +266,7 @@ class CodeLoader:
                 os.path.join(all_modules_dir, pathlib.PurePath(pathlib.PurePath(relative_module_path).parts[0]))
             )
 
-            if module_source.meta_data.is_byte_code:
+            if module_source.metadata.is_byte_code:
                 init_file = "__init__.pyc"
                 alternate_file = "__init__.py"
             else:
@@ -298,11 +299,11 @@ class CodeLoader:
             if os.path.exists(source_file):
                 with open(source_file, "rb") as fh:
                     thehash = hash_file_streaming(fh)
-                if thehash == module_source.meta_data.hash_value:
+                if thehash == module_source.metadata.hash_value:
                     LOGGER.debug(
                         "Not deploying code (hv=%s, module=%s) because it is already on disk",
-                        module_source.meta_data.hash_value,
-                        module_source.meta_data.name,
+                        module_source.metadata.hash_value,
+                        module_source.metadata.name,
                     )
                     return
 
@@ -312,8 +313,8 @@ class CodeLoader:
         else:
             LOGGER.debug(
                 "Not deploying code (hv=%s, module=%s) because of cache hit",
-                module_source.meta_data.hash_value,
-                module_source.meta_data.name,
+                module_source.metadata.hash_value,
+                module_source.metadata.name,
             )
 
     def deploy_version(self, module_sources: Iterable[ModuleSource]) -> None:
@@ -442,6 +443,9 @@ def convert_module_to_relative_path(full_mod_name: str) -> str:
         return ""
 
     module_parts.insert(1, PLUGIN_DIR)
+
+    if module_parts[-1] == "__init__":
+        module_parts = module_parts[:-1]
 
     return os.path.join(*module_parts)
 

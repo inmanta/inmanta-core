@@ -441,7 +441,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
             try:
                 await loop.run_in_executor(
                     context.threadpool,
-                    functools.partial(loader.load_module, module_source.meta_data.name, module_source.meta_data.hash_value),
+                    functools.partial(loader.load_module, module_source.metadata.name, module_source.metadata.hash_value),
                 )
             except Exception as e:
                 logger.info("Failed to load sources: %s", module_source, exc_info=True)

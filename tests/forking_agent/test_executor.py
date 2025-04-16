@@ -147,7 +147,7 @@ def test():
         "utf-8"
     )
     direct = inmanta.data.model.ModuleSource(
-        meta_data=ModuleSourceMetadata(
+        metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test.testA",
             hash_value=inmanta.util.hash_file(direct_content),
             is_byte_code=False,
@@ -163,7 +163,7 @@ def test():
     )
     server_content_hash = inmanta.util.hash_file(server_content)
     via_server = inmanta.data.model.ModuleSource(
-        meta_data=ModuleSourceMetadata(
+        metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test.testB",
             hash_value=server_content_hash,
             is_byte_code=False,
@@ -309,7 +309,7 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
 
 def test_hash_with_duplicates():
     source = inmanta.data.model.ModuleSource(
-        meta_data=ModuleSourceMetadata(
+        metadata=ModuleSourceMetadata(
             name="test",
             hash_value="aaaaa",
             is_byte_code=False,

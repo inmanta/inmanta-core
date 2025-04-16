@@ -106,7 +106,7 @@ async def test_agent_installs_dependency_containing_extras(
                 )
             ],
             requirements=["pkg[optional-a]"],
-            required_by=["agent1"],
+            for_agents=["agent1"],
         )
     }
 
@@ -318,7 +318,7 @@ async def test_agent_code_loading_with_failure(
                 ModuleSourceMetadata(name="dummy.path.test.plugins.dummy_file", hash_value=hash, is_byte_code=False)
             ],
             requirements=[],
-            required_by=["agent1"],
+            for_agents=["agent1"],
         )
     }
 

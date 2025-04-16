@@ -870,7 +870,7 @@ class PipConfig(BaseModel):
     """
 
     # Config needs to be in the top-level object, because is also affect serialization/deserialization
-    model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+    model_config: ClassVar[ConfigDict] = ConfigDict(
         # use alias generator have `-` in names
         alias_generator=hyphenize,
         # allow use of aliases
@@ -977,13 +977,13 @@ class ModuleSourceMetadata(BaseModel):
     This class holds metadata for a given python module. i.e. it doesn't contain
     the source itself.
 
-    :param name: the name of the python module. e.g. inmanta_plugins.model.x
+    :param name: the fully qualified name of the python module. e.g. inmanta_plugins.model.x
     :param hash_value: hash of the underlying content
     :param is_byte_code: is this content python byte code or python source
 
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict]= ConfigDict(frozen=True)
     name: str
     hash_value: str
     is_byte_code: bool
@@ -1006,8 +1006,8 @@ class ModuleSource(BaseModel):
     :param source: the content of the file
     """
 
-    model_config = ConfigDict(frozen=True)
-    meta_data: ModuleSourceMetadata
+    model_config: ClassVar[ConfigDict]= ConfigDict(frozen=True)
+    metadata: ModuleSourceMetadata
     source: bytes
 
     @classmethod
@@ -1021,7 +1021,7 @@ class ModuleSource(BaseModel):
         _hash = sha1sum.hexdigest()
 
         return ModuleSource(
-            meta_data=ModuleSourceMetadata(
+            metadata=ModuleSourceMetadata(
                 name=name,
                 is_byte_code=absolute_path.endswith(".pyc"),
                 hash_value=_hash,
@@ -1032,12 +1032,12 @@ class ModuleSource(BaseModel):
     def __lt__(self, other: object) -> bool | None:
         if not isinstance(other, ModuleSource):
             return NotImplemented
-        return self.meta_data < other.meta_data
+        return self.metadata < other.metadata
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ModuleSource):
             return False
-        return self.meta_data == other.meta_data
+        return self.metadata == other.metadata
 
 
 class InmantaModuleDTO(BaseModel):
@@ -1049,13 +1049,13 @@ class InmantaModuleDTO(BaseModel):
         the python files in this module as well as the python requirements of this module.
     :param files_in_module: The list of python files composing this inmanta module.
     :param requirements: The list of python requirements this inmanta module requires.
-    :param required_by: The list of agent names that require to install this inmanta module to
+    :param for_agents: The list of agent names that require to install this inmanta module to
         deploy resources.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict]= ConfigDict(frozen=True)
     name: str
     version: str
     files_in_module: list[ModuleSourceMetadata]
     requirements: list[str]
-    required_by: list[str]
+    for_agents: list[str]

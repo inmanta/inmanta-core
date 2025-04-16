@@ -606,7 +606,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                         module_install_spec.module_name,
                         module_install_spec.module_version,
                     )
-                    await self._install(module_install_spec.module_name, module_install_spec.blueprint)
+                    await self._install(module_install_spec.blueprint)
                     self.logger.debug(
                         "Installed module %s version=%s",
                         module_install_spec.module_name,
@@ -629,7 +629,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
         return failed_to_load
 
-    async def _install(self, module_name: str, blueprint: executor.ExecutorBlueprint) -> None:
+    async def _install(self, blueprint: executor.ExecutorBlueprint) -> None:
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 

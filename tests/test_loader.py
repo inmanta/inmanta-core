@@ -45,7 +45,7 @@ def get_module_source(module: str, code: str) -> ModuleSource:
     sha1sum.update(data)
     hv: str = sha1sum.hexdigest()
     return ModuleSource(
-        meta_data=ModuleSourceMetadata(
+        metadata=ModuleSourceMetadata(
             name=module,
             hash_value=hv,
             is_byte_code=False,
@@ -164,18 +164,18 @@ def test():
     assert inmanta_plugins.inmanta_unit_test.test() == 10
     assert any("Deploying code " in message for message in caplog.messages)
     assert any(
-        f"Not deploying code (hv={source_1.meta_data.hash_value}, module={source_1.meta_data.name}) "
+        f"Not deploying code (hv={source_1.metadata.hash_value}, module={source_1.metadata.name}) "
         "because it is already on disk" in message
         for message in caplog.messages
     )
     caplog.clear()
 
     # Load the module to register it in the loader cache
-    cl.load_module(source_1.meta_data.name, source_1.meta_data.hash_value)
+    cl.load_module(source_1.metadata.name, source_1.metadata.hash_value)
     # Subsequent deploys of the same module will result in a cache hit
     cl.deploy_version([source_1])
     assert any(
-        f"Not deploying code (hv={source_1.meta_data.hash_value}, module={source_1.meta_data.name}) because of cache hit"
+        f"Not deploying code (hv={source_1.metadata.hash_value}, module={source_1.metadata.name}) because of cache hit"
         in message
         for message in caplog.messages
     )
@@ -192,9 +192,9 @@ def test():
     assert any("Deploying code " in message for message in caplog.messages)
 
     with pytest.raises(Exception):
-        cl.load_module(source_2.meta_data.name, source_2.meta_data.hash_value)
+        cl.load_module(source_2.metadata.name, source_2.metadata.hash_value)
         assert any(
-            f"The content of module {source_2.meta_data.name} changed since it was last imported." in message
+            f"The content of module {source_2.metadata.name} changed since it was last imported." in message
             for message in caplog.messages
         )
 

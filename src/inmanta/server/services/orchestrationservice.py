@@ -838,14 +838,15 @@ class OrchestrationService(protocol.ServerSlice):
                 base_version_data: dict[tuple[str, str], list[str]] = await ModulesForAgent.get_agents_per_module(
                     model_version=partial_base_version, environment=environment, connection=connection
                 )
-                for (inmanta_module_name, inmanta_module_version), _ in base_version_data.items():
-                    if (
-                        inmanta_module_name not in module_version_info
-                        or module_version_info[inmanta_module_name].version != inmanta_module_version
-                    ):
+                for inmanta_module_name, module_data in module_version_info.items():
+                    module_version = module_data.version
+                    if not all([
+                        (inmanta_module_name, module_version) in base_version_data,
+                        set(module_data.for_agents).issubset(base_version_data[(inmanta_module_name, module_version)])
+                    ]):
                         raise BadRequest(
                             "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
-                        )
+                            )
 
             if is_partial_update:
                 assert partial_base_version is not None

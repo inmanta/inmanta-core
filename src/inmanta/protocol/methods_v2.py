@@ -40,16 +40,15 @@ from inmanta.types import PrimitiveTypes, ResourceIdStr
     client_types=[ClientType.compiler],
     api_version=2,
     varkw=True,
-    strict_typing=False,
 )
 def put_partial(
     tid: uuid.UUID,
+    module_version_info: dict[str, model.InmantaModuleDTO],
     resource_state: Optional[dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
     unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
     resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[list[str]] = None,
     pip_config: Optional[PipConfig] = None,
-    module_version_info: dict[str, model.InmantaModuleDTO] | None = None,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> ReturnValue[int]:
     """
@@ -74,7 +73,7 @@ def put_partial(
               * resources: a list of resource objects. Since the version is not known yet resource versions should be set to 0.
               * version_info: Model version information
     :param pip_config: Pip config used by this version
-    :param module_version_info: Optional map of (module name, module version) to InmantaModuleDTO
+    :param module_version_info: Map of (module name, module version) to InmantaModuleDTO
 
     :return: The newly stored version number.
     """

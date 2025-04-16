@@ -68,7 +68,7 @@ async def update(connection: Connection) -> None:
             inmanta_module_name varchar NOT NULL,
             inmanta_module_version varchar NOT NULL,
             environment uuid NOT NULL,
-            PRIMARY KEY(environment, cm_version, agent_name, inmanta_module_name, inmanta_module_version),
+            PRIMARY KEY(environment, cm_version, agent_name, inmanta_module_name),
             FOREIGN KEY (environment, cm_version)
                 REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE,
             FOREIGN KEY (environment, agent_name)

@@ -293,7 +293,7 @@ class ModulesForAgent(Base):
         async with connection.transaction():
             values = []
             for inmanta_module_name, inmanta_module_data in module_version_info.items():
-                for agent_name in inmanta_module_data.required_by:
+                for agent_name in inmanta_module_data.for_agents:
                     values.append(
                         (
                             model_version,

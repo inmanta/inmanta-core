@@ -122,7 +122,7 @@ class CodeManager:
             version="",
             files_in_module=[],
             requirements=[],
-            required_by=[],
+            for_agents=[],
         )
         previous_module_sources: list[ModuleSource] = []
         async with get_session() as session:
@@ -150,11 +150,11 @@ class CodeManager:
                         version=res.inmanta_module_version,
                         files_in_module=[],
                         requirements=res.requirements,
-                        required_by=[],
+                        for_agents=[],
                     )
                     previous_module_sources = [
                         ModuleSource(
-                            meta_data=ModuleSourceMetadata(
+                            metadata=ModuleSourceMetadata(
                                 name=res.python_module_name,
                                 hash_value=res.file_content_hash,
                                 is_byte_code=res.is_byte_code,
@@ -165,7 +165,7 @@ class CodeManager:
                 else:
                     previous_module_sources.append(
                         ModuleSource(
-                            meta_data=ModuleSourceMetadata(
+                            metadata=ModuleSourceMetadata(
                                 name=res.python_module_name,
                                 hash_value=res.file_content_hash,
                                 is_byte_code=res.is_byte_code,
