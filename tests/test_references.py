@@ -163,6 +163,42 @@ async def test_deploy_end_to_end(
     assert details.status == ReleasedResourceState.deployed
 
 
+# TODO: name
+def test_undeclared_reference_in_dataclass(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    # TODO: docstring
+    refs_module = os.path.join(modules_v2_dir, "refs")
+
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import refs
+
+        test = refs::Test(value="test", non_ref_value=refs::create_string_reference(name="test"))
+        refs::read_dataclass_value(test)
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+        autostd=True,
+    )
+
+    # TODO: appropriate assertions: should fail because of attr access
+    snippetcompiler.do_export()
+
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import refs
+
+        normal_entity = refs::NormalEntity(non_ref_value=refs::create_string_reference(name="test"))
+        test = refs::Test(value="test", non_ref_value=refs::create_string_reference(name="test"))
+        from_entity = refs::read_entity_value(normal_entity)
+        from_dataclass = refs::read_entity_value(test)
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+        autostd=True,
+    )
+
+    # TODO: appropriate assertions: should be fine?????
+    snippetcompiler.do_export()
+
+
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
     """Test the correct detection of reference cycles."""
     refs_module = os.path.join(modules_v2_dir, "refs")

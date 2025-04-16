@@ -171,7 +171,10 @@ class DynamicProxy:
         if isinstance(value, (str, tuple, int, float, bool)):
             return copy(value)
 
-        if isinstance(value, DynamicProxy):
+        # Reference is not allowed by the type checker in the top-level plugin args, but it may be present
+        # in nested fields (e.g. instance attribute), in which case we need to pass on the reference, not a proxy.
+        # TODO: what about a dataclass with a reference in it that is not declared on the type???? Will not pass here, add test!
+        if isinstance(value, (DynamicProxy, Reference)):
             return value
 
         if isinstance(value, dict):
