@@ -23,6 +23,8 @@ import pytest
 
 from inmanta import data
 from inmanta.data import Report
+from inmanta.server import SLICE_COMPILER
+from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import parse_timestamp
 
 
@@ -57,6 +59,7 @@ async def env_with_compiles(client, environment):
             version=1,
             substitute_compile_id=None,
             compile_data={"errors": [{"type": "UnexpectedException", "message": "msg"}]} if i % 2 else None,
+            links={"instances": [f"my-link{i}"], f"test-{i}": [f"my-link{i}"]},
         )
         compiles.append(compile)
     compiles[1].substitute_compile_id = compiles[0].id
@@ -104,6 +107,9 @@ async def test_compile_details(server, client, env_with_compiles):
     assert parse_timestamp(result.result["data"]["requested"]) == compile_requested_timestamps[0].astimezone(
         datetime.timezone.utc
     )
+    # Assert that the links are correct
+    links = result.result["data"]["links"]
+    assert links == {"instances": ["my-link0"], "test-0": ["my-link0"]}
 
     # A compile that is 2 levels deep in substitutions: id2 -> id1 -> id0
     result = await client.compile_details(environment, ids[2])
@@ -115,12 +121,35 @@ async def test_compile_details(server, client, env_with_compiles):
     assert parse_timestamp(result.result["data"]["requested"]) == compile_requested_timestamps[2].astimezone(
         datetime.timezone.utc
     )
+    # Assert that the links of the substitutions are also present
+    # Assert that "self" is the link of the requested compile
+    links = result.result["data"]["links"]
+    assert links == {
+        "instances": ["my-link0", "my-link1", "my-link2"],
+        "test-0": ["my-link0"],
+        "test-1": ["my-link1"],
+        "test-2": ["my-link2"],
+    }
 
     # A compile that has no reports
     result = await client.compile_details(environment, ids[3])
     assert result.code == 200
     assert not result.result["data"]["reports"]
 
+    # Assert that even without a report, we still get the correct links
+    links = result.result["data"]["links"]
+    assert links == {"instances": ["my-link3"], "test-3": ["my-link3"]}
+
     # An id that doesn't exist as a compile
     result = await client.compile_details(environment, uuid.uuid4())
     assert result.code == 404
+
+    # Test passing links via request_recompile
+    env = await data.Environment.get_by_id(environment)
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    compile_id, _ = await compilerslice.request_recompile(
+        env, force_update=False, do_export=False, remote_id=uuid.uuid4(), links={"example-link": ["localhost:8888"]}
+    )
+    result = await client.compile_details(environment, compile_id)
+    assert result.code == 200
+    assert result.result["data"]["links"] == {"example-link": ["localhost:8888"]}

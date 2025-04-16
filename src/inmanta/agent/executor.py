@@ -106,6 +106,7 @@ class ResourceDetails:
 class EnvBlueprint:
     """Represents a blueprint for creating virtual environments with specific pip configurations and requirements."""
 
+    environment_id: uuid.UUID
     pip_config: PipConfig
     requirements: Sequence[str]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
@@ -124,6 +125,7 @@ class EnvBlueprint:
         """
         if self._hash_cache is None:
             blueprint_dict: Dict[str, Any] = {
+                "environment_id": str(self.environment_id),
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 "python_version": self.python_version,
@@ -140,7 +142,8 @@ class EnvBlueprint:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, EnvBlueprint):
             return False
-        return (self.pip_config, set(self.requirements), self.python_version) == (
+        return (self.environment_id, self.pip_config, set(self.requirements), self.python_version) == (
+            other.environment_id,
             other.pip_config,
             set(other.requirements),
             other.python_version,
@@ -151,7 +154,10 @@ class EnvBlueprint:
 
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
-        return f"EnvBlueprint(requirements=[{str(req)}], pip={self.pip_config}, python_version={self.python_version}]"
+        return (
+            f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}],"
+            f" pip={self.pip_config}, python_version={self.python_version})"
+        )
 
 
 @dataclasses.dataclass
@@ -176,6 +182,8 @@ class ExecutorBlueprint(EnvBlueprint):
 
         if not code:
             raise ValueError("from_specs expects at least one resource install spec")
+        env_ids = {cd.blueprint.environment_id for cd in code}
+        assert len(env_ids) == 1
         sources = list({source for cd in code for source in cd.blueprint.sources})
         requirements = list({req for cd in code for req in cd.blueprint.requirements})
         pip_configs = [cd.blueprint.pip_config for cd in code]
@@ -193,6 +201,7 @@ class ExecutorBlueprint(EnvBlueprint):
                 python_version == base_python_version
             ), f"One agent is using multiple python versions: {base_python_version} {python_version}"
         return ExecutorBlueprint(
+            environment_id=env_ids.pop(),
             pip_config=base_pip,
             sources=sources,
             requirements=requirements,
@@ -208,6 +217,7 @@ class ExecutorBlueprint(EnvBlueprint):
         """
         if self._hash_cache is None:
             blueprint_dict = {
+                "environment_id": str(self.environment_id),
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 # Use the hash values and name to create a stable identity
@@ -227,12 +237,18 @@ class ExecutorBlueprint(EnvBlueprint):
         """
         Converts this ExecutorBlueprint instance into an EnvBlueprint instance.
         """
-        return EnvBlueprint(pip_config=self.pip_config, requirements=self.requirements, python_version=self.python_version)
+        return EnvBlueprint(
+            environment_id=self.environment_id,
+            pip_config=self.pip_config,
+            requirements=self.requirements,
+            python_version=self.python_version,
+        )
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
-        return (self.pip_config, self.requirements, self.sources, self.python_version) == (
+        return (self.environment_id, self.pip_config, self.requirements, self.sources, self.python_version) == (
+            other.environment_id,
             other.pip_config,
             other.requirements,
             other.sources,
