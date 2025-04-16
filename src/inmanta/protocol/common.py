@@ -485,7 +485,8 @@ class MethodProperties:
         """
         if self._agent_server or self._server_agent:
             return True
-        return set(self.client_types).intersection({const.ClientType.agent, const.ClientType.compiler})
+        machine_to_machine_client_types = {const.ClientType.agent, const.ClientType.compiler}
+        return len(set(self.client_types) & machine_to_machine_client_types) > 0
 
     @property
     def varkw(self) -> bool:
