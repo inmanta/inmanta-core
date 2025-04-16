@@ -6803,7 +6803,7 @@ async def start_engine(
 
 async def stop_engine() -> None:
     """
-    Stop the sql alchemy engine and the.
+    Stop the sql alchemy engine and the associated asyncpg connection pool.
     """
 
     global ENGINE
