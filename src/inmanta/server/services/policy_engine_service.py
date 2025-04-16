@@ -31,11 +31,21 @@ from tornado.httpclient import HTTPRequest
 from tornado.simple_httpclient import SimpleAsyncHTTPClient
 
 from inmanta import config, const, server, util
-from inmanta.protocol.auth import decorators
+from inmanta.protocol import common
 from inmanta.server import config as server_config
 from inmanta.server import protocol
 
 LOGGER = logging.getLogger(__name__)
+
+opa_log_level_values = ["debug", "info", "error"]
+
+
+def is_opa_log_level(value: str) -> str:
+    value = value.lower()
+    if value not in opa_log_level_values:
+        raise ValueError(f"Invalid value {value}. Valid values: {opa_log_level_values}")
+    return value
+
 
 policy_file = config.Option(
     "policy-engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the access policy.", config.is_str
@@ -49,6 +59,13 @@ policy_engine_bind_address = config.Option(
 )
 policy_engine_bind_port = config.Option(
     "policy-engine", "bind-port", 8181, "Port on which the policy engine will listen for incoming connections.", config.is_int
+)
+policy_engine_log_level = config.Option(
+    "policy-engine",
+    "log-level",
+    "error",
+    f"The log level used by the policy engine. Valid values: {opa_log_level_values}",
+    is_opa_log_level,
 )
 
 
@@ -80,7 +97,7 @@ class PolicyEngineSlice(protocol.ServerSlice):
         if not self._opa_process.running:
             raise Exception("Policy engine is not running. Call OpaServer.start() first.")
         client = SimpleAsyncHTTPClient()
-        policy_engine_addr = await self._opa_process.get_addr_policy_engine()
+        policy_engine_addr = self._opa_process.get_addr_policy_engine()
         request = HTTPRequest(
             url=f"http://{policy_engine_addr}/v1/data/policy/allowed",
             method="POST",
@@ -105,7 +122,7 @@ class OpaServer:
         self.process: asyncio.subprocess.Process | None = None
         self.running = False
 
-    async def get_addr_policy_engine(self) -> str:
+    def get_addr_policy_engine(self) -> str:
         """
         Returns the "<host>:<port>" on which the policy engine should listen for incoming connections.
         """
@@ -128,7 +145,7 @@ class OpaServer:
 
         # Write data to state directory
         data_file = os.path.join(state_dir, "data.json")
-        data = decorators.AuthorizationMetadata.get_open_policy_agent_data()
+        data: dict[str, object] = common.MethodProperties.get_open_policy_agent_data()
         with open(data_file, "w") as fh:
             json.dump(data, fh)
 
@@ -144,11 +161,11 @@ class OpaServer:
                 "run",
                 "--server",
                 "--addr",
-                await self.get_addr_policy_engine(),
+                self.get_addr_policy_engine(),
                 "--log-format",
                 "text",
                 "--log-level",
-                "debug",
+                policy_engine_log_level.get(),
                 data_file,
                 policy_file.get(),
                 stdout=log_file_handle,
@@ -163,7 +180,7 @@ class OpaServer:
     async def _wait_until_opa_server_is_up(self, policy_engine_log_file: str) -> None:
         client = httpclient.AsyncHTTPClient()
         now: float = time.time()
-        policy_engine_addr = await self.get_addr_policy_engine()
+        policy_engine_addr = self.get_addr_policy_engine()
         health_endpoint = f"http://{policy_engine_addr}/health?plugins&bundles"
         while True:
             try:
@@ -189,11 +206,13 @@ class OpaServer:
             self.process = None
             self.running = False
             return
+
         self.process.terminate()
         try:
             await asyncio.wait_for(self.process.wait(), timeout=const.POLICY_ENGINE_GRACE_HARD)
         except TimeoutError:
             LOGGER.warning("Policy engine didn't terminate in %d seconds. Killing it.", const.POLICY_ENGINE_GRACE_HARD)
             self.process.kill()
+            await self.process.wait()
         self.process = None
         self.running = False

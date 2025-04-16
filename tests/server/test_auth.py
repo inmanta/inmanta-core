@@ -61,6 +61,7 @@ async def server_with_test_slice(tmpdir, access_policy: str) -> protocol.Server:
     with open(access_policy_file, "w") as fh:
         fh.write(access_policy)
     policy_engine_service.policy_file.set(access_policy_file)
+    policy_engine_service.policy_engine_log_level.set("info")
 
     # Define the TestSlice and its API endpoints
     @decorators.auth(auth_label="test", read_only=True)
@@ -304,7 +305,7 @@ async def test_policy_engine_data() -> None:
     def test_read_write(tid: uuid.UUID) -> None:  # NOQA
         pass
 
-    data: dict[str, object] = decorators.AuthorizationMetadata.get_open_policy_agent_data()
+    data: dict[str, object] = common.MethodProperties.get_open_policy_agent_data()
     endpoint_id = "GET /api/v1/read-only"
     assert endpoint_id in data["endpoints"]
     read_only_method_metadata = data["endpoints"][endpoint_id]

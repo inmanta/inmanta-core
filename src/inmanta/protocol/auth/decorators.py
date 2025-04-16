@@ -17,9 +17,10 @@ Contact: code@inmanta.com
 """
 
 import inspect
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
-from inmanta.protocol.common import MethodProperties
+if TYPE_CHECKING:
+    from inmanta.protocol.common import MethodProperties
 
 
 def auth(auth_label: str, read_only: bool, environment_param: str | None = None) -> Callable[..., Callable]:
@@ -50,8 +51,9 @@ def auth(auth_label: str, read_only: bool, environment_param: str | None = None)
             if environment_param not in signature.parameters:
                 raise Exception(f"environment_param {environment_param} is not a parameter of the API endpoint {fnc.__name__}")
         method_properties = fnc.__method_properties__
-        metadata = AuthorizationMetadata(method_properties, auth_label, read_only, environment_param)
-        AuthorizationMetadata.register_auth_metadata(metadata)
+        method_properties.authorization_metadata = AuthorizationMetadata(
+            method_properties, auth_label, read_only, environment_param
+        )
         return fnc
 
     return wrapper
@@ -59,14 +61,12 @@ def auth(auth_label: str, read_only: bool, environment_param: str | None = None)
 
 class AuthorizationMetadata:
     """
-    A class that contains authorization-related metadata about API endpoints for users.
+    A class that contains authorization-related metadata about an API endpoint.
     """
-
-    metadata: dict[str, "AuthorizationMetadata"] = {}
 
     def __init__(
         self,
-        method_properties: MethodProperties,
+        method_properties: "MethodProperties",
         auth_label: str,
         read_only: bool,
         environment_param: str | None,
@@ -75,32 +75,3 @@ class AuthorizationMetadata:
         self.auth_label = auth_label
         self.read_only = read_only
         self.environment_param = environment_param
-
-    @classmethod
-    def register_auth_metadata(cls, metadata: "AuthorizationMetadata") -> None:
-        function_name = metadata.method_properties.function_name
-        if function_name in cls.metadata:
-            raise Exception(f"Authorization metadata already set for method {function_name}.")
-        cls.metadata[function_name] = metadata
-
-    @classmethod
-    def has_metadata_for(cls, method_name: str) -> bool:
-        return method_name in cls.metadata
-
-    @classmethod
-    def get_open_policy_agent_data(cls) -> dict[str, object]:
-        """
-        Return the information about the different endpoints that exist
-        in the format used as input to Open Policy Agent.
-        """
-        endpoints = {}
-        for md in cls.metadata.values():
-            method_properties = md.method_properties
-            endpoint_id = f"{method_properties.operation} {method_properties.get_full_path()}"
-            endpoints[endpoint_id] = {
-                "client_types": method_properties.client_types,
-                "auth_label": md.auth_label,
-                "read_only": md.read_only,
-                "environment_param": md.environment_param,
-            }
-        return {"endpoints": endpoints}

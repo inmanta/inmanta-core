@@ -545,7 +545,6 @@ def delete_version(tid: uuid.UUID, id: int):
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
 @method(path="/version", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
 def put_version(
     tid: uuid.UUID,
@@ -878,7 +877,6 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.CODE_WRITE, read_only=False, environment_param="tid")
 @method(path="/codebatched/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
 def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
     """

@@ -45,6 +45,7 @@ from tornado import web
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
 from inmanta.protocol.auth import auth
+from inmanta.protocol.auth.decorators import AuthorizationMetadata
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
@@ -455,16 +456,36 @@ class MethodProperties:
                 raise Exception(f"Method properties already set on method {self.function_name}")
             self.function.__method_properties__ = self
 
-    def is_internal_endpoint(self) -> bool:
+        self.authorization_metadata: AuthorizationMetadata | None = None
+
+    @classmethod
+    def get_open_policy_agent_data(cls) -> dict[str, object]:
         """
-        Returns True iff it's an internal endpoint (for communication between the server and the agents)
-        and is not part of the public API.
+        Return the information about the different endpoints that exist
+        in the format used as input to Open Policy Agent.
         """
-        if self.client_types == [const.ClientType.agent]:
+        endpoints = {}
+        for method_properties in cls.methods.values():
+            auth_metadata = method_properties.authorization_metadata
+            if auth_metadata is None:
+                continue
+            endpoint_id = f"{method_properties.operation} {method_properties.get_full_path()}"
+            endpoints[endpoint_id] = {
+                "client_types": method_properties.client_types,
+                "auth_label": auth_metadata.auth_label,
+                "read_only": auth_metadata.read_only,
+                "environment_param": auth_metadata.environment_param,
+            }
+        return {"endpoints": endpoints}
+
+    def is_machine_to_machine_endpoint(self) -> bool:
+        """
+        Returns True iff this endpoint is exclusively used by other software components
+        (agent, scheduler, compiler, etc.).
+        """
+        if self._agent_server or self._server_agent:
             return True
-        if (self._agent_server or self._server_agent) and not self._api:
-            return True
-        return False
+        return set(self.client_types).intersection({const.ClientType.agent, const.ClientType.compiler})
 
     @property
     def varkw(self) -> bool:
