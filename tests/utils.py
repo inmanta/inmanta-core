@@ -314,7 +314,7 @@ async def report_db_index_usage(min_precent=100):
         " n_live_tup rows_in_table, seq_scan * n_live_tup badness  FROM pg_stat_user_tables "
         "WHERE seq_scan + idx_scan > 0 order by badness desc"
     )
-    async with data.get_connection_pool() as con:
+    async with data.get_connection_pool().acquire() as con:
         result = await con.fetch(q)
 
     for row in result:

@@ -6719,13 +6719,6 @@ async def disconnect_pool() -> None:
         BaseDocument._connection_pool.terminate()
         LOGGER.exception("A timeout occurred while closing the connection pool to the database")
         raise
-    except asyncio.CancelledError:
-        BaseDocument._connection_pool.terminate()
-        # Propagate cancel
-        raise
-    except Exception:
-        LOGGER.exception("An unexpected exception occurred while closing the connection pool to the database")
-        raise
     finally:
         BaseDocument.remove_connection_pool()
 
@@ -6810,9 +6803,8 @@ async def start_engine(
 
 async def stop_engine() -> None:
     """
-    Stop the sql alchemy engine.
+    Stop the sql alchemy engine and the.
     """
-    await disconnect_pool()
 
     global ENGINE
     global SESSION_FACTORY
@@ -6820,6 +6812,8 @@ async def stop_engine() -> None:
         await ENGINE.dispose(close=True)
     ENGINE = None
     SESSION_FACTORY = None
+
+    await disconnect_pool()
 
 
 def get_engine() -> AsyncEngine:
