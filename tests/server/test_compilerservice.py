@@ -1031,7 +1031,12 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     # request a compile
     remote_id1 = uuid.uuid4()
     await compilerslice.request_recompile(
-        env=env, force_update=False, do_export=False, remote_id=remote_id1, env_vars={"my_unique_var": "1"}
+        env=env,
+        force_update=False,
+        do_export=False,
+        remote_id=remote_id1,
+        env_vars={"my_unique_var": "1"},
+        links={"self": ["my-link"]},
     )
 
     # api should return one
@@ -1041,6 +1046,8 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 1
     assert result.result["queue"][0]["remote_id"] == str(remote_id1)
+    # Assert that links are present in the compile queue
+    assert result.result["queue"][0]["links"] == {"self": ["my-link"]}
     assert result.code == 200
     # None in the queue, all running
     await retry_limited(lambda: compilerslice._queue_count_cache == 0, 10)
