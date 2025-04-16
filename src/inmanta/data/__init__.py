@@ -3873,7 +3873,7 @@ class Compile(BaseDocument):
                         returncode=compile["returncode"],
                     )
                 )
-            for name, url in cast(dict[str, list[str]], compile.get("links", {})).items():
+            for name, url in (json.loads(compile["links"]) if requested_compile["links"] else {}).items():
                 links[name].add(*url)
 
         return m.CompileDetails(
