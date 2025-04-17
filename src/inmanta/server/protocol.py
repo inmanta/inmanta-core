@@ -219,20 +219,15 @@ class Server(endpoints.Endpoint):
             except Exception as e:
                 pre_stop_exceptions[endpoint.name] = e
 
-        if pre_stop_exceptions:
-            LOGGER.debug("The following errors occurred during pre-stopping: %s", str(pre_stop_exceptions))
-
         for endpoint in order:
             try:
                 LOGGER.debug("Stopping %s", endpoint.name)
                 await endpoint.stop()
             except Exception as e:
                 stop_exceptions[endpoint.name] = e
-        if stop_exceptions:
-            LOGGER.debug("The following errors occurred during stopping: %s", str(stop_exceptions))
 
         if pre_stop_exceptions or stop_exceptions:
-            raise ExceptionGroup(
+            raise BaseExceptionGroup(
                 "Uncaught exception occurred during the following slice(s) shutdown %s."
                 % str(set(pre_stop_exceptions.keys()).union(set(stop_exceptions.keys()))),
                 [exc for exc in itertools.chain(pre_stop_exceptions.values(), stop_exceptions.values())],
