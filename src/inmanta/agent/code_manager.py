@@ -15,16 +15,15 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
-
+import itertools
 import logging
 import sys
 import uuid
-from typing import Collection
 
 import inmanta.data.sqlalchemy as models
 from inmanta.agent import executor
 from inmanta.agent.executor import ModuleInstallSpec
-from inmanta.data import get_session
+from inmanta import data
 from inmanta.data.model import LEGACY_PIP_DEFAULT, InmantaModuleDTO, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.protocol import Client
 from inmanta.util.async_lru import async_lru_cache
@@ -62,13 +61,13 @@ class CodeManager:
         return PipConfig(**pip_config)
 
     @async_lru_cache(maxsize=1024)
-    async def get_code(self, environment: uuid.UUID, model_version: int, agent_name: str) -> Collection[ModuleInstallSpec]:
+    async def get_code(self, environment: uuid.UUID, model_version: int, agent_name: str) -> list[ModuleInstallSpec]:
         """
-        Get the collection of installation specifications (i.e. pip config, python package dependencies,
+        Get the list of installation specifications (i.e. pip config, python package dependencies,
         Inmanta modules sources) required to deploy resources on a given agent for a given configuration
         model version.
 
-        :return: collection of ModuleInstallSpec for this agent and this model version.
+        :return: list of ModuleInstallSpec for this agent and this model version.
         """
 
         module_install_specs = []
@@ -105,8 +104,6 @@ class CodeManager:
                 models.File,
                 and_(
                     models.FilesInModule.file_content_hash == models.File.content_hash,
-                    models.InmantaModule.version == models.FilesInModule.inmanta_module_version,
-                    models.InmantaModule.environment == models.FilesInModule.environment,
                 ),
             )
             .where(
@@ -117,76 +114,33 @@ class CodeManager:
             .order_by(models.ModulesForAgent.inmanta_module_name)
         )
 
-        previous_inmanta_module: InmantaModuleDTO = InmantaModuleDTO(
-            name="",
-            version="",
-            files_in_module=[],
-            requirements=[],
-            for_agents=[],
-        )
-        previous_module_sources: list[ModuleSource] = []
-        async with get_session() as session:
+        async with data.get_session() as session:
             result = await session.execute(modules_for_agent)
-            for res in result.all():
-                current_row_module_name = res.inmanta_module_name
-
-                if current_row_module_name != previous_inmanta_module.name:
-                    if previous_module_sources:
-                        module_install_specs.append(
-                            ModuleInstallSpec(
-                                module_name=previous_inmanta_module.name,
-                                module_version=previous_inmanta_module.version,
-                                model_version=model_version,
-                                blueprint=executor.ExecutorBlueprint(
-                                    pip_config=await self.get_pip_config(environment, model_version),
-                                    requirements=previous_inmanta_module.requirements,
-                                    sources=previous_module_sources,
-                                    python_version=sys.version_info[:2],
+            for module_name, rows in itertools.groupby(result.all(), key=lambda r: r.name):
+                rows_list = list(rows)
+                assert rows_list
+                assert len({row.version for row in rows_list}) == 1
+                ModuleInstallSpec(
+                    module_name=module_name.name,
+                    module_version=rows_list[0].version,
+                    model_version=model_version,
+                    blueprint=executor.ExecutorBlueprint(
+                        pip_config=await self.get_pip_config(environment, model_version),
+                        requirements=rows_list[0].requirements,
+                        sources=[
+                            ModuleSource(
+                                metadata=ModuleSourceMetadata(
+                                    name=row.python_module_name,
+                                    hash_value=row.file_content_hash,
+                                    is_byte_code=row.is_byte_code,
                                 ),
-                            )
-                        )
-                    previous_inmanta_module = InmantaModuleDTO(
-                        name=current_row_module_name,
-                        version=res.inmanta_module_version,
-                        files_in_module=[],
-                        requirements=res.requirements,
-                        for_agents=[],
-                    )
-                    previous_module_sources = [
-                        ModuleSource(
-                            metadata=ModuleSourceMetadata(
-                                name=res.python_module_name,
-                                hash_value=res.file_content_hash,
-                                is_byte_code=res.is_byte_code,
-                            ),
-                            source=res.content,
-                        )
-                    ]
-                else:
-                    previous_module_sources.append(
-                        ModuleSource(
-                            metadata=ModuleSourceMetadata(
-                                name=res.python_module_name,
-                                hash_value=res.file_content_hash,
-                                is_byte_code=res.is_byte_code,
-                            ),
-                            source=res.content,
-                        )
-                    )
-            if previous_module_sources:
-                module_install_specs.append(
-                    ModuleInstallSpec(
-                        module_name=previous_inmanta_module.name,
-                        module_version=previous_inmanta_module.version,
-                        model_version=model_version,
-                        blueprint=executor.ExecutorBlueprint(
-                            pip_config=await self.get_pip_config(environment, model_version),
-                            requirements=previous_inmanta_module.requirements,
-                            sources=previous_module_sources,
-                            python_version=sys.version_info[:2],
-                        ),
-                    )
+                                source=row.content,
+                            ) for row in rows_list
+                        ],
+                        python_version=sys.version_info[:2],
+                    ),
                 )
+
 
         if not module_install_specs:
             raise CouldNotResolveCode(agent_name, model_version)
