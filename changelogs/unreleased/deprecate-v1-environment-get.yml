@@ -1,4 +1,5 @@
 description: Deprecated the v1 endpoint to fetch an environment in favor of the v2 endpoint.
+  Also deprecated Resource.get_resources_report as it was only used by this endpoint.
 change-type: patch
 destination-branches: [iso8]
 sections:
