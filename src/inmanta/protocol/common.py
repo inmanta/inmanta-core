@@ -478,9 +478,9 @@ class MethodProperties:
             }
         return {"endpoints": endpoints}
 
-    def is_machine_to_machine_endpoint(self) -> bool:
+    def is_human_interface(self) -> bool:
         """
-        Returns True iff this endpoint is exclusively used by other software components
+        Returns False iff this endpoint is exclusively used by other software components
         (agent, scheduler, compiler, etc.).
         """
         if self._agent_server or self._server_agent:
