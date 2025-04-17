@@ -40,7 +40,7 @@ from inmanta.protocol.auth import auth
 from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
 from inmanta.server.services.databaseservice import initialize_sql_alchemy_engine
-from inmanta.server.services.policy_engine_service import policy_file
+from inmanta.server.services.policy_engine_service import LoopResolverWithUnixSocketSuppport, policy_file
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -595,6 +595,7 @@ def reset_all_objects():
     AsyncHTTPClient.configure(None)
     reference.reset()
     mutator.reset()
+    LoopResolverWithUnixSocketSuppport.clear_unix_socket_registry()
 
 
 @pytest.fixture()

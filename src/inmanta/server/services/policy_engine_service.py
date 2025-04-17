@@ -21,14 +21,14 @@ import asyncio.subprocess
 import json
 import logging
 import os
+import socket
 import subprocess
 import time
 from importlib.resources import files
 from typing import Mapping
 
-from tornado import httpclient
+from tornado import httpclient, netutil
 from tornado.httpclient import HTTPRequest
-from tornado.simple_httpclient import SimpleAsyncHTTPClient
 
 from inmanta import config, const, server, util
 from inmanta.protocol import common
@@ -50,16 +50,6 @@ def is_opa_log_level(value: str) -> str:
 policy_file = config.Option(
     "policy-engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the access policy.", config.is_str
 )
-policy_engine_bind_address = config.Option(
-    "policy-engine",
-    "bind-address",
-    "127.0.0.1",
-    "Address on which the policy engine will listen for incoming connections.",
-    config.is_str,
-)
-policy_engine_bind_port = config.Option(
-    "policy-engine", "bind-port", 8181, "Port on which the policy engine will listen for incoming connections.", config.is_int
-)
 policy_engine_log_level = config.Option(
     "policy-engine",
     "log-level",
@@ -69,21 +59,60 @@ policy_engine_log_level = config.Option(
 )
 
 
+class LoopResolverWithUnixSocketSuppport(netutil.DefaultLoopResolver):
+    """
+    A custom Tornado resolver that allows the Tornado client to connect to a UNIX socket.
+    It extends the default Resolver (DefaultLoopResolver) in that it maps certain hostnames
+    to a unix socket on disk. All other hostnames will resolve using the logic from
+    DefaultLoopResolver.
+
+    Inspired by: https://github.com/tornadoweb/tornado/issues/2671#issuecomment-499190469
+    """
+
+    _unix_sockets = {}
+    """
+    :param unix_sockets: A dictionary mapping hostnames to a unix socket on disk.
+    """
+
+    @classmethod
+    def register_unix_socket(cls, hostname: str, path_unix_socket: str) -> None:
+        """
+        Make this Resolver resolve the given hostname to the given unix socket.
+        """
+        cls._unix_sockets[hostname] = path_unix_socket
+
+    @classmethod
+    def clear_unix_socket_registry(cls) -> None:
+        """
+        Clear all mappings from hostname to unix socket.
+        """
+        cls._unix_sockets.clear()
+
+    async def resolve(self, host, port, *args, **kwargs):
+        if host in self._unix_sockets:
+            return [(socket.AF_UNIX, self._unix_sockets[host])]
+        return await super().resolve(host, port, *args, **kwargs)
+
+
+# Configure Tornado with our custom Resolver.
+netutil.Resolver.configure(LoopResolverWithUnixSocketSuppport)
+
+
 class PolicyEngineSlice(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(server.SLICE_POLICY_ENGINE)
-        self._opa_process = OpaServer()
+        self._opa_server = OpaServer()
 
     async def start(self) -> None:
         await super().start()
         if server_config.enforce_access_policy.get():
             LOGGER.info("Starting policy engine")
-            await self._opa_process.start()
+            await self._opa_server.start()
 
     async def stop(self) -> None:
         await super().stop()
-        await self._opa_process.stop()
+        await self._opa_server.stop()
 
     def get_depended_by(self) -> list[str]:
         return [server.SLICE_TRANSPORT]
@@ -94,46 +123,33 @@ class PolicyEngineSlice(protocol.ServerSlice):
         """
         if not server_config.enforce_access_policy.get():
             return True
-        if not self._opa_process.running:
-            raise Exception("Policy engine is not running. Call OpaServer.start() first.")
-        client = SimpleAsyncHTTPClient()
-        policy_engine_addr = self._opa_process.get_addr_policy_engine()
-        request = HTTPRequest(
-            url=f"http://{policy_engine_addr}/v1/data/policy/allowed",
-            method="POST",
-            headers={"Content-Type": "application/json"},
-            body=json.dumps(input_data, default=util.api_boundary_json_encoder),
-        )
-        try:
-            response = await client.fetch(request)
-            if response.code != 200:
-                LOGGER.error("Failed to evaluate access policy for %s.", input_data)
-                return False
-            response_body = json.loads(response.body.decode())
-            return "result" in response_body and response_body["result"] is True
-        except Exception:
-            LOGGER.exception("Failed to evaluate access policy for %s.", input_data)
-            return False
+        return await self._opa_server.does_satisfy_access_policy(input_data)
 
 
 class OpaServer:
+    """
+    A class representing an Open Policy Agent server.
+
+    The implementation of this class assumes only one instance of this class exists at any point in time.
+    """
 
     def __init__(self) -> None:
-        self.process: asyncio.subprocess.Process | None = None
+        self._state_dir: str = self._initialize_storage()
+        self._process: asyncio.subprocess.Process | None = None
         self.running = False
-
-    def get_addr_policy_engine(self) -> str:
-        """
-        Returns the "<host>:<port>" on which the policy engine should listen for incoming connections.
-        """
-        return f"{policy_engine_bind_address.get()}:{policy_engine_bind_port.get()}"
+        # The OPA server will listen on this unix socket.
+        self._socket_file = os.path.join(self._state_dir, "policy_engine.socket")
+        # A virtual hostname that will be mapped to the unix socket by the custom tornado resolver.
+        self._hostname = "policy_engine"
+        LoopResolverWithUnixSocketSuppport.register_unix_socket(self._hostname, self._socket_file)
+        self._client = httpclient.AsyncHTTPClient()
 
     def _initialize_storage(self) -> str:
         """
         Make sure the required directories exist in the state directory for the policy engine.
         """
         state_dir = config.state_dir.get()
-        policy_engine_state_dir = os.path.join(state_dir, "policy_engine")
+        policy_engine_state_dir = os.path.abspath(os.path.join(state_dir, "policy_engine"))
         os.makedirs(policy_engine_state_dir, exist_ok=True)
         return policy_engine_state_dir
 
@@ -141,10 +157,8 @@ class OpaServer:
         if not os.path.isfile(policy_file.get()):
             raise Exception(f"Access policy file {policy_file.get()} not found.")
 
-        state_dir = self._initialize_storage()
-
         # Write data to state directory
-        data_file = os.path.join(state_dir, "data.json")
+        data_file = os.path.join(self._state_dir, "data.json")
         data: dict[str, object] = common.MethodProperties.get_open_policy_agent_data()
         with open(data_file, "w") as fh:
             json.dump(data, fh)
@@ -156,12 +170,14 @@ class OpaServer:
         log_file_handle = None
         try:
             log_file_handle = open(policy_engine_log, "wb+")
-            self.process = await asyncio.create_subprocess_exec(
+            self._process = await asyncio.create_subprocess_exec(
                 opa_binary,
                 "run",
                 "--server",
                 "--addr",
-                self.get_addr_policy_engine(),
+                f"unix://{self._socket_file}",
+                "--unix-socket-perm",
+                "700",
                 "--log-format",
                 "text",
                 "--log-level",
@@ -178,13 +194,11 @@ class OpaServer:
         self.running = True
 
     async def _wait_until_opa_server_is_up(self, policy_engine_log_file: str) -> None:
-        client = httpclient.AsyncHTTPClient()
         now: float = time.time()
-        policy_engine_addr = self.get_addr_policy_engine()
-        health_endpoint = f"http://{policy_engine_addr}/health?plugins&bundles"
+        health_endpoint = f"http://{self._hostname}/health?plugins&bundles"
         while True:
             try:
-                await client.fetch(health_endpoint)
+                await self._client.fetch(health_endpoint)
             except Exception as e:
                 # Server is not yet up
                 timeout_happened = (time.time() - now) >= const.POLICY_ENGINE_STARTUP_TIMEOUT
@@ -201,18 +215,48 @@ class OpaServer:
                 return
 
     async def stop(self) -> None:
-        if self.process is None or self.process.returncode is not None:
+        if self._process is None or self._process.returncode is not None:
             # Process didn't start or was already terminated.
-            self.process = None
+            self._process = None
             self.running = False
             return
 
-        self.process.terminate()
+        self._process.terminate()
         try:
-            await asyncio.wait_for(self.process.wait(), timeout=const.POLICY_ENGINE_GRACE_HARD)
+            await asyncio.wait_for(self._process.wait(), timeout=const.POLICY_ENGINE_GRACE_HARD)
         except TimeoutError:
             LOGGER.warning("Policy engine didn't terminate in %d seconds. Killing it.", const.POLICY_ENGINE_GRACE_HARD)
-            self.process.kill()
-            await self.process.wait()
-        self.process = None
+            self._process.kill()
+            await self._process.wait()
+        self._process = None
         self.running = False
+
+    async def does_satisfy_access_policy(self, input_data: Mapping[str, object]) -> bool:
+        """
+        Return True iff the policy evaluates to True.
+        """
+        if not self.running:
+            LOGGER.error("Policy engine is not running. Call OpaServer.start() first.")
+            return False
+        request = HTTPRequest(
+            url=f"http://{self._hostname}/v1/data/policy/allowed",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            body=json.dumps(input_data, default=util.api_boundary_json_encoder),
+        )
+        try:
+            response = await self._client.fetch(request)
+            if response.code != 200:
+                LOGGER.error(
+                    "Failed to evaluate access policy for %s.",
+                    json.dumps(input_data, default=util.api_boundary_json_encoder),
+                )
+                return False
+            response_body = json.loads(response.body.decode())
+            return "result" in response_body and response_body["result"] is True
+        except Exception:
+            LOGGER.exception(
+                "Failed to evaluate access policy for %s.",
+                json.dumps(input_data, default=util.api_boundary_json_encoder),
+            )
+            return False
