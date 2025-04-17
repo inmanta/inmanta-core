@@ -1,0 +1,4 @@
+---
+description: Added support to define access policies. 
+change-type: major
+destination-branches: [master]

@@ -44,7 +44,8 @@ from tornado import web
 
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
-from inmanta.protocol import auth
+from inmanta.protocol.auth import auth
+from inmanta.protocol.auth.decorators import AuthorizationMetadata
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
@@ -347,22 +348,17 @@ class MethodProperties:
     This class stores the information from a method definition
     """
 
-    methods: dict[str, list["MethodProperties"]] = defaultdict(list)
+    methods: dict[str, "MethodProperties"] = {}
 
     @classmethod
     def register_method(cls, properties: "MethodProperties") -> None:
         """
-        Register new method properties. Multiple properties on a method is supported but the (URL, API version) combination has
-        to be unique.
+        Register new method properties. The name of the method has to be unique.
         """
-        current_list = [(x.path, x.api_version) for x in cls.methods[properties.function.__name__]]
-        if (properties.path, properties.api_version) in current_list:
-            raise Exception(
-                f"Method {properties.function.__name__} already has a "
-                f"method definition for api path {properties.path} and API version {properties.api_version}"
-            )
+        if properties.function_name in cls.methods:
+            raise Exception(f"Method with name {properties.function_name} already defined.")
 
-        cls.methods[properties.function.__name__].append(properties)
+        cls.methods[properties.function_name] = properties
 
     def __init__(
         self,
@@ -385,6 +381,7 @@ class MethodProperties:
         strict_typing: bool = True,
         enforce_auth: bool = True,
         varkw: bool = False,
+        set_method_properties_on_fnc: bool = True,
     ) -> None:
         """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -438,6 +435,7 @@ class MethodProperties:
         self._strict_typing = strict_typing
         self._enforce_auth = enforce_auth
         self.function = function
+        self.function_name = function.__name__
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
         self._return_type: Optional[type] = None
@@ -452,6 +450,43 @@ class MethodProperties:
 
         self._validate_function_types(typed)
         self.argument_validator = self.arguments_to_pydantic()
+
+        if set_method_properties_on_fnc:
+            if hasattr(self.function, "__method_properties__"):
+                raise Exception(f"Method properties already set on method {self.function_name}")
+            self.function.__method_properties__ = self
+
+        self.authorization_metadata: AuthorizationMetadata | None = None
+
+    @classmethod
+    def get_open_policy_agent_data(cls) -> dict[str, object]:
+        """
+        Return the information about the different endpoints that exist
+        in the format used as input to Open Policy Agent.
+        """
+        endpoints = {}
+        for method_properties in cls.methods.values():
+            auth_metadata = method_properties.authorization_metadata
+            if auth_metadata is None:
+                continue
+            endpoint_id = f"{method_properties.operation} {method_properties.get_full_path()}"
+            endpoints[endpoint_id] = {
+                "client_types": method_properties.client_types,
+                "auth_label": auth_metadata.auth_label,
+                "read_only": auth_metadata.read_only,
+                "environment_param": auth_metadata.environment_param,
+            }
+        return {"endpoints": endpoints}
+
+    def is_human_interface(self) -> bool:
+        """
+        Returns False iff this endpoint is exclusively used by other software components
+        (agent, scheduler, compiler, etc.).
+        """
+        if self._agent_server or self._server_agent:
+            return False
+        machine_to_machine_client_types = {const.ClientType.agent, const.ClientType.compiler}
+        return len(set(self.client_types) - machine_to_machine_client_types) > 0
 
     @property
     def varkw(self) -> bool:
@@ -497,7 +532,7 @@ class MethodProperties:
                 return (param.annotation, None)
 
         return create_model(
-            f"{self.function.__name__}_arguments",
+            f"{self.function_name}_arguments",
             **{param.name: to_tuple(param) for param in sig.parameters.values() if param.name != self._varkw_name},
             __base__=DateTimeNormalizerModel,
         )
@@ -826,6 +861,12 @@ class MethodProperties:
         """
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
         return url + self._path.generate_regex_path()
+
+    def get_full_path(self) -> str:
+        """
+        Return the path of this endpoint including the api prefix and version number.
+        """
+        return f"/{self._api_prefix}/v{self._api_version}{self._path.path}"
 
     def get_call_url(self, msg: dict[str, str]) -> str:
         """

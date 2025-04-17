@@ -32,6 +32,7 @@ from inmanta.const import ClientType, ResourceAction
 from inmanta.data import model
 from inmanta.data.model import EnvironmentSetting
 from inmanta.protocol import method
+from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ArgOption, BaseHttpException, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.converter import (
     ArgOptionHandler,
@@ -58,6 +59,7 @@ def feature_manager(server: Server) -> FeatureManager:
 
 @pytest.fixture(scope="function")
 def api_methods_fixture(clean_reset):
+    @auth(auth_label="test", read_only=True)
     @method(path="/simpleoperation", client_types=[ClientType.api, ClientType.agent], envelope=True)
     def post_method() -> str:
         return ""
@@ -71,6 +73,7 @@ def api_methods_fixture(clean_reset):
         "non_header": ArgOption(getter=lambda x, y: "test"),
     }
 
+    @auth(auth_label="test", read_only=True)
     @method(path="/operation/<id>", client_types=[ClientType.api, ClientType.agent], envelope=True, arg_options=arg_options)
     def dummy_post_with_parameters(header: str, non_header: str, param: int, id: UUID) -> str:
         """
@@ -89,6 +92,7 @@ def api_methods_fixture(clean_reset):
         """
         return ""
 
+    @auth(auth_label="test", read_only=True)
     @method(
         path="/operation/<id>",
         client_types=[ClientType.api, ClientType.agent],
@@ -113,10 +117,12 @@ def api_methods_fixture(clean_reset):
         """
         return ""
 
+    @auth(auth_label="test", read_only=True)
     @method(path="/operation/<id>", client_types=[ClientType.api, ClientType.agent], envelope=True, arg_options=arg_options)
     def dummy_post_with_parameters_no_docstring(header: str, non_header: str, param: int, id: UUID) -> str:
         return ""
 
+    @auth(auth_label="test", read_only=True)
     @method(
         path="/operation/<id>",
         client_types=[ClientType.api, ClientType.agent],
@@ -132,6 +138,7 @@ def api_methods_fixture(clean_reset):
         "tid_no_doc": ArgOption(header="header-no-doc", reply_header=True, getter=lambda x, y: "test"),
     }
 
+    @auth(auth_label="test", read_only=True)
     @method(
         path="/operation/<id_doc>/<id_no_doc>",
         client_types=[ClientType.api, ClientType.agent],
@@ -150,6 +157,7 @@ def api_methods_fixture(clean_reset):
         """
         return ""
 
+    @auth(auth_label="test", read_only=True)
     @method(
         path="/operation/<id_doc>/<id_no_doc>",
         client_types=[ClientType.api, ClientType.agent],
@@ -169,6 +177,7 @@ def api_methods_fixture(clean_reset):
         """
         return ""
 
+    @auth(auth_label="test", read_only=True)
     @method(
         path="/default/<id>",
         client_types=[ClientType.api],
@@ -200,12 +209,10 @@ async def test_generate_openapi_definition(server: Server):
 
 
 def test_filter_api_methods(server, api_methods_fixture, feature_manager):
-    post = UrlMethod(properties=MethodProperties.methods["post_method"][0], slice=None, method_name="post_method", handler=None)
+    post = UrlMethod(properties=MethodProperties.methods["post_method"], slice=None, method_name="post_method", handler=None)
     methods = {
         "POST": post,
-        "GET": UrlMethod(
-            properties=MethodProperties.methods["get_method"][0], slice=None, method_name="get_method", handler=None
-        ),
+        "GET": UrlMethod(properties=MethodProperties.methods["get_method"], slice=None, method_name="get_method", handler=None),
     }
     openapi = OpenApiConverter(server._transport.get_global_url_map(server.get_slices().values()), feature_manager)
     api_methods = openapi._filter_api_methods(methods)
@@ -214,7 +221,7 @@ def test_filter_api_methods(server, api_methods_fixture, feature_manager):
 
 def test_get_function_parameters(api_methods_fixture):
     url_method = UrlMethod(
-        properties=MethodProperties.methods["dummy_get_with_parameters"][0],
+        properties=MethodProperties.methods["dummy_get_with_parameters"],
         slice=None,
         method_name="dummy_get_with_parameters",
         handler=None,
@@ -230,7 +237,7 @@ def test_get_function_parameters(api_methods_fixture):
 def test_return_value(api_methods_fixture):
     operation_handler = OperationHandler(OpenApiTypeConverter(), ArgOptionHandler(OpenApiTypeConverter()))
 
-    json_response_content = operation_handler._build_return_value_wrapper(MethodProperties.methods["post_method"][0])
+    json_response_content = operation_handler._build_return_value_wrapper(MethodProperties.methods["post_method"])
     assert json_response_content == {
         "application/json": MediaType(schema=Schema(type="object", properties={"data": Schema(type="string")}))
     }
@@ -513,7 +520,7 @@ def test_post_operation(api_methods_fixture):
     method_name = "dummy_post_with_parameters"
 
     post = UrlMethod(
-        properties=MethodProperties.methods["dummy_post_with_parameters"][0],
+        properties=MethodProperties.methods["dummy_post_with_parameters"],
         slice=None,
         method_name=method_name,
         handler=None,
@@ -566,7 +573,7 @@ def test_get_operation(api_methods_fixture):
     method_name = "dummy_get_with_parameters"
 
     get = UrlMethod(
-        properties=MethodProperties.methods["dummy_get_with_parameters"][0],
+        properties=MethodProperties.methods["dummy_get_with_parameters"],
         slice=None,
         method_name=method_name,
         handler=None,
@@ -604,7 +611,7 @@ def test_post_operation_no_docstring(api_methods_fixture):
     POST method which doesn't have a docstring.
     """
     post = UrlMethod(
-        properties=MethodProperties.methods["dummy_post_with_parameters_no_docstring"][0],
+        properties=MethodProperties.methods["dummy_post_with_parameters_no_docstring"],
         slice=None,
         method_name="dummy_post_with_parameters_no_docstring",
         handler=None,
@@ -640,7 +647,7 @@ def test_get_operation_no_docstring(api_methods_fixture):
     GET method which doesn't have a docstring.
     """
     get = UrlMethod(
-        properties=MethodProperties.methods["dummy_get_with_parameters_no_docstring"][0],
+        properties=MethodProperties.methods["dummy_get_with_parameters_no_docstring"],
         slice=None,
         method_name="dummy_get_with_parameters_no_docstring",
         handler=None,
@@ -679,7 +686,7 @@ def test_post_operation_partial_documentation(api_methods_fixture):
     param_description = "A parameter."
     id_description = "The id of the resource."
     post = UrlMethod(
-        properties=MethodProperties.methods["dummy_post_with_parameters_partial_documentation"][0],
+        properties=MethodProperties.methods["dummy_post_with_parameters_partial_documentation"],
         slice=None,
         method_name="dummy_post_with_parameters_partial_documentation",
         handler=None,
@@ -723,7 +730,7 @@ def test_get_operation_partial_documentation(api_methods_fixture):
     id_description = "The id of the resource."
 
     get = UrlMethod(
-        properties=MethodProperties.methods["dummy_get_with_parameters_partial_documentation"][0],
+        properties=MethodProperties.methods["dummy_get_with_parameters_partial_documentation"],
         slice=None,
         method_name="dummy_get_with_parameters_partial_documentation",
         handler=None,
@@ -849,15 +856,13 @@ def test_get_openapi_parameter_type_for(api_methods_fixture: None) -> None:
     """
     Verify whether the MethodProperties.get_openapi_parameter_type_for() method works as expected.
     """
-    assert len(MethodProperties.methods["dummy_post_with_parameters_no_docstring"]) == 1
-    method_properties = MethodProperties.methods["dummy_post_with_parameters_no_docstring"][0]
+    method_properties = MethodProperties.methods["dummy_post_with_parameters_no_docstring"]
     assert method_properties.get_openapi_parameter_type_for("id") is ParameterType.path
     assert method_properties.get_openapi_parameter_type_for("header") is ParameterType.header
     assert method_properties.get_openapi_parameter_type_for("non_header") is None
     assert method_properties.get_openapi_parameter_type_for("param") is None
 
-    assert len(MethodProperties.methods["dummy_get_with_parameters_no_docstring"]) == 1
-    method_properties = MethodProperties.methods["dummy_get_with_parameters_no_docstring"][0]
+    method_properties = MethodProperties.methods["dummy_get_with_parameters_no_docstring"]
     assert method_properties.get_openapi_parameter_type_for("id") is ParameterType.path
     assert method_properties.get_openapi_parameter_type_for("header") is ParameterType.header
     assert method_properties.get_openapi_parameter_type_for("non_header") is ParameterType.query
@@ -869,8 +874,7 @@ def test_get_openapi_type_of_parameter(api_methods_fixture: None) -> None:
     Verify whether the OpenApiTypeConverter.get_openapi_type_of_parameter() method works as expected.
     """
     type_converter = OpenApiTypeConverter()
-    assert len(MethodProperties.methods["dummy_get_with_default_values"]) == 1
-    method_properties = MethodProperties.methods["dummy_get_with_default_values"][0]
+    method_properties = MethodProperties.methods["dummy_get_with_default_values"]
     param_dct = inspect.signature(method_properties.function).parameters
     for param_name, data_type, default_value, nullable in [
         ("no_def", OpenApiDataTypes.INTEGER.value, None, False),

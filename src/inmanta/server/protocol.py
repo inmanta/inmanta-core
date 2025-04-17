@@ -112,7 +112,7 @@ class Server(endpoints.Endpoint):
         self.sessions_handler = SessionManager()
         self.add_slice(self.sessions_handler)
 
-        self._transport = server.RESTServer(self.sessions_handler, self.id)
+        self._transport = server.RESTServer(self.sessions_handler, self.id, self)
         self.add_slice(TransportSlice(self))
         self.running = False
 
@@ -165,6 +165,17 @@ class Server(endpoints.Endpoint):
         self._slice_sequence = self._order_slices()
         return self._slice_sequence
 
+    def _validate(self) -> None:
+        """
+        Validate whether the server is in a consistent state.
+        Raises an exception if an inconsistency is found.
+        """
+        for method_name, properties in common.MethodProperties.methods.items():
+            # All endpoints used by end-users must have an @auth annotation.
+            has_auth_annotation = properties.authorization_metadata is not None
+            if properties.is_human_interface() and not has_auth_annotation:
+                raise Exception(f"API endpoint {method_name} is missing an @auth annotation.")
+
     async def start(self) -> None:
         """
         Start the transport.
@@ -176,6 +187,7 @@ class Server(endpoints.Endpoint):
         if self.running:
             return
         LOGGER.debug("Starting Server Rest Endpoint")
+        self._validate()
         self.running = True
 
         for my_slice in self._get_slice_sequence():

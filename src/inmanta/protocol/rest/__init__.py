@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import abc
 import inspect
 import json
 import logging
@@ -29,10 +30,15 @@ from tornado import escape
 
 from inmanta import const, tracing, util
 from inmanta.data.model import BaseModel
-from inmanta.protocol import auth, common, exceptions
+from inmanta.protocol import common, exceptions
+from inmanta.protocol.auth import auth
 from inmanta.protocol.common import ReturnValue
+from inmanta.server import SLICE_POLICY_ENGINE
 from inmanta.server import config as server_config
 from inmanta.types import Apireturn, JsonType
+
+if TYPE_CHECKING:
+    from inmanta.server.services.policy_engine_service import PolicyEngineSlice
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -536,12 +542,21 @@ class CallArguments:
             # We only need a valid token when the endpoint enforces authentication
             raise exceptions.UnauthorizedException()
 
-    def authorize_request(self, auth_enabled: bool) -> None:
-        """Authorize a request based on the given data
+    def _is_service_token(self) -> bool:
+        """
+        Return True iff self._auth_token is a service token (i.e. a token used by a service instead of a user).
+        """
+        ct_key: str = const.INMANTA_URN + "ct"
+        client_types_token = self._auth_token[ct_key]
+        return any(ct in {const.ClientType.agent.value, const.ClientType.compiler.value} for ct in client_types_token)
+
+    async def authorize_request(self, auth_enabled: bool, policy_engine_slice: Optional["PolicyEngineSlice"]) -> None:
+        """Validate whether the token is authorized to perform this request.
 
         :param auth_enabled: is authentication enabled?
+        :param policy_engine_slice: The policy-engine slice of this server or None if we are not running on the server.
         """
-        if not auth_enabled:
+        if not server_config.enforce_access_policy.get():
             return
 
         if self._auth_token is None:
@@ -550,6 +565,21 @@ class CallArguments:
                 raise exceptions.UnauthorizedException()
             return None
 
+        if self._is_service_token():
+            self._authorize_service_token()
+        else:
+            if policy_engine_slice is None:
+                raise exceptions.Forbidden(f"{SLICE_POLICY_ENGINE} slice not found.")
+            input_data = self._get_input_for_policy_engine()
+            if not await policy_engine_slice.does_satisfy_access_policy(input_data):
+                raise exceptions.Forbidden("Request is not allowed by the access policy.")
+
+    def _authorize_service_token(self) -> None:
+        """
+        Validate whether self._auth_token is a valid service token.
+        If not, this method raises a Forbidden exception.
+        """
+        assert self._auth_token is not None
         # Enforce environment restrictions
         env_key: str = const.INMANTA_URN + "env"
         if env_key in self._auth_token:
@@ -560,21 +590,37 @@ class CallArguments:
                 raise exceptions.Forbidden("The authorization token is not valid for the requested environment.")
 
         # Enforce client_types restrictions
-        ok: bool = False
         ct_key: str = const.INMANTA_URN + "ct"
-        for ct in self._auth_token[ct_key]:
-            if ct in self._config.properties.client_types:
-                ok = True
-
-        if not ok:
+        if not any(ct for ct in self._auth_token[ct_key] if ct in self._config.properties.client_types):
             raise exceptions.Forbidden(
                 "The authorization token does not have a valid client type for this call."
-                + f" ({self._auth_token[ct_key]} provided, {self._config.properties.client_types} expected"
+                + f" ({self._auth_token[ct_key]} provided, {self._config.properties.client_types} expected)"
             )
+
+    def _get_input_for_policy_engine(self) -> Mapping[str, object]:
+        """
+        Returns the input that should be provided to the policy engine to validate
+        whether this call is authorized or not.
+        """
+        method_properties = self._config.properties
+        call_args = dict(self.call_args)
+        name_call_context_context_arg = self.get_call_context()
+        if name_call_context_context_arg and name_call_context_context_arg in call_args:
+            # Remove the CallContext argument. It cannot be serialized to JSON.
+            del call_args[name_call_context_context_arg]
+        return {
+            "input": {
+                "request": {
+                    "endpoint_id": f"{method_properties.operation} {method_properties.get_full_path()}",
+                    "parameters": call_args,
+                },
+                "token": self._auth_token,
+            }
+        }
 
 
 # Shared
-class RESTBase(util.TaskHandler[None]):
+class RESTBase(util.TaskHandler[None], abc.ABC):
     """
     Base class for REST based client and servers
     """
@@ -621,7 +667,9 @@ class RESTBase(util.TaskHandler[None]):
             arguments = CallArguments(config, message, request_headers)
             arguments.authenticate(server_config.server_enable_auth.get())
             await arguments.process()
-            arguments.authorize_request(server_config.server_enable_auth.get())
+            await arguments.authorize_request(
+                auth_enabled=server_config.server_enable_auth.get(), policy_engine_slice=await self.get_policy_engine_slice()
+            )
 
             LOGGER.debug(
                 "Calling method %s(%s) user=%s",
@@ -645,3 +693,10 @@ class RESTBase(util.TaskHandler[None]):
         except Exception as e:
             LOGGER.exception("An exception occurred during the request.")
             raise exceptions.ServerError(str(e.args))
+
+    @abc.abstractmethod
+    async def get_policy_engine_slice(self) -> Optional["PolicyEngineSlice"]:
+        """
+        Return the policy-engine slice or None if no such slice exists because we are not running on the server.
+        """
+        raise NotImplementedError()
