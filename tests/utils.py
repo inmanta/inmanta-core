@@ -51,7 +51,6 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data import get_connection_ctx_mgr
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
@@ -316,7 +315,7 @@ async def report_db_index_usage(min_precent=100):
         " n_live_tup rows_in_table, seq_scan * n_live_tup badness  FROM pg_stat_user_tables "
         "WHERE seq_scan + idx_scan > 0 order by badness desc"
     )
-    async with get_connection_ctx_mgr() as con:
+    async with data.get_connection_pool().acquire() as con:
         result = await con.fetch(q)
 
     for row in result:

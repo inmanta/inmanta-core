@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import abc
+import json
 import urllib.parse
 from abc import ABC
 from collections.abc import Sequence
@@ -622,7 +623,7 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                 resource_version_id=resource["resource_id"] + ",v=" + str(resource["model"]),
                 id_details=data.Resource.get_details_from_resource_id(resource["resource_id"]),
                 status=resource["status"],
-                requires=resource["attributes"].get("requires", []),
+                requires=json.loads(resource["attributes"]).get("requires", []),
             )
             for resource in records
             if resource["attributes"]  # filter out bad joins
@@ -682,7 +683,7 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
                 resource_id=versioned_resource["resource_id"],
                 resource_version_id=versioned_resource["resource_id"] + f",v={self.version}",
                 id_details=data.Resource.get_details_from_resource_id(versioned_resource["resource_id"]),
-                requires=versioned_resource["attributes"].get("requires", []),  # todo: broken
+                requires=json.loads(versioned_resource["attributes"]).get("requires", []),  # todo: broken
             )
             for versioned_resource in records
         ]
@@ -750,15 +751,18 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                 version=compile["version"],
                 do_export=compile["do_export"],
                 force_update=compile["force_update"],
-                metadata=compile["metadata"] or {},
-                environment_variables=compile["used_environment_variables"] or {},
-                requested_environment_variables=compile["requested_environment_variables"],
-                mergeable_environment_variables=compile["mergeable_environment_variables"],
+                metadata=json.loads(compile["metadata"]) if compile["metadata"] else {},
+                environment_variables=(
+                    json.loads(compile["used_environment_variables"]) if compile["used_environment_variables"] else {}
+                ),
+                requested_environment_variables=json.loads(compile["requested_environment_variables"]),
+                mergeable_environment_variables=json.loads(compile["mergeable_environment_variables"]),
                 partial=compile["partial"],
                 removed_resource_sets=compile["removed_resource_sets"],
                 exporter_plugin=compile["exporter_plugin"],
                 notify_failed_compile=compile["notify_failed_compile"],
                 failed_compile_message=compile["failed_compile_message"],
+                links=cast(dict[str, list[str]], compile.get("links", {})),
             )
             for compile in records
         ]
@@ -911,7 +915,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[ResourceHistory]:
         def get_attributes(record: Record) -> JsonType:
-            attributes = record["attributes"]
+            attributes: JsonType = json.loads(record["attributes"])
             if "version" not in attributes:
                 # Due to a bug, the version field has always been present in the attributes dictionary.
                 # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
@@ -925,7 +929,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
                 attribute_hash=record["attribute_hash"],
                 attributes=get_attributes(record),
                 date=record["date"],
-                requires=[Id.parse_id(rid).resource_str() for rid in record["attributes"].get("requires", [])],
+                requires=[Id.parse_id(rid).resource_str() for rid in json.loads(record["attributes"]).get("requires", [])],
             )
             for record in records
         ]
@@ -1014,7 +1018,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[ResourceLog]:
         logs = []
         for record in records:
-            message = record["unnested_message"]
+            message = json.loads(record["unnested_message"])
             logs.append(
                 ResourceLog(
                     action_id=record["action_id"],
@@ -1081,7 +1085,7 @@ class FactsView(DataView[FactOrder, Fact]):
                 source=fact["source"],
                 updated=fact["updated"],
                 resource_id=fact["resource_id"],
-                metadata=fact["metadata"],
+                metadata=json.loads(fact["metadata"]) if fact["metadata"] else None,
                 environment=fact["environment"],
             )
             for fact in records
@@ -1199,7 +1203,7 @@ class ParameterView(DataView[ParameterOrder, model.Parameter]):
                 value=parameter["value"],
                 source=parameter["source"],
                 updated=parameter["updated"],
-                metadata=parameter["metadata"],
+                metadata=json.loads(parameter["metadata"]) if parameter["metadata"] else None,
                 environment=parameter["environment"],
             )
             for parameter in records
@@ -1373,7 +1377,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         return [
             model.DiscoveredResource(
                 discovered_resource_id=res["discovered_resource_id"],
-                values=res["values"],
+                values=json.loads(res["values"]),
                 managed_resource_uri=(
                     f"/api/v2/resource/{urllib.parse.quote(str(res['discovered_resource_id']), safe='')}"
                     if res["managed"]

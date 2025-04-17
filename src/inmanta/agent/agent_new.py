@@ -70,9 +70,11 @@ class Agent(SessionEndpoint):
         self.working = False
 
     async def start(self) -> None:
-        # Make mypy happy
-        max_overflow = cfg.scheduler_db_connection_pool_max_size.get() - cfg.scheduler_db_connection_pool_min_size.get()
-        self._db_monitor = DatabaseMonitor(opt.db_name.get(), opt.db_host.get(), max_overflow)
+        self._db_monitor = DatabaseMonitor(
+            data.get_connection_pool(),
+            opt.db_name.get(),
+            opt.db_host.get(),
+        )
         self._db_monitor.start()
 
         await super().start()

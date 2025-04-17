@@ -914,6 +914,9 @@ def get_compile_reports(
     """
     Get the compile reports from an environment.
 
+    The returned compile report objects may carry links to other objects, e.g. a service instance.
+    The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
+
     :param tid: The id of the environment
     :param limit: Limit the number of instances that are returned
     :param first_id: The id to use as a continuation token for paging, in combination with the 'start' value,
@@ -962,6 +965,9 @@ def get_compile_reports(
 )
 def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.CompileDetails:
     """
+    The returned compile details object may carry links to other objects, e.g. a service instance.
+    The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
+
     :param tid: The id of the environment in which the compilation process occurred.
     :param id: The id of the compile for which the details are being requested.
 
