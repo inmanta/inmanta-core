@@ -5031,9 +5031,9 @@ class Resource(BaseDocument):
         return result
 
     @classmethod
-    @warnings.deprecated("To be removed in iso9")
     async def get_resources_report(cls, environment: uuid.UUID) -> list[JsonType]:
         """
+        [DEPRECATED] Only used in v1 get_environment endpoint
         This method generates a report of all resources in the given environment,
         with their latest version and when they are last deployed.
         """
