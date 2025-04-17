@@ -175,6 +175,7 @@ def list_environments():
 )
 def get_environment(id: uuid.UUID, versions: Optional[int] = None, resources: Optional[int] = None):
     """
+    [DEPRECATED] Deprecated in favor of the v2 endpoint.
     Get an environment and all versions associated.
 
     :param id: The id of the environment to return.
