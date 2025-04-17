@@ -358,10 +358,10 @@ async def test_env_api(client):
 
     result = await client.environment_get(id=env_id)
     assert result.code == 200
-    assert "environment" in result.result
-    assert result.result["environment"]["id"] == env_id
-    assert result.result["environment"]["project"] == project_id
-    assert result.result["environment"]["name"] == "dev2"
+    assert "data" in result.result
+    assert result.result["data"]["id"] == env_id
+    assert result.result["data"]["project_id"] == project_id
+    assert result.result["data"]["name"] == "dev2"
 
     project_result = await client.get_project(id=project_id)
     assert project_result.code == 200
