@@ -68,6 +68,7 @@ class AuthorizationMetadata:
         self,
         method_properties: "MethodProperties",
         auth_label: str,
+        *,
         read_only: bool,
         environment_param: str | None,
     ) -> None:
