@@ -708,10 +708,10 @@ class OrchestrationService(protocol.ServerSlice):
         if is_partial_update:
             assert partial_base_version is not None
             await self._check_version_info(partial_base_version, environment, module_version_info, connection)
-
-        await InmantaModule.register_modules(
-            environment=environment, module_version_info=module_version_info, connection=connection
-        )
+        else:
+            await InmantaModule.register_modules(
+                environment=environment, module_version_info=module_version_info, connection=connection
+            )
         await ModulesForAgent.register_modules_for_agents(
             model_version=version, environment=environment, module_version_info=module_version_info, connection=connection
         )
