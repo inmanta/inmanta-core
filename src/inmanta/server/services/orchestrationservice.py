@@ -655,6 +655,67 @@ class OrchestrationService(protocol.ServerSlice):
             work.extend(provides_tree[current])
         return list(skippeable - set(undeployable_ids))
 
+    async def _check_version_info(
+        self,
+        partial_base_version: int,
+        environment: uuid.UUID,
+        module_version_info: dict[str, InmantaModuleDTO],
+        connection: Connection,
+    ) -> None:
+        """
+        Retrieve which inmanta modules (name, version) are registered for all agents
+        for a given model version and a given environment.
+
+        Make sure that the same module versions are used in this partial version.
+        """
+
+        base_version_data: dict[tuple[str, str], list[str]] = await ModulesForAgent.get_agents_per_module(
+            model_version=partial_base_version, environment=environment, connection=connection
+        )
+        for inmanta_module_name, module_data in module_version_info.items():
+            module_version = module_data.version
+            if not all([
+                (inmanta_module_name, module_version) in base_version_data,
+                set(module_data.for_agents).issubset(base_version_data[(inmanta_module_name, module_version)])
+            ]):
+                raise BadRequest(
+                    "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
+                )
+
+    async def _register_agent_code(
+        self,
+        is_partial_update: bool,
+        partial_base_version: int | None,
+        version: int,
+        environment: uuid.UUID,
+        module_version_info: dict[str, InmantaModuleDTO],
+        connection: asyncpg.connection.Connection,
+    ) -> None:
+        """
+        Helper method for the _put_version method.
+
+        Register the relevant inmanta modules for all agents that need them.
+        Use the `module_version_info` dict to populate the relevant tables
+        AgentModules, InmantaModule and ModuleFiles.
+
+        :param is_partial_update: Is the associated compile a partial or a full compile.
+        :param partial_base_version: In case of a partial compile, base version it is based on.
+        :param version: Configuration model version.
+        :param environment: Environment this compile belongs to.
+        :param module_version_info: Inmanta module information to register for this version.
+        :param connection: DB connection expected to be managed by the caller method.
+        """
+        if is_partial_update:
+            assert partial_base_version is not None
+            await self._check_version_info(partial_base_version, environment, module_version_info, connection)
+
+        await InmantaModule.register_modules(
+            environment=environment, module_version_info=module_version_info, connection=connection
+        )
+        await ModulesForAgent.register_modules_for_agents(
+            model_version=version, environment=environment, module_version_info=module_version_info, connection=connection
+        )
+
     async def _put_version(
         self,
         env: data.Environment,
@@ -822,43 +883,7 @@ class OrchestrationService(protocol.ServerSlice):
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
-            async def check_version_info(
-                partial_base_version: int,
-                environment: uuid.UUID,
-                module_version_info: dict[str, InmantaModuleDTO],
-                connection: Connection,
-            ) -> None:
-                """
-                Retrieve which inmanta modules (name, version) are registered for all agents
-                for a given model version and a given environment.
-
-                Make sure that the same module versions are used in this partial version.
-                """
-
-                base_version_data: dict[tuple[str, str], list[str]] = await ModulesForAgent.get_agents_per_module(
-                    model_version=partial_base_version, environment=environment, connection=connection
-                )
-                for inmanta_module_name, module_data in module_version_info.items():
-                    module_version = module_data.version
-                    if not all([
-                        (inmanta_module_name, module_version) in base_version_data,
-                        set(module_data.for_agents).issubset(base_version_data[(inmanta_module_name, module_version)])
-                    ]):
-                        raise BadRequest(
-                            "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
-                            )
-
-            if is_partial_update:
-                assert partial_base_version is not None
-                await check_version_info(partial_base_version, env.id, module_version_info, connection)
-            else:
-                await InmantaModule.register_modules(
-                    environment=env.id, module_version_info=module_version_info, connection=connection
-                )
-
-            await ModulesForAgent.register_modules_for_agents(
-                model_version=version, environment=env.id, module_version_info=module_version_info, connection=connection
-            )
+            await self._register_agent_code(is_partial_update, partial_base_version, version, env.id, module_version_info, connection)
 
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
