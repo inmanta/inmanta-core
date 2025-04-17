@@ -52,7 +52,7 @@ def auth(auth_label: str, *, read_only: bool, environment_param: str | None = No
                 raise Exception(f"environment_param {environment_param} is not a parameter of the API endpoint {fnc.__name__}")
         method_properties = fnc.__method_properties__
         method_properties.authorization_metadata = AuthorizationMetadata(
-            method_properties, auth_label, read_only, environment_param
+            method_properties, auth_label, read_only=read_only, environment_param=environment_param
         )
         return fnc
 
