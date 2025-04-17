@@ -81,31 +81,9 @@ class CodeManager:
                 models.FilesInModule.is_byte_code,
                 models.File.content,
             )
-            .join_from(
-                models.ModulesForAgent,
-                models.InmantaModule,
-                and_(
-                    models.ModulesForAgent.inmanta_module_name == models.InmantaModule.name,
-                    models.ModulesForAgent.inmanta_module_version == models.InmantaModule.version,
-                    models.ModulesForAgent.environment == models.InmantaModule.environment,
-                ),
-            )
-            .join_from(
-                models.InmantaModule,
-                models.FilesInModule,
-                and_(
-                    models.InmantaModule.name == models.FilesInModule.inmanta_module_name,
-                    models.InmantaModule.version == models.FilesInModule.inmanta_module_version,
-                    models.InmantaModule.environment == models.FilesInModule.environment,
-                ),
-            )
-            .join_from(
-                models.FilesInModule,
-                models.File,
-                and_(
-                    models.FilesInModule.file_content_hash == models.File.content_hash,
-                ),
-            )
+            .join(models.InmantaModule)
+            .join(models.FilesInModule)
+            .join(models.File)
             .where(
                 models.ModulesForAgent.environment == environment,
                 models.ModulesForAgent.agent_name == agent_name,
