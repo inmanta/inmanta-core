@@ -25,7 +25,7 @@ import socket
 import subprocess
 import time
 from importlib.resources import files
-from typing import Mapping
+from typing import Any, Mapping
 
 from tornado import httpclient, netutil
 from tornado.httpclient import HTTPRequest
@@ -69,7 +69,7 @@ class LoopResolverWithUnixSocketSuppport(netutil.DefaultLoopResolver):
     Inspired by: https://github.com/tornadoweb/tornado/issues/2671#issuecomment-499190469
     """
 
-    _unix_sockets = {}
+    _unix_sockets: dict[str, str] = {}
     """
     :param unix_sockets: A dictionary mapping hostnames to a unix socket on disk.
     """
@@ -88,10 +88,10 @@ class LoopResolverWithUnixSocketSuppport(netutil.DefaultLoopResolver):
         """
         cls._unix_sockets.clear()
 
-    async def resolve(self, host, port, *args, **kwargs):
+    async def resolve(self, host: str, port: int, family: socket.AddressFamily = socket.AF_UNSPEC) -> list[tuple[int, Any]]:
         if host in self._unix_sockets:
             return [(socket.AF_UNIX, self._unix_sockets[host])]
-        return await super().resolve(host, port, *args, **kwargs)
+        return await super().resolve(host, port, family)
 
 
 # Configure Tornado with our custom Resolver.
