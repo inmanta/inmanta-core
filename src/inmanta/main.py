@@ -365,7 +365,7 @@ def environment_show(client: Client, environment: str, format_string: Optional[s
 
     ENVIRONMENT: ID or name of the environment to show
     """
-    env = client.get_dict("get_environment", "environment", dict(id=client.to_environment_id(environment)))
+    env = client.get_dict("environment_get", "data", dict(id=client.to_environment_id(environment)))
     if format_string is not None:
         print(format_string.format(**env))
     else:
@@ -383,7 +383,7 @@ def environment_write_config(client: Client, environment: str) -> None:
 
     ENVIRONMENT: ID or name of the environment to write the config for
     """
-    env = client.get_dict("get_environment", "environment", dict(id=client.to_environment_id(environment)))
+    env = client.get_dict("environment_get", "data", dict(id=client.to_environment_id(environment)))
     save_config(client, env)
 
 

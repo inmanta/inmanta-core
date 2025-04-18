@@ -102,7 +102,7 @@ async def test_environment(server, client, cli, tmpdir):
     assert env_name in result.output
     assert env_id in result.output
 
-    result = await cli.run("environment", "show", "--format", "{id}--{name}--{project}--{repo_url}--{repo_branch}", env_name)
+    result = await cli.run("environment", "show", "--format", "{id}--{name}--{project_id}--{repo_url}--{repo_branch}", env_name)
     assert result.exit_code == 0
     assert result.output.strip() == f"{env_id}--{env_name}--{project_id}--/git/repo--dev1"
 

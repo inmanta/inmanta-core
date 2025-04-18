@@ -1,0 +1,4 @@
+change-type: minor
+issue-nr: 8937
+description: Remove unused methods that touch the resource table
+destination-branches: [master]

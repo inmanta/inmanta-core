@@ -190,28 +190,6 @@ class EnvironmentService(protocol.ServerSlice):
     async def modify_environment(self, environment_id: uuid.UUID, name: str, repository: str, branch: str) -> Apireturn:
         return 200, {"environment": rename_fields(await self.environment_modify(environment_id, name, repository, branch))}
 
-    @handle(methods.get_environment, environment_id="id", api_version=1)
-    async def get_environment(
-        self, environment_id: uuid.UUID, versions: Optional[int] = None, resources: Optional[int] = None
-    ) -> Apireturn:
-        versions = 0 if versions is None else int(versions)
-        resources = 0 if resources is None else int(resources)
-
-        env = await data.Environment.get_by_id(environment_id)
-
-        if env is None:
-            raise NotFound("The environment id does not exist.")
-
-        env_dict = env.to_dict()
-
-        if versions > 0:
-            env_dict["versions"] = await data.ConfigurationModel.get_versions(environment_id, limit=versions)
-
-        if resources > 0:
-            env_dict["resources"] = await data.Resource.get_resources_report(environment=environment_id)
-
-        return 200, {"environment": env_dict}
-
     @handle(methods.list_environments)
     async def list_environments(self) -> Apireturn:
         return 200, {"environments": [rename_fields(env) for env in await self.environment_list()]}
