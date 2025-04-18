@@ -32,7 +32,7 @@ import inmanta.db.versions
 from data.db import versions
 from data.db_with_invalid_versions import invalid_versions
 from inmanta import data
-from inmanta.data import CORE_SCHEMA_NAME, schema
+from inmanta.data import CORE_SCHEMA_NAME, get_connection_ctx_mgr, schema
 from inmanta.data.schema import TableNotFound, Version
 from utils import log_contains
 
@@ -241,14 +241,14 @@ def test_dbschema_get_dct_with_update_functions():
         assert inspect.getfullargspec(version.function)[0] == ["connection"]
 
 
-async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, hard_clean_db):
-    async with postgresql_pool.acquire() as postgresql_client:
-        async with postgresql_pool.acquire() as postgresql_client2:
+async def test_multi_upgrade_lockout(sql_alchemy_engine, get_columns_in_db_table, hard_clean_db):
+    async with get_connection_ctx_mgr() as conn1:
+        async with get_connection_ctx_mgr() as conn2:
             # schedule 3 updates, hang on second, unblock one, verify, unblock other, verify
-            corev: set[int] = await get_core_versions(postgresql_client)
+            corev: set[int] = await get_core_versions(conn1)
 
-            db_schema = schema.DBSchema("test_multi_upgrade_lockout", inmanta.db.versions, postgresql_client)
-            db_schema2 = schema.DBSchema("test_multi_upgrade_lockout", inmanta.db.versions, postgresql_client2)
+            db_schema = schema.DBSchema("test_multi_upgrade_lockout", inmanta.db.versions, conn1)
+            db_schema2 = schema.DBSchema("test_multi_upgrade_lockout", inmanta.db.versions, conn2)
             await db_schema.ensure_self_update()
 
             lock = Semaphore(0)
@@ -289,24 +289,24 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
             # Assert done
             assert (await db_schema.get_installed_versions()) == {1, 2, 3}
             assert (
-                await postgresql_client.fetchval(
+                await conn1.fetchval(
                     "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='taba'"
                 )
             ) is not None
 
             assert (
-                await postgresql_client.fetchval(
+                await conn1.fetchval(
                     "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='tabb'"
                 )
             ) is not None
 
             assert (
-                await postgresql_client.fetchval(
+                await conn1.fetchval(
                     "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public' AND table_name='tabc'"
                 )
             ) is not None
 
-            await assert_core_untouched(postgresql_client, corev)
+            await assert_core_untouched(conn1, corev)
 
 
 async def test_dbschema_get_dct_filter_disabled():

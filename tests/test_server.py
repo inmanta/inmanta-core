@@ -147,10 +147,7 @@ async def test_create_too_many_versions(client, server, no_agent, n_versions_to_
     assert len(prvs) == min(n_versions_to_keep + 2, n_versions_to_create + 1)
 
 
-@pytest.mark.parametrize(
-    "has_released_versions",
-    [True, False],
-)
+@pytest.mark.parametrize("has_released_versions", [True, False])
 async def test_purge_versions(server, client, environment, has_released_versions: bool, agent_no_state_check) -> None:
     """
     Verify that the `OrchestrationService._purge_versions()` method works correctly and that it doesn't cleanup
