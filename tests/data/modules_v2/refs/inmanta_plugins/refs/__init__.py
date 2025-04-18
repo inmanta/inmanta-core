@@ -1,9 +1,10 @@
 import os
 import dataclasses
+from typing import Annotated, Any
 
 from inmanta.agent.handler import LoggerABC, provider, CRUDHandler, HandlerContext
 from inmanta.references import reference, Reference, is_reference_of
-from inmanta.plugins import plugin
+from inmanta.plugins import plugin, ModelType
 from inmanta.resources import resource, ManagedResource, PurgeableResource
 
 
@@ -72,6 +73,7 @@ def create_bool_reference_cycle(name: str) -> Reference[bool]:
 @dataclasses.dataclass(frozen=True)
 class Test:
     value: str | Reference[str]
+    non_ref_value: str = "Hello World!"
 
 
 @reference("refs::TestReference")
@@ -162,3 +164,18 @@ class NullProvider(CRUDHandler[Deep]):
 
     def update_resource(self, ctx: HandlerContext, changes: dict, resource: Deep) -> None:
         ctx.set_updated()
+
+
+type Entity = Annotated[Any, ModelType["std::Entity"]]
+
+
+# TODO: naming etc
+@plugin
+def read_entity_value(instance: Entity) -> str:
+    return instance.non_ref_value
+
+
+@plugin
+def read_dataclass_value(instance: Test) -> None:
+    failed_read = instance.non_ref_value
+    return None
