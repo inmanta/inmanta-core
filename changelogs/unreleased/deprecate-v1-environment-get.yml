@@ -3,4 +3,4 @@ description: Deprecated the v1 endpoint to fetch an environment in favor of the 
 change-type: patch
 destination-branches: [iso8]
 sections:
-  deprecation-note: {{description}}
+  deprecation-note: "Deprecated the v1 endpoint to fetch an environment in favor of the v2 endpoint."
