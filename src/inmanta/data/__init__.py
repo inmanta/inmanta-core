@@ -4895,12 +4895,14 @@ class Resource(BaseDocument):
         """
         Update resources on the latest released version of the model stuck in "deploying" state.
         The status will be reset to the latest non deploying status.
+        The is_deploying flag will also be set to "False" on the ResourcePersistentState table.
 
         :param environment: The environment impacted by this
         :param connection: The connection to use
         """
 
-        query = f"""
+        # FIXME: When we remove the status from the Resource table, this can go.
+        update_resource_query = f"""
             UPDATE {Resource.table_name()} r
             SET status=ps.last_non_deploying_status::TEXT::resourcestate
             FROM {ResourcePersistentState.table_name()} ps
@@ -4917,9 +4919,15 @@ class Resource(BaseDocument):
                     LIMIT 1
                 )
         """
+        update_rps_query = f"""
+            UPDATE {ResourcePersistentState.table_name()} ps
+            SET is_deploying=FALSE
+            WHERE environment=$1
+        """
         values = [cls._get_value(environment)]
         async with cls.get_connection(connection) as connection:
-            await connection.execute(query, *values)
+            await connection.execute(update_rps_query, *values)
+            await connection.execute(update_resource_query, *values)
 
     @classmethod
     async def get_resource_ids_with_status(

@@ -1229,6 +1229,8 @@ async def test_send_in_progress_action_id_conflict(server, client, environment, 
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
 
+    await data.ResourcePersistentState.populate_for_version(environment=uuid.UUID(environment), model_version=model_version)
+
     action_id = uuid.uuid4()
     update_manager = persistence.ToDbUpdateManager(client, env_id)
 
