@@ -18,7 +18,6 @@ Contact: code@inmanta.com
 
 import asyncio
 import importlib.metadata
-import itertools
 import logging
 import re
 import socket
@@ -222,29 +221,13 @@ class Server(endpoints.Endpoint):
 
         order = list(reversed(self._get_slice_sequence()))
 
-        pre_stop_exceptions: dict[str, Exception] = {}
-        stop_exceptions: dict[str, Exception] = {}
+        for endpoint in order:
+            LOGGER.debug("Pre Stopping %s", endpoint.name)
+            await endpoint.prestop()
 
         for endpoint in order:
-            try:
-                LOGGER.debug("Pre Stopping %s", endpoint.name)
-                await endpoint.prestop()
-            except Exception as e:
-                pre_stop_exceptions[endpoint.name] = e
-
-        for endpoint in order:
-            try:
-                LOGGER.debug("Stopping %s", endpoint.name)
-                await endpoint.stop()
-            except Exception as e:
-                stop_exceptions[endpoint.name] = e
-
-        if pre_stop_exceptions or stop_exceptions:
-            raise BaseExceptionGroup(
-                "Uncaught exception occurred during the following slice(s) shutdown %s."
-                % str(set(pre_stop_exceptions.keys()).union(set(stop_exceptions.keys()))),
-                [exc for exc in itertools.chain(pre_stop_exceptions.values(), stop_exceptions.values())],
-            )
+            LOGGER.debug("Stopping %s", endpoint.name)
+            await endpoint.stop()
 
 
 class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler[Result | None]):

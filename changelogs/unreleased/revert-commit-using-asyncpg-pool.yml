@@ -1,0 +1,3 @@
+description: Revert commit be9fe03 using asyncpg pool instead of sqlalchemy.
+change-type: patch
+destination-branches: [master]
