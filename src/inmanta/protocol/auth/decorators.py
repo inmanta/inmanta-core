@@ -50,10 +50,10 @@ def auth(auth_label: str, *, read_only: bool, environment_param: str | None = No
             signature = inspect.signature(fnc)
             if environment_param not in signature.parameters:
                 raise Exception(f"environment_param {environment_param} is not a parameter of the API endpoint {fnc.__name__}")
-        method_properties = fnc.__method_properties__
-        method_properties.authorization_metadata = AuthorizationMetadata(
-            method_properties, auth_label, read_only=read_only, environment_param=environment_param
-        )
+        for method_properties in fnc.__method_properties__:
+            method_properties.authorization_metadata = AuthorizationMetadata(
+                method_properties, auth_label, read_only=read_only, environment_param=environment_param
+            )
         return fnc
 
     return wrapper

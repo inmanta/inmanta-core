@@ -348,17 +348,30 @@ class MethodProperties:
     This class stores the information from a method definition
     """
 
-    methods: dict[str, "MethodProperties"] = {}
+    methods: dict[str, list["MethodProperties"]] = defaultdict(list)
 
     @classmethod
     def register_method(cls, properties: "MethodProperties") -> None:
         """
-        Register new method properties. The name of the method has to be unique.
+        Register new method properties. Multiple properties on a method is supported but the (URL, API version) combination has
+        to be unique.
         """
-        if properties.function_name in cls.methods:
-            raise Exception(f"Method with name {properties.function_name} already defined.")
+        current_list = [(x.path, x.api_version) for x in cls.methods[properties.function.__name__]]
+        if (properties.path, properties.api_version) in current_list:
+            raise Exception(
+                f"Method {properties.function.__name__} already has a "
+                f"method definition for api path {properties.path} and API version {properties.api_version}"
+            )
+        if (
+            cls.methods[properties.function_name]
+            and cls.methods[properties.function_name][-1].authorization_metadata is not None
+        ):
+            raise Exception(
+                f"Method {properties.function_name} has a @method/@typedmethod annotation above an @auth annotation."
+                " The @auth method always needs to be defined above the @method/@typedmethod annotations."
+            )
 
-        cls.methods[properties.function_name] = properties
+        cls.methods[properties.function_name].append(properties)
 
     def __init__(
         self,
@@ -381,7 +394,6 @@ class MethodProperties:
         strict_typing: bool = True,
         enforce_auth: bool = True,
         varkw: bool = False,
-        set_method_properties_on_fnc: bool = True,
     ) -> None:
         """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -451,10 +463,9 @@ class MethodProperties:
         self._validate_function_types(typed)
         self.argument_validator = self.arguments_to_pydantic()
 
-        if set_method_properties_on_fnc:
-            if hasattr(self.function, "__method_properties__"):
-                raise Exception(f"Method properties already set on method {self.function_name}")
-            self.function.__method_properties__ = self
+        if not hasattr(self.function, "__method_properties__"):
+            self.function.__method_properties__ = []
+        self.function.__method_properties__.append(self)
 
         self.authorization_metadata: AuthorizationMetadata | None = None
 
@@ -465,17 +476,18 @@ class MethodProperties:
         in the format used as input to Open Policy Agent.
         """
         endpoints = {}
-        for method_properties in cls.methods.values():
-            auth_metadata = method_properties.authorization_metadata
-            if auth_metadata is None:
-                continue
-            endpoint_id = f"{method_properties.operation} {method_properties.get_full_path()}"
-            endpoints[endpoint_id] = {
-                "client_types": method_properties.client_types,
-                "auth_label": auth_metadata.auth_label,
-                "read_only": auth_metadata.read_only,
-                "environment_param": auth_metadata.environment_param,
-            }
+        for method_properties_list in cls.methods.values():
+            for method_properties in method_properties_list:
+                auth_metadata = method_properties.authorization_metadata
+                if auth_metadata is None:
+                    continue
+                endpoint_id = f"{method_properties.operation} {method_properties.get_full_path()}"
+                endpoints[endpoint_id] = {
+                    "client_types": method_properties.client_types,
+                    "auth_label": auth_metadata.auth_label,
+                    "read_only": auth_metadata.read_only,
+                    "environment_param": auth_metadata.environment_param,
+                }
         return {"endpoints": endpoints}
 
     def is_human_interface(self) -> bool:

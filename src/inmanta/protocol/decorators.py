@@ -35,9 +35,10 @@ class handle:
     :param kwargs: Map arguments in the message from one name to an other
     """
 
-    def __init__(self, method: Callable[..., Apireturn], **kwargs: str) -> None:
+    def __init__(self, method: Callable[..., Apireturn], api_version: Optional[int] = None, **kwargs: str) -> None:
         self.method = method
         self.mapping: dict[str, str] = kwargs
+        self._api_version = api_version
 
     def __call__(self, function: FuncT) -> FuncT:
         """
@@ -48,6 +49,7 @@ class handle:
 
         function.__protocol_method__ = self.method
         function.__protocol_mapping__ = self.mapping
+        function.__api_version__ = self._api_version
         return function
 
 
@@ -120,7 +122,6 @@ def method(
             False,
             envelope_key,
             enforce_auth=enforce_auth,
-            set_method_properties_on_fnc=True,
         )
         common.MethodProperties.register_method(properties)
         return func
@@ -201,7 +202,6 @@ def typedmethod(
                 strict_typing=strict_typing,
                 enforce_auth=enforce_auth,
                 varkw=varkw,
-                set_method_properties_on_fnc=(index == 0),  # Prevent setting method properties twice
             )
             common.MethodProperties.register_method(properties)
         return func

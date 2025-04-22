@@ -102,17 +102,19 @@ class PolicyEngineSlice(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(server.SLICE_POLICY_ENGINE)
-        self._opa_server = OpaServer()
+        self._opa_server: OpaServer | None = None
 
     async def start(self) -> None:
         await super().start()
         if server_config.enforce_access_policy.get():
             LOGGER.info("Starting policy engine")
+            self._opa_server = OpaServer()
             await self._opa_server.start()
 
     async def stop(self) -> None:
         await super().stop()
-        await self._opa_server.stop()
+        if self._opa_server:
+            await self._opa_server.stop()
 
     def get_depended_by(self) -> list[str]:
         return [server.SLICE_TRANSPORT]
@@ -123,6 +125,9 @@ class PolicyEngineSlice(protocol.ServerSlice):
         """
         if not server_config.enforce_access_policy.get():
             return True
+        if not self._opa_server:
+            LOGGER.warning("Access policy evaluation was requested, but the policy server isn't running.")
+            return False
         return await self._opa_server.does_satisfy_access_policy(input_data)
 
 

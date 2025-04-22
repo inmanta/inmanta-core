@@ -66,7 +66,7 @@ class ProjectService(protocol.ServerSlice):
     async def create_project(self, name: str, project_id: Optional[uuid.UUID]) -> Apireturn:
         return 200, {"project": (await self.project_create(name, project_id)).model_dump()}
 
-    @handle(methods.delete_project, project_id="id")
+    @handle(methods.delete_project, project_id="id", api_version=1)
     async def delete_project(self, project_id: uuid.UUID) -> Apireturn:
         await self.project_delete(project_id)
         return 200
@@ -102,7 +102,7 @@ class ProjectService(protocol.ServerSlice):
 
         return project.to_dto()
 
-    @handle(methods_v2.project_delete, project_id="id")
+    @handle(methods_v2.project_delete, project_id="id", api_version=2)
     async def project_delete(self, project_id: uuid.UUID) -> None:
         project = await data.Project.get_by_id(project_id)
         if project is None:

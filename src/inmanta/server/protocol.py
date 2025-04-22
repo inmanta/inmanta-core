@@ -170,11 +170,12 @@ class Server(endpoints.Endpoint):
         Validate whether the server is in a consistent state.
         Raises an exception if an inconsistency is found.
         """
-        for method_name, properties in common.MethodProperties.methods.items():
-            # All endpoints used by end-users must have an @auth annotation.
-            has_auth_annotation = properties.authorization_metadata is not None
-            if properties.is_human_interface() and not has_auth_annotation:
-                raise Exception(f"API endpoint {method_name} is missing an @auth annotation.")
+        for method_name, properties_list in common.MethodProperties.methods.items():
+            for properties in properties_list:
+                # All endpoints used by end-users must have an @auth annotation.
+                has_auth_annotation = properties.authorization_metadata is not None
+                if properties.is_human_interface() and not has_auth_annotation:
+                    raise Exception(f"API endpoint {method_name} is missing an @auth annotation.")
 
     async def start(self) -> None:
         """

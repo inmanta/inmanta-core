@@ -190,7 +190,7 @@ class EnvironmentService(protocol.ServerSlice):
     async def modify_environment(self, environment_id: uuid.UUID, name: str, repository: str, branch: str) -> Apireturn:
         return 200, {"environment": rename_fields(await self.environment_modify(environment_id, name, repository, branch))}
 
-    @handle(methods.get_environment, environment_id="id")
+    @handle(methods.get_environment, environment_id="id", api_version=1)
     async def get_environment(
         self, environment_id: uuid.UUID, versions: Optional[int] = None, resources: Optional[int] = None
     ) -> Apireturn:
@@ -446,7 +446,7 @@ class EnvironmentService(protocol.ServerSlice):
         await self.notify_listeners(EnvironmentAction.updated, env.to_dto(), original_env)
         return env.to_dto()
 
-    @handle(methods_v2.environment_get, environment_id="id")
+    @handle(methods_v2.environment_get, environment_id="id", api_version=2)
     async def environment_get(self, environment_id: uuid.UUID, details: bool = False) -> model.Environment:
         env = await data.Environment.get_by_id(environment_id, details=details)
 
