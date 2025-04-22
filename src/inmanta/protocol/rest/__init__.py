@@ -644,6 +644,12 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
     def validate_sid(self, sid: uuid.UUID) -> bool:
         raise NotImplementedError()
 
+    def is_auth_enabled(self) -> bool:
+        """
+        Return True iff authentication is enabled.
+        """
+        raise NotImplementedError()
+
     async def _execute_call(
         self,
         config: common.UrlMethod,
@@ -665,10 +671,11 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
             # Authorization might need data from the request but we do not want to process it before we are sure the call
             # is authenticated.
             arguments = CallArguments(config, message, request_headers)
-            arguments.authenticate(server_config.server_enable_auth.get())
+            is_auth_enabled: bool = self.is_auth_enabled()
+            arguments.authenticate(auth_enabled=is_auth_enabled)
             await arguments.process()
             await arguments.authorize_request(
-                auth_enabled=server_config.server_enable_auth.get(), policy_engine_slice=await self.get_policy_engine_slice()
+                auth_enabled=is_auth_enabled, policy_engine_slice=await self.get_policy_engine_slice()
             )
 
             LOGGER.debug(

@@ -57,6 +57,10 @@ class RESTClient(RESTBase):
     def endpoint(self) -> "Endpoint":
         return self.__end_point
 
+    def is_auth_enabled(self) -> bool:
+        # Auth cannot be enabled on the client-side.
+        return False
+
     @property
     def id(self) -> str:
         """

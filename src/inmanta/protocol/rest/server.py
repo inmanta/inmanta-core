@@ -269,6 +269,9 @@ class RESTServer(RESTBase):
     def validate_sid(self, sid: uuid.UUID) -> bool:
         return self.session_manager.validate_sid(sid)
 
+    def is_auth_enabled(self) -> bool:
+        return server_config.server_enable_auth.get()
+
     def get_global_url_map(
         self, targets: list[inmanta.protocol.endpoints.CallTarget]
     ) -> dict[str, dict[str, common.UrlMethod]]:
