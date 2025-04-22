@@ -163,7 +163,7 @@ enforce_access_policy = Option(
     "server",
     "enforce-access-policy",
     False,
-    "If True, the access policy defined by the policy-engine.policy-file config option will be enforce on the API."
+    "If True, the access policy defined by the policy-engine.policy-file config option will be enforced on the API."
     " If False, any access will be allowed.",
     is_bool,
 )
