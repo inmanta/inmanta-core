@@ -44,6 +44,9 @@ def test_conversion(caplog):
     assert inmanta_type.NullableType(inmanta_type.Integer()) == to_dsl_type_simple(Annotated[int | None, "something"])
     # Union type should be ignored in favor of our ModelType
     assert inmanta_type.TypedDict(inmanta_type.Any()) == to_dsl_type_simple(Annotated[dict[str, int], ModelType["dict"]])
+    assert inmanta_type.Any() == to_dsl_type_simple(Annotated[dict[str, int], ModelType["any"]])
+    assert inmanta_type.TypedDict(inmanta_type.Any()) == to_dsl_type_simple(dict[str, Annotated[int, ModelType["any"]]])
+
     assert inmanta_type.Integer() == to_dsl_type_simple(int)
     assert inmanta_type.Float() == to_dsl_type_simple(float)
     assert inmanta_type.NullableType(inmanta_type.Float()) == to_dsl_type_simple(float | None)

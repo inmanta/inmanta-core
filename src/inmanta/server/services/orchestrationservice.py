@@ -674,10 +674,12 @@ class OrchestrationService(protocol.ServerSlice):
         )
         for inmanta_module_name, module_data in module_version_info.items():
             module_version = module_data.version
-            if not all([
-                (inmanta_module_name, module_version) in base_version_data,
-                set(module_data.for_agents).issubset(base_version_data[(inmanta_module_name, module_version)])
-            ]):
+            if not all(
+                [
+                    (inmanta_module_name, module_version) in base_version_data,
+                    set(module_data.for_agents).issubset(base_version_data[(inmanta_module_name, module_version)]),
+                ]
+            ):
                 raise BadRequest(
                     "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
                 )
@@ -883,7 +885,9 @@ class OrchestrationService(protocol.ServerSlice):
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
-            await self._register_agent_code(is_partial_update, partial_base_version, version, env.id, module_version_info, connection)
+            await self._register_agent_code(
+                is_partial_update, partial_base_version, version, env.id, module_version_info, connection
+            )
 
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
@@ -1244,9 +1248,6 @@ class OrchestrationService(protocol.ServerSlice):
                     # to start pulling in the resources.
                     # This has to be done after the resources outside of the increment have been marked as deployed.
                     await model.update_fields(released=True, connection=connection)
-
-            if model.total == 0:
-                return 200, {"model": model}
 
             if connection.is_in_transaction():
                 raise RuntimeError(

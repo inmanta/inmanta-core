@@ -699,8 +699,13 @@ def resource_list(
                 resource_type: filter by the type of the resource
                 resource_id_value: filter by the attribute values of the resource
                 status: filter by the current status of the resource.
-                For status filters it's also possible to invert the condition with '!', for example
-                `filter.status=!orphaned` will return all the resources that are not in 'orphaned' state
+                For status filters it's also possible to invert the condition with '!'.
+                The inverted status filter works as a separate filter from the normal status filter.
+                For example: `filter.status=!orphaned` will return all the resources that are not in 'orphaned' state.
+                If multiple values are provided to the inverted filter, resources are returned if they don't match
+                any of the filter values.
+                For example: `?filter.status=!deployed&filter.status=!available`
+                returns all instances except those whose status is deployed or available.
                 The values for the 'agent', 'resource_type' and 'value' filters are matched partially.
     :param sort: Return the results sorted according to the parameter value.
                 It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `resource_type.desc`
@@ -873,6 +878,9 @@ def get_compile_reports(
     """
     Get the compile reports from an environment.
 
+    The returned compile report objects may carry links to other objects, e.g. a service instance.
+    The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
+
     :param tid: The id of the environment
     :param limit: Limit the number of instances that are returned
     :param first_id: The id to use as a continuation token for paging, in combination with the 'start' value,
@@ -920,6 +928,9 @@ def get_compile_reports(
 )
 def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.CompileDetails:
     """
+    The returned compile details object may carry links to other objects, e.g. a service instance.
+    The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
+
     :param tid: The id of the environment in which the compilation process occurred.
     :param id: The id of the compile for which the details are being requested.
 

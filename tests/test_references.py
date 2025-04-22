@@ -30,7 +30,8 @@ from inmanta.agent.handler import PythonLogger
 from inmanta.ast import ExternalException, RuntimeException, TypingException
 from inmanta.data.model import ReleasedResourceDetails, ReleasedResourceState
 from inmanta.export import ResourceDict
-from inmanta.references import ReferenceCycleException
+from inmanta.references import Reference, ReferenceCycleException, reference
+from inmanta.util.dict_path import Mapping, MutableMapping
 from utils import ClientHelper, log_contains
 
 if typing.TYPE_CHECKING:
@@ -38,6 +39,20 @@ if typing.TYPE_CHECKING:
 
 # The purpose of this module is to test references (compiler, exporter and executor). This module requires the test module
 # defined in tests/data/modules_v2/refs
+
+
+def round_trip_resource(resource):
+    serialized = resource.serialize()
+    data = json.dumps(serialized, default=util.api_boundary_json_encoder)
+    r = resources.Resource.deserialize(json.loads(data))
+    r.resolve_all_references(PythonLogger(logging.getLogger("test.refs")))
+
+
+def round_trip_ref(reference: Reference):
+    serialized = reference.serialize()
+    data = json.dumps(serialized, default=util.api_boundary_json_encoder)
+    intermediate = references.ReferenceModel(**json.loads(data))
+    references.reference.get_class(intermediate.type).deserialize(intermediate, None, logging.getLogger("test.refs"))
 
 
 def test_references_in_model(
@@ -123,12 +138,27 @@ async def test_deploy_end_to_end(
                agentname="test",
                fail=refs::create_bool_reference(name="testx"),
            )
+
+           # Deeper mutator should also work
+            refs::DeepResource(
+               name="test3",
+               agentname="test",
+               value=refs::create_string_reference(name="testx"),
+           )
+
+
            """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
     )
 
     await clienthelper.set_auto_deploy()
-    await snippetcompiler.do_export_and_deploy()
+    version, resource = await snippetcompiler.do_export_and_deploy()
+
+    # All resource must be dictpath compatible for the mutators to work!
+    for resource in resource.values():
+        assert isinstance(resource, Mapping)
+        assert isinstance(resource, MutableMapping)
+
     await clienthelper.wait_for_released()
     await clienthelper.wait_for_deployed()
     result = await client.resource_details(environment, "std::testing::NullResource[test,name=test]")
@@ -137,6 +167,11 @@ async def test_deploy_end_to_end(
     assert details.status == ReleasedResourceState.failed
 
     result = await client.resource_details(environment, "std::testing::NullResource[test,name=test2]")
+    assert result.code == 200
+    details = ReleasedResourceDetails(**result.result["data"])
+    assert details.status == ReleasedResourceState.deployed
+
+    result = await client.resource_details(environment, "refs::DeepResource[test,name=test3]")
     assert result.code == 200
     details = ReleasedResourceDetails(**result.result["data"])
     assert details.status == ReleasedResourceState.deployed
@@ -237,19 +272,13 @@ def test_references_in_wrong_resource(snippetcompiler: "SnippetCompilationTest",
 
     _, res_dict = snippetcompiler.do_export()
 
-    def round_trip(resource):
-        serialized = resource.serialize()
-        data = json.dumps(serialized, default=util.api_boundary_json_encoder)
-        r = resources.Resource.deserialize(json.loads(data))
-        r.resolve_all_references(PythonLogger(logging.getLogger("test.refs")))
-
     with pytest.raises(
         Exception,
         match=r"This resource refers to another resource refs::NullResource\[test,name=test2?\] instead of "
         r"itself refs::NullResource\[test,name=test2?\], this is not supported",
     ):
         for resource in res_dict.values():
-            round_trip(resource)
+            round_trip_resource(resource)
 
 
 def test_references_in_index(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
@@ -331,3 +360,20 @@ def test_ref_docs(snippetcompiler, monkeypatch, capsys):
     run_for_example(2)
 
     assert "TEST VALUE" in capsys.readouterr()[0]
+
+
+def test_ref_serialization():
+
+    @reference("test::Test")
+    class TestReference(Reference[str]):
+        def __init__(self, keys):
+            super().__init__()
+            self.keys = keys
+
+    round_trip_ref(TestReference({"a": "A"}))
+
+    # Only clean json is allowed
+    tr = TestReference({"a": "A"})
+    baddy = TestReference({"a": tr})
+    with pytest.raises(ValueError):
+        baddy.serialize()

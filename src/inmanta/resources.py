@@ -543,6 +543,16 @@ class Resource(metaclass=ResourceMeta):
 
         raise KeyError()
 
+    def __delitem__(self, key: str) -> None:
+        raise Exception("Deleting fields is not allowed on a resource")
+
+    def clear(self) -> None:
+        raise Exception("Deleting fields is not allowed on a resource")
+
+    def items(self) -> Iterator[tuple[str, object]]:
+        for key in self.fields:
+            yield key, getattr(self, key)
+
     def get_reference_value(self, id: uuid.UUID, logger: "handler.LoggerABC") -> "references.RefValue":
         """Get a value of a reference"""
         if id not in self._references:

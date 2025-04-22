@@ -1,0 +1,5 @@
+description: Extend dictpath to handle fields in resources
+change-type: patch
+destination-branches: [master, iso8]
+
+

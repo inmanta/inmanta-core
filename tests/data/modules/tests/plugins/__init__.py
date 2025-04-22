@@ -1,8 +1,10 @@
 from _collections import defaultdict
+from collections.abc import Sequence
 from inmanta import resources
 from inmanta.ast import UnknownException, PluginException
 from inmanta.execute.util import Unknown
-from inmanta.plugins import plugin, Context
+from inmanta.plugins import plugin, Context, ModelType
+from typing import Annotated
 
 
 @plugin
@@ -32,7 +34,9 @@ def do_uknown(inp: "any") -> "string":
 
 
 @plugin
-def convert_unknowns(inp: "list", replace: "any") -> "list":
+def convert_unknowns[T, R](
+    inp: Sequence[T], replace: Annotated[R, ModelType["any"]]
+) -> Sequence[Annotated[T | R, ModelType["any"]]]:
     def convert():
         iterator = iter(inp)
         while True:

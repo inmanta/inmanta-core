@@ -15,19 +15,20 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
+
 import itertools
 import logging
 import sys
 import uuid
 
 import inmanta.data.sqlalchemy as models
+from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.executor import ModuleInstallSpec
-from inmanta import data
-from inmanta.data.model import LEGACY_PIP_DEFAULT, InmantaModuleDTO, ModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.protocol import Client
 from inmanta.util.async_lru import async_lru_cache
-from sqlalchemy import and_, select
+from sqlalchemy import select
 
 LOGGER = logging.getLogger(__name__)
 
@@ -113,12 +114,12 @@ class CodeManager:
                                     is_byte_code=row.is_byte_code,
                                 ),
                                 source=row.content,
-                            ) for row in rows_list
+                            )
+                            for row in rows_list
                         ],
                         python_version=sys.version_info[:2],
                     ),
                 )
-
 
         if not module_install_specs:
             raise CouldNotResolveCode(agent_name, model_version)
