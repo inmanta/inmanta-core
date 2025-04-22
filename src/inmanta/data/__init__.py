@@ -5556,7 +5556,7 @@ class Resource(BaseDocument):
 
     async def update_persistent_state(
         self,
-        is_deploying: bool,
+        is_deploying: bool | None = None,
         last_deploy: datetime.datetime | None = None,
         last_deployed_version: int | None = None,
         last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
