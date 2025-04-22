@@ -16,85 +16,80 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import asyncio
 import datetime
 import enum
 import logging
 import time
 import uuid
 from collections import abc
+from collections.abc import Mapping
 from datetime import UTC
 from typing import Optional, cast
 
 import asyncpg
 import pytest
-from asyncpg import Connection, ForeignKeyViolationError, Pool
+from asyncpg import Connection, ForeignKeyViolationError
 
+import sqlalchemy
 import utils
 from inmanta import const, data, util
 from inmanta.const import AgentStatus, LogLevel
-from inmanta.data import ArgumentCollector, QueryType
+from inmanta.data import ArgumentCollector, QueryType, get_engine, start_engine, stop_engine
 from inmanta.deploy import state
 from inmanta.resources import Id
 from inmanta.types import ResourceVersionIdStr
 
 
-async def test_connect_too_small_connection_pool(postgres_db, database_name: str):
-    pool: Pool = await data.connect_pool(
-        postgres_db.host,
-        postgres_db.port,
-        database_name,
-        postgres_db.user,
-        postgres_db.password,
-        create_db_schema=False,
-        connection_pool_min_size=1,
-        connection_pool_max_size=1,
-        connection_timeout=120,
+async def test_connect_too_small_connection_pool(sqlalchemy_url_parameters: Mapping[str, str]):
+    """
+    Test sql alchemy engine connection pool saturation
+    """
+    await start_engine(
+        **sqlalchemy_url_parameters,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=1,
     )
-    assert pool is not None
-    connection: Connection = await pool.acquire()
+    engine = get_engine()
+    assert engine is not None
+    connection: Connection = await engine.connect()
+
     try:
-        with pytest.raises(asyncio.TimeoutError):
-            await pool.acquire(timeout=1.0)
+        with pytest.raises(sqlalchemy.exc.TimeoutError):
+            await engine.connect()
     finally:
         await connection.close()
-        await data.disconnect_pool()
+        await stop_engine()
 
 
-async def test_connect_default_parameters(postgres_db, database_name: str, create_db_schema: bool = False):
-    pool: Pool = await data.connect_pool(
-        postgres_db.host, postgres_db.port, database_name, postgres_db.user, postgres_db.password, create_db_schema
-    )
-    assert pool is not None
-    try:
-        async with pool.acquire() as connection:
-            assert connection is not None
-    finally:
-        await data.disconnect_pool()
+async def test_connect_default_parameters(sql_alchemy_engine):
+    """
+    Basic connectivity test for the sql alchemy engine
+    """
+    assert sql_alchemy_engine is not None
+    async with sql_alchemy_engine.connect() as connection:
+        assert connection is not None
 
 
-@pytest.mark.parametrize("min_size, max_size", [(-1, 1), (2, 1), (-2, -2)])
-async def test_connect_invalid_parameters(postgres_db, min_size, max_size, database_name: str, create_db_schema: bool = False):
-    with pytest.raises(ValueError):
-        await data.connect_pool(
-            postgres_db.host,
-            postgres_db.port,
-            database_name,
-            postgres_db.user,
-            postgres_db.password,
-            create_db_schema,
-            connection_pool_min_size=min_size,
-            connection_pool_max_size=max_size,
-        )
-
-
-async def test_connection_failure(unused_tcp_port_factory, database_name, clean_reset):
+async def test_connection_failure(postgres_db, unused_tcp_port_factory, database_name, clean_reset):
     """
     Basic connectivity test: using an incorrect port raises an error
     """
-    port = unused_tcp_port_factory()
-    with pytest.raises(OSError):
-        await data.connect_pool("localhost", port, database_name, "testuser", None)
+    wrong_port = unused_tcp_port_factory()
+
+    await start_engine(
+        database_username=postgres_db.user,
+        database_password=postgres_db.password,
+        database_host=postgres_db.host,
+        database_port=wrong_port,
+        database_name=database_name,
+    )
+    engine = get_engine()
+    with pytest.raises(ConnectionRefusedError):
+        async with engine.connect() as _:
+            pass
+
+    await stop_engine()
 
 
 async def test_postgres_client(postgresql_client):
