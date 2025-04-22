@@ -33,17 +33,14 @@ from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
-from inmanta.data import get_engine, start_engine, stop_engine
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol.auth import auth
 from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
-from inmanta.server.services.databaseservice import initialize_sql_alchemy_engine
 from inmanta.server.services.policy_engine_service import LoopResolverWithUnixSocketSuppport, policy_file
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -122,7 +119,7 @@ import uuid
 import venv
 import weakref
 from collections import abc, defaultdict, namedtuple
-from collections.abc import AsyncIterator, Awaitable, Iterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
 from typing import Any, Callable, Dict, Generic, Optional, Union
 
@@ -387,44 +384,30 @@ async def postgresql_client(postgres_db, database_name_internal):
     await client.close()
 
 
-@pytest.fixture
-def sqlalchemy_url_parameters(postgres_db, database_name_internal: str) -> dict[str, str]:
-    """
-    Return the dict representation of the parameters to pass to the start_engine
-    function to start the sql alchemy engine.
-    """
-    return {
-        "database_username": postgres_db.user,
-        "database_password": postgres_db.password,
-        "database_host": postgres_db.host,
-        "database_port": postgres_db.port,
-        "database_name": database_name_internal,
-    }
-
-
 @pytest.fixture(scope="function")
-async def sql_alchemy_engine(sqlalchemy_url_parameters: Mapping[str, str]) -> AsyncEngine:
-
-    await start_engine(**sqlalchemy_url_parameters)
-    engine = get_engine()
-
-    yield engine
-
-    await stop_engine()
+async def postgresql_pool(postgres_db, database_name_internal):
+    pool = await asyncpg.create_pool(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name_internal,
+    )
+    yield pool
+    await pool.close()
 
 
 @pytest.fixture(scope="function")
 async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_reset):
-    await initialize_sql_alchemy_engine(
-        database_host=postgres_db.host,
-        database_port=postgres_db.port,
-        database_name=database_name,
-        database_username=postgres_db.user,
-        database_password=postgres_db.password,
-        create_db_schema=True,
+    await data.connect_pool(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        username=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
     )
     yield
-    await stop_engine()
+    await data.disconnect_pool()
 
 
 @pytest.fixture(scope="function")
@@ -448,7 +431,6 @@ async def clean_db(create_db, postgresql_client):
                        not part of the Inmanta schema. These should be cleaned-up before running a new test.
     """
     yield
-    # By using the connection pool, we can make sure that the connection we use is alive
 
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     tables_in_db = [x["table_name"] for x in tables_in_db]
@@ -1121,6 +1103,7 @@ async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str,
         :return: The uuid of the newly created environment as a string.
         """
         result = await client.create_environment(project_id=project_id, name=env_name)
+        assert result.code == 200, result
         env_id = result.result["environment"]["id"]
 
         cfg_env.set(env_id)

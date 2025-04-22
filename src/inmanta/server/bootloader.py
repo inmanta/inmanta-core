@@ -132,9 +132,13 @@ class InmantaBootloader:
             await asyncio.wait_for(self._stop(), timeout=timeout)
 
     async def _stop(self) -> None:
-        await self.restserver.stop()
-        if self.feature_manager is not None:
-            await self.feature_manager.stop()
+        try:
+            await self.restserver.stop()
+        finally:
+            # Always attempt to stop the feature manager, even if exceptions
+            # were raised during the call to restserver.stop().
+            if self.feature_manager is not None:
+                await self.feature_manager.stop()
 
     @classmethod
     def get_available_extensions(cls) -> dict[str, str]:
