@@ -4472,6 +4472,8 @@ class ResourcePersistentState(BaseDocument):
     is_undefined: bool
     # Written when a new version is processed by the scheduler
     is_orphan: bool
+    # Set to true when a version starts its deployment, set to false when it finishes
+    is_deploying: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
     last_deploy_result: state.DeployResult
     # Written both when processing a new version and at deploy time. As such, this should be updated
@@ -4573,6 +4575,7 @@ class ResourcePersistentState(BaseDocument):
                 current_intent_attribute_hash,
                 is_undefined,
                 is_orphan,
+                is_deploying,
                 last_deploy_result,
                 blocked
             )
@@ -4584,6 +4587,7 @@ class ResourcePersistentState(BaseDocument):
                 r.resource_id_value,
                 r.attribute_hash,
                 r.status = 'undefined'::public.resourcestate,
+                FALSE,
                 FALSE,
                 'NEW',
                 CASE
@@ -4613,6 +4617,8 @@ class ResourcePersistentState(BaseDocument):
             return None
         elif self.is_undefined:
             return state.Compliance.UNDEFINED
+        elif self.is_deploying:
+            return state.Compliance.DEPLOYING
         elif (
             self.last_deployed_attribute_hash is None or self.current_intent_attribute_hash != self.last_deployed_attribute_hash
         ):
@@ -5550,6 +5556,7 @@ class Resource(BaseDocument):
 
     async def update_persistent_state(
         self,
+        is_deploying: bool,
         last_deploy: datetime.datetime | None = None,
         last_deployed_version: int | None = None,
         last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
@@ -5564,6 +5571,7 @@ class Resource(BaseDocument):
         args = ArgumentCollector(2)
 
         invalues = {
+            "is_deploying": is_deploying,
             "last_deploy": last_deploy,
             "last_non_deploying_status": last_non_deploying_status,
             "last_success": last_success,

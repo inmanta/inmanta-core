@@ -163,8 +163,12 @@ class ToDbUpdateManager(StateUpdateManager):
                 except UniqueViolationError:
                     raise ValueError(f"A resource action with id {action_id} already exists.")
 
-                # FIXME: we may want to have this in the RPS table instead of Resource table, at some point
+                # FIXME: At some point, we will only need this on the RPS table
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
+                await resource.update_persistent_state(
+                    is_deploying=False,
+                    connection=connection,
+                )
 
     async def send_deploy_done(
         self,
@@ -275,6 +279,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     connection=connection,
                 )
                 await resource.update_persistent_state(
+                    is_deploying=False,
                     last_deploy=finished,
                     last_deployed_version=resource_id_parsed.version,
                     last_deployed_attribute_hash=resource.attribute_hash,
