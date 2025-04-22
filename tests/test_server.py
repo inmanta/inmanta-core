@@ -525,6 +525,9 @@ async def test_clear_environment(client, server, clienthelper, environment):
 
     result = await client.environment_get(id=environment)
     assert result.code == 200
+    versions = await client.list_versions(tid=environment)
+    assert versions.code == 200
+    assert versions.result["count"] == 1
 
     # trigger multiple compiles and wait for them to complete in order to test cascade deletion of collapsed compiles (#2350)
     result = await client.notify_change_get(id=environment)
@@ -554,6 +557,9 @@ async def test_clear_environment(client, server, clienthelper, environment):
     result = await client.list_desired_state_versions(tid=environment)
     assert result.code == 200
     assert len(result.result["data"]) == 0
+    versions = await client.list_versions(tid=environment)
+    assert versions.code == 200
+    assert versions.result["count"] == 0
 
 
 async def test_tokens(server_multi, client_multi, environment_multi, request):
