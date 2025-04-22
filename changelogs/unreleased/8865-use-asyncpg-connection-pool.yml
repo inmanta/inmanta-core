@@ -1,4 +1,0 @@
-description: Use asyncpg instead of SQLAlchemy for database connection pooling.
-issue-nr: 8865
-change-type: minor
-destination-branches: [master]
