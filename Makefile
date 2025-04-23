@@ -90,8 +90,9 @@ test:
 ci-test:
 	$(PYTHON) -m pytest -vvv --log-level DEBUG -p no:sugar --junitxml=junit-tests.xml $(PYTEST_EXTRA_ARGS) $(TESTS)
 
-.PHONY: all
-all: pep8 test mypy
+.PHONY: all ci-all
+all: pep8 mypy test
+ci-all: ci-pep8 ci-mypy ci-test
 
 venv-%: FORCE $(shell mktemp -d)/bin/python install %
 	rm -rf $(<:/bin/python=)
