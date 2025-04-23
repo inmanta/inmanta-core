@@ -1,32 +1,53 @@
 # variables exposed to Jenkinsfile
 PYTHON := python3
+ISO_VERSION :=
+PIP_INDEX :=
 TESTS := tests
-INSTALL_EXTRA_ARGS :=
 PYTEST_EXTRA_ARGS :=
 
 # Shortcuts for various dev tasks. Based on makefile from pydantic
 .DEFAULT_GOAL := all
 isort = isort src tests tests_common
 black = black src tests tests_common
+mypy=MYPYPATH=stubs:src $(PYTHON) -m mypy --soft-error-limit=-1 --html-report mypy -p inmanta
 
+ifdef PIP_INDEX
+pip_index_arg := -i $(PIP_INDEX)
+endif
 ifeq ($(shell which uv),)
-pip = $(PYTHON) -m pip
-pip_args :=
+pip_install = $(PYTHON) -m pip install $(pip_index_arg) --pre
 else
-pip := uv pip
-pip_args = --python $(PYTHON)
+pip_install = uv pip install --python $(PYTHON) $(pip_index_arg) --prerelease allow
+endif
+ifdef ISO_VERSION
+pip_install_c = $(pip_install) -c requirements.txt -c 'https://docs.inmanta.com/inmanta-service-orchestrator-dev/$(ISO_VERSION)/reference/requirements.txt'
+else
+pip_install_c = $(pip_install) -c requirements.txt
 endif
 
-.PHONY: install
+src_dirs := src tests $(shell test -d tests_common && echo tests_common || true)
+
+
+.PHONY: install ci-install ci-install-check
 install:
-	$(pip) install $(pip_args) -U setuptools pip uv -c requirements.txt $(INSTALL_EXTRA_ARGS)
-	$(pip) install $(pip_args) -U -e .[dev] -c requirements.txt $(INSTALL_EXTRA_ARGS)
+	$(pip_install_c) -U setuptools pip uv
+	$(pip_install_c) -U -e .[dev]
+
+ci-install-check:
+ifeq ($(shell which uv),)
+	$(error uv is required for this target.)
+endif
+ifndef ISO_VERSION
+	$(error ISO_VERSION make variable needs to be set for this target. Run `make ISO_VERSION=<x> $@`.)
+endif
+
+ci-install: ci-install-check install
 
 .PHONY: install-tests
 install-tests:
-	$(pip) install -U setuptools pip uv
-	python3 tests_common/copy_files_from_core.py
-	$(pip) install -e ./tests_common
+	$(pip_install) -U setuptools pip uv
+	$(PYTHON) tests_common/copy_files_from_core.py
+	$(pip_install) -e ./tests_common
 
 .PHONY: format
 format:
@@ -35,24 +56,31 @@ format:
 
 .PHONY: pep8 ci-pep8
 pep8:
-	$(PYTHON) -m flake8 src tests tests_common
-ci-pep8: pep8
-
-RUN_MYPY=MYPYPATH=stubs:src $(PYTHON) -m mypy --soft-error-limit=-1 --html-report mypy -p inmanta
+	$(PYTHON) -m flake8 $(src_dirs)
+ci-pep8:
+	$(PYTHON) -m flake8 --output-file flake8-report.txt --tee $(src_dirs)
+	$(PYTHON) -m flake8_junit flake8-report.txt junit-pep8.xml
 
 # TODO: mypy-baseline config file: sorting
+parsetab=src/inmanta/parser/parsetab.py
+$(parsetab): src/inmanta/parser/plyInmantaLex.py src/inmanta/parser/plyInmantaParser.py
+	# load inmanta.app so that the parser is generated for a consistent mypy baseline
+	$(PYTHON) -m inmanta.app >/dev/null
+	touch $@
+
 .PHONY: mypy ci-mypy
-mypy:
-	$(RUN_MYPY) | mypy-baseline filter
-ci-mypy: mypy
+mypy: $(parsetab)
+	$(mypy) | mypy-baseline filter
+ci-mypy: $(parsetab)
+	$(mypy) --junit-xml mypy.xml --cobertura-xml-report coverage | mypy-baseline filter --no-colors
 
 .PHONY: mypy-sync
-mypy-sync:
-	$(RUN_MYPY) | mypy-baseline sync
+mypy-sync: $(parsetab)
+	$(mypy) | mypy-baseline sync
 
 .PHONY: mypy-full
-mypy-full:
-	$(RUN_MYPY)
+mypy-full: $(parsetab)
+	$(mypy)
 
 .PHONY: test ci-test
 test:
