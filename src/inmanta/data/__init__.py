@@ -5052,42 +5052,6 @@ class Resource(BaseDocument):
         return result
 
     @classmethod
-    async def get_resources_report(cls, environment: uuid.UUID) -> list[JsonType]:
-        """
-        This method generates a report of all resources in the given environment,
-        with their latest version and when they are last deployed.
-        """
-        query = f"""
-        WITH latest_version_of_each_resource AS (
-            SELECT environment, max(model) AS model, resource_id
-            FROM {Resource.table_name()}
-            WHERE environment=$1
-            GROUP BY (environment, resource_id)
-        )
-        SELECT lver.resource_id, lver.model AS latest_version, rps.last_deployed_version AS deployed_version, rps.last_deploy
-        FROM latest_version_of_each_resource AS lver LEFT JOIN {ResourcePersistentState.table_name()} AS rps
-            ON lver.environment=rps.environment AND lver.resource_id=rps.resource_id
-        """
-        values = [cls._get_value(environment)]
-        result = []
-        async with cls.get_connection() as con:
-            async with con.transaction():
-                async for record in con.cursor(query, *values):
-                    resource_id = record["resource_id"]
-                    parsed_id = resources.Id.parse_id(resource_id)
-                    result.append(
-                        {
-                            "resource_id": resource_id,
-                            "resource_type": parsed_id.entity_type,
-                            "agent": parsed_id.agent_name,
-                            "latest_version": record["latest_version"],
-                            "deployed_version": record["deployed_version"] if "deployed_version" in record else None,
-                            "last_deploy": record["last_deploy"] if "last_deploy" in record else None,
-                        }
-                    )
-        return result
-
-    @classmethod
     async def get_resources_for_version(
         cls,
         environment: uuid.UUID,

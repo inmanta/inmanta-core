@@ -17,6 +17,49 @@ This guide assumes you already have `Podman <http://podman.io/>`_ installed on y
     For example the uids and gids may already be in use, selinux may be configured differently, ...
 
 
+System configuration
+####################
+
+1.  Make sure the user running the orchestrator is allowed to linger.  This is required to let the orchestrator run even when no active session is active for the user.
+    You can check whether lingering is enabled for the user running the orchestrator this way:
+
+    .. tab-set::
+
+        .. tab-item:: User setup
+            :sync: rootless-setup
+
+            .. code-block:: console
+
+                $ ls /var/lib/systemd/linger | grep $USER
+                inmanta
+
+        .. tab-item:: Root setup
+            :sync: rootful-setup
+
+            .. code-block:: console
+
+                # ls /var/lib/systemd/linger | grep inmanta
+                inmanta
+
+    If the name of the user used to run the orchestrator doesn't show in the output, then you need to enable lingering for that user, which can be done this way:
+
+    .. tab-set::
+
+        .. tab-item:: User setup
+            :sync: rootless-setup
+
+            .. code-block:: console
+
+                $ loginctl enable-linger
+
+        .. tab-item:: Root setup
+            :sync: rootful-setup
+
+            .. code-block:: console
+
+                # loginctl enable-linger inmanta
+
+
 Podman configuration
 ####################
 

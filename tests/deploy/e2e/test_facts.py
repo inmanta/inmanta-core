@@ -371,9 +371,9 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     assert result.code == 200
 
     # There should be only one resource
-    result = await client.get_environment(id=environment, resources=1)
+    result = await client.resource_list(tid=environment)
     assert result.code == 200
-    assert len(result.result["environment"]["resources"]) == 1
+    assert len(result.result["data"]) == 1
 
     # 3 facts from res1 + parameter test
     result = await client.list_params(environment)
@@ -401,9 +401,9 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     assert result.code == 200
 
     # Verify there are no resources anymore
-    result = await client.get_environment(id=environment, resources=1)
+    result = await client.resource_list(tid=environment)
     assert result.code == 200
-    assert len(result.result["environment"]["resources"]) == 0
+    assert len(result.result["data"]) == 0
 
     # Only the resource independent parameter test should exist
     result = await client.list_params(environment)
