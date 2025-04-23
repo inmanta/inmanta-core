@@ -197,8 +197,8 @@ def test():
     )
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
-    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test", 1, 5, dummy)])
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", 1, 5, full)])
+    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test", 1, dummy)])
+    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", 1, full)])
 
     assert oldest_executor.id in manager.pool
 
@@ -224,7 +224,7 @@ def test():
         return oldest_executor not in manager.agent_map["agent2"]
 
     with caplog.at_level(logging.DEBUG):
-        _ = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", 5, dummy)])
+        _ = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", dummy)])
         assert not oldest_executor.running
         assert full_runner.running
         await retry_limited(oldest_gone, 1)
@@ -242,7 +242,7 @@ def test():
         await x.join()
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 0, 10)
 
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", 5, full)])
+    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", full)])
 
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 1, 1)
 
