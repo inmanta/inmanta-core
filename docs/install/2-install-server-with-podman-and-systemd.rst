@@ -30,7 +30,7 @@ System configuration
 
             .. code-block:: console
 
-                $ ls /var/lib/systemd/linger | grep inmanta
+                $ ls /var/lib/systemd/linger | grep $USER
                 inmanta
 
         .. tab-item:: Root setup
@@ -41,7 +41,7 @@ System configuration
                 # ls /var/lib/systemd/linger | grep inmanta
                 inmanta
 
-    If `inmanta` doesn't show on stdout, then you need to enable lingering for that user, which can be done this way:
+    If the name of the user used to run the orchestrator doesn't show in the output, then you need to enable lingering for that user, which can be done this way:
 
     .. tab-set::
 
