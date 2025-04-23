@@ -661,7 +661,7 @@ class OrchestrationService(protocol.ServerSlice):
         environment: uuid.UUID,
         module_version_info: dict[str, InmantaModuleDTO],
         connection: Connection,
-    ) -> None:
+    ) -> dict[tuple[str, str], list[str]]:
         """
         Retrieve which inmanta modules (name, version) are registered for all agents
         for a given model version and a given environment.
@@ -683,6 +683,8 @@ class OrchestrationService(protocol.ServerSlice):
                 raise BadRequest(
                     "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
                 )
+
+        return base_version_data
 
     async def _register_agent_code(
         self,
@@ -707,15 +709,22 @@ class OrchestrationService(protocol.ServerSlice):
         :param module_version_info: Inmanta module information to register for this version.
         :param connection: DB connection expected to be managed by the caller method.
         """
+        base_version_info: dict[tuple[str, str], list[str]] = {}
         if is_partial_update:
             assert partial_base_version is not None
-            await self._check_version_info(partial_base_version, environment, module_version_info, connection)
+            base_version_info = await self._check_version_info(
+                partial_base_version, environment, module_version_info, connection
+            )
         else:
             await InmantaModule.register_modules(
                 environment=environment, module_version_info=module_version_info, connection=connection
             )
         await ModulesForAgent.register_modules_for_agents(
-            model_version=version, environment=environment, module_version_info=module_version_info, connection=connection
+            model_version=version,
+            environment=environment,
+            module_version_info=module_version_info,
+            connection=connection,
+            base_version_info=base_version_info,
         )
 
     async def _put_version(

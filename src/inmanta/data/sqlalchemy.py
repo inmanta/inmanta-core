@@ -260,6 +260,7 @@ class ModulesForAgent(Base):
         model_version: int,
         environment: uuid.UUID,
         module_version_info: dict[str, InmantaModuleDTO],
+        base_version_info: dict[tuple[str, str], list[str]],
         connection: asyncpg.Connection,
     ) -> None:
         """
@@ -270,7 +271,11 @@ class ModulesForAgent(Base):
 
         :param model_version: The model version for which to register modules per agent.
         :param environment: The environment for which to register modules per agent.
-        :param module_version_info: Map of module name to inmanta module data.
+        :param module_version_info: Map of module name to inmanta module data. For a full compile, this map
+            contains all module info. For partial compiles, it only contains info for the subset of modules
+            required by the exported resources.
+        :param base_version_info: Map of (module name, module version) to the list of agents requiring these
+            modules in the base version this partial compile is based on.
         :param connection: The asyncpg connection to use.
         :return:
         """
@@ -301,6 +306,18 @@ class ModulesForAgent(Base):
                             agent_name,
                             inmanta_module_name,
                             inmanta_module_data.version,
+                        )
+                    )
+
+            for (inmanta_module_name, inmanta_module_version), for_agents in base_version_info.items():
+                for agent_name in for_agents:
+                    values.append(
+                        (
+                            model_version,
+                            environment,
+                            agent_name,
+                            inmanta_module_name,
+                            inmanta_module_version,
                         )
                     )
 
