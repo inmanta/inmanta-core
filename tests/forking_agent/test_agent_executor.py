@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ModuleInstallSpec]:
-    return [executor.ModuleInstallSpec("test", "abcdef", 5, bp)]
+    return [executor.ModuleInstallSpec("test", "abcdef", bp)]
 
 
 async def test_process_manager(environment, pip_index, mpmanager_light: forking_executor.MPManager) -> None:

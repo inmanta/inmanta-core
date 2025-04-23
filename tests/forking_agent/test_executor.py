@@ -132,9 +132,7 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
         sources=[],
         python_version=sys.version_info[:2],
     )  # No pip
-    simplest = await manager.get_executor(
-        "agent1", "test", [executor.ModuleInstallSpec("test", "123456", 5, simplest_blueprint)]
-    )
+    simplest = await manager.get_executor("agent1", "test", [executor.ModuleInstallSpec("test", "123456", simplest_blueprint)])
 
     # check communications
     result = await simplest.call(Echo(["aaaa"]))
