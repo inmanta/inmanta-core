@@ -26,7 +26,7 @@ import inmanta.types
 from inmanta import const, data, resources
 from inmanta.const import ResourceState
 from inmanta.data import model
-from inmanta.data.model import InmantaModuleDTO, PipConfig
+from inmanta.data.model import InmantaModule, PipConfig
 from inmanta.protocol import exceptions
 from inmanta.protocol.common import ArgOption
 from inmanta.protocol.decorators import method, typedmethod
@@ -507,7 +507,7 @@ def put_version(
     tid: uuid.UUID,
     version: int,
     resources: list,
-    module_version_info: dict[str, InmantaModuleDTO],
+    module_version_info: dict[str, InmantaModule],
     resource_state: dict[inmanta.types.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
     unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
     version_info: Optional[dict] = None,
@@ -530,7 +530,7 @@ def put_version(
     :param compiler_version: Optional. version of the compiler, if not provided, this call will return an error
     :param resource_sets: Optional. a dictionary describing which resource belongs to which resource set
     :param pip_config: Optional. Pip config used by this version
-    :param module_version_info: Map of (module name, module version) to InmantaModuleDTO
+    :param module_version_info: Map of (module name, module version) to InmantaModule
 
     """
 

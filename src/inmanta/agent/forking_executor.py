@@ -428,7 +428,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                 await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
                 in_place.append(module_source)
             except Exception as e:
-                logger.info("Failed to load sources: %s", module_source, exc_info=True)
+                logger.info("Failed to load source: %s", module_source, exc_info=True)
                 failed.append(
                     inmanta.loader.FailedModuleSource(
                         module_source=module_source,
@@ -444,7 +444,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                     functools.partial(loader.load_module, module_source.metadata.name, module_source.metadata.hash_value),
                 )
             except Exception as e:
-                logger.info("Failed to load sources: %s", module_source, exc_info=True)
+                logger.info("Failed to load source: %s", module_source, exc_info=True)
                 failed.append(
                     inmanta.loader.FailedModuleSource(
                         module_source=module_source,
@@ -922,7 +922,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
 
     async def create_member(self, blueprint: executor.ExecutorBlueprint) -> MPProcess:
         venv = await self.environment_manager.get_environment(blueprint.to_env_blueprint())
-        executor = await self.make_child_and_connect(blueprint, venv)
+        executor: MPProcess = await self.make_child_and_connect(blueprint, venv)
         try:
             LOGGER.debug(
                 "Child forked (pid: %s) for %s",

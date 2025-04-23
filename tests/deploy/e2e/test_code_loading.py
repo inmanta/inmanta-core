@@ -35,7 +35,7 @@ from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.data import FilesInModule, InmantaModule, ModulesForAgent, PipConfig, get_session
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import process_env
-from inmanta.loader import InmantaModuleDTO
+from inmanta.loader import InmantaModule as InmantaModuleDTO
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server

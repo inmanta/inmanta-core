@@ -19,7 +19,8 @@ from typing import Any, List, Optional
 
 import asyncpg
 
-from inmanta.data.model import EnvSettingType, InmantaModuleDTO
+from inmanta.data.model import EnvSettingType
+from inmanta.data.model import InmantaModule as InmantaModuleDTO
 from sqlalchemy import (
     ARRAY,
     Boolean,

@@ -1060,7 +1060,7 @@ class ModuleSource(BaseModel):
         return self.metadata == other.metadata
 
 
-class InmantaModuleDTO(BaseModel):
+class InmantaModule(BaseModel):
     """
     This class represents an Inmanta module during code upload.
 
@@ -1073,7 +1073,6 @@ class InmantaModuleDTO(BaseModel):
         deploy resources.
     """
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
     name: str
     version: str
     files_in_module: list[ModuleSourceMetadata]

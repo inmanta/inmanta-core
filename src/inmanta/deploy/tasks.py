@@ -95,6 +95,10 @@ class Task(abc.ABC):
             agent_name=agent_name, agent_uri="NO_URI", code=code
         )
 
+        # Bail out if any module install / load failed:
+        if my_executor.failed_modules:
+            raise ExceptionGroup([e for e in my_executor.failed_modules.values()])
+
         return my_executor
 
 

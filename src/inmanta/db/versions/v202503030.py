@@ -78,6 +78,7 @@ async def update(connection: Connection) -> None:
                 REFERENCES public.inmanta_module(environment, name, version) ON DELETE CASCADE
         );
 
+        -- Foreign key indexes:
         CREATE INDEX modules_for_agent_environment_agent_name_index
         ON public.modules_for_agent (environment, agent_name);
         CREATE INDEX modules_for_agent_environment_module_name_module_version_index

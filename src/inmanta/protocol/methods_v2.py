@@ -43,7 +43,7 @@ from inmanta.types import PrimitiveTypes, ResourceIdStr
 )
 def put_partial(
     tid: uuid.UUID,
-    module_version_info: dict[str, model.InmantaModuleDTO],
+    module_version_info: dict[str, model.InmantaModule],
     resource_state: Optional[dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
     unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
     resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
@@ -73,7 +73,7 @@ def put_partial(
               * resources: a list of resource objects. Since the version is not known yet resource versions should be set to 0.
               * version_info: Model version information
     :param pip_config: Pip config used by this version
-    :param module_version_info: Map of (module name, module version) to InmantaModuleDTO
+    :param module_version_info: Map of (module name, module version) to InmantaModule
 
     :return: The newly stored version number.
     """

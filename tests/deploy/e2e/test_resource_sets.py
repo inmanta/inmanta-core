@@ -29,7 +29,7 @@ from inmanta import const, data, util
 from inmanta.agent import executor
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.deploy import persistence, state
-from inmanta.loader import InmantaModuleDTO
+from inmanta.loader import InmantaModule
 from inmanta.protocol.common import Result
 from inmanta.resources import Id
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
@@ -251,7 +251,7 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
     )
 
     module_version_info = {
-        "test": InmantaModuleDTO(
+        "test": InmantaModule(
             name="test", version="0.0.0", files_in_module=[module_source_metadata], requirements=[], for_agents=["agent1"]
         )
     }

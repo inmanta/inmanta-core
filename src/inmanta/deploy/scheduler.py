@@ -64,8 +64,7 @@ class ResourceVersionIntent:
     """
     Resource intent for a single resource at a specific version.
 
-    Includes model version and resource intent, as well as the full set of resource types that live on the resource's agent.
-    This list will never be empty, and will always include the resource's own type.
+    Includes model version and resource intent.
     """
 
     model_version: int

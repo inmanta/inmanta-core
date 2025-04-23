@@ -35,7 +35,7 @@ from itertools import chain
 from typing import Optional
 
 from inmanta import const, module
-from inmanta.data.model import InmantaModuleDTO, ModuleSource, ModuleSourceMetadata
+from inmanta.data.model import InmantaModule, ModuleSource, ModuleSourceMetadata
 from inmanta.resources import Id, Resource
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
@@ -77,11 +77,11 @@ class CodeManager:
         # Map of [path, ModuleSource]
         # To which python module do these python files belong
         self.__file_info: dict[str, ModuleSource] = {}
-        self.__module_to_agents: dict[str, set[str]] = defaultdict(set)
 
-        # Cache of module to source info
-        self.__module_to_source_info: dict[str, list[ModuleSource]] = defaultdict(list)
         self._types_to_agent: dict[str, set[str]] = defaultdict(set)
+
+        # Map of [inmanta_module_name, inmanta module]
+        self.module_version_info: dict[str, "InmantaModule"] = {}
 
     def build_agent_map(self, resources: dict[Id, Resource]) -> None:
         """
@@ -113,17 +113,35 @@ class CodeManager:
         self._update_agents_for_module(module_name, registered_agents)
 
     def _register_inmanta_module(self, inmanta_module_name: str) -> None:
-        if inmanta_module_name in self.__module_to_source_info:
+        if inmanta_module_name in self.module_version_info:
             # This module was already registered
             return
+
+        module_sources: list[ModuleSource] = []
 
         for absolute_path, fqn_module_name in module.Project.get().modules[inmanta_module_name].get_plugin_files():
             source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
             self.__file_info[absolute_path] = source_info
-            self.__module_to_source_info[inmanta_module_name].append(source_info)
+            module_sources.append(source_info)
+
+        files_metadata = [module_source.metadata for module_source in module_sources]
+        requirements = self.get_inmanta_module_requirements(inmanta_module_name)
+        module_version = self.get_module_version(requirements, files_metadata)
+
+        self.module_version_info[inmanta_module_name] = InmantaModule(
+            name=inmanta_module_name,
+            version=module_version,
+            files_in_module=files_metadata,
+            requirements=list(requirements),
+            for_agents=[],
+        )
 
     def _update_agents_for_module(self, inmanta_module_name: str, registered_agents: set[str]) -> None:
-        self.__module_to_agents[inmanta_module_name].update(registered_agents)
+        """
+        Helper method to add the given agents to the list of registered agents for the given Inmanta module.
+        """
+        old_set: set[str] = set(self.module_version_info[inmanta_module_name].for_agents)
+        self.module_version_info[inmanta_module_name].for_agents = list(old_set.union(registered_agents))
 
     def get_object_source(self, instance: object) -> Optional[str]:
         """Get the path of the source file in which type_object is defined"""
@@ -136,7 +154,12 @@ class CodeManager:
         """Return the hashes of all source files"""
         return (info.metadata.hash_value for info in self.__file_info.values())
 
-    def get_inmanta_module_requirements(self, module_name: str) -> set[str]:
+    def get_module_version_info(self) -> dict[str, "InmantaModule"]:
+        """Return all module version info"""
+        return self.module_version_info
+
+    @staticmethod
+    def get_inmanta_module_requirements(module_name: str) -> set[str]:
         """Get the list of python requirements associated with this inmanta module"""
         project: module.Project = module.Project.get()
         mod: module.Module = project.modules[module_name]
@@ -145,26 +168,6 @@ class CodeManager:
         else:
             _requires = mod.get_strict_python_requirements_as_list()
         return set(_requires)
-
-    def get_module_version_info(self) -> dict[str, "InmantaModuleDTO"]:
-        """Return all module version info"""
-
-        modules_data = {}
-        for module_name, module_sources in self.__module_to_source_info.items():
-
-            requirements = self.get_inmanta_module_requirements(module_name)
-            files_metadata: list[ModuleSourceMetadata] = [module_source.metadata for module_source in module_sources]
-
-            module_version = self.get_module_version(requirements, files_metadata)
-
-            modules_data[module_name] = InmantaModuleDTO(
-                name=module_name,
-                version=module_version,
-                files_in_module=files_metadata,
-                requirements=list(requirements),
-                for_agents=list(self.__module_to_agents[module_name]),
-            )
-        return modules_data
 
     @staticmethod
     def get_module_version(requirements: set[str], module_sources: Sequence[ModuleSourceMetadata]) -> str:
