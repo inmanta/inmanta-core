@@ -16,6 +16,14 @@ This guide assumes you already have `Podman <http://podman.io/>`_ installed on y
     The following instructions make some assumptions on the system used, you may have to adapt the examples depending on your environment.
     For example the uids and gids may already be in use, selinux may be configured differently, ...
 
+.. warning::
+    Whichever configuration path you take, make sure that the user that will be running the orchestrator is allowed to linger.  Lingering
+    can be enabled easily by running the ``loginctl`` command as root.  Assuming your user is named ``inmanta``, the command would be:
+
+    .. code-block:: console
+
+        # loginctl enable-linger inmanta
+
 
 Podman configuration
 ####################
