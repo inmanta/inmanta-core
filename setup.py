@@ -89,8 +89,11 @@ setup(
             # test dependencies
             "inmanta-dev-dependencies[pytest,async,core]",
             "bumpversion",
+            "flake8-black",
+            "flake8-isort",
             "flake8-junit-report",
             "openapi_spec_validator",
+            "pep8-naming",
             "pip2pi",
             "time-machine",
             # types
