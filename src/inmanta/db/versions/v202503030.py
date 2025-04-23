@@ -16,13 +16,13 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import json
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 
 from asyncpg import Connection
 
-import json
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.loader import CodeManager
 
