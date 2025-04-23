@@ -960,10 +960,10 @@ class OrchestrationService(protocol.ServerSlice):
         resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         unknowns: list[dict[str, PrimitiveTypes]],
         version_info: JsonType,
+        module_version_info: dict[str, InmantaModuleDTO],
         compiler_version: Optional[str] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
-        module_version_info: dict[str, InmantaModuleDTO] | None = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure

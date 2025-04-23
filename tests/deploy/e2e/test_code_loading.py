@@ -368,7 +368,7 @@ async def test_agent_code_loading_with_failure(
 
     module_install_specs_2 = await codemanager.get_code(environment=environment, model_version=version_1, agent_name="agent1")
 
-    async def _install(module_name: str, blueprint: executor.ExecutorBlueprint) -> None:
+    async def _install(blueprint: executor.ExecutorBlueprint) -> None:
         raise Exception("MKPTCH: Unable to load code when agent is started with code loading disabled.")
 
     monkeypatch.setattr(agent.executor_manager, "_install", _install)

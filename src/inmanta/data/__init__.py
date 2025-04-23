@@ -4072,7 +4072,12 @@ class ResourceAction(BaseDocument):
         if from_postgres and self.messages:
             new_messages = []
             for message in self.messages:
-                message = json.loads(message)
+                # Not 100% sure why this is needed, could depend on whether the data is
+                # retrieved through sql alchemy (automatically deserializes json into dict)
+                # or through regular asyncpg queries (no automatic deserialization)
+                if isinstance(message, str):
+                    message = json.loads(message)
+                assert isinstance(message, dict)
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset

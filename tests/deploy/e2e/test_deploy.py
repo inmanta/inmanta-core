@@ -537,6 +537,7 @@ async def test_deploy_to_empty(server, client, clienthelper, environment, agent,
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 

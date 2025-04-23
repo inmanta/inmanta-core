@@ -136,6 +136,7 @@ async def test_put_partial_version_allocation(server, client, environment, clien
         unknowns=[],
         version_info=None,
         resource_sets={},
+        module_version_info={}
     )
     assert result.code == 400
     assert "partial export requires a base model but no versions have been exported yet" in result.result["message"]
