@@ -65,8 +65,8 @@ ci-pep8:
 # TODO: mypy-baseline config file: sorting
 parser:=src/inmanta/parser/
 parsetab:=$(parser)/parsetab.py
+# load inmanta.app so that the parser is generated for a consistent mypy baseline
 $(parsetab): $(parser)/plyInmantaLex.py $(parser)/plyInmantaParser.py
-	# load inmanta.app so that the parser is generated for a consistent mypy baseline
 	$(PYTHON) -m inmanta.app >/dev/null
 	touch $@
 
