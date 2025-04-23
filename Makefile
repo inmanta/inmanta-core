@@ -74,7 +74,7 @@ $(parsetab): $(parser)/plyInmantaLex.py $(parser)/plyInmantaParser.py
 mypy: $(parsetab)
 	$(mypy) | $(mypy_baseline) filter
 ci-mypy: $(parsetab)
-	$(mypy) --junit-xml mypy.xml --cobertura-xml-report coverage | $(mypy_baseline) filter --no-colors
+	$(mypy) --junit-xml junit-mypy.xml --cobertura-xml-report coverage | $(mypy_baseline) filter --no-colors
 
 .PHONY: mypy-sync
 mypy-sync: $(parsetab)
