@@ -72,13 +72,13 @@ $(parsetab): $(parser)/plyInmantaLex.py $(parser)/plyInmantaParser.py
 
 .PHONY: mypy ci-mypy
 mypy: $(parsetab)
-	$(mypy) | $(mypy_baseline) filter
+	$(mypy) | $(mypy_baseline) filter --sort-baseline
 ci-mypy: $(parsetab)
-	$(mypy) --junit-xml junit-mypy.xml --cobertura-xml-report coverage | $(mypy_baseline) filter --no-colors
+	$(mypy) --junit-xml junit-mypy.xml --cobertura-xml-report coverage | $(mypy_baseline) filter --no-colors --sort-baseline
 
 .PHONY: mypy-sync
 mypy-sync: $(parsetab)
-	$(mypy) | $(mypy_baseline) sync
+	$(mypy) | $(mypy_baseline) sync --sort-baseline
 
 .PHONY: mypy-full
 mypy-full: $(parsetab)
