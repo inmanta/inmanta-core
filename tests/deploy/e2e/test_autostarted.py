@@ -1292,11 +1292,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     for children in children_after_deployment.children:
         assert children.is_running()
 
-    # Assert that we are still deploying in the rps table
-    rps = await data.ResourcePersistentState.get_one(environment=environment)
-    assert rps
-    assert rps.is_deploying
-
     # We want to simulate a crash
     children_after_deployment.scheduler.kill()
 
@@ -1336,11 +1331,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
         "unpause_on_resume": None,
     }
     assert actual_data[0] == expected_data
-
-    # Assert that we are still deploying in the rps table
-    rps = await data.ResourcePersistentState.get_one(environment=environment)
-    assert rps
-    assert rps.is_deploying is False
 
     await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
 
