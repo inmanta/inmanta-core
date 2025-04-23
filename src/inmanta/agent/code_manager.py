@@ -28,7 +28,7 @@ from inmanta.agent.executor import ModuleInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.protocol import Client
 from inmanta.util.async_lru import async_lru_cache
-from sqlalchemy import select
+from sqlalchemy import and_, select
 
 LOGGER = logging.getLogger(__name__)
 
@@ -82,9 +82,31 @@ class CodeManager:
                 models.FilesInModule.is_byte_code,
                 models.File.content,
             )
-            .join(models.InmantaModule)
-            .join(models.FilesInModule)
-            .join(models.File)
+            .join_from(
+                models.ModulesForAgent,
+                models.InmantaModule,
+                and_(
+                    models.ModulesForAgent.inmanta_module_name == models.InmantaModule.name,
+                    models.ModulesForAgent.inmanta_module_version == models.InmantaModule.version,
+                    models.ModulesForAgent.environment == models.InmantaModule.environment,
+                ),
+            )
+            .join_from(
+                models.InmantaModule,
+                models.FilesInModule,
+                and_(
+                    models.InmantaModule.name == models.FilesInModule.inmanta_module_name,
+                    models.InmantaModule.version == models.FilesInModule.inmanta_module_version,
+                    models.InmantaModule.environment == models.FilesInModule.environment,
+                ),
+            )
+            .join_from(
+                models.FilesInModule,
+                models.File,
+                and_(
+                    models.FilesInModule.file_content_hash == models.File.content_hash,
+                ),
+            )
             .where(
                 models.ModulesForAgent.environment == environment,
                 models.ModulesForAgent.agent_name == agent_name,
@@ -95,30 +117,33 @@ class CodeManager:
 
         async with data.get_session() as session:
             result = await session.execute(modules_for_agent)
-            for module_name, rows in itertools.groupby(result.all(), key=lambda r: r.name):
+            for module_name, rows in itertools.groupby(result.all(), key=lambda r: r.inmanta_module_name):
                 rows_list = list(rows)
                 assert rows_list
-                assert len({row.version for row in rows_list}) == 1
-                ModuleInstallSpec(
-                    module_name=module_name.name,
-                    module_version=rows_list[0].version,
-                    model_version=model_version,
-                    blueprint=executor.ExecutorBlueprint(
-                        pip_config=await self.get_pip_config(environment, model_version),
-                        requirements=rows_list[0].requirements,
-                        sources=[
-                            ModuleSource(
-                                metadata=ModuleSourceMetadata(
-                                    name=row.python_module_name,
-                                    hash_value=row.file_content_hash,
-                                    is_byte_code=row.is_byte_code,
-                                ),
-                                source=row.content,
-                            )
-                            for row in rows_list
-                        ],
-                        python_version=sys.version_info[:2],
-                    ),
+                assert len({row.inmanta_module_version for row in rows_list}) == 1
+                module_install_specs.append(
+                    ModuleInstallSpec(
+                        module_name=module_name,
+                        module_version=rows_list[0].inmanta_module_version,
+                        model_version=model_version,
+                        blueprint=executor.ExecutorBlueprint(
+                            pip_config=await self.get_pip_config(environment, model_version),
+                            requirements=rows_list[0].requirements,
+                            sources=[
+                                ModuleSource(
+                                    metadata=ModuleSourceMetadata(
+                                        name=row.python_module_name,
+                                        hash_value=row.file_content_hash,
+                                        is_byte_code=row.is_byte_code,
+                                    ),
+                                    source=row.content,
+                                )
+                                for row in rows_list
+                            ],
+                            python_version=sys.version_info[:2],
+                            environment_id=environment,
+                        ),
+                    )
                 )
 
         if not module_install_specs:
