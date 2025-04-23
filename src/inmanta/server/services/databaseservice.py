@@ -244,7 +244,7 @@ class DatabaseService(protocol.ServerSlice):
     async def get_status(self) -> Mapping[str, ArgumentTypes]:
         """Get the status of the database connection"""
         assert self._db_monitor is not None  # make mypy happy
-        return (await self._db_monitor.get_status()).dict()
+        return (await self._db_monitor.get_status()).model_dump(mode="json")
 
 
 async def initialize_database_connection_pool(
