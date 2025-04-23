@@ -166,7 +166,7 @@ class ToDbUpdateManager(StateUpdateManager):
                 # FIXME: At some point, we will only need this on the RPS table
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
                 await resource.update_persistent_state(
-                    is_deploying=False,
+                    is_deploying=True,
                     connection=connection,
                 )
 

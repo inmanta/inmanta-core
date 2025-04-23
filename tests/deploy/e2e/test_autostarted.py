@@ -1292,6 +1292,11 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     for children in children_after_deployment.children:
         assert children.is_running()
 
+    # Assert that we are still deploying in the rps table
+    rps = await data.ResourcePersistentState.get_one(environment=environment)
+    assert rps
+    assert rps.is_deploying
+
     # We want to simulate a crash
     children_after_deployment.scheduler.kill()
 
@@ -1332,6 +1337,11 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     }
     assert actual_data[0] == expected_data
 
+    # Assert that we are still deploying in the rps table
+    rps = await data.ResourcePersistentState.get_one(environment=environment)
+    assert rps
+    assert rps.is_deploying is False
+
     await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
 
     snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
@@ -1344,3 +1354,51 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
     assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
+
+
+async def test_rps_state_deploying(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    clienthelper,
+    environment,
+    async_finalizer,
+    tmp_path,
+):
+    """
+    Verify that the is_deploying flag is correctly set when deploying starts and finishes
+    """
+
+    file_to_remove = tmp_path / "file"
+    file_to_remove.touch()
+
+    config.Config.set("config", "environment", environment)
+
+    model = f"""
+import minimalwaitingmodule
+minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path="{file_to_remove}")
+"""
+    snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
+
+    # Deploy a resource
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version)
+    assert result.code == 200
+
+    # Wait for this resource to be deploying
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deploying)
+
+    # Assert that rps is correct
+    rps = await data.ResourcePersistentState.get_one(environment=environment)
+    assert rps
+    assert rps.is_deploying
+
+    # Finish deploying
+    file_to_remove.unlink()
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
+
+    # Assert that rps gets updated
+    rps = await data.ResourcePersistentState.get_one(environment=environment)
+    assert rps
+    assert rps.is_deploying is False
