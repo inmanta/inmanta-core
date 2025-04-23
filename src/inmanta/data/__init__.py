@@ -4076,7 +4076,10 @@ class ResourceAction(BaseDocument):
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
-                    timestamp = ta.validate_python(message["timestamp"])
+                    try:
+                        timestamp = ta.validate_python(message["timestamp"])
+                    except TypeError:
+                        raise
                     if timestamp.tzinfo is None:
                         raise Exception("Found naive timestamp in the database, this should not be possible")
                     message["timestamp"] = timestamp

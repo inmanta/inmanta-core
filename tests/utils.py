@@ -399,7 +399,7 @@ async def get_done_count(
 
 
 async def wait_until_deployment_finishes(
-    client: Client, environment: str, *, version: int = -1, timeout: int = 10, wait_for_n: int | None = None
+    client: Client, environment: str, *, version: int = -1, timeout: int = 1000, wait_for_n: int | None = None
 ) -> None:
     async def done() -> bool:
 
@@ -419,6 +419,7 @@ async def wait_until_deployment_finishes(
 
         # {'by_state': {'available': 3, 'cancelled': 0, 'deployed': 12, 'deploying': 0, 'failed': 0, 'skipped': 0,
         #               'skipped_for_undefined': 0, 'unavailable': 0, 'undefined': 0}, 'total': 15}
+        LOGGER.debug(summary)
         if wait_for_n is None:
             available = summary["by_state"]["available"]
             deploying = summary["by_state"]["deploying"]
