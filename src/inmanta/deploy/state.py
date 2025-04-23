@@ -62,14 +62,12 @@ class Compliance(StrEnum):
         based on a deploy attempt / compliance check for that intent.
     UNDEFINED: The resource status is undefined, because it has an unknown attribute. i.e. undefined status <=> undefined
         intent.
-    DEPLOYING: The resource is currently in the middle of a deploy attempt.
     """
 
     COMPLIANT = enum.auto()
     HAS_UPDATE = enum.auto()
     NON_COMPLIANT = enum.auto()
     UNDEFINED = enum.auto()
-    DEPLOYING = enum.auto()
 
     def is_dirty(self) -> bool:
         """

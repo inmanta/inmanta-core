@@ -4617,8 +4617,6 @@ class ResourcePersistentState(BaseDocument):
             return None
         elif self.is_undefined:
             return state.Compliance.UNDEFINED
-        elif self.is_deploying:
-            return state.Compliance.DEPLOYING
         elif (
             self.last_deployed_attribute_hash is None or self.current_intent_attribute_hash != self.last_deployed_attribute_hash
         ):
