@@ -1,0 +1,3 @@
+description: Update podman install documentation to mention the need for user linger.
+change-type: patch
+destination-branches: [master, iso8]
