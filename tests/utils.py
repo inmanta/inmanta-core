@@ -1012,7 +1012,7 @@ class DummyCodeManager(CodeManager):
         self, environment: uuid.UUID, model_version: int, agent_name: str
     ) -> tuple[Collection[ModuleInstallSpec], executor.FailedModules]:
         dummyblueprint: ExecutorBlueprint = _get_dummy_blueprint_for(environment)
-        return ([ModuleInstallSpec("dummy_module", "0.0.0", model_version, dummyblueprint)], {})
+        return ([ModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint)], {})
 
 
 async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:

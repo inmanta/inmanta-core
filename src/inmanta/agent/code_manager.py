@@ -125,7 +125,6 @@ class CodeManager:
                     ModuleInstallSpec(
                         module_name=module_name,
                         module_version=rows_list[0].inmanta_module_version,
-                        model_version=model_version,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=await self.get_pip_config(environment, model_version),
                             requirements=rows_list[0].requirements,

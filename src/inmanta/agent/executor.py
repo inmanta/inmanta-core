@@ -289,18 +289,16 @@ class ExecutorId:
 @dataclass(frozen=True)
 class ModuleInstallSpec:
     """
-    This class encapsulates the requirements for a specific (module_name, module_version) for a specific model version.
+    This class encapsulates the requirements for a specific (module_name, module_version).
 
     :ivar module_name: fully qualified name for this module
     :ivar module_version: the version of the module to use
-    :ivar model_version: the version of the model to use
     :ivar blueprint: the associated install blueprint
 
     """
 
     module_name: str
     module_version: str
-    model_version: int
     blueprint: ExecutorBlueprint
 
 
