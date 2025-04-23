@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from inmanta.protocol.common import MethodProperties
 
 
-def auth(auth_label: str, *, read_only: bool, environment_param: str | None = None) -> Callable[..., Callable]:
+def auth[F: Callable](auth_label: str, *, read_only: bool, environment_param: str | None = None) -> Callable[[F], F]:
     """
     A decorator used to add authorization-related metadata to an API endpoint.
     This metadata can be used when writing an access policy. The @auth
@@ -40,7 +40,7 @@ def auth(auth_label: str, *, read_only: bool, environment_param: str | None = No
                               Or None if it's an environment-agnostic endpoint.
     """
 
-    def wrapper(fnc: Callable[..., Callable]) -> Callable[..., Callable]:
+    def wrapper(fnc: F) -> F:
         if not hasattr(fnc, "__method_properties__"):
             raise Exception(
                 f"@method/@typedmethod decorator not found on method {fnc.__name__}."
