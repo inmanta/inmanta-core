@@ -406,43 +406,6 @@ async def test_resource_action_update(server_multi, client_multi, environment_mu
     assert result.result["metadata"]["deploy_summary"]["by_state"]["deployed"] == 2
 
 
-async def test_get_environment(client, clienthelper, server, environment):
-    for i in range(10):
-        version = await clienthelper.get_version()
-
-        resources = []
-        for j in range(i):
-            resources.append(
-                {
-                    "group": "root",
-                    "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-                    "id": "std::testing::NullResource[vm1.dev.inmanta.com,name=file%d],v=%d" % (j, version),
-                    "owner": "root",
-                    "path": "/tmp/file%d" % j,
-                    "permissions": 644,
-                    "purged": False,
-                    "reload": False,
-                    "requires": [],
-                    "version": version,
-                }
-            )
-
-        res = await client.put_version(
-            tid=environment,
-            version=version,
-            resources=resources,
-            unknowns=[],
-            version_info={},
-            compiler_version=get_compiler_version(),
-        )
-        assert res.code == 200
-
-    result = await client.get_environment(environment, versions=5, resources=1)
-    assert result.code == 200
-    assert len(result.result["environment"]["versions"]) == 5
-    assert len(result.result["environment"]["resources"]) == 9
-
-
 async def test_resource_update(postgresql_client, client, clienthelper, server, environment, async_finalizer, null_agent):
     """
     Test updating resources and logging
@@ -560,9 +523,11 @@ async def test_clear_environment(client, server, clienthelper, environment):
     )
     assert result.code == 200
 
-    result = await client.get_environment(id=environment, versions=10)
+    result = await client.environment_get(id=environment)
     assert result.code == 200
-    assert len(result.result["environment"]["versions"]) == 1
+    versions = await client.list_versions(tid=environment)
+    assert versions.code == 200
+    assert versions.result["count"] == 1
 
     # trigger multiple compiles and wait for them to complete in order to test cascade deletion of collapsed compiles (#2350)
     result = await client.notify_change_get(id=environment)
@@ -589,9 +554,12 @@ async def test_clear_environment(client, server, clienthelper, environment):
 
     assert not os.path.exists(env_dir)
 
-    result = await client.get_environment(id=environment, versions=10)
+    result = await client.list_desired_state_versions(tid=environment)
     assert result.code == 200
-    assert len(result.result["environment"]["versions"]) == 0
+    assert len(result.result["data"]) == 0
+    versions = await client.list_versions(tid=environment)
+    assert versions.code == 200
+    assert versions.result["count"] == 0
 
 
 async def test_tokens(server_multi, client_multi, environment_multi, request):
