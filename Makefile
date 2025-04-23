@@ -9,7 +9,8 @@ PYTEST_EXTRA_ARGS :=
 .DEFAULT_GOAL := all
 isort = isort src tests tests_common
 black = black src tests tests_common
-mypy=MYPYPATH=stubs:src $(PYTHON) -m mypy --soft-error-limit=-1 --html-report mypy -p inmanta
+mypy = MYPYPATH=stubs:src $(PYTHON) -m mypy --soft-error-limit=-1 --html-report mypy -p inmanta
+mypy_baseline = $(PYTHON) -m mypy_baseline
 
 ifdef PIP_INDEX
 pip_index_arg := -i $(PIP_INDEX)
@@ -71,13 +72,13 @@ $(parsetab): $(parser)/plyInmantaLex.py $(parser)/plyInmantaParser.py
 
 .PHONY: mypy ci-mypy
 mypy: $(parsetab)
-	$(mypy) | mypy-baseline filter
+	$(mypy) | $(mypy_baseline) filter
 ci-mypy: $(parsetab)
-	$(mypy) --junit-xml mypy.xml --cobertura-xml-report coverage | mypy-baseline filter --no-colors
+	$(mypy) --junit-xml mypy.xml --cobertura-xml-report coverage | $(mypy_baseline) filter --no-colors
 
 .PHONY: mypy-sync
 mypy-sync: $(parsetab)
-	$(mypy) | mypy-baseline sync
+	$(mypy) | $(mypy_baseline) sync
 
 .PHONY: mypy-full
 mypy-full: $(parsetab)
