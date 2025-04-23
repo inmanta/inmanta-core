@@ -462,7 +462,6 @@ src/inmanta/data/__init__.py:0: error: Missing type parameters for generic type 
 src/inmanta/data/__init__.py:0: error: Incompatible return value type (got "object", expected "list[Any]")  [return-value]
 src/inmanta/data/__init__.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "str")  [assignment]
 src/inmanta/data/__init__.py:0: error: Need type annotation for "_updates" (hint: "_updates: dict[<type>, <type>] = ...")  [var-annotated]
-src/inmanta/data/__init__.py:0: error: Argument 1 to "loads" has incompatible type "dict[str, object]"; expected "str | bytes | bytearray"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Incompatible return value type (got "ResourceAction | None", expected "ResourceAction")  [return-value]
 src/inmanta/data/__init__.py:0: error: Incompatible return value type (got "ResourceAction | None", expected "ResourceAction")  [return-value]
 src/inmanta/data/__init__.py:0: error: Argument 1 to "add_logs" of "ResourceAction" has incompatible type "list[dict[str, object]]"; expected "str | None"  [arg-type]
