@@ -16,9 +16,9 @@ ifdef PIP_INDEX
 pip_index_arg := -i $(PIP_INDEX)
 endif
 ifeq ($(shell which uv),)
-pip_install = $(PYTHON) -m pip install $(pip_index_arg) --pre
+pip_install = $(PYTHON) -m pip install $(pip_index_arg)
 else
-pip_install = uv pip install --python $(PYTHON) $(pip_index_arg) --prerelease allow
+pip_install = uv pip install --python $(PYTHON) $(pip_index_arg)
 endif
 ifdef ISO_VERSION
 pip_install_c = $(pip_install) -c requirements.txt -c 'https://docs.inmanta.com/inmanta-service-orchestrator-dev/$(ISO_VERSION)/reference/requirements.txt'
