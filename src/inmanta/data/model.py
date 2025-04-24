@@ -1,19 +1,19 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import datetime
@@ -87,6 +87,19 @@ class ExtensionStatus(BaseModel):
     package: str
 
 
+class ReportedStatus(StrEnum):
+    OK = "OK"
+    Warning = "Warning"
+    Error = "Error"
+
+    def __gt__(self, other: str) -> bool:
+        # Determines the order of severity of the reported status
+        order: list[str] = [ReportedStatus.OK, ReportedStatus.Warning, ReportedStatus.Error]
+        if self not in order or other not in order:
+            raise ValueError
+        return order.index(self) > order.index(other)
+
+
 class SliceStatus(BaseModel):
     """
     Status response for slices loaded in the server
@@ -94,6 +107,8 @@ class SliceStatus(BaseModel):
 
     name: str
     status: Mapping[str, ArgumentTypes | Mapping[str, ArgumentTypes]]
+    reported_status: ReportedStatus
+    message: str | None = None
 
 
 class FeatureStatus(BaseModel):
@@ -118,6 +133,7 @@ class StatusResponse(BaseModel):
     extensions: list[ExtensionStatus]
     slices: list[SliceStatus]
     features: list[FeatureStatus]
+    status: ReportedStatus
 
 
 @stable_api
@@ -139,6 +155,9 @@ class CompileRunBase(BaseModel):
             These env vars can be compacted over multiple compiles.
             If multiple values are compacted, they will be joined using spaces.
     :param environment_variables: environment variables passed to the compiler
+    :param links: An object that contains relevant links to this compile.
+        It is a dictionary where the key is something that identifies one or more links
+        and the value is a list of urls. i.e. {"instances": ["link-1',"link-2"], "compiles": ["link-3"]}
     """
 
     id: uuid.UUID
@@ -161,6 +180,7 @@ class CompileRunBase(BaseModel):
 
     notify_failed_compile: Optional[bool] = None
     failed_compile_message: Optional[str] = None
+    links: dict[str, list[str]] = {}
 
     @pydantic.field_validator("environment_variables", mode="before")
     @classmethod
@@ -658,11 +678,16 @@ class DesiredStateLabel(BaseModel):
 
 
 class DesiredStateVersion(BaseModel):
+    """
+    :param released: has this desired state version been released?
+    """
+
     version: int
     date: datetime.datetime
     total: int
     labels: list[DesiredStateLabel]
     status: const.DesiredStateVersionStatus
+    released: bool
 
 
 class PromoteTriggerMethod(StrEnum):

@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump types-setuptools from 78.1.0.20250329 to 79.0.0.20250422
+destination-branches:
+- master
+sections: {}

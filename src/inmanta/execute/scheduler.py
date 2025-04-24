@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import itertools
@@ -32,6 +32,7 @@ from inmanta.ast import (
     CycleException,
     Location,
     MultiException,
+    MultiUnsetException,
     RuntimeException,
     UnsetException,
 )
@@ -54,7 +55,6 @@ from inmanta.execute.runtime import (
     Waiter,
     WaiterSet,
 )
-from inmanta.execute.tracking import ModuleTracker
 
 if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, NamedType, Statement  # noqa: F401
@@ -256,22 +256,23 @@ class Scheduler:
             implement.evaluate()
 
         compiler.plugins = {k: v for k, v in types_and_impl.items() if isinstance(v, plugins.Plugin)}
-        types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
+        self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
-        # normalize plugins
-        for p in compiler.plugins.values():
-            p.normalize()
-
-        # give type info to all types, to normalize blocks inside them
-        # normalize implementations last because they have subblocks that might depend on other type information
-        for t in sorted(types.values(), key=lambda t: isinstance(t, Implementation)):
+        # give type info to all types (includes plugins), to normalize blocks inside them
+        for t in sorted(
+            self.types.values(),
+            key=lambda t: (
+                # normalize implementations last because they have subblocks that might depend on other type information
+                isinstance(t, Implementation),
+                # normalize entities second last because it may call validate on its attribute types to validate defaults
+                isinstance(t, Entity),
+            ),
+        ):
             t.normalize()
 
         # normalize root blocks
         for block in blocks:
             block.normalize()
-
-        self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
     def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
@@ -396,7 +397,7 @@ class Scheduler:
 
         # emit all top level statements
         for block in blocks:
-            block.context.emit(queue.for_tracker(ModuleTracker(block)))
+            block.context.emit(queue)
 
         # start an evaluation loop
         i = 0
@@ -433,6 +434,10 @@ class Scheduler:
                 except UnsetException as e:
                     # some statements don't know all their dependencies up front,...
                     next.requeue_with_additional_requires(object(), e.get_result_variable())
+                except MultiUnsetException as e:
+                    # some statements don't know all their dependencies up front,...
+                    for rv in e.result_variables:
+                        next.requeue_with_additional_requires(object(), rv)
 
             # all safe stmts are done
             progress = False

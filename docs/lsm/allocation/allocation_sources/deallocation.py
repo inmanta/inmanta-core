@@ -1,9 +1,9 @@
 """
-    Inmanta LSM
+Inmanta LSM
 
-    :copyright: 2020 Inmanta
-    :contact: code@inmanta.com
-    :license: Inmanta EULA
+:copyright: 2020 Inmanta
+:contact: code@inmanta.com
+:license: Inmanta EULA
 """
 
 import os

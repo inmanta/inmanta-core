@@ -1,0 +1,4 @@
+description: Integrate a GraphQL introspection endpoint to serve the schema.
+issue-nr: 8820
+change-type: minor
+destination-branches: [master]

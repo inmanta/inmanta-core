@@ -1,33 +1,33 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
-
-
-    Command line development guidelines
-    ###################################
-
-    do's and don'ts
-    ----------------
-    MUST NOT: sys.exit => use command.CLIException
-    SHOULD NOT: print( => use logger for messages, only print for final output
+Contact: code@inmanta.com
 
 
-    Entry points
-    ------------
-    @command annotation to register new command
+Command line development guidelines
+###################################
+
+do's and don'ts
+----------------
+MUST NOT: sys.exit => use command.CLIException
+SHOULD NOT: print( => use logger for messages, only print for final output
+
+
+Entry points
+------------
+@command annotation to register new command
 """
 
 import argparse
@@ -147,6 +147,7 @@ def start_scheduler(options: argparse.Namespace) -> None:
     a = agent_new.Agent()
 
     async def start() -> None:
+
         await initialize_database_connection_pool(
             database_host=opt.db_host.get(),
             database_port=opt.db_port.get(),
@@ -158,6 +159,7 @@ def start_scheduler(options: argparse.Namespace) -> None:
             connection_pool_max_size=agent_config.scheduler_db_connection_pool_max_size.get(),
             connection_timeout=agent_config.scheduler_db_connection_timeout.get(),
         )
+
         # also report metrics if this is relevant
         metrics_reporter = MetricsService(
             extra_tags={"component": "scheduler", "environment": str(agent_config.environment.get())}

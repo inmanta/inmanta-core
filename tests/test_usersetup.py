@@ -1,19 +1,19 @@
 """
-    Copyright 2023 Inmanta
+Copyright 2023 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -25,7 +25,7 @@ from click import testing
 from inmanta import data
 from inmanta.db.util import PGRestore
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.user_setup import cmd, get_connection_pool
+from inmanta.user_setup import cmd
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +78,12 @@ def setup_config(tmpdir, postgres_db, database_name):
     os.chdir(tmpdir)
 
 
-async def test_user_setup(tmpdir, server_pre_start, postgres_db, database_name, hard_clean_db, hard_clean_db_post):
+async def test_user_setup(
+    tmpdir, server_pre_start, postgres_db, postgresql_client, database_name, hard_clean_db, hard_clean_db_post
+):
     ibl = InmantaBootloader(configure_logging=True)
     # we need the server to start so that all the migrations scripts are applied, but the server needs
-    # to be shut down afterwards, otherwise the call to get_connection_pool() will result in an exception saying
+    # to be shut down afterwards, otherwise the call to start_engine() will result in an exception saying
     # that the connection pool is already set in the database layer.
     await ibl.start()
     await ibl.stop(timeout=20)
@@ -94,27 +96,19 @@ async def test_user_setup(tmpdir, server_pre_start, postgres_db, database_name, 
 
     result = await cli.run("yes", "new_user", "password")
     assert result.exit_code == 0
-    try:
-        # Because the setup command calls data.disconnect(), we cannot use the init_dataclasses_and_load_schema fixture here.
-        # After calling into cli.run(), the connection to the database, which was setup by the init_dataclasses_and_load_schema
-        # fixture, will be no longer active.
-        connection = await get_connection_pool()
-        users = await data.User.get_list()
-        assert len(users) == 1
-        assert users[0].username == "new_user"
 
-    finally:
-        if connection is not None:
-            await data.disconnect()
+    users = await data.User.get_list(connection=postgresql_client)
+    assert len(users) == 1
+    assert users[0].username == "new_user"
 
 
 async def test_user_setup_empty_username(
-    tmpdir, server_pre_start, postgres_db, database_name, hard_clean_db, hard_clean_db_post
+    tmpdir, server_pre_start, postgres_db, postgresql_client, database_name, hard_clean_db, hard_clean_db_post
 ):
     """test that if no username is provided to the user setup tool, the username will default to admin"""
     ibl = InmantaBootloader(configure_logging=True)
     # we need the server to start so that all the migrations scripts are applied, but the server needs
-    # to be shut down afterwards, otherwise the call to get_connection_pool() will result in an exception saying
+    # to be shut down afterwards, otherwise the call to start_engine() will result in an exception saying
     # that the connection pool is already set in the database layer.
     await ibl.start()
     await ibl.stop(timeout=20)
@@ -124,18 +118,10 @@ async def test_user_setup_empty_username(
 
     result = await cli.run("yes", "", "password")
     assert result.exit_code == 0
-    try:
-        # Because the setup command calls data.disconnect(), we cannot use the init_dataclasses_and_load_schema fixture here.
-        # After calling into cli.run(), the connection to the database, which was setup by the init_dataclasses_and_load_schema
-        # fixture, will be no longer active.
-        connection = await get_connection_pool()
-        users = await data.User.get_list()
-        assert len(users) == 1
-        assert users[0].username == "admin"
 
-    finally:
-        if connection is not None:
-            await data.disconnect()
+    users = await data.User.get_list(connection=postgresql_client)
+    assert len(users) == 1
+    assert users[0].username == "admin"
 
 
 async def test_user_setup_schema_outdated(

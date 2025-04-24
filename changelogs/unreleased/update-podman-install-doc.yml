@@ -1,0 +1,6 @@
+change-type: patch
+description: Update podman installation documentation
+destination-branches:
+- master
+- iso8
+sections: {}

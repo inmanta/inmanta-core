@@ -1,36 +1,31 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import traceback
 from abc import abstractmethod
-from functools import lru_cache
-from typing import Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from inmanta import warnings
 from inmanta.ast import export
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
+from inmanta.types import DataclassProtocol
 from inmanta.warnings import InmantaWarning
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute  # noqa: F401
@@ -329,7 +324,7 @@ class Namespace(Namespaced):
     This class models a namespace that contains defined types, modules, ...
     """
 
-    __slots__ = ("__name", "__parent", "__children", "defines_types", "visible_namespaces", "primitives", "scope")
+    __slots__ = ("__name", "__parent", "__children", "defines_types", "visible_namespaces", "primitives", "scope", "__path")
 
     def __init__(self, name: str, parent: "Optional[Namespace]" = None) -> None:
         Namespaced.__init__(self)
@@ -345,6 +340,12 @@ class Namespace(Namespaced):
             self.visible_namespaces = {name: MockImport(self)}
         self.primitives = None  # type: Optional[Dict[str,Type]]
         self.scope = None  # type:  Optional[ExecutionContext]
+        self.__path: list[str]
+
+        if self.__parent is None or self.__parent.get_name() == "__root__":
+            self.__path = [self.__name]
+        else:
+            self.__path = self.__parent.to_path() + [self.__name]
 
     def set_primitives(self, primitives: "Dict[str,Type]") -> None:
         self.primitives = primitives
@@ -541,15 +542,11 @@ class Namespace(Namespaced):
                 return None
             return child._get_ns(ns_parts[1:])
 
-    @lru_cache
     def to_path(self) -> list[str]:
         """
         Return a list with the namespace path elements in it.
         """
-        if self.__parent is None or self.__parent.get_name() == "__root__":
-            return [self.__name]
-        else:
-            return self.__parent.to_path() + [self.__name]
+        return self.__path
 
     def get_namespace(self) -> "Namespace":
         return self
@@ -715,7 +712,9 @@ class MissingImportException(TypeNotFoundException):
 
 
 class AmbiguousTypeException(TypeNotFoundException):
-    """Exception raised when a type is referenced that does not exist"""
+    """
+    Exception raised when a type is referenced in an unqualified manner in a context where it can not be unambiguously resolved.
+    """
 
     def __init__(self, type: LocatableString, candidates: list["Entity"]) -> None:
         candidates = sorted(candidates, key=lambda x: x.get_full_name())
@@ -824,6 +823,15 @@ class AttributeException(WrappingRuntimeException):
         self.instance = instance
 
 
+class PluginTypeException(WrappingRuntimeException):
+    """
+    Raised when an argument or return value of a plugin is not in-line with the type
+    annotation of that plugin. Wraps the validation error.
+    """
+
+    pass
+
+
 class OptionalValueException(RuntimeException):
     """Exception raised when an optional value is accessed that has no value (and is frozen)"""
 
@@ -852,11 +860,49 @@ class TypingException(RuntimeException):
         return 10
 
 
+class InvalidTypeAnnotation(TypingException):
+    """
+    Invalid type annotation, e.g. for a plugin.
+    """
+
+
 class DirectExecuteException(TypingException):
     """Exception raised when direct execute is called on a wrong object"""
 
     def importantance(self) -> int:
         return 11
+
+
+class DataClassException(TypingException):
+    """Exception in relation to dataclasses"""
+
+    def __init__(self, entity: "Entity", msg: str) -> None:
+        super().__init__(entity, msg)
+        self.entity = entity
+
+    def importantance(self) -> int:
+        return 9
+
+
+class DataClassMismatchException(DataClassException):
+    """
+    Exception due to a mismatch between both version of a dataclass
+
+    """
+
+    def __init__(
+        self,
+        entity: "Entity",
+        dataclass: DataclassProtocol | None,
+        dataclass_python_name: str,
+        msg: str,
+    ) -> None:
+        """
+        :param dataclass python dataclass, None if absent
+        """
+        super().__init__(entity, msg)
+        self.dataclass = dataclass
+        self.dataclass_python_name = dataclass_python_name
 
 
 class KeyException(RuntimeException):
@@ -1012,6 +1058,17 @@ class UnsetException(RuntimeException):
 
     def get_result_variable(self) -> Optional["Instance"]:
         return self.instance
+
+
+class MultiUnsetException(RuntimeException):
+    """
+    This exception is thrown when multiple attributes are accessed that were not yet
+    available (i.e. it has not been frozen yet).
+    """
+
+    def __init__(self, msg: str, result_variables: "list[ResultVariable[object]]") -> None:
+        RuntimeException.__init__(self, None, msg)
+        self.result_variables = result_variables
 
 
 class UnknownException(Exception):

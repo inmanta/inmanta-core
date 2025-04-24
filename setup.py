@@ -35,6 +35,8 @@ requires = [
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
     "setproctitle~=1.3",
+    "SQLAlchemy~=2.0",
+    "strawberry-sqlalchemy-mapper==0.5.0",
 ]
 
 
@@ -45,7 +47,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "15.0.1"
+version = "16.0.0"
 
 setup(
     version=version,

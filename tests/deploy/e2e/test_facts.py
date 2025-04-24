@@ -1,19 +1,19 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 # Copied from old tests
@@ -369,9 +369,9 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     assert result.code == 200
 
     # There should be only one resource
-    result = await client.get_environment(id=environment, resources=1)
+    result = await client.resource_list(tid=environment)
     assert result.code == 200
-    assert len(result.result["environment"]["resources"]) == 1
+    assert len(result.result["data"]) == 1
 
     # 3 facts from res1 + parameter test
     result = await client.list_params(environment)
@@ -399,9 +399,9 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     assert result.code == 200
 
     # Verify there are no resources anymore
-    result = await client.get_environment(id=environment, resources=1)
+    result = await client.resource_list(tid=environment)
     assert result.code == 200
-    assert len(result.result["environment"]["resources"]) == 0
+    assert len(result.result["data"]) == 0
 
     # Only the resource independent parameter test should exist
     result = await client.list_params(environment)

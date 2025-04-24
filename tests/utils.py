@@ -1,19 +1,19 @@
 """
-    Copyright 2021 Inmanta
+Copyright 2021 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -25,6 +25,7 @@ import json
 import logging
 import math
 import os
+import queue
 import random
 import shutil
 import uuid
@@ -33,7 +34,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timezone
 from logging import LogRecord
-from typing import Any, Collection, Mapping, Optional, Set, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Collection, Mapping, Optional, Set, TypeVar, Union
 
 import pytest
 import yaml
@@ -50,14 +51,15 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
+from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceIntent
 from inmanta.moduletool import ModuleTool
-from inmanta.protocol import Client, SessionEndpoint, methods
+from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
+from inmanta.server.services.compilerservice import CompilerService
 from inmanta.types import Apireturn, ResourceIdStr, ResourceType
 from inmanta.util import get_compiler_version, hash_file
 from libpip2pi.commands import dir2pi
@@ -65,6 +67,9 @@ from libpip2pi.commands import dir2pi
 T = TypeVar("T")
 
 LOGGER = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from conftest import CompileRunnerMock
 
 
 def get_all_subclasses(cls: type[T]) -> set[type[T]]:
@@ -152,7 +157,7 @@ def log_contains(caplog, loggerpart, level, msg, test_phase="call"):
             print(logger_name, log_level, message)
         print("------------")
 
-    assert False
+    assert False, f'Message "{msg}" not present in logs'
 
 
 def log_doesnt_contain(caplog, loggerpart, level, msg):
@@ -309,7 +314,7 @@ async def report_db_index_usage(min_precent=100):
         " n_live_tup rows_in_table, seq_scan * n_live_tup badness  FROM pg_stat_user_tables "
         "WHERE seq_scan + idx_scan > 0 order by badness desc"
     )
-    async with data.Compile._connection_pool.acquire() as con:
+    async with data.get_connection_pool().acquire() as con:
         result = await con.fetch(q)
 
     for row in result:
@@ -331,7 +336,7 @@ async def wait_until_version_is_released(client, environment: uuid.UUID, version
     await retry_limited(_is_version_released, timeout=10)
 
 
-async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
+async def wait_for_version(client, environment, cnt: int, compile_timeout: int = 30):
     """
     :param compile_timeout: Raise an AssertionError if the compilation didn't finish after this amount of seconds.
     """
@@ -339,12 +344,13 @@ async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     # Wait until the server is no longer compiling
     # wait for it to finish
     async def compile_done():
-        compiling = await client.is_compiling(environment)
-        code = compiling.code
-        return code == 204
+        result = await client.get_reports(environment)
+        assert result.code == 200
+        return all(r["success"] is not None for r in result.result["reports"])
 
     await retry_limited(compile_done, compile_timeout)
 
+    # Output compile report for debugging purposes
     reports = await client.get_reports(environment)
     for report in reports.result["reports"]:
         data = await client.get_report(report["id"])
@@ -399,7 +405,11 @@ async def wait_until_deployment_finishes(
 
         if version >= 0:
             scheduler = await data.Scheduler.get_one(environment=environment)
-            if scheduler.last_processed_model_version is None or scheduler.last_processed_model_version < version:
+            if (
+                scheduler is None
+                or scheduler.last_processed_model_version is None
+                or scheduler.last_processed_model_version < version
+            ):
                 return False
 
         result = await client.resource_list(environment, deploy_summary=True)
@@ -685,7 +695,7 @@ def module_from_template(
     """
 
     def to_python_requires(
-        requires: abc.Sequence[Union[module.InmantaModuleRequirement, inmanta.util.CanonicalRequirement]]
+        requires: abc.Sequence[Union[module.InmantaModuleRequirement, inmanta.util.CanonicalRequirement]],
     ) -> list[str]:
         return [
             str(req) if isinstance(req, packaging.requirements.Requirement) else str(req.get_python_package_requirement())
@@ -752,14 +762,14 @@ def module_from_template(
                 config=PipConfig(use_system_config=True),
             )
         else:
-            mod_artifact_path = ModuleTool().build(path=dest_dir)
+            mod_artifact_paths = ModuleTool().build(path=dest_dir, wheel=True)
             env.process_env.install_for_config(
                 requirements=[],
-                paths=[env.LocalPackagePath(path=mod_artifact_path)],
+                paths=[env.LocalPackagePath(path=mod_artifact_paths[0])],
                 config=PipConfig(use_system_config=True),
             )
     if publish_index is not None:
-        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
+        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir, wheel=True)
         publish_index.publish()
     with open(config_file) as fh:
         return module.ModuleV2Metadata.parse(fh)
@@ -972,18 +982,24 @@ class NullAgent(SessionEndpoint):
     async def get_status(self) -> Apireturn:
         return 200, {}
 
+    @protocol.handle(methods_v2.trigger_get_status, env="tid")
+    async def get_scheduler_resource_state(self, env: data.Environment) -> SchedulerStatusReport:
+        return SchedulerStatusReport(scheduler_state={}, db_state={}, resource_states={}, discrepancies=[])
+
 
 def make_requires(resources: Mapping[ResourceIdStr, ResourceIntent]) -> Mapping[ResourceIdStr, Set[ResourceIdStr]]:
     """Convert resources from the scheduler input format to its requires format"""
     return {k: {req for req in resource.attributes.get("requires", [])} for k, resource in resources.items()}
 
 
-dummyblueprint = ExecutorBlueprint(
-    pip_config=LEGACY_PIP_DEFAULT,
-    requirements=[],
-    python_version=(3, 11),
-    sources=[],
-)
+def _get_dummy_blueprint_for(environment: uuid.UUID) -> ExecutorBlueprint:
+    return ExecutorBlueprint(
+        environment_id=environment,
+        pip_config=LEGACY_PIP_DEFAULT,
+        requirements=[],
+        python_version=(3, 11),
+        sources=[],
+    )
 
 
 class DummyCodeManager(CodeManager):
@@ -992,6 +1008,10 @@ class DummyCodeManager(CodeManager):
     async def get_code(
         self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
     ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
+        if not resource_types:
+            raise ValueError(f"{self.__class__.__name__}.get_code() expects at least one resource type")
+
+        dummyblueprint: ExecutorBlueprint = _get_dummy_blueprint_for(environment)
         return ([ResourceInstallSpec(rt, version, dummyblueprint) for rt in resource_types], {})
 
 
@@ -1036,3 +1056,34 @@ def assert_resource_persistent_state(
         f"{resource_persistent_state.resource_id}"
         f" ({resource_persistent_state.get_compliance_status()} != {expected_compliance})"
     )
+
+
+async def run_compile_and_wait_until_compile_is_done(
+    compiler_service: CompilerService,
+    compiler_queue: queue.Queue["CompileRunnerMock"],
+    env_id: uuid.UUID,
+    fail: Optional[bool] = None,
+    fail_on_pull=False,
+) -> "CompileRunnerMock":
+    """
+    Unblock the first compile in the compiler queue and wait until the compile finishes.
+    """
+    # prevent race conditions where compile request is not yet in queue
+    await retry_limited(lambda: not compiler_queue.empty(), timeout=10)
+    run = compiler_queue.get(block=True)
+    if fail is not None:
+        run._make_compile_fail = fail
+    run._make_pull_fail = fail_on_pull
+
+    current_task = compiler_service._env_to_compile_task[env_id]
+    run.block = False
+
+    def _is_compile_finished() -> bool:
+        if env_id not in compiler_service._env_to_compile_task:
+            return True
+        if current_task is not compiler_service._env_to_compile_task[env_id]:
+            return True
+        return False
+
+    await retry_limited(_is_compile_finished, timeout=10)
+    return run

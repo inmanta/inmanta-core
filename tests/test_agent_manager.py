@@ -1,19 +1,19 @@
 """
-    Copyright 2016 Inmanta
+Copyright 2016 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -744,7 +744,8 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     assert len(session_manager._sessions) == 0
 
     # Remove connectivity to the database
-    await data.disconnect()
+    await data.disconnect_pool()
+
     caplog.clear()
 
     a = NullAgent(environment=environment)
@@ -752,7 +753,7 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     await a.start()
     async_finalizer(a.stop)
 
-    # Verify that session creation fails and server state is stays consistent
+    # Verify that session creation fails and server state stays consistent
     await retry_limited(lambda: "Heartbeat failed" in caplog.text, 10)
     assert len(agentmanager.sessions) == 0
     assert len(agentmanager.tid_endpoint_to_session) == 0

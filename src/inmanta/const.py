@@ -1,22 +1,23 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import datetime
+import typing
 from collections import abc
 from enum import Enum
 from typing import Optional
@@ -76,6 +77,14 @@ class DeprecatedResourceState(str, Enum):
     processing_events = "processing_events"
 
 
+"""
+The following consts are considered to be part of the stable API.
+Modifying them may break some libraries:
+    - UNDEPLOYABLE_STATES
+    - TRANSIENT_STATES
+    - NOT_DONE_STATES
+    - DONE_STATES
+"""
 # undeployable
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
 UNDEPLOYABLE_NAMES = [s.name for s in UNDEPLOYABLE_STATES]
@@ -385,11 +394,13 @@ DEFAULT_INMANTA_DISK_LAYOUT_VERSION = 2
 # ID to represent the new scheduler as an agent
 AGENT_SCHEDULER_ID = "$__scheduler"
 
-
 # resource attributes for event propagation
-RESOURCE_ATTRIBUTE_SEND_EVENTS = "send_event"
-RESOURCE_ATTRIBUTE_RECEIVE_EVENTS = "receive_events"
+RESOURCE_ATTRIBUTE_SEND_EVENTS: typing.Final[str] = "send_event"
+RESOURCE_ATTRIBUTE_RECEIVE_EVENTS: typing.Final[str] = "receive_events"
 
+# resource attributes for references
+RESOURCE_ATTRIBUTE_REFERENCES: typing.Final[str] = "references"
+RESOURCE_ATTRIBUTE_MUTATORS: typing.Final[str] = "mutators"
 
 # Per component log variables
 LOG_CONTEXT_VAR_ENVIRONMENT = "environment"

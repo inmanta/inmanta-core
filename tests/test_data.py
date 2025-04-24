@@ -1,19 +1,19 @@
 """
-    Copyright 2018 Inmanta
+Copyright 2018 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
@@ -28,8 +28,7 @@ from typing import Optional, cast
 
 import asyncpg
 import pytest
-from asyncpg import Connection, ForeignKeyViolationError
-from asyncpg.pool import Pool
+from asyncpg import Connection, ForeignKeyViolationError, Pool
 
 import utils
 from inmanta import const, data, util
@@ -40,14 +39,14 @@ from inmanta.resources import Id
 from inmanta.types import ResourceVersionIdStr
 
 
-async def test_connect_too_small_connection_pool(postgres_db, database_name: str, create_db_schema: bool = False):
-    pool: Pool = await data.connect(
+async def test_connect_too_small_connection_pool(postgres_db, database_name: str):
+    pool: Pool = await data.connect_pool(
         postgres_db.host,
         postgres_db.port,
         database_name,
         postgres_db.user,
         postgres_db.password,
-        create_db_schema,
+        create_db_schema=False,
         connection_pool_min_size=1,
         connection_pool_max_size=1,
         connection_timeout=120,
@@ -59,11 +58,11 @@ async def test_connect_too_small_connection_pool(postgres_db, database_name: str
             await pool.acquire(timeout=1.0)
     finally:
         await connection.close()
-        await data.disconnect()
+        await data.disconnect_pool()
 
 
 async def test_connect_default_parameters(postgres_db, database_name: str, create_db_schema: bool = False):
-    pool: Pool = await data.connect(
+    pool: Pool = await data.connect_pool(
         postgres_db.host, postgres_db.port, database_name, postgres_db.user, postgres_db.password, create_db_schema
     )
     assert pool is not None
@@ -71,13 +70,13 @@ async def test_connect_default_parameters(postgres_db, database_name: str, creat
         async with pool.acquire() as connection:
             assert connection is not None
     finally:
-        await data.disconnect()
+        await data.disconnect_pool()
 
 
 @pytest.mark.parametrize("min_size, max_size", [(-1, 1), (2, 1), (-2, -2)])
 async def test_connect_invalid_parameters(postgres_db, min_size, max_size, database_name: str, create_db_schema: bool = False):
     with pytest.raises(ValueError):
-        await data.connect(
+        await data.connect_pool(
             postgres_db.host,
             postgres_db.port,
             database_name,
@@ -90,9 +89,12 @@ async def test_connect_invalid_parameters(postgres_db, min_size, max_size, datab
 
 
 async def test_connection_failure(unused_tcp_port_factory, database_name, clean_reset):
+    """
+    Basic connectivity test: using an incorrect port raises an error
+    """
     port = unused_tcp_port_factory()
     with pytest.raises(OSError):
-        await data.connect("localhost", port, database_name, "testuser", None)
+        await data.connect_pool("localhost", port, database_name, "testuser", None)
 
 
 async def test_postgres_client(postgresql_client):
@@ -1000,7 +1002,7 @@ async def test_model_get_version_nr_latest_version(init_dataclasses_and_load_sch
     assert await data.ConfigurationModel.get_version_nr_latest_version(uuid.uuid4()) is None
 
 
-async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_client):
+async def test_get_latest_resource(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -1530,131 +1532,6 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
     await assert_expected_count(
         {"std::testing::NullResource": 1, "std::Dummy": 1}
     )  # 1 NullResource resource and 1 Dummy resource in model v2
-
-
-async def test_resources_report(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    # model 1
-    version = 1
-    cm1 = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        released=True,
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm1.insert()
-
-    res11 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
-        status=const.ResourceState.deployed,
-        attributes={"name": "file1"},
-    )
-    await res11.insert()
-
-    res12 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file2],v=%s" % version,
-        status=const.ResourceState.deployed,
-        attributes={"name": "file2"},
-    )
-    await res12.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
-    await res11.update_persistent_state(last_deployed_version=version, last_deploy=datetime.datetime(2018, 7, 14, 12, 30))
-    await res12.update_persistent_state(
-        last_deployed_version=version,
-        last_deploy=datetime.datetime(2018, 7, 14, 12, 30),
-    )
-
-    # model 2
-    version += 1
-    cm2 = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        released=False,
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm2.insert()
-    res21 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
-        status=const.ResourceState.available,
-        attributes={"name": "file1"},
-    )
-    await res21.insert()
-
-    res22 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file3],v=%s" % version,
-        status=const.ResourceState.available,
-        attributes={"name": "file3"},
-    )
-    await res22.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
-
-    # model 3
-    version += 1
-    cm3 = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        released=True,
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm3.insert()
-
-    res31 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file2],v=%s" % version,
-        status=const.ResourceState.deployed,
-        attributes={"name": "file2"},
-    )
-    await res31.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
-    await res31.update_persistent_state(last_deployed_version=version, last_deploy=datetime.datetime(2018, 7, 14, 14, 30))
-
-    report = await data.Resource.get_resources_report(env.id)
-    assert len(report) == 3
-    report_as_map = {x["resource_id"]: x for x in report}
-    for i in range(1, 4):
-        assert f"std::testing::NullResource[agent1,name=file{i}]" in report_as_map
-
-    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["resource_type"] == "std::testing::NullResource"
-    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["deployed_version"] == 1
-    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["latest_version"] == 2
-    assert (
-        report_as_map["std::testing::NullResource[agent1,name=file1]"]["last_deploy"]
-        == datetime.datetime(2018, 7, 14, 12, 30).astimezone()
-    )
-    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["agent"] == "agent1"
-
-    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["resource_type"] == "std::testing::NullResource"
-    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["deployed_version"] == 3
-    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["latest_version"] == 3
-    assert (
-        report_as_map["std::testing::NullResource[agent1,name=file2]"]["last_deploy"]
-        == datetime.datetime(2018, 7, 14, 14, 30).astimezone()
-    )
-    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["agent"] == "agent1"
-
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["resource_type"] == "std::testing::NullResource"
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["deployed_version"] is None
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["latest_version"] == 2
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["last_deploy"] is None
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["agent"] == "agent1"
 
 
 async def test_resource_action(init_dataclasses_and_load_schema):
@@ -2257,7 +2134,8 @@ async def test_compile_get_report(init_dataclasses_and_load_schema):
     await report12.insert()
 
     # Compile 2
-    compile2 = data.Compile(environment=env.id)
+    links = {"self": ["link-1"], "instances": ["link-2", "link-3"]}
+    compile2 = data.Compile(environment=env.id, links=links)
     await compile2.insert()
     report21 = data.Report(
         started=datetime.datetime.now(), completed=datetime.datetime.now(), command="cmd", name="test", compile=compile2.id
@@ -2277,6 +2155,8 @@ async def test_compile_get_report(init_dataclasses_and_load_schema):
     report_of_compile = await data.Compile.get_report(compile2.id)
     reports = report_of_compile["reports"]
     assert len(reports) == 1
+    # Assert that links are passed to the CompileReport
+    assert report_of_compile["links"] == links
 
 
 async def test_match_tables_in_db_against_table_definitions_in_orm(
@@ -2393,7 +2273,7 @@ async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2
         assert remaining_resource_action.started == timestamp_six_days_ago
 
 
-async def test_insert_many(init_dataclasses_and_load_schema, postgresql_client):
+async def test_insert_many(init_dataclasses_and_load_schema):
     project1 = data.Project(name="proj1")
     project2 = data.Project(name="proj2")
     projects = [project1, project2]

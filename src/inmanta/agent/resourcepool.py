@@ -1,49 +1,49 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 
-    This file contains the caching mechanism for the forking executor
+This file contains the caching mechanism for the forking executor
 
-    The complexity is that:
-    1. we need to cache processes on blueprint id
-    2. we need to cache executors (running on processes) on executor id
-    3. invalidate both caches if a process dies
-    4. invalidate executors based on idle time
-    5. invalidate executors based on nr per agent
-    6. closed processes if they are no longer in use
-    7. never invalidate executors that have work in flight
+The complexity is that:
+1. we need to cache processes on blueprint id
+2. we need to cache executors (running on processes) on executor id
+3. invalidate both caches if a process dies
+4. invalidate executors based on idle time
+5. invalidate executors based on nr per agent
+6. closed processes if they are no longer in use
+7. never invalidate executors that have work in flight
 
-    The solution is a combination of pool manager/pool members that can:
-    1. can perform invalidation according to various stategies
-    2. has fairly accurate membership tracking (for requirements 4  and 5) through events/listeners
-        (cache responds correctly to crashes)
-    3. members can be contained in multiple cache
+The solution is a combination of pool manager/pool members that can:
+1. can perform invalidation according to various stategies
+2. has fairly accurate membership tracking (for requirements 4  and 5) through events/listeners
+    (cache responds correctly to crashes)
+3. members can be contained in multiple cache
 
-    To make this work, we propagate the 'closed' event, that indicates when a pool member has terminated.
-    We use it for cache eviction and failure propagation.
+To make this work, we propagate the 'closed' event, that indicates when a pool member has terminated.
+We use it for cache eviction and failure propagation.
 
-    The `closing` status is tracked on each member and checked when taking an item out of the cache.
-    As such, the cache can contain closing items. These are replaced when being checked out.
-    We don't propagate this as an event, as they will eventually get a closed event.
+The `closing` status is tracked on each member and checked when taking an item out of the cache.
+As such, the cache can contain closing items. These are replaced when being checked out.
+We don't propagate this as an event, as they will eventually get a closed event.
 
-    The intended usage is that:
-    1. A single Pool Manager manages a pool of processes (no eviction policy)
-    2. each process is a pool manager for a set of executors (evict self when pool is empty, on receival of closed event)
-    3. an overarching pool manager also caches executors on top of the other two (i.e. it never creates new things),
-        it evicts based on time and executors per agent
+The intended usage is that:
+1. A single Pool Manager manages a pool of processes (no eviction policy)
+2. each process is a pool manager for a set of executors (evict self when pool is empty, on receival of closed event)
+3. an overarching pool manager also caches executors on top of the other two (i.e. it never creates new things),
+    it evicts based on time and executors per agent
 """
 
 import abc
@@ -191,7 +191,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
         return "PoolMember"
 
     def member_name(self, member: TPoolMember) -> str:
-        """Method to improve logging output by naming the members, best kept consitent with render_id"""
+        """Method to improve logging output by naming the members, best kept consistent with render_id"""
         return self.render_id(member.get_id())
 
     def get_lock_name_for(self, member_id: TIntPoolID) -> str:
@@ -271,6 +271,7 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
 
         my_executor = await self.create_member(member_id)
         assert my_executor.id == internal_id
+
         self.pool[internal_id] = my_executor
         my_executor.termination_listeners.append(self.notify_member_shutdown)
 
@@ -382,7 +383,7 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
                         # Check that the executor can still be cleaned up by the time we have acquired the lock
                         if pool_member.can_be_cleaned_up() and pool_member.last_used < oldest_time and pool_member.running:
                             LOGGER.debug(
-                                "%s will be shutdown becuase is inactive for %.2f, which is more than %d",
+                                "%s will be shutdown because it was inactive for %.2f, which is more than %d",
                                 self.member_name(pool_member),
                                 (cleanup_start - pool_member.last_used).total_seconds(),
                                 self.retention_time,

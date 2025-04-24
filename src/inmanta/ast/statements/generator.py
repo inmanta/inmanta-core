@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 # pylint: disable-msg=W0613,R0201
@@ -24,7 +24,7 @@ import uuid
 from collections import abc
 from collections.abc import Iterator
 from itertools import chain
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import inmanta.ast.entity
 import inmanta.ast.type as inmanta_type
@@ -73,13 +73,7 @@ from inmanta.execute.runtime import (
     VariableResolver,
     WrappedValueVariable,
 )
-from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Entity, Implement  # noqa: F401
@@ -151,15 +145,13 @@ class SubConstructor(RequiresEmitStatement):
         if not condition:
             return None
 
-        myqueue = queue.for_tracker(ImplementsTracker(self, instance))
-
         implementations = self.implements.implementations
 
         for impl in implementations:
             if instance.add_implementation(impl):
                 # generate a subscope/namespace for each loop
                 xc = ExecutionContext(impl.statements, instance.for_namespace(impl.statements.namespace))
-                xc.emit(myqueue)
+                xc.emit(queue)
 
         return None
 
@@ -877,7 +869,10 @@ class Constructor(ExpressionStatement):
             attr = self.type.get_attribute(k)
             if attr is None:
                 raise TypingException(self.__attribute_locations[k], f"no attribute {k} on type {self.type.get_full_name()}")
-            type_hint = attr.get_type().get_base_type()
+            # Whether we use type or type_internal doesn't matter here,
+            # because this argument will only ever be used on entity types
+            # which can't be references
+            type_hint = attr.type_internal.get_base_type()
             # don't notify the rhs for index attributes because it won't be able to resolve the reference
             # (index attributes need to be resolved before the instance can be constructed)
             v.normalize(
@@ -960,7 +955,7 @@ class Constructor(ExpressionStatement):
                 )
             elif local_type is not None:
                 # always prefer local type, raise an exception if it is of an incorrect type
-                if not type_hint.is_subclass(local_type, strict=False):
+                if not local_type.is_subclass(type_hint, strict=False):
                     raise TypingException(
                         self,
                         f"Can not assign a value of type {str(local_type)} "
@@ -1182,8 +1177,6 @@ class Constructor(ExpressionStatement):
         # generate an implementation
         for stmt in type_class.get_sub_constructor():
             stmt.emit(object_instance, queue)
-
-        object_instance.trackers.append(queue.get_tracker())
 
         return object_instance
 

@@ -1,19 +1,19 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import logging
@@ -24,6 +24,7 @@ import subprocess
 from collections.abc import Iterator
 from datetime import datetime
 from importlib.abc import Loader
+from importlib.metadata import distribution
 from itertools import chain
 from typing import Optional
 
@@ -60,10 +61,10 @@ def run_module_install(module_path: str, editable: bool = False) -> None:
             config=PipConfig(use_system_config=True),
         )
     else:
-        mod_artifact_path = ModuleTool().build(path=module_path)
+        mod_artifact_paths = ModuleTool().build(path=module_path, wheel=True)
         env.process_env.install_for_config(
             requirements=[],
-            paths=[env.LocalPackagePath(path=mod_artifact_path)],
+            paths=[env.LocalPackagePath(path=mod_artifact_paths[0])],
             config=PipConfig(use_system_config=True),
         )
 
@@ -100,7 +101,7 @@ def test_bad_setup(git_modules_dir, modules_repo):
         ModuleTool().execute("verify", [])
 
 
-def test_complex_checkout(git_modules_dir, modules_repo):
+def test_complex_checkout(git_modules_dir, modules_repo, tmpvenv_active):
     coroot = os.path.join(git_modules_dir, "testproject")
     subprocess.check_output(
         ["git", "clone", os.path.join(git_modules_dir, "repos", "testproject")], cwd=git_modules_dir, stderr=subprocess.STDOUT
@@ -124,7 +125,7 @@ def test_complex_checkout(git_modules_dir, modules_repo):
     ModuleTool().execute("push", [])
 
 
-def test_for_git_failures(git_modules_dir, modules_repo):
+def test_for_git_failures(git_modules_dir, modules_repo, tmpvenv_active):
     coroot = os.path.join(git_modules_dir, "testproject2")
     subprocess.check_output(
         ["git", "clone", os.path.join(git_modules_dir, "repos", "testproject"), "testproject2"],
@@ -531,7 +532,7 @@ def test_project_install(
         assert env_module_file == os.path.join(env.process_env.site_packages_dir, *fq_mod_name.split("."), "__init__.py")
     v1_mod_dir: str = os.path.join(project.path, project.downloadpath)
     assert os.path.exists(v1_mod_dir)
-    assert os.listdir(v1_mod_dir) == ["std"]
+    assert os.listdir(v1_mod_dir) == []
 
     # ensure we can compile
     compiler.do_compile()
@@ -714,6 +715,7 @@ def test_project_install_incompatible_versions(
     modules_dir: str,
     modules_v2_dir: str,
     autostd: bool,
+    tmpvenv_active,
 ) -> None:
     """
     Verify that introducing module version incompatibilities results in the appropriate exception and warnings.
@@ -1142,7 +1144,6 @@ import custom_mod_two
         """.strip(),
         python_package_sources=[local_module_package_index],
         project_requires=[
-            module.InmantaModuleRequirement.parse("std~=4.3.3,<4.3.4"),
             module.InmantaModuleRequirement.parse("custom_mod_one>0"),
         ],
         python_requires=[
@@ -1154,17 +1155,18 @@ import custom_mod_two
 
     capsys.readouterr()
     ModuleTool().list()
+    std_version = distribution("inmanta_module_std").version
     out, err = capsys.readouterr()
     assert (
         out.strip()
-        == """
+        == f"""
 +----------------+------+----------+----------------+----------------+---------+
 |      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
 |                |      |          |    version     |    project     |         |
 +================+======+==========+================+================+=========+
 | custom_mod_one | v2   | no       | 1.0.0          | >0,<999,~=1.0  | yes     |
 | custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
-| std            | v1   | yes      | 4.3.3          | 4.3.3          | yes     |
+| std            | v2   | no       | {std_version:<7}        | *              | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
     )
@@ -1183,14 +1185,14 @@ import custom_mod_two
     out, err = capsys.readouterr()
     assert (
         out.strip()
-        == """
+        == f"""
 +----------------+------+----------+----------------+----------------+---------+
 |      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
 |                |      |          |    version     |    project     |         |
 +================+======+==========+================+================+=========+
 | custom_mod_one | v2   | no       | 2.0.0          | >0,<999,~=1.0  | no      |
 | custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
-| std            | v1   | yes      | 4.3.3          | 4.3.3          | yes     |
+| std            | v2   | no       | {std_version:<7}        | *              | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
     )
@@ -1223,58 +1225,6 @@ The release type of the project is set to 'master'. Set it to a value that is ap
     """.strip() in str(
         excinfo.value
     )
-
-
-@pytest.mark.slowtest
-def test_module_install_logging(local_module_package_index: str, snippetcompiler_clean, caplog) -> None:
-    """
-    Make sure the module's informations are displayed when it is being installed for both v1 and v2 modules.
-    The check for v1 module is performed on the std module as it gets downloaded and installed, unlike other
-    v1 modules in tests/data/modules which are already on disk.
-    """
-
-    caplog.set_level(logging.DEBUG)
-
-    v2_module = "minimalv2module"
-
-    v2_requirements = [inmanta.util.parse_requirement(requirement=module.ModuleV2Source.get_package_name_for(v2_module))]
-
-    # set up project and modules
-    project: module.Project = snippetcompiler_clean.setup_for_snippet(
-        "\n".join(f"import {mod}" for mod in ["std", v2_module]),
-        autostd=False,
-        index_url=local_module_package_index,
-        python_requires=v2_requirements,
-        install_project=False,
-        project_requires=[
-            module.InmantaModuleRequirement.parse("std==4.2.1"),
-        ],
-    )
-
-    os.chdir(project.path)
-
-    # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
-    module.Project.get().autostd = False
-    ProjectTool().execute("install", [])
-
-    expected_logs = [
-        ("Installing module minimalv2module (v2)", logging.DEBUG),
-        ("Successfully installed module minimalv2module (v2) version 1.2.3", logging.DEBUG),
-        ("Installing module std (v1)", logging.DEBUG),
-        (
-            """Successfully installed module std (v1) version 4.2.1 in %s from %s"""
-            % (os.path.join(project.downloadpath, "std"), "https://github.com/inmanta/std"),
-            logging.DEBUG,
-        ),
-    ]
-
-    for message, level in expected_logs:
-        log_contains(
-            caplog,
-            "inmanta.module",
-            level,
-            message,
-        )
 
 
 @pytest.mark.slowtest
@@ -1363,34 +1313,6 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
         log_contains(
             caplog,
             "inmanta.pip",
-            level,
-            message,
-        )
-
-
-@pytest.mark.slowtest
-def test_git_clone_output(snippetcompiler_clean, caplog, modules_v2_dir):
-    """
-    This test checks that git clone output is correctly logged on module install.
-    """
-    caplog.set_level(logging.DEBUG)
-
-    project = snippetcompiler_clean.setup_for_snippet(
-        """
-        import std
-        """,
-        autostd=False,
-        install_project=True,
-    )
-
-    expected_logs = [
-        ("Cloning into '%s'..." % os.path.join(project.downloadpath, "std"), logging.DEBUG),
-    ]
-
-    for message, level in expected_logs:
-        log_contains(
-            caplog,
-            "inmanta.module",
             level,
             message,
         )
@@ -1685,30 +1607,3 @@ def test_constraints_logging_v2(modules_v2_dir, tmpdir, caplog, snippetcompiler_
             logging.DEBUG,
             log_message,
         )
-
-
-@pytest.mark.slowtest
-def test_constraints_logging_v1(caplog, snippetcompiler_clean, local_module_package_index):
-    caplog.set_level(logging.DEBUG)
-
-    snippetcompiler_clean.setup_for_snippet(
-        """
-        import std
-        """,
-        autostd=False,
-        install_project=True,
-        project_requires=[
-            module.InmantaModuleRequirement.parse("std>0.0"),
-            module.InmantaModuleRequirement.parse("std>=0.0"),
-            module.InmantaModuleRequirement.parse("std==4.2.1"),
-            module.InmantaModuleRequirement.parse("std<=100.0.0"),
-            module.InmantaModuleRequirement.parse("std<100.0.0"),
-        ],
-        index_url=local_module_package_index,
-    )
-    log_contains(
-        caplog,
-        "inmanta.module",
-        logging.DEBUG,
-        "Installing module std (v1) (with constraints std>0.0 std>=0.0 std==4.2.1 std<=100.0.0 std<100.0.0)",
-    )

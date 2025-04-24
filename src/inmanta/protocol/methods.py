@@ -1,21 +1,21 @@
 """
-    Copyright 2019 Inmanta
+Copyright 2019 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 
-    Module defining the v1 rest api
+Module defining the v1 rest api
 """
 
 import datetime
@@ -164,24 +164,6 @@ def delete_environment(id: uuid.UUID):
 def list_environments():
     """
     Returns a list of environments. The results are sorted by (project id, environment name, environment id).
-    """
-
-
-@method(
-    path="/environment/<id>",
-    operation="GET",
-    client_types=[const.ClientType.api],
-    arg_options={"id": ArgOption(getter=add_env)},
-)
-def get_environment(id: uuid.UUID, versions: Optional[int] = None, resources: Optional[int] = None):
-    """
-    Get an environment and all versions associated.
-
-    :param id: The id of the environment to return.
-    :param versions: Optional. If provided and greater than 0, include this many of the most recent versions for this
-                     environment, ordered in descending order of their version number.
-                     If not provided or 0, no version information is included.
-    :param resources: Optional. If provided and greater than 0, include a summary of the resources in the environment.
     """
 
 
@@ -878,6 +860,9 @@ def get_reports(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] 
     """
     Return compile reports newer then start
 
+    The returned compile report objects may carry links to other objects, e.g. a service instance.
+    The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
+
     :param tid: The id of the environment to get a report from
     :param start: Optional. Reports after start
     :param end: Optional. Reports before end
@@ -890,6 +875,9 @@ def get_reports(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] 
 def get_report(id: uuid.UUID):
     """
     Get a compile report from the server
+
+    The returned compile report object may carry links to other objects, e.g. a service instance.
+    The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
 
     :param id: The id of the compile and its reports to fetch.
     """
@@ -1059,6 +1047,9 @@ def get_server_status() -> model.StatusResponse:
 def get_compile_queue(tid: uuid.UUID) -> list[model.CompileRun]:
     """
     Get the current compiler queue on the server, ordered by increasing `requested` timestamp.
+
+    The returned compile run object may carry links to other objects, e.g. a service instance. The full list of supported links
+    can be found :ref:`here <api_self_referencing_links>`.
 
     :param tid: The id of the environment for which to retrieve the compile queue.
 

@@ -923,3 +923,46 @@ Plug-ins
 For more complex operations, python plugins can be used. Plugins are exposed in the Inmanta language as function calls, such as the template function call. A template
 accepts parameters and returns a value that it computed out of the variables. Each module that is included can also provide plug-ins. These plug-ins are accessible within the namespace of the
 module. The :ref:`module-plugins` section of the module guide provides more details about how to write a plugin.
+
+
+.. _language_unknowns:
+Unknowns
+========
+
+Wherever the configuration model interacts with the outside world (e.g. to fetch external values) :term:`unknown` values
+may be present. These unknowns represent values we don't know yet, such as the IP address of a machine that hasn't been created yet. Because the compiler can handle unknowns, developers can write models as if all information is present up front, even when this is not the case. These unknowns are propagated through the model to finally end up in the resources that require these unknowns. When exported, these resources are marked as undefined until their values become known.
+values. This section describes how unknown values flow through the model, and perhaps equally importantly, where they do not
+flow at all.
+
+.. note::
+    Unknowns are a subtle concept. Luckily, for the majority of model development you don't really need to take them into
+    account. However, for some advanced scenarios it may be important to know how and where they may occur.
+
+For the most part, unknowns are simply propagated along the data flow: they're treated like any other value, except
+when anything needs to be derived from them, the result simply becomes an unknown as well. More specifically: statements like
+assignment statements, constructors
+and lists simply include the unknown in their result like they would any other value. Any expression that can not produce
+a definite result without knowing the value, will return another unknown. And finally, statements that expand the model
+with new blocks based on some value, like the if statement and the for loop, simply do not expand the model with their
+respective blocks for unknowns.
+
+The model below presents some examples of how an unknown propagates.
+
+.. literalinclude:: language/unknowns_simple.cf
+    :language: inmanta
+    :caption: my_project/main.cf
+    :linenos:
+
+
+Now that we've covered how unknowns flow through the model, we can discuss what an unknown value actually means. In most cases
+it simply represents an unknown value. But because of the propagation semantics outlined above, if it happens to occur in a
+list, it may in fact represent any number of values: not only the value is unknown, also its size.
+
+For example, consider a list comprehension that filters a list on some condition. If the list contains an unknown, the compiler
+can not know if the filter applies so it will propagate the unknown to the result. When the unknown eventually becomes known,
+it might remain in the result, or it might be filtered out, depending on whether it matches the condition.
+
+.. literalinclude:: language/unknowns_multi.cf
+    :language: inmanta
+    :caption: my_project/main.cf
+    :linenos:

@@ -1,25 +1,26 @@
 """
-    Copyright 2024 Inmanta
+Copyright 2024 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import asyncio
 import base64
 import logging
 import sys
+import uuid
 
 import psutil
 import pytest
@@ -98,7 +99,7 @@ def set_custom_executor_policy(server_config):
     inmanta.agent.config.agent_executor_retention_time.set(str(old_retention_value))
 
 
-async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client, caplog):
+async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client, environment, caplog):
     """
     Test the MPManager, this includes
 
@@ -124,7 +125,11 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
 
     # Simple empty venv
     simplest_blueprint = executor.ExecutorBlueprint(
-        pip_config=inmanta.data.PipConfig(), requirements=[], sources=[], python_version=sys.version_info[:2]
+        environment_id=uuid.UUID(environment),
+        pip_config=inmanta.data.PipConfig(),
+        requirements=[],
+        sources=[],
+        python_version=sys.version_info[:2],
     )  # No pip
     simplest = await manager.get_executor("agent1", "test", [executor.ResourceInstallSpec("test::Test", 5, simplest_blueprint)])
 
@@ -163,6 +168,7 @@ def test():
     # Create this one first to make sure this is the one being stopped
     # when the cap is reached
     dummy = executor.ExecutorBlueprint(
+        environment_id=uuid.UUID(environment),
         pip_config=inmanta.data.PipConfig(use_system_config=True),
         requirements=["lorem"],
         sources=[direct],
@@ -170,6 +176,7 @@ def test():
     )
     # Full config: 2 source files, one python dependency
     full = executor.ExecutorBlueprint(
+        environment_id=uuid.UUID(environment),
         pip_config=inmanta.data.PipConfig(use_system_config=True),
         requirements=["lorem"],
         sources=[direct, via_server],
@@ -193,6 +200,7 @@ def test():
     # Request a third executor:
     # The executor cap is reached -> check that the oldest executor got correctly stopped
     dummy = executor.ExecutorBlueprint(
+        environment_id=uuid.UUID(environment),
         pip_config=inmanta.data.PipConfig(use_system_config=True),
         requirements=["lorem"],
         sources=[via_server],
@@ -249,7 +257,7 @@ def test():
             caplog,
             "inmanta.agent.resourcepool",
             logging.DEBUG,
-            ("Executor for agent2 will be shutdown becuase is inactive for "),
+            ("executor for agent2 will be shutdown because it was inactive for "),
         )
 
     # We can get `Caught subprocess termination from unknown pid: %d -> %d`
@@ -262,6 +270,7 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
     manager = mpmanager
 
     blueprint = executor.ExecutorBlueprint(
+        environment_id=uuid.uuid4(),
         pip_config=inmanta.data.PipConfig(use_system_config=True),
         requirements=[],
         sources=[],
@@ -293,12 +302,18 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
 
 
 def test_hash_with_duplicates():
+    env_id = uuid.uuid4()
     source = inmanta.loader.ModuleSource("test", "aaaaa", False, None, None)
     requirement = "setuptools"
     simple = ExecutorBlueprint(
-        pip_config=PipConfig(), requirements=[requirement], sources=[source], python_version=sys.version_info[:2]
+        environment_id=env_id,
+        pip_config=PipConfig(),
+        requirements=[requirement],
+        sources=[source],
+        python_version=sys.version_info[:2],
     )
     duplicated = ExecutorBlueprint(
+        environment_id=env_id,
         pip_config=PipConfig(),
         requirements=[requirement, requirement],
         sources=[source, source],

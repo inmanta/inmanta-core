@@ -1,23 +1,24 @@
 """
-    Copyright 2017 Inmanta
+Copyright 2017 Inmanta
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-    Contact: code@inmanta.com
+Contact: code@inmanta.com
 """
 
 import argparse
 import base64
+import itertools
 import logging
 import time
 import uuid
@@ -26,7 +27,7 @@ from typing import Any, Callable, Optional, Union
 
 import pydantic
 
-from inmanta import const, loader, protocol
+from inmanta import const, loader, protocol, references
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
@@ -36,7 +37,6 @@ from inmanta.data.model import PipConfig
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import Instance
 from inmanta.module import Project
-from inmanta.protocol import Result
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
 from inmanta.types import ResourceVersionIdStr
@@ -437,6 +437,7 @@ class Exporter:
         if self.options and self.options.json:
             with open(self.options.json, "wb+") as fd:
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
+
         elif (not self.failed or len(self._resources) > 0) and not no_commit:
             self._version = self.commit_resources(
                 self._version,
@@ -508,12 +509,23 @@ class Exporter:
         code_manager = loader.CodeManager()
         LOGGER.info("Sending resources and handler source to server")
 
+        types = set()
+
         # Load both resource definition and handlers
         for type_name, resource_definition in resource.get_resources():
             code_manager.register_code(type_name, resource_definition)
+            types.add(type_name)
 
         for type_name, handler_definition in Commander.get_providers():
             code_manager.register_code(type_name, handler_definition)
+            types.add(type_name)
+
+        # Register all reference and mutator code to all resources. This is very coarse grained and can be optimized once
+        # usage patterns have been established.
+        for resource_type in types:
+            for type_name, obj in itertools.chain(references.reference.get_references(), references.mutator.get_mutators()):
+                if not type_name.startswith("core::"):
+                    code_manager.register_code(resource_type, obj)
 
         LOGGER.info("Uploading source files")
 
@@ -584,7 +596,7 @@ class Exporter:
                 else:
                     LOGGER.debug("  %s not in any resource set", rid)
 
-        def do_put(**kwargs: object) -> Result:
+        def do_put(**kwargs: object) -> protocol.Result:
             if partial_compile:
                 result = conn.put_partial(
                     tid=tid,
