@@ -440,6 +440,7 @@ async def test_logging_on_code_loading_error(server, client, environment, client
         },
     ]
     content = "import non-existent"
+    # content = ""
     sha1sum = hashlib.new("sha1")
     sha1sum.update(content.encode())
     hv: str = sha1sum.hexdigest()

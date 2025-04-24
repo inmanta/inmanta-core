@@ -5136,7 +5136,8 @@ class Resource(BaseDocument):
                     continue
                 resource: dict[str, object] = dict(raw_resource)
                 if "attributes" in resource:
-                    resource["attributes"] = json.loads(resource["attributes"])
+                    if isinstance(resource["attributes"], str):
+                        resource["attributes"] = json.loads(resource["attributes"])
                 if projection is not None:
                     assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
