@@ -94,7 +94,8 @@ ci-test:
 all: pep8 mypy test
 ci-all: ci-pep8 ci-mypy ci-test
 
-venv-%: FORCE $(shell mktemp -d)/bin/python install %
+# The python path must be the first prerequisite, because it is referenced as $< in the recipe
+venv-%: $(shell mktemp -d)/bin/python install % FORCE
 	rm -rf $(<:/bin/python=)
 
 %/bin/python: %
