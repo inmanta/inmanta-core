@@ -62,7 +62,6 @@ ci-pep8:
 	$(PYTHON) -m flake8 --output-file flake8-report.txt --tee $(src_dirs)
 	$(PYTHON) -m junit_conversor flake8-report.txt junit-pep8.xml
 
-# TODO: mypy-baseline config file: sorting
 parser:=src/inmanta/parser/
 parsetab:=$(parser)/parsetab.py
 # load inmanta.app so that the parser is generated for a consistent mypy baseline
