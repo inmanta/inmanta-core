@@ -29,20 +29,21 @@ endif
 src_dirs := src tests $(shell test -d tests_common && echo tests_common || true)
 
 
-.PHONY: install ci-install ci-install-check
+.PHONY: install ci-install
 install:
 	$(pip_install_c) -U setuptools pip uv
 	$(pip_install_c) -U -e .[dev]
 
-ci-install-check:
+ci-install:
 ifeq ($(shell which uv),)
 	$(error uv is required for this target.)
 endif
 ifndef ISO_VERSION
 	$(error ISO_VERSION make variable needs to be set for this target. Run `make ISO_VERSION=<x> $@`.)
 endif
-
-ci-install: ci-install-check install
+	$(pip_install_c) -U setuptools pip uv
+# some tests are skipped for editable installs => no editable on ci
+	$(pip_install_c) -U .[dev]
 
 .PHONY: install-tests
 install-tests:
