@@ -90,6 +90,7 @@ setup(
             "inmanta-core[datatrace,debug,tracing]",
             # test dependencies
             "inmanta-dev-dependencies[pytest,async,core]",
+            "inmanta-module-std",
             "bumpversion",
             "flake8-black",
             "flake8-isort",
