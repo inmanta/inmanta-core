@@ -23,10 +23,9 @@ import pytest
 
 from inmanta import config, const
 from inmanta.protocol import common
-from inmanta.protocol.auth import auth, decorators
+from inmanta.protocol.auth import auth, decorators, policy_engine
 from inmanta.protocol.decorators import handle, typedmethod
 from inmanta.server import protocol
-from inmanta.server.services import policy_engine_service
 
 
 @pytest.fixture
@@ -60,8 +59,8 @@ async def server_with_test_slice(tmpdir, access_policy: str) -> protocol.Server:
     access_policy_file = os.path.join(tmpdir, "policy_engine", "policy.rego")
     with open(access_policy_file, "w") as fh:
         fh.write(access_policy)
-    policy_engine_service.policy_file.set(access_policy_file)
-    policy_engine_service.policy_engine_log_level.set("info")
+    policy_engine.policy_file.set(access_policy_file)
+    policy_engine.policy_engine_log_level.set("info")
 
     # Define the TestSlice and its API endpoints
     @decorators.auth(auth_label="test", read_only=True)
@@ -103,17 +102,14 @@ async def server_with_test_slice(tmpdir, access_policy: str) -> protocol.Server:
 
     # Start the server
     rs = protocol.Server()
-    policy_engine_slice = policy_engine_service.PolicyEngineSlice()
     test_slice = TestSlice(name="testslice")
-    for current_slice in [policy_engine_slice, test_slice]:
-        rs.add_slice(current_slice)
+    rs.add_slice(test_slice)
     await rs.start()
 
     yield rs
 
     # Stop the server
     await test_slice.stop()
-    await policy_engine_slice.stop()
     await rs.stop()
 
 
@@ -238,7 +234,7 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     # Monkeypatch the does_satisfy_access_policy() method of the PolicyEngineSlice so that we can
     # intercept the value of the input_data dictionary.
     input_policy_engine = None
-    _old_does_satisfy_access_policy = policy_engine_service.PolicyEngineSlice.does_satisfy_access_policy
+    _old_does_satisfy_access_policy = policy_engine.PolicyEngine.does_satisfy_access_policy
 
     async def save_input_data(self, input_data: dict[str, object]) -> bool:
         """
@@ -249,7 +245,7 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
         input_policy_engine = input_data
         return _old_does_satisfy_access_policy(self, input_data)
 
-    monkeypatch.setattr(policy_engine_service.PolicyEngineSlice, "does_satisfy_access_policy", save_input_data)
+    monkeypatch.setattr(policy_engine.PolicyEngine, "does_satisfy_access_policy", save_input_data)
 
     env_id = "11111111-1111-1111-1111-111111111111"
     client = get_client_with_role(env_to_role_dct={env_id: "read-write"}, is_admin=False)

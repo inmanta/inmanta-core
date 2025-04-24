@@ -34,15 +34,14 @@ import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta import const, tracing
 from inmanta.protocol import common, exceptions
+from inmanta.protocol.auth import policy_engine
 from inmanta.protocol.rest import RESTBase
-from inmanta.server import SLICE_POLICY_ENGINE
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
 from inmanta.types import ReturnTypes
 
 if TYPE_CHECKING:
     from inmanta.server import protocol
-    from inmanta.server.services.policy_engine_service import PolicyEngineSlice
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -256,6 +255,7 @@ class RESTServer(RESTBase):
         self.running = False
         self._http_server = None
         self._server = server
+        self._policy_engine: policy_engine.PolicyEngine | None = None
 
     def start_request(self) -> None:
         self.idle_event.clear()
@@ -290,6 +290,10 @@ class RESTServer(RESTBase):
         """
         Start the server on the current ioloop
         """
+        if self.is_auth_enabled():
+            self._policy_engine = policy_engine.PolicyEngine()
+            await self._policy_engine.start()
+
         global_url_map: dict[str, dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
 
         rules: list[routing.Rule] = []
@@ -336,8 +340,9 @@ class RESTServer(RESTBase):
         await self.idle_event.wait()
         if self._http_server is not None:
             await self._http_server.close_all_connections()
+        if self._policy_engine:
+            await self._policy_engine.stop()
+            self._policy_engine = None
 
-    async def get_policy_engine_slice(self) -> Optional["PolicyEngineSlice"]:
-        if not server_config.enforce_access_policy.get():
-            return None
-        return self._server.get_slice(name=SLICE_POLICY_ENGINE)
+    async def get_policy_engine(self) -> policy_engine.PolicyEngine | None:
+        return self._policy_engine

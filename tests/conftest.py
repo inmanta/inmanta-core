@@ -36,9 +36,10 @@ from inmanta.config import log_dir
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol.auth import auth
+from inmanta.protocol.auth.policy_engine import policy_file
 from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
-from inmanta.server.services.policy_engine_service import LoopResolverWithUnixSocketSuppport, policy_file
+from inmanta.tornado import LoopResolverWithUnixSocketSuppport
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
 

@@ -21,19 +21,19 @@ import asyncio.subprocess
 import json
 import logging
 import os
-import socket
 import subprocess
 import time
 from importlib.resources import files
-from typing import Any, Mapping
+from typing import Mapping
 
-from tornado import httpclient, netutil
+from tornado import httpclient
 from tornado.httpclient import HTTPRequest
 
-from inmanta import config, const, server, util
+from inmanta import config, const
+from inmanta import tornado as inmanta_tornado
+from inmanta import util
 from inmanta.protocol import common
 from inmanta.server import config as server_config
-from inmanta.server import protocol
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,81 +59,9 @@ policy_engine_log_level = config.Option(
 )
 
 
-class LoopResolverWithUnixSocketSuppport(netutil.DefaultLoopResolver):
+class PolicyEngine:
     """
-    A custom Tornado resolver that allows the Tornado client to connect to a UNIX socket.
-    It extends the default Resolver (DefaultLoopResolver) in that it maps certain hostnames
-    to a unix socket on disk. All other hostnames will resolve using the logic from
-    DefaultLoopResolver.
-
-    Inspired by: https://github.com/tornadoweb/tornado/issues/2671#issuecomment-499190469
-    """
-
-    _unix_sockets: dict[str, str] = {}
-    """
-    :param unix_sockets: A dictionary mapping hostnames to a unix socket on disk.
-    """
-
-    @classmethod
-    def register_unix_socket(cls, hostname: str, path_unix_socket: str) -> None:
-        """
-        Make this Resolver resolve the given hostname to the given unix socket.
-        """
-        cls._unix_sockets[hostname] = path_unix_socket
-
-    @classmethod
-    def clear_unix_socket_registry(cls) -> None:
-        """
-        Clear all mappings from hostname to unix socket.
-        """
-        cls._unix_sockets.clear()
-
-    async def resolve(self, host: str, port: int, family: socket.AddressFamily = socket.AF_UNSPEC) -> list[tuple[int, Any]]:
-        if host in self._unix_sockets:
-            return [(socket.AF_UNIX, self._unix_sockets[host])]
-        return await super().resolve(host, port, family)
-
-
-# Configure Tornado with our custom Resolver.
-netutil.Resolver.configure(LoopResolverWithUnixSocketSuppport)
-
-
-class PolicyEngineSlice(protocol.ServerSlice):
-
-    def __init__(self) -> None:
-        super().__init__(server.SLICE_POLICY_ENGINE)
-        self._opa_server: OpaServer | None = None
-
-    async def start(self) -> None:
-        await super().start()
-        if server_config.enforce_access_policy.get():
-            LOGGER.info("Starting policy engine")
-            self._opa_server = OpaServer()
-            await self._opa_server.start()
-
-    async def stop(self) -> None:
-        await super().stop()
-        if self._opa_server:
-            await self._opa_server.stop()
-
-    def get_depended_by(self) -> list[str]:
-        return [server.SLICE_TRANSPORT]
-
-    async def does_satisfy_access_policy(self, input_data: Mapping[str, object]) -> bool:
-        """
-        Return True iff the policy evaluates to True.
-        """
-        if not server_config.enforce_access_policy.get():
-            return True
-        if not self._opa_server:
-            LOGGER.warning("Access policy evaluation was requested, but the policy server isn't running.")
-            return False
-        return await self._opa_server.does_satisfy_access_policy(input_data)
-
-
-class OpaServer:
-    """
-    A class representing an Open Policy Agent server.
+    A class representing an Open Policy Agent server that listens on a unix socket.
 
     The implementation of this class assumes only one instance of this class exists at any point in time.
     """
@@ -146,7 +74,7 @@ class OpaServer:
         self._socket_file = os.path.join(self._state_dir, "policy_engine.socket")
         # A virtual hostname that will be mapped to the unix socket by the custom tornado resolver.
         self._hostname = "policy_engine"
-        LoopResolverWithUnixSocketSuppport.register_unix_socket(self._hostname, self._socket_file)
+        inmanta_tornado.LoopResolverWithUnixSocketSuppport.register_unix_socket(self._hostname, self._socket_file)
         self._client = httpclient.AsyncHTTPClient()
 
     def _initialize_storage(self) -> str:
@@ -154,8 +82,11 @@ class OpaServer:
         Make sure the required directories exist in the state directory for the policy engine.
         """
         state_dir = config.state_dir.get()
+        os.makedirs(state_dir, exist_ok=True)
         policy_engine_state_dir = os.path.abspath(os.path.join(state_dir, "policy_engine"))
         os.makedirs(policy_engine_state_dir, exist_ok=True)
+        log_dir = config.log_dir.get()
+        os.makedirs(log_dir, exist_ok=True)
         return policy_engine_state_dir
 
     async def start(self) -> None:
@@ -240,6 +171,8 @@ class OpaServer:
         """
         Return True iff the policy evaluates to True.
         """
+        if not server_config.enforce_access_policy.get():
+            return True
         if not self.running:
             LOGGER.error("Policy engine is not running. Call OpaServer.start() first.")
             return False

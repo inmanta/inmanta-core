@@ -31,7 +31,7 @@ from inmanta import data
 from inmanta.protocol import method
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.methods import ENV_OPTS
-from inmanta.server import SLICE_POLICY_ENGINE, SLICE_SESSION_MANAGER, SLICE_TRANSPORT
+from inmanta.server import SLICE_SESSION_MANAGER
 from inmanta.server.protocol import Server, ServerSlice, SessionListener
 from utils import configure_auth, retry_limited
 
@@ -83,21 +83,6 @@ class SessionSpy(SessionListener, ServerSlice):
         return self._sessions
 
 
-class DummyPolicyEngineSlice(ServerSlice):
-    """
-    An policy-engine slice that doesn't start a policy engine and allows everything.
-    """
-
-    def __init__(self) -> None:
-        super().__init__(SLICE_POLICY_ENGINE)
-
-    def get_depended_by(self) -> list[str]:
-        return [SLICE_TRANSPORT]
-
-    async def does_satisfy_access_policy(self, input_data: dict[str, object]) -> bool:
-        return True
-
-
 class Agent(protocol.SessionEndpoint):
     def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
         super().__init__(name, timeout, reconnect_delay)
@@ -147,9 +132,7 @@ async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgr
     configure_auth(auth=True, ca=False, ssl=False)
     rs = Server()
     server = SessionSpy()
-    dummy_policy_engine_slice = DummyPolicyEngineSlice()
     rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
-    rs.add_slice(dummy_policy_engine_slice)
     rs.add_slice(server)
     await rs.start()
 
@@ -160,7 +143,7 @@ async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgr
 
     await retry_limited(lambda: len(server.get_sessions()) == 1, 10)
     assert len(server.get_sessions()) == 1
-    await assert_agent_counter(agent, 1, 0)
+    await assert_agent_counter(agent, reconnect=1, disconnected=0)
 
     client = protocol.Client("client")
     status = await client.get_status_x(str(agent.environment))
@@ -181,7 +164,10 @@ async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgr
 
     await rs.stop()
     await agent.stop()
-    await assert_agent_counter(agent, 1, 0)
+    assert agent.reconnect == 1
+    # If the agent already detected that the server is gone agent.disconnect == 1.
+    # Otherwise, agent.disconnect == 0.
+    assert agent.disconnect < 2
 
 
 async def check_sessions(sessions):

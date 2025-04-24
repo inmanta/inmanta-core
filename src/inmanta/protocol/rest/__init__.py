@@ -22,7 +22,7 @@ import json
 import logging
 import uuid
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
+from typing import Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
 
 import pydantic
 import typing_inspect
@@ -31,14 +31,11 @@ from tornado import escape
 from inmanta import const, tracing, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol import common, exceptions
-from inmanta.protocol.auth import auth
+from inmanta.protocol.auth import auth, policy_engine
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import SLICE_POLICY_ENGINE
 from inmanta.server import config as server_config
 from inmanta.types import Apireturn, JsonType
-
-if TYPE_CHECKING:
-    from inmanta.server.services.policy_engine_service import PolicyEngineSlice
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -550,11 +547,12 @@ class CallArguments:
         client_types_token = self._auth_token[ct_key]
         return any(ct in {const.ClientType.agent.value, const.ClientType.compiler.value} for ct in client_types_token)
 
-    async def authorize_request(self, auth_enabled: bool, policy_engine_slice: Optional["PolicyEngineSlice"]) -> None:
+    async def authorize_request(self, auth_enabled: bool, policy_engine: policy_engine.PolicyEngine | None) -> None:
         """Validate whether the token is authorized to perform this request.
 
         :param auth_enabled: is authentication enabled?
-        :param policy_engine_slice: The policy-engine slice of this server or None if we are not running on the server.
+        :param policy_engine: The policy engine of the server. None if we are not running on the server
+                              or if auth is disabled.
         """
         if not server_config.enforce_access_policy.get():
             return
@@ -568,10 +566,10 @@ class CallArguments:
         if self._is_service_token():
             self._authorize_service_token()
         else:
-            if policy_engine_slice is None:
+            if policy_engine is None:
                 raise exceptions.Forbidden(f"{SLICE_POLICY_ENGINE} slice not found.")
             input_data = self._get_input_for_policy_engine()
-            if not await policy_engine_slice.does_satisfy_access_policy(input_data):
+            if not await policy_engine.does_satisfy_access_policy(input_data):
                 raise exceptions.Forbidden("Request is not allowed by the access policy.")
 
     def _authorize_service_token(self) -> None:
@@ -674,9 +672,7 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
             is_auth_enabled: bool = self.is_auth_enabled()
             arguments.authenticate(auth_enabled=is_auth_enabled)
             await arguments.process()
-            await arguments.authorize_request(
-                auth_enabled=is_auth_enabled, policy_engine_slice=await self.get_policy_engine_slice()
-            )
+            await arguments.authorize_request(auth_enabled=is_auth_enabled, policy_engine=await self.get_policy_engine())
 
             LOGGER.debug(
                 "Calling method %s(%s) user=%s",
@@ -702,8 +698,8 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
             raise exceptions.ServerError(str(e.args))
 
     @abc.abstractmethod
-    async def get_policy_engine_slice(self) -> Optional["PolicyEngineSlice"]:
+    async def get_policy_engine(self) -> policy_engine.PolicyEngine | None:
         """
-        Return the policy-engine slice or None if no such slice exists because we are not running on the server.
+        Return the policy engine or None if no such engine exists because we are not running on the server.
         """
         raise NotImplementedError()

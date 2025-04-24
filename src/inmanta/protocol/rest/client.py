@@ -182,6 +182,6 @@ class RESTClient(RESTBase):
             # Any other content-type will leave the encoding unchanged
             return common.Result(code=response.code, result=response.body)
 
-    async def get_policy_engine_slice(self) -> None:
-        # We are not running on the server, so there is no policy engine and no policy engine slice.
+    async def get_policy_engine(self) -> None:
+        # We are not running on the server, so there is no policy engine.
         return None
