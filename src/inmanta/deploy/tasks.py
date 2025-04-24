@@ -97,7 +97,11 @@ class Task(abc.ABC):
 
         # Bail out if any module install / load failed:
         if my_executor.failed_modules:
-            raise ExceptionGroup([e for e in my_executor.failed_modules.values()])
+            raise ExceptionGroup(
+                "The following errors occurred during installation of code "
+                "required to deploy resources of type %s." % self.resource,
+                [e for e in my_executor.failed_modules.values()],
+            )
 
         return my_executor
 

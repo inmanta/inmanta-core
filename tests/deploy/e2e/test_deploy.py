@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import asyncio
 import logging
 import pathlib
 import uuid
@@ -782,10 +781,12 @@ async def test_unknown_parameters(
 
     env_id = uuid.UUID(environment)
     if not halted:
-        params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
-        while len(params) < 3:
+
+        async def params_available():
             params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
-            await asyncio.sleep(0.1)
+            return len(params) >= 3
+
+        await retry_limited(params_available, 10)
 
         result = await client.get_param(env_id, "length", resource_id_wov)
         assert result.code == 200

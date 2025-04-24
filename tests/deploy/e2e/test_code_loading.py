@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import asyncio
 import base64
+import hashlib
 import logging
 import pathlib
 import uuid
@@ -389,7 +390,7 @@ async def test_agent_code_loading_with_failure(
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
-async def test_logging_on_code_loading_failure(server, client, environment, clienthelper):
+async def test_logging_on_code_loading_failure_missing_code(server, client, environment, clienthelper):
     """
     This test case ensures that if handler code cannot be loaded, this is reported in the resource action log.
     """
@@ -420,6 +421,67 @@ async def test_logging_on_code_loading_failure(server, client, environment, clie
     assert result.code == 200
     assert any(
         "All resources of type `test::Test` failed to load handler code or install handler code dependencies" in log_line["msg"]
+        for resource_action in result.result["data"]
+        for log_line in resource_action["messages"]
+    )
+
+
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_logging_on_code_loading_error(server, client, environment, clienthelper):
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    content = "import non-existent"
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(content.encode())
+    hv: str = sha1sum.hexdigest()
+    await client.upload_file(hv, content=base64.b64encode(content.encode()).decode("ascii"))
+
+    module_source_metadata = ModuleSourceMetadata(
+        name="inmanta_plugins.test",
+        hash_value=hv,
+        is_byte_code=False,
+    )
+
+    module_version_info = {
+        "test": InmantaModuleDTO(
+            name="test", version="0.0.0", files_in_module=[module_source_metadata], requirements=[], for_agents=["agent1"]
+        )
+    }
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        module_version_info=module_version_info,
+    )
+
+    assert result.code == 200
+
+    result = await client.release_version(tid=environment, id=version)
+    assert result.code == 200
+
+    await wait_until_deployment_finishes(client, environment, version=version, timeout=10000)
+
+    result = await client.get_resource_actions(
+        tid=environment, resource_type="test::Resource", agent="agent1", log_severity="ERROR"
+    )
+    assert result.code == 200
+    assert any(
+        "All resources of type `test::Resource` failed to load handler code or install handler code dependencies"
+        in log_line["msg"]
         for resource_action in result.result["data"]
         for log_line in resource_action["messages"]
     )

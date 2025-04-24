@@ -610,7 +610,7 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
         self.executor_virtual_env = venv
 
         # Set by init, keeps state for the underlying executors
-        self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = list()
+        self._failed_modules: typing.Sequence[inmanta.loader.FailedModuleSource] = list()
 
         # threadpool for cleanup jobs
         self.worker_threadpool = worker_threadpool
@@ -757,8 +757,9 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
         self.stop_task: Awaitable[None]
 
         # Set by init and parent class
-        self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = process.failed_resource_results
-        self.failed_modules: executor.FailedModules = {}
+        self.failed_modules: executor.FailedModules = {
+            failure.module_source.metadata.name: failure.exception for failure in process._failed_modules
+        }
 
     async def call(self, method: IPCMethod[ExecutorContext, ReturnType]) -> ReturnType:
         try:
@@ -931,7 +932,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
             )
             storage_for_blueprint = os.path.join(self.code_folder, blueprint.blueprint_hash())
             os.makedirs(storage_for_blueprint, exist_ok=True)
-            failed_types = await executor.connection.call(
+            failed_modules = await executor.connection.call(
                 InitCommand(
                     venv_path=venv.env_path,
                     storage_folder=storage_for_blueprint,
@@ -945,7 +946,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                 executor.process.pid,
                 self.render_id(blueprint),
             )
-            executor.failed_resource_results = failed_types
+            executor._failed_modules = failed_modules
             return executor
         except Exception:
             # Make sure to cleanup the executor process if its initialization fails.
