@@ -26,23 +26,36 @@ else
 pip_install_c = $(pip_install) -c requirements.txt
 endif
 
-src_dirs := src tests $(shell test -d tests_common && echo tests_common || true)
+src_dirs := src tests $(wildcard tests_common)
 
+parser:=src/inmanta/parser/
+ifeq ($(wildcard $(parser)/plyInmantaParser.py),)
+# no parser present in this package => no parsetab prerequisite
+parsetab:=
+else
+parsetab:=$(parser)/parsetab.py
+# load inmanta.app so that the parser is generated for a consistent mypy baseline
+$(parsetab): $(parser)/plyInmantaLex.py $(parser)/plyInmantaParser.py
+	$(PYTHON) -m inmanta.app >/dev/null
+	touch $@
+endif
 
-.PHONY: install ci-install
+.PHONY: install ci-install ci-install-check
 install:
 	$(pip_install_c) -U setuptools pip uv
 	$(pip_install_c) -U -e .[dev]
 
-ci-install:
+ci-install-check:
 ifeq ($(shell which uv),)
 	$(error uv is required for this target.)
 endif
 ifndef ISO_VERSION
 	$(error ISO_VERSION make variable needs to be set for this target. Run `make ISO_VERSION=<x> $@`.)
 endif
-	$(pip_install_c) -U setuptools pip uv
+
 # some tests are skipped for editable installs => no editable on ci
+# first perform editable install to install parsetab file (mypy reads it locally, even for non-editable install)
+ci-install: ci-install-check install $(parsetab)
 	$(pip_install_c) -U .[dev]
 
 .PHONY: install-tests
@@ -62,13 +75,6 @@ pep8:
 ci-pep8:
 	$(PYTHON) -m flake8 --output-file flake8-report.txt --tee $(src_dirs)
 	$(PYTHON) -m junit_conversor flake8-report.txt junit-pep8.xml
-
-parser:=src/inmanta/parser/
-parsetab:=$(parser)/parsetab.py
-# load inmanta.app so that the parser is generated for a consistent mypy baseline
-$(parsetab): $(parser)/plyInmantaLex.py $(parser)/plyInmantaParser.py
-	$(PYTHON) -m inmanta.app >/dev/null
-	touch $@
 
 .PHONY: mypy ci-mypy
 mypy: $(parsetab)
