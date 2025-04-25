@@ -372,14 +372,6 @@ class StopCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
         await context.stop_for(self.name)
 
 
-class ModuleCodeRetrievalException(Exception):
-    pass
-
-
-class ModuleImportException(Exception):
-    pass
-
-
 class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.FailedModuleSource]]):
     """
     Initialize the executor process:
@@ -451,7 +443,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
                     functools.partial(loader.load_module, module_source.metadata.name, module_source.metadata.hash_value),
                 )
             except Exception as e:
-                logger.info("Failed to IMPORT source: %s", module_source.metadata.name, exc_info=True)
+                logger.info("Failed to import source: %s", module_source.metadata.name, exc_info=True)
                 failed.append(
                     inmanta.loader.FailedModuleSource(
                         module_source=module_source,

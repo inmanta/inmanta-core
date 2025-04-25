@@ -453,21 +453,9 @@ async def test_logging_on_code_loading_error(server, client, environment, client
     hv1: str = sha1sum.hexdigest()
     await client.upload_file(hv1, content=base64.b64encode(content.encode()).decode("ascii"))
 
-    content = "syntax error"
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(content.encode())
-    hv2: str = sha1sum.hexdigest()
-    await client.upload_file(hv2, content=base64.b64encode(content.encode()).decode("ascii"))
-
     module_source_metadata1 = ModuleSourceMetadata(
         name="inmanta_plugins.test",
         hash_value=hv1,
-        is_byte_code=False,
-    )
-
-    module_source_metadata2 = ModuleSourceMetadata(
-        name="inmanta_plugins.test2",
-        hash_value=hv2,
         is_byte_code=False,
     )
 
@@ -475,7 +463,7 @@ async def test_logging_on_code_loading_error(server, client, environment, client
         "test": InmantaModuleDTO(
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata1, module_source_metadata2],
+            files_in_module=[module_source_metadata1],
             requirements=[],
             for_agents=["agent1"],
         )
@@ -507,6 +495,10 @@ async def test_logging_on_code_loading_error(server, client, environment, client
     )
 
     def check_for_messages(data, must_be_present: str, must_be_absent: str) -> None:
+        """
+        Helper method to assert the presence of the must_be_present string and the absence
+        of the must_be_absent string in all the resource action log lines.
+        """
         must_be_present_flag = False
         must_be_absent_flag = False
         for resource_action in data:
