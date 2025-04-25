@@ -299,7 +299,7 @@ class TestScheduler(ResourceScheduler):
         super().__init__(environment, executor_manager, client)
         # Bypass DB
         self.executor_manager = self.executor_manager
-        self.code_manager = DummyCodeManager(client)
+        self.code_manager = DummyCodeManager()
         self.mock_versions = {}
         self.state_update_manager = DummyStateManager()
         self._timer_manager = DummyTimerManager(self)

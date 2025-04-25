@@ -988,7 +988,7 @@ async def agent_multi(server_multi, environment_multi):
     executor = WriteBarierExecutorManager(executor)
     a.executor_manager = executor
     a.scheduler.executor_manager = executor
-    a.scheduler.code_manager = utils.DummyCodeManager(a._client)
+    a.scheduler.code_manager = utils.DummyCodeManager()
 
     await a.start()
 
