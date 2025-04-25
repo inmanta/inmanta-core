@@ -4504,6 +4504,8 @@ class ResourcePersistentState(BaseDocument):
     is_undefined: bool
     # Written when a new version is processed by the scheduler
     is_orphan: bool
+    # Set to true when a version starts its deployment, set to false when it finishes
+    is_deploying: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
     last_deploy_result: state.DeployResult
     # Written both when processing a new version and at deploy time. As such, this should be updated
@@ -4605,6 +4607,7 @@ class ResourcePersistentState(BaseDocument):
                 current_intent_attribute_hash,
                 is_undefined,
                 is_orphan,
+                is_deploying,
                 last_deploy_result,
                 blocked
             )
@@ -4616,6 +4619,7 @@ class ResourcePersistentState(BaseDocument):
                 r.resource_id_value,
                 r.attribute_hash,
                 r.status = 'undefined'::public.resourcestate,
+                FALSE,
                 FALSE,
                 'NEW',
                 CASE
@@ -4921,12 +4925,14 @@ class Resource(BaseDocument):
         """
         Update resources on the latest released version of the model stuck in "deploying" state.
         The status will be reset to the latest non deploying status.
+        The is_deploying flag will also be set to "False" on the ResourcePersistentState table.
 
         :param environment: The environment impacted by this
         :param connection: The connection to use
         """
 
-        query = f"""
+        # FIXME: When we remove the status from the Resource table, this can go.
+        update_resource_query = f"""
             UPDATE {Resource.table_name()} r
             SET status=ps.last_non_deploying_status::TEXT::resourcestate
             FROM {ResourcePersistentState.table_name()} ps
@@ -4943,9 +4949,15 @@ class Resource(BaseDocument):
                     LIMIT 1
                 )
         """
+        update_rps_query = f"""
+            UPDATE {ResourcePersistentState.table_name()} ps
+            SET is_deploying=FALSE
+            WHERE environment=$1
+        """
         values = [cls._get_value(environment)]
         async with cls.get_connection(connection) as connection:
-            await connection.execute(query, *values)
+            await connection.execute(update_rps_query, *values)
+            await connection.execute(update_resource_query, *values)
 
     @classmethod
     async def get_resource_ids_with_status(
@@ -5560,6 +5572,7 @@ class Resource(BaseDocument):
 
     async def update_persistent_state(
         self,
+        is_deploying: bool | None = None,
         last_deploy: datetime.datetime | None = None,
         last_deployed_version: int | None = None,
         last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
@@ -5574,6 +5587,7 @@ class Resource(BaseDocument):
         args = ArgumentCollector(2)
 
         invalues = {
+            "is_deploying": is_deploying,
             "last_deploy": last_deploy,
             "last_non_deploying_status": last_non_deploying_status,
             "last_success": last_success,
