@@ -66,7 +66,7 @@ async def agent(server, environment, deactive_venv):
     )
     a.executor_manager = executor
     a.scheduler.executor_manager = executor
-    a.scheduler.code_manager = DummyCodeManager(a._client)
+    a.scheduler.code_manager = DummyCodeManager()
 
     await a.start()
 
