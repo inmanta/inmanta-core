@@ -177,25 +177,6 @@ def list_environments():
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_READ, read_only=True, environment_param="id")
-@method(
-    path="/environment/<id>",
-    operation="GET",
-    client_types=[const.ClientType.api],
-    arg_options={"id": ArgOption(getter=add_env)},
-)
-def get_environment(id: uuid.UUID, versions: Optional[int] = None, resources: Optional[int] = None):
-    """
-    Get an environment and all versions associated.
-
-    :param id: The id of the environment to return.
-    :param versions: Optional. If provided and greater than 0, include this many of the most recent versions for this
-                     environment, ordered in descending order of their version number.
-                     If not provided or 0, no version information is included.
-    :param resources: Optional. If provided and greater than 0, include a summary of the resources in the environment.
-    """
-
-
 # Method for listing/getting/setting/removing settings of an environment. This API is also used by agents to configure
 # environments.
 
