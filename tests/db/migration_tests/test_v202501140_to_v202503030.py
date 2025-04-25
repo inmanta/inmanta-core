@@ -22,7 +22,6 @@ from collections import abc
 
 import pytest
 
-import inmanta
 from inmanta.agent.code_manager import CodeManager
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")

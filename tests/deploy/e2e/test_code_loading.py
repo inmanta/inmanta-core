@@ -33,7 +33,7 @@ from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
-from inmanta.data import ModuleFiles, InmantaModule, AgentModules, PipConfig
+from inmanta.data import AgentModules, InmantaModule, ModuleFiles, PipConfig
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import process_env
 from inmanta.loader import InmantaModule as InmantaModuleDTO

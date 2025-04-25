@@ -39,7 +39,7 @@ from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import DesiredStateVersion
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
 from inmanta.data.model import PipConfig, PromoteTriggerMethod, ResourceDiff, ResourceMinimal, SchedulerStatusReport
-from inmanta.data.sqlalchemy import InmantaModule, AgentModules
+from inmanta.data.sqlalchemy import AgentModules, InmantaModule
 from inmanta.db.util import ConnectionInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
