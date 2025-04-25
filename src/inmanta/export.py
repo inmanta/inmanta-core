@@ -39,7 +39,7 @@ from inmanta.module import Project
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
 from inmanta.types import ResourceVersionIdStr
-from inmanta.util import get_compiler_version
+from inmanta.util import get_compiler_version, hash_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -627,6 +627,23 @@ class Exporter:
             return pydantic.TypeAdapter(int).validate_python(result.result["data"])
         else:
             return version
+
+    def upload_file(self, content: Union[str, bytes]) -> str:
+        """
+        Upload a file to the configuration server. This operation is not
+        executed in the transaction.
+        """
+        bcontent: bytes
+
+        if not isinstance(content, bytes):
+            bcontent = content.encode("utf-8")
+        else:
+            bcontent = content
+
+        hash_id = hash_file(bcontent)
+        self._file_store[hash_id] = bcontent
+
+        return hash_id
 
     def get_environment_id(self) -> str:
         env = str(cfg_env.get())

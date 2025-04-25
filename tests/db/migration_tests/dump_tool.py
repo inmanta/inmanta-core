@@ -150,7 +150,7 @@ async def test_dump_db(
 
     check_result(await client.notify_change(id=env_id_1))
 
-    versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=80)
+    versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=40)
     v1 = versions["versions"][0]["version"]
 
     check_result(await client.release_version(env_id_1, v1))
@@ -189,7 +189,7 @@ async def test_dump_db(
     await wait_for_version(client, env_id_1, env_1_version)
     check_result(await client.notify_change(id=env_id_1))
     env_1_version += 1
-    await wait_for_version(client, env_id_1, env_1_version)
+    await wait_for_version(client, env_id_1, env_1_version, compile_timeout=50)
 
     # Partial compile
     rid2 = "test::Resource[agent2,key=key2]"
@@ -213,6 +213,7 @@ async def test_dump_db(
             unknowns=[],
             version_info=None,
             resource_sets=resource_sets,
+            module_version_info={},
         )
     )
 
