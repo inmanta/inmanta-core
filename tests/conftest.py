@@ -19,6 +19,8 @@ Contact: code@inmanta.com
 import copy
 import logging.config
 import pathlib
+import stat
+import tempfile
 import warnings
 from glob import glob
 from re import Pattern
@@ -28,6 +30,7 @@ from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
 import inmanta.deploy.state
+import requests
 import toml
 from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
@@ -36,7 +39,7 @@ from inmanta.config import log_dir
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol.auth import auth
-from inmanta.protocol.auth.policy_engine import policy_file
+from inmanta.protocol.auth.policy_engine import path_opa_executable, policy_file
 from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
 from inmanta.tornado import LoopResolverWithUnixSocketSuppport
@@ -113,7 +116,6 @@ import socket
 import string
 import subprocess
 import sys
-import tempfile
 import time
 import traceback
 import uuid
@@ -714,6 +716,25 @@ async def access_policy() -> str:
     """
 
 
+@pytest.fixture(scope="session")
+async def path_policy_engine_executable() -> str:
+    """
+    Returns the path to the Open Policy Agent executable.
+    This method caches the executables to prevent slow setup times of the test suite.
+    """
+    cache_dir = os.path.abspath(os.path.join(__file__, "..", "data", "opa_executables.cache"))
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file = os.path.join(cache_dir, "opa-1.3.0")
+    if not os.path.exists(cache_file):
+        with open(cache_file, "wb") as fp:
+            req = requests.get("http://file.ii.inmanta.com/software/opa/opa-1.3.0", stream=True)
+            for chunk in req.iter_content(chunk_size=1024):
+                fp.write(chunk)
+        # Give owner execute permissions on file
+        os.chmod(cache_file, stat.S_IXUSR)
+    yield cache_file
+
+
 @pytest.fixture(scope="function")
 async def server_config(
     inmanta_config,
@@ -725,6 +746,7 @@ async def server_config(
     no_agent,
     access_policy: str,
     enable_auth: bool,
+    path_policy_engine_executable: str,
 ):
     reset_metrics()
     agentmanager.assert_no_start_scheduler = not auto_start_agent
@@ -766,6 +788,7 @@ async def server_config(
         with open(access_policy_file, "w") as fh:
             fh.write(access_policy)
         policy_file.set(access_policy_file)
+        path_opa_executable.set(path_policy_engine_executable)
 
         yield config
 

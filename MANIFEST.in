@@ -4,7 +4,6 @@ include setup.py
 include setup.cfg
 include src/inmanta/py.typed
 include src/inmanta/parser/parser.out
-include src/inmanta/opa/opa
 
 # explainers for compiler exceptions
 recursive-include src *.j2

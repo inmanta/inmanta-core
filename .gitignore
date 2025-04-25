@@ -98,3 +98,6 @@ docs/reference/openapi.json
 
 # Ignore modules_v2 python package repo cache
 tests/data/modules_v2.cache
+
+# Ignore cache for Open policy Agent executables
+tests/data/opa_executables.cache

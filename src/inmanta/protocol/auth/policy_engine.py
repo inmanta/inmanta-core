@@ -23,7 +23,6 @@ import logging
 import os
 import subprocess
 import time
-from importlib.resources import files
 from typing import Mapping
 
 from tornado import httpclient
@@ -56,6 +55,9 @@ policy_engine_log_level = config.Option(
     "error",
     f"The log level used by the policy engine. Valid values: {opa_log_level_values}",
     is_opa_log_level,
+)
+path_opa_executable = config.Option(
+    "policy-engine", "executable", "", "Path to the executable that runs the Open Policy Agent.", config.is_str
 )
 
 
@@ -100,14 +102,18 @@ class PolicyEngine:
             json.dump(data, fh)
 
         # Start policy engine
-        opa_binary = str(files("inmanta.opa").joinpath("opa").absolute())
+        opa_executable = path_opa_executable.get()
+        if not opa_executable:
+            raise Exception("Config option policy-engine.executable was not set.")
+        if not os.path.isfile(opa_executable):
+            raise Exception(f"Config option policy-engine.executable doesn't point to a file: {opa_executable}.")
         log_dir = config.log_dir.get()
         policy_engine_log = os.path.join(log_dir, "policy_engine.log")
         log_file_handle = None
         try:
             log_file_handle = open(policy_engine_log, "wb+")
             self._process = await asyncio.create_subprocess_exec(
-                opa_binary,
+                opa_executable,
                 "run",
                 "--server",
                 "--addr",
