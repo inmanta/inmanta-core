@@ -766,16 +766,11 @@ async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterat
                     logger.debug("%s\n%s", file, fh.read())
 
 
-# @pytest.fixture(
-#     scope="function",
-#     params=[(True, True, False), (True, False, False), (False, True, False), (False, False, False), (True, True, True)],
-#     ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"],
-# )
-# async def server_multi(
+
 @pytest.fixture(
     scope="function",
-    params=[(True, True, True)],
-    ids=["SSL and Auth with not self signed certificate"],
+    params=[(True, True, False), (True, False, False), (False, True, False), (False, False, False), (True, True, True)],
+    ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"],
 )
 async def server_multi(
     server_pre_start, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory
