@@ -5,11 +5,11 @@ PIP_INDEX :=
 TESTS := tests
 PYTEST_EXTRA_ARGS :=
 
-# Shortcuts for various dev tasks. Based on makefile from pydantic
 .DEFAULT_GOAL := all
 isort = isort src tests tests_common
 black = black src tests tests_common
-mypy = MYPYPATH=stubs:src $(PYTHON) -m mypy --soft-error-limit=-1 --html-report mypy -p inmanta
+packages := $(notdir $(patsubst %.egg-info,,$(wildcard src/*)))
+mypy = MYPYPATH=stubs:src $(PYTHON) -m mypy --soft-error-limit=-1 --html-report mypy $(addprefix -p , $(packages))
 mypy_baseline = $(PYTHON) -m mypy_baseline
 
 ifdef PIP_INDEX
@@ -18,7 +18,7 @@ endif
 ifeq ($(shell which uv),)
 pip_install = $(PYTHON) -m pip install $(pip_index_arg)
 else
-pip_install = uv pip install --python $(PYTHON) $(pip_index_arg)
+pip_install = uv pip install --python $(PYTHON) --prerelease if-necessary-or-explicit $(pip_index_arg)
 endif
 ifdef ISO_VERSION
 pip_install_c = $(pip_install) -c requirements.txt -c 'https://docs.inmanta.com/inmanta-service-orchestrator-dev/$(ISO_VERSION)/reference/requirements.txt'
