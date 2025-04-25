@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump opentelemetry-instrumentation-asyncpg from 0.52b1 to 0.53b0
+destination-branches:
+- iso8
+sections: {}
