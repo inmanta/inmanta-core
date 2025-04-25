@@ -355,7 +355,7 @@ class ResourceScheduler(TaskManager):
 
         self.environment = environment
         self.client = client
-        self.code_manager = CodeManager(client)
+        self.code_manager = CodeManager()
         self.executor_manager = executor_manager
         self.state_update_manager = ToDbUpdateManager(client, environment)
 

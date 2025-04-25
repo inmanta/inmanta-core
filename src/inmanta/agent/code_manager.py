@@ -47,20 +47,6 @@ class CodeManager:
     Caches heavily
     """
 
-    def __init__(self, client: Client) -> None:
-        self._client = client
-
-    @async_lru_cache(maxsize=5)
-    async def get_pip_config(self, environment: uuid.UUID, version: int) -> PipConfig:
-        response = await self._client.get_pip_config(tid=environment, version=version)
-        if response.code != 200:
-            raise Exception("Could not get pip config from server " + str(response.result))
-        assert response.result is not None  # mypy
-        pip_config = response.result["data"]
-        if pip_config is None:
-            return LEGACY_PIP_DEFAULT
-        return PipConfig(**pip_config)
-
     @async_lru_cache(maxsize=1024)
     async def get_code(self, environment: uuid.UUID, model_version: int, agent_name: str) -> list[ModuleInstallSpec]:
         """
@@ -81,6 +67,7 @@ class CodeManager:
                 models.FilesInModule.file_content_hash,
                 models.FilesInModule.is_byte_code,
                 models.File.content,
+                models.ConfigurationModel.pip_config,
             )
             .join(
                 models.InmantaModule,
@@ -100,8 +87,13 @@ class CodeManager:
             )
             .join(
                 models.File,
+                models.FilesInModule.file_content_hash == models.File.content_hash,
+            )
+            .join(
+                models.ConfigurationModel,
                 and_(
-                    models.FilesInModule.file_content_hash == models.File.content_hash,
+                    models.ModulesForAgent.cm_version == models.ConfigurationModel.version,
+                    models.ModulesForAgent.environment == models.ConfigurationModel.environment,
                 ),
             )
             .where(
@@ -118,12 +110,16 @@ class CodeManager:
                 rows_list = list(rows)
                 assert rows_list
                 assert len({row.inmanta_module_version for row in rows_list}) == 1
+
+                _pip_config = rows_list[0].pip_config
+                assert all(row.pip_config == _pip_config for row in rows_list)
+                pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
                 module_install_specs.append(
                     ModuleInstallSpec(
                         module_name=module_name,
                         module_version=rows_list[0].inmanta_module_version,
                         blueprint=executor.ExecutorBlueprint(
-                            pip_config=await self.get_pip_config(environment, model_version),
+                            pip_config=pip_config,
                             requirements=rows_list[0].requirements,
                             sources=[
                                 ModuleSource(

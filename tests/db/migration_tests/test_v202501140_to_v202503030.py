@@ -34,8 +34,7 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
 
     await migrate_db_from()
 
-    client = inmanta.protocol.Client("client")
-    codemanager = CodeManager(client)
+    codemanager = CodeManager()
     install_spec_1 = await codemanager.get_code(
         environment="a8317edd-74d8-40fc-8933-9aedb77cfed4",
         model_version=1,

@@ -136,7 +136,7 @@ async def test_agent_installs_dependency_containing_extras(
     )
     assert res.code == 200
 
-    codemanager = CodeManager(agent._client)
+    codemanager = CodeManager()
 
     install_spec = await codemanager.get_code(
         environment=uuid.UUID(environment),
@@ -168,7 +168,7 @@ async def test_get_code(
     agent,
     client,
 ) -> None:
-    codemanager = CodeManager(agent._client)
+    codemanager = CodeManager()
 
     # Create project
     result = await client.create_project("test_project")
@@ -358,7 +358,7 @@ async def test_agent_code_loading_with_failure(
 
     config.Config.set("agent", "executor-mode", "threaded")
 
-    codemanager = CodeManager(agent._client)
+    codemanager = CodeManager()
 
     # We want to test
     nonexistent_version = -1
@@ -538,7 +538,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
 
     Assert that agent Y can still get the code to deploy r2 in version V2
     """
-    codemanager = CodeManager(agent._client)
+    codemanager = CodeManager()
 
     async def check_code_for_version(version: int, environment: str, agent_names: Sequence[str]):
         """
