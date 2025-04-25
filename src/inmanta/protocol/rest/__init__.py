@@ -33,7 +33,6 @@ from inmanta.data.model import BaseModel
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.auth import auth, policy_engine
 from inmanta.protocol.common import ReturnValue
-from inmanta.server import SLICE_POLICY_ENGINE
 from inmanta.server import config as server_config
 from inmanta.types import Apireturn, JsonType
 
@@ -567,7 +566,7 @@ class CallArguments:
             self._authorize_service_token()
         else:
             if policy_engine is None:
-                raise exceptions.Forbidden(f"{SLICE_POLICY_ENGINE} slice not found.")
+                raise exceptions.Forbidden("The policy engine is not running.")
             input_data = self._get_input_for_policy_engine()
             if not await policy_engine.does_satisfy_access_policy(input_data):
                 raise exceptions.Forbidden("Request is not allowed by the access policy.")

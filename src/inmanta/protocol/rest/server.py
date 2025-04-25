@@ -24,7 +24,7 @@ from asyncio import CancelledError
 from collections import defaultdict
 from collections.abc import MutableMapping, Sequence
 from json import JSONDecodeError
-from typing import TYPE_CHECKING, Optional, Union
+from typing import Optional, Union
 
 import tornado
 from pyformance import timer
@@ -39,9 +39,6 @@ from inmanta.protocol.rest import RESTBase
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
 from inmanta.types import ReturnTypes
-
-if TYPE_CHECKING:
-    from inmanta.server import protocol
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -241,7 +238,7 @@ class RESTServer(RESTBase):
 
     _http_server: Optional[httpserver.HTTPServer]
 
-    def __init__(self, session_manager: common.SessionManagerInterface, id: str, server: "protocol.Server") -> None:
+    def __init__(self, session_manager: common.SessionManagerInterface, id: str) -> None:
         super().__init__()
 
         self._id = id
@@ -254,7 +251,6 @@ class RESTServer(RESTBase):
         self.idle_event.set()
         self.running = False
         self._http_server = None
-        self._server = server
         self._policy_engine: policy_engine.PolicyEngine | None = None
 
     def start_request(self) -> None:
