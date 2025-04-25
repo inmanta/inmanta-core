@@ -766,7 +766,6 @@ async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterat
                     logger.debug("%s\n%s", file, fh.read())
 
 
-
 @pytest.fixture(
     scope="function",
     params=[(True, True, False), (True, False, False), (False, True, False), (False, False, False), (True, True, True)],
