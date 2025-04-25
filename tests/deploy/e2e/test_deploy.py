@@ -1229,6 +1229,27 @@ async def test_resource_status(resource_container, server, client, clienthelper,
 
         await wait_until_deployment_finishes(client, env_id, version=version)
 
+    async def assert_states(expected_states: dict[ResourceIdStr, const.ResourceState]) -> None:
+        # Verify behavior of resource_details() endpoint.
+        for rid, current_resource_state in expected_states.items():
+            result = await client.resource_details(tid=environment, rid=rid)
+            assert result.code == 200
+            assert (
+                result.result["data"]["status"] == current_resource_state.value
+            ), f"Got state {result.result['data']['status']} for resource {rid}, expected {current_resource_state.value}"
+
+        # Verify behavior of get_current_resource_state() endpoint
+        resource_state: Optional[const.ResourceState]
+        for rid, current_resource_state in expected_states.items():
+            resource_state = await data.Resource.get_current_resource_state(env=uuid.UUID(environment), rid=rid)
+            assert resource_state == current_resource_state
+
+        # Verify behavior of resource_list() endpoint
+        result = await client.resource_list(tid=environment)
+        assert result.code == 200
+        actual_states = {r["resource_id"]: const.ResourceState(r["status"]) for r in result.result["data"]}
+        assert actual_states == expected_states
+
     resource_container.Provider.set_fail("agent1", "key2", 1)
     version = await clienthelper.get_version()
     await deploy_resources(
@@ -1241,6 +1262,15 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.undefined,
             ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.available,
         },
+    )
+    await assert_states(
+        {
+            ResourceIdStr("test::Resource[agent1,key=key1]"): const.ResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.failed,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): const.ResourceState.skipped,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.undefined,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.skipped_for_undefined,
+        }
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
@@ -1299,6 +1329,15 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.available,
         },
     )
+    await assert_states(
+        {
+            ResourceIdStr("test::Resource[agent1,key=key1]"): const.ResourceState.orphaned,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): const.ResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.deployed,
+        }
+    )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
     for i in range(1, 6):
@@ -1323,6 +1362,15 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.undefined,
             ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.available,
         },
+    )
+    await assert_states(
+        {
+            ResourceIdStr("test::Resource[agent1,key=key1]"): const.ResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): const.ResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.undefined,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.skipped_for_undefined,
+        }
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
