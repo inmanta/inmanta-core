@@ -33,7 +33,7 @@ from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
-from inmanta.data import FilesInModule, InmantaModule, ModulesForAgent, PipConfig, get_session
+from inmanta.data import FilesInModule, InmantaModule, ModulesForAgent, PipConfig
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import process_env
 from inmanta.loader import InmantaModule as InmantaModuleDTO
@@ -265,7 +265,7 @@ async def test_get_code(
     files_in_module_stmt = insert(FilesInModule).on_conflict_do_nothing()
     modules_for_agent_stmt = insert(ModulesForAgent).on_conflict_do_nothing()
 
-    async with get_session() as session, session.begin():
+    async with data.get_session() as session, session.begin():
         await session.execute(module_stmt, module_data)
         await session.execute(files_in_module_stmt, files_in_module_data)
         await session.execute(modules_for_agent_stmt, modules_for_agent_data)
@@ -433,28 +433,51 @@ async def test_logging_on_code_loading_error(server, client, environment, client
         {
             "key": "key1",
             "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "id": "test::ResourceAAA[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::ResourceBBB[agent1,key=key1],v=%d" % version,
             "send_event": False,
             "purged": False,
             "requires": [],
         },
     ]
-    content = "import non-existent"
-    # content = ""
+    content = "syntax error"
     sha1sum = hashlib.new("sha1")
     sha1sum.update(content.encode())
-    hv: str = sha1sum.hexdigest()
-    await client.upload_file(hv, content=base64.b64encode(content.encode()).decode("ascii"))
+    hv1: str = sha1sum.hexdigest()
+    await client.upload_file(hv1, content=base64.b64encode(content.encode()).decode("ascii"))
 
-    module_source_metadata = ModuleSourceMetadata(
+    content = "syntax error"
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(content.encode())
+    hv2: str = sha1sum.hexdigest()
+    await client.upload_file(hv2, content=base64.b64encode(content.encode()).decode("ascii"))
+
+    module_source_metadata1 = ModuleSourceMetadata(
         name="inmanta_plugins.test",
-        hash_value=hv,
+        hash_value=hv1,
+        is_byte_code=False,
+    )
+
+    module_source_metadata2 = ModuleSourceMetadata(
+        name="inmanta_plugins.test2",
+        hash_value=hv2,
         is_byte_code=False,
     )
 
     module_version_info = {
         "test": InmantaModuleDTO(
-            name="test", version="0.0.0", files_in_module=[module_source_metadata], requirements=[], for_agents=["agent1"]
+            name="test",
+            version="0.0.0",
+            files_in_module=[module_source_metadata1, module_source_metadata2],
+            requirements=[],
+            for_agents=["agent1"],
         )
     }
 
@@ -474,15 +497,147 @@ async def test_logging_on_code_loading_error(server, client, environment, client
     result = await client.release_version(tid=environment, id=version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment, version=version, timeout=10000)
+    await wait_until_deployment_finishes(client, environment, version=version, timeout=10)
+
+    resourceAAA_failure_message = (
+        "All resources of type `test::ResourceAAA` failed to load handler code or install handler code dependencies: "
+    )
+    resourceBBB_failure_message = (
+        "All resources of type `test::ResourceBBB` failed to load handler code or install handler code dependencies: "
+    )
+
+    def check_for_messages(data, must_be_present: str, must_be_absent: str) -> None:
+        must_be_present_flag = False
+        must_be_absent_flag = False
+        for resource_action in data:
+            for log_line in resource_action["messages"]:
+                if must_be_present in log_line["msg"]:
+                    must_be_present_flag = True
+                if must_be_absent in log_line["msg"]:
+                    must_be_absent_flag = True
+
+        assert must_be_present_flag
+        assert not must_be_absent_flag
 
     result = await client.get_resource_actions(
-        tid=environment, resource_type="test::Resource", agent="agent1", log_severity="ERROR"
+        tid=environment, resource_type="test::ResourceAAA", agent="agent1", log_severity="ERROR"
     )
     assert result.code == 200
-    assert any(
-        "All resources of type `test::Resource` failed to load handler code or install handler code dependencies"
-        in log_line["msg"]
-        for resource_action in result.result["data"]
-        for log_line in resource_action["messages"]
+    check_for_messages(
+        data=result.result["data"], must_be_present=resourceAAA_failure_message, must_be_absent=resourceBBB_failure_message
     )
+
+    result = await client.get_resource_actions(
+        tid=environment, resource_type="test::ResourceBBB", agent="agent1", log_severity="ERROR"
+    )
+    assert result.code == 200
+    check_for_messages(
+        data=result.result["data"], must_be_present=resourceBBB_failure_message, must_be_absent=resourceAAA_failure_message
+    )
+
+
+@pytest.mark.parametrize("auto_start_agent", [True])
+async def test_code_loading_after_partial(server, agent, client, environment, clienthelper):
+    """
+    Test the following scenario:
+
+    1) Full export of [r1 = ResType_A(agent = X), r2 = ResType_A(agent = Y)]   ---  V1
+    2) Partial export of only r1                                               ---  V2
+
+    Assert that agent Y can still get the code to deploy r2 in version V2
+    """
+    codemanager = CodeManager(agent._client)
+
+    async def check_code_for_version(version: int, environment: str, agent_names: Sequence[str]):
+        """
+        Helper method to check that all agents get the same code
+        """
+        environment = uuid.UUID(environment)
+        for agent_name in agent_names:
+            module_install_specs = await codemanager.get_code(
+                environment=environment, model_version=version, agent_name=agent_name
+            )
+            assert len(module_install_specs) == 1
+            assert len(module_install_specs[0].blueprint.sources) == 1
+            assert module_install_specs[0].blueprint.sources[0].source == b"#The code"
+
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::ResType_A[agent_X,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::ResType_A[agent_Y,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    content = "#The code"
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(content.encode())
+    hv1: str = sha1sum.hexdigest()
+    await client.upload_file(hv1, content=base64.b64encode(content.encode()).decode("ascii"))
+
+    module_source_metadata1 = ModuleSourceMetadata(
+        name="inmanta_plugins.test",
+        hash_value=hv1,
+        is_byte_code=False,
+    )
+
+    module_version_info = {
+        "test": InmantaModuleDTO(
+            name="test",
+            version="0.0.0",
+            files_in_module=[module_source_metadata1],
+            requirements=[],
+            for_agents=["agent_X", "agent_Y"],
+        )
+    }
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        module_version_info=module_version_info,
+    )
+
+    assert result.code == 200
+
+    await check_code_for_version(version=1, environment=environment, agent_names=["agent_X", "agent_Y"])
+
+    resources = [
+        {
+            "key": "key1",
+            "value": "value2",
+            "id": "test::ResType_A[agent_X,key=key1],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        }
+    ]
+    resource_sets = {
+        "test::ResType_A[agent_X,key=key1]": "set-a",
+    }
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        resource_sets=resource_sets,
+        module_version_info={},
+    )
+    assert result.code == 200
+    await check_code_for_version(version=2, environment=environment, agent_names=["agent_X", "agent_Y"])

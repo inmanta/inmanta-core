@@ -97,10 +97,11 @@ class Task(abc.ABC):
 
         # Bail out if any module install / load failed:
         if my_executor.failed_modules:
-            raise Exception(str(my_executor.failed_modules.values()))
             raise BaseExceptionGroup(
-                "The following errors occurred during installation of code "
-                "required to deploy resources of type %s." % self.resource,
+                """
+                    The following modules cannot be installed: %s.
+                """
+                % ", ".join([e for e in my_executor.failed_modules.keys()]),
                 [e for e in my_executor.failed_modules.values()],
             )
 
@@ -163,6 +164,28 @@ class Deploy(Task):
                         agent_name=agent,
                         version=version,
                     )
+
+                except BaseExceptionGroup as beg:
+                    log_line = data.LogLine.log(
+                        logging.ERROR,
+                        "All resources of type `%(res_type)s` failed to load handler code or install handler code "
+                        "dependencies: `%(error)s`\n%(sub_excp)s",
+                        res_type=executor_resource_details.id.entity_type,
+                        error=str(beg),
+                        sub_excp=str(beg.exceptions),
+                    )
+                    # log_line = data.LogLine.log(
+                    #     logging.ERROR,
+                    #     "All resources of type `%(res_type)s` failed to load handler code or install handler code "
+                    #     "dependencies: `%(error)s`\n%(traceback)s",
+                    #     res_type=executor_resource_details.id.entity_type,
+                    #     error=str(beg),
+                    #     traceback="".join(traceback.format_tb(beg.__traceback__)),
+                    # )
+                    # Not attached to ctx, needs to be flushed to logger explicitly
+                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
+                    deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
+                    return
                 except Exception as e:
                     log_line = data.LogLine.log(
                         logging.ERROR,
