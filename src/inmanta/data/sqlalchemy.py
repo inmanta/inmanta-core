@@ -92,7 +92,7 @@ class InmantaModule(Base):
         """
 
         insert_files_query = f"""
-            INSERT INTO {FilesInModule.__tablename__}(
+            INSERT INTO {ModuleFiles.__tablename__}(
                 inmanta_module_name,
                 inmanta_module_version,
                 environment,
@@ -142,7 +142,7 @@ class InmantaModule(Base):
             DELETE FROM {InmantaModule.__tablename__}
             WHERE (environment, name, version) IN (
                 SELECT environment, inmanta_module_name, inmanta_module_version
-                FROM public.modules_for_agent
+                FROM public.agent_modules
                 WHERE environment=$1
                 AND cm_version=$2
             )
@@ -152,17 +152,17 @@ class InmantaModule(Base):
         )
 
 
-class FilesInModule(Base):
-    __tablename__ = "files_in_module"
+class ModuleFiles(Base):
+    __tablename__ = "module_files"
     __table_args__ = (
         ForeignKeyConstraint(
             ["inmanta_module_name", "inmanta_module_version", "environment"],
             ["inmanta_module.name", "inmanta_module.version", "inmanta_module.environment"],
             ondelete="CASCADE",
         ),
-        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="files_in_module_environment_fkey"),
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="module_files_environment_fkey"),
         ForeignKeyConstraint(
-            ["file_content_hash"], ["file.content_hash"], ondelete="RESTRICT", name="files_in_module_file_content_hash_fkey"
+            ["file_content_hash"], ["file.content_hash"], ondelete="RESTRICT", name="module_files_file_content_hash_fkey"
         ),  # todo add test for restrict behaviour on delete
         UniqueConstraint("inmanta_module_name", "inmanta_module_version", "environment", "python_module_name"),
     )
@@ -181,10 +181,10 @@ class FilesInModule(Base):
     ) -> None:
         await connection.execute(
             f"""
-            DELETE FROM {FilesInModule.__tablename__}
+            DELETE FROM {ModuleFiles.__tablename__}
             WHERE (environment, inmanta_module_name, inmanta_module_version) IN (
                 SELECT environment, inmanta_module_name, inmanta_module_version
-                FROM {ModulesForAgent.__tablename__}
+                FROM {AgentModules.__tablename__}
                 WHERE environment=$1
                 AND cm_version=$2
             )
@@ -194,8 +194,8 @@ class FilesInModule(Base):
         )
 
 
-class ModulesForAgent(Base):
-    __tablename__ = "modules_for_agent"
+class AgentModules(Base):
+    __tablename__ = "agent_modules"
     __table_args__ = (
         ForeignKeyConstraint(
             ["cm_version", "environment"], ["configurationmodel.version", "configurationmodel.environment"], ondelete="CASCADE"
@@ -240,7 +240,7 @@ class ModulesForAgent(Base):
                 inmanta_module_name,
                 inmanta_module_version
             FROM
-                {ModulesForAgent.__tablename__}
+                {AgentModules.__tablename__}
             WHERE
                 cm_version=$1
             AND
@@ -281,7 +281,7 @@ class ModulesForAgent(Base):
         :return:
         """
         query = f"""
-            INSERT INTO {ModulesForAgent.__tablename__}(
+            INSERT INTO {AgentModules.__tablename__}(
                 cm_version,
                 environment,
                 agent_name,
@@ -332,7 +332,7 @@ class ModulesForAgent(Base):
         cls, environment: uuid.UUID, model_version: int, connection: asyncpg.connection.Connection
     ) -> None:
         await connection.execute(
-            f"DELETE FROM {ModulesForAgent.__tablename__} WHERE environment=$1 AND cm_version=$2",
+            f"DELETE FROM {AgentModules.__tablename__} WHERE environment=$1 AND cm_version=$2",
             environment,
             model_version,
         )

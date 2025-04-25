@@ -33,7 +33,7 @@ from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
-from inmanta.data import FilesInModule, InmantaModule, ModulesForAgent, PipConfig
+from inmanta.data import ModuleFiles, InmantaModule, AgentModules, PipConfig
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import process_env
 from inmanta.loader import InmantaModule as InmantaModuleDTO
@@ -262,8 +262,8 @@ async def test_get_code(
     ]
 
     module_stmt = insert(InmantaModule).on_conflict_do_nothing()
-    files_in_module_stmt = insert(FilesInModule).on_conflict_do_nothing()
-    modules_for_agent_stmt = insert(ModulesForAgent).on_conflict_do_nothing()
+    files_in_module_stmt = insert(ModuleFiles).on_conflict_do_nothing()
+    modules_for_agent_stmt = insert(AgentModules).on_conflict_do_nothing()
 
     async with data.get_session() as session, session.begin():
         await session.execute(module_stmt, module_data)

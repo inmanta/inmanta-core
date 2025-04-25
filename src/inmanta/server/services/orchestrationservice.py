@@ -39,7 +39,7 @@ from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import DesiredStateVersion
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
 from inmanta.data.model import PipConfig, PromoteTriggerMethod, ResourceDiff, ResourceMinimal, SchedulerStatusReport
-from inmanta.data.sqlalchemy import InmantaModule, ModulesForAgent
+from inmanta.data.sqlalchemy import InmantaModule, AgentModules
 from inmanta.db.util import ConnectionInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
@@ -663,7 +663,7 @@ class OrchestrationService(protocol.ServerSlice):
         Make sure that the same module versions are used in this partial version.
         """
 
-        base_version_data: dict[tuple[str, str], list[str]] = await ModulesForAgent.get_agents_per_module(
+        base_version_data: dict[tuple[str, str], list[str]] = await AgentModules.get_agents_per_module(
             model_version=partial_base_version, environment=environment, connection=connection
         )
         for inmanta_module_name, module_data in module_version_info.items():
@@ -713,7 +713,7 @@ class OrchestrationService(protocol.ServerSlice):
             await InmantaModule.register_modules(
                 environment=environment, module_version_info=module_version_info, connection=connection
             )
-        await ModulesForAgent.register_modules_for_agents(
+        await AgentModules.register_modules_for_agents(
             model_version=version,
             environment=environment,
             module_version_info=module_version_info,

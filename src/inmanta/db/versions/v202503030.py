@@ -33,14 +33,13 @@ async def update(connection: Connection) -> None:
     """
     * Create the inmanta_module table, that keeps track of the python package requirements
       per inmanta module (name, version).
-    * Create the files_in_module table, that keeps track of which files belong to which inmanta
+    * Create the module_files table, that keeps track of which files belong to which inmanta
       module.
-    * Create the modules_for_agent table, that keeps track of which inmanta modules are required
+    * Create the agent_modules table, that keeps track of which inmanta modules are required
       by which agent.
     * Transfer all known source data from the Code table into these newly created tables.
     * Delete the Code table.
     """
-
     schema = """
         CREATE TABLE public.inmanta_module (
             name varchar NOT NULL,
@@ -50,7 +49,7 @@ async def update(connection: Connection) -> None:
             PRIMARY KEY(environment, name, version)
         );
 
-        CREATE TABLE public.files_in_module (
+        CREATE TABLE public.module_files (
             inmanta_module_name varchar NOT NULL,
             inmanta_module_version varchar NOT NULL,
             environment uuid NOT NULL,
@@ -63,7 +62,7 @@ async def update(connection: Connection) -> None:
         );
 
 
-        CREATE TABLE public.modules_for_agent (
+        CREATE TABLE public.agent_modules (
             cm_version integer NOT NULL,
             agent_name varchar NOT NULL,
             inmanta_module_name varchar NOT NULL,
@@ -79,10 +78,10 @@ async def update(connection: Connection) -> None:
         );
 
         -- Foreign key indexes:
-        CREATE INDEX modules_for_agent_environment_agent_name_index
-        ON public.modules_for_agent (environment, agent_name);
-        CREATE INDEX modules_for_agent_environment_module_name_module_version_index
-        ON public.modules_for_agent (environment, inmanta_module_name, inmanta_module_version);
+        CREATE INDEX agent_modules_environment_agent_name_index
+        ON public.agent_modules (environment, agent_name);
+        CREATE INDEX agent_modules_environment_module_name_module_version_index
+        ON public.agent_modules (environment, inmanta_module_name, inmanta_module_version);
 
     """
 
@@ -167,7 +166,7 @@ async def update(connection: Connection) -> None:
         Use the data from the `code_data` container to populate the following data containers:
 
         1) module_data: The data that will be used to populate the new inmanta_module table.
-        2) files_in_module_data: The data that will be used to populate the new files_in_module table.
+        2) files_in_module_data: The data that will be used to populate the new module_files table.
         3) model_to_module_version_map
         """
         module_data: list[tuple[str, str, str, list[str]]] = []
@@ -213,7 +212,7 @@ async def update(connection: Connection) -> None:
         Use the data from the `resource_type_to_module` and `model_to_module_version_map` containers to populate
         the following data container:
 
-        modules_for_agent_data: The data that will be used to populate the new modules_for_agent table.
+        modules_for_agent_data: The data that will be used to populate the new agent_modules table.
         """
         modules_for_agent_data: list[tuple[int, str, str, str, str]] = []
         fetch_agent_for_resource_query = """
@@ -262,7 +261,7 @@ async def update(connection: Connection) -> None:
     await connection.executemany(insert_module, inmanta_module_data)
 
     insert_files_in_module = """
-    INSERT INTO public.files_in_module (
+    INSERT INTO public.module_files (
         inmanta_module_name,
         inmanta_module_version,
         environment,
@@ -276,7 +275,7 @@ async def update(connection: Connection) -> None:
     await connection.executemany(insert_files_in_module, files_in_module_data)
 
     insert_modules_for_agent = """
-    INSERT INTO public.modules_for_agent (
+    INSERT INTO public.agent_modules (
         cm_version,
         environment,
         agent_name,

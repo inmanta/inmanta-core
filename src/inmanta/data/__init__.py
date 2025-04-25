@@ -62,7 +62,7 @@ from inmanta.const import (
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
-from inmanta.data.sqlalchemy import FilesInModule, InmantaModule, ModulesForAgent
+from inmanta.data.sqlalchemy import ModuleFiles, InmantaModule, AgentModules
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
@@ -2713,9 +2713,9 @@ class Environment(BaseDocument):
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
 
-            await ModulesForAgent.delete_all(environment=self.id, connection=con)
+            await AgentModules.delete_all(environment=self.id, connection=con)
             await InmantaModule.delete_all(environment=self.id, connection=con)
-            await FilesInModule.delete_all(environment=self.id, connection=con)
+            await ModuleFiles.delete_all(environment=self.id, connection=con)
 
             await DiscoveredResource.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsGauge.delete_all(environment=self.id, connection=con)
@@ -5962,9 +5962,9 @@ class ConfigurationModel(BaseDocument):
             await Compile.delete_all(environment=self.environment, version=self.version, connection=con)
             await DryRun.delete_all(environment=self.environment, model=self.version, connection=con)
 
-            await ModulesForAgent.delete_version(environment=self.environment, model_version=self.version, connection=con)
+            await AgentModules.delete_version(environment=self.environment, model_version=self.version, connection=con)
             await InmantaModule.delete_version(environment=self.environment, model_version=self.version, connection=con)
-            await FilesInModule.delete_version(environment=self.environment, model_version=self.version, connection=con)
+            await ModuleFiles.delete_version(environment=self.environment, model_version=self.version, connection=con)
 
             await UnknownParameter.delete_all(environment=self.environment, version=self.version, connection=con)
             await self._execute_query(

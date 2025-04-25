@@ -60,48 +60,48 @@ class CodeManager:
         module_install_specs = []
         modules_for_agent = (
             select(
-                models.ModulesForAgent.inmanta_module_name,
-                models.ModulesForAgent.inmanta_module_version,
+                models.AgentModules.inmanta_module_name,
+                models.AgentModules.inmanta_module_version,
                 models.InmantaModule.requirements,
-                models.FilesInModule.python_module_name,
-                models.FilesInModule.file_content_hash,
-                models.FilesInModule.is_byte_code,
+                models.ModuleFiles.python_module_name,
+                models.ModuleFiles.file_content_hash,
+                models.ModuleFiles.is_byte_code,
                 models.File.content,
                 models.ConfigurationModel.pip_config,
             )
             .join(
                 models.InmantaModule,
                 and_(
-                    models.ModulesForAgent.inmanta_module_name == models.InmantaModule.name,
-                    models.ModulesForAgent.inmanta_module_version == models.InmantaModule.version,
-                    models.ModulesForAgent.environment == models.InmantaModule.environment,
+                    models.AgentModules.inmanta_module_name == models.InmantaModule.name,
+                    models.AgentModules.inmanta_module_version == models.InmantaModule.version,
+                    models.AgentModules.environment == models.InmantaModule.environment,
                 ),
             )
             .join(
-                models.FilesInModule,
+                models.ModuleFiles,
                 and_(
-                    models.InmantaModule.name == models.FilesInModule.inmanta_module_name,
-                    models.InmantaModule.version == models.FilesInModule.inmanta_module_version,
-                    models.InmantaModule.environment == models.FilesInModule.environment,
+                    models.InmantaModule.name == models.ModuleFiles.inmanta_module_name,
+                    models.InmantaModule.version == models.ModuleFiles.inmanta_module_version,
+                    models.InmantaModule.environment == models.ModuleFiles.environment,
                 ),
             )
             .join(
                 models.File,
-                models.FilesInModule.file_content_hash == models.File.content_hash,
+                models.ModuleFiles.file_content_hash == models.File.content_hash,
             )
             .join(
                 models.ConfigurationModel,
                 and_(
-                    models.ModulesForAgent.cm_version == models.ConfigurationModel.version,
-                    models.ModulesForAgent.environment == models.ConfigurationModel.environment,
+                    models.AgentModules.cm_version == models.ConfigurationModel.version,
+                    models.AgentModules.environment == models.ConfigurationModel.environment,
                 ),
             )
             .where(
-                models.ModulesForAgent.environment == environment,
-                models.ModulesForAgent.agent_name == agent_name,
-                models.ModulesForAgent.cm_version == model_version,
+                models.AgentModules.environment == environment,
+                models.AgentModules.agent_name == agent_name,
+                models.AgentModules.cm_version == model_version,
             )
-            .order_by(models.ModulesForAgent.inmanta_module_name)
+            .order_by(models.AgentModules.inmanta_module_name)
         )
 
         async with data.get_session() as session:
