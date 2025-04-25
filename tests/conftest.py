@@ -882,7 +882,7 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
 
         a.executor_manager = executor
         a.scheduler.executor_manager = executor
-        a.scheduler.code_manager = utils.DummyCodeManager(a._client)
+        a.scheduler.code_manager = utils.DummyCodeManager()
         await a.start()
         await utils.retry_limited(
             lambda: agentmanager.get_agent_client(tid=environment, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=True)
