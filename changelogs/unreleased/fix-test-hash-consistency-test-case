@@ -1,4 +1,0 @@
----
-description: Fix test_hash_consistency_across_sessions test case.
-change-type: patch
-destination-branches: [master, iso8]
