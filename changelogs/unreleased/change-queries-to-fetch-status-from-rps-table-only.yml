@@ -1,0 +1,3 @@
+change-type: patch
+description: Change get_current_resource_state to fetch status from rps table only
+destination-branches: [master]
