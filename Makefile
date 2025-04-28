@@ -94,7 +94,7 @@ mypy-full: $(parsetab)
 test:
 	$(PYTHON) -m pytest -vvv --log-level DEBUG $(TESTS)
 ci-test:
-	$(PYTHON) -m pytest -vvv --log-level DEBUG -p no:sugar --junitxml=junit-tests.xml $(PYTEST_EXTRA_ARGS) $(TESTS)/forking_agent/test_venv_manager.py::test_hash_consistency_across_sessions
+	$(PYTHON) -m pytest -vvv --log-level DEBUG -p no:sugar --junitxml=junit-tests.xml $(PYTEST_EXTRA_ARGS) $(TESTS)
 
 .PHONY: all ci-all
 all: pep8 mypy test
