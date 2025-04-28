@@ -315,7 +315,7 @@ class ReferenceLike:
         return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
     def __eq__(self, other: object) -> bool:
-        if type(self) != type(other):
+        if type(self) is not type(other):
             return False
 
         my_args = self.arguments
