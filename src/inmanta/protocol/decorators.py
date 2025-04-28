@@ -181,7 +181,7 @@ def typedmethod(
 
     def wrapper(func: MethodT) -> MethodT:
         paths = path if isinstance(path, list) else [path]
-        for index, current_path in enumerate(paths):
+        for current_path in paths:
             properties = common.MethodProperties(
                 func,
                 current_path,
