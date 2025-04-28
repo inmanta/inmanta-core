@@ -319,6 +319,7 @@ class ReferenceLike:
             return False
 
         my_args = self.arguments
+        assert isinstance(other, ReferenceLike)  # mypy can't figure out the check above
         other_args = other.arguments
 
         if my_args.keys() != other_args.keys():
