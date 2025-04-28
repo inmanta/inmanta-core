@@ -61,7 +61,7 @@ from inmanta.const import (
 )
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer, ReleasedResourceState
+from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config

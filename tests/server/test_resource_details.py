@@ -18,19 +18,16 @@ Contact: code@inmanta.com
 
 import datetime
 import itertools
-import uuid
 from collections import defaultdict
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 import pytest
 from dateutil.tz import UTC
 
-from inmanta import const, data, resources, util
-from inmanta.agent import executor
+from inmanta import const, data
 from inmanta.const import ResourceState
-from inmanta.deploy import persistence, state
-from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+from inmanta.types import ResourceVersionIdStr
 from inmanta.util import parse_timestamp
 
 

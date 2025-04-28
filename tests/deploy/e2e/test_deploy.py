@@ -28,7 +28,7 @@ import pytest
 from inmanta import config, const, data, execute
 from inmanta.config import Config
 from inmanta.data import SERVER_COMPILE
-from inmanta.data.model import SchedulerStatusReport
+from inmanta.data.model import ReleasedResourceState, SchedulerStatusReport
 from inmanta.deploy.state import Blocked, Compliance, DeployResult, ResourceState
 from inmanta.deploy.work import TaskPriority
 from inmanta.resources import Id
@@ -1229,7 +1229,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
 
         await wait_until_deployment_finishes(client, env_id, version=version)
 
-    async def assert_states(expected_states: dict[ResourceIdStr, const.ResourceState]) -> None:
+    async def assert_states(expected_states: dict[ResourceIdStr, ReleasedResourceState]) -> None:
         # Verify behavior of resource_details() endpoint.
         for rid, current_resource_state in expected_states.items():
             result = await client.resource_details(tid=environment, rid=rid)
@@ -1242,12 +1242,16 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         resource_state: Optional[const.ResourceState]
         for rid, current_resource_state in expected_states.items():
             resource_state = await data.Resource.get_current_resource_state(env=uuid.UUID(environment), rid=rid)
-            assert resource_state == current_resource_state
+            if resource_state is None:
+                assert ReleasedResourceState("orphaned") == current_resource_state
+            else:
+                assert isinstance(resource_state, const.ResourceState)
+                assert ReleasedResourceState(resource_state) == current_resource_state
 
         # Verify behavior of resource_list() endpoint
         result = await client.resource_list(tid=environment)
         assert result.code == 200
-        actual_states = {r["resource_id"]: const.ResourceState(r["status"]) for r in result.result["data"]}
+        actual_states = {r["resource_id"]: ReleasedResourceState(r["status"]) for r in result.result["data"]}
         assert actual_states == expected_states
 
     resource_container.Provider.set_fail("agent1", "key2", 1)
@@ -1265,11 +1269,11 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     )
     await assert_states(
         {
-            ResourceIdStr("test::Resource[agent1,key=key1]"): const.ResourceState.deployed,
-            ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.failed,
-            ResourceIdStr("test::Resource[agent1,key=key3]"): const.ResourceState.skipped,
-            ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.undefined,
-            ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.skipped_for_undefined,
+            ResourceIdStr("test::Resource[agent1,key=key1]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): ReleasedResourceState.failed,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): ReleasedResourceState.skipped,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): ReleasedResourceState.undefined,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): ReleasedResourceState.skipped_for_undefined,
         }
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
@@ -1331,11 +1335,11 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     )
     await assert_states(
         {
-            ResourceIdStr("test::Resource[agent1,key=key1]"): const.ResourceState.orphaned,
-            ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.deployed,
-            ResourceIdStr("test::Resource[agent1,key=key3]"): const.ResourceState.deployed,
-            ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.deployed,
-            ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key1]"): ReleasedResourceState.orphaned,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): ReleasedResourceState.deployed,
         }
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
@@ -1365,11 +1369,11 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     )
     await assert_states(
         {
-            ResourceIdStr("test::Resource[agent1,key=key1]"): const.ResourceState.deployed,
-            ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.deployed,
-            ResourceIdStr("test::Resource[agent1,key=key3]"): const.ResourceState.deployed,
-            ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.undefined,
-            ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.skipped_for_undefined,
+            ResourceIdStr("test::Resource[agent1,key=key1]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): ReleasedResourceState.undefined,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): ReleasedResourceState.skipped_for_undefined,
         }
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
