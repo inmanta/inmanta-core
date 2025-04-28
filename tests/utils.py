@@ -1106,6 +1106,6 @@ def validate_version_numbers_migration_scripts(versions_folder: pathlib.Path) ->
         if file_name == "v1.py":
             v1_found = True
             continue
-        if not re.fullmatch(r"v([0-9]{8}[0-9]+)\.py", file_name):
+        if not re.fullmatch(r"v([0-9]{9})\.py", file_name):
             raise Exception(f"Database migration script {file_name} has invalid format.")
     assert v1_found
