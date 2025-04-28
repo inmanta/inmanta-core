@@ -24,12 +24,12 @@ import pytest
 from inmanta import config, const
 from inmanta.protocol import common
 from inmanta.protocol.auth import auth, decorators, policy_engine
-from inmanta.protocol.decorators import handle, typedmethod
+from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.server import protocol
 
 
 @pytest.fixture
-async def server_with_test_slice(tmpdir, access_policy: str) -> protocol.Server:
+async def server_with_test_slice(tmpdir, access_policy: str, path_policy_engine_executable: str) -> protocol.Server:
     """
     A fixture that returns a server with authentication and authorization enabled
     that has a TestSlice with several different API endpoints that require authorization
@@ -61,6 +61,7 @@ async def server_with_test_slice(tmpdir, access_policy: str) -> protocol.Server:
         fh.write(access_policy)
     policy_engine.policy_file.set(access_policy_file)
     policy_engine.policy_engine_log_level.set("info")
+    policy_engine.path_opa_executable.set(path_policy_engine_executable)
 
     # Define the TestSlice and its API endpoints
     @decorators.auth(auth_label="test", read_only=True)
@@ -317,3 +318,100 @@ async def test_policy_engine_data() -> None:
     assert read_write_method_metadata["read_only"] is False
     assert read_write_method_metadata["client_types"] == ["api", "agent"]
     assert read_write_method_metadata["environment_param"] == "tid"
+
+
+async def test_missing_auth_annotation() -> None:
+    """
+    Ensure that the validation logic of the server raises an Exception if an API endpoint
+    is missing an @auth annotation.
+    """
+
+    @method(path="/test/<id>", operation="GET")
+    def missing_auth_annotation(id: str):
+        pass
+
+    with pytest.raises(Exception) as excinfo:
+        protocol.Server()._validate()
+
+    assert "API endpoint missing_auth_annotation is missing an @auth annotation." in str(excinfo.value)
+
+
+async def test_auth_annotation_not_required() -> None:
+    """
+    Verify that no exception is raised if the @auth annotation is missing on endpoints for machine-to-machine
+    communication.
+    """
+
+    @method(path="/test1/<id>", agent_server=True, operation="GET")
+    def method_1(id: str):
+        pass
+
+    @method(path="/test2/<id>", client_types=[const.ClientType.agent], operation="GET")
+    def method_2(id: str):
+        pass
+
+    @method(path="/test3/<id>", client_types=[const.ClientType.compiler], operation="GET")
+    def method_3(id: str):
+        pass
+
+    @method(
+        path="/test4/<id>",
+        client_types=[const.ClientType.agent, const.ClientType.compiler],
+        operation="GET",
+    )
+    def method_4(id: str):
+        pass
+
+    protocol.Server()._validate()
+
+
+async def test_auth_annotation() -> None:
+    """
+    Validate whether the logic behind the @auth annotation works correctly.
+    """
+
+    @decorators.auth(auth_label="label1", read_only=True, environment_param="id")
+    @method(path="/test1/<id>", operation="GET")
+    def method_1(id: str) -> None:
+        pass
+
+    @decorators.auth(auth_label="label2", read_only=False)
+    @method(path="/test2", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
+    def method_2(id: str) -> None:
+        pass
+
+    @decorators.auth(auth_label="label3", read_only=True, environment_param="id")
+    @typedmethod(path="/test3/<id>", operation="GET")
+    def method_3(id: str) -> None:
+        pass
+
+    @decorators.auth(auth_label="label4", read_only=False)
+    @typedmethod(path="/test4", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
+    def method_4(id: str) -> None:
+        pass
+
+    data: dict[str, object] = common.MethodProperties.get_open_policy_agent_data()
+    assert data["endpoints"]["GET /api/v1/test1/<id>"] == {
+        "client_types": [const.ClientType.api],
+        "auth_label": "label1",
+        "read_only": True,
+        "environment_param": "id",
+    }
+    assert data["endpoints"]["POST /api/v1/test2"] == {
+        "client_types": [const.ClientType.api, const.ClientType.agent],
+        "auth_label": "label2",
+        "read_only": False,
+        "environment_param": None,
+    }
+    assert data["endpoints"]["GET /api/v1/test3/<id>"] == {
+        "client_types": [const.ClientType.api],
+        "auth_label": "label3",
+        "read_only": True,
+        "environment_param": "id",
+    }
+    assert data["endpoints"]["POST /api/v1/test4"] == {
+        "client_types": [const.ClientType.api, const.ClientType.agent],
+        "auth_label": "label4",
+        "read_only": False,
+        "environment_param": None,
+    }
