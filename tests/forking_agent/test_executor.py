@@ -198,7 +198,7 @@ def test():
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
     oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test", 1, dummy)])
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", 1, full)])
+    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test:DDD:Test", 1, full)])
 
     assert oldest_executor.id in manager.pool
 

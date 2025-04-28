@@ -143,7 +143,10 @@ async def test_agent_installs_dependency_containing_extras(
         model_version=version,
         agent_name="agent1",
     )
+
+    assert install_spec[0].blueprint.sources[0].source == b'file content'
     await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
+
 
     installed_packages = process_env.get_installed_packages()
 
@@ -168,6 +171,12 @@ async def test_get_code(
     agent,
     client,
 ) -> None:
+    """
+    Test the code_manager get_code method.
+
+    1) Set up some data in the agent_modules, inmanta_modules and module_files tables.
+    2) Test data retrieval with the get_code method.
+    """
     codemanager = CodeManager()
 
     # Create project
@@ -198,34 +207,48 @@ async def test_get_code(
     for agent_name in agents:
         await agent_manager.ensure_agent_registered(env=env, nodename=agent_name)
 
-    content = "".encode()
-    hash = hash_file(content)
-    body = base64.b64encode(content).decode("ascii")
+    async def upload_files(contents: Sequence[str]) -> list[str]:
+        "helper method to upload some files using the file API"
+        file_hashes = []
+        for file_content in contents:
+            content = file_content.encode()
+            hash = hash_file(content)
+            file_hashes.append(hash)
+            body = base64.b64encode(content).decode("ascii")
 
-    result = await client.upload_file(id=hash, content=body)
-    assert result.code == 200
+            result = await client.upload_file(id=hash, content=body)
+            assert result.code == 200
+
+        return file_hashes
+
+    file_contents = ["A", "B", "C"]
+    files_hashes: Sequence[str]
+    files_hashes = await upload_files(file_contents)
 
     # Setup each module version with a number of file corresponding to its index:
     #  module version:   v1.0.0  v2.0.0  v3.0.0
     #         n_files:      1       2       3
+    #         content:      A      A,B    A,B,C
 
     files_in_module_data = [
         {
             "inmanta_module_name": inmanta_module_name,
             "inmanta_module_version": inmanta_module_version,
             "environment": env_id,
-            "file_content_hash": hash,
+            "file_content_hash": file_hash,
             "python_module_name": python_module_name,
             "is_byte_code": False,
         }
         for inmanta_module_name in inmanta_modules
         for n_files_to_create, inmanta_module_version in enumerate(inmanta_module_versions)
-        for python_module_name in [
-            f"inmanta_plugins.{inmanta_module_name}.{py_module}"
-            for py_module in [
-                f"top_module{suffix}" for suffix in [".sub" * i for i in range(1 + n_files_to_create)][: 1 + n_files_to_create]
-            ]
-        ]
+        for python_module_name, file_hash in zip(
+                [
+                f"inmanta_plugins.{inmanta_module_name}.{py_module}"
+                for py_module in [
+                    f"top_module{suffix}" for suffix in [".sub" * i for i in range(1 + n_files_to_create)]
+                ]
+            ],
+            files_hashes)
     ]
 
     module_data = [
@@ -243,6 +266,7 @@ async def test_get_code(
     # Setup each agent with the following modules:
 
     #            model version:      1        2       3
+    #   inmanta module version:   v1.0.0   v2.0.0  v3.0.0
     #  module list for agent_1:     [1]     [1, 2]   [1, 2, 3]
     #  module list for agent_2:  [1, 2, 3]  [1, 2]   [1]
 
@@ -269,21 +293,28 @@ async def test_get_code(
         await session.execute(module_stmt, module_data)
         await session.execute(files_in_module_stmt, files_in_module_data)
         await session.execute(modules_for_agent_stmt, modules_for_agent_data)
-        # await session.commit()
 
     for version in model_versions:
         module_install_specs = await codemanager.get_code(environment=env_id, model_version=version, agent_name="agent_1")
         # Agent 1 is set up to have |version| files per module version and |version| modules per model version:
         assert len(module_install_specs) == version
+        expected_content = set(file_contents[:version])
         for spec in module_install_specs:
             assert len(spec.blueprint.sources) == version
+
+            actual_content = set([module_source.source.decode() for module_source in spec.blueprint.sources])
+            assert actual_content == expected_content
 
     for version in model_versions:
         module_install_specs = await codemanager.get_code(environment=env_id, model_version=version, agent_name="agent_2")
         # Agent 2 is set up to have |version| files per module version and (4-|version|) modules per model version:
         assert len(module_install_specs) == (4 - version)
+        expected_content = set(file_contents[:version])
+
         for spec in module_install_specs:
             assert len(spec.blueprint.sources) == version
+            actual_content = set([module_source.source.decode() for module_source in spec.blueprint.sources])
+            assert actual_content == expected_content
 
 
 async def test_agent_code_loading_with_failure(
@@ -300,9 +331,7 @@ async def test_agent_code_loading_with_failure(
     Test goal: make sure that failed resources are correctly returned by `get_code` and `ensure_code` methods.
     The failed resources should have the right exception contained in the returned object.
 
-    TODO: update docstrings of all updated tests
-    TODO: remove old transport mechanism parts
-
+    TODO critical look at what we want to test
     """
 
     caplog.set_level(DEBUG)
@@ -311,7 +340,7 @@ async def test_agent_code_loading_with_failure(
     hash = hash_file(content)
     body = base64.b64encode(content).decode("ascii")
 
-    mocked_module_version_info = {
+    module_version_info = {
         "test": InmantaModuleDTO(
             name="test",
             version="abc",
@@ -347,7 +376,7 @@ async def test_agent_code_loading_with_failure(
                     "name": "test",
                 },
             ],
-            module_version_info=mocked_module_version_info,
+            module_version_info=module_version_info,
             compiler_version=get_compiler_version(),
             pip_config=PipConfig(),
         )
@@ -355,8 +384,6 @@ async def test_agent_code_loading_with_failure(
         return version
 
     version_1 = await get_version()
-
-    config.Config.set("agent", "executor-mode", "threaded")
 
     codemanager = CodeManager()
 
@@ -367,7 +394,7 @@ async def test_agent_code_loading_with_failure(
             environment=environment, model_version=nonexistent_version, agent_name="dummy_agent_name"
         )
 
-    module_install_specs_2 = await codemanager.get_code(environment=environment, model_version=version_1, agent_name="agent1")
+    module_install_specs = await codemanager.get_code(environment=environment, model_version=version_1, agent_name="agent1")
 
     async def _install(blueprint: executor.ExecutorBlueprint) -> None:
         raise Exception("MKPTCH: Unable to load code when agent is started with code loading disabled.")
@@ -375,7 +402,7 @@ async def test_agent_code_loading_with_failure(
     monkeypatch.setattr(agent.executor_manager, "_install", _install)
 
     failed_to_load = await agent.executor_manager.ensure_code(
-        code=module_install_specs_2,
+        code=module_install_specs,
     )
     assert len(failed_to_load) == 1
     for handler, exception in failed_to_load.items():
@@ -393,6 +420,8 @@ async def test_agent_code_loading_with_failure(
 async def test_logging_on_code_loading_failure_missing_code(server, client, environment, clienthelper):
     """
     This test case ensures that if handler code cannot be loaded, this is reported in the resource action log.
+
+    TODO critical look at what we want to test
     """
     version = await clienthelper.get_version()
 
@@ -428,6 +457,12 @@ async def test_logging_on_code_loading_failure_missing_code(server, client, envi
 
 @pytest.mark.parametrize("auto_start_agent", [True])
 async def test_logging_on_code_loading_error(server, client, environment, clienthelper):
+    """
+    1) Deploy resources that use broken code
+    2) Check the resource action log
+
+    TODO critical look at what we want to test
+    """
     version = await clienthelper.get_version()
     resources = [
         {
@@ -453,7 +488,7 @@ async def test_logging_on_code_loading_error(server, client, environment, client
     hv1: str = sha1sum.hexdigest()
     await client.upload_file(hv1, content=base64.b64encode(content.encode()).decode("ascii"))
 
-    module_source_metadata1 = ModuleSourceMetadata(
+    module_source_metadata = ModuleSourceMetadata(
         name="inmanta_plugins.test",
         hash_value=hv1,
         is_byte_code=False,
@@ -463,7 +498,7 @@ async def test_logging_on_code_loading_error(server, client, environment, client
         "test": InmantaModuleDTO(
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata1],
+            files_in_module=[module_source_metadata],
             requirements=[],
             for_agents=["agent1"],
         )

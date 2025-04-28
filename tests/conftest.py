@@ -724,7 +724,6 @@ async def server_config(
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
-        config.Config.set("agent", "executor-mode", "forking")
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
         yield config
@@ -800,7 +799,6 @@ async def server_multi(
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
-        config.Config.set("agent", "executor-mode", "forking")
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
 

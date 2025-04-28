@@ -96,7 +96,6 @@ async def config(inmanta_config, tmp_path):
     Config.set("config", "log-dir", str(tmp_path / "logs"))
     Config.set("server", "agent-timeout", "2")
     Config.set("agent", "agent-repair-interval", "0")
-    Config.set("agent", "executor-mode", "forking")
     Config.set("agent", "executor-venv-retention-time", "60")
     Config.set("agent", "executor-retention-time", "10")
 

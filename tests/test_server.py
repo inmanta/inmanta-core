@@ -29,12 +29,13 @@ import pytest
 from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-from inmanta import config, const, data, resources, util
+from inmanta import config, const, data, resources, util, loader
 from inmanta.agent import executor
 from inmanta.const import ParameterSource
 from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import persistence, state
+from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVER
 from inmanta.server import config as opt
@@ -608,21 +609,6 @@ async def test_token_without_auth(server, client, environment):
     token = await client.create_token(environment, ["api"], idempotent=True)
     assert token.code == 400
 
-
-async def test_batched_code_upload(
-    server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
-):
-    """Test uploading all code definitions at once"""
-    # TODO remove or adapt this test ?
-    snippetcompiler.setup_for_snippet(
-        """
-    import std::testing
-    f = std::testing::NullResource(name="test")
-    """
-    )
-    version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
-
-    # code_manager = loader.CodeManager()
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])

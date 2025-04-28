@@ -20,6 +20,7 @@ import hashlib
 import importlib.abc
 import importlib.machinery
 import importlib.util
+import inspect
 import os
 import shutil
 import sys
@@ -33,6 +34,7 @@ from pytest import fixture
 
 import utils
 from inmanta import const, env, loader, moduletool
+from inmanta.agent.code_manager import CodeManager
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource
@@ -82,22 +84,20 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependen
     mgr.register_code("std::testing::NullResource", single.MyHandler)
     mgr.register_code("multiple_plugin_files::NullResourceBis", multi.MyHandler)
 
-    return
-    # def assert_content(source_info: SourceInfo, handler) -> str:
-    #     filename = inspect.getsourcefile(handler)
-    #     assert filename is not None
-    #     content: str
-    #     with open(filename, "rb") as fd:
-    #         content = fd.read()
-    #         assert source_info.content == content
-    #         assert len(source_info.hash) > 0
-    #         return content
+    def assert_content(source_info: ModuleSource, handler) -> str:
+        filename = inspect.getsourcefile(handler)
+        assert filename is not None
+        content: str
+        with open(filename, "rb") as fd:
+            content = fd.read()
+            assert source_info.content == content
+            assert len(source_info.hash) > 0
+            return content
 
-    # get types
-    # module_version_info = mgr.get_module_version_info()
-    # TODO rework this test: get_types is gone and file content is not meant to be accessible anymore (or is it ?)
-    # assert "std::testing::NullResource" in types
-    # assert "multiple_plugin_files::NullResourceBis" in types
+    module_version_info = mgr.get_module_version_info()
+    assert "multiple_plugin_files" in module_version_info.keys()
+    assert "single_plugin_file" in module_version_info.keys()
+
     #
     # single_type_list: list[SourceInfo] = types["std::testing::NullResource"]
     # multi_type_list: list[SourceInfo] = types["multiple_plugin_files::NullResourceBis"]
