@@ -33,6 +33,7 @@ from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDepen
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
 from inmanta.data.model import AttributeStateChange
 from inmanta.loader import CodeLoader
+from inmanta.references import MutatorMissingError
 from inmanta.resources import Resource
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import NamedLock, join_threadpools
@@ -201,6 +202,13 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 )
                 if ctx.status is None:
                     ctx.set_resource_state(const.HandlerResourceState.deployed)
+            except MutatorMissingError as e:
+                ctx.set_resource_state(const.HandlerResourceState.unavailable)
+                ctx.exception(
+                    "An error occurred during reference resolution for resource %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=repr(e),
+                )
             except SkipResourceForDependencies as e:
                 ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
                 ctx.warning(

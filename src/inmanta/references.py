@@ -84,6 +84,13 @@ class ReferenceCycleException(Exception):
     def __str__(self) -> str:
         return self.get_message()
 
+class MutatorMissingError(TypeError):
+    """
+    Exception raised during reference resolution when the requested mutator
+    cannot be found in the set of registered mutators.
+
+    e.g. when no mutator was registered or in case of code loading failure.
+    """
 
 class Argument(pydantic.BaseModel):
     """Base class for reference (resolver) arguments"""
@@ -453,7 +460,7 @@ class mutator:
     def get_class(cls, name: str) -> type[Mutator]:
         """Get the mutator class registered with the given name"""
         if name not in cls._mutator_classes:
-            raise TypeError(f"There is no mutator class registered with name {name}")
+            raise MutatorMissingError(f"There is no mutator class registered with name {name}")
 
         return cls._mutator_classes[name]
 
