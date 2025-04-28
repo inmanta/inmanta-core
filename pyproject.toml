@@ -39,6 +39,9 @@ warn_return_any = true
 warn_unused_configs = true
 warn_unused_ignores = true
 
+[tool.mypy-baseline]
+sort_baseline = true
+
 [tool.pydantic-mypy]
 init_forbid_extra = true
 init_typed = true

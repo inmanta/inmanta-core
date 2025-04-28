@@ -580,6 +580,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                                 extra_fields["last_deployed_version"] = version
 
                             await res.update_persistent_state(
+                                is_deploying=True if status == ResourceState.deploying else False,
                                 **extra_fields,
                                 connection=inner_connection,
                             )

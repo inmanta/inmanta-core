@@ -617,6 +617,7 @@ async def test_log_deploy_start(server, client, environment, clienthelper, agent
         {"name": "file1", "id": rvid_r1_v1, "requires": [], "purged": False, "send_event": False},
     ]
     await clienthelper.put_version_simple(resources, version)
+    await data.ResourcePersistentState.populate_for_version(environment=uuid.UUID(environment), model_version=version)
 
     # Start new deployment for r1
     await resource_deployer.start_deployment(rvid=rvid_r1_v1)
