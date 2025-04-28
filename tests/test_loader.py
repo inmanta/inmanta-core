@@ -34,7 +34,6 @@ from pytest import fixture
 
 import utils
 from inmanta import const, env, loader, moduletool
-from inmanta.agent.code_manager import CodeManager
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource

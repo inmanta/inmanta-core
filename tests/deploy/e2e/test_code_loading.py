@@ -28,7 +28,7 @@ from logging import DEBUG
 import py
 import pytest
 
-from inmanta import config, data
+from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
@@ -144,9 +144,8 @@ async def test_agent_installs_dependency_containing_extras(
         agent_name="agent1",
     )
 
-    assert install_spec[0].blueprint.sources[0].source == b'file content'
+    assert install_spec[0].blueprint.sources[0].source == b"file content"
     await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
-
 
     installed_packages = process_env.get_installed_packages()
 
@@ -242,13 +241,12 @@ async def test_get_code(
         for inmanta_module_name in inmanta_modules
         for n_files_to_create, inmanta_module_version in enumerate(inmanta_module_versions)
         for python_module_name, file_hash in zip(
-                [
+            [
                 f"inmanta_plugins.{inmanta_module_name}.{py_module}"
-                for py_module in [
-                    f"top_module{suffix}" for suffix in [".sub" * i for i in range(1 + n_files_to_create)]
-                ]
+                for py_module in [f"top_module{suffix}" for suffix in [".sub" * i for i in range(1 + n_files_to_create)]]
             ],
-            files_hashes)
+            files_hashes,
+        )
     ]
 
     module_data = [
