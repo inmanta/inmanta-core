@@ -192,7 +192,7 @@ class CodeManager:
 
 @dataclass(frozen=True)
 class FailedModuleSource:
-    module_source: ModuleSource
+    file_name: str
     exception: Exception
 
 

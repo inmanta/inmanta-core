@@ -95,14 +95,16 @@ class Task(abc.ABC):
             agent_name=agent_name, agent_uri="NO_URI", code=code
         )
 
-        # Bail out if any module install / load failed:
-        if my_executor.failed_modules:
+        # Bail out if the current task's resource needs code
+        # that failed to load/install:
+        inmanta_module_name = self.resource.split("::")[0]
+        if inmanta_module_name in my_executor.failed_modules:
             raise BaseExceptionGroup(
                 """
                     The following modules cannot be installed: %s.
                 """
-                % ", ".join([e for e in my_executor.failed_modules.keys()]),
-                [e for e in my_executor.failed_modules.values()],
+                % ", ".join([e for e in my_executor.failed_modules[inmanta_module_name].keys()]),
+                [e for e in my_executor.failed_modules[inmanta_module_name].values()],
             )
 
         return my_executor
@@ -174,15 +176,6 @@ class Deploy(Task):
                         error=str(beg),
                         sub_excp=str(beg.exceptions),
                     )
-                    # log_line = data.LogLine.log(
-                    #     logging.ERROR,
-                    #     "All resources of type `%(res_type)s` failed to load handler code or install handler code "
-                    #     "dependencies: `%(error)s`\n%(traceback)s",
-                    #     res_type=executor_resource_details.id.entity_type,
-                    #     error=str(beg),
-                    #     traceback="".join(traceback.format_tb(beg.__traceback__)),
-                    # )
-                    # Not attached to ctx, needs to be flushed to logger explicitly
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
                     return

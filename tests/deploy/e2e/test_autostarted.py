@@ -54,7 +54,6 @@ async def wait_for_resources_in_state(client, environment: uuid.UUID, nr_of_reso
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
-        logger.error(f"{summary=}")
         return summary["by_state"][state.value] == nr_of_resources
 
     await retry_limited(_done_waiting, timeout=10)
@@ -1423,3 +1422,66 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     rps = await data.ResourcePersistentState.get_one(environment=environment)
     assert rps
     assert rps.is_deploying is False
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_code_install_success_code_load_error(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    clienthelper,
+    environment,
+    auto_start_agent: bool,
+    async_finalizer,
+    monkeypatch,
+    tmp_path,
+):
+    """
+    Make sure that code installation errors only affect deployment of resources that
+    rely on this code for their deployment.
+
+    e.g. in the following scenario, check
+    that agent_1 can still deploy resources of type SuccessResource, even if an error occurred
+    during the import of code necessary to deploy resources of type CodeInstallErrorResource:
+
+
+    This test uses these two modules:
+        - minimalinstallfailuremodule  ->  handler code for resource of type CodeInstallErrorResource
+        - successhandlermodule  ->  handler code for resource of type SuccessResource
+
+    Set up 1 agent that install both modules
+
+    Deploy 2 resources: 1 SuccessResource and 1 CodeInstallErrorResource
+
+    Check that the agent can still deploy the SuccessResource even if a code loading failure
+    occurred when installing the code necessary to deploy the CodeInstallErrorResource.
+
+    """  # noqa: E501
+
+    # First, configure everything
+    config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
+
+    snippetcompiler.setup_for_snippet(
+        """
+    import minimalinstallfailuremodule
+    import successhandlermodule
+
+    r_1 = minimalinstallfailuremodule::CodeInstallErrorResource(name="test_fail_1", agent="agent_1")
+    r_2 = successhandlermodule::SuccessResource(name="test_success", agent="agent_1")
+        """,  # noqa: E501
+        ministd=True,
+        index_url="https://pypi.org/simple",
+    )
+
+    # Now, let's deploy resources
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)

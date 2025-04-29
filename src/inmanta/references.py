@@ -84,6 +84,7 @@ class ReferenceCycleException(Exception):
     def __str__(self) -> str:
         return self.get_message()
 
+
 class MutatorMissingError(TypeError):
     """
     Exception raised during reference resolution when the requested mutator
@@ -91,6 +92,7 @@ class MutatorMissingError(TypeError):
 
     e.g. when no mutator was registered or in case of code loading failure.
     """
+
 
 class Argument(pydantic.BaseModel):
     """Base class for reference (resolver) arguments"""

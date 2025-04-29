@@ -564,7 +564,8 @@ class Executor(abc.ABC):
     :param storage: File system path to where the executor's resources are stored.
     """
 
-    failed_modules: FailedModules
+    # Maps inmanta module names to the map of their python modules that failed during installation.
+    failed_modules: Mapping[str, FailedModules]
 
     @abc.abstractmethod
     async def execute(

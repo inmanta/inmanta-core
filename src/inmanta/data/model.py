@@ -1018,6 +1018,9 @@ class ModuleSourceMetadata(BaseModel):
             return False
         return (self.name, self.hash_value, self.is_byte_code) == (other.name, other.hash_value, other.is_byte_code)
 
+    def get_inmanta_module_name(self) -> str:
+        return self.name.split(".")[1]
+
 
 @functools.total_ordering
 class ModuleSource(BaseModel):
@@ -1058,6 +1061,9 @@ class ModuleSource(BaseModel):
         if not isinstance(other, ModuleSource):
             return False
         return self.metadata == other.metadata
+
+    def get_inmanta_module_name(self) -> str:
+        return self.metadata.get_inmanta_module_name()
 
 
 class InmantaModule(BaseModel):

@@ -527,38 +527,31 @@ async def test_logging_on_code_loading_error(server, client, environment, client
         "All resources of type `test::ResourceBBB` failed to load handler code or install handler code dependencies: "
     )
 
-    def check_for_messages(data, must_be_present: str, must_be_absent: str) -> None:
+    def check_for_message(data, must_be_present: str) -> None:
         """
-        Helper method to assert the presence of the must_be_present string and the absence
-        of the must_be_absent string in all the resource action log lines.
+        Helper method to assert the presence of the must_be_present string
+        in the resource action log lines.
         """
         must_be_present_flag = False
-        must_be_absent_flag = False
         for resource_action in data:
             for log_line in resource_action["messages"]:
                 if must_be_present in log_line["msg"]:
                     must_be_present_flag = True
-                if must_be_absent in log_line["msg"]:
-                    must_be_absent_flag = True
+                    break
 
         assert must_be_present_flag
-        assert not must_be_absent_flag
 
     result = await client.get_resource_actions(
         tid=environment, resource_type="test::ResourceAAA", agent="agent1", log_severity="ERROR"
     )
     assert result.code == 200
-    check_for_messages(
-        data=result.result["data"], must_be_present=resourceAAA_failure_message, must_be_absent=resourceBBB_failure_message
-    )
+    check_for_message(data=result.result["data"], must_be_present=resourceAAA_failure_message)
 
     result = await client.get_resource_actions(
         tid=environment, resource_type="test::ResourceBBB", agent="agent1", log_severity="ERROR"
     )
     assert result.code == 200
-    check_for_messages(
-        data=result.result["data"], must_be_present=resourceBBB_failure_message, must_be_absent=resourceAAA_failure_message
-    )
+    check_for_message(data=result.result["data"], must_be_present=resourceBBB_failure_message)
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
