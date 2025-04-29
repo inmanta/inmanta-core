@@ -29,6 +29,7 @@ from threading import Condition
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
+import inmanta
 import inmanta.deploy.state
 import requests
 import toml
@@ -722,12 +723,19 @@ async def path_policy_engine_executable() -> str:
     Returns the path to the Open Policy Agent executable.
     This method caches the executables to prevent slow setup times of the test suite.
     """
-    cache_dir = os.path.abspath(os.path.join(__file__, "..", "data", "opa_executables.cache"))
+    opa_version = inmanta.OPA_VERSION
+    cache_dir = os.path.abspath(os.path.join(__file__, "..", "data", "opa_executables.cache", f"v{opa_version}"))
     os.makedirs(cache_dir, exist_ok=True)
-    cache_file = os.path.join(cache_dir, "opa-1.3.0")
+    cache_file = os.path.join(cache_dir, "opa_linux_amd64_static")
     if not os.path.exists(cache_file):
         with open(cache_file, "wb") as fp:
-            req = requests.get("http://file.ii.inmanta.com/software/opa/opa-1.3.0", stream=True)
+            opa_executables_url_prefix = os.environ.get(
+                "INMANTA_OPA_EXECUTABLES_URL_PREFIX", "https://openpolicyagent.org/downloads"
+            )
+            url_to_opa_executable = f"{opa_executables_url_prefix}/v{opa_version}/opa_linux_amd64_static"
+            logger.info("Downloading OPA executable from %s", url_to_opa_executable)
+            req = requests.get(url_to_opa_executable, stream=True)
+            req.raise_for_status()
             for chunk in req.iter_content(chunk_size=1024):
                 fp.write(chunk)
         # Give owner execute permissions on file
