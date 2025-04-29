@@ -24,7 +24,9 @@ import functools
 import json
 import logging
 import os
+import pathlib
 import random
+import re
 import shutil
 import uuid
 from collections import abc
@@ -771,3 +773,23 @@ def make_random_file(size: int = 0) -> tuple[str, bytes, str]:
     body = base64.b64encode(content).decode("ascii")
 
     return hash, content, body
+
+
+def validate_version_numbers_migration_scripts(versions_folder: pathlib.Path) -> None:
+    """
+    Validate whether the names of the database migration scripts in the given directory
+    are compliant with the schema. Migration scripts must have the format vYYYYMMDDN.py
+    """
+    v1_found = False
+    for path in versions_folder.iterdir():
+        file_name = path.name
+        if not file_name.endswith(".py"):
+            continue
+        if file_name == "__init__.py":
+            continue
+        if file_name == "v1.py":
+            v1_found = True
+            continue
+        if not re.fullmatch(r"v([0-9]{9})\.py", file_name):
+            raise Exception(f"Database migration script {file_name} has invalid format.")
+    assert v1_found
