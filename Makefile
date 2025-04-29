@@ -99,13 +99,6 @@ test:
 ci-test:
 	$(PYTHON) -m pytest -vvv --log-level DEBUG -p no:sugar --junitxml=junit-tests.xml $(PYTEST_EXTRA_ARGS) $(TESTS)
 
-check_sphinx = INMANTA_DONT_DISCOVER_VERSION=1 ASYNC_TEST_TIMEOUT=60 $(PYTHON) -m pytest -v tests/docs/check_sphinx.py
-.PHONY: ci-docs-test ci-docs-test-link-check
-ci-docs-test:
-	$(check_sphinx) -m "not link_check"
-ci-docs-tests-link-check:
-	$(check_sphinx)
-
 .PHONY: all ci-all
 all: pep8 mypy test
 ci-all: ci-pep8 ci-mypy ci-test
