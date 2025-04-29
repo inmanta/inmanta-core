@@ -119,7 +119,7 @@ class PolicyEngine:
                 "--addr",
                 f"unix://{self._socket_file}",
                 "--unix-socket-perm",
-                "700",
+                "600",
                 "--log-format",
                 "text",
                 "--log-level",
