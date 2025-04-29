@@ -24,6 +24,6 @@ async def update(connection: Connection) -> None:
     Add links column to compile table
     """
     schema = """
-        ALTER TABLE public.compile ADD COLUMN links jsonb DEFAULT '{}' NOT NULL;
+        ALTER TABLE public.compile ADD COLUMN IF NOT EXISTS links jsonb DEFAULT '{}' NOT NULL;
     """
     await connection.execute(schema)
