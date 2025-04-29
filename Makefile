@@ -15,11 +15,14 @@ mypy_baseline = $(PYTHON) -m mypy_baseline
 ifdef PIP_INDEX
 pip_index_arg := -i $(PIP_INDEX)
 endif
+uv_args = pip install --python $(PYTHON) --prerelease if-necessary-or-explicit $(pip_index_arg)
 ifeq ($(shell which uv),)
-pip_install = $(PYTHON) -m pip install $(pip_index_arg)
+bootstrap_pip_install = $(PYTHON) -m pip install $(pip_index_arg)
 else
-pip_install = uv pip install --python $(PYTHON) --prerelease if-necessary-or-explicit $(pip_index_arg)
+bootstrap_pip_install = uv $(uv_args)
 endif
+# pip install to use after install uv in the venv
+pip_install = $(PYTHON) -m uv $(uv_args)
 ifdef ISO_VERSION
 pip_install_c = $(pip_install) -c requirements.txt -c 'https://docs.inmanta.com/inmanta-service-orchestrator-dev/$(ISO_VERSION)/reference/requirements.txt'
 else
@@ -42,7 +45,7 @@ endif
 
 .PHONY: install ci-install ci-install-check
 install:
-	$(pip_install_c) -U setuptools pip uv
+	$(bootstrap_pip_install) -U setuptools pip uv
 	$(pip_install_c) -U -e .[dev]
 
 ci-install-check:
@@ -60,7 +63,7 @@ ci-install: ci-install-check install $(parsetab)
 
 .PHONY: install-tests
 install-tests:
-	$(pip_install) -U setuptools pip uv
+	$(bootstrap_pip_install) -U setuptools pip uv
 	$(PYTHON) tests_common/copy_files_from_core.py
 	$(pip_install) -e ./tests_common
 
