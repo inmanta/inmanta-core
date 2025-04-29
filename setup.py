@@ -17,7 +17,7 @@ requires = [
     "jinja2~=3.0",
     "more-itertools>=8,<11",
     # upper bound on packaging because we use a non-public API that might change in any (non-SemVer) version
-    "packaging>=21.3,<24.3",
+    "packaging>=21.3,<25.1",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
@@ -36,7 +36,7 @@ requires = [
     "toml~=0.10 ",
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
-    "strawberry-sqlalchemy-mapper==0.5.0",
+    "strawberry-sqlalchemy-mapper==0.6.0",
 ]
 
 
@@ -95,6 +95,7 @@ setup(
             "openapi_spec_validator",
             "pep8-naming",
             "pip2pi",
+            "psutil",
             "time-machine",
             # types
             "types-python-dateutil",
