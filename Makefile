@@ -21,7 +21,7 @@ bootstrap_pip_install = $(PYTHON) -m pip install $(pip_index_arg)
 else
 bootstrap_pip_install = uv $(uv_args)
 endif
-# pip install to use after install uv in the venv
+# pip install to use after installing uv in the venv
 pip_install = $(PYTHON) -m uv $(uv_args)
 ifdef ISO_VERSION
 pip_install_c = $(pip_install) -c requirements.txt -c 'https://docs.inmanta.com/inmanta-service-orchestrator-dev/$(ISO_VERSION)/reference/requirements.txt'
