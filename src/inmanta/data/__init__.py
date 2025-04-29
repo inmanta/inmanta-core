@@ -4863,8 +4863,6 @@ class Resource(BaseDocument):
         query = """
             SELECT  (
                 CASE
-                    WHEN rps.is_orphan = TRUE
-                        THEN 'orphaned'
                     WHEN rps.is_deploying = TRUE
                         THEN 'deploying'
                     WHEN rps.is_undefined = TRUE
@@ -4878,14 +4876,13 @@ class Resource(BaseDocument):
                 END
             ) AS status
             FROM resource_persistent_state AS rps
-            WHERE rps.environment=$1 AND rps.resource_id=$2
+            WHERE rps.environment=$1 AND rps.resource_id=$2 AND NOT rps.is_orphan
             """
         results = await cls.select_query(query, [env, rid], no_obj=True)
         if not results:
             return None
         assert len(results) == 1
-        status = results[0]["status"]
-        return const.ResourceState(status) if status != "orphaned" else None
+        return const.ResourceState(results[0]["status"])
 
     @classmethod
     async def set_deployed_multi(
