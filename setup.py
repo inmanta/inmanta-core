@@ -90,6 +90,7 @@ setup(
             "inmanta-dev-dependencies[pytest,async,core]",
             "openapi_spec_validator",
             "pip2pi",
+            "psutil",
             "time-machine",
             "types-PyYAML",
             "types-python-dateutil",
