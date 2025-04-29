@@ -490,7 +490,7 @@ class MethodProperties:
                 }
         return {"endpoints": endpoints}
 
-    def is_human_interface(self) -> bool:
+    def is_external_interface(self) -> bool:
         """
         Returns False iff this endpoint is exclusively used by other software components
         (agent, scheduler, compiler, etc.).

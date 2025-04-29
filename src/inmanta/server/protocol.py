@@ -174,7 +174,7 @@ class Server(endpoints.Endpoint):
             for properties in properties_list:
                 # All endpoints used by end-users must have an @auth annotation.
                 has_auth_annotation = properties.authorization_metadata is not None
-                if properties.is_human_interface() and not has_auth_annotation:
+                if properties.is_external_interface() and not has_auth_annotation:
                     raise Exception(f"API endpoint {method_name} is missing an @auth annotation.")
 
     async def start(self) -> None:

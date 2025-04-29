@@ -739,7 +739,7 @@ async def path_policy_engine_executable() -> str:
             for chunk in req.iter_content(chunk_size=1024):
                 fp.write(chunk)
         # Give owner execute permissions on file
-        os.chmod(cache_file, stat.S_IXUSR)
+        os.chmod(cache_file, stat.S_IRWXU)
     yield cache_file
 
 
