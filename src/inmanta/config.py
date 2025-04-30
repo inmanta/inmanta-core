@@ -213,16 +213,6 @@ class Config:
         return section in cls.get_instance() and name in cls.get_instance()[section]
 
     @classmethod
-    def getboolean(cls, section: str, name: str, default_value: bool) -> bool:
-        """
-        Return a boolean from the configuration
-        """
-        val = cls.get(section, name, default_value)
-        if val is None:
-            raise ValueError(f"Expected boolean value. Found: {val}")
-        return is_bool(val)
-
-    @classmethod
     def set(cls, section: str, name: str, value: str) -> None:
         """
         Override a value
