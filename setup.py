@@ -95,6 +95,7 @@ setup(
             "openapi_spec_validator",
             "pep8-naming",
             "pip2pi",
+            "psutil",
             "time-machine",
             # types
             "types-python-dateutil",
