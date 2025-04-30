@@ -553,6 +553,9 @@ class CallArguments:
         :param policy_engine: The policy engine of the server. None if we are not running on the server
                               or if auth is disabled.
         """
+        if not auth_enabled:
+            return
+
         if not server_config.enforce_access_policy.get():
             return
 
