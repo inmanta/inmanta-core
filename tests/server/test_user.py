@@ -18,7 +18,9 @@
 
 import pytest
 
-from inmanta import config, const
+import nacl.pwhash
+from inmanta import config, const, data
+from inmanta.data.model import AuthMethod
 from inmanta.protocol import auth, endpoints
 from inmanta.server import SLICE_USER, protocol
 
@@ -152,3 +154,38 @@ async def test_set_password(server: protocol.Server, auth_client: endpoints.Clie
 
     response = await auth_client.login("admin", new_pw)
     assert response.code == 200
+
+
+async def test_environment_create_token(server: protocol.Server, auth_client: endpoints.Client, monkeypatch) -> None:
+    """
+    Verify that the environment_create_token endpoint works correctly when the server.auth=true
+    option is set via an environment variable.
+
+    Reproduction of bug: https://github.com/inmanta/inmanta-core/issues/8962
+    """
+    config.Config.set("server", "auth", "false")
+    monkeypatch.setenv("INMANTA_SERVER_AUTH", "true")
+    user = data.User(
+        username="admin",
+        password_hash=nacl.pwhash.str("adminadmin".encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    response = await auth_client.login("admin", "adminadmin")
+    assert response.code == 200
+    token = response.result["data"]["token"]
+    config.Config.set("client_rest_transport", "token", token)
+    auth_client = protocol.Client("client")
+
+    response = await auth_client.project_create(name="test")
+    assert response.code == 200
+    project_id = response.result["data"]["id"]
+
+    response = await auth_client.environment_create(project_id=project_id, name="test")
+    assert response.code == 200
+    env_id = response.result["data"]["id"]
+
+    response = await auth_client.environment_create_token(tid=env_id, client_types=["api"])
+    assert response.code == 200
+    assert response.result["data"]
