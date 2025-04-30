@@ -543,6 +543,7 @@ class CallArguments:
         Return True iff self._auth_token is a service token (i.e. a token used by a service instead of a user).
         """
         ct_key: str = const.INMANTA_URN + "ct"
+        assert self._auth_token is not None
         client_types_token = self._auth_token[ct_key]
         return any(ct in {const.ClientType.agent.value, const.ClientType.compiler.value} for ct in client_types_token)
 
