@@ -28,7 +28,6 @@ import sys
 import types
 from collections import abc, defaultdict
 from collections.abc import Iterable, Iterator, Sequence
-from dataclasses import dataclass
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
@@ -188,12 +187,6 @@ class CodeManager:
                 return info.source
 
         raise KeyError("No file found with this hash")
-
-
-@dataclass(frozen=True)
-class FailedModuleSource:
-    file_name: str
-    exception: Exception
 
 
 class CodeLoader:

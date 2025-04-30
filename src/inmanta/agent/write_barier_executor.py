@@ -24,7 +24,14 @@ from copy import deepcopy
 
 from inmanta import const
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployReport, DryrunReport, FailedModules, GetFactReport, ModuleInstallSpec, ResourceDetails
+from inmanta.agent.executor import (
+    DeployReport,
+    DryrunReport,
+    FailedInmantaModules,
+    GetFactReport,
+    ModuleInstallSpec,
+    ResourceDetails,
+)
 from inmanta.types import ResourceIdStr
 
 
@@ -64,11 +71,11 @@ class WriteBarierExecutor(executor.Executor):
         await self.delegate.join()
 
     @property
-    def failed_modules(self) -> FailedModules:
+    def failed_modules(self) -> FailedInmantaModules:
         return self.delegate.failed_modules
 
     @failed_modules.setter
-    def failed_modules(self, value: FailedModules) -> None:
+    def failed_modules(self, value: FailedInmantaModules) -> None:
         self.delegate.failed_modules = value
 
 

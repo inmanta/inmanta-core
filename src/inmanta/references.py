@@ -94,6 +94,15 @@ class MutatorMissingError(TypeError):
     """
 
 
+class ReferenceMissingError(TypeError):
+    """
+    Exception raised during reference resolution when the requested reference
+    cannot be found in the set of registered references.
+
+    e.g. when no reference was registered or in case of code loading failure.
+    """
+
+
 class Argument(pydantic.BaseModel):
     """Base class for reference (resolver) arguments"""
 
@@ -422,7 +431,7 @@ class reference:
     def get_class(cls, name: str) -> type[Reference[RefValue]]:
         """Get the reference class registered with the given name"""
         if name not in cls._reference_classes:
-            raise TypeError(f"There is no reference class registered with name {name}")
+            raise ReferenceMissingError(f"There is no reference class registered with name {name}")
 
         return cls._reference_classes[name]
 
@@ -500,7 +509,7 @@ class ReplaceValue(Mutator):
     """Replace a reference in the provided resource"""
 
     def __init__(self, resource: "inmanta.resources.Resource", value: Reference[PrimitiveTypes], destination: str) -> None:
-        """Change a value in the given resource at the given distination
+        """Change a value in the given resource at the given destination
 
         :param resource: The resource to replace the value in
         :param value: The value to replace in `resource` at `destination`

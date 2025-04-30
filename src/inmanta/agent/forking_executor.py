@@ -97,7 +97,7 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.executor import DeployReport, GetFactReport
+from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
 from inmanta.protocol.ipc_light import (
@@ -373,7 +373,7 @@ class StopCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
         await context.stop_for(self.name)
 
 
-class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.FailedModuleSource]]):
+class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedInmantaModules]):
     """
     Initialize the executor process:
     1. setup the client, using the session id of the agent
@@ -402,7 +402,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         self.sources = sources
         self._venv_touch_interval = venv_touch_interval
 
-    async def call(self, context: ExecutorContext) -> dict[str, set[inmanta.loader.FailedModuleSource]]:
+    async def call(self, context: ExecutorContext) -> FailedInmantaModules:
         assert context.server.timer_venv_scheduler_interval is None, "InitCommand should be only called once!"
 
         loop = asyncio.get_running_loop()
@@ -421,7 +421,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
 
-        failed: dict[str, dict[str, inmanta.loader.FailedModuleSource]] = defaultdict(dict)
+        failed: FailedInmantaModules = defaultdict(dict)
         in_place: list[inmanta.data.model.ModuleSource] = []
         # First put all files on disk
         for module_source in self.sources:
@@ -431,10 +431,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
             except Exception as e:
                 logger.info("Failed to load source on disk: %s", module_source.metadata.name, exc_info=True)
                 inmanta_module_name = module_source.get_inmanta_module_name()
-                failed[inmanta_module_name][module_source.metadata.name] = inmanta.loader.FailedModuleSource(
-                    file_name=module_source.metadata.name,
-                    exception=e,
-                )
+                failed[inmanta_module_name][module_source.metadata.name] = e
 
         # then try to import them
         for module_source in in_place:
@@ -446,10 +443,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
             except Exception as e:
                 logger.info("Failed to import source: %s", module_source.metadata.name, exc_info=True)
                 inmanta_module_name = module_source.get_inmanta_module_name()
-                failed[inmanta_module_name][module_source.metadata.name] = inmanta.loader.FailedModuleSource(
-                    file_name=module_source.metadata.name,
-                    exception=e,
-                )
+                failed[inmanta_module_name][module_source.metadata.name] = e
 
         return failed
 
@@ -609,7 +603,7 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
         self.executor_virtual_env = venv
 
         # Set by init, keeps state for the underlying executors
-        self._failed_modules: typing.Mapping[str, typing.Sequence[inmanta.loader.FailedModuleSource]]
+        self._failed_modules: FailedInmantaModules
 
         # threadpool for cleanup jobs
         self.worker_threadpool = worker_threadpool
@@ -756,7 +750,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
         self.stop_task: Awaitable[None]
 
         # Set by init and parent class
-        self.failed_modules: Mapping[str, executor.FailedModules] = process._failed_modules
+        self.failed_modules: FailedInmantaModules = process._failed_modules
 
     async def call(self, method: IPCMethod[ExecutorContext, ReturnType]) -> ReturnType:
         try:
@@ -1058,7 +1052,6 @@ class MPManager(
             handler code in its venv. Must have at least one element.
         :return: An Executor instance
         """
-
         if not code:
             raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
 

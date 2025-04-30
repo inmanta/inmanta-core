@@ -16,6 +16,19 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+# This trick is used in tests/deploy/e2e/test_autostarted.py in the test_code_install_success_code_load_error test.
+# It ensures
+#   - success during code compilation and upload
+#   - failure during code loading by the executor
+try:
+    a = b
+except NameError:
+    if "executors/code" in __file__:
+        raise
+    else:
+        pass
+
+
 import json
 import os.path
 
@@ -56,10 +69,8 @@ class FooReference(Reference[str]):
         super().__init__()
         self.base = base
 
-
     def resolve(self, logger: LoggerABC) -> str:
         """Resolve the reference"""
-        logger.debug("Resolving FooReference")
         return self.resolve_other(self.base, logger) + "foo"
 
 
@@ -70,19 +81,3 @@ def create_my_ref(base: str | Reference[str]) -> Reference[str]:
     :return: A reference to what can be resolved to a string
     """
     return FooReference(base)
-
-
-
-
-# This trick is used in tests/deploy/e2e/test_autostarted.py in the test_code_install_success_code_load_error test.
-# It ensures
-#   - success during code compilation and upload
-#   - failure during code loading by the executor
-try:
-    a = b
-except NameError:
-    if "executors/code" in __file__:
-        raise
-    else:
-        pass
-

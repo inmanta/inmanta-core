@@ -51,6 +51,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 FailedModules: typing.TypeAlias = dict[str, Exception]
+FailedInmantaModules: typing.TypeAlias = dict[str, FailedModules]
 
 
 class AgentInstance(abc.ABC):
@@ -565,7 +566,7 @@ class Executor(abc.ABC):
     """
 
     # Maps inmanta module names to the map of their python modules that failed during installation.
-    failed_modules: Mapping[str, FailedModules]
+    failed_modules: FailedInmantaModules
 
     @abc.abstractmethod
     async def execute(

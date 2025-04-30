@@ -43,8 +43,6 @@ class SuccessResourceHandler(CRUDHandler):
         ctx.set_status(const.ResourceState.deployed)
 
 
-
-
 @resources.resource("successhandlermodule::SuccessResourceWithReference", agent="agent", id_attribute="name")
 class SuccessResourceWithReference(resources.PurgeableResource):
     """

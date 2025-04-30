@@ -28,12 +28,12 @@ import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import DeployReport, DryrunReport, FailedModules, GetFactReport, ResourceDetails
+from inmanta.agent.executor import DeployReport, DryrunReport, FailedInmantaModules, GetFactReport, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
 from inmanta.data.model import AttributeStateChange
 from inmanta.loader import CodeLoader
-from inmanta.references import MutatorMissingError
+from inmanta.references import MutatorMissingError, ReferenceMissingError
 from inmanta.resources import Resource
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import NamedLock, join_threadpools
@@ -77,7 +77,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         self._stopped = False
 
-        self.failed_modules: FailedModules = dict()
+        self.failed_modules: FailedInmantaModules = dict()
 
         self.cache_cleanup_tick_rate = inmanta.agent.config.agent_cache_cleanup_tick_rate.get()
         self.periodic_cache_cleanup_job: Optional[asyncio.Task[None]] = None
@@ -202,7 +202,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 )
                 if ctx.status is None:
                     ctx.set_resource_state(const.HandlerResourceState.deployed)
-            except MutatorMissingError as e:
+            except (ReferenceMissingError, MutatorMissingError) as e:
                 ctx.set_resource_state(const.HandlerResourceState.unavailable)
                 ctx.exception(
                     "An error occurred during reference resolution for resource %(resource_id)s (exception: %(exception)s",
@@ -586,10 +586,10 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
         return out
 
-    async def ensure_code(self, code: typing.Collection[executor.ModuleInstallSpec]) -> FailedModules:
+    async def ensure_code(self, code: typing.Collection[executor.ModuleInstallSpec]) -> FailedInmantaModules:
         """Ensure that the code for the given environment and version is loaded"""
 
-        failed_to_load: FailedModules = {}
+        failed_to_load: FailedInmantaModules = defaultdict(dict)
 
         if self._loader is None:
             return failed_to_load
@@ -628,11 +628,12 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                         module_install_spec.module_name,
                         module_install_spec.module_version,
                     )
-                    if module_install_spec.module_name not in failed_to_load:
-                        failed_to_load[module_install_spec.module_name] = Exception(
-                            f"Failed to install module {module_install_spec.module_name} "
-                            f"version={module_install_spec.module_version}: {e}"
-                        ).with_traceback(e.__traceback__)
+                    inmanta_module_name = module_install_spec.module_name.split(".")[0]
+                    failed_to_load[inmanta_module_name][module_install_spec.module_name] = Exception(
+                        f"Failed to install module {module_install_spec.module_name} "
+                        f"version={module_install_spec.module_version}: {e}"
+                    ).with_traceback(e.__traceback__)
+
                     self._last_loaded_version[module_install_spec.module_name] = None
 
         return failed_to_load

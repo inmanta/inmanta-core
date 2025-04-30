@@ -54,11 +54,6 @@ async def wait_for_resources_in_state(client, environment: uuid.UUID, nr_of_reso
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
-        logger.debug(f'{summary}')
-        logger.debug("r0")
-        logger.debug(result.result["data"][0])
-        logger.debug("r1")
-        logger.debug(result.result["data"][1])
         return summary["by_state"][state.value] == nr_of_resources
 
     await retry_limited(_done_waiting, timeout=10)
@@ -1562,6 +1557,5 @@ async def test_code_install_success_code_load_error_for_reference(
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.deployed)
-    # await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
-    resources = await data.Resource.get_resources_in_latest_version(environment=environment)
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
