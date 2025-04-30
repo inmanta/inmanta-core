@@ -329,7 +329,6 @@ async def test_agent_code_loading_with_failure(
     Test goal: make sure that failed resources are correctly returned by `get_code` and `ensure_code` methods.
     The failed resources should have the right exception contained in the returned object.
 
-    TODO critical look at what we want to test
     """
 
     caplog.set_level(DEBUG)
@@ -343,7 +342,7 @@ async def test_agent_code_loading_with_failure(
             name="test",
             version="abc",
             files_in_module=[
-                ModuleSourceMetadata(name="dummy.path.test.plugins.dummy_file", hash_value=hash, is_byte_code=False)
+                ModuleSourceMetadata(name="inmanta_plugins.test.dummy_file", hash_value=hash, is_byte_code=False)
             ],
             requirements=[],
             for_agents=["agent1"],
@@ -403,11 +402,11 @@ async def test_agent_code_loading_with_failure(
         code=module_install_specs,
     )
     assert len(failed_to_load) == 1
-    for handler, exception in failed_to_load.items():
-        assert str(exception) == (
-            f"Failed to install module {handler} version=abc: "
-            f"MKPTCH: Unable to load code when agent is started with code loading disabled."
-        )
+    assert "test" in failed_to_load
+    assert str(failed_to_load["test"]["test"]) == (
+        f"Failed to install module test version=abc: "
+        f"MKPTCH: Unable to load code when agent is started with code loading disabled."
+    )
 
     monkeypatch.undo()
 
@@ -419,7 +418,6 @@ async def test_logging_on_code_loading_failure_missing_code(server, client, envi
     """
     This test case ensures that if handler code cannot be loaded, this is reported in the resource action log.
 
-    TODO critical look at what we want to test
     """
     version = await clienthelper.get_version()
 
@@ -459,7 +457,6 @@ async def test_logging_on_code_loading_error(server, client, environment, client
     1) Deploy resources that use broken code
     2) Check the resource action log
 
-    TODO critical look at what we want to test
     """
     version = await clienthelper.get_version()
     resources = [

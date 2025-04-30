@@ -628,8 +628,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                         module_install_spec.module_name,
                         module_install_spec.module_version,
                     )
-                    inmanta_module_name = module_install_spec.module_name.split(".")[0]
-                    failed_to_load[inmanta_module_name][module_install_spec.module_name] = Exception(
+                    failed_to_load[module_install_spec.module_name][module_install_spec.module_name] = Exception(
                         f"Failed to install module {module_install_spec.module_name} "
                         f"version={module_install_spec.module_version}: {e}"
                     ).with_traceback(e.__traceback__)
