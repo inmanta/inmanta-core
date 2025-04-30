@@ -341,9 +341,7 @@ async def test_agent_code_loading_with_failure(
         "test": InmantaModuleDTO(
             name="test",
             version="abc",
-            files_in_module=[
-                ModuleSourceMetadata(name="inmanta_plugins.test.dummy_file", hash_value=hash, is_byte_code=False)
-            ],
+            files_in_module=[ModuleSourceMetadata(name="inmanta_plugins.test.dummy_file", hash_value=hash, is_byte_code=False)],
             requirements=[],
             for_agents=["agent1"],
         )
@@ -404,8 +402,8 @@ async def test_agent_code_loading_with_failure(
     assert len(failed_to_load) == 1
     assert "test" in failed_to_load
     assert str(failed_to_load["test"]["test"]) == (
-        f"Failed to install module test version=abc: "
-        f"MKPTCH: Unable to load code when agent is started with code loading disabled."
+        "Failed to install module test version=abc: "
+        "MKPTCH: Unable to load code when agent is started with code loading disabled."
     )
 
     monkeypatch.undo()
