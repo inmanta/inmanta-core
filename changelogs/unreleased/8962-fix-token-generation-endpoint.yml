@@ -3,6 +3,6 @@ description: "Fix bug where the POST /api/v2/environment_auth endpoint returns a
 issue-nr: 8962
 issue-repo: inmanta-core
 change-type: patch
-destination-branches: [master, iso8, iso7]
+destination-branches: [master, iso8]
 sections:
   bugfix: "{{description}}"
