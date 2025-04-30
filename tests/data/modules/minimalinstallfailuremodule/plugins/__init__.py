@@ -20,7 +20,9 @@ import json
 import os.path
 
 from inmanta import resources, const
-from inmanta.agent.handler import provider, CRUDHandler, HandlerContext
+from inmanta.agent.handler import provider, CRUDHandler, HandlerContext, LoggerABC
+from inmanta.plugins import plugin
+from inmanta.references import reference, Reference
 
 
 @resources.resource("minimalinstallfailuremodule::CodeInstallErrorResource", agent="agent", id_attribute="name")
@@ -43,6 +45,35 @@ class CodeInstallErrorResourceHandler(CRUDHandler):
         ctx.set_status(const.ResourceState.deployed)
 
 
+@reference("minimalinstallfailuremodule::FooReference")
+class FooReference(Reference[str]):
+    """A reference to the 'foo' string"""
+
+    def __init__(self, base: str | Reference[str]) -> None:
+        """
+        :param name: The name of the environment variable.
+        """
+        super().__init__()
+        self.base = base
+
+
+    def resolve(self, logger: LoggerABC) -> str:
+        """Resolve the reference"""
+        logger.debug("Resolving FooReference")
+        return self.resolve_other(self.base, logger) + "foo"
+
+
+@plugin
+def create_my_ref(base: str | Reference[str]) -> Reference[str]:
+    """Create an environment reference
+
+    :return: A reference to what can be resolved to a string
+    """
+    return FooReference(base)
+
+
+
+
 # This trick is used in tests/deploy/e2e/test_autostarted.py in the test_code_install_success_code_load_error test.
 # It ensures
 #   - success during code compilation and upload
@@ -55,6 +86,3 @@ except NameError:
     else:
         pass
 
-# TODO should be a v2 module
-# same for successhandlermodule
-# see /home/hugo/work/inmanta/github-repos/inmanta-core/tests/test_references.py L111 to draw inspiration

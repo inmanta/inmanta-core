@@ -41,3 +41,26 @@ class SuccessResourceHandler(CRUDHandler):
     def execute(self, ctx: HandlerContext, resource: SuccessResource, dry_run: bool = False) -> None:
 
         ctx.set_status(const.ResourceState.deployed)
+
+
+
+
+@resources.resource("successhandlermodule::SuccessResourceWithReference", agent="agent", id_attribute="name")
+class SuccessResourceWithReference(resources.PurgeableResource):
+    """
+    This resource's handler will always succeed
+    """
+
+    name: str
+    agent: str
+    my_attr: str
+
+    fields = ("name", "agent", "my_attr")
+
+
+@provider("successhandlermodule::SuccessResourceWithReference", name="wait_for_file")
+class SuccessResourceWithReferenceHandler(CRUDHandler):
+
+    def execute(self, ctx: HandlerContext, resource: SuccessResourceWithReference, dry_run: bool = False) -> None:
+
+        ctx.set_status(const.ResourceState.deployed)

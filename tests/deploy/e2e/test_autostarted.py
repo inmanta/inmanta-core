@@ -54,6 +54,11 @@ async def wait_for_resources_in_state(client, environment: uuid.UUID, nr_of_reso
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
+        logger.debug(f'{summary}')
+        logger.debug("r0")
+        logger.debug(result.result["data"][0])
+        logger.debug("r1")
+        logger.debug(result.result["data"][1])
         return summary["by_state"][state.value] == nr_of_resources
 
     await retry_limited(_done_waiting, timeout=10)
@@ -1426,7 +1431,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
-async def test_code_install_success_code_load_error(
+async def test_code_install_success_code_load_error_for_provider(
     snippetcompiler,
     server,
     ensure_resource_tracker_is_started,
@@ -1471,7 +1476,7 @@ async def test_code_install_success_code_load_error(
     import minimalinstallfailuremodule
     import successhandlermodule
 
-    r_1 = minimalinstallfailuremodule::CodeInstallErrorResource(name="test_fail_1", agent="agent_1")
+    r_1 = minimalinstallfailuremodule::CodeInstallErrorResource(name="test_failure", agent="agent_1")
     r_2 = successhandlermodule::SuccessResource(name="test_success", agent="agent_1")
         """,  # noqa: E501
         ministd=True,
@@ -1485,3 +1490,78 @@ async def test_code_install_success_code_load_error(
 
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_code_install_success_code_load_error_for_reference(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    clienthelper,
+    environment,
+    auto_start_agent: bool,
+    async_finalizer,
+    monkeypatch,
+    tmp_path,
+):
+    """
+    Make sure that code installation errors only affect deployment of resources that
+    rely on this code for their deployment.
+
+    e.g. in the following scenario, check
+    that agent_1 can still deploy resource r1, even if an error occurred
+    during the import of code necessary to resolve the reference for resource r2
+
+
+    This test uses these two modules:
+        - minimalinstallfailuremodule  ->  reference code for MyRef
+        - successhandlermodule  ->  handler code for resource of type SuccessResource
+
+    Set up 1 agent that install both modules
+
+    Deploy 2 SuccessResource resources: 1 uses references and 1 does not.
+
+    Check that the agent can still deploy the SuccessResource without references
+    even if a code loading failure occurred when installing the code necessary to
+    deploy the other resource that uses references.
+
+    """  # noqa: E501
+
+    # First, configure everything
+    config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
+
+    snippetcompiler.setup_for_snippet(
+        """
+    import minimalinstallfailuremodule
+    import successhandlermodule
+
+    r_1 = successhandlermodule::SuccessResourceWithReference(
+        name="test_success",
+        agent="agent_1",
+        my_attr="plain_string"
+     )
+
+    ref = minimalinstallfailuremodule::create_my_ref("base_str")
+    r_2 = successhandlermodule::SuccessResourceWithReference(
+        name="test_failure",
+        agent="agent_1",
+        my_attr=ref
+     )
+        """,  # noqa: E501
+        ministd=True,
+        index_url="https://pypi.org/simple",
+    )
+
+    # Now, let's deploy resources
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.deployed)
+    # await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
+    resources = await data.Resource.get_resources_in_latest_version(environment=environment)
