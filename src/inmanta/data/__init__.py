@@ -62,6 +62,7 @@ from inmanta.const import (
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
+from inmanta.data.sqlalchemy import AgentModules, InmantaModule, ModuleFiles
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
@@ -107,7 +108,6 @@ Locking order rules:
 In general, locks should be acquired consistently with delete cascade lock order, which is top down. Additional lock orderings
 are as follows. This list should be extended when new locks (explicit or implicit) are introduced. The rules below are written
 as `A -> B`, meaning A should be locked before B in any transaction that acquires a lock on both.
-- Code -> ConfigurationModel
 - Agentprocess -> Agentinstance -> Agent
 - ResourcePersistentState -> Scheduler
 """
@@ -2712,7 +2712,11 @@ class Environment(BaseDocument):
             await Compile.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on report table
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
-            await Code.delete_all(environment=self.id, connection=con)
+
+            await AgentModules.delete_all(environment=self.id, connection=con)
+            await InmantaModule.delete_all(environment=self.id, connection=con)
+            await ModuleFiles.delete_all(environment=self.id, connection=con)
+
             await DiscoveredResource.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsGauge.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsTimer.delete_all(environment=self.id, connection=con)
@@ -4068,7 +4072,12 @@ class ResourceAction(BaseDocument):
         if from_postgres and self.messages:
             new_messages = []
             for message in self.messages:
-                message = json.loads(message)
+                # Not 100% sure why this is needed, could depend on whether the data is
+                # retrieved through sql alchemy (automatically deserializes json into dict)
+                # or through regular asyncpg queries (no automatic deserialization)
+                if isinstance(message, str):
+                    message = json.loads(message)
+                assert isinstance(message, dict)
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
@@ -5139,7 +5148,8 @@ class Resource(BaseDocument):
                     continue
                 resource: dict[str, object] = dict(raw_resource)
                 if "attributes" in resource:
-                    resource["attributes"] = json.loads(resource["attributes"])
+                    if isinstance(resource["attributes"], str):
+                        resource["attributes"] = json.loads(resource["attributes"])
                 if projection is not None:
                     assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
@@ -5964,8 +5974,12 @@ class ConfigurationModel(BaseDocument):
         async with self.get_connection(connection=connection) as con:
             # Delete of compile record triggers cascading delete report table
             await Compile.delete_all(environment=self.environment, version=self.version, connection=con)
-            await Code.delete_all(environment=self.environment, version=self.version, connection=con)
             await DryRun.delete_all(environment=self.environment, model=self.version, connection=con)
+
+            await AgentModules.delete_version(environment=self.environment, model_version=self.version, connection=con)
+            await InmantaModule.delete_version(environment=self.environment, model_version=self.version, connection=con)
+            await ModuleFiles.delete_version(environment=self.environment, model_version=self.version, connection=con)
+
             await UnknownParameter.delete_all(environment=self.environment, version=self.version, connection=con)
             await self._execute_query(
                 "DELETE FROM public.resourceaction_resource WHERE environment=$1 AND resource_version=$2",
@@ -6229,63 +6243,6 @@ class ConfigurationModel(BaseDocument):
         if new_total is None:
             raise KeyError(f"Configurationmodel {self.version} in environment {self.environment} was deleted.")
         self.total = new_total
-
-
-class Code(BaseDocument):
-    """
-    A code deployment
-
-    :param environment: The environment this code belongs to
-    :param version: The version of configuration model it belongs to
-    :param resource: The resource type this code belongs to
-    :param sources: The source code of plugins (phasing out)  form:
-        {code_hash:(file_name, provider.__module__, source_code, [req])}
-    :param requires: Python requires for the source code above
-    :param source_refs: file hashes refering to files in the file store
-        {code_hash:(file_name, provider.__module__, [req])}
-    """
-
-    __primary_key__ = ("environment", "resource", "version")
-
-    environment: uuid.UUID
-    resource: str
-    version: int
-    source_refs: Optional[dict[str, tuple[str, str, list[str]]]] = None
-
-    @classmethod
-    async def get_version(cls, environment: uuid.UUID, version: int, resource: str) -> Optional["Code"]:
-        codes = await cls.get_list(environment=environment, version=version, resource=resource)
-        if len(codes) == 0:
-            return None
-
-        return codes[0]
-
-    @classmethod
-    async def get_versions(cls, environment: uuid.UUID, version: int) -> list["Code"]:
-        codes = await cls.get_list(environment=environment, version=version)
-        return codes
-
-    @classmethod
-    async def copy_versions(
-        cls,
-        environment: uuid.UUID,
-        old_version: int,
-        new_version: int,
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        """
-        Copy all code for one model version to another.
-        """
-        query: str = f"""
-            INSERT INTO {cls.table_name()} (environment, resource, version, source_refs)
-            SELECT environment, resource, $1, source_refs
-            FROM {cls.table_name()}
-            WHERE environment=$2 AND version=$3
-        """
-        await cls._execute_query(
-            query, cls._get_value(new_version), cls._get_value(environment), cls._get_value(old_version), connection=connection
-        )
 
 
 class DryRun(BaseDocument):
@@ -6620,7 +6577,6 @@ _classes = [
     ResourceAction,
     ResourcePersistentState,
     ConfigurationModel,
-    Code,
     Parameter,
     DryRun,
     Compile,
@@ -6636,6 +6592,7 @@ _classes = [
 
 
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
+
 
 # Name of core schema in the DB schema verions
 # prevent import loop

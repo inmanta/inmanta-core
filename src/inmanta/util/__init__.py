@@ -317,12 +317,6 @@ class Scheduler:
         """
         Add task that is currently executing to `self._executing_tasks`.
         """
-        # requires: RequiresProvidesMapping = dataclasses.field(default_factory=RequiresProvidesMapping)
-        # # types per agent keeps track of which resource types live on which agent by doing a reference count
-        # # the dict is agent_name -> resource_type -> resource_count
-        # types_per_agent: dict[str, dict["ResourceType", int]] = dataclasses.field(
-        #     default_factory=lambda: defaultdict(lambda: defaultdict(lambda: 0))
-        # )
         if action in self._executing_tasks and self._executing_tasks[action]:
             LOGGER.warning("Multiple instances of background task %s are executing simultaneously", action.__name__)
         self._executing_tasks[action].append(task)

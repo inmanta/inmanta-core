@@ -27,10 +27,10 @@ from inmanta.agent import executor
 from inmanta.agent.executor import (
     DeployReport,
     DryrunReport,
-    FailedResources,
+    FailedInmantaModules,
     GetFactReport,
+    ModuleInstallSpec,
     ResourceDetails,
-    ResourceInstallSpec,
 )
 from inmanta.types import ResourceIdStr
 
@@ -71,12 +71,12 @@ class WriteBarierExecutor(executor.Executor):
         await self.delegate.join()
 
     @property
-    def failed_resources(self) -> FailedResources:
-        return self.delegate.failed_resources
+    def failed_modules(self) -> FailedInmantaModules:
+        return self.delegate.failed_modules
 
-    @failed_resources.setter
-    def failed_resources(self, value: FailedResources) -> None:
-        self.delegate.failed_resources = value
+    @failed_modules.setter
+    def failed_modules(self, value: FailedInmantaModules) -> None:
+        self.delegate.failed_modules = value
 
 
 class WriteBarierExecutorManager(executor.ExecutorManager[WriteBarierExecutor]):
@@ -86,7 +86,7 @@ class WriteBarierExecutorManager(executor.ExecutorManager[WriteBarierExecutor]):
         self.delegate = delegate
 
     async def get_executor(
-        self, agent_name: str, agent_uri: str, code: typing.Collection[ResourceInstallSpec]
+        self, agent_name: str, agent_uri: str, code: typing.Collection[ModuleInstallSpec]
     ) -> WriteBarierExecutor:
         if not code:
             raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
