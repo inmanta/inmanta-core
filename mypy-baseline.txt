@@ -18,7 +18,6 @@ src/inmanta/warnings.py:0: error: Function is missing a type annotation for one 
 src/inmanta/config.py:0: error: "_validate_value_types" undefined in superclass  [misc]
 src/inmanta/config.py:0: error: Missing type parameters for generic type "Option"  [type-arg]
 src/inmanta/config.py:0: error: Missing type parameters for generic type "Option"  [type-arg]
-src/inmanta/config.py:0: error: Argument "fallback" to "getboolean" of "RawConfigParser" has incompatible type "bool | None"; expected "bool"  [arg-type]
 src/inmanta/config.py:0: error: Missing type parameters for generic type "Option"  [type-arg]
 src/inmanta/config.py:0: error: Argument 1 to "CronTab" has incompatible type "str | int"; expected "str"  [arg-type]
 src/inmanta/config.py:0: error: Incompatible default for argument "validator" (default has type "Callable[[str], str]", argument has type "Callable[[str | T], T]")  [assignment]
