@@ -250,8 +250,7 @@ class Config:
         opt = cls.__config_definition[section][name]
         if default_value is not None and opt.get_default_value() != default_value:
             LOGGER.warning(
-                "Inconsistent default value for option %s.%s: defined as %s, got %s",
-                section, name, opt.default, default_value
+                "Inconsistent default value for option %s.%s: defined as %s, got %s", section, name, opt.default, default_value
             )
 
         return opt
