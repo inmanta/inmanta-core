@@ -50,9 +50,8 @@ from inmanta.server import (
     SLICE_SERVER,
     SLICE_TRANSPORT,
     agentmanager,
+    protocol,
 )
-from inmanta.server import config as server_config
-from inmanta.server import protocol
 from inmanta.server.server import Server
 from inmanta.server.services import orchestrationservice, resourceservice
 from inmanta.server.services.environmentlistener import (  # These were moved from this module, important to keep them in place
@@ -514,7 +513,7 @@ class EnvironmentService(protocol.ServerSlice):
         """
         Create a new auth token for this environment
         """
-        if not server_config.server_enable_auth.get():
+        if not config.Config.getboolean("server", "auth", False):
             raise BadRequest("Authentication is disabled, generating a token is not allowed")
         return encode_token(client_types, str(env.id), idempotent)
 
