@@ -88,7 +88,7 @@ class RESTClient(RESTBase):
         port: int = inmanta_config.Config.get(self.id, "port", 8888)
         host: str = inmanta_config.Config.get(self.id, "host", "localhost")
 
-        if inmanta_config.Config.getboolean(self.id, "ssl", False):
+        if inmanta_config.TransportConfig(name=self.endpoint.name).ssl.get():
             protocol = "https"
         else:
             protocol = "http"
