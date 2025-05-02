@@ -245,7 +245,7 @@ class LogSequence:
         if not self.allow_errors:
             # first error is later
             idxe = self._find("", logging.ERROR, "", self.index, min_level)
-            assert idxe == -1 or idxe >= index
+            assert idxe == -1 or idxe >= index, f"Unexpected ERROR log line found: {self.caplog.records[idxe]}"
         assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
