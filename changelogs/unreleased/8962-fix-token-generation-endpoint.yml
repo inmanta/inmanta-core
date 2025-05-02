@@ -1,8 +1,0 @@
----
-description: "Fix bug where the POST /api/v2/environment_auth endpoint returns a 400 if the server.auth=true config option was set using an environment variable."
-issue-nr: 8962
-issue-repo: inmanta-core
-change-type: patch
-destination-branches: [master, iso8]
-sections:
-  bugfix: "{{description}}"
