@@ -201,7 +201,7 @@ class Config:
         cfg: ConfigParser = cls.get_instance()
         val: Optional[str] = _get_from_env(section, name)
         if val is not None:
-            LOGGER.debug(f"Setting {section}:{name} was set using an environment variable")
+            LOGGER.debug("Setting %s:%s was set using an environment variable", section, name)
             return val
         # Typing of this method in the sdk is not entirely accurate
         # It just returns the fallback, whatever its type
@@ -213,12 +213,14 @@ class Config:
         return section in cls.get_instance() and name in cls.get_instance()[section]
 
     @classmethod
-    def getboolean(cls, section: str, name: str, default_value: Optional[bool] = None) -> bool:
+    def getboolean(cls, section: str, name: str, default_value: bool = None) -> bool:
         """
         Return a boolean from the configuration
         """
-        cls.validate_option_request(section, name, default_value)
-        return cls.get_instance().getboolean(section, name, fallback=default_value)
+        value = cls.get(section, name, default_value)
+        if value is None:
+            raise ValueError(f"Expected boolean value. Found: {value}")
+        return is_bool(value)
 
     @classmethod
     def set(cls, section: str, name: str, value: str) -> None:
@@ -238,7 +240,7 @@ class Config:
     @classmethod
     def validate_option_request(cls, section: str, name: str, default_value: Optional[T]) -> Optional["Option[T]"]:
         if section not in cls.__config_definition:
-            LOGGER.warning("Config section %s not defined" % (section))
+            LOGGER.warning("Config section %s not defined", section)
             # raise Exception("Config section %s not defined" % (section))
             return None
         if name not in cls.__config_definition[section]:
@@ -248,8 +250,8 @@ class Config:
         opt = cls.__config_definition[section][name]
         if default_value is not None and opt.get_default_value() != default_value:
             LOGGER.warning(
-                "Inconsistent default value for option %s.%s: defined as %s, got %s"
-                % (section, name, opt.default, default_value)
+                "Inconsistent default value for option %s.%s: defined as %s, got %s",
+                section, name, opt.default, default_value
             )
 
         return opt
