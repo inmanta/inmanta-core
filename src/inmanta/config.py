@@ -213,7 +213,7 @@ class Config:
         return section in cls.get_instance() and name in cls.get_instance()[section]
 
     @classmethod
-    def getboolean(cls, section: str, name: str, default_value: bool = None) -> bool:
+    def getboolean(cls, section: str, name: str, default_value: Optional[bool] = None) -> bool:
         """
         Return a boolean from the configuration
         """
