@@ -226,7 +226,7 @@ class DynamicProxy:
                 reference=value,
             )
 
-        return DynamicProxy.return_value(value, allow_references=False)
+        return DynamicProxy.return_value(value)
 
     def __setattr__(self, attribute: str, value: object) -> None:
         raise Exception("Readonly object")
