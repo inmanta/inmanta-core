@@ -182,24 +182,13 @@ class OpenApiTypeConverter:
 
     def _get_security_schemes(self) -> dict[SecuritySchemeName, SecurityScheme] | None:
         if config.server_enable_auth.get():
-            match config.server_auth_method.get():
-                case AuthMethod.database.name:
-                    return {
-                        "bearerAuth": SecurityScheme(
-                            type="http",
-                            scheme="bearer",
-                            bearerFormat="JWT",
-                        )
-                    }
-                case AuthMethod.oidc.name:
-                    # The oidc security scheme is not supported.
-                    return None
-                case _:
-                    LOGGER.warning(
-                        "Unknown authentication method found in config option server.auth_method: %s",
-                        config.server_auth_method.get(),
-                    )
-                    return None
+            return {
+                "bearerAuth": SecurityScheme(
+                    type="http",
+                    scheme="bearer",
+                    bearerFormat="JWT",
+                )
+            }
         else:
             return None
 
