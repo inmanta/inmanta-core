@@ -29,7 +29,6 @@ from tornado.gen import sleep
 from inmanta import protocol  # NOQA
 from inmanta import data
 from inmanta.protocol import method
-from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.server import SLICE_SESSION_MANAGER
 from inmanta.server.protocol import Server, ServerSlice, SessionListener
@@ -38,7 +37,6 @@ from utils import configure_auth, retry_limited
 LOGGER = logging.getLogger(__name__)
 
 
-@auth(auth_label="test", read_only=True, environment_param="tid")
 @method(path="/status", operation="GET")
 def get_status_x(tid: uuid.UUID):
     pass
@@ -143,7 +141,7 @@ async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgr
 
     await retry_limited(lambda: len(server.get_sessions()) == 1, 10)
     assert len(server.get_sessions()) == 1
-    await assert_agent_counter(agent, reconnect=1, disconnected=0)
+    await assert_agent_counter(agent, 1, 0)
 
     client = protocol.Client("client")
     status = await client.get_status_x(str(agent.environment))
@@ -164,10 +162,7 @@ async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgr
 
     await rs.stop()
     await agent.stop()
-    assert agent.reconnect == 1
-    # If the agent already detected that the server is gone agent.disconnect == 1.
-    # Otherwise, agent.disconnect == 0.
-    assert agent.disconnect < 2
+    await assert_agent_counter(agent, 1, 0)
 
 
 async def check_sessions(sessions):

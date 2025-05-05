@@ -21,13 +21,12 @@ import pytest
 import nacl.pwhash
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod
-from inmanta.protocol import endpoints
-from inmanta.protocol.auth import auth
+from inmanta.protocol import auth, endpoints
 from inmanta.server import SLICE_USER, protocol
 
 
 @pytest.fixture
-def server_pre_start(server_config, tmpdir):
+def server_pre_start(server_config):
     """Ensure that the server started by the server fixtures have authentication enabled with auth_method database"""
     config.Config.set("server", "auth", "true")
     config.Config.set("server", "auth_method", "database")

@@ -57,10 +57,6 @@ class RESTClient(RESTBase):
     def endpoint(self) -> "Endpoint":
         return self.__end_point
 
-    def is_auth_enabled(self) -> bool:
-        # Auth cannot be enabled on the client-side.
-        return False
-
     @property
     def id(self) -> str:
         """
@@ -181,7 +177,3 @@ class RESTClient(RESTBase):
         else:
             # Any other content-type will leave the encoding unchanged
             return common.Result(code=response.code, result=response.body)
-
-    async def get_policy_engine(self) -> None:
-        # We are not running on the server, so there is no policy engine.
-        return None

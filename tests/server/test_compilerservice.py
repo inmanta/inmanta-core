@@ -2030,7 +2030,7 @@ class Mockreport:
 
 
 async def test_venv_use_and_reuse(tmp_path, caplog):
-    caplog.set_level(logging.DEBUG)
+    caplog.at_level(logging.DEBUG)
 
     # Set up mock
     project = tmp_path / "project"
@@ -2055,7 +2055,7 @@ async def test_venv_upgrade_version_match(tmp_path, caplog):
     1. Make a venv in the old layout and upgrade it
     2. Test we can handle re-creation of the venv
     """
-    caplog.set_level(logging.DEBUG)
+    caplog.at_level(logging.DEBUG)
 
     # Set up mock
     project = tmp_path / "project"
@@ -2086,7 +2086,7 @@ async def test_venv_upgrade_version_match(tmp_path, caplog):
 async def test_venv_upgrade_version_mismatch(tmp_path, caplog):
     # Make fake venv of wrong version
 
-    caplog.set_level(logging.DEBUG)
+    caplog.at_level(logging.DEBUG)
 
     # Old setup
     project = tmp_path / "project2"
