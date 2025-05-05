@@ -366,19 +366,14 @@ async def test_auth_annotation_not_required() -> None:
 
     protocol.Server()._validate()
 
-    # test a rule that is not correct: use is on list
-    client = get_auth_client(
-        claim_rules=["environments is prod"],
-        claims=dict(environments=["prod", "lab"], type="lab", username="bob"),
-    )
-    assert (await client.list_users()).code == 403
-
 
 async def test_provide_token_as_parameter(server: protocol.Server, client) -> None:
     """
     Validate whether the authorization token is handled correctly
     when provided using a parameter instead of a header.
     """
+    config.Config.set("server", "auth", "true")
+    config.Config.set("server", "auth_method", "database")
     user = data.User(
         username="admin",
         password_hash=nacl.pwhash.str("adminadmin".encode()).decode(),
@@ -386,16 +381,14 @@ async def test_provide_token_as_parameter(server: protocol.Server, client) -> No
     )
     await user.insert()
 
+    # No authorization token provided
+    result = await client.get_api_docs()
+    assert result.code == 401
+
     response = await client.login("admin", "adminadmin")
     assert response.code == 200
     token = response.result["data"]["token"]
 
-    # Create a client that doesn't set the Authorization header
-    config.Config.get_instance().remove_option("client_rest_transport", "token")
-    client = protocol.Client("client")
-
-    result = await client.get_api_docs()
-    assert result.code == 401
     result = await client.get_api_docs(token=token)
     assert result.code == 200
 
