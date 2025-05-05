@@ -1332,7 +1332,8 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     }
     assert actual_data[0] == expected_data
 
-    await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
+    # _ensure_scheduler only waits for unpaused agents
+    # await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
 
     snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)

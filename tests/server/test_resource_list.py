@@ -184,10 +184,16 @@ async def env_with_resources(server, client):
         await cm.insert()
 
     async def create_resource(
-        agent: str, path: str, resource_type: str, status: ResourceState, versions: list[int], environment: UUID = env.id
+        agent: str,
+        path: str,
+        resource_type: str,
+        status: ResourceState,
+        versions: list[int],
+        environment: UUID = env.id,
+        orphaned: bool = False,
     ):
+        key = f"{resource_type}[{agent},path={path}]"
         for version in versions:
-            key = f"{resource_type}[{agent},path={path}]"
             res = data.Resource.new(
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
@@ -195,25 +201,29 @@ async def env_with_resources(server, client):
                 status=status,
             )
             await res.insert()
-            await data.ResourcePersistentState.populate_for_version(environment=environment, model_version=version)
-            await res.update_persistent_state(
-                last_deploy=datetime.now(tz=UTC),
-                last_non_deploying_status=(
-                    status
-                    if status
-                    not in [
-                        ResourceState.available,
-                        ResourceState.deploying,
-                        ResourceState.undefined,
-                        ResourceState.skipped_for_undefined,
-                    ]
-                    else None
-                ),
-            )
+        version = max(versions)
+        await data.ResourcePersistentState.populate_for_version(
+            environment=environment, model_version=version, orphaned=orphaned
+        )
+        res = await data.Resource.get_one(resource_id=key)
+        await res.update_persistent_state(
+            last_deploy=datetime.now(tz=UTC),
+            last_non_deploying_status=(
+                status
+                if status
+                not in [
+                    ResourceState.available,
+                    ResourceState.deploying,
+                    ResourceState.undefined,
+                    ResourceState.skipped_for_undefined,
+                ]
+                else None
+            ),
+        )
 
     await create_resource("agent1", "/etc/file1", "test::File", ResourceState.available, [1, 2, 3])
-    await create_resource("agent1", "/etc/file2", "test::File", ResourceState.deploying, [1, 2])  # Orphaned
-    await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [2])  # Orphaned
+    await create_resource("agent1", "/etc/file2", "test::File", ResourceState.deploying, [1, 2], orphaned=True)
+    await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [2], orphaned=True)
     await create_resource("agent2", "/tmp/file4", "test::File", ResourceState.unavailable, [3])
     await create_resource("agent2", "/tmp/dir5", "test::Directory", ResourceState.skipped, [3])
     await create_resource("agent3", "/tmp/dir6", "test::Directory", ResourceState.deployed, [3])

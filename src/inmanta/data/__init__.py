@@ -4581,11 +4581,13 @@ class ResourcePersistentState(BaseDocument):
 
     @classmethod
     async def populate_for_version(
-        cls, environment: uuid.UUID, model_version: int, connection: Optional[Connection] = None
+        cls, environment: uuid.UUID, model_version: int, connection: Optional[Connection] = None, orphaned: bool = False
     ) -> None:
         """
         Make sure that the resource_persistent_state table has a record for each resource present in the
-        given model version. This method assumes that the given model_version is the latest released version.
+        given model version. Ideally this method should be used with the latest released version of the model.
+        However, when setting up tests we might want to populate the RPS table for orphaned resources.
+        If that is the case, set orphaned to true.
         """
         await cls._execute_query(
             f"""
@@ -4610,7 +4612,7 @@ class ResourcePersistentState(BaseDocument):
                 r.resource_id_value,
                 r.attribute_hash,
                 r.status = 'undefined'::public.resourcestate,
-                FALSE,
+                $3,
                 FALSE,
                 'NEW',
                 CASE
@@ -4629,6 +4631,7 @@ class ResourcePersistentState(BaseDocument):
             """,
             environment,
             model_version,
+            orphaned,
             connection=connection,
         )
 
@@ -4795,25 +4798,6 @@ class Resource(BaseDocument):
         return out
 
     @classmethod
-    async def get_status_for(
-        cls,
-        env: uuid.UUID,
-        model_version: int,
-        rids: list[ResourceIdStr],
-    ) -> dict[ResourceIdStr, ResourceState]:
-        if not rids:
-            return {}
-        query = """
-            SELECT r.resource_id, r.status
-            FROM resource r
-            WHERE r.environment=$1
-                AND r.model=$2
-                AND r.resource_id = ANY($3);
-            """
-        out = await cls.select_query(query, [env, model_version, rids], no_obj=True)
-        return {ResourceIdStr(r["resource_id"]): ResourceState[r["status"]] for r in out}
-
-    @classmethod
     async def get_resource_states_latest_version(
         cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
     ) -> tuple[Optional[int], abc.Mapping[ResourceIdStr, ResourceState]]:
@@ -4824,34 +4808,30 @@ class Resource(BaseDocument):
                 WHERE environment=$1 AND released
             )
             SELECT
-                r.model,
-                r.resource_id,
+                c.version,
+                rps.resource_id,
                 (
                     CASE
-                        -- The resource_persistent_state.last_non_deploying_status column is only populated for
-                        -- actual deployment operations to prevent locking issues. This case-statement calculates
-                        -- the correct state from the combination of the resource table and the
-                        -- resource_persistent_state table.
-                        WHEN r.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
-                            -- The deploying, undefined and skipped_for_undefined states are not tracked in the
-                            -- resource_persistent_state table.
-                            THEN r.status::text
-                        WHEN rps.last_deployed_attribute_hash != r.attribute_hash
-                            -- The hash changed since the last deploy -> new desired state
-                            THEN r.status::text
-                            -- No override required, use last known state from actual deployment
-                            ELSE rps.last_non_deploying_status::text
-                    END
+                        WHEN rps.is_deploying = TRUE
+                            THEN 'deploying'
+                        WHEN rps.is_undefined = TRUE
+                            THEN 'undefined'
+                        WHEN rps.blocked = 'BLOCKED'
+                            THEN 'skipped_for_undefined'
+                        WHEN rps.current_intent_attribute_hash <> rps.last_deployed_attribute_hash
+                            THEN 'available'
+                        ELSE
+                            rps.last_non_deploying_status::text
+                        END
                 ) AS status
-            FROM resource AS r
-                 INNER JOIN resource_persistent_state AS rps ON r.environment=rps.environment AND r.resource_id=rps.resource_id
-                 INNER JOIN configurationmodel AS c ON c.environment=r.environment AND c.version=r.model
-            WHERE r.environment=$1 AND r.model = (SELECT version FROM latest_released_version)
+            FROM resource_persistent_state AS rps
+                 INNER JOIN configurationmodel AS c ON c.environment=rps.environment
+            WHERE c.environment=$1 AND c.version = (SELECT version FROM latest_released_version) AND NOT rps.is_orphan
         """
         results = await cls.select_query(query, [env], no_obj=True, connection=connection)
         if not results:
             return None, {}
-        return (int(results[0]["model"]), {r["resource_id"]: const.ResourceState[r["status"]] for r in results})
+        return (int(results[0]["version"]), {r["resource_id"]: const.ResourceState[r["status"]] for r in results})
 
     @stable_api
     @classmethod
@@ -4939,42 +4919,6 @@ class Resource(BaseDocument):
         async with cls.get_connection(connection) as connection:
             await connection.execute(update_rps_query, *values)
             await connection.execute(update_resource_query, *values)
-
-    @classmethod
-    async def get_resource_ids_with_status(
-        cls,
-        environment: uuid.UUID,
-        resource_version_ids: list[ResourceIdStr],
-        version: int,
-        statuses: Sequence[const.ResourceState],
-        lock: Optional[RowLockMode] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> list[ResourceIdStr]:
-        query = (
-            "SELECT resource_id as resource_id FROM resource WHERE "
-            "environment=$1 AND model=$2 AND status = ANY($3) and resource_id =ANY($4) "
-        )
-        if lock:
-            query += lock.value
-        async with cls.get_connection(connection) as connection:
-            return [
-                ResourceIdStr(cast(str, r["resource_id"]))
-                for r in await connection.fetch(query, environment, version, statuses, resource_version_ids)
-            ]
-
-    @classmethod
-    async def get_undeployable(cls, environment: uuid.UUID, version: int) -> list["Resource"]:
-        """
-        Returns a list of resources with an undeployable state
-        """
-        (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
-        undeployable_states = ", ".join(["$" + str(i + 3) for i in range(len(const.UNDEPLOYABLE_STATES))])
-        values = values + [cls._get_value(s) for s in const.UNDEPLOYABLE_STATES]
-        query = (
-            "SELECT * FROM " + cls.table_name() + " WHERE " + filter_statement + " AND status IN (" + undeployable_states + ")"
-        )
-        resources = await cls.select_query(query, values)
-        return resources
 
     @classmethod
     async def get_resources_in_latest_version(
@@ -5371,23 +5315,24 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:
-        inner_query = f"""
-        SELECT r.resource_id as resource_id,
+        inner_query = """
+        SELECT rps.resource_id as resource_id,
         (
-            CASE WHEN r.status IN ('deploying', 'undefined', 'skipped_for_undefined')
-                     THEN r.status::text
-                 WHEN rps.last_deployed_attribute_hash != r.attribute_hash
-                     -- The hash changed since the last deploy -> new desired state
-                     THEN r.status::text
-                 ELSE
-                     rps.last_non_deploying_status::text
+            CASE
+                WHEN rps.is_deploying = TRUE
+                    THEN 'deploying'
+                WHEN rps.is_undefined = TRUE
+                    THEN 'undefined'
+                WHEN rps.blocked = 'BLOCKED'
+                    THEN 'skipped_for_undefined'
+                WHEN rps.current_intent_attribute_hash <> rps.last_deployed_attribute_hash
+                    THEN 'available'
+                ELSE
+                    rps.last_non_deploying_status::text
             END
         ) as status
-        FROM {cls.table_name()} as r
-            JOIN resource_persistent_state rps ON r.resource_id = rps.resource_id and r.environment = rps.environment
-                WHERE r.environment=$1 AND r.model=(SELECT MAX(cm.version)
-                                                    FROM public.configurationmodel AS cm
-                                                    WHERE cm.environment=$1 AND cm.released=TRUE)
+        FROM resource_persistent_state as rps
+            WHERE rps.environment=$1 AND NOT rps.is_orphan
         """
 
         query = f"""
