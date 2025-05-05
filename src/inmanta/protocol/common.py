@@ -385,6 +385,7 @@ class MethodProperties:
         strict_typing: bool = True,
         enforce_auth: bool = True,
         varkw: bool = False,
+        token_param: str | None = None
     ) -> None:
         """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -411,6 +412,8 @@ class MethodProperties:
         :param varkw: If true, additional arguments are allowed and will be dispatched to the handler. The handler is
                       responsible for the validation.
         :param reply: If False, this is a fire-and-forget query: we will not wait for any result, just deliver the call
+        :param token_param: The parameter that contains the authorization token or None if the authorization token
+                            should be retrieved from the Authorization header.
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -452,6 +455,7 @@ class MethodProperties:
 
         self._validate_function_types(typed)
         self.argument_validator = self.arguments_to_pydantic()
+        self.token_param = token_param
 
     @property
     def varkw(self) -> bool:

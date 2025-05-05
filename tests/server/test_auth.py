@@ -17,9 +17,11 @@ Contact: code@inmanta.com
 """
 
 import pytest
+import nacl.pwhash
 
-from inmanta import config, const
-from inmanta.protocol import auth
+from inmanta.data.model import AuthMethod
+from inmanta import config, const, data
+from inmanta.protocol import auth, endpoints
 from inmanta.server import SLICE_USER, protocol
 
 
@@ -77,3 +79,29 @@ async def test_claim_assertions(server: protocol.Server, server_pre_start) -> No
         claims=dict(environments=["prod", "lab"], type="lab", username="bob"),
     )
     assert (await client.list_users()).code == 403
+
+
+async def test_provide_token_as_parameter(server: protocol.Server, client) -> None:
+    """
+    Validate whether the authorization token is handled correctly
+    when provided using a parameter instead of a header.
+    """
+    user = data.User(
+        username="admin",
+        password_hash=nacl.pwhash.str("adminadmin".encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    response = await client.login("admin", "adminadmin")
+    assert response.code == 200
+    token = response.result["data"]["token"]
+
+    # Create a client that doesn't set the Authorization header
+    config.Config.get_instance().remove_option("client_rest_transport", "token")
+    client = protocol.Client("client")
+
+    result = await client.get_api_docs()
+    assert result.code == 401
+    result = await client.get_api_docs(token=token)
+    assert result.code == 200
