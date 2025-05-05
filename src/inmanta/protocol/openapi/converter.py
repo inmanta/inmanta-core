@@ -26,7 +26,7 @@ from pydantic import ConfigDict
 from typing_inspect import get_args, get_origin, is_generic_type
 
 from inmanta import util
-from inmanta.data.model import AuthMethod, BaseModel
+from inmanta.data.model import BaseModel
 from inmanta.protocol.common import ArgOption, MethodProperties, ReturnValue, UrlMethod
 from inmanta.protocol.openapi.model import (
     Components,
