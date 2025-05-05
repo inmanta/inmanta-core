@@ -2,3 +2,5 @@
 description: Added support to define access policies. 
 change-type: major
 destination-branches: [master]
+sections:
+  upgrade-note: "Access control using claim match expressions in no longer supported."
