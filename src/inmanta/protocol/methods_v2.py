@@ -385,7 +385,9 @@ def reserve_version(tid: uuid.UUID) -> int:
 
 
 @typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2, token_param="token")
-def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None) -> ReturnValue[Union[OpenAPI, str]]:
+def get_api_docs(
+    format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None
+) -> ReturnValue[Union[OpenAPI, str]]:
     """
     Get the OpenAPI definition of the API
 

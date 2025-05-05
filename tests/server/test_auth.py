@@ -17,11 +17,11 @@ Contact: code@inmanta.com
 """
 
 import pytest
-import nacl.pwhash
 
-from inmanta.data.model import AuthMethod
+import nacl.pwhash
 from inmanta import config, const, data
-from inmanta.protocol import auth, endpoints
+from inmanta.data.model import AuthMethod
+from inmanta.protocol import auth
 from inmanta.server import SLICE_USER, protocol
 
 

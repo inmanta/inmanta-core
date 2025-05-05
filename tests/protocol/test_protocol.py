@@ -15,7 +15,7 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
-import pytest
+
 import asyncio
 import base64
 import datetime
@@ -2154,6 +2154,7 @@ async def test_token_param_not_present_in_method_signature() -> None:
     that parameter is not present in the signature of the method.
     """
     with pytest.raises(InvalidMethodDefinition) as excinfo:
+
         @protocol.typedmethod(path="/test", operation="GET", client_types=[ClientType.api], token_param="test")
         def test_method1() -> dict[str, str]:  # NOQA
             pass

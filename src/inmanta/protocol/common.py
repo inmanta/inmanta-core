@@ -385,7 +385,7 @@ class MethodProperties:
         strict_typing: bool = True,
         enforce_auth: bool = True,
         varkw: bool = False,
-        token_param: str | None = None
+        token_param: str | None = None,
     ) -> None:
         """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
