@@ -286,6 +286,7 @@ def configure_auth(auth: bool, ca: bool, ssl: bool) -> None:
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
     if auth:
         config.Config.set("server", "auth", "true")
+        config.Config.set("server", "enforce-access-policy", "true")
     for x, ct in [
         ("server", None),
         ("agent_rest_transport", ["agent"]),

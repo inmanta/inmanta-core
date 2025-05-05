@@ -246,7 +246,7 @@ External authentication providers
 ---------------------------------
 
 Inmanta supports all external authentication providers that support JWT tokens with RS256 or HS256. These providers need to
-add a claims that indicate the allowed client type (``urn:inmanta:ct``). Currently, the web-console only has support for keycloak.
+add a claim that indicates the allowed client type (``urn:inmanta:ct``). Currently, the web-console only has support for keycloak.
 However, each provider that can insert custom (private) claims should work. The web-console now relies on the keycloak js library
 to implement the OAuth2 implicit flow, required to obtain a JWT.
 
@@ -466,39 +466,3 @@ By default the `sub` claim is used to indicate the user that is logged in. Cloud
 claim. By setting jwt_username_claim to email in the auth section (see the example) you can change the claim that is used for
 the username. The username is used for example for logging and the username in the web console.
 
-
-Custom claims
--------------
-
-Access to the orchestrator can be controlled using claim match expressions. In the section of the identity provider that
-you want to restrict you can configure the ``claims`` options. This is a multiline option where each line contains a match
-expression. There are two operators available:
-
-- ``in`` for exact string match on a claim that contains a list of string values
-- ``is`` for exact string match on a claim that is a string
-
-You can use them as follows, for example each user gets two additional claims:
-
-- ``my:environments`` which is a list of network environments the user is allowed to access. For example: lab and prod
-- ``my:scope`` which indicates the scope of automation the orchestrator does. For example: network and dc
-
-A user is allowed to have multiple environments but they can only have one scope. So that is why the environments is a list and
-scope is single string value.
-
-On the lab orchestrator for the datacenter we can then configure it as follows:
-
-.. code-block:: ini
-
-   [auth_jwt_keycloak]
-   algorithm=RS256
-   sign=false
-   client_types=api
-   issuer=http://localhost:8080/realms/inmanta
-   audience=inmantaso
-   jwks_uri=http://keycloak:8080/realms/inmanta/protocol/openid-connect/certs
-   validate_cert=false
-   claims=
-     lab in my:environments
-     my:scope is dc
-
-This will only allow users with ``lab`` in the ``my:environments`` claim and ``my:scope`` equal to ``dc``.

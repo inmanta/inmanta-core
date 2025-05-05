@@ -28,6 +28,7 @@ from inmanta.const import ResourceState
 from inmanta.data import model
 from inmanta.data.model import PipConfig
 from inmanta.protocol import exceptions
+from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ArgOption
 from inmanta.protocol.decorators import method, typedmethod
 from inmanta.types import JsonType, PrimitiveTypes
@@ -69,6 +70,7 @@ RVID_OPTS = {"rvid": ArgOption(getter=convert_resource_version_id)}
 
 
 # Method for working with projects
+@auth(auth_label=const.AuthorizationLabel.PROJECT_WRITE, read_only=False)
 @method(path="/project", operation="PUT", client_types=[const.ClientType.api])
 def create_project(name: str, project_id: Optional[uuid.UUID] = None):
     """
@@ -79,6 +81,7 @@ def create_project(name: str, project_id: Optional[uuid.UUID] = None):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.PROJECT_WRITE, read_only=False)
 @method(path="/project/<id>", operation="POST", client_types=[const.ClientType.api])
 def modify_project(id: uuid.UUID, name: str):
     """
@@ -89,6 +92,7 @@ def modify_project(id: uuid.UUID, name: str):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.PROJECT_WRITE, read_only=False)
 @method(path="/project/<id>", operation="DELETE", client_types=[const.ClientType.api])
 def delete_project(id: uuid.UUID):
     """
@@ -98,6 +102,7 @@ def delete_project(id: uuid.UUID):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.PROJECT_READ, read_only=True)
 @method(path="/project", operation="GET", client_types=[const.ClientType.api])
 def list_projects():
     """
@@ -105,6 +110,7 @@ def list_projects():
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.PROJECT_READ, read_only=True)
 @method(path="/project/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_project(id: uuid.UUID):
     """
@@ -115,6 +121,7 @@ def get_project(id: uuid.UUID):
 
 
 # Methods for working with environments
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_WRITE, read_only=False, environment_param="environment_id")
 @method(path="/environment", operation="PUT", client_types=[const.ClientType.api])
 def create_environment(
     project_id: uuid.UUID,
@@ -134,6 +141,7 @@ def create_environment(
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_WRITE, read_only=False, environment_param="id")
 @method(path="/environment/<id>", operation="POST", client_types=[const.ClientType.api])
 def modify_environment(id: uuid.UUID, name: str, repository: Optional[str] = None, branch: Optional[str] = None):
     """
@@ -148,6 +156,7 @@ def modify_environment(id: uuid.UUID, name: str, repository: Optional[str] = Non
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_WRITE, read_only=False, environment_param="id")
 @method(path="/environment/<id>", operation="DELETE", client_types=[const.ClientType.api])
 def delete_environment(id: uuid.UUID):
     """
@@ -160,6 +169,7 @@ def delete_environment(id: uuid.UUID):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_READ, read_only=True)
 @method(path="/environment", operation="GET", client_types=[const.ClientType.api])
 def list_environments():
     """
@@ -171,6 +181,7 @@ def list_environments():
 # environments.
 
 
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_READ, read_only=True, environment_param="tid")
 @method(
     path="/environment_settings",
     operation="GET",
@@ -187,6 +198,7 @@ def list_settings(tid: uuid.UUID):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/environment_settings/<id>",
     operation="POST",
@@ -205,6 +217,7 @@ def set_setting(tid: uuid.UUID, id: str, value: Union[PrimitiveTypes, JsonType])
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_READ, read_only=True, environment_param="tid")
 @method(
     path="/environment_settings/<id>",
     operation="GET",
@@ -222,6 +235,7 @@ def get_setting(tid: uuid.UUID, id: str):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_SETTINGS_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/environment_settings/<id>",
     operation="DELETE",
@@ -243,6 +257,7 @@ def delete_setting(tid: uuid.UUID, id: str):
 # Method for listing and creating auth tokens for an environment that can be used by the agent and compilers
 
 
+@auth(auth_label=const.AuthorizationLabel.TOKEN, read_only=False, environment_param="tid")
 @method(
     path="/environment_auth",
     operation="POST",
@@ -260,6 +275,7 @@ def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_WRITE, read_only=False, environment_param="id")
 @method(
     path="/decommission/<id>",
     operation="DELETE",
@@ -325,6 +341,7 @@ def heartbeat_reply(sid: uuid.UUID, reply_id: uuid.UUID, data: dict):
 # Upload, retrieve and check for file. A file is identified by a hash of its content.
 
 
+@auth(auth_label=const.AuthorizationLabel.FILES_WRITE, read_only=False)
 @method(
     path="/file/<id>",
     operation="PUT",
@@ -342,6 +359,7 @@ def upload_file(id: str, content: str):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.FILES_READ, read_only=True)
 @method(
     path="/file/<id>",
     operation="HEAD",
@@ -358,6 +376,7 @@ def stat_file(id: str):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.FILES_READ, read_only=True)
 @method(
     path="/file/<id>",
     operation="GET",
@@ -374,6 +393,7 @@ def get_file(id: str):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.FILES_READ, read_only=True)
 @method(
     path="/file",
     api=True,
@@ -392,6 +412,7 @@ def stat_files(files: list):
 # Manage resources on the server
 
 
+@auth(auth_label=const.AuthorizationLabel.RESOURCES_READ, read_only=True, environment_param="tid")
 @method(
     path="/resource/<id>",
     operation="GET",
@@ -461,6 +482,7 @@ def resource_action_update(
 # Manage configuration model versions
 
 
+@auth(auth_label=const.AuthorizationLabel.DESIRED_STATE_READ, read_only=True, environment_param="tid")
 @method(path="/version", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def list_versions(tid: uuid.UUID, start: Optional[int] = None, limit: Optional[int] = None):
     """
@@ -473,6 +495,7 @@ def list_versions(tid: uuid.UUID, start: Optional[int] = None, limit: Optional[i
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.DESIRED_STATE_READ, read_only=True, environment_param="tid")
 @method(path="/version/<id>", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def get_version(
     tid: uuid.UUID, id: int, include_logs: Optional[bool] = None, log_filter: Optional[str] = None, limit: Optional[int] = None
@@ -492,6 +515,7 @@ def get_version(
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
 @method(path="/version/<id>", operation="DELETE", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def delete_version(tid: uuid.UUID, id: int):
     """
@@ -532,6 +556,7 @@ def put_version(
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.DESIRED_STATE_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/version/<id>", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api, const.ClientType.compiler]
 )
@@ -553,6 +578,7 @@ def release_version(
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.DEPLOY, read_only=False, environment_param="tid")
 @method(path="/deploy", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def deploy(
     tid: uuid.UUID,
@@ -571,6 +597,7 @@ def deploy(
 # Method for requesting and quering a dryrun
 
 
+@auth(auth_label=const.AuthorizationLabel.DRYRUN_WRITE, read_only=False, environment_param="tid")
 @method(path="/dryrun/<id>", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def dryrun_request(tid: uuid.UUID, id: int):
     """
@@ -581,6 +608,7 @@ def dryrun_request(tid: uuid.UUID, id: int):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.DRYRUN_READ, read_only=True, environment_param="tid")
 @method(path="/dryrun", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def dryrun_list(tid: uuid.UUID, version: Optional[int] = None):
     """
@@ -591,6 +619,7 @@ def dryrun_list(tid: uuid.UUID, version: Optional[int] = None):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.DRYRUN_READ, read_only=True, environment_param="tid")
 @method(path="/dryrun/<id>", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def dryrun_report(tid: uuid.UUID, id: uuid.UUID):
     """
@@ -639,6 +668,7 @@ def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
 # Method to notify the server of changes in the configuration model source code
 
 
+@auth(auth_label=const.AuthorizationLabel.COMPILER_EXECUTE, read_only=False, environment_param="id")
 @method(
     path="/notify/<id>",
     operation="GET",
@@ -654,6 +684,7 @@ def notify_change_get(id: uuid.UUID, update: bool = True):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.COMPILER_EXECUTE, read_only=False, environment_param="id")
 @method(
     path="/notify/<id>",
     operation="POST",
@@ -670,6 +701,7 @@ def notify_change(id: uuid.UUID, update: bool = True, metadata: dict = {}):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.COMPILER_STATUS_READ, read_only=True, environment_param="id")
 @method(path="/notify/<id>", operation="HEAD", client_types=[const.ClientType.api])
 def is_compiling(id: uuid.UUID):
     """
@@ -682,6 +714,7 @@ def is_compiling(id: uuid.UUID):
 # Get and set parameters on the server
 
 
+@auth(auth_label=const.AuthorizationLabel.PARAMETER_READ, read_only=True, environment_param="tid")
 @method(
     path="/parameter/<id>",
     operation="GET",
@@ -706,6 +739,7 @@ def get_param(tid: uuid.UUID, id: str, resource_id: Optional[str] = None):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.PARAMETER_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/parameter/<id>",
     operation="PUT",
@@ -740,6 +774,7 @@ def set_param(
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.PARAMETER_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/parameter/<id>",
     operation="DELETE",
@@ -756,6 +791,7 @@ def delete_param(tid: uuid.UUID, id: str, resource_id: Optional[str] = None):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.PARAMETER_READ, read_only=True, environment_param="tid")
 @method(
     path="/parameter", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api, const.ClientType.compiler]
 )
@@ -771,6 +807,7 @@ def list_params(tid: uuid.UUID, query: dict = {}):
 #  Get and set parameters on the server
 
 
+@auth(auth_label=const.AuthorizationLabel.PARAMETER_WRITE, read_only=False, environment_param="tid")
 @method(
     path="/parameters",
     operation="PUT",
@@ -840,6 +877,7 @@ def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
 # Generate download the diff of two hashes
 
 
+@auth(auth_label=const.AuthorizationLabel.FILES_READ, read_only=True)
 @method(path="/filediff", client_types=[const.ClientType.api])
 def diff(file_id_1: str, file_id_2: str):
     """
@@ -855,6 +893,7 @@ def diff(file_id_1: str, file_id_2: str):
 # Get a list of compile reports
 
 
+@auth(auth_label=const.AuthorizationLabel.COMPILEREPORT_READ, read_only=True, environment_param="tid")
 @method(path="/compilereport", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def get_reports(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] = None, limit: Optional[int] = None):
     """
@@ -871,6 +910,7 @@ def get_reports(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] 
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.COMPILEREPORT_READ, read_only=True)
 @method(path="/compilereport/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_report(id: uuid.UUID):
     """
@@ -886,6 +926,7 @@ def get_report(id: uuid.UUID):
 # Get a list of all agents
 
 
+@auth(auth_label=const.AuthorizationLabel.AGENT_READ, read_only=True, environment_param="environment")
 @method(path="/agentproc", operation="GET", client_types=[const.ClientType.api])
 def list_agent_processes(
     environment: Optional[uuid.UUID] = None,
@@ -911,6 +952,7 @@ def list_agent_processes(
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.AGENT_READ, read_only=True)
 @method(path="/agentproc/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_agent_process(id: uuid.UUID):
     """
@@ -922,6 +964,7 @@ def get_agent_process(id: uuid.UUID):
 
 
 # Get a list of all agents
+@auth(auth_label=const.AuthorizationLabel.AGENT_WRITE, read_only=False, environment_param="tid")
 @method(path="/agent/<id>", operation="POST", api=True, timeout=5, arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def trigger_agent(tid: uuid.UUID, id: str):
     """
@@ -933,6 +976,7 @@ def trigger_agent(tid: uuid.UUID, id: str):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.AGENT_READ, read_only=True, environment_param="tid")
 @method(path="/agent", operation="GET", api=True, timeout=5, arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def list_agents(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] = None, limit: Optional[int] = None):
     """
@@ -1029,6 +1073,7 @@ def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.STATUS_READ, read_only=True)
 @typedmethod(path="/serverstatus", operation="GET", client_types=[const.ClientType.api])
 def get_server_status() -> model.StatusResponse:
     """
@@ -1036,6 +1081,7 @@ def get_server_status() -> model.StatusResponse:
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.COMPILER_STATUS_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/compilequeue",
     operation="GET",
