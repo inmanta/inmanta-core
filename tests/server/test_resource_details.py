@@ -18,16 +18,19 @@ Contact: code@inmanta.com
 
 import datetime
 import itertools
+import uuid
 from collections import defaultdict
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID
 
 import pytest
 from dateutil.tz import UTC
 
-from inmanta import const, data
+from inmanta import const, data, resources, util
+from inmanta.agent import executor
 from inmanta.const import ResourceState
-from inmanta.types import ResourceVersionIdStr
+from inmanta.deploy import persistence, state
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
 
 
@@ -513,3 +516,199 @@ async def test_resource_details(server, client, env_with_resources):
     assert result.result["data"]["requires_status"] == {
         "std::testing::NullResource[internal,name=/tmp/orphaned_req]": "orphaned"
     }
+
+
+async def test_move_to_available_state(server, environment, client, clienthelper, null_agent, resource_container):
+    """
+    Verify that the endpoints, that return the state of a resource, return the correct state
+    when a resource moved back to the available state. This state is not written back to the
+    resource_persistent_state table and should be determined based on the content of the
+    resource table.
+    """
+    env_id = uuid.UUID(environment)
+    # Create model version1
+    version1 = await clienthelper.get_version()
+    resources_v1 = [
+        {
+            "id": f"test::Resource[agent1,key=test1],v={version1}",
+            "key": "test1",
+            "value": "val1",
+            "send_event": True,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "id": f"test::Resource[agent1,key=test2],v={version1}",
+            "key": "test2",
+            "value": "val2",
+            "send_event": True,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "id": f"test::Resource[agent1,key=test3],v={version1}",
+            "key": "test3",
+            "value": "val3",
+            "send_event": True,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "id": f"test::Resource[agent1,key=test4],v={version1}",
+            "key": "test4",
+            "value": "val4",
+            "send_event": True,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "id": f"test::Resource[agent1,key=test5],v={version1}",
+            "key": "test5",
+            "value": "val5",
+            "send_event": True,
+            "requires": [f"test::Resource[agent1,key=test4],v={version1}"],
+        },
+    ]
+    result = await client.put_version(
+        tid=environment,
+        version=version1,
+        resources=resources_v1,
+        resource_state={"test::Resource[agent1,key=test4]": const.ResourceState.undefined},
+        compiler_version=util.get_compiler_version(),
+    )
+    assert result.code == 200, result.result
+
+    # Release version
+    result = await client.release_version(tid=environment, id=version1)
+    assert result.code == 200
+
+    # Move resources
+    #    * test::Resource[agent1,key=test1]
+    #    * test::Resource[agent1,key=test2]
+    # to deployed state
+    update_manager = persistence.ToDbUpdateManager(client, env_id)
+    for i in range(1, 3):
+        action_id = uuid.uuid4()
+        rvid = ResourceVersionIdStr(f"test::Resource[agent1,key=test{i}],v={version1}")
+        start_time: datetime.datetime = datetime.datetime.now().astimezone()
+        await update_manager.send_in_progress(action_id, resources.Id.parse_id(rvid))
+        await update_manager.send_deploy_done(
+            attribute_hash=util.make_attribute_hash(
+                resource_id=ResourceIdStr(f"test::Resource[agent1,key=test{i}]"), attributes=resources_v1[0]
+            ),
+            result=executor.DeployReport(
+                rvid=rvid,
+                action_id=action_id,
+                resource_state=const.HandlerResourceState.deployed,
+                messages=[],
+                changes={},
+                change=None,
+            ),
+            state=state.ResourceState(
+                compliance=state.Compliance.COMPLIANT,
+                last_deploy_result=state.DeployResult.DEPLOYED,
+                blocked=state.Blocked.NOT_BLOCKED,
+                last_deployed=datetime.datetime.now().astimezone(),
+            ),
+            started=start_time,
+            finished=datetime.datetime.now().astimezone(),
+        )
+
+    # Create a new version containing:
+    #    * an updated desired state for resource test::Resource[agent1,key=test1]
+    #    * A version of the test::Resource[agent1,key=test4] that is no longer undefined but available.
+    version2 = await clienthelper.get_version()
+    resources_v2 = [
+        {
+            "id": f"test::Resource[agent1,key=test1],v={version2}",
+            "key": "test1",
+            "value": "val1_udpated",
+            "send_event": True,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "id": f"test::Resource[agent1,key=test2],v={version2}",
+            "key": "test2",
+            "value": "val2",
+            "send_event": True,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "id": f"test::Resource[agent1,key=test3],v={version2}",
+            "key": "test3",
+            "value": "val3",
+            "send_event": True,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "id": f"test::Resource[agent1,key=test4],v={version2}",
+            "key": "test4",
+            "value": "val4",
+            "send_event": True,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "id": f"test::Resource[agent1,key=test5],v={version2}",
+            "key": "test5",
+            "value": "val5",
+            "send_event": True,
+            "requires": [f"test::Resource[agent1,key=test4],v={version2}"],
+        },
+    ]
+    result = await client.put_version(
+        tid=environment,
+        version=version2,
+        resources=resources_v2,
+        resource_state={},
+        compiler_version=util.get_compiler_version(),
+    )
+    assert result.code == 200, result.result
+
+    async def assert_states(expected_states: dict[ResourceIdStr, const.ResourceState]) -> None:
+        # Verify behavior of resource_details() endpoint.
+        for rid, current_resource_state in expected_states.items():
+            result = await client.resource_details(tid=environment, rid=rid)
+            assert result.code == 200
+            assert (
+                result.result["data"]["status"] == current_resource_state.value
+            ), f"Got state {result.result['data']['status']} for resource {rid}, expected {current_resource_state.value}"
+
+        # Verify behavior of get_current_resource_state() endpoint
+        resource_state: Optional[ResourceState]
+        for rid, current_resource_state in expected_states.items():
+            resource_state = await data.Resource.get_current_resource_state(env=uuid.UUID(environment), rid=rid)
+            assert resource_state == current_resource_state
+
+        # Verify behavior of resource_list() endpoint
+        result = await client.resource_list(tid=environment)
+        assert result.code == 200
+        actual_states = {r["resource_id"]: const.ResourceState(r["status"]) for r in result.result["data"]}
+        assert expected_states == actual_states
+
+    await assert_states(
+        {
+            ResourceIdStr("test::Resource[agent1,key=test1]"): const.ResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=test2]"): const.ResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=test3]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=test4]"): const.ResourceState.undefined,
+            ResourceIdStr("test::Resource[agent1,key=test5]"): const.ResourceState.skipped_for_undefined,
+        }
+    )
+
+    # Release version2
+    result = await client.release_version(tid=environment, id=version2)
+    assert result.code == 200
+
+    await assert_states(
+        {
+            ResourceIdStr("test::Resource[agent1,key=test1]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=test2]"): const.ResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=test3]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=test4]"): const.ResourceState.available,
+            ResourceIdStr("test::Resource[agent1,key=test5]"): const.ResourceState.available,
+        }
+    )
