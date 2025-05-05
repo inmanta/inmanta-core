@@ -125,7 +125,7 @@ print(blueprint.blueprint_hash())
     current_hash = current_session_blueprint.blueprint_hash()
 
     # Generate hash in a new interpreter session
-    result = subprocess.run(["python", "-c", python_code], capture_output=True, text=True)
+    result = subprocess.run([sys.executable, "-c", python_code], capture_output=True, text=True)
 
     # Check if the subprocess ended successfully
     if result.returncode != 0:

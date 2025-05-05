@@ -64,17 +64,18 @@ from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
+from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
-from sqlalchemy import URL, AsyncAdaptedQueuePool
+from sqlalchemy import URL, AdaptedConnection, NullPool
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import ConnectionPoolEntry
 
 """
 Global reference to the SQL Alchemy engine
 Main APIs to interact with it:
 - start_engine()
-- get_connection_ctx_mgr()
 - stop_engine()
 """
 ENGINE: AsyncEngine | None = None
@@ -1218,6 +1219,7 @@ class BaseDocument(metaclass=DocumentMeta):
       strings.
     """
 
+    _connection_pool: Optional[asyncpg.pool.Pool] = None
     _fields_metadata: dict[str, Field]
     __primary_key__: tuple[str, ...]
     __ignore_fields__: tuple[str, ...]
@@ -1238,10 +1240,14 @@ class BaseDocument(metaclass=DocumentMeta):
         wrapped around that connection instance. This allows for transparent usage, regardless of whether a connection has
         already been acquired.
         """
-        if connection is None:
-            return get_connection_ctx_mgr()
+        if connection is not None:
+            return util.nullcontext(connection)
 
-        return util.nullcontext(connection)
+        # Make mypy happy
+
+        assert cls._connection_pool is not None
+
+        return cls._connection_pool.acquire()
 
     @classmethod
     def table_name(cls) -> str:
@@ -1430,6 +1436,18 @@ class BaseDocument(metaclass=DocumentMeta):
         Generate a new ID. Override to use something else than uuid4
         """
         return uuid.uuid4()
+
+    @classmethod
+    def set_connection_pool(cls, pool: asyncpg.pool.Pool) -> None:
+        if cls._connection_pool:
+            raise Exception(f"Connection already set on {cls} ({cls._connection_pool})!")
+        cls._connection_pool = pool
+
+    @classmethod
+    def remove_connection_pool(cls) -> None:
+        if not cls._connection_pool:
+            return
+        cls._connection_pool = None
 
     def __setattr__(self, name: str, value: object) -> None:
         if name[0] == "_":
@@ -3864,7 +3882,7 @@ class Compile(BaseDocument):
                         returncode=compile["returncode"],
                     )
                 )
-            for name, url in cast(dict[str, list[str]], compile.get("links", {})).items():
+            for name, url in (json.loads(compile["links"]) if requested_compile["links"] else {}).items():
                 links[name].add(*url)
 
         return m.CompileDetails(
@@ -3878,16 +3896,20 @@ class Compile(BaseDocument):
             version=requested_compile["version"],
             do_export=requested_compile["do_export"],
             force_update=requested_compile["force_update"],
-            metadata=requested_compile["metadata"] or {},
-            environment_variables=requested_compile["used_environment_variables"] or {},
-            requested_environment_variables=requested_compile["requested_environment_variables"],
-            mergeable_environment_variables=requested_compile["mergeable_environment_variables"],
+            metadata=json.loads(requested_compile["metadata"]) if requested_compile["metadata"] else {},
+            environment_variables=(
+                json.loads(requested_compile["used_environment_variables"])
+                if requested_compile["used_environment_variables"] is not None
+                else {}
+            ),
+            requested_environment_variables=(json.loads(requested_compile["requested_environment_variables"])),
+            mergeable_environment_variables=(json.loads(requested_compile["mergeable_environment_variables"])),
             partial=requested_compile["partial"],
             removed_resource_sets=requested_compile["removed_resource_sets"],
             exporter_plugin=requested_compile["exporter_plugin"],
             notify_failed_compile=requested_compile["notify_failed_compile"],
             failed_compile_message=requested_compile["failed_compile_message"],
-            compile_data=requested_compile["compile_data"],
+            compile_data=json.loads(requested_compile["compile_data"]) if requested_compile["compile_data"] else None,
             reports=reports,
             links={key: sorted(list(links)) for key, links in links.items()},
         )
@@ -4046,6 +4068,7 @@ class ResourceAction(BaseDocument):
         if from_postgres and self.messages:
             new_messages = []
             for message in self.messages:
+                message = json.loads(message)
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
@@ -4472,6 +4495,8 @@ class ResourcePersistentState(BaseDocument):
     is_undefined: bool
     # Written when a new version is processed by the scheduler
     is_orphan: bool
+    # Set to true when a version starts its deployment, set to false when it finishes
+    is_deploying: bool
     # Written at deploy time (except for NEW -> no race condition possible with deploy path)
     last_deploy_result: state.DeployResult
     # Written both when processing a new version and at deploy time. As such, this should be updated
@@ -4573,6 +4598,7 @@ class ResourcePersistentState(BaseDocument):
                 current_intent_attribute_hash,
                 is_undefined,
                 is_orphan,
+                is_deploying,
                 last_deploy_result,
                 blocked
             )
@@ -4584,6 +4610,7 @@ class ResourcePersistentState(BaseDocument):
                 r.resource_id_value,
                 r.attribute_hash,
                 r.status = 'undefined'::public.resourcestate,
+                FALSE,
                 FALSE,
                 'NEW',
                 CASE
@@ -4889,12 +4916,14 @@ class Resource(BaseDocument):
         """
         Update resources on the latest released version of the model stuck in "deploying" state.
         The status will be reset to the latest non deploying status.
+        The is_deploying flag will also be set to "False" on the ResourcePersistentState table.
 
         :param environment: The environment impacted by this
         :param connection: The connection to use
         """
 
-        query = f"""
+        # FIXME: When we remove the status from the Resource table, this can go.
+        update_resource_query = f"""
             UPDATE {Resource.table_name()} r
             SET status=ps.last_non_deploying_status::TEXT::resourcestate
             FROM {ResourcePersistentState.table_name()} ps
@@ -4911,9 +4940,15 @@ class Resource(BaseDocument):
                     LIMIT 1
                 )
         """
+        update_rps_query = f"""
+            UPDATE {ResourcePersistentState.table_name()} ps
+            SET is_deploying=FALSE
+            WHERE environment=$1
+        """
         values = [cls._get_value(environment)]
         async with cls.get_connection(connection) as connection:
-            await connection.execute(query, *values)
+            await connection.execute(update_rps_query, *values)
+            await connection.execute(update_resource_query, *values)
 
     @classmethod
     async def get_resource_ids_with_status(
@@ -5017,42 +5052,6 @@ class Resource(BaseDocument):
         return result
 
     @classmethod
-    async def get_resources_report(cls, environment: uuid.UUID) -> list[JsonType]:
-        """
-        This method generates a report of all resources in the given environment,
-        with their latest version and when they are last deployed.
-        """
-        query = f"""
-        WITH latest_version_of_each_resource AS (
-            SELECT environment, max(model) AS model, resource_id
-            FROM {Resource.table_name()}
-            WHERE environment=$1
-            GROUP BY (environment, resource_id)
-        )
-        SELECT lver.resource_id, lver.model AS latest_version, rps.last_deployed_version AS deployed_version, rps.last_deploy
-        FROM latest_version_of_each_resource AS lver LEFT JOIN {ResourcePersistentState.table_name()} AS rps
-            ON lver.environment=rps.environment AND lver.resource_id=rps.resource_id
-        """
-        values = [cls._get_value(environment)]
-        result = []
-        async with cls.get_connection() as con:
-            async with con.transaction():
-                async for record in con.cursor(query, *values):
-                    resource_id = record["resource_id"]
-                    parsed_id = resources.Id.parse_id(resource_id)
-                    result.append(
-                        {
-                            "resource_id": resource_id,
-                            "resource_type": parsed_id.entity_type,
-                            "agent": parsed_id.agent_name,
-                            "latest_version": record["latest_version"],
-                            "deployed_version": record["deployed_version"] if "deployed_version" in record else None,
-                            "last_deploy": record["last_deploy"] if "last_deploy" in record else None,
-                        }
-                    )
-        return result
-
-    @classmethod
     async def get_resources_for_version(
         cls,
         environment: uuid.UUID,
@@ -5074,6 +5073,7 @@ class Resource(BaseDocument):
                 async for record in con.cursor(query, *values):
                     if no_obj:
                         record = dict(record)
+                        record["attributes"] = json.loads(record["attributes"])
                         cls.__mangle_dict(record)
                         resources_list.append(record)
                     else:
@@ -5096,7 +5096,11 @@ class Resource(BaseDocument):
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
         resource_records = await cls._fetch_query(query, *values, connection=connection)
-        return [dict(record) for record in resource_records]
+        resources = [dict(record) for record in resource_records]
+        for res in resources:
+            if "attributes" in res:
+                res["attributes"] = json.loads(res["attributes"])
+        return resources
 
     @classmethod
     async def get_resources_since_version_raw(
@@ -5134,6 +5138,8 @@ class Resource(BaseDocument):
                     # left join produced no resources
                     continue
                 resource: dict[str, object] = dict(raw_resource)
+                if "attributes" in resource:
+                    resource["attributes"] = json.loads(resource["attributes"])
                 if projection is not None:
                     assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
@@ -5177,7 +5183,13 @@ class Resource(BaseDocument):
         WHERE r.environment=$1 AND r.model = $2;
         """
         resource_records = await cls._fetch_query(query, environment, version, connection=connection)
-        return [dict(record) for record in resource_records]
+        resources = [dict(record) for record in resource_records]
+        for res in resources:
+            if project_attributes:
+                for k in project_attributes:
+                    if res[k]:
+                        res[k] = json.loads(res[k])
+        return resources
 
     @classmethod
     async def get_latest_version(cls, environment: uuid.UUID, resource_id: ResourceIdStr) -> Optional["Resource"]:
@@ -5312,7 +5324,7 @@ class Resource(BaseDocument):
             return None
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
-        attributes = record["attributes"]
+        attributes = json.loads(record["attributes"])
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
@@ -5550,6 +5562,7 @@ class Resource(BaseDocument):
 
     async def update_persistent_state(
         self,
+        is_deploying: bool | None = None,
         last_deploy: datetime.datetime | None = None,
         last_deployed_version: int | None = None,
         last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
@@ -5564,6 +5577,7 @@ class Resource(BaseDocument):
         args = ArgumentCollector(2)
 
         invalues = {
+            "is_deploying": is_deploying,
             "last_deploy": last_deploy,
             "last_non_deploying_status": last_non_deploying_status,
             "last_success": last_success,
@@ -6628,6 +6642,65 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
+def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
+    BaseDocument.set_connection_pool(pool)
+
+
+def get_connection_pool() -> asyncpg.pool.Pool:
+    assert BaseDocument._connection_pool is not None
+    return BaseDocument._connection_pool
+
+
+async def connect_pool(
+    host: str,
+    port: int,
+    database: str,
+    username: str,
+    password: str,
+    create_db_schema: bool = True,
+    connection_pool_min_size: int = 10,
+    connection_pool_max_size: int = 10,
+    connection_timeout: float = 60,
+) -> asyncpg.pool.Pool:
+
+    pool = await asyncpg.create_pool(
+        host=host,
+        port=port,
+        database=database,
+        user=username,
+        password=password,
+        min_size=connection_pool_min_size,
+        max_size=connection_pool_max_size,
+        timeout=connection_timeout,
+    )
+    try:
+        set_connection_pool(pool)
+        if create_db_schema:
+            async with pool.acquire() as con:
+                await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, con).ensure_db_schema()
+            # expire connections after db schema migration to ensure cache consistency
+            await pool.expire_connections()
+        return pool
+    except Exception as e:
+        await disconnect_pool()
+        raise e
+
+
+async def disconnect_pool() -> None:
+    LOGGER.debug("Disconnecting connection pool")
+
+    if BaseDocument._connection_pool is None:
+        return
+    try:
+        await asyncio.wait_for(BaseDocument._connection_pool.close(), config.db_connection_timeout.get())
+    except asyncio.TimeoutError:
+        BaseDocument._connection_pool.terminate()
+        LOGGER.exception("A timeout occurred while closing the connection pool to the database")
+        raise
+    finally:
+        BaseDocument.remove_connection_pool()
+
+
 async def start_engine(
     *,
     database_username: str,
@@ -6635,13 +6708,41 @@ async def start_engine(
     database_host: str,
     database_port: int,
     database_name: str,
-    pool_size: int = 10,
-    max_overflow: int = 0,
-    pool_timeout: float = 60.0,
-) -> None:
+    create_db_schema: bool = False,
+    connection_pool_min_size: int = 10,
+    connection_pool_max_size: int = 10,
+    connection_timeout: float = 60.0,
+) -> asyncpg.pool.Pool:
     """
-    Start the SQL Alchemy engine for this process
+    Start the SQL Alchemy engine for this process.
+
+    We don't delegate pool creation to SQL alchemy (yet?) because at this stage
+    we are still using the low level asyncpg connection object to interact with
+    the DB in most of the code base.
+
+    We create our own asyncpg pool and configure the SQL alchemy engine to use it.
+
+    To this end, we pass the following arguments to `create_async_engine`:
+
+        * async_creator: tell SQL alchemy how it can acquire new DB connections
+            i.e. using pool.acquire()
+
+        * poolclass: use a subclass of NullPool to disable SQL alchemy pool management.
+            The _do_return_conn method will make sure the connection is returned back
+            into the pool.
     """
+
+    pool = await connect_pool(
+        host=database_host,
+        port=database_port,
+        database=database_name,
+        username=database_username,
+        password=database_password,
+        create_db_schema=create_db_schema,
+        connection_pool_min_size=connection_pool_min_size,
+        connection_pool_max_size=connection_pool_max_size,
+        connection_timeout=connection_timeout,
+    )
 
     url_object = URL.create(
         drivername="postgresql+asyncpg",
@@ -6652,6 +6753,15 @@ async def start_engine(
         database=database_name,
     )
 
+    async def bridge_creator() -> asyncpg.connection.Connection:
+        return await pool.acquire()
+
+    class NullerPool(NullPool):
+        def _do_return_conn(self, record: ConnectionPoolEntry) -> None:
+            assert record.dbapi_connection is not None
+            assert isinstance(record.dbapi_connection, AdaptedConnection)
+            record.dbapi_connection.run_async(pool.release)
+
     global ENGINE
     global SESSION_FACTORY
 
@@ -6660,45 +6770,20 @@ async def start_engine(
 
     LOGGER.debug("Creating engine...")
     try:
-        ENGINE = create_async_engine(
-            url=url_object,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_pre_ping=True,
-        )
+        ENGINE = create_async_engine(url=url_object, pool_pre_ping=True, poolclass=NullerPool, async_creator=bridge_creator)
         SESSION_FACTORY = async_sessionmaker(ENGINE)
     except Exception as e:
         await stop_engine()
         raise e
 
-
-@asynccontextmanager
-async def get_connection_ctx_mgr() -> AsyncIterator[Connection]:
-    """
-    Retrieve an asyncpg connection from the sqlalchemy engine's
-    connection pool. This method is expected to be used as an
-    async context manager.
-    """
-    if ENGINE is None:
-        raise Exception("SQL Alchemy engine was not initialized")
-    async with ENGINE.connect() as connection:
-        connection_fairy = await connection.get_raw_connection()
-
-        # the really-real innermost driver connection is available
-        # from the .driver_connection attribute
-        raw_asyncio_connection = connection_fairy.driver_connection
-        assert isinstance(raw_asyncio_connection, Connection)
-        yield raw_asyncio_connection
-        # Pool can't handle naked asycpg
-        # https://github.com/sqlalchemy/sqlalchemy/discussions/12460
-        await raw_asyncio_connection.reset()
+    return pool
 
 
 async def stop_engine() -> None:
     """
-    Stop the sql alchemy engine.
+    Stop the sql alchemy engine and the associated asyncpg connection pool.
     """
+
     global ENGINE
     global SESSION_FACTORY
     if ENGINE is not None:
@@ -6706,12 +6791,7 @@ async def stop_engine() -> None:
     ENGINE = None
     SESSION_FACTORY = None
 
-
-def get_pool() -> AsyncAdaptedQueuePool:
-    pool = get_engine().pool
-    assert pool is not None, "SQL Alchemy engine's pool was not initialized"
-    assert isinstance(pool, AsyncAdaptedQueuePool)
-    return pool
+    await disconnect_pool()
 
 
 def get_engine() -> AsyncEngine:

@@ -17,7 +17,7 @@ requires = [
     "jinja2~=3.0",
     "more-itertools>=8,<11",
     # upper bound on packaging because we use a non-public API that might change in any (non-SemVer) version
-    "packaging>=21.3,<24.3",
+    "packaging>=21.3,<25.1",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
@@ -36,7 +36,7 @@ requires = [
     "toml~=0.10 ",
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
-    "strawberry-sqlalchemy-mapper==0.5.0",
+    "strawberry-sqlalchemy-mapper==0.6.0",
 ]
 
 
@@ -85,6 +85,38 @@ setup(
     include_package_data=True,
     install_requires=requires,
     extras_require={
+        "dev": [
+            # all extra's (for testing and mypy)
+            "inmanta-core[datatrace,debug,tracing]",
+            # test dependencies
+            "inmanta-dev-dependencies[pytest,async,core]",
+            "inmanta-module-std",
+            "bumpversion",
+            "openapi_spec_validator",
+            "pep8-naming",
+            "pip2pi",
+            "psutil",
+            "time-machine",
+            # types
+            "types-python-dateutil",
+            "types-PyYAML",
+            "types-setuptools",
+            "types-toml",
+            # doc dependencies
+            "furo",
+            "inmanta-sphinx",
+            "myst-parser",
+            "sphinx",
+            "sphinx-argparse",
+            "sphinx-autodoc-annotation",
+            "sphinx-click",
+            "sphinxcontrib-contentui",
+            "sphinxcontrib.datatemplates",
+            "sphinxcontrib-redoc",
+            "sphinxcontrib-serializinghtml",
+            "sphinx-design",
+            "Sphinx-Substitution-Extensions",
+        ],
         "debug": ["rpdb"],
         # option to install a matched pair of inmanta-core and pytest-inmanta-extensions
         "pytest-inmanta-extensions": [f"pytest-inmanta-extensions~={version}.0.dev"],

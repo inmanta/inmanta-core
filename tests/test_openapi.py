@@ -32,6 +32,7 @@ from inmanta.const import ClientType, ResourceAction
 from inmanta.data import model
 from inmanta.data.model import EnvironmentSetting
 from inmanta.protocol import method
+from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ArgOption, BaseHttpException, MethodProperties, UrlMethod
 from inmanta.protocol.openapi.converter import (
     ArgOptionHandler,
@@ -58,6 +59,7 @@ def feature_manager(server: Server) -> FeatureManager:
 
 @pytest.fixture(scope="function")
 def api_methods_fixture(clean_reset):
+    @auth(auth_label="test", read_only=True)
     @method(path="/simpleoperation", client_types=[ClientType.api, ClientType.agent], envelope=True)
     def post_method() -> str:
         return ""
@@ -71,6 +73,7 @@ def api_methods_fixture(clean_reset):
         "non_header": ArgOption(getter=lambda x, y: "test"),
     }
 
+    @auth(auth_label="test", read_only=True)
     @method(path="/operation/<id>", client_types=[ClientType.api, ClientType.agent], envelope=True, arg_options=arg_options)
     def dummy_post_with_parameters(header: str, non_header: str, param: int, id: UUID) -> str:
         """
@@ -89,6 +92,7 @@ def api_methods_fixture(clean_reset):
         """
         return ""
 
+    @auth(auth_label="test", read_only=True)
     @method(
         path="/operation/<id>",
         client_types=[ClientType.api, ClientType.agent],
@@ -113,10 +117,12 @@ def api_methods_fixture(clean_reset):
         """
         return ""
 
+    @auth(auth_label="test", read_only=True)
     @method(path="/operation/<id>", client_types=[ClientType.api, ClientType.agent], envelope=True, arg_options=arg_options)
     def dummy_post_with_parameters_no_docstring(header: str, non_header: str, param: int, id: UUID) -> str:
         return ""
 
+    @auth(auth_label="test", read_only=True)
     @method(
         path="/operation/<id>",
         client_types=[ClientType.api, ClientType.agent],
@@ -132,6 +138,7 @@ def api_methods_fixture(clean_reset):
         "tid_no_doc": ArgOption(header="header-no-doc", reply_header=True, getter=lambda x, y: "test"),
     }
 
+    @auth(auth_label="test", read_only=True)
     @method(
         path="/operation/<id_doc>/<id_no_doc>",
         client_types=[ClientType.api, ClientType.agent],
@@ -150,6 +157,7 @@ def api_methods_fixture(clean_reset):
         """
         return ""
 
+    @auth(auth_label="test", read_only=True)
     @method(
         path="/operation/<id_doc>/<id_no_doc>",
         client_types=[ClientType.api, ClientType.agent],
@@ -169,6 +177,7 @@ def api_methods_fixture(clean_reset):
         """
         return ""
 
+    @auth(auth_label="test", read_only=True)
     @method(
         path="/default/<id>",
         client_types=[ClientType.api],

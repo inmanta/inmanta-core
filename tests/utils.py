@@ -25,8 +25,10 @@ import json
 import logging
 import math
 import os
+import pathlib
 import queue
 import random
+import re
 import shutil
 import uuid
 from collections import abc
@@ -51,7 +53,6 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ResourceInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data import get_connection_ctx_mgr
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
@@ -249,7 +250,7 @@ class LogSequence:
         if not self.allow_errors:
             # first error is later
             idxe = self._find("", logging.ERROR, "", self.index, min_level)
-            assert idxe == -1 or idxe >= index
+            assert idxe == -1 or idxe >= index, f"Unexpected ERROR log line found: {self.caplog.records[idxe]}"
         assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
@@ -285,6 +286,7 @@ def configure_auth(auth: bool, ca: bool, ssl: bool) -> None:
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
     if auth:
         config.Config.set("server", "auth", "true")
+        config.Config.set("server", "enforce-access-policy", "true")
     for x, ct in [
         ("server", None),
         ("agent_rest_transport", ["agent"]),
@@ -315,7 +317,7 @@ async def report_db_index_usage(min_precent=100):
         " n_live_tup rows_in_table, seq_scan * n_live_tup badness  FROM pg_stat_user_tables "
         "WHERE seq_scan + idx_scan > 0 order by badness desc"
     )
-    async with get_connection_ctx_mgr() as con:
+    async with data.get_connection_pool().acquire() as con:
         result = await con.fetch(q)
 
     for row in result:
@@ -1088,3 +1090,23 @@ async def run_compile_and_wait_until_compile_is_done(
 
     await retry_limited(_is_compile_finished, timeout=10)
     return run
+
+
+def validate_version_numbers_migration_scripts(versions_folder: pathlib.Path) -> None:
+    """
+    Validate whether the names of the database migration scripts in the given directory
+    are compliant with the schema. Migration scripts must have the format vYYYYMMDDN.py
+    """
+    v1_found = False
+    for path in versions_folder.iterdir():
+        file_name = path.name
+        if not file_name.endswith(".py"):
+            continue
+        if file_name == "__init__.py":
+            continue
+        if file_name == "v1.py":
+            v1_found = True
+            continue
+        if not re.fullmatch(r"v([0-9]{9})\.py", file_name):
+            raise Exception(f"Database migration script {file_name} has invalid format.")
+    assert v1_found

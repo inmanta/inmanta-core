@@ -19,6 +19,8 @@ Contact: code@inmanta.com
 import copy
 import logging.config
 import pathlib
+import stat
+import tempfile
 import warnings
 from glob import glob
 from re import Pattern
@@ -27,22 +29,23 @@ from threading import Condition
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
+import inmanta
 import inmanta.deploy.state
+import requests
 import toml
 from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
-from inmanta.data import get_engine, start_engine, stop_engine
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
-from inmanta.protocol import auth
+from inmanta.protocol.auth import auth
+from inmanta.protocol.auth.policy_engine import path_opa_executable, policy_file
 from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
-from inmanta.server.services.databaseservice import initialize_sql_alchemy_engine
+from inmanta.tornado import LoopResolverWithUnixSocketSuppport
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -114,14 +117,13 @@ import socket
 import string
 import subprocess
 import sys
-import tempfile
 import time
 import traceback
 import uuid
 import venv
 import weakref
 from collections import abc, defaultdict, namedtuple
-from collections.abc import AsyncIterator, Awaitable, Iterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
 from typing import Any, Callable, Dict, Generic, Optional, Union
 
@@ -386,44 +388,30 @@ async def postgresql_client(postgres_db, database_name_internal):
     await client.close()
 
 
-@pytest.fixture
-def sqlalchemy_url_parameters(postgres_db, database_name_internal: str) -> dict[str, str]:
-    """
-    Return the dict representation of the parameters to pass to the start_engine
-    function to start the sql alchemy engine.
-    """
-    return {
-        "database_username": postgres_db.user,
-        "database_password": postgres_db.password,
-        "database_host": postgres_db.host,
-        "database_port": postgres_db.port,
-        "database_name": database_name_internal,
-    }
-
-
 @pytest.fixture(scope="function")
-async def sql_alchemy_engine(sqlalchemy_url_parameters: Mapping[str, str]) -> AsyncEngine:
-
-    await start_engine(**sqlalchemy_url_parameters)
-    engine = get_engine()
-
-    yield engine
-
-    await stop_engine()
+async def postgresql_pool(postgres_db, database_name_internal):
+    pool = await asyncpg.create_pool(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name_internal,
+    )
+    yield pool
+    await pool.close()
 
 
 @pytest.fixture(scope="function")
 async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_reset):
-    await initialize_sql_alchemy_engine(
-        database_host=postgres_db.host,
-        database_port=postgres_db.port,
-        database_name=database_name,
-        database_username=postgres_db.user,
-        database_password=postgres_db.password,
-        create_db_schema=True,
+    await data.connect_pool(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        username=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
     )
     yield
-    await stop_engine()
+    await data.disconnect_pool()
 
 
 @pytest.fixture(scope="function")
@@ -447,7 +435,6 @@ async def clean_db(create_db, postgresql_client):
                        not part of the Inmanta schema. These should be cleaned-up before running a new test.
     """
     yield
-    # By using the connection pool, we can make sure that the connection we use is alive
 
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     tables_in_db = [x["table_name"] for x in tables_in_db]
@@ -594,6 +581,7 @@ def reset_all_objects():
     AsyncHTTPClient.configure(None)
     reference.reset()
     mutator.reset()
+    LoopResolverWithUnixSocketSuppport.clear_unix_socket_registry()
 
 
 @pytest.fixture()
@@ -707,9 +695,66 @@ def log_state_tcp_ports(request, log_file):
     _write_log_line(f"After run test case {request.function.__name__}:")
 
 
+@pytest.fixture
+async def enable_auth() -> bool:
+    """
+    A fixture that indicates whether the server_config fixture should
+    set server.auth to true or false.
+    """
+    return False
+
+
+@pytest.fixture
+async def access_policy() -> str:
+    """
+    A fixture that returns the access policy configured by the server_config fixture.
+    """
+    return """
+        package policy
+
+        # Allow everything
+        default allowed:=true
+    """
+
+
+@pytest.fixture(scope="session")
+async def path_policy_engine_executable() -> str:
+    """
+    Returns the path to the Open Policy Agent executable.
+    This method caches the executables to prevent slow setup times of the test suite.
+    """
+    opa_version = inmanta.OPA_VERSION
+    cache_dir = os.path.abspath(os.path.join(__file__, "..", "data", "opa_executables.cache", f"v{opa_version}"))
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file = os.path.join(cache_dir, "opa_linux_amd64_static")
+    if not os.path.exists(cache_file):
+        with open(cache_file, "wb") as fp:
+            opa_executables_url_prefix = os.environ.get(
+                "INMANTA_OPA_EXECUTABLES_URL_PREFIX", "https://openpolicyagent.org/downloads"
+            )
+            url_to_opa_executable = f"{opa_executables_url_prefix}/v{opa_version}/opa_linux_amd64_static"
+            logger.info("Downloading OPA executable from %s", url_to_opa_executable)
+            req = requests.get(url_to_opa_executable, stream=True)
+            req.raise_for_status()
+            for chunk in req.iter_content(chunk_size=1024):
+                fp.write(chunk)
+        # Give owner execute permissions on file
+        os.chmod(cache_file, stat.S_IRWXU)
+    yield cache_file
+
+
 @pytest.fixture(scope="function")
 async def server_config(
-    inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory, auto_start_agent, no_agent
+    inmanta_config,
+    postgres_db,
+    database_name,
+    clean_reset,
+    unused_tcp_port_factory,
+    auto_start_agent,
+    no_agent,
+    access_policy: str,
+    enable_auth: bool,
+    path_policy_engine_executable: str,
 ):
     reset_metrics()
     agentmanager.assert_no_start_scheduler = not auto_start_agent
@@ -742,7 +787,19 @@ async def server_config(
         config.Config.set("agent", "executor-mode", "forking")
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
+        config.Config.set("server", "auth", str(enable_auth).lower())
+        config.Config.set("server", "enforce-access-policy", str(enable_auth).lower())
+
+        # Configure the access policy. This will only be used if server.auth is enabled.
+        os.mkdir(os.path.join(state_dir, "policy_engine"))
+        access_policy_file = os.path.join(state_dir, "policy_engine", "policy.rego")
+        with open(access_policy_file, "w") as fh:
+            fh.write(access_policy)
+        policy_file.set(access_policy_file)
+        path_opa_executable.set(path_policy_engine_executable)
+
         yield config
+
     agentmanager.assert_no_start_scheduler = False
     agentmanager.no_start_scheduler = False
 
@@ -1078,6 +1135,7 @@ async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str,
         :return: The uuid of the newly created environment as a string.
         """
         result = await client.create_environment(project_id=project_id, name=env_name)
+        assert result.code == 200, result
         env_id = result.result["environment"]["id"]
 
         cfg_env.set(env_id)
@@ -1941,7 +1999,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
             ModuleTool().build(path=path, output_dir=build_dir, wheel=True)
         # Download bare necessities
         CommandRunner(logging.getLogger(__name__)).run_command_and_log_output(
-            ["pip", "download", "setuptools", "wheel"], cwd=build_dir
+            [sys.executable, "-m", "pip", "download", "setuptools", "wheel"], cwd=build_dir
         )
 
         # Build python package repository

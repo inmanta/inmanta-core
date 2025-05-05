@@ -1,0 +1,4 @@
+---
+description: Fix the issue caused by the rename of a db migration script.
+change-type: patch
+destination-branches: [master]

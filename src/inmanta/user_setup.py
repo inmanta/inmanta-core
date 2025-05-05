@@ -28,7 +28,7 @@ from inmanta import config, data
 from inmanta.const import MIN_PASSWORD_LENGTH
 from inmanta.data import start_engine, stop_engine
 from inmanta.data.model import AuthMethod
-from inmanta.protocol import auth
+from inmanta.protocol.auth import auth
 from inmanta.server import config as server_config
 
 
@@ -107,9 +107,10 @@ async def connect_to_db() -> None:
         database_host=server_config.db_host.get(),
         database_port=server_config.db_port.get(),
         database_name=server_config.db_name.get(),
-        pool_size=connection_pool_min_size,
-        max_overflow=connection_pool_max_size - connection_pool_min_size,
-        pool_timeout=connection_timeout,
+        create_db_schema=False,
+        connection_pool_min_size=connection_pool_min_size,
+        connection_pool_max_size=connection_pool_max_size,
+        connection_timeout=connection_timeout,
     )
 
 

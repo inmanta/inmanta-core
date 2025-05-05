@@ -16,80 +16,85 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import asyncio
 import datetime
 import enum
 import logging
 import time
 import uuid
 from collections import abc
-from collections.abc import Mapping
 from datetime import UTC
 from typing import Optional, cast
 
 import asyncpg
 import pytest
-from asyncpg import Connection, ForeignKeyViolationError
+from asyncpg import Connection, ForeignKeyViolationError, Pool
 
-import sqlalchemy
 import utils
 from inmanta import const, data, util
 from inmanta.const import AgentStatus, LogLevel
-from inmanta.data import ArgumentCollector, QueryType, get_engine, start_engine, stop_engine
+from inmanta.data import ArgumentCollector, QueryType
 from inmanta.deploy import state
 from inmanta.resources import Id
 from inmanta.types import ResourceVersionIdStr
 
 
-async def test_connect_too_small_connection_pool(sqlalchemy_url_parameters: Mapping[str, str]):
-    """
-    Test sql alchemy engine connection pool saturation
-    """
-    await start_engine(
-        **sqlalchemy_url_parameters,
-        pool_size=1,
-        max_overflow=0,
-        pool_timeout=1,
+async def test_connect_too_small_connection_pool(postgres_db, database_name: str):
+    pool: Pool = await data.connect_pool(
+        postgres_db.host,
+        postgres_db.port,
+        database_name,
+        postgres_db.user,
+        postgres_db.password,
+        create_db_schema=False,
+        connection_pool_min_size=1,
+        connection_pool_max_size=1,
+        connection_timeout=120,
     )
-    engine = get_engine()
-    assert engine is not None
-    connection: Connection = await engine.connect()
-
+    assert pool is not None
+    connection: Connection = await pool.acquire()
     try:
-        with pytest.raises(sqlalchemy.exc.TimeoutError):
-            await engine.connect()
+        with pytest.raises(asyncio.TimeoutError):
+            await pool.acquire(timeout=1.0)
     finally:
         await connection.close()
-        await stop_engine()
+        await data.disconnect_pool()
 
 
-async def test_connect_default_parameters(sql_alchemy_engine):
-    """
-    Basic connectivity test for the sql alchemy engine
-    """
-    assert sql_alchemy_engine is not None
-    async with sql_alchemy_engine.connect() as connection:
-        assert connection is not None
+async def test_connect_default_parameters(postgres_db, database_name: str, create_db_schema: bool = False):
+    pool: Pool = await data.connect_pool(
+        postgres_db.host, postgres_db.port, database_name, postgres_db.user, postgres_db.password, create_db_schema
+    )
+    assert pool is not None
+    try:
+        async with pool.acquire() as connection:
+            assert connection is not None
+    finally:
+        await data.disconnect_pool()
 
 
-async def test_connection_failure(postgres_db, unused_tcp_port_factory, database_name, clean_reset):
+@pytest.mark.parametrize("min_size, max_size", [(-1, 1), (2, 1), (-2, -2)])
+async def test_connect_invalid_parameters(postgres_db, min_size, max_size, database_name: str, create_db_schema: bool = False):
+    with pytest.raises(ValueError):
+        await data.connect_pool(
+            postgres_db.host,
+            postgres_db.port,
+            database_name,
+            postgres_db.user,
+            postgres_db.password,
+            create_db_schema,
+            connection_pool_min_size=min_size,
+            connection_pool_max_size=max_size,
+        )
+
+
+async def test_connection_failure(unused_tcp_port_factory, database_name, clean_reset):
     """
     Basic connectivity test: using an incorrect port raises an error
     """
-    wrong_port = unused_tcp_port_factory()
-
-    await start_engine(
-        database_username=postgres_db.user,
-        database_password=postgres_db.password,
-        database_host=postgres_db.host,
-        database_port=wrong_port,
-        database_name=database_name,
-    )
-    engine = get_engine()
-    with pytest.raises(ConnectionRefusedError):
-        async with engine.connect() as _:
-            pass
-
-    await stop_engine()
+    port = unused_tcp_port_factory()
+    with pytest.raises(OSError):
+        await data.connect_pool("localhost", port, database_name, "testuser", None)
 
 
 async def test_postgres_client(postgresql_client):
@@ -1527,131 +1532,6 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
     await assert_expected_count(
         {"std::testing::NullResource": 1, "std::Dummy": 1}
     )  # 1 NullResource resource and 1 Dummy resource in model v2
-
-
-async def test_resources_report(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    # model 1
-    version = 1
-    cm1 = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        released=True,
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm1.insert()
-
-    res11 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
-        status=const.ResourceState.deployed,
-        attributes={"name": "file1"},
-    )
-    await res11.insert()
-
-    res12 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file2],v=%s" % version,
-        status=const.ResourceState.deployed,
-        attributes={"name": "file2"},
-    )
-    await res12.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
-    await res11.update_persistent_state(last_deployed_version=version, last_deploy=datetime.datetime(2018, 7, 14, 12, 30))
-    await res12.update_persistent_state(
-        last_deployed_version=version,
-        last_deploy=datetime.datetime(2018, 7, 14, 12, 30),
-    )
-
-    # model 2
-    version += 1
-    cm2 = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        released=False,
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm2.insert()
-    res21 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file1],v=%s" % version,
-        status=const.ResourceState.available,
-        attributes={"name": "file1"},
-    )
-    await res21.insert()
-
-    res22 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file3],v=%s" % version,
-        status=const.ResourceState.available,
-        attributes={"name": "file3"},
-    )
-    await res22.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
-
-    # model 3
-    version += 1
-    cm3 = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        released=True,
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm3.insert()
-
-    res31 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::testing::NullResource[agent1,name=file2],v=%s" % version,
-        status=const.ResourceState.deployed,
-        attributes={"name": "file2"},
-    )
-    await res31.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
-    await res31.update_persistent_state(last_deployed_version=version, last_deploy=datetime.datetime(2018, 7, 14, 14, 30))
-
-    report = await data.Resource.get_resources_report(env.id)
-    assert len(report) == 3
-    report_as_map = {x["resource_id"]: x for x in report}
-    for i in range(1, 4):
-        assert f"std::testing::NullResource[agent1,name=file{i}]" in report_as_map
-
-    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["resource_type"] == "std::testing::NullResource"
-    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["deployed_version"] == 1
-    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["latest_version"] == 2
-    assert (
-        report_as_map["std::testing::NullResource[agent1,name=file1]"]["last_deploy"]
-        == datetime.datetime(2018, 7, 14, 12, 30).astimezone()
-    )
-    assert report_as_map["std::testing::NullResource[agent1,name=file1]"]["agent"] == "agent1"
-
-    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["resource_type"] == "std::testing::NullResource"
-    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["deployed_version"] == 3
-    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["latest_version"] == 3
-    assert (
-        report_as_map["std::testing::NullResource[agent1,name=file2]"]["last_deploy"]
-        == datetime.datetime(2018, 7, 14, 14, 30).astimezone()
-    )
-    assert report_as_map["std::testing::NullResource[agent1,name=file2]"]["agent"] == "agent1"
-
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["resource_type"] == "std::testing::NullResource"
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["deployed_version"] is None
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["latest_version"] == 2
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["last_deploy"] is None
-    assert report_as_map["std::testing::NullResource[agent1,name=file3]"]["agent"] == "agent1"
 
 
 async def test_resource_action(init_dataclasses_and_load_schema):

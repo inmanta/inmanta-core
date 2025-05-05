@@ -1248,12 +1248,18 @@ async def test_compilerservice_halt(
 ) -> None:
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
+    # Wait until the compiler service is ready to process compiles.
+    # As long as the compiler service is not fully ready,
+    # is_compiling() will always return False.
+    await retry_limited(lambda: compilerslice.fully_ready, timeout=10)
+
     result = await client.get_compile_queue(environment)
     assert result.code == 200
     assert len(result.result["queue"]) == 0
     assert compilerslice._queue_count_cache == 0
 
-    await client.halt_environment(environment)
+    result = await client.halt_environment(environment)
+    assert result.code == 200
 
     env = await data.Environment.get_by_id(environment)
     assert env is not None
@@ -1267,7 +1273,8 @@ async def test_compilerservice_halt(
     result = await client.is_compiling(environment)
     assert result.code == 204
 
-    await client.resume_environment(environment)
+    result = await client.resume_environment(environment)
+    assert result.code == 200
     result = await client.is_compiling(environment)
     assert result.code == 200
 
@@ -1548,6 +1555,7 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
     assert "trace: " in report.errstream
 
 
+@pytest.mark.parametrize("no_agent", [True])
 @pytest.mark.parametrize(
     "recompile_backoff,expected_log_message,expected_log_level",
     [
@@ -2022,7 +2030,7 @@ class Mockreport:
 
 
 async def test_venv_use_and_reuse(tmp_path, caplog):
-    caplog.at_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG)
 
     # Set up mock
     project = tmp_path / "project"
@@ -2047,7 +2055,7 @@ async def test_venv_upgrade_version_match(tmp_path, caplog):
     1. Make a venv in the old layout and upgrade it
     2. Test we can handle re-creation of the venv
     """
-    caplog.at_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG)
 
     # Set up mock
     project = tmp_path / "project"
@@ -2078,7 +2086,7 @@ async def test_venv_upgrade_version_match(tmp_path, caplog):
 async def test_venv_upgrade_version_mismatch(tmp_path, caplog):
     # Make fake venv of wrong version
 
-    caplog.at_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG)
 
     # Old setup
     project = tmp_path / "project2"
