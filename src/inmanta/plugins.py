@@ -52,7 +52,8 @@ from inmanta.ast.type import NamedType
 from inmanta.ast.type import Null as Null  # Moved, part of stable api
 from inmanta.ast.type import ReferenceType
 from inmanta.config import Config
-from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext, get_inmanta_type_for_dataclass
+from inmanta.execute import proxy
+from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.references import Reference
@@ -408,13 +409,13 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
             return inmanta_type.create_union(bases)
 
     if dataclasses.is_dataclass(python_type):
-        entity = get_inmanta_type_for_dataclass(python_type)
+        entity = proxy.get_inmanta_type_for_dataclass(python_type)
         if entity:
             return entity
         raise TypingException(None, f"invalid type {python_type}, this dataclass has no associated inmanta entity")
 
     if dataclasses.is_dataclass(python_type):
-        entity = get_inmanta_type_for_dataclass(python_type)
+        entity = proxy.get_inmanta_type_for_dataclass(python_type)
         if entity:
             return entity
         raise TypingException(None, f"invalid type {python_type}, this dataclass has no associated inmanta entity")
@@ -1158,7 +1159,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         value = DynamicProxy.unwrap(
             value,
-            dynamic_context=DynamicUnwrapContext(
+            dynamic_context=proxy.DynamicUnwrapContext(
                 resolver=resolver,
                 queue=queue,
                 location=location,
@@ -1315,3 +1316,11 @@ def deprecated(
     if function is not None:
         return inner(function)
     return inner
+
+
+# TODO: move up in file?
+def allow_reference_attributes(instance: object) -> object:
+    if not isinstance(instance, DynamicProxy):
+        # TODO
+        raise ValueError()
+    return proxy.WithReferenceAttributes(instance)

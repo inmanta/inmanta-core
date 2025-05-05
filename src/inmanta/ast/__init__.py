@@ -1084,6 +1084,7 @@ class UnknownException(Exception):
         self.unknown = unknown
 
 
+
 class AttributeNotFound(NotFoundException, AttributeError):
     """
     Exception used for backwards compatibility with try-except blocks around some_proxy.some_attr.

@@ -252,14 +252,6 @@ class ReferenceType(Type):
     def as_python_type_string(self) -> "str | None":
         return f"Reference[{self.element_type.as_python_type_string()}]"
 
-    def has_custom_to_python(self) -> bool:
-        return True
-
-    def to_python(self, instance: object) -> "object":
-        if isinstance(instance, Reference):
-            return instance
-        return DynamicProxy.return_value(instance)
-
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ReferenceType):
             return False
