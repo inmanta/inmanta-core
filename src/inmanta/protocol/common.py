@@ -444,6 +444,7 @@ class MethodProperties:
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
         self._return_type: Optional[type] = None
+        self.token_param = token_param
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
@@ -455,7 +456,6 @@ class MethodProperties:
 
         self._validate_function_types(typed)
         self.argument_validator = self.arguments_to_pydantic()
-        self.token_param = token_param
 
     @property
     def varkw(self) -> bool:
@@ -528,6 +528,9 @@ class MethodProperties:
         # TODO: only primitive types are allowed in the path
         # TODO: body and get does not work
         self._path.validate_vars(type_hints.keys(), str(self.function))
+
+        if self.token_param is not None and self.token_param not in type_hints:
+            raise InvalidMethodDefinition(f"token_param ({self.token_param}) is missing in parameters of method.")
 
         if not typed:
             return
