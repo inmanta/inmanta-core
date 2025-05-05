@@ -250,7 +250,7 @@ class LogSequence:
         if not self.allow_errors:
             # first error is later
             idxe = self._find("", logging.ERROR, "", self.index, min_level)
-            assert idxe == -1 or idxe >= index
+            assert idxe == -1 or idxe >= index, f"Unexpected ERROR log line found: {self.caplog.records[idxe]}"
         assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
@@ -286,6 +286,7 @@ def configure_auth(auth: bool, ca: bool, ssl: bool) -> None:
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
     if auth:
         config.Config.set("server", "auth", "true")
+        config.Config.set("server", "enforce-access-policy", "true")
     for x, ct in [
         ("server", None),
         ("agent_rest_transport", ["agent"]),

@@ -1555,6 +1555,7 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
     assert "trace: " in report.errstream
 
 
+@pytest.mark.parametrize("no_agent", [True])
 @pytest.mark.parametrize(
     "recompile_backoff,expected_log_message,expected_log_level",
     [
@@ -2029,7 +2030,7 @@ class Mockreport:
 
 
 async def test_venv_use_and_reuse(tmp_path, caplog):
-    caplog.at_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG)
 
     # Set up mock
     project = tmp_path / "project"
@@ -2054,7 +2055,7 @@ async def test_venv_upgrade_version_match(tmp_path, caplog):
     1. Make a venv in the old layout and upgrade it
     2. Test we can handle re-creation of the venv
     """
-    caplog.at_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG)
 
     # Set up mock
     project = tmp_path / "project"
@@ -2085,7 +2086,7 @@ async def test_venv_upgrade_version_match(tmp_path, caplog):
 async def test_venv_upgrade_version_mismatch(tmp_path, caplog):
     # Make fake venv of wrong version
 
-    caplog.at_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG)
 
     # Old setup
     project = tmp_path / "project2"
