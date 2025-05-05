@@ -1555,6 +1555,7 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
     assert "trace: " in report.errstream
 
 
+@pytest.mark.parametrize("no_agent", [True])
 @pytest.mark.parametrize(
     "recompile_backoff,expected_log_message,expected_log_level",
     [
