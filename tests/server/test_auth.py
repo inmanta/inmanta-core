@@ -18,13 +18,13 @@ Contact: code@inmanta.com
 
 import pytest
 
-from inmanta.server import SLICE_USER, protocol
 import nacl.pwhash
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod
 from inmanta.protocol import common
-from inmanta.protocol.auth import auth, decorators, policy_engine
-from inmanta.protocol.decorators import handle, method, typedmethod
+from inmanta.protocol.auth import auth, decorators
+from inmanta.protocol.decorators import method, typedmethod
+from inmanta.server import SLICE_USER, protocol
 
 
 @pytest.fixture
