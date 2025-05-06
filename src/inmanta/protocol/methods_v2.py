@@ -29,6 +29,7 @@ from inmanta.data.model import DataBaseReport, LinkedDiscoveredResource, PipConf
 from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
+from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.types import PrimitiveTypes, ResourceIdStr
 
@@ -384,8 +385,11 @@ def reserve_version(tid: uuid.UUID) -> int:
     """
 
 
-@typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2)
-def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> ReturnValue[Union[OpenAPI, str]]:
+@auth(auth_label=const.AuthorizationLabel.DOCS_READ, read_only=True)
+@typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2, token_param="token")
+def get_api_docs(
+    format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None
+) -> ReturnValue[Union[OpenAPI, str]]:
     """
     Get the OpenAPI definition of the API
 
