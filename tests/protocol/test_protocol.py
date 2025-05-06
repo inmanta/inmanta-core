@@ -2213,3 +2213,17 @@ async def test_get_description_foreach_http_status_code() -> None:
     assert response_code_to_description[200] == ""
     assert response_code_to_description[404] == ""
     assert response_code_to_description[500] == ""
+
+
+async def test_token_param_not_present_in_method_signature() -> None:
+    """
+    Verify that an exception is raised if the method defines a token_param, but
+    that parameter is not present in the signature of the method.
+    """
+    with pytest.raises(InvalidMethodDefinition) as excinfo:
+
+        @protocol.typedmethod(path="/test", operation="GET", client_types=[ClientType.api], token_param="test")
+        def test_method1() -> dict[str, str]:  # NOQA
+            pass
+
+    assert "token_param (test) is missing in parameters of method." in str(excinfo.value)
