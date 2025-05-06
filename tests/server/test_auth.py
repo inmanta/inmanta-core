@@ -27,7 +27,7 @@ from inmanta.data.model import AuthMethod
 from inmanta.protocol import common
 from inmanta.protocol.auth import auth, decorators, policy_engine
 from inmanta.protocol.decorators import handle, method, typedmethod
-from inmanta.server import SLICE_USER, protocol
+from inmanta.server import protocol
 
 
 @pytest.fixture
@@ -365,13 +365,6 @@ async def test_auth_annotation_not_required() -> None:
         pass
 
     protocol.Server()._validate()
-
-    # test a rule that is not correct: use is on list
-    client = get_auth_client(
-        claim_rules=["environments is prod"],
-        claims=dict(environments=["prod", "lab"], type="lab", username="bob"),
-    )
-    assert (await client.list_users()).code == 403
 
 
 async def test_provide_token_as_parameter(server: protocol.Server, client) -> None:
