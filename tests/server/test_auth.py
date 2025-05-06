@@ -21,7 +21,7 @@ import pytest
 import nacl.pwhash
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod
-from inmanta.protocol.auth import auth
+from inmanta.protocol import auth
 from inmanta.server import SLICE_USER, protocol
 
 
