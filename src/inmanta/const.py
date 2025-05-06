@@ -280,10 +280,6 @@ SHUTDOWN_GRACE_IOLOOP = 10
 SHUTDOWN_GRACE_HARD = 15
 # Time we give the executor to shutdown gracefully, before we execute sys.exit(3)
 EXECUTOR_GRACE_HARD = 3
-# Time we give the policy engine to shutdown gracefully (in seconds).
-POLICY_ENGINE_GRACE_HARD = 3
-# Time we give the policy engine to startup (in seconds).
-POLICY_ENGINE_STARTUP_TIMEOUT = 10
 
 # Hard shutdown exit code
 EXIT_HARD = 3
@@ -414,44 +410,3 @@ ALL_LOG_CONTEXT_VARS = [LOG_CONTEXT_VAR_ENVIRONMENT]
 
 # Logger namespace
 LOGGER_NAME_EXECUTOR = "inmanta.executor"
-
-
-class AuthorizationLabel(str, Enum):
-    AGENT_READ = "agent.read"
-    AGENT_WRITE = "agent.write"
-    AUTH_ADMIN = "auth.admin"
-    AUTH_CHANGE_PASSWORD = "auth.change-password"
-    AUTH_USER = "auth.user"
-    CODE_WRITE = "code.write"
-    COMPILEREPORT_READ = "compilereport.read"
-    COMPILER_EXECUTE = "compiler.execute"
-    COMPILER_STATUS_READ = "compiler.status.read"
-    DEPLOY = "deploy"
-    DESIRED_STATE_READ = "desired-state.read"
-    DESIRED_STATE_WRITE = "desired-state.write"
-    DISCOVERED_RESOURCES_READ = "discovered_resources.read"
-    DOCS_READ = "docs.read"
-    DRYRUN_READ = "dryrun.read"
-    DRYRUN_WRITE = "dryrun.write"
-    ENVIRONMENT_HALT_RESUME = "environment.halt-resume"
-    ENVIRONMENT_READ = "environment.read"
-    ENVIRONMENT_SETTINGS_READ = "environment.settings.read"
-    ENVIRONMENT_SETTINGS_WRITE = "environment.settings.write"
-    ENVIRONMENT_WRITE = "environment.write"
-    FACT_READ = "fact.read"
-    FACT_WRITE = "fact.write"
-    FILES_READ = "files.read"
-    FILES_WRITE = "files.write"
-    GRAPHQL_READ = "graphql.read"
-    GRAPHQL_WRITE = "graphql.write"
-    METRICS_READ = "metrics.read"
-    NOTIFICATION_READ = "notification.read"
-    NOTIFICATION_WRITE = "notification.write"
-    PARAMETER_READ = "parameter.read"
-    PARAMETER_WRITE = "parameter.write"
-    PIP_CONFIG_READ = "pip_config.read"
-    PROJECT_READ = "project.read"
-    PROJECT_WRITE = "project.write"
-    RESOURCES_READ = "resources.read"
-    STATUS_READ = "status.read"
-    TOKEN = "token"
