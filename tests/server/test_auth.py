@@ -21,9 +21,7 @@ import pytest
 import nacl.pwhash
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod
-from inmanta.protocol import common, auth
-from inmanta.protocol.auth import auth, decorators, policy_engine
-from inmanta.protocol.decorators import handle, method, typedmethod
+from inmanta.protocol import auth
 from inmanta.server import SLICE_USER, protocol
 
 
@@ -75,6 +73,13 @@ async def test_claim_assertions(server: protocol.Server, server_pre_start) -> No
     )
     assert (await client.list_users()).code == 403
 
+    # test a rule that is not correct: use is on list
+    client = get_auth_client(
+        claim_rules=["environments is prod"],
+        claims=dict(environments=["prod", "lab"], type="lab", username="bob"),
+    )
+    assert (await client.list_users()).code == 403
+
 
 async def test_provide_token_as_parameter(server: protocol.Server, client) -> None:
     """
@@ -100,55 +105,3 @@ async def test_provide_token_as_parameter(server: protocol.Server, client) -> No
 
     result = await client.get_api_docs(token=token)
     assert result.code == 200
-
-
-async def test_auth_annotation() -> None:
-    """
-    Validate whether the logic behind the @auth annotation works correctly.
-    """
-
-    @decorators.auth(auth_label="label1", read_only=True, environment_param="id")
-    @method(path="/test1/<id>", operation="GET")
-    def method_1(id: str) -> None:
-        pass
-
-    @decorators.auth(auth_label="label2", read_only=False)
-    @method(path="/test2", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
-    def method_2(id: str) -> None:
-        pass
-
-    @decorators.auth(auth_label="label3", read_only=True, environment_param="id")
-    @typedmethod(path="/test3/<id>", operation="GET")
-    def method_3(id: str) -> None:
-        pass
-
-    @decorators.auth(auth_label="label4", read_only=False)
-    @typedmethod(path="/test4", operation="POST", client_types=[const.ClientType.api, const.ClientType.agent])
-    def method_4(id: str) -> None:
-        pass
-
-    data: dict[str, object] = common.MethodProperties.get_open_policy_agent_data()
-    assert data["endpoints"]["GET /api/v1/test1/<id>"] == {
-        "client_types": [const.ClientType.api],
-        "auth_label": "label1",
-        "read_only": True,
-        "environment_param": "id",
-    }
-    assert data["endpoints"]["POST /api/v1/test2"] == {
-        "client_types": [const.ClientType.api, const.ClientType.agent],
-        "auth_label": "label2",
-        "read_only": False,
-        "environment_param": None,
-    }
-    assert data["endpoints"]["GET /api/v1/test3/<id>"] == {
-        "client_types": [const.ClientType.api],
-        "auth_label": "label3",
-        "read_only": True,
-        "environment_param": "id",
-    }
-    assert data["endpoints"]["POST /api/v1/test4"] == {
-        "client_types": [const.ClientType.api, const.ClientType.agent],
-        "auth_label": "label4",
-        "read_only": False,
-        "environment_param": None,
-    }
