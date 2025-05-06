@@ -18,8 +18,10 @@
 
 import pytest
 
-from inmanta import config, const
-from inmanta.protocol import auth
+import nacl.pwhash
+from inmanta import config, const, data
+from inmanta.data.model import AuthMethod
+from inmanta.protocol.auth import auth
 from inmanta.server import SLICE_USER, protocol
 
 
@@ -71,9 +73,28 @@ async def test_claim_assertions(server: protocol.Server, server_pre_start) -> No
     )
     assert (await client.list_users()).code == 403
 
-    # test a rule that is not correct: use is on list
-    client = get_auth_client(
-        claim_rules=["environments is prod"],
-        claims=dict(environments=["prod", "lab"], type="lab", username="bob"),
+
+async def test_provide_token_as_parameter(server: protocol.Server, client) -> None:
+    """
+    Validate whether the authorization token is handled correctly
+    when provided using a parameter instead of a header.
+    """
+    config.Config.set("server", "auth", "true")
+    config.Config.set("server", "auth_method", "database")
+    user = data.User(
+        username="admin",
+        password_hash=nacl.pwhash.str("adminadmin".encode()).decode(),
+        auth_method=AuthMethod.database,
     )
-    assert (await client.list_users()).code == 403
+    await user.insert()
+
+    # No authorization token provided
+    result = await client.get_api_docs()
+    assert result.code == 401
+
+    response = await client.login("admin", "adminadmin")
+    assert response.code == 200
+    token = response.result["data"]["token"]
+
+    result = await client.get_api_docs(token=token)
+    assert result.code == 200

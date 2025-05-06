@@ -493,6 +493,26 @@ class CallArguments:
 
         :return: A mapping of claims
         """
+        token: str | None = None
+
+        # Try to get token from parameters if token_param set in method properties.
+        token_param = self._properties.token_param
+        if token_param is not None and self._message.get(token_param):
+            token = self._message[token_param]
+
+        # Try to get token from header
+        if token is None:
+            token = self._get_auth_token_from_header()
+
+        if token is None:
+            return None
+
+        self._auth_token, cfg = auth.decode_token(token)
+
+        if cfg.jwt_username_claim in self._auth_token:
+            self._auth_username = str(self._auth_token[cfg.jwt_username_claim])
+
+    def _get_auth_token_from_header(self) -> str | None:
         header_value: Optional[str] = None
 
         if additional_header := server_config.server_additional_auth_header.get():
@@ -512,13 +532,7 @@ class CallArguments:
 
             header_value = parts[1]
 
-        if header_value is None:
-            return None
-
-        self._auth_token, cfg = auth.decode_token(header_value)
-
-        if cfg.jwt_username_claim in self._auth_token:
-            self._auth_username = str(self._auth_token[cfg.jwt_username_claim])
+        return header_value
 
     def authenticate(self, auth_enabled: bool) -> None:
         """Fetch any identity information and authenticate. This will also load this authentication
