@@ -24,7 +24,7 @@ https://github.com/tiangolo/fastapi
 """
 from collections import abc
 from enum import Enum
-from typing import Any, Optional, Self, Union
+from typing import Any, Optional, Self, TypeAlias, Union
 
 import pydantic
 from pydantic import AnyUrl, ConfigDict, Field
@@ -263,8 +263,8 @@ class PathItem(BaseModel):
     parameters: Optional[list[Union[Parameter, Reference]]] = None
 
 
-type SecuritySchemeName = str
-type Scope = str
+SecuritySchemeName: TypeAlias = str
+Scope: TypeAlias = str
 
 
 class SecurityScheme(BaseModel):
