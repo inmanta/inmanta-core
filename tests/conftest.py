@@ -717,7 +717,7 @@ async def access_policy() -> str:
     """
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 async def path_policy_engine_executable() -> str:
     """
     Returns the path to the Open Policy Agent executable.
