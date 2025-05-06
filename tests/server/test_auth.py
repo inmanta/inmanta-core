@@ -73,6 +73,13 @@ async def test_claim_assertions(server: protocol.Server, server_pre_start) -> No
     )
     assert (await client.list_users()).code == 403
 
+    # test a rule that is not correct: use is on list
+    client = get_auth_client(
+        claim_rules=["environments is prod"],
+        claims=dict(environments=["prod", "lab"], type="lab", username="bob"),
+    )
+    assert (await client.list_users()).code == 403
+
 
 async def test_provide_token_as_parameter(server: protocol.Server, client) -> None:
     """
