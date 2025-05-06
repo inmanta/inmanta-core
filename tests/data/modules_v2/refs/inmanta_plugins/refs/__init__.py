@@ -164,18 +164,3 @@ class NullProvider(CRUDHandler[Deep]):
 
     def update_resource(self, ctx: HandlerContext, changes: dict, resource: Deep) -> None:
         ctx.set_updated()
-
-
-type Entity = Annotated[Any, ModelType["std::Entity"]]
-
-
-# TODO: naming etc
-@plugin
-def read_entity_value(instance: Entity) -> str:
-    return instance.non_ref_value
-
-
-@plugin
-def read_dataclass_value(instance: Test) -> None:
-    failed_read = instance.non_ref_value
-    return None

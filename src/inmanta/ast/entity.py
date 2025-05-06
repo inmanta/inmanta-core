@@ -43,7 +43,7 @@ from inmanta.ast.type import Any as inm_Any
 from inmanta.ast.type import Float, NamedType, NullableType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
-from inmanta.references import AttributeReference, PrimitiveTypes, Reference
+from inmanta.references import AttributeReference, PrimitiveTypes, Reference, RefValue, UnexpectedReferenceException
 from inmanta.types import DataclassProtocol
 
 # pylint: disable-msg=R0902,R0904
@@ -344,6 +344,8 @@ class Entity(NamedType, WithComment):
     def validate(self, value: object) -> bool:
         """
         Validate the given value
+
+        :raises UnexpectedReferenceException
         """
         if isinstance(value, AnyType):
             return True
@@ -354,6 +356,13 @@ class Entity(NamedType, WithComment):
         value_definition = value.type
         if not (value_definition is self or value_definition.is_subclass(self)):
             raise RuntimeException(None, f"Invalid class type for {value}, should be {self}")
+
+        if value.is_reference():
+            # TODO: this is too trigger-happy -> also fires for return values
+            # TODO: better message
+            raise UnexpectedReferenceValidationError(
+                msg=f"{value} is a reference, should be {self}", reference=value.dataclass_self
+            )
 
         return True
 
@@ -864,3 +873,10 @@ class Implement(Locatable):
             return
         self.normalized = True
         self.constraint.normalize()
+
+
+class UnexpectedReferenceValidationError(RuntimeException, UnexpectedReferenceException):
+    # TODO: docstring. Only raised when ref is encountered where value is expected, but all other validation passed
+    def __init__(self, *, msg: str, reference: Reference[RefValue]) -> None:
+        RuntimeException.__init__(self, stmt=None, msg=msg)
+        UnexpectedReferenceException.__init__(self, msg=msg, reference=reference)

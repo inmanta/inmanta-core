@@ -27,7 +27,7 @@ import pytest
 
 from inmanta import env, references, resources, util
 from inmanta.agent.handler import PythonLogger
-from inmanta.ast import ExternalException, RuntimeException, TypingException
+from inmanta.ast import ExternalException, PluginTypeException, RuntimeException, TypingException
 from inmanta.data.model import ReleasedResourceDetails, ReleasedResourceState
 from inmanta.export import ResourceDict
 from inmanta.references import Reference, ReferenceCycleException, reference
@@ -177,27 +177,93 @@ async def test_deploy_end_to_end(
     assert details.status == ReleasedResourceState.deployed
 
 
-# TODO: name
-def test_undeclared_reference_in_dataclass(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+# TODO: name -> more like "references in plugins"
+# TODO: run these tests on master to see which fail
+def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
     # TODO: docstring
     refs_module = os.path.join(modules_v2_dir, "refs")
 
+    # set up project
     snippetcompiler.setup_for_snippet(
-        snippet="""
+        "import refs",
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+        autostd=True,
+    )
+
+    def run_snippet(snippet: str) -> None:
+        """
+        Wrapper around snippetcompiler.setup_for_snippet + runs compile and export.
+        Passes appropriate options and prepends snippet with refs import.
+        """
+        snippetcompiler.setup_for_snippet(f"import refs import refs::plugins\n{snippet}", install_project=False, autostd=True)
+        snippetcompiler.do_export()
+
+    # Primitives
+
+    # Scenario: plugin argument annotated as `object`
+    run_snippet(snippet="refs::plugins::takes_obj('hello')")
+    run_snippet(snippet="refs::plugins::takes_obj(refs::create_string_reference('name'))")
+    # Scenario: plugin argument annotated as `str`
+    run_snippet(snippet="refs::plugins::takes_str('hello')")
+    with pytest.raises(PluginTypeException):
+        run_snippet(snippet="refs::plugins::takes_str(refs::create_string_reference('name'))")
+    # Scenario: plugin argument annotated as `str | Reference[str]`
+    run_snippet(snippet="refs::plugins::takes_str_ref('hello')")
+    run_snippet(snippet="refs::plugins::takes_str_ref(refs::create_string_reference('name'))")
+    with pytest.raises(PluginTypeException):
+        # takes a str ref, not a bool ref
+        run_snippet(snippet="refs::plugins::takes_str_ref(refs::create_bool_reference('name'))")
+    # Scenario: plugin argument annotated as `Sequence[object]`
+    run_snippet(snippet="refs::plugins::iterates_obj_list(['h', 'e'])")
+    run_snippet(snippet="refs::plugins::iterates_obj_list(['h', 1])")
+    run_snippet(snippet="refs::plugins::iterates_obj_list(['h', refs::create_string_reference('name')])")
+    # Scenario: plugin argument annotated as `Sequence[str]`
+    run_snippet(snippet="refs::plugins::iterates_str_list(['h', 'e'])")
+    with pytest.raises(PluginTypeException):
+        run_snippet(snippet="refs::plugins::iterates_str_list(['h', 1])")
+    with pytest.raises(PluginTypeException):
+        run_snippet(snippet="refs::plugins::iterates_str_list(['h', refs::create_string_reference('name')])")
+    # Scenario: plugin argument annotated as `Sequence[str | Reference[str]]`
+    run_snippet(snippet="refs::plugins::iterates_str_ref_list(['h', 'e'])")
+    with pytest.raises(PluginTypeException):
+        run_snippet(snippet="refs::plugins::iterates_str_ref_list(['h', 1])")
+    run_snippet(snippet="refs::plugins::iterates_str_ref_list(['h', refs::create_string_reference('name')])")
+
+    # Entities
+
+    # Scenario: plugin annotated as `Entity` or `Test` gets reference
+    # TODO: this scenario isn't really relevant because Ref[Test] is converted to Test[Ref]. What is relevant is
+    #       how to deal with non-ref attributes that suddenly become a reference.
+    #       => HOW TO DISTINGUISH Ref[Test] from Test[...] with illegal ref? Especially for dataclasses. Perhaps add metadata
+    #           on instance, and rewrap on plugin boundary? OR IMMEDIATELY GENERATE ASSOCIATED PYTHON INSTANCE -> already so
+    with pytest.raises(PluginTypeException):
+        run_snippet("refs::plugins::read_entity_value(refs::create_test('hello'))")
+    with pytest.raises(PluginTypeException):
+        run_snippet("refs::plugins::read_dataclass_value(refs::create_test('hello'))")
+    run_snippet("refs::plugins::read_dataclass_ref_value(refs::create_test('hello'))")
+    # TODO: make sure that `Test | Reference[Test]` is allowed (probably not so atm)
+
+
+    # TODO: plugins annotated as Reference[Entity] and Reference[Test]
+    return
+
+    # TODO
+    snippetcompiler.setup_for_snippet(
+        snippet="""\
         import refs
 
         test = refs::Test(value="test", non_ref_value=refs::create_string_reference(name="test"))
         refs::read_dataclass_value(test)
         """,
-        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
-        autostd=True,
     )
 
     # TODO: appropriate assertions: should fail because of attr access
     snippetcompiler.do_export()
 
+    assert False
+
     snippetcompiler.setup_for_snippet(
-        snippet="""
+        snippet="""\
         import refs
 
         normal_entity = refs::NormalEntity(non_ref_value=refs::create_string_reference(name="test"))
@@ -205,8 +271,6 @@ def test_undeclared_reference_in_dataclass(snippetcompiler: "SnippetCompilationT
         from_entity = refs::read_entity_value(normal_entity)
         from_dataclass = refs::read_entity_value(test)
         """,
-        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
-        autostd=True,
     )
 
     # TODO: appropriate assertions: should be fine?????

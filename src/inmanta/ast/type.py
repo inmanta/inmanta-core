@@ -215,8 +215,14 @@ class ReferenceType(Type):
             self.is_dataclass = True
 
     def validate(self, value: Optional[object]) -> bool:
+        # TODO: should also check if it's a reference -> add a test case
         if self.is_dataclass:
-            return self.element_type.validate(value)
+            # TODO: move exception and drop import. Or consider catching UnexpectedReferenceException instead
+            from inmanta.ast.entity import UnexpectedReferenceValidationError
+            try:
+                return self.element_type.validate(value)
+            except UnexpectedReferenceValidationError:
+                return True
 
         if isinstance(value, Reference):
             assert value._model_type is not None

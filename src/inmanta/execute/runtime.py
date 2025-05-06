@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Deque, Generic, List, Literal, NewType, Option
 
 import inmanta.ast
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
-from inmanta import ast
+from inmanta import ast, references
 from inmanta.ast import (
     AttributeException,
     CompilerException,
@@ -1274,6 +1274,11 @@ class Instance(ExecutionContext):
 
     def get_type(self) -> "Entity":
         return self.type
+
+    # TODO: is this the same as references.is_reference_of()?
+    def is_reference(self) -> bool:
+        # TODO: docstring
+        return self.dataclass_self is not None and isinstance(self.dataclass_self, references.Reference)
 
     def set_attribute(self, name: str, value: object, location: Location, recur: bool = True) -> None:
         if name not in self.slots:
