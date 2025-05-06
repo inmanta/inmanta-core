@@ -21,9 +21,7 @@ import pytest
 import nacl.pwhash
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod
-from inmanta.protocol import common
-from inmanta.protocol.auth import auth, decorators
-from inmanta.protocol.decorators import method, typedmethod
+from inmanta.protocol.auth import auth
 from inmanta.server import SLICE_USER, protocol
 
 
@@ -107,4 +105,3 @@ async def test_provide_token_as_parameter(server: protocol.Server, client) -> No
 
     result = await client.get_api_docs(token=token)
     assert result.code == 200
-
