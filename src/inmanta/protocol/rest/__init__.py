@@ -16,12 +16,13 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import abc
 import inspect
 import json
 import logging
 import uuid
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
+from typing import Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
 
 import pydantic
 import typing_inspect
@@ -29,7 +30,8 @@ from tornado import escape
 
 from inmanta import const, tracing, util
 from inmanta.data.model import BaseModel
-from inmanta.protocol import auth, common, exceptions
+from inmanta.protocol import common, exceptions
+from inmanta.protocol.auth import auth, policy_engine
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import config as server_config
 from inmanta.types import Apireturn, JsonType
@@ -536,12 +538,26 @@ class CallArguments:
             # We only need a valid token when the endpoint enforces authentication
             raise exceptions.UnauthorizedException()
 
-    def authorize_request(self, auth_enabled: bool) -> None:
-        """Authorize a request based on the given data
+    def _is_service_token(self) -> bool:
+        """
+        Return True iff self._auth_token is a service token (i.e. a token used by a service instead of a user).
+        """
+        ct_key: str = const.INMANTA_URN + "ct"
+        assert self._auth_token is not None
+        client_types_token = self._auth_token[ct_key]
+        return any(ct in {const.ClientType.agent.value, const.ClientType.compiler.value} for ct in client_types_token)
+
+    async def authorize_request(self, auth_enabled: bool, policy_engine: policy_engine.PolicyEngine | None) -> None:
+        """Validate whether the token is authorized to perform this request.
 
         :param auth_enabled: is authentication enabled?
+        :param policy_engine: The policy engine of the server. None if we are not running on the server
+                              or if auth is disabled.
         """
         if not auth_enabled:
+            return
+
+        if not server_config.enforce_access_policy.get():
             return
 
         if self._auth_token is None:
@@ -550,6 +566,21 @@ class CallArguments:
                 raise exceptions.UnauthorizedException()
             return None
 
+        if self._is_service_token():
+            self._authorize_service_token()
+        else:
+            if policy_engine is None:
+                raise exceptions.Forbidden("The policy engine is not running.")
+            input_data = self._get_input_for_policy_engine()
+            if not await policy_engine.does_satisfy_access_policy(input_data):
+                raise exceptions.Forbidden("Request is not allowed by the access policy.")
+
+    def _authorize_service_token(self) -> None:
+        """
+        Validate whether self._auth_token is a valid service token.
+        If not, this method raises a Forbidden exception.
+        """
+        assert self._auth_token is not None
         # Enforce environment restrictions
         env_key: str = const.INMANTA_URN + "env"
         if env_key in self._auth_token:
@@ -560,21 +591,37 @@ class CallArguments:
                 raise exceptions.Forbidden("The authorization token is not valid for the requested environment.")
 
         # Enforce client_types restrictions
-        ok: bool = False
         ct_key: str = const.INMANTA_URN + "ct"
-        for ct in self._auth_token[ct_key]:
-            if ct in self._config.properties.client_types:
-                ok = True
-
-        if not ok:
+        if not any(ct for ct in self._auth_token[ct_key] if ct in self._config.properties.client_types):
             raise exceptions.Forbidden(
                 "The authorization token does not have a valid client type for this call."
-                + f" ({self._auth_token[ct_key]} provided, {self._config.properties.client_types} expected"
+                + f" ({self._auth_token[ct_key]} provided, {self._config.properties.client_types} expected)"
             )
+
+    def _get_input_for_policy_engine(self) -> Mapping[str, object]:
+        """
+        Returns the input that should be provided to the policy engine to validate
+        whether this call is authorized or not.
+        """
+        method_properties = self._config.properties
+        call_args = dict(self.call_args)
+        name_call_context_context_arg = self.get_call_context()
+        if name_call_context_context_arg and name_call_context_context_arg in call_args:
+            # Remove the CallContext argument. It cannot be serialized to JSON.
+            del call_args[name_call_context_context_arg]
+        return {
+            "input": {
+                "request": {
+                    "endpoint_id": f"{method_properties.operation} {method_properties.get_full_path()}",
+                    "parameters": call_args,
+                },
+                "token": self._auth_token,
+            }
+        }
 
 
 # Shared
-class RESTBase(util.TaskHandler[None]):
+class RESTBase(util.TaskHandler[None], abc.ABC):
     """
     Base class for REST based client and servers
     """
@@ -598,6 +645,12 @@ class RESTBase(util.TaskHandler[None]):
     def validate_sid(self, sid: uuid.UUID) -> bool:
         raise NotImplementedError()
 
+    def is_auth_enabled(self) -> bool:
+        """
+        Return True iff authentication is enabled.
+        """
+        raise NotImplementedError()
+
     async def _execute_call(
         self,
         config: common.UrlMethod,
@@ -619,9 +672,10 @@ class RESTBase(util.TaskHandler[None]):
             # Authorization might need data from the request but we do not want to process it before we are sure the call
             # is authenticated.
             arguments = CallArguments(config, message, request_headers)
-            arguments.authenticate(server_config.server_enable_auth.get())
+            is_auth_enabled: bool = self.is_auth_enabled()
+            arguments.authenticate(auth_enabled=is_auth_enabled)
             await arguments.process()
-            arguments.authorize_request(server_config.server_enable_auth.get())
+            await arguments.authorize_request(auth_enabled=is_auth_enabled, policy_engine=await self.get_policy_engine())
 
             LOGGER.debug(
                 "Calling method %s(%s) user=%s",
@@ -645,3 +699,10 @@ class RESTBase(util.TaskHandler[None]):
         except Exception as e:
             LOGGER.exception("An exception occurred during the request.")
             raise exceptions.ServerError(str(e.args))
+
+    @abc.abstractmethod
+    async def get_policy_engine(self) -> policy_engine.PolicyEngine | None:
+        """
+        Return the policy engine or None if no such engine exists because we are not running on the server.
+        """
+        raise NotImplementedError()
