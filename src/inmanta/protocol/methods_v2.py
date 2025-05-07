@@ -392,6 +392,7 @@ def get_api_docs(
     Get the OpenAPI definition of the API
 
     :param format: Use 'openapi' to get the schema in json format, leave empty or use 'swagger' to get the Swagger-UI view
+    :param token: If provided, use this token to authorize the request instead of the value from the authorization header.
     """
 
 
