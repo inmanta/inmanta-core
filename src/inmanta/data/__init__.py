@@ -4860,21 +4860,8 @@ class Resource(BaseDocument):
         Return the state of the given resource in the latest version of the configuration model
         or None if the resource is not present in the latest version.
         """
-        query = """
-            SELECT  (
-                CASE
-                    WHEN rps.is_deploying = TRUE
-                        THEN 'deploying'
-                    WHEN rps.is_undefined = TRUE
-                        THEN 'undefined'
-                    WHEN rps.blocked = 'BLOCKED'
-                        THEN 'skipped_for_undefined'
-                    WHEN rps.current_intent_attribute_hash <> rps.last_deployed_attribute_hash
-                        THEN 'available'
-                    ELSE
-                        rps.last_non_deploying_status::text
-                END
-            ) AS status
+        query = f"""
+            {const.RESOURCE_STATUS_QUERY},
             FROM resource_persistent_state AS rps
             WHERE rps.environment=$1 AND rps.resource_id=$2 AND NOT rps.is_orphan
             """
