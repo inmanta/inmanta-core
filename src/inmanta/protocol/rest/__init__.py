@@ -571,16 +571,13 @@ class CallArguments:
         if not auth_enabled:
             return
 
-        if not server_config.enforce_access_policy.get():
-            return
-
         if self._auth_token is None:
             if self._config.properties.enforce_auth:
                 # We only need a valid token when the endpoint enforces authentication and auth is enabled
                 raise exceptions.UnauthorizedException()
             return None
 
-        if self._is_service_token():
+        if self._is_service_token() or not server_config.enforce_access_policy.get():
             self._authorize_service_token()
         else:
             if policy_engine is None:
