@@ -6,8 +6,8 @@ TESTS := tests
 PYTEST_EXTRA_ARGS :=
 
 .DEFAULT_GOAL := all
-isort = isort src tests $(wildcard tests_common)
-black = black src tests $(wildcard tests_common)
+isort = isort src tests tests_common
+black = black src tests tests_common
 packages := $(notdir $(patsubst %.egg-info,,$(wildcard src/*)))
 mypy = MYPYPATH=stubs:src $(PYTHON) -m mypy --soft-error-limit=-1 --html-report mypy $(addprefix -p , $(packages))
 mypy_baseline = $(PYTHON) -m mypy_baseline
