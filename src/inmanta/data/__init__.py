@@ -4861,7 +4861,7 @@ class Resource(BaseDocument):
         or None if the resource is not present in the latest version.
         """
         query = f"""
-            {const.RESOURCE_STATUS_QUERY},
+            {const.RESOURCE_STATUS_QUERY}
             FROM resource_persistent_state AS rps
             WHERE rps.environment=$1 AND rps.resource_id=$2 AND NOT rps.is_orphan
             """
