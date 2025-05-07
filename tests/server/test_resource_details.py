@@ -59,7 +59,9 @@ async def env_with_resources(server, client):
     is_version_released = [None, False, True, True, True, False, True]
 
     # Add multiple versions of model, with 2 of them not released
-    for i in range(1, 6):
+    latest_released_version = {env.id: 4, env2.id: 4, env3.id: 6}
+    # Create an additional unreleased version
+    for i in range(1, latest_released_version[env.id] + 2):
         cm = data.ConfigurationModel(
             environment=env.id,
             version=i,
@@ -74,7 +76,7 @@ async def env_with_resources(server, client):
 
     cm = data.ConfigurationModel(
         environment=env2.id,
-        version=4,
+        version=latest_released_version[env2.id],
         date=datetime.datetime.now(tz=datetime.timezone.utc),
         total=1,
         released=True,
@@ -86,7 +88,7 @@ async def env_with_resources(server, client):
 
     cm = data.ConfigurationModel(
         environment=env3.id,
-        version=6,
+        version=latest_released_version[env3.id],
         date=datetime.datetime.now(tz=datetime.timezone.utc),
         total=1,
         released=True,
@@ -129,10 +131,22 @@ async def env_with_resources(server, client):
 
         last_deploy = resource_deploy_times[next(counter)]
         deploy_times[environment][key].append(last_deploy)
-        if update_last_deployed:
-            await res.update_persistent_state(last_deploy=last_deploy)
-        if is_version_released[version] and status != ResourceState.deploying:
-            await res.update_persistent_state(last_non_deploying_status=status)
+        is_deploying = status == ResourceState.deploying
+        is_undefined = status == ResourceState.undefined
+        blocked = (
+            "BLOCKED" if status == ResourceState.undefined or status == ResourceState.skipped_for_undefined else "NOT_BLOCKED"
+        )
+        last_deploy = last_deploy if update_last_deployed else None
+        last_non_deploying_status = status if is_version_released[version] and status != ResourceState.deploying else None
+        is_orphan = version < latest_released_version[environment]
+        await res.update_persistent_state(
+            last_deploy=last_deploy,
+            last_non_deploying_status=last_non_deploying_status,
+            is_deploying=is_deploying,
+            is_undefined=is_undefined,
+            blocked=blocked,
+            is_orphan=is_orphan,
+        )
 
         return res
 

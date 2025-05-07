@@ -278,6 +278,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     status=status,
                     connection=connection,
                 )
+                # TODO: do we need to set blocked, is_undefined, is_orphan here?
                 await resource.update_persistent_state(
                     is_deploying=False,
                     last_deploy=finished,
@@ -285,7 +286,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
                     last_deploy_result=state.last_deploy_result if state is not None else None,
-                    **extra_datetime_fields,
+                    **extra_datetime_fields,  # type: ignore[arg-type]
                     connection=connection,
                 )
 

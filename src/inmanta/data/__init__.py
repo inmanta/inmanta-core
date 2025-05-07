@@ -5443,6 +5443,9 @@ class Resource(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
         # TODO[#8541]: accept state.ResourceState and write blocked status as well
         last_deploy_result: Optional[state.DeployResult] = None,
+        blocked: Optional[str] = None,
+        is_undefined: Optional[bool] = None,
+        is_orphan: Optional[bool] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
         args = ArgumentCollector(2)
@@ -5455,6 +5458,9 @@ class Resource(BaseDocument):
             "last_produced_events": last_produced_events,
             "last_deployed_attribute_hash": last_deployed_attribute_hash,
             "last_deployed_version": last_deployed_version,
+            "blocked": blocked,
+            "is_undefined": is_undefined,
+            "is_orphan": is_orphan,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
         if last_deploy_result:
