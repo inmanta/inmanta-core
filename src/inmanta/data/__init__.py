@@ -4801,7 +4801,7 @@ class Resource(BaseDocument):
     async def get_resource_states_latest_version(
         cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
     ) -> tuple[Optional[int], abc.Mapping[ResourceIdStr, ResourceState]]:
-        query = """
+        query = f"""
             WITH latest_released_version AS (
                 SELECT max(version) AS version
                 FROM configurationmodel
@@ -4810,20 +4810,7 @@ class Resource(BaseDocument):
             SELECT
                 c.version,
                 rps.resource_id,
-                (
-                    CASE
-                        WHEN rps.is_deploying = TRUE
-                            THEN 'deploying'
-                        WHEN rps.is_undefined = TRUE
-                            THEN 'undefined'
-                        WHEN rps.blocked = 'BLOCKED'
-                            THEN 'skipped_for_undefined'
-                        WHEN rps.current_intent_attribute_hash <> rps.last_deployed_attribute_hash
-                            THEN 'available'
-                        ELSE
-                            rps.last_non_deploying_status::text
-                        END
-                ) AS status
+                {const.RESOURCE_STATUS_QUERY}
             FROM resource_persistent_state AS rps
                  INNER JOIN configurationmodel AS c ON c.environment=rps.environment
             WHERE c.environment=$1 AND c.version = (SELECT version FROM latest_released_version) AND NOT rps.is_orphan
@@ -4841,6 +4828,7 @@ class Resource(BaseDocument):
         or None if the resource is not present in the latest version.
         """
         query = f"""
+            SELECT
             {const.RESOURCE_STATUS_QUERY}
             FROM resource_persistent_state AS rps
             WHERE rps.environment=$1 AND rps.resource_id=$2 AND NOT rps.is_orphan
@@ -4882,10 +4870,10 @@ class Resource(BaseDocument):
         # FIXME: When we remove the status from the Resource table, this can go.
         update_resource_query = f"""
             UPDATE {Resource.table_name()} r
-            SET status=ps.last_non_deploying_status::TEXT::resourcestate
-            FROM {ResourcePersistentState.table_name()} ps
-            WHERE r.resource_id=ps.resource_id
-                AND r.environment=ps.environment
+            SET status=rps.last_non_deploying_status::TEXT::resourcestate
+            FROM {ResourcePersistentState.table_name()} rps
+            WHERE r.resource_id=rps.resource_id
+                AND r.environment=rps.environment
                 AND r.status='deploying'
                 AND r.environment=$1
                 AND r.model=(
@@ -4898,7 +4886,7 @@ class Resource(BaseDocument):
                 )
         """
         update_rps_query = f"""
-            UPDATE {ResourcePersistentState.table_name()} ps
+            UPDATE {ResourcePersistentState.table_name()} rps
             SET is_deploying=FALSE
             WHERE environment=$1
         """
@@ -5098,9 +5086,9 @@ class Resource(BaseDocument):
             json_projection = ""
 
         query = f"""
-        SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_persistent, 'ps')} {json_projection}
-        FROM {cls.table_name()} r JOIN resource_persistent_state ps
-                                    ON r.environment=ps.environment AND r.resource_id = ps.resource_id
+        SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_persistent, 'rps')} {json_projection}
+        FROM {cls.table_name()} r JOIN resource_persistent_state rps
+                                    ON r.environment=rps.environment AND r.resource_id = rps.resource_id
         WHERE r.environment=$1 AND r.model = $2;
         """
         resource_records = await cls._fetch_query(query, environment, version, connection=connection)
@@ -5188,38 +5176,12 @@ class Resource(BaseDocument):
     async def get_released_resource_details(
         cls, env: uuid.UUID, resource_id: ResourceIdStr
     ) -> Optional[m.ReleasedResourceDetails]:
-        def status_sub_query(resource_table_name: str) -> str:
-            return f"""
-            (CASE
-               -- The resource_persistent_state.last_non_deploying_status column is only populated for
-               -- actual deployment operations to prevent locking issues. This case-statement calculates
-               -- the correct state from the combination of the resource table and the
-               -- resource_persistent_state table.
-               WHEN (SELECT {resource_table_name}.model < MAX(configurationmodel.version)
-                       FROM configurationmodel
-                       WHERE configurationmodel.released=TRUE
-                       AND environment = $1
-                 )
-                 -- Resource is no longer present in latest released configurationmodel
-                 THEN 'orphaned'
-               WHEN {resource_table_name}.status::text IN('deploying', 'undefined', 'skipped_for_undefined')
-                 -- The deploying, undefined and skipped_for_undefined states are not tracked in the
-                 -- resource_persistent_state table.
-                 THEN {resource_table_name}.status::text
-               WHEN ps.last_deployed_attribute_hash != {resource_table_name}.attribute_hash
-                 -- The hash changed since the last deploy -> new desired state
-                 THEN {resource_table_name}.status::text
-                 -- No override required, use last known state from actual deployment
-                 ELSE ps.last_non_deploying_status::text
-             END
-            ) as status
-            """
 
         query = f"""
         SELECT DISTINCT ON (resource_id) first.resource_id, cm.date as first_generated_time,
         first.model as first_model, latest.model AS latest_model, latest.resource_id as latest_resource_id,
-        latest.resource_type, latest.agent, latest.resource_id_value, ps.last_deploy as latest_deploy, latest.attributes,
-        {status_sub_query('latest')}
+        latest.resource_type, latest.agent, latest.resource_id_value, rps.last_deploy as latest_deploy, latest.attributes,
+        {const.RESOURCE_STATUS_QUERY}
         FROM resource first
         INNER JOIN
             /* 'latest' is the latest released version of the resource */
@@ -5234,7 +5196,7 @@ class Resource(BaseDocument):
             the 'latest' released version */
         ON first.resource_id = latest.resource_id AND first.attribute_hash = latest.attribute_hash
         INNER JOIN configurationmodel cm ON first.model = cm.version AND first.environment = cm.environment
-        INNER JOIN resource_persistent_state ps on ps.resource_id = first.resource_id AND first.environment = ps.environment
+        INNER JOIN resource_persistent_state rps on rps.resource_id = first.resource_id AND first.environment = rps.environment
         WHERE first.environment = $1 AND first.resource_id = $2 AND cm.released = TRUE
         ORDER BY first.resource_id, first.model asc;
         """
@@ -5256,11 +5218,11 @@ class Resource(BaseDocument):
         # fetch the status of each of the requires. This is not calculated in the database because the lack of joinable
         # fields requires to calculate the status for each resource record, before it is filtered
         status_query = f"""
-        SELECT DISTINCT ON (resource.resource_id) resource.resource_id, {status_sub_query('resource')}
+        SELECT DISTINCT ON (resource.resource_id) resource.resource_id, {const.RESOURCE_STATUS_QUERY}
         FROM resource
         INNER JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
-        INNER JOIN resource_persistent_state ps
-              ON ps.resource_id = resource.resource_id AND resource.environment = ps.environment
+        INNER JOIN resource_persistent_state rps
+              ON rps.resource_id = resource.resource_id AND resource.environment = rps.environment
         WHERE resource.environment = $1 AND cm.released = TRUE AND resource.resource_id = ANY($2)
         ORDER BY resource.resource_id, model DESC;
         """
@@ -5302,22 +5264,9 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:
-        inner_query = """
+        inner_query = f"""
         SELECT rps.resource_id as resource_id,
-        (
-            CASE
-                WHEN rps.is_deploying = TRUE
-                    THEN 'deploying'
-                WHEN rps.is_undefined = TRUE
-                    THEN 'undefined'
-                WHEN rps.blocked = 'BLOCKED'
-                    THEN 'skipped_for_undefined'
-                WHEN rps.current_intent_attribute_hash <> rps.last_deployed_attribute_hash
-                    THEN 'available'
-                ELSE
-                    rps.last_non_deploying_status::text
-            END
-        ) as status
+        {const.RESOURCE_STATUS_QUERY}
         FROM resource_persistent_state as rps
             WHERE rps.environment=$1 AND NOT rps.is_orphan
         """

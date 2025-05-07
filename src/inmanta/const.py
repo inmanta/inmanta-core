@@ -29,8 +29,10 @@ from inmanta.stable_api import stable_api
 # And if it has an update in the "has_update" field
 # If a resource is deploying but has an update. It status should be "deploying" and "has_update" should be set to true.
 RESOURCE_STATUS_QUERY = """
-SELECT  (
+(
     CASE
+        WHEN rps.is_orphan = TRUE
+            THEN 'orphaned'
         WHEN rps.is_deploying = TRUE
             THEN 'deploying'
         WHEN rps.is_undefined = TRUE
@@ -42,9 +44,10 @@ SELECT  (
         ELSE
             rps.last_non_deploying_status::text
     END
-    ) AS status,
+) AS status,
 rps.current_intent_attribute_hash <> rps.last_deployed_attribute_hash AS has_update
 """
+
 
 class ResourceState(str, Enum):
     unavailable = "unavailable"  # This state is set by the agent when no handler is available for the resource
