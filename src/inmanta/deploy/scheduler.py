@@ -1054,7 +1054,6 @@ class ResourceScheduler(TaskManager):
                 connection=con,
             )
             # Mark orphaned resources
-            await self.state_update_manager.mark_as_orphan(self.environment, deleted, connection=con)
             await self.state_update_manager.set_last_processed_model_version(
                 self.environment, self._state.version, connection=con
             )
