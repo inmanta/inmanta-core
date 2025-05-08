@@ -717,8 +717,8 @@ async def access_policy() -> str:
     """
 
 
-@pytest.fixture(scope="function")
-async def path_policy_engine_executable() -> str:
+@pytest.fixture(scope="session")
+def path_policy_engine_executable() -> str:
     """
     Returns the path to the Open Policy Agent executable.
     This method caches the executables to prevent slow setup times of the test suite.

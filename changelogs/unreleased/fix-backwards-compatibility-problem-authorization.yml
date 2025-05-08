@@ -1,0 +1,4 @@
+---
+description: "Fix issue where the server tries to start a policy engine even if enforce_access_policy config option is disabled."
+change-type: patch
+destination-branches: [master]
