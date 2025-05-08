@@ -17,11 +17,14 @@ Contact: code@inmanta.com
 """
 
 from abc import ABC, abstractmethod
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
 
 from inmanta import const
-from inmanta.protocol import exceptions, rest
+from inmanta.protocol import exceptions
 from inmanta.protocol.auth import auth, policy_engine
+
+if TYPE_CHECKING:
+    from inmanta.protocol import rest
 
 
 class AuthorizationProvider(ABC):
@@ -42,13 +45,13 @@ class AuthorizationProvider(ABC):
         """
         self.running = False
 
-    async def authorize_request(self, auth_token: auth.claim_type, call_arguments: rest.CallArguments) -> None:
+    async def authorize_request(self, auth_token: auth.claim_type, call_arguments: "rest.CallArguments") -> None:
         if not self.running:
             raise Exception("Authorization provider was not started.")
         await self._do_authorize_request(auth_token, call_arguments)
 
     @abstractmethod
-    async def _do_authorize_request(self, auth_token: auth.claim_type, call_arguments: rest.CallArguments) -> None:
+    async def _do_authorize_request(self, auth_token: auth.claim_type, call_arguments: "rest.CallArguments") -> None:
         raise NotImplementedError()
 
 
@@ -66,13 +69,13 @@ class PolicyEngineAuthorizationProvider(AuthorizationProvider):
         await super().stop()
         await self._policy_engine.stop()
 
-    async def _do_authorize_request(self, auth_token: auth.claim_type, call_arguments: rest.CallArguments) -> None:
+    async def _do_authorize_request(self, auth_token: auth.claim_type, call_arguments: "rest.CallArguments") -> None:
         input_data = self._get_input_for_policy_engine(auth_token, call_arguments)
         if not await self._policy_engine.does_satisfy_access_policy(input_data):
             raise exceptions.Forbidden("Request is not allowed by the access policy.")
 
     def _get_input_for_policy_engine(
-        self, auth_token: auth.claim_type, call_arguments: rest.CallArguments
+        self, auth_token: auth.claim_type, call_arguments: "rest.CallArguments"
     ) -> Mapping[str, object]:
         """
         Returns the input that should be provided to the policy engine to validate
@@ -93,7 +96,7 @@ class PolicyEngineAuthorizationProvider(AuthorizationProvider):
 
 class LegacyAuthorizationProvider(AuthorizationProvider):
 
-    async def _do_authorize_request(self, auth_token: auth.claim_type, call_arguments: rest.CallArguments) -> None:
+    async def _do_authorize_request(self, auth_token: auth.claim_type, call_arguments: "rest.CallArguments") -> None:
         # Enforce environment restrictions
         env_key: str = const.INMANTA_URN + "env"
         if env_key in auth_token:
