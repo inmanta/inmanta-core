@@ -29,6 +29,9 @@ if TYPE_CHECKING:
 
 
 class AuthorizationProvider(ABC):
+    """
+    A class used to validate whether an API request is authorized.
+    """
 
     def __init__(self) -> None:
         self.running = False
@@ -47,6 +50,12 @@ class AuthorizationProvider(ABC):
         self.running = False
 
     async def authorize_request(self, call_arguments: "rest.CallArguments") -> None:
+        """
+        Main entrypoint to validate whether an API call is authorized or not.
+
+        :raises UnauthorizedException: If no authorization token is found in call_arguments.
+        :raises Forbidden: If the authorization token in call_arguments doesn't authorize the request.
+        """
         if not self.running:
             raise Exception("Authorization provider was not started.")
 
@@ -60,6 +69,10 @@ class AuthorizationProvider(ABC):
 
     @abstractmethod
     async def _do_authorize_request(self, auth_token: auth.claim_type, call_arguments: "rest.CallArguments") -> None:
+        """
+        To be overriden by the subclass. Contains the logic to validate whether the given method call is authorized
+        for this authorization provider.
+        """
         raise NotImplementedError()
 
     @classmethod
@@ -79,6 +92,9 @@ class AuthorizationProvider(ABC):
 
 
 class LegacyAuthorizationProvider(AuthorizationProvider):
+    """
+    An authorization provider that authorizes the API call based on the authorization token only.
+    """
 
     async def _do_authorize_request(self, auth_token: auth.claim_type, call_arguments: "rest.CallArguments") -> None:
         # Enforce environment restrictions
@@ -101,6 +117,10 @@ class LegacyAuthorizationProvider(AuthorizationProvider):
 
 
 class PolicyEngineAuthorizationProvider(AuthorizationProvider):
+    """
+    An Authorization provider that authorizes non-service tokens using the defined access policy.
+    Service tokens are authorized using the LegacyAuthorizationProvider.
+    """
 
     def __init__(self) -> None:
         super().__init__()
