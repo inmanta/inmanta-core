@@ -471,6 +471,7 @@ class VersionedResource(BaseModel):
 
 class LatestReleasedResource(VersionedResource):
     status: ReleasedResourceState
+    has_update: bool
 
 
 class PagingBoundaries:

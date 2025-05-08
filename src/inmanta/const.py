@@ -45,7 +45,7 @@ RESOURCE_STATUS_QUERY = """
             rps.last_non_deploying_status::text
     END
 ) AS status,
-rps.current_intent_attribute_hash <> rps.last_deployed_attribute_hash AS has_update
+rps.current_intent_attribute_hash <> rps.last_deployed_attribute_hash OR rps.last_deployed_attribute_hash IS NULL AS has_update
 """
 
 

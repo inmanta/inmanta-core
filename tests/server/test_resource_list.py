@@ -113,6 +113,7 @@ async def test_has_only_one_version_from_resource(server, client):
         environment=env.id, resource_version_id=res2_key + ",v=%d" % version, attributes={"name": res2_name}
     )
     await res2_v1.insert()
+    # This version has both resources so we can populate just this version
     await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
 
     version = 2
@@ -130,7 +131,8 @@ async def test_has_only_one_version_from_resource(server, client):
         status=ResourceState.deploying,
     )
     await res2_v2.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
+    # res2 will not be a part of version 3 which is the latest released version
+    await res2_v2.update_persistent_state(is_orphan=True)
 
     version = 3
     res1_v3 = data.Resource.new(
@@ -140,7 +142,6 @@ async def test_has_only_one_version_from_resource(server, client):
         status=ResourceState.deployed,
     )
     await res1_v3.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
 
     version = 4
     res1_v4 = data.Resource.new(
@@ -150,7 +151,6 @@ async def test_has_only_one_version_from_resource(server, client):
         status=ResourceState.deployed,
     )
     await res1_v4.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
     await res1_v4.update_persistent_state(last_non_deploying_status=ResourceState.deployed)
 
     result = await client.resource_list(env.id, sort="status.asc")
