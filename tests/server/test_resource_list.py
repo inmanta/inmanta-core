@@ -851,7 +851,7 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
             "available": 0,
             "cancelled": 0,
             "deployed": (95 * very_big_env),
-            "deploying": 2,
+            "deploying": very_big_env,
             "failed": very_big_env,
             "skipped": very_big_env,
             "skipped_for_undefined": very_big_env,
