@@ -34,7 +34,7 @@ import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta import const, tracing
 from inmanta.protocol import common, exceptions
-from inmanta.protocol.auth import policy_engine
+from inmanta.protocol.auth import providers
 from inmanta.protocol.rest import RESTBase
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
@@ -251,7 +251,23 @@ class RESTServer(RESTBase):
         self.idle_event.set()
         self.running = False
         self._http_server = None
-        self._policy_engine: policy_engine.PolicyEngine | None = None
+        self._authorization_provider = self._create_authorization_provider()
+
+    def _create_authorization_provider(self) -> providers.AuthorizationProvider | None:
+        """
+        Returns an instance of AuthorizationProvider that corresponds to the authorization provider
+        configured in the server config. Or None if authentication is disabled.
+        """
+        if not self.is_auth_enabled():
+            return None
+        authorization_provider_name = server_config.authorization_provider.get()
+        match server_config.AuthorizationProviderName(authorization_provider_name):
+            case server_config.AuthorizationProviderName.policy_engine:
+                return providers.PolicyEngineAuthorizationProvider()
+            case server_config.AuthorizationProviderName.legacy:
+                return providers.LegacyAuthorizationProvider()
+            case _:
+                raise Exception(f"Unknown authorization provider {server_config.authorization_provider.get()}")
 
     def start_request(self) -> None:
         self.idle_event.clear()
@@ -286,9 +302,8 @@ class RESTServer(RESTBase):
         """
         Start the server on the current ioloop
         """
-        if self.is_auth_enabled():
-            self._policy_engine = policy_engine.PolicyEngine()
-            await self._policy_engine.start()
+        if self._authorization_provider:
+            await self._authorization_provider.start()
 
         global_url_map: dict[str, dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
 
@@ -336,9 +351,8 @@ class RESTServer(RESTBase):
         await self.idle_event.wait()
         if self._http_server is not None:
             await self._http_server.close_all_connections()
-        if self._policy_engine:
-            await self._policy_engine.stop()
-            self._policy_engine = None
+        if self._authorization_provider:
+            await self._authorization_provider.stop()
 
-    async def get_policy_engine(self) -> policy_engine.PolicyEngine | None:
-        return self._policy_engine
+    def get_authorization_provider(self) -> providers.AuthorizationProvider | None:
+        return self._authorization_provider
