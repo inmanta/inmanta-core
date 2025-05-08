@@ -4507,7 +4507,6 @@ class ResourcePersistentState(BaseDocument):
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
 
     @classmethod
-    @classmethod
     async def mark_orphans_not_in_version(
         cls,
         environment: UUID,
