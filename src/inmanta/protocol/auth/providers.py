@@ -1,0 +1,113 @@
+"""
+Copyright 2025 Inmanta
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Contact: code@inmanta.com
+"""
+
+from abc import ABC, abstractmethod
+from typing import Mapping
+
+from inmanta import const
+from inmanta.protocol import exceptions, rest
+from inmanta.protocol.auth import auth, policy_engine
+
+
+class AuthorizationProvider(ABC):
+
+    def __init__(self) -> None:
+        self.running = False
+
+    async def start(self) -> None:
+        """
+        Start the authorization provider. The provider has to be started
+        before it can accept calls on the authorize_request() method.
+        """
+        self.running = True
+
+    async def stop(self) -> None:
+        """
+        Stop the authorization provider.
+        """
+        self.running = False
+
+    async def authorize_request(self, auth_token: auth.claim_type, call_arguments: rest.CallArguments) -> None:
+        if not self.running:
+            raise Exception("Authorization provider was not started.")
+        await self._do_authorize_request(auth_token, call_arguments)
+
+    @abstractmethod
+    async def _do_authorize_request(self, auth_token: auth.claim_type, call_arguments: rest.CallArguments) -> None:
+        raise NotImplementedError()
+
+
+class PolicyEngineAuthorizationProvider(AuthorizationProvider):
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._policy_engine = policy_engine.PolicyEngine()
+
+    async def start(self) -> None:
+        await self._policy_engine.start()
+        await super().start()
+
+    async def stop(self) -> None:
+        await super().stop()
+        await self._policy_engine.stop()
+
+    async def _do_authorize_request(self, auth_token: auth.claim_type, call_arguments: rest.CallArguments) -> None:
+        input_data = self._get_input_for_policy_engine(auth_token, call_arguments)
+        if not await self._policy_engine.does_satisfy_access_policy(input_data):
+            raise exceptions.Forbidden("Request is not allowed by the access policy.")
+
+    def _get_input_for_policy_engine(
+        self, auth_token: auth.claim_type, call_arguments: rest.CallArguments
+    ) -> Mapping[str, object]:
+        """
+        Returns the input that should be provided to the policy engine to validate
+        whether this call is authorized or not.
+        """
+        method_properties = call_arguments.method_properties
+        call_args = call_arguments.get_call_args_without_call_context_argument()
+        return {
+            "input": {
+                "request": {
+                    "endpoint_id": f"{method_properties.operation} {method_properties.get_full_path()}",
+                    "parameters": call_args,
+                },
+                "token": auth_token,
+            }
+        }
+
+
+class LegacyAuthorizationProvider(AuthorizationProvider):
+
+    async def _do_authorize_request(self, auth_token: auth.claim_type, call_arguments: rest.CallArguments) -> None:
+        # Enforce environment restrictions
+        env_key: str = const.INMANTA_URN + "env"
+        if env_key in auth_token:
+            if env_key not in call_arguments.metadata:
+                raise exceptions.Forbidden("The authorization token is scoped to a specific environment.")
+
+            if call_arguments.metadata[env_key] != "all" and auth_token[env_key] != call_arguments.metadata[env_key]:
+                raise exceptions.Forbidden("The authorization token is not valid for the requested environment.")
+
+        # Enforce client_types restrictions
+        method_properties = call_arguments.method_properties
+        ct_key: str = const.INMANTA_URN + "ct"
+        if not any(ct for ct in auth_token[ct_key] if ct in method_properties.client_types):
+            raise exceptions.Forbidden(
+                "The authorization token does not have a valid client type for this call."
+                + f" ({auth_token[ct_key]} provided, {method_properties.client_types} expected)"
+            )
