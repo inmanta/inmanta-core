@@ -4591,13 +4591,11 @@ class ResourcePersistentState(BaseDocument):
 
     @classmethod
     async def populate_for_version(
-        cls, environment: uuid.UUID, model_version: int, connection: Optional[Connection] = None, orphaned: bool = False
+        cls, environment: uuid.UUID, model_version: int, connection: Optional[Connection] = None
     ) -> None:
         """
         Make sure that the resource_persistent_state table has a record for each resource present in the
-        given model version. Ideally this method should be used with the latest released version of the model.
-        However, when setting up tests we might want to populate the RPS table for orphaned resources.
-        If that is the case, set orphaned to true.
+        given model version. This method assumes that the given model_version is the latest released version.
         """
         await cls._execute_query(
             f"""
@@ -4622,7 +4620,7 @@ class ResourcePersistentState(BaseDocument):
                 r.resource_id_value,
                 r.attribute_hash,
                 r.status = 'undefined'::public.resourcestate,
-                $3,
+                FALSE,
                 FALSE,
                 'NEW',
                 CASE
@@ -4641,7 +4639,6 @@ class ResourcePersistentState(BaseDocument):
             """,
             environment,
             model_version,
-            orphaned,
             connection=connection,
         )
 

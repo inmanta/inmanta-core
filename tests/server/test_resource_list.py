@@ -130,8 +130,6 @@ async def test_has_only_one_version_from_resource(server, client):
         status=ResourceState.deploying,
     )
     await res2_v2.insert()
-    # res2 will not be a part of version 3 which is the latest released version
-    await res2_v2.update_persistent_state(is_orphan=True)
 
     version = 3
     res1_v3 = data.Resource.new(
@@ -141,6 +139,9 @@ async def test_has_only_one_version_from_resource(server, client):
         status=ResourceState.deployed,
     )
     await res1_v3.insert()
+
+    # This will mark res2 as an orphan since it is not on version 3
+    await data.ResourcePersistentState.mark_orphans_not_in_version(environment=env.id, version=version)
 
     version = 4
     res1_v4 = data.Resource.new(
@@ -169,8 +170,9 @@ async def env_with_resources(server, client):
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
+    max_version = 3
     # Add multiple versions of model, with 2 of them released
-    for i in range(1, 4):
+    for i in range(1, max_version + 1):
         cm = data.ConfigurationModel(
             environment=env.id,
             version=i,
@@ -189,7 +191,6 @@ async def env_with_resources(server, client):
         status: ResourceState,
         versions: list[int],
         environment: UUID = env.id,
-        orphaned: bool = False,
     ):
         key = f"{resource_type}[{agent},path={path}]"
         for version in versions:
@@ -200,10 +201,11 @@ async def env_with_resources(server, client):
                 status=status,
             )
             await res.insert()
+        # Populate RPS and mark each resource not in the max_version as orphaned
         version = max(versions)
-        await data.ResourcePersistentState.populate_for_version(
-            environment=environment, model_version=version, orphaned=orphaned
-        )
+        await data.ResourcePersistentState.populate_for_version(environment=environment, model_version=version)
+        await data.ResourcePersistentState.mark_orphans_not_in_version(environment=environment, version=max_version)
+
         res = await data.Resource.get_one(resource_id=key)
         await res.update_persistent_state(
             last_deploy=datetime.now(tz=UTC),
@@ -221,8 +223,9 @@ async def env_with_resources(server, client):
         )
 
     await create_resource("agent1", "/etc/file1", "test::File", ResourceState.available, [1, 2, 3])
-    await create_resource("agent1", "/etc/file2", "test::File", ResourceState.deploying, [1, 2], orphaned=True)
-    await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [2], orphaned=True)
+    # The following 2 resources are orphaned
+    await create_resource("agent1", "/etc/file2", "test::File", ResourceState.deploying, [1, 2])
+    await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [2])
     await create_resource("agent2", "/tmp/file4", "test::File", ResourceState.unavailable, [3])
     await create_resource("agent2", "/tmp/dir5", "test::Directory", ResourceState.skipped, [3])
     await create_resource("agent3", "/tmp/dir6", "test::Directory", ResourceState.deployed, [3])
