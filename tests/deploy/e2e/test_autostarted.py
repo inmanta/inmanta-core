@@ -1332,15 +1332,26 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     }
     assert actual_data[0] == expected_data
 
-    # _ensure_scheduler only waits for unpaused agents
-    # await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
-
+    # Let's restart everything and check that the resource is considered as available
     snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    # Let's restart everything and check that the resource is considered as available
+    async def wait_for_up_status() -> bool:
+        """
+        Wait for the up status of Agent1
+        """
+        result = await client.get_agents(environment)
+        assert result.code == 200
+        actual_data = result.result["data"]
+        if len(actual_data) != 1:
+            return False
+        return actual_data[0]["status"] == "up"
+
+    # Wait for the scheduler to be up and set the status to available
+    await retry_limited(wait_for_up_status, timeout=5)
+
     result = await client.resource_list(environment, deploy_summary=True)
     assert result.code == 200
     summary = result.result["metadata"]["deploy_summary"]
