@@ -869,9 +869,9 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
     filters = [
         ({}, very_big_env * 110),
         ({"status": "!orphaned"}, very_big_env * 100),
-        ({"status": "deploying"}, 1),
+        ({"status": "deploying"}, very_big_env),
         ({"status": "deployed"}, 95 * very_big_env),
-        ({"status": "available"}, very_big_env - 1),
+        ({"status": "available"}, 0),
         ({"agent": "agent0"}, 110),
         ({"agent": "someotheragent"}, 0),
         ({"resource_id_value": "39"}, very_big_env),

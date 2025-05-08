@@ -4507,21 +4507,32 @@ class ResourcePersistentState(BaseDocument):
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
 
     @classmethod
-    async def mark_as_orphan(
+    @classmethod
+    async def mark_orphans_not_in_version(
         cls,
         environment: UUID,
-        resource_ids: Set[ResourceIdStr],
+        version: int,
         connection: Optional[Connection] = None,
     ) -> None:
         """
-        Set the is_orphan column to True on all given resources.
+        Marks all persisted resources that do not exist in the given version as orphans.
         """
         query = f"""
-            UPDATE {cls.table_name()}
+            UPDATE {cls.table_name()} AS rps
             SET is_orphan=TRUE
-            WHERE environment=$1 AND resource_id=ANY($2)
+            WHERE
+                rps.environment=$1
+                AND rps.is_orphan=false
+                AND NOT EXISTS(
+                    SELECT 1
+                    FROM {Resource.table_name()} AS r
+                    WHERE
+                        r.environment=rps.environment
+                        AND r.resource_id=rps.resource_id
+                        AND r.model=$2
+                )
         """
-        await cls._execute_query(query, environment, resource_ids, connection=connection)
+        await cls._execute_query(query, environment, version, connection=connection)
 
     @classmethod
     async def update_resource_intent(
