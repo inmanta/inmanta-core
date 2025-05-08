@@ -44,7 +44,6 @@ async def server_with_test_slice(tmpdir, access_policy: str, path_policy_engine_
         os.mkdir(directory)
 
     config.Config.set("server", "auth", "true")
-    config.Config.set("server", "enforce-access-policy", "true")
     config.Config.set("server", "auth_method", "database")
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
     config.Config.set("auth_jwt_default", "sign", "true")
@@ -57,6 +56,8 @@ async def server_with_test_slice(tmpdir, access_policy: str, path_policy_engine_
     config.Config.set("config", "log-dir", log_dir)
     config.state_dir.set(str(tmpdir))
 
+    # Configure authorization
+    config.Config.set("server", "authorization_provider", "policy_engine")
     os.mkdir(os.path.join(tmpdir, "policy_engine"))
     access_policy_file = os.path.join(tmpdir, "policy_engine", "policy.rego")
     with open(access_policy_file, "w") as fh:
