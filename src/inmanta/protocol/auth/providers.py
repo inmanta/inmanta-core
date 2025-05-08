@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Mapping
 from inmanta import const
 from inmanta.protocol import exceptions
 from inmanta.protocol.auth import auth, policy_engine
+from inmanta.server import config as server_config
 
 if TYPE_CHECKING:
     from inmanta.protocol import rest
@@ -45,53 +46,36 @@ class AuthorizationProvider(ABC):
         """
         self.running = False
 
-    async def authorize_request(self, auth_token: auth.claim_type, call_arguments: "rest.CallArguments") -> None:
+    async def authorize_request(self, call_arguments: "rest.CallArguments") -> None:
         if not self.running:
             raise Exception("Authorization provider was not started.")
-        await self._do_authorize_request(auth_token, call_arguments)
+
+        if call_arguments.auth_token is None:
+            if call_arguments.method_properties.enforce_auth:
+                # We only need a valid token when the endpoint enforces authentication
+                raise exceptions.UnauthorizedException()
+            return None
+
+        await self._do_authorize_request(call_arguments.auth_token, call_arguments)
 
     @abstractmethod
     async def _do_authorize_request(self, auth_token: auth.claim_type, call_arguments: "rest.CallArguments") -> None:
         raise NotImplementedError()
 
-
-class PolicyEngineAuthorizationProvider(AuthorizationProvider):
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._policy_engine = policy_engine.PolicyEngine()
-
-    async def start(self) -> None:
-        await self._policy_engine.start()
-        await super().start()
-
-    async def stop(self) -> None:
-        await super().stop()
-        await self._policy_engine.stop()
-
-    async def _do_authorize_request(self, auth_token: auth.claim_type, call_arguments: "rest.CallArguments") -> None:
-        input_data = self._get_input_for_policy_engine(auth_token, call_arguments)
-        if not await self._policy_engine.does_satisfy_access_policy(input_data):
-            raise exceptions.Forbidden("Request is not allowed by the access policy.")
-
-    def _get_input_for_policy_engine(
-        self, auth_token: auth.claim_type, call_arguments: "rest.CallArguments"
-    ) -> Mapping[str, object]:
+    @classmethod
+    def create_from_config(cls) -> "AuthorizationProvider":
         """
-        Returns the input that should be provided to the policy engine to validate
-        whether this call is authorized or not.
+        Returns an AuthorizationProvider that corresponds to the authorization provider
+        configured in the server config.
         """
-        method_properties = call_arguments.method_properties
-        call_args = call_arguments.get_call_args_without_call_context_argument()
-        return {
-            "input": {
-                "request": {
-                    "endpoint_id": f"{method_properties.operation} {method_properties.get_full_path()}",
-                    "parameters": call_args,
-                },
-                "token": auth_token,
-            }
-        }
+        authorization_provider_name = server_config.authorization_provider.get()
+        match server_config.AuthorizationProviderName(authorization_provider_name):
+            case server_config.AuthorizationProviderName.policy_engine:
+                return PolicyEngineAuthorizationProvider()
+            case server_config.AuthorizationProviderName.legacy:
+                return LegacyAuthorizationProvider()
+            case _:
+                raise Exception(f"Unknown authorization provider {authorization_provider_name}.")
 
 
 class LegacyAuthorizationProvider(AuthorizationProvider):
@@ -114,3 +98,49 @@ class LegacyAuthorizationProvider(AuthorizationProvider):
                 "The authorization token does not have a valid client type for this call."
                 + f" ({auth_token[ct_key]} provided, {method_properties.client_types} expected)"
             )
+
+
+class PolicyEngineAuthorizationProvider(AuthorizationProvider):
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._policy_engine = policy_engine.PolicyEngine()
+        self._legacy_authorization_provider = LegacyAuthorizationProvider()
+
+    async def start(self) -> None:
+        await self._policy_engine.start()
+        await self._legacy_authorization_provider.start()
+        await super().start()
+
+    async def stop(self) -> None:
+        await super().stop()
+        await self._policy_engine.stop()
+        await self._legacy_authorization_provider.stop()
+
+    async def _do_authorize_request(self, auth_token: auth.claim_type, call_arguments: "rest.CallArguments") -> None:
+        if call_arguments.is_service_request():
+            # Service (machine-to-machine) requests always use the legacy provider.
+            await self._legacy_authorization_provider.authorize_request(call_arguments)
+        else:
+            input_data = self._get_input_for_policy_engine(auth_token, call_arguments)
+            if not await self._policy_engine.does_satisfy_access_policy(input_data):
+                raise exceptions.Forbidden("Request is not allowed by the access policy.")
+
+    def _get_input_for_policy_engine(
+        self, auth_token: auth.claim_type, call_arguments: "rest.CallArguments"
+    ) -> Mapping[str, object]:
+        """
+        Returns the input that should be provided to the policy engine to validate
+        whether this call is authorized or not.
+        """
+        method_properties = call_arguments.method_properties
+        call_args = call_arguments.get_call_args_without_call_context_argument()
+        return {
+            "input": {
+                "request": {
+                    "endpoint_id": f"{method_properties.operation} {method_properties.get_full_path()}",
+                    "parameters": call_args,
+                },
+                "token": auth_token,
+            }
+        }

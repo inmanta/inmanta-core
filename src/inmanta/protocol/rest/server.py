@@ -251,23 +251,7 @@ class RESTServer(RESTBase):
         self.idle_event.set()
         self.running = False
         self._http_server = None
-        self._authorization_provider = self._create_authorization_provider()
-
-    def _create_authorization_provider(self) -> providers.AuthorizationProvider | None:
-        """
-        Returns an instance of AuthorizationProvider that corresponds to the authorization provider
-        configured in the server config. Or None if authentication is disabled.
-        """
-        if not self.is_auth_enabled():
-            return None
-        authorization_provider_name = server_config.authorization_provider.get()
-        match server_config.AuthorizationProviderName(authorization_provider_name):
-            case server_config.AuthorizationProviderName.policy_engine:
-                return providers.PolicyEngineAuthorizationProvider()
-            case server_config.AuthorizationProviderName.legacy:
-                return providers.LegacyAuthorizationProvider()
-            case _:
-                raise Exception(f"Unknown authorization provider {server_config.authorization_provider.get()}")
+        self._authorization_provider = providers.AuthorizationProvider.create_from_config() if self.is_auth_enabled() else None
 
     def start_request(self) -> None:
         self.idle_event.clear()

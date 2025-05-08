@@ -60,19 +60,15 @@ class CallArguments:
         config: common.UrlMethod,
         message: dict[str, Optional[object]],
         request_headers: Mapping[str, str],
-        authorization_provider: providers.AuthorizationProvider | None,
     ) -> None:
         """
         :param config: The method configuration that contains the metadata and functions to call
         :param message: The message received by the RPC call
         :param request_headers: The headers received by the RPC call
         :param handler: The handler for the call
-        :param authorization_provider: The authorization provider that should be used to authorize this request.
-                                       Or None, if the authorization of this request should not be validated.
         """
         self._config = config
         self._properties = self._config.properties
-        self._authorization_provider = authorization_provider
         self._message = message
         self._request_headers = request_headers
         self._argspec: inspect.FullArgSpec = inspect.getfullargspec(self._properties.function)
@@ -88,6 +84,10 @@ class CallArguments:
     @property
     def method_properties(self) -> common.MethodProperties:
         return self._properties
+
+    @property
+    def auth_token(self) -> auth.claim_type | None:
+        return self._auth_token
 
     @property
     def call_args(self) -> dict[str, object]:
@@ -574,34 +574,14 @@ class CallArguments:
             # We only need a valid token when the endpoint enforces authentication
             raise exceptions.UnauthorizedException()
 
-    def _is_service_token(self) -> bool:
+    def is_service_request(self) -> bool:
         """
-        Return True iff self._auth_token is a service token (i.e. a token used by a service instead of a user).
+        Return True iff this is a machine-to-machine request.
         """
         ct_key: str = const.INMANTA_URN + "ct"
         assert self._auth_token is not None
         client_types_token = self._auth_token[ct_key]
         return any(ct in {const.ClientType.agent.value, const.ClientType.compiler.value} for ct in client_types_token)
-
-    async def authorize_request(self, auth_enabled: bool) -> None:
-        """Validate whether the token is authorized to perform this request.
-
-        :param auth_enabled: is authentication enabled?
-        """
-        if not auth_enabled:
-            return
-
-        if not self._authorization_provider:
-            # We are not running on the server, so requests should not be authorized.
-            return
-
-        if self._auth_token is None:
-            if self._config.properties.enforce_auth:
-                # We only need a valid token when the endpoint enforces authentication and auth is enabled
-                raise exceptions.UnauthorizedException()
-            return None
-
-        await self._authorization_provider.authorize_request(self._auth_token, self)
 
 
 # Shared
@@ -655,11 +635,13 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
             # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
             # Authorization might need data from the request but we do not want to process it before we are sure the call
             # is authenticated.
-            arguments = CallArguments(config, message, request_headers, self.get_authorization_provider())
+            arguments = CallArguments(config, message, request_headers)
             is_auth_enabled: bool = self.is_auth_enabled()
             arguments.authenticate(auth_enabled=is_auth_enabled)
             await arguments.process()
-            await arguments.authorize_request(auth_enabled=is_auth_enabled)
+            authorization_provider = self.get_authorization_provider()
+            if authorization_provider:
+                await authorization_provider.authorize_request(arguments)
 
             LOGGER.debug(
                 "Calling method %s(%s) user=%s",
