@@ -34,12 +34,11 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 import inmanta.util
 import util.performance
 import utils
-from inmanta import const, data, resources, util
+from inmanta import const, data, util
 from inmanta.agent.executor import DeployReport
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource
-from inmanta.deploy import persistence, scheduler, state
-from inmanta.deploy.state import DeployResult
+from inmanta.deploy import scheduler
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
@@ -818,9 +817,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                         resource_state=(
                             const.HandlerResourceState.failed
                             if "sub=2]" in rid
-                            else const.HandlerResourceState.skipped
-                            if "sub=3]" in rid
-                            else const.HandlerResourceState.deployed
+                            else const.HandlerResourceState.skipped if "sub=3]" in rid else const.HandlerResourceState.deployed
                         ),
                         messages=[],
                         changes={},
