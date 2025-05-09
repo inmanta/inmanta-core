@@ -74,9 +74,10 @@ def test_references_in_model(
     snippetcompiler.setup_for_snippet(
         snippet="""
         import refs
+        import refs::dc
         import std::testing
 
-        test_ref = refs::create_test(value=refs::create_string_reference(name="CWD"))
+        test_ref = refs::dc::create_all_refs_dataclass_reference(value=refs::create_string_reference(name="CWD"))
 
         std::testing::NullResource(
             name="test",
@@ -92,7 +93,8 @@ def test_references_in_model(
 
     # validate that our UUID is stable
     assert_id(serialized["references"], "refs::Bool", "ed26b59b-a567-392e-8626-f89d821532b7")
-    assert_id(serialized["references"], "refs::TestReference", "78d7ff5f-6309-3011-bfff-8068471d5761")
+    # TODO: add other reference types?
+    assert_id(serialized["references"], "refs::AllRefsDataclassReference", "78d7ff5f-6309-3011-bfff-8068471d5761")
     assert_id(serialized["references"], "core::AttributeReference", "81cc3241-2368-3b6d-8807-6755bd27b2fa")
     assert_id(serialized["references"], "refs::String", "a8ed8c4f-204a-3f7e-a630-e21cb20e9209")
 
@@ -195,7 +197,8 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
         Wrapper around snippetcompiler.setup_for_snippet + runs compile and export.
         Passes appropriate options and prepends snippet with refs import.
         """
-        snippetcompiler.setup_for_snippet(f"import refs import refs::plugins\n{snippet}", install_project=False, autostd=True)
+        # TODO: fix/discuss bug that causes dataclass error to be raised if associated model file is not loaded
+        snippetcompiler.setup_for_snippet(f"import refs import refs::dc import refs::plugins\n{snippet}", install_project=False, autostd=True)
         snippetcompiler.do_export()
 
     # Primitives
@@ -231,17 +234,46 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
 
     # Entities
 
-    # Scenario: plugin annotated as `Entity` or `Test` gets reference
-    # TODO: this scenario isn't really relevant because Ref[Test] is converted to Test[Ref]. What is relevant is
-    #       how to deal with non-ref attributes that suddenly become a reference.
-    #       => HOW TO DISTINGUISH Ref[Test] from Test[...] with illegal ref? Especially for dataclasses. Perhaps add metadata
-    #           on instance, and rewrap on plugin boundary? OR IMMEDIATELY GENERATE ASSOCIATED PYTHON INSTANCE -> already so
+    # Scenario: plugin annotated as `Entity` or `Test` gets Reference[Test]
+    ## Entity annotation
+    ### dataclasses allowed
+    run_snippet("refs::plugins::takes_entity(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
+    run_snippet("refs::plugins::takes_entity(refs::dc::NoRefsDataclass())")
+    ### references not allowed
     with pytest.raises(PluginTypeException):
-        run_snippet("refs::plugins::read_entity_value(refs::create_test('hello'))")
+        run_snippet("refs::plugins::takes_entity(refs::dc::create_all_refs_dataclass_reference('hello'))")
     with pytest.raises(PluginTypeException):
-        run_snippet("refs::plugins::read_dataclass_value(refs::create_test('hello'))")
-    run_snippet("refs::plugins::read_dataclass_ref_value(refs::create_test('hello'))")
+        run_snippet("refs::plugins::takes_entity(refs::dc::create_no_refs_dataclass_reference())")
+    ## dataclass annotation that does not support reference attrs
+    ### plain dataclass
+    run_snippet("refs::plugins::takes_no_refs_dataclass(refs::dc::NoRefsDataclass())")
+    run_snippet("refs::plugins::takes_mixed_refs_dataclass(refs::dc::MixedRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
+    ### basic inheritance
+    run_snippet("refs::plugins::takes_no_refs_dataclass(refs::dc::MixedRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
+    ### basic inheritance the wrong direction
+    with pytest.raises(PluginTypeException):
+        run_snippet("refs::plugins::takes_mixed_refs_dataclass(refs::dc::NoRefsDataclass())")
+    ### references not allowed
+    with pytest.raises(PluginTypeException):
+        run_snippet("refs::plugins::takes_no_refs_dataclass(refs::dc::create_no_refs_dataclass_reference())")
+    with pytest.raises(PluginTypeException):
+        run_snippet("refs::plugins::takes_mixed_refs_dataclass(refs::dc::create_mixed_refs_dataclass_reference('hello'))")
+    ## dataclass annotation that supports reference attrs -> references are coerced
+    ### references are coerced to dataclass of references
+    run_snippet("refs::plugins::takes_all_refs_dataclass(refs::dc::create_all_refs_dataclass_reference('hello'))")
+
+
+
+    # TODO: test with legacy-style annotation for specific dataclass entity. What is expected? Proxy or dataclass? I think
+    #       proxy, but current implementation results in dataclass, also on master?
+    # TODO: inheritance on reference return type (declare generic, return specific -> model instance = specific)
+    # TODO: inheritance on return type
+    # TODO: reference to wrong dataclass value
+    # TODO: reference to sub/supertype
     # TODO: make sure that `Test | Reference[Test]` is allowed (probably not so atm)
+
+    # TODO: test that has reference in model-custructed dataclass on non-annotated field
+    # TODO: test that has reference in non-dataclass instance, accessed from model
 
 
     # TODO: plugins annotated as Reference[Entity] and Reference[Test]

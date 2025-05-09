@@ -120,6 +120,7 @@ class DynamicProxy:
                         "It can only be converted to an inmanta entity at the plugin boundary",
                     )
                 dataclass_ref_type = dynamic_context.type_resolver(ref_type)
+                item._model_type = dataclass_ref_type
                 # Can not be typed correctly due to import loops
                 return dataclass_ref_type.from_python(
                     item, dynamic_context.resolver, dynamic_context.queue, dynamic_context.location

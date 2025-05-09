@@ -21,6 +21,7 @@ import copy
 import dataclasses
 import functools
 import numbers
+import typing
 from collections import defaultdict, deque
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Optional
@@ -43,6 +44,21 @@ from inmanta.stable_api import stable_api
 
 if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement
+
+
+# TODO: if this protocol ends up staying, the UnexpectedReferenceValidationError probably belongs next to it. Consider where
+#   else they should be used.
+# TODO: name
+@typing.runtime_checkable
+class ReferenceValue(typing.Protocol):
+    # TODO
+    """
+    DSL value that may represent a reference in the Python domain, while having a different value in the DSL domain.
+    """
+    def is_reference(self) -> bool:
+        """
+        """
+        ...
 
 
 @stable_api
@@ -185,6 +201,7 @@ class Type(Locatable):
         return hash(type(self))
 
 
+# TODO: I think this class is missing to_python. Write test that accepts Reference[dataclass]
 class ReferenceType(Type):
     """
     The type of a reference to something of type element_type
@@ -215,18 +232,24 @@ class ReferenceType(Type):
             self.is_dataclass = True
 
     def validate(self, value: Optional[object]) -> bool:
-        # TODO: should also check if it's a reference -> add a test case
-        if self.is_dataclass:
-            # TODO: move exception and drop import. Or consider catching UnexpectedReferenceException instead
-            from inmanta.ast.entity import UnexpectedReferenceValidationError
-            try:
-                return self.element_type.validate(value)
-            except UnexpectedReferenceValidationError:
-                return True
-
-        if isinstance(value, Reference):
-            assert value._model_type is not None
-            if value._model_type.issubtype(self.element_type):
+        # TODO: fix! Consider making a protocol with dataclass_self?
+        from inmanta.execute.runtime import Instance
+        # TODO: test cases for each of these
+        ref: Optional[Reference[object]] = (
+            value
+            if isinstance(value, Reference)
+            else value.dataclass_self
+            if (
+                self.is_dataclass
+                and isinstance(value, Instance)
+                and value.dataclass_self is not None
+                and isinstance(value.dataclass_self, Reference)
+            )
+            else None
+        )
+        if ref is not None:
+            assert ref._model_type is not None
+            if ref._model_type.issubtype(self.element_type):
                 return True
 
         raise TypingException(None, f"Invalid value {value} is not a subtype of {self.type_string()}")
@@ -272,6 +295,7 @@ class ReferenceType(Type):
         return self.element_type.issupertype(other.element_type)
 
 
+# TODO: this class!
 class OrReferenceType(ReferenceType):
     """
     This class represents the shorthand for Reference[T] | T

@@ -3,3 +3,4 @@ tentative:
     - attribute access on attr that happens to be reference raises exception
     - attribute access on valid (explicit in dataclass or explicit in access) reference attribute returns reference, not proxy
     - plugins now properly validate Ref[Dataclass] vs Dataclass
+    - support inheritance for dataclasses, both for registering them and on the plugin boundary -> map instance-to-dataclass rather than entity-to-dataclass

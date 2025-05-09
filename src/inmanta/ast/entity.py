@@ -20,6 +20,7 @@ import dataclasses
 import importlib
 import inspect
 import typing
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
 from inmanta import plugins
@@ -40,7 +41,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import Any as inm_Any
-from inmanta.ast.type import Float, NamedType, NullableType, Type
+from inmanta.ast.type import Float, NamedType, NullableType, ReferenceType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
 from inmanta.references import AttributeReference, PrimitiveTypes, Reference, RefValue, UnexpectedReferenceException
@@ -101,6 +102,7 @@ class Entity(NamedType, WithComment):
         self.normalized = False
 
         self._paired_dataclass: type[DataclassProtocol] | None = None
+        self._paired_dataclass_field_types: Mapping[str, Type] = {}
         # Entities can be paired up to python dataclasses
         # If such a sibling exists, the type is kept here
         # Every instance of such entity can cary the associated python object in a slot called `DATACLASS_SELF_FIELD`
@@ -336,6 +338,9 @@ class Entity(NamedType, WithComment):
         """
         return (not strict and superclass_candidate == self) or self.is_parent(superclass_candidate)
 
+    def issubtype(self, other: "Type") -> bool:
+        return isinstance(other, Entity) and self.is_subclass(other, strict=False)
+
     def issupertype(self, other: "Type") -> bool:
         if not isinstance(other, Entity):
             raise NotImplementedError()
@@ -358,12 +363,28 @@ class Entity(NamedType, WithComment):
             raise RuntimeException(None, f"Invalid class type for {value}, should be {self}")
 
         if value.is_reference():
-            # TODO: this is too trigger-happy -> also fires for return values
-            # TODO: better message
-            raise UnexpectedReferenceValidationError(
-                msg=f"{value} is a reference, should be {self}", reference=value.dataclass_self
-            )
+            # TODO: warning when coercing? Consider if it may be out of the user's control
+            if not self.can_coerce(value):
+                # TODO: better message
+                # TODO: get rid of this exception if it's no longer used, use more generic exception instead
+                raise UnexpectedReferenceValidationError(
+                    msg=f"{value} is a reference, should be {self}", reference=value.dataclass_self
+                )
 
+        return True
+
+    def can_coerce(self, instance: Instance) -> bool:
+        # TODO: docstring. Also mention preconditions (validated, reference to dataclass)
+        if not self.has_custom_to_python():
+            # no custom logic for declared type => no coercion
+            return False
+        if instance.type is not self:
+            # allow inheritance: delegate to child type
+            return instance.type.can_coerce(instance)
+        dc_types = typing.get_type_hints(self._paired_dataclass)
+        for attr_type in self._paired_dataclass_field_types.values():
+            if not isinstance(attr_type, ReferenceType):
+                return False
         return True
 
     def add_implementation(self, implement: "Implementation") -> None:
@@ -656,6 +677,8 @@ class Entity(NamedType, WithComment):
                     # Type correspondence
                     try:
                         dsl_type = plugins.to_dsl_type(dc_types[rel_or_attr_name], self.location, self.namespace)
+                        # TODO: what is the memory impact of this?!
+                        self._paired_dataclass_field_types[rel_or_attr_name] = dsl_type
                         if not inm_type.corresponds_to(dsl_type):
                             failures.append(
                                 f"The attribute {rel_or_attr_name} does not have the same type as "
@@ -733,21 +756,31 @@ class Entity(NamedType, WithComment):
 
         assert isinstance(instance, Instance)
 
-        dataclass_self = instance.dataclass_self
-        if dataclass_self is not None:
-            return dataclass_self
-        else:
+        if instance.type is not self:
+            # allow inheritance: delegate to child type
+            return instance.type.to_python(instance)
+
+        def create():
+            # Convert values
+            # All values are primitive, so this is trivial
+            kwargs = {k: v.get_value() for k, v in instance.slots.items() if k not in ["self", "requires", "provides"]}
+            return self._paired_dataclass(**kwargs)
+
+        if instance.dataclass_self is None:
             # Handle unsets
             unset = [v for k, v in instance.slots.items() if k not in ["self", "requires", "provides"] if not v.is_ready()]
             if unset:
                 raise MultiUnsetException("Unset values when converting instance to dataclass", unset)
 
-            # Convert values
-            # All values are primitive, so this is trivial
-            kwargs = {k: v.get_value() for k, v in instance.slots.items() if k not in ["self", "requires", "provides"]}
-            out = self._paired_dataclass(**kwargs)
-            instance.dataclass_self = out
-            return out
+            instance.dataclass_self = create()
+
+        return (
+            # coerce if the dataclass definition is reference-compatible. Do not overwrite dataclass_self
+            create()
+            if isinstance(instance.dataclass_self, Reference)
+            # or simply return the linked dataclass instance
+            else instance.dataclass_self
+        )
 
     def from_python(self, value: object, resolver: Resolver, queue: QueueScheduler, location: Location) -> Instance:
         """
