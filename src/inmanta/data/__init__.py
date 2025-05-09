@@ -4815,17 +4815,17 @@ class Resource(BaseDocument):
                 WHERE environment=$1 AND released
             )
             SELECT
-                c.version,
+                r.model,
                 rps.resource_id,
                 {const.RESOURCE_STATUS_QUERY}
-            FROM resource_persistent_state AS rps
-                 INNER JOIN configurationmodel AS c ON c.environment=rps.environment
-            WHERE c.environment=$1 AND c.version = (SELECT version FROM latest_released_version) AND NOT rps.is_orphan
+            FROM {Resource.table_name()} AS r
+                INNER JOIN resource_persistent_state AS rps ON rps.environment=r.environment AND r.resource_id=rps.resource_id
+            WHERE r.environment=$1 AND r.model = (SELECT version FROM latest_released_version)
         """
         results = await cls.select_query(query, [env], no_obj=True, connection=connection)
         if not results:
             return None, {}
-        return (int(results[0]["version"]), {r["resource_id"]: const.ResourceState[r["status"]] for r in results})
+        return (int(results[0]["model"]), {r["resource_id"]: const.ResourceState[r["status"]] for r in results})
 
     @stable_api
     @classmethod

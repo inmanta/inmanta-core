@@ -279,7 +279,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
                     last_deploy_result=state.last_deploy_result if state is not None else None,
-                    **extra_datetime_fields,  # type: ignore[arg-type]
+                    **extra_datetime_fields,
                     connection=connection,
                 )
 
