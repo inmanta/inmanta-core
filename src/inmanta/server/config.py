@@ -168,12 +168,12 @@ class AuthorizationProviderName(enum.Enum):
     """
 
     legacy = "legacy"
-    policy_engine = "policy_engine"
+    policy_engine = "policy-engine"
 
 
 def _is_authorization_provider(value: str) -> str:
     f"""
-    str, valid values: {', '.join(a.name for a in AuthorizationProviderName)}
+    str, valid values: {', '.join(a.value for a in AuthorizationProviderName)}
     """
     value = value.lower()
     try:
@@ -181,7 +181,7 @@ def _is_authorization_provider(value: str) -> str:
     except ValueError:
         raise ValueError(
             f"Invalid value for config option {authorization_provider.get_full_name()}: {value}."
-            f" Valid values: {', '.join(a.name for a in AuthorizationProviderName)}"
+            f" Valid values: {', '.join(a.value for a in AuthorizationProviderName)}"
         )
     else:
         return value
@@ -189,7 +189,7 @@ def _is_authorization_provider(value: str) -> str:
 
 authorization_provider = Option(
     "server",
-    "authorization_provider",
+    "authorization-provider",
     AuthorizationProviderName.legacy.value,
     "The authorization provider that should be used if authentication is enabled.",
     _is_authorization_provider,

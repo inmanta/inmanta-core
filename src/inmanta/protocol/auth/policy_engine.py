@@ -46,17 +46,17 @@ def is_opa_log_level(value: str) -> str:
 
 
 policy_file = config.Option(
-    "policy-engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the access policy.", config.is_str
+    "policy_engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the access policy.", config.is_str
 )
 policy_engine_log_level = config.Option(
-    "policy-engine",
+    "policy_engine",
     "log-level",
     "error",
     f"The log level used by the policy engine. Valid values: {opa_log_level_values}",
     is_opa_log_level,
 )
 path_opa_executable = config.Option(
-    "policy-engine", "executable", "", "Path to the executable that runs the Open Policy Agent.", config.is_str
+    "policy_engine", "executable", "", "Path to the executable that runs the Open Policy Agent.", config.is_str
 )
 
 

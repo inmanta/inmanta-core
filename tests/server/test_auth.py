@@ -69,7 +69,7 @@ async def server_with_test_slice(
     config.state_dir.set(str(tmpdir))
 
     # Configure authorization
-    config.Config.set("server", "authorization_provider", authorization_provider)
+    config.Config.set("server", "authorization-provider", authorization_provider)
     os.mkdir(os.path.join(tmpdir, "policy_engine"))
     access_policy_file = os.path.join(tmpdir, "policy_engine", "policy.rego")
     with open(access_policy_file, "w") as fh:
@@ -290,10 +290,10 @@ async def test_authorization_providers(server_with_test_slice: protocol.Server, 
     """
     client = get_client_with_role(env_to_role_dct={}, is_admin=False, client_type=const.ClientType.api)
     result = await client.read_only_method()
-    match authorization_provider:
-        case server_config.AuthorizationProviderName.legacy.value:
+    match server_config.AuthorizationProviderName(authorization_provider):
+        case server_config.AuthorizationProviderName.legacy:
             assert result.code == 200
-        case server_config.AuthorizationProviderName.policy_engine.value:
+        case server_config.AuthorizationProviderName.policy_engine:
             assert result.code == 403
         case _:
             raise Exception(f"Unknown authorization_provider: {authorization_provider}")
