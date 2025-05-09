@@ -24,18 +24,18 @@ from typing import Optional
 
 from inmanta.stable_api import stable_api
 
-# This query assumes that the resource_persistent_state table is present in the query as rps
-# It returns the status of the resource in the "status" field
-# And if it has an update in the "has_update" field
-# If a resource is deploying but has an update. It status should be "deploying" and "has_update" should be set to true.
+# This query assumes that the resource_persistent_state table is present in the query as rps.
+# It returns the status of the resource in the "status" field.
+# And if it has an update in the "has_update" field.
+# If a resource is deploying but has an update. Its status should be "deploying" and "has_update" should be set to true.
 RESOURCE_STATUS_QUERY = """
 (
     CASE
-        WHEN rps.is_orphan = TRUE
+        WHEN rps.is_orphan
             THEN 'orphaned'
-        WHEN rps.is_deploying = TRUE
+        WHEN rps.is_deploying
             THEN 'deploying'
-        WHEN rps.is_undefined = TRUE
+        WHEN rps.is_undefined
             THEN 'undefined'
         WHEN rps.blocked = 'BLOCKED'
             THEN 'skipped_for_undefined'

@@ -4521,7 +4521,7 @@ class ResourcePersistentState(BaseDocument):
             SET is_orphan=TRUE
             WHERE
                 rps.environment=$1
-                AND rps.is_orphan=false
+                AND NOT rps.is_orphan
                 AND NOT EXISTS(
                     SELECT 1
                     FROM {Resource.table_name()} AS r
@@ -5273,9 +5273,9 @@ class Resource(BaseDocument):
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:
         inner_query = f"""
         SELECT rps.resource_id as resource_id,
-        {const.RESOURCE_STATUS_QUERY}
+            {const.RESOURCE_STATUS_QUERY}
         FROM resource_persistent_state as rps
-            WHERE rps.environment=$1 AND NOT rps.is_orphan
+        WHERE rps.environment=$1 AND NOT rps.is_orphan
         """
 
         query = f"""
