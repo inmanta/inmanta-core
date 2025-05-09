@@ -1,0 +1,4 @@
+---
+description: "Fix makefile with respect to the handling of the tests_common directory."
+change-type: patch
+destination-branches: [master, iso8, iso7]

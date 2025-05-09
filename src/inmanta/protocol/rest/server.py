@@ -286,7 +286,7 @@ class RESTServer(RESTBase):
         """
         Start the server on the current ioloop
         """
-        if self.is_auth_enabled():
+        if self.is_auth_enabled() and server_config.enforce_access_policy.get():
             self._policy_engine = policy_engine.PolicyEngine()
             await self._policy_engine.start()
 
