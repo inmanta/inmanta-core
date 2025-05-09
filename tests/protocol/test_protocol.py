@@ -310,7 +310,7 @@ async def test_call_arguments_defaults():
         test_method,
         "test_method",
     )
-    call = CallArguments(method, {"name": "test"}, {})
+    call = CallArguments(config=method, message={"name": "test"}, request_headers={})
     await call.process()
 
     assert call.call_args["name"] == "test"
@@ -348,7 +348,7 @@ async def test_pydantic():
         "test_method",
     )
     id = uuid.uuid4()
-    call = CallArguments(method, {"project": {"name": "test", "id": str(id)}}, {})
+    call = CallArguments(config=method, message={"project": {"name": "test", "id": str(id)}}, request_headers={})
     await call.process()
 
     project = call.call_args["project"]
@@ -356,7 +356,7 @@ async def test_pydantic():
     assert project.id == id
 
     with pytest.raises(exceptions.BadRequest):
-        call = CallArguments(method, {"project": {"name": "test", "id": "abcd"}}, {})
+        call = CallArguments(config=method, message={"project": {"name": "test", "id": "abcd"}}, request_headers={})
         await call.process()
 
 

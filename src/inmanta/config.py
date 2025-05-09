@@ -401,6 +401,12 @@ class Option(Generic[T]):
         self.predecessor_option = predecessor_option
         Config.register_option(self)
 
+    def get_full_name(self) -> str:
+        """
+        Returns the fully-qualified name of this config option.
+        """
+        return f"{self.section}.{self.name}"
+
     def get(self) -> T:
         raw_config: ConfigParser = Config.get()
         if self.predecessor_option:

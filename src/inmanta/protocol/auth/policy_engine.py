@@ -32,7 +32,6 @@ from inmanta import config, const
 from inmanta import tornado as inmanta_tornado
 from inmanta import util
 from inmanta.protocol import common
-from inmanta.server import config as server_config
 
 LOGGER = logging.getLogger(__name__)
 
@@ -47,17 +46,17 @@ def is_opa_log_level(value: str) -> str:
 
 
 policy_file = config.Option(
-    "policy-engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the access policy.", config.is_str
+    "policy_engine", "policy-file", "/etc/inmanta/authorization/policy.rego", "File defining the access policy.", config.is_str
 )
 policy_engine_log_level = config.Option(
-    "policy-engine",
+    "policy_engine",
     "log-level",
     "error",
     f"The log level used by the policy engine. Valid values: {opa_log_level_values}",
     is_opa_log_level,
 )
 path_opa_executable = config.Option(
-    "policy-engine", "executable", "", "Path to the executable that runs the Open Policy Agent.", config.is_str
+    "policy_engine", "executable", "", "Path to the executable that runs the Open Policy Agent.", config.is_str
 )
 
 
@@ -84,7 +83,6 @@ class PolicyEngine:
         Make sure the required directories exist in the state directory for the policy engine.
         """
         state_dir = config.state_dir.get()
-        os.makedirs(state_dir, exist_ok=True)
         policy_engine_state_dir = os.path.abspath(os.path.join(state_dir, "policy_engine"))
         os.makedirs(policy_engine_state_dir, exist_ok=True)
         log_dir = config.log_dir.get()
@@ -104,9 +102,9 @@ class PolicyEngine:
         # Start policy engine
         opa_executable = path_opa_executable.get()
         if not opa_executable:
-            raise Exception("Config option policy-engine.executable was not set.")
+            raise Exception(f"Config option {path_opa_executable.get_full_name()} was not set.")
         if not os.path.isfile(opa_executable):
-            raise Exception(f"Config option policy-engine.executable doesn't point to a file: {opa_executable}.")
+            raise Exception(f"Config option {path_opa_executable.get_full_name()} doesn't point to a file: {opa_executable}.")
         log_dir = config.log_dir.get()
         policy_engine_log = os.path.join(log_dir, "policy_engine.log")
         log_file_handle = None
@@ -177,8 +175,6 @@ class PolicyEngine:
         """
         Return True iff the policy evaluates to True.
         """
-        if not server_config.enforce_access_policy.get():
-            return True
         if not self.running:
             LOGGER.error("Policy engine is not running. Call OpaServer.start() first.")
             return False

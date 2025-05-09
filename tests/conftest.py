@@ -788,7 +788,7 @@ async def server_config(
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
         config.Config.set("server", "auth", str(enable_auth).lower())
-        config.Config.set("server", "enforce-access-policy", str(enable_auth).lower())
+        config.Config.set("server", "authorization-provider", "policy-engine")
 
         # Configure the access policy. This will only be used if server.auth is enabled.
         os.mkdir(os.path.join(state_dir, "policy_engine"))

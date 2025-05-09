@@ -1,0 +1,4 @@
+---
+description: Make authorization provider configurable.
+change-type: minor
+destination-branches: [master]
