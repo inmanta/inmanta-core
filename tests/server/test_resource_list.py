@@ -751,23 +751,23 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 environment,
                 version,
                 attributes,
-                resource_state,
+                module_version_info={},
+                resource_state=resource_state,
                 unknowns=[],
                 version_info={},
                 compiler_version=inmanta.util.get_compiler_version(),
                 resource_sets=resource_sets,
-                module_version_info={},
             )
             assert result.code == 200
         else:
             result = await client.put_partial(
                 environment,
+                module_version_info={},
                 resource_state=resource_state,
                 unknowns=[],
                 version_info={},
                 resources=attributes,
                 resource_sets=resource_sets,
-                module_version_info={},
             )
             assert result.code == 200
             version = result.result["data"]
