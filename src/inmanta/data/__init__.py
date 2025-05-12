@@ -5193,7 +5193,7 @@ class Resource(BaseDocument):
         INNER JOIN
             /* 'latest' is the latest released version of the resource */
             (SELECT distinct on (resource_id) resource_id, attribute_hash, model, attributes,
-                resource_type, agent, resource_id_value,  resource.status as status
+                resource_type, agent, resource_id_value
                 FROM resource
                 JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
                 WHERE resource.environment = $1 AND resource_id = $2 AND cm.released = TRUE
