@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import os
 import uuid
 from dataclasses import dataclass
+from typing import Mapping
 
 import pytest
 
@@ -592,7 +593,7 @@ def capture_input_for_policy_engine(monkeypatch) -> CapturedInput:
 
     original_get_input_for_policy_engine = providers.PolicyEngineAuthorizationProvider._get_input_for_policy_engine
 
-    def _get_input_for_policy_engine_wrapper(self, call_arguments: rest.CallArguments):
+    def _get_input_for_policy_engine_wrapper(self, call_arguments: rest.CallArguments) -> Mapping[str, object]:
         result = original_get_input_for_policy_engine(self, call_arguments)
         captured_input.value = result
         return result
