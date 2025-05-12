@@ -165,6 +165,9 @@ class PolicyEngineAuthorizationProvider(AuthorizationProvider):
         assert call_arguments.auth_token is not None
         method_properties = call_arguments.method_properties
         call_args = call_arguments.get_call_args_without_call_context_argument()
+        handle_to_method_arg_mapping = call_arguments.config.handler.__protocol_mapping__
+        # Make sure to use the parameter names like in the method, not the handle.
+        call_args = {handle_to_method_arg_mapping.get(k, k): v  for k,v in call_args.items()}
         return {
             "input": {
                 "request": {

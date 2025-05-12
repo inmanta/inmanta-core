@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import os
 import uuid
+from dataclasses import dataclass
 
 import pytest
 
@@ -25,7 +26,7 @@ import nacl.pwhash
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod
 from inmanta.protocol import common
-from inmanta.protocol.auth import auth, decorators, policy_engine
+from inmanta.protocol.auth import auth, decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.server import config as server_config
 from inmanta.server import protocol
@@ -104,6 +105,11 @@ async def server_with_test_slice(
     def enforce_auth_disabled_method() -> None:  # NOQA
         pass
 
+    @decorators.auth(auth_label="test", read_only=False)
+    @typedmethod(path="/method-with-call-context", operation="GET", client_types=["api"])
+    def call_context_method(arg1: uuid.UUID, arg2: str) -> None:  # NOQA
+        pass
+
     class TestSlice(protocol.ServerSlice):
         @handle(read_only_method)
         async def handle_read_only_method(self) -> None:  # NOQA
@@ -123,6 +129,10 @@ async def server_with_test_slice(
 
         @handle(enforce_auth_disabled_method)
         async def handle_enforce_auth_disabled(self) -> None:  # NOQA
+            return
+
+        @handle(call_context_method, test="arg1")
+        async def handle_call_context_method(self, call_context: common.CallContext, test: uuid.UUID, arg2: str) -> None:  #NOQA
             return
 
     # Start the server
@@ -406,6 +416,11 @@ async def test_policy_engine_data() -> None:
     def test_read_write(tid: uuid.UUID) -> None:  # NOQA
         pass
 
+    @decorators.auth(auth_label="other-test2", read_only=False, environment_param="tid")
+    @typedmethod(path="/read-write2/<tid>", operation="POST", client_types=["api", "agent"])
+    def test_param(tid: uuid.UUID) -> None:  # NOQA
+        pass
+
     data: dict[str, object] = common.MethodProperties.get_open_policy_agent_data()
     endpoint_id = "GET /api/v1/read-only"
     assert endpoint_id in data["endpoints"]
@@ -419,6 +434,14 @@ async def test_policy_engine_data() -> None:
     assert endpoint_id in data["endpoints"]
     read_write_method_metadata = data["endpoints"][endpoint_id]
     assert read_write_method_metadata["auth_label"] == "other-test"
+    assert read_write_method_metadata["read_only"] is False
+    assert read_write_method_metadata["client_types"] == ["api", "agent"]
+    assert read_write_method_metadata["environment_param"] == "tid"
+
+    endpoint_id = "POST /api/v1/read-write2/<tid>"
+    assert endpoint_id in data["endpoints"]
+    read_write_method_metadata = data["endpoints"][endpoint_id]
+    assert read_write_method_metadata["auth_label"] == "other-test2"
     assert read_write_method_metadata["read_only"] is False
     assert read_write_method_metadata["client_types"] == ["api", "agent"]
     assert read_write_method_metadata["environment_param"] == "tid"
@@ -545,3 +568,56 @@ async def test_auth_annotation() -> None:
         "read_only": False,
         "environment_param": None,
     }
+
+
+@dataclass
+class CapturedInput:
+    """
+    Object that contains the output of the `PolicyEngineAuthorizationProvider._get_input_for_policy_engine()` method.
+    """
+    value: dict[str, object] | None = None
+
+
+@pytest.fixture
+def capture_input_for_policy_engine(monkeypatch) -> CapturedInput:
+    """
+    Fixture that monkeypatches the PolicyEngineAuthorizationProvider._get_input_for_policy_engine() method to
+    capture its return value. After each invocation of the _get_input_for_policy_engine() method, the value
+    is stored in the returned CapturedInput object.
+    """
+    captured_input = CapturedInput()
+
+    original_get_input_for_policy_engine = providers.PolicyEngineAuthorizationProvider._get_input_for_policy_engine
+
+    def _get_input_for_policy_engine_wrapper(self, call_arguments: "rest.CallArguments"):
+        result = original_get_input_for_policy_engine(self, call_arguments)
+        nonlocal captured_input
+        captured_input.value = result
+        return result
+
+    monkeypatch.setattr(
+        providers.PolicyEngineAuthorizationProvider, "_get_input_for_policy_engine", _get_input_for_policy_engine_wrapper
+    )
+
+    return captured_input
+
+
+async def test_get_input_for_policy_engine(capture_input_for_policy_engine: CapturedInput, server_with_test_slice):
+    """
+    Verify that the input, provided to the policy engine, looks as expected.
+    """
+    env_id = str(uuid.uuid4())
+    client = get_client_with_role(env_to_role_dct={env_id: "test"}, is_admin=False, client_type=const.ClientType.api)
+
+    arg1 = uuid.uuid4()
+    arg2 = "test"
+    assert capture_input_for_policy_engine.value is None
+    result = await client.call_context_method(arg1, arg2)
+    assert result.code == 200
+    pe_input = capture_input_for_policy_engine.value
+    assert pe_input["input"]["request"]["endpoint_id"] == "GET /api/v1/method-with-call-context"
+    assert pe_input["input"]["request"]["parameters"] == {"arg1": arg1, "arg2": arg2}
+    assert pe_input["input"]["token"]["urn:inmanta:ct"] == ["api"]
+    assert pe_input["input"]["token"]["urn:inmanta:roles"] == {env_id: "test"}
+    assert pe_input["input"]["token"]["urn:inmanta:is-admin"] is False
+
