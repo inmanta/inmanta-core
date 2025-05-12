@@ -99,6 +99,11 @@ async def server_with_test_slice(
     def admin_only_method() -> None:  # NOQA
         pass
 
+    @decorators.auth(auth_label="test", read_only=False)
+    @typedmethod(path="/enforce-auth-disabled", operation="GET", client_types=["api"], enforce_auth=False)
+    def enforce_auth_disabled_method() -> None:  # NOQA
+        pass
+
     class TestSlice(protocol.ServerSlice):
         @handle(read_only_method)
         async def handle_read_only_method(self) -> None:  # NOQA
@@ -114,6 +119,10 @@ async def server_with_test_slice(
 
         @handle(admin_only_method)
         async def handle_admin_only_method(self, context: common.CallContext) -> None:  # NOQA
+            return
+
+        @handle(enforce_auth_disabled_method)
+        async def handle_enforce_auth_disabled(self) -> None:  # NOQA
             return
 
     # Start the server
@@ -268,6 +277,29 @@ async def test_fallback_to_legacy_provider(server_with_test_slice: protocol.Serv
     client = get_client_with_role(env_to_role_dct={}, is_admin=False, client_type=const.ClientType.compiler)
     result = await client.read_only_method()
     assert result.code == 200
+
+
+@pytest.mark.parametrize(
+    "authorization_provider, return_code",
+    [
+        # policy_engine provider -> enforce_auth=False is ignored
+        (server_config.AuthorizationProviderName.policy_engine.value, 401),
+        # legacy provider -> enforce_auth=False is taken into account
+        (server_config.AuthorizationProviderName.legacy.value, 200),
+    ],
+)
+async def test_enforce_auth_method_property(
+    server_with_test_slice: protocol.Server, authorization_provider: str, return_code: int
+) -> None:
+    """
+    Ensure that the enforce_auth method property is taken into account by the legacy authorization provider,
+    but not by the policy engine authorization provider.
+    """
+    # Create a client that doesn't include an authorization token in its requests to the server.
+    config.Config.get("client_rest_transport", "token", None) is None
+    client = protocol.Client("client")
+    result = await client.enforce_auth_disabled_method()
+    assert result.code == return_code
 
 
 @pytest.mark.parametrize(
