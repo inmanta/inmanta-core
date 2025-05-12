@@ -479,17 +479,25 @@ class ResourceCountMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
         query: str = f"""
-            WITH {LATEST_RELEASED_RESOURCES_SUBQUERY}, nonzero_statuses AS (
-                SELECT r.environment, r.status, COUNT(*) AS count
-                FROM latest_released_resources AS r
-                GROUP BY r.environment, r.status
+            WITH {LATEST_RELEASED_RESOURCES_SUBQUERY},resource_statuses AS (
+                SELECT r.environment,
+                {const.RESOURCE_STATUS_QUERY}
+                from latest_released_resources AS r
+                INNER JOIN public.resource_persistent_state AS rps
+                    ON r.resource_id = rps.resource_id AND r.environment = rps.environment
+            ),
+            nonzero_statuses AS (
+                SELECT environment, status, COUNT(*) AS count
+                FROM resource_statuses AS r
+                GROUP BY environment, status
             )
-            SELECT e.id as environment, s.name as status, COALESCE(r.count, 0) as count
+            SELECT e.id as environment, s.name as status, COALESCE(nzsr.count, 0) as count
             FROM {Environment.table_name()} AS e
             CROSS JOIN unnest(enum_range(NULL::resourcestate)) AS s(name)
-            LEFT JOIN nonzero_statuses AS r
-            ON r.environment = e.id AND r.status = s.name
-            ORDER BY r.environment, r.status
+            LEFT JOIN nonzero_statuses AS nzsr
+            -- "orphaned" is not a part of the public.resourcestate enum but it should never appear here
+            ON nzsr.environment = e.id AND nzsr.status::resourcestate = s.name
+            ORDER BY nzsr.environment, nzsr.status
             """
         metric_values: list[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
