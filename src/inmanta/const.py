@@ -28,7 +28,7 @@ from inmanta.stable_api import stable_api
 # It returns the status of the resource in the "status" field.
 # And if it has an update in the "has_update" field.
 # If a resource is deploying but has an update. Its status should be "deploying" and "has_update" should be set to true.
-RESOURCE_STATUS_QUERY = """
+RESOURCE_STATUS_QUERY: typing.LiteralString = """
 (
     CASE
         WHEN rps.is_orphan
