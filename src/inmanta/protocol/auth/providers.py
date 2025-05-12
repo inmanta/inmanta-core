@@ -72,6 +72,9 @@ class AuthorizationProvider(ABC):
         """
         To be overriden by the subclass. Contains the logic to validate whether the given method call is authorized
         for this authorization provider.
+
+        :raises UnauthorizedException: If no authorization token is found in call_arguments.
+        :raises Forbidden: If the authorization token in call_arguments doesn't authorize the request.
         """
         raise NotImplementedError()
 
