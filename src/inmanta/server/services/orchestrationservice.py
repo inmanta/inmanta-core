@@ -669,12 +669,10 @@ class OrchestrationService(protocol.ServerSlice):
         )
         for inmanta_module_name, module_data in module_version_info.items():
             module_version = module_data.version
-            if not all(
-                [
-                    (inmanta_module_name, module_version) in base_version_data,
-                    set(module_data.for_agents).issubset(base_version_data[(inmanta_module_name, module_version)]),
-                ]
-            ):
+            if not all([
+                (inmanta_module_name, module_version) in base_version_data,
+                set(module_data.for_agents).issubset(base_version_data[(inmanta_module_name, module_version)])
+            ]):
                 raise BadRequest(
                     "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
                 )
@@ -956,10 +954,10 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
         version: int,
         resources: list[JsonType],
-        module_version_info: dict[str, InmantaModuleDTO],
         resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         unknowns: list[dict[str, PrimitiveTypes]],
         version_info: JsonType,
+        module_version_info: dict[str, InmantaModuleDTO],
         compiler_version: Optional[str] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,

@@ -29,7 +29,7 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
-from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Iterable, Sequence, Set
+from collections.abc import Awaitable,AsyncIterator, Callable, Collection, Iterable, Sequence, Set
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from itertools import chain
@@ -6586,6 +6586,22 @@ _classes = [
 ]
 
 
+def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
+    LOGGER.debug("Connecting data classes")
+    for cls in _classes:
+        cls.set_connection_pool(pool)
+
+
+async def disconnect() -> None:
+    LOGGER.debug("Disconnecting data classes")
+    # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
+    # or until the gather itself is cancelled.
+    result = await asyncio.gather(*[cls.close_connection_pool() for cls in _classes], return_exceptions=True)
+    exceptions = [r for r in result if r is not None and isinstance(r, Exception)]
+    if exceptions:
+        raise exceptions[0]
+
+
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 
 
@@ -6725,7 +6741,8 @@ async def start_engine(
         ENGINE = create_async_engine(url=url_object, pool_pre_ping=True, poolclass=NullerPool, async_creator=bridge_creator)
         SESSION_FACTORY = async_sessionmaker(ENGINE)
     except Exception as e:
-        await stop_engine()
+        await pool.close()
+        await disconnect()
         raise e
 
     return pool
