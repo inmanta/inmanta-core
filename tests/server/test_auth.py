@@ -25,7 +25,7 @@ import pytest
 import nacl.pwhash
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod
-from inmanta.protocol import common
+from inmanta.protocol import common, rest
 from inmanta.protocol.auth import auth, decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.server import config as server_config
@@ -132,7 +132,9 @@ async def server_with_test_slice(
             return
 
         @handle(call_context_method, test="arg1")
-        async def handle_call_context_method(self, call_context: common.CallContext, test: uuid.UUID, arg2: str) -> None:  #NOQA
+        async def handle_call_context_method(
+            self, call_context: common.CallContext, test: uuid.UUID, arg2: str
+        ) -> None:  # NOQA
             return
 
     # Start the server
@@ -575,6 +577,7 @@ class CapturedInput:
     """
     Object that contains the output of the `PolicyEngineAuthorizationProvider._get_input_for_policy_engine()` method.
     """
+
     value: dict[str, object] | None = None
 
 
@@ -589,9 +592,8 @@ def capture_input_for_policy_engine(monkeypatch) -> CapturedInput:
 
     original_get_input_for_policy_engine = providers.PolicyEngineAuthorizationProvider._get_input_for_policy_engine
 
-    def _get_input_for_policy_engine_wrapper(self, call_arguments: "rest.CallArguments"):
+    def _get_input_for_policy_engine_wrapper(self, call_arguments: rest.CallArguments):
         result = original_get_input_for_policy_engine(self, call_arguments)
-        nonlocal captured_input
         captured_input.value = result
         return result
 
@@ -620,4 +622,3 @@ async def test_get_input_for_policy_engine(capture_input_for_policy_engine: Capt
     assert pe_input["input"]["token"]["urn:inmanta:ct"] == ["api"]
     assert pe_input["input"]["token"]["urn:inmanta:roles"] == {env_id: "test"}
     assert pe_input["input"]["token"]["urn:inmanta:is-admin"] is False
-
