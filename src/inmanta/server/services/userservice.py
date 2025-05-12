@@ -25,7 +25,8 @@ import nacl.pwhash
 from inmanta import const, data, protocol
 from inmanta.const import MIN_PASSWORD_LENGTH
 from inmanta.data import AuthMethod, model
-from inmanta.protocol import auth, common, exceptions
+from inmanta.protocol import common, exceptions
+from inmanta.protocol.auth import auth
 from inmanta.server import SLICE_DATABASE, SLICE_TRANSPORT, SLICE_USER
 from inmanta.server import config as server_config
 from inmanta.server import protocol as server_protocol

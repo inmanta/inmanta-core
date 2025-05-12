@@ -19,6 +19,8 @@ Contact: code@inmanta.com
 import copy
 import logging.config
 import pathlib
+import stat
+import tempfile
 import warnings
 from glob import glob
 from re import Pattern
@@ -27,7 +29,9 @@ from threading import Condition
 from tornado.httpclient import AsyncHTTPClient
 
 import _pytest.logging
+import inmanta
 import inmanta.deploy.state
+import requests
 import toml
 from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
@@ -35,9 +39,11 @@ from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
-from inmanta.protocol import auth
+from inmanta.protocol.auth import auth
+from inmanta.protocol.auth.policy_engine import path_opa_executable, policy_file
 from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
+from inmanta.tornado import LoopResolverWithUnixSocketSuppport
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
 
@@ -111,7 +117,6 @@ import socket
 import string
 import subprocess
 import sys
-import tempfile
 import time
 import traceback
 import uuid
@@ -579,6 +584,7 @@ def reset_all_objects():
     AsyncHTTPClient.configure(None)
     reference.reset()
     mutator.reset()
+    LoopResolverWithUnixSocketSuppport.clear_unix_socket_registry()
 
 
 @pytest.fixture()
@@ -692,9 +698,66 @@ def log_state_tcp_ports(request, log_file):
     _write_log_line(f"After run test case {request.function.__name__}:")
 
 
+@pytest.fixture
+async def enable_auth() -> bool:
+    """
+    A fixture that indicates whether the server_config fixture should
+    set server.auth to true or false.
+    """
+    return False
+
+
+@pytest.fixture
+async def access_policy() -> str:
+    """
+    A fixture that returns the access policy configured by the server_config fixture.
+    """
+    return """
+        package policy
+
+        # Allow everything
+        default allowed:=true
+    """
+
+
+@pytest.fixture(scope="session")
+def path_policy_engine_executable() -> str:
+    """
+    Returns the path to the Open Policy Agent executable.
+    This method caches the executables to prevent slow setup times of the test suite.
+    """
+    opa_version = inmanta.OPA_VERSION
+    cache_dir = os.path.abspath(os.path.join(__file__, "..", "data", "opa_executables.cache", f"v{opa_version}"))
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file = os.path.join(cache_dir, "opa_linux_amd64_static")
+    if not os.path.exists(cache_file):
+        with open(cache_file, "wb") as fp:
+            opa_executables_url_prefix = os.environ.get(
+                "INMANTA_OPA_EXECUTABLES_URL_PREFIX", "https://openpolicyagent.org/downloads"
+            )
+            url_to_opa_executable = f"{opa_executables_url_prefix}/v{opa_version}/opa_linux_amd64_static"
+            logger.info("Downloading OPA executable from %s", url_to_opa_executable)
+            req = requests.get(url_to_opa_executable, stream=True)
+            req.raise_for_status()
+            for chunk in req.iter_content(chunk_size=1024):
+                fp.write(chunk)
+        # Give owner execute permissions on file
+        os.chmod(cache_file, stat.S_IRWXU)
+    yield cache_file
+
+
 @pytest.fixture(scope="function")
 async def server_config(
-    inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory, auto_start_agent, no_agent
+    inmanta_config,
+    postgres_db,
+    database_name,
+    clean_reset,
+    unused_tcp_port_factory,
+    auto_start_agent,
+    no_agent,
+    access_policy: str,
+    enable_auth: bool,
+    path_policy_engine_executable: str,
 ):
     reset_metrics()
     agentmanager.assert_no_start_scheduler = not auto_start_agent
@@ -726,7 +789,19 @@ async def server_config(
         config.Config.set("agent", "agent-repair-interval", "0")
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
+        config.Config.set("server", "auth", str(enable_auth).lower())
+        config.Config.set("server", "enforce-access-policy", str(enable_auth).lower())
+
+        # Configure the access policy. This will only be used if server.auth is enabled.
+        os.mkdir(os.path.join(state_dir, "policy_engine"))
+        access_policy_file = os.path.join(state_dir, "policy_engine", "policy.rego")
+        with open(access_policy_file, "w") as fh:
+            fh.write(access_policy)
+        policy_file.set(access_policy_file)
+        path_opa_executable.set(path_policy_engine_executable)
+
         yield config
+
     agentmanager.assert_no_start_scheduler = False
     agentmanager.no_start_scheduler = False
 

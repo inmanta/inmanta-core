@@ -448,7 +448,7 @@ def test():
         assert all(not e.running for e in executors)
 
         def did_executor_server_stop() -> bool:
-            return executor_blueprint in mpmanager_light.process_pool.pool
+            return executor_blueprint not in mpmanager_light.process_pool.pool
 
         # Also wait until the executor server has stopped, because that one refreshes the .inmanta_venv_status file.
         await retry_limited(did_executor_server_stop, timeout=10)

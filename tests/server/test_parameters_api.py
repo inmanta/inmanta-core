@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import datetime
 import json
+import logging
 import uuid
 from operator import itemgetter
 from typing import Optional
@@ -321,6 +322,7 @@ async def test_dont_renew_old_facts(server, client, environment, clienthelper, c
 
     # Make sure it's time to renew param1
     time_machine.move_to(destination=datetime.timedelta(server_fact_renew_time + 1))
+    caplog.set_level(logging.DEBUG)
     caplog.clear()
     await parameter_slice.renew_facts()
     # No model version has been released yet.
