@@ -27,7 +27,14 @@ import pytest
 
 from inmanta import env, references, resources, util
 from inmanta.agent.handler import PythonLogger
-from inmanta.ast import ExternalException, PluginTypeException, RuntimeException, TypingException
+from inmanta.ast import (
+    ExplicitPluginException,
+    ExternalException,
+    PluginTypeException,
+    RuntimeException,
+    TypingException,
+    UndeclaredReference,
+)
 from inmanta.data.model import ReleasedResourceDetails, ReleasedResourceState
 from inmanta.export import ResourceDict
 from inmanta.references import Reference, ReferenceCycleException, reference
@@ -240,6 +247,7 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     run_snippet("refs::plugins::takes_entity(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
     run_snippet("refs::plugins::takes_entity(refs::dc::NoRefsDataclass())")
     ### references not allowed
+    # TODO: does this really make sense? as far as the model is concerned it's an instance.
     with pytest.raises(PluginTypeException):
         run_snippet("refs::plugins::takes_entity(refs::dc::create_all_refs_dataclass_reference('hello'))")
     with pytest.raises(PluginTypeException):
@@ -262,8 +270,21 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     ### references are coerced to dataclass of references
     run_snippet("refs::plugins::takes_all_refs_dataclass(refs::dc::create_all_refs_dataclass_reference('hello'))")
 
+    # Scenario: plugin annotated as `Entity` accesses reference attribute
+    ## no reference
+    run_snippet("refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value='Hello World!'))")
+    ## reference
+    with pytest.raises(ExplicitPluginException) as exc_info:
+        run_snippet("refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
+    assert isinstance(exc_info.value.__cause__, UndeclaredReference)
+    assert isinstance(exc_info.value.__cause__.reference, Reference)
+    ## reference, plugin explicitly allows it
+    run_snippet("refs::plugins::read_entity_ref_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
+    # TODO: a test with Reference[Test] showing the same behavior
 
 
+
+    # TODO: what about references inside lists / dicts / ...
     # TODO: test with legacy-style annotation for specific dataclass entity. What is expected? Proxy or dataclass? I think
     #       proxy, but current implementation results in dataclass, also on master?
     # TODO: inheritance on reference return type (declare generic, return specific -> model instance = specific)

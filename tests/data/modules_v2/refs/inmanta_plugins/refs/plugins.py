@@ -1,6 +1,8 @@
 from collections.abc import Sequence
 from typing import Annotated, Any
 
+from inmanta import plugins
+from inmanta.execute.proxy import DynamicProxy
 from inmanta.plugins import plugin, ModelType
 from inmanta.references import Reference
 from inmanta_plugins.refs import dc
@@ -44,7 +46,7 @@ def iterates_str_ref_list(l: Sequence[str | Reference[str]]) -> None:
 
 @plugin
 def takes_entity(instance: Entity) -> None:
-    ...
+    assert isinstance(instance, DynamicProxy)
 
 
 @plugin
@@ -92,12 +94,19 @@ def takes_mixed_refs_dataclass_or_ref(instance: dc.MixedRefsDataclass | Referenc
     assert isinstance(instance, (dc.MixedRefsDataclass, Reference))
 
 
-# TODO: everything below this: check if used
 @plugin
-def read_entity_value(instance: Entity) -> str:
-    return instance.non_ref_value
+def read_entity_value(instance: Entity) -> None:
+    instance.maybe_ref_value  # expected to fail iff it's a reference
+    return None
 
 
+@plugin
+def read_entity_ref_value(instance: Entity) -> None:
+    plugins.allow_reference_attributes(instance).maybe_ref_value
+    return None
+
+
+# TODO: everything below this: check if used
 #@plugin
 #def read_dataclass_value(instance: refs.Test) -> None:
 #    failed_read = instance.non_ref_value

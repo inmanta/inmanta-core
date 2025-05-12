@@ -23,12 +23,17 @@ from dataclasses import is_dataclass
 from typing import TYPE_CHECKING, Callable, Union
 
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
-from inmanta.ast import AttributeNotFound as AttributeNotFound
-from inmanta.ast import Location, NotFoundException, RuntimeException
-from inmanta.ast import UnknownException as UnknownException
-from inmanta.ast import UnsetException as UnsetException  # noqa F401
+from inmanta.ast import (
+    AttributeNotFound,
+    Location,
+    NotFoundException,
+    RuntimeException,
+    UndeclaredReference,
+    UnknownException,
+)
+from inmanta.ast import UnsetException  # noqa F401
 from inmanta.execute.util import NoneValue, Unknown
-from inmanta.references import Reference, UnexpectedReferenceException
+from inmanta.references import Reference
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
 from inmanta.util import JSONSerializable
@@ -175,6 +180,7 @@ class DynamicProxy:
         if isinstance(value, (str, tuple, int, float, bool)):
             return copy(value)
 
+        # if a reference gets here, it has been validated, and we want to represent it as a reference, not a proxy
         if isinstance(value, (Reference, DynamicProxy)):
             return value
 
@@ -214,7 +220,8 @@ class DynamicProxy:
         if isinstance(value, Reference):
             # TODO: message
             # TODO: string format accepts reference. Should also raise this exception
-            raise UnexpectedReferenceException(
+            # TODO: move part of this message to UndeclaredReference class?
+            raise UndeclaredReference(
                 (
                     "Encountered reference attribute in instance. Plugins are only allowed to access reference attributes"
                     " when declared explicitly. Either use a dataclass entity with attributes annotated with declared reference"
@@ -222,7 +229,6 @@ class DynamicProxy:
                     # TODO: name
                     " `inmanta.plugins.allow_reference_attributes()` wrapper."
                     f" ({attribute}={value} on instance {self._get_instance()})"
-                    #f"(self._get_instance()
                 ),
                 reference=value,
             )
@@ -283,8 +289,7 @@ class WithReferenceAttributes(DynamicProxy):
 
         try:
             return getattr(delegate, attribute)
-        # simulated with Unknown here to simplify the PoC
-        except UnexpectedReferenceException as e:
+        except UndeclaredReference as e:
             return e.reference
 
 

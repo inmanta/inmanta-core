@@ -20,7 +20,7 @@ import traceback
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
-from inmanta import warnings
+from inmanta import references, warnings
 from inmanta.ast import export
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
@@ -1101,3 +1101,15 @@ class PluginException(Exception):
 
     def __init__(self, message: str) -> None:
         self.message = message
+
+
+# custom class to enable clean wrapping on the plugin boundary
+# TODO: name?
+class UndeclaredReference(references.UnexpectedReferenceException, PluginException):
+    """
+    Undeclared reference encountered during plugin execution.
+    """
+
+    def __init__(self, message, reference: references.Reference[references.RefValue]) -> None:
+        references.UnexpectedReferenceException.__init__(self, message, reference)
+        PluginException.__init__(self, message)

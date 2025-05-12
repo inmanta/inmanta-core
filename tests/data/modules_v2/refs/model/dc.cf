@@ -10,8 +10,3 @@ end
 implement NoRefsDataclass using std::none
 implement AllRefsDataclass using std::none
 implement MixedRefsDataclass using std::none
-
-
-entity NormalEntity:
-    string non_ref_value
-end

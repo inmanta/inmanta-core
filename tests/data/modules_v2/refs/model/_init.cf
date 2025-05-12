@@ -21,3 +21,8 @@ entity DeepResource extends std::ManagedResource, std::PurgeableResource:
 end
 
 implement DeepResource using std::none
+
+
+entity NormalEntity:
+    string non_ref_value
+end
