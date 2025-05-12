@@ -1153,8 +1153,6 @@ class Field(Generic[T]):
         if isinstance(value, str) and issubclass(self.field_type, pydantic.BaseModel):
             jsv = json.loads(value)
             return self.field_type(**jsv)
-        if isinstance(value, dict) and issubclass(self.field_type, pydantic.BaseModel):
-            return self.field_type(**value)
         if self.field_type == pydantic.AnyHttpUrl:
             return pydantic.TypeAdapter(pydantic.AnyHttpUrl).validate_python(value)
 
@@ -4075,9 +4073,7 @@ class ResourceAction(BaseDocument):
                 # Not 100% sure why this is needed, could depend on whether the data is
                 # retrieved through sql alchemy (automatically deserializes json into dict)
                 # or through regular asyncpg queries (no automatic deserialization)
-                if isinstance(message, str):
-                    message = json.loads(message)
-                assert isinstance(message, dict)
+                message = json.loads(message)
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
@@ -5148,8 +5144,7 @@ class Resource(BaseDocument):
                     continue
                 resource: dict[str, object] = dict(raw_resource)
                 if "attributes" in resource:
-                    if isinstance(resource["attributes"], str):
-                        resource["attributes"] = json.loads(resource["attributes"])
+                    resource["attributes"] = json.loads(resource["attributes"])
                 if projection is not None:
                     assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
