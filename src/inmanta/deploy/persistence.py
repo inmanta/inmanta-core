@@ -271,7 +271,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     status=status,
                     connection=connection,
                 )
-                # TODO: do we need to set blocked, is_undefined, is_orphan here?
+
                 await resource.update_persistent_state(
                     is_deploying=False,
                     last_deploy=finished,

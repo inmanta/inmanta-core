@@ -1,3 +1,3 @@
 change-type: patch
-description: Change get_current_resource_state to fetch status from rps table only
+description: Change endpoints that specifically fetch the status of a resource, to only use the rps table
 destination-branches: [master]

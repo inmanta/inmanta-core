@@ -26,8 +26,6 @@ from inmanta.stable_api import stable_api
 
 # This query assumes that the resource_persistent_state table is present in the query as rps.
 # It returns the status of the resource in the "status" field.
-# And if it has an update in the "has_update" field.
-# If a resource is deploying but has an update. Its status should be "deploying" and "has_update" should be set to true.
 RESOURCE_STATUS_QUERY: typing.LiteralString = """
 (
     CASE
@@ -44,8 +42,7 @@ RESOURCE_STATUS_QUERY: typing.LiteralString = """
         ELSE
             rps.last_non_deploying_status::text
     END
-) AS status,
-rps.current_intent_attribute_hash <> rps.last_deployed_attribute_hash OR rps.last_deployed_attribute_hash IS NULL AS has_update
+) AS status
 """
 
 

@@ -605,7 +605,6 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                 resource_version_id=resource["resource_id"] + ",v=" + str(resource["model"]),
                 id_details=data.Resource.get_details_from_resource_id(resource["resource_id"]),
                 status=resource["status"],
-                has_update=bool(resource["has_update"]),
                 requires=json.loads(resource["attributes"]).get("requires", []),
             )
             for resource in records

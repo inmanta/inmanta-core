@@ -27,6 +27,7 @@ from dateutil.tz import UTC
 
 from inmanta import const, data
 from inmanta.const import ResourceState
+from inmanta.deploy.state import Blocked
 from inmanta.types import ResourceVersionIdStr
 from inmanta.util import parse_timestamp
 
@@ -134,7 +135,9 @@ async def env_with_resources(server, client):
         is_deploying = status == ResourceState.deploying
         is_undefined = status == ResourceState.undefined
         blocked = (
-            "BLOCKED" if status == ResourceState.undefined or status == ResourceState.skipped_for_undefined else "NOT_BLOCKED"
+            Blocked.BLOCKED
+            if status == ResourceState.undefined or status == ResourceState.skipped_for_undefined
+            else Blocked.NOT_BLOCKED
         )
         last_deploy = last_deploy if update_last_deployed else None
         last_non_deploying_status = status if is_version_released[version] and status != ResourceState.deploying else None
@@ -143,10 +146,9 @@ async def env_with_resources(server, client):
             last_deploy=last_deploy,
             last_non_deploying_status=last_non_deploying_status,
             is_deploying=is_deploying,
-            is_undefined=is_undefined,
-            blocked=blocked,
-            is_orphan=is_orphan,
         )
+        rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=res.resource_id)
+        await rps.update(is_undefined=is_undefined, blocked=blocked, is_orphan=is_orphan)
 
         return res
 
