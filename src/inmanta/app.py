@@ -159,6 +159,7 @@ def start_scheduler(options: argparse.Namespace) -> None:
             connection_pool_max_size=agent_config.scheduler_db_connection_pool_max_size.get(),
             connection_timeout=agent_config.scheduler_db_connection_timeout.get(),
         )
+
         # also report metrics if this is relevant
         metrics_reporter = MetricsService(
             extra_tags={"component": "scheduler", "environment": str(agent_config.environment.get())}

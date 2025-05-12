@@ -138,13 +138,6 @@ class DatabaseMonitor:
             CallbackGauge(callback=lambda: self._pool.get_size() if self._pool is not None else 0),
         )
         self._add_gauge(
-            "db.max_pool", CallbackGauge(callback=lambda: self._pool.get_max_size() if self._pool is not None else 0)
-        )
-        self._add_gauge(
-            "db.open_connections",
-            CallbackGauge(callback=lambda: self._pool.get_size() if self._pool is not None else 0),
-        )
-        self._add_gauge(
             "db.free_connections",
             CallbackGauge(callback=lambda: self._pool.get_idle_size() if self._pool is not None else 0),
         )
