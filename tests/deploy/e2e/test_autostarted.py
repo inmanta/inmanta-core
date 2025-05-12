@@ -1288,7 +1288,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     )
     result = await client.get_agents(environment)
     assert result.code == 200
-    actual_data = result.result["data"]
 
     # Retrieve the current processes, we should have more processes than `start_state_children`
     children_after_deployment = construct_scheduler_children(current_pid)
@@ -1345,7 +1344,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
 
     async def wait_for_available() -> bool:
         """
-        Wait for the scheduler to set the resource to availabel
+        Wait for the scheduler to set the resource to available
         """
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
