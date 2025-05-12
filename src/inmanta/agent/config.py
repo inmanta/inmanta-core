@@ -127,17 +127,6 @@ scheduler_db_connection_timeout: Option[float] = Option(
 )
 
 
-class AgentExecutorMode(str, enum.Enum):
-    threaded = "threaded"
-    forking = "forking"
-
-
-def is_executor_mode(value: str | AgentExecutorMode) -> AgentExecutorMode:
-    """threaded | forking"""
-    if isinstance(value, AgentExecutorMode):
-        return value
-    return AgentExecutorMode(value)
-
 
 agent_executor_cap = Option[int](
     "agent",
