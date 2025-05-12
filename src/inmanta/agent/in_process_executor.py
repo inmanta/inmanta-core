@@ -205,7 +205,9 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             except (ReferenceMissingError, MutatorMissingError) as e:
                 ctx.set_resource_state(const.HandlerResourceState.unavailable)
                 ctx.exception(
-                    "An error occurred during reference resolution for resource %(resource_id)s (exception: %(exception)s",
+                    "Cannot find the source code for reference resolution for resource %(resource_id)s. Make sure you"
+                    "register the relevant code via the @reference decorator and that the relevant file(s) can be imported. "
+                    "(exception: %(exception)s",
                     resource_id=resource.id,
                     exception=repr(e),
                 )

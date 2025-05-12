@@ -221,7 +221,6 @@ class AgentModules(Base):
         cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
     ) -> dict[tuple[str, str], list[str]]:
         """
-        # TODO don't need agent info ??
         Retrieve the list of agents that require each inmanta module (name, version)
         as a map of (inmanta_module_name, inmanta_module_version) to list[agent_name]
 

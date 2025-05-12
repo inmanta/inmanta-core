@@ -663,6 +663,7 @@ class OrchestrationService(protocol.ServerSlice):
         Make sure that the same module versions are used in this partial version.
         """
 
+        # Map of (inmanta_module_name, inmanta_module_version) to list[agent_names]
         base_version_data: dict[tuple[str, str], list[str]] = await AgentModules.get_agents_per_module(
             model_version=partial_base_version, environment=environment, connection=connection
         )
@@ -682,7 +683,6 @@ class OrchestrationService(protocol.ServerSlice):
 
     async def _register_agent_code(
         self,
-        is_partial_update: bool,
         partial_base_version: int | None,
         version: int,
         environment: uuid.UUID,
@@ -696,7 +696,6 @@ class OrchestrationService(protocol.ServerSlice):
         Use the `module_version_info` dict to populate the relevant tables
         AgentModules, InmantaModule and ModuleFiles.
 
-        :param is_partial_update: Is the associated compile a partial or a full compile.
         :param partial_base_version: In case of a partial compile, base version it is based on.
         :param version: Configuration model version.
         :param environment: Environment this compile belongs to.
@@ -704,8 +703,7 @@ class OrchestrationService(protocol.ServerSlice):
         :param connection: DB connection expected to be managed by the caller method.
         """
         base_version_info: dict[tuple[str, str], list[str]] = {}
-        if is_partial_update:
-            assert partial_base_version is not None
+        if partial_base_version is not None:
             base_version_info = await self._check_version_info(
                 partial_base_version, environment, module_version_info, connection
             )
@@ -888,9 +886,7 @@ class OrchestrationService(protocol.ServerSlice):
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
-            await self._register_agent_code(
-                is_partial_update, partial_base_version, version, env.id, module_version_info, connection
-            )
+            await self._register_agent_code(partial_base_version, version, env.id, module_version_info, connection)
 
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.

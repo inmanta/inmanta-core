@@ -31,11 +31,10 @@ from collections.abc import Iterable, Iterator, Sequence
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
-from inmanta.data.model import InmantaModule, ModuleSource, ModuleSourceMetadata
-from inmanta.resources import Id, Resource
+from inmanta.data.model import InmantaModule, ModuleSource
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -44,6 +43,10 @@ MODULE_DIR = "modules"
 PLUGIN_DIR = "plugins"
 
 LOGGER = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from inmanta.data.model import ModuleSourceMetadata
+    from inmanta.resources import Id, Resource
 
 
 def get_inmanta_module_name(python_module_name: str) -> str:
@@ -82,7 +85,7 @@ class CodeManager:
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[str, "InmantaModule"] = {}
 
-    def build_agent_map(self, resources: dict[Id, Resource]) -> None:
+    def build_agent_map(self, resources: dict["Id", "Resource"]) -> None:
         """
         Construct a map of which agents are registered to deploy which resource type.
         This map is later used to construct a map of which agents need to load
@@ -169,7 +172,7 @@ class CodeManager:
         return set(_requires)
 
     @staticmethod
-    def get_module_version(requirements: set[str], module_sources: Sequence[ModuleSourceMetadata]) -> str:
+    def get_module_version(requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"]) -> str:
         module_version_hash = hashlib.new("sha1")
 
         for module_source in sorted(module_sources, key=lambda f: f.hash_value):

@@ -97,11 +97,12 @@ class Task(abc.ABC):
 
         # Bail out if the current task's resource needs code
         # that failed to load/install:
-        inmanta_module_name = self.resource.split("::")[0]
+        inmanta_module_name = self.id.get_inmanta_module()
+
         if inmanta_module_name in my_executor.failed_modules:
-            raise BaseExceptionGroup(
+            raise ExceptionGroup(
                 """
-                    The following modules cannot be installed: %s.
+                    The following modules cannot be loaded: %s.
                 """
                 % ", ".join([e for e in my_executor.failed_modules[inmanta_module_name].keys()]),
                 [e for e in my_executor.failed_modules[inmanta_module_name].values()],
@@ -167,18 +168,6 @@ class Deploy(Task):
                         version=version,
                     )
 
-                except BaseExceptionGroup as beg:
-                    log_line = data.LogLine.log(
-                        logging.ERROR,
-                        "All resources of type `%(res_type)s` failed to load handler code or install handler code "
-                        "dependencies: `%(error)s`\n%(sub_excp)s",
-                        res_type=executor_resource_details.id.entity_type,
-                        error=str(beg),
-                        sub_excp=str(beg.exceptions),
-                    )
-                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
-                    deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
-                    return
                 except Exception as e:
                     log_line = data.LogLine.log(
                         logging.ERROR,
