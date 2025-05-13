@@ -632,7 +632,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         last_timestamp: Optional[datetime.datetime] = None,
         exclude_changes: Optional[list[Change]] = None,
     ) -> ReturnValue[list[ResourceAction]]:
-        LOGGER.error("get_resource_actionsget_resource_actions")
         if exclude_changes is None:
             exclude_changes = []
 
@@ -657,7 +656,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         elif limit > APILIMIT:
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
-        LOGGER.error("CALL TO query_resource_actions")
         resource_actions = await data.ResourceAction.query_resource_actions(
             env.id,
             resource_type,
@@ -672,7 +670,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             exclude_changes=exclude_changes,
         )
 
-        LOGGER.error(f"{resource_actions=}")
 
         resource_action_dtos = [resource_action.to_dto() for resource_action in resource_actions]
         links = {}

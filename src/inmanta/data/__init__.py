@@ -4352,8 +4352,6 @@ class ResourceAction(BaseDocument):
 
         async with cls.get_connection() as con:
             async with con.transaction():
-                LOGGER.error(f"{query=}")
-                LOGGER.error(f"{con=}")
                 return [cls(**record, from_postgres=True) async for record in con.cursor(query, *values)]
 
     @classmethod
