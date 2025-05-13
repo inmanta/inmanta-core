@@ -1,0 +1,6 @@
+---
+description: 'Mark parameters in the path of an endpoint using `<param>` instead of `{param}` in the openapi documentation.'
+change-type: patch
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"
