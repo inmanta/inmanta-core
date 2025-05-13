@@ -1614,7 +1614,7 @@ class ResourceScheduler(TaskManager):
                     return report_model_version_mismatch(latest_model.version)
 
                 resource_states_in_db: Mapping[ResourceIdStr, const.ResourceState]
-                latest_version, resource_states_in_db = await data.Resource.get_resource_states_latest_version(
+                latest_version, resource_states_in_db = await data.Resource.get_latest_resource_states(
                     env=self.environment, connection=connection
                 )
                 if latest_version != self._state.version:

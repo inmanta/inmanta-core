@@ -4805,9 +4805,12 @@ class Resource(BaseDocument):
         return out
 
     @classmethod
-    async def get_resource_states_latest_version(
+    async def get_latest_resource_states(
         cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
     ) -> tuple[Optional[int], abc.Mapping[ResourceIdStr, ResourceState]]:
+        """
+        Fetches the states of all the resources in the given environment, excluding orphans
+        """
         query = f"""
             SELECT
                 r.model,

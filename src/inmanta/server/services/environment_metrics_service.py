@@ -92,47 +92,6 @@ class MetricValueTimer(MetricValue):
         self.value = value
 
 
-LATEST_RELEASED_MODELS_SUBQUERY: str = textwrap.dedent(
-    f"""
-    latest_released_models AS (
-        SELECT cm.environment, MAX(cm.version) AS version
-        FROM {ConfigurationModel.table_name()} AS cm
-        WHERE cm.released = TRUE
-        GROUP BY cm.environment
-    )
-    """.strip(
-        "\n"
-    )
-).strip()
-"""
-Subquery to get the latest released version for each environment. Environments with no released versions are absent.
-To be used like f"WITH {LATEST_RELEASED_MODELS_SUBQUERY} <main_query>". The main query can use the name 'latest_released_models'
-to refer to this table.
-"""
-
-LATEST_RELEASED_RESOURCES_SUBQUERY: str = (
-    LATEST_RELEASED_MODELS_SUBQUERY
-    + textwrap.dedent(
-        f"""
-        , latest_released_resources AS (
-            SELECT r.*
-            FROM {Resource.table_name()} AS r
-            INNER JOIN latest_released_models as cm
-                ON r.environment = cm.environment AND r.model = cm.version
-        )
-        """.strip(
-            "\n"
-        )
-    ).strip()
-)
-"""
-Subquery to get the resources for latest released version for each environment. Environments with no released versions are
-absent. Includes LATEST_RELEASED_MODELS_SUBQUERY.
-To be used like f"WITH {LATEST_RELEASED_RESOURCES_SUBQUERY} <main_query>. The main query can use the name
-'latest_released_resources' to refer to this table.
-"""
-
-
 class MetricsCollector(abc.ABC):
     @abc.abstractmethod
     def get_metric_name(self) -> str:
@@ -479,12 +438,13 @@ class ResourceCountMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
         query: str = f"""
-            WITH {LATEST_RELEASED_RESOURCES_SUBQUERY},resource_statuses AS (
+            WITH resource_statuses AS (
                 SELECT r.environment,
                 {const.RESOURCE_STATUS_QUERY}
-                from latest_released_resources AS r
+                FROM {Resource.table_name()} AS r
                 INNER JOIN public.resource_persistent_state AS rps
                     ON r.resource_id = rps.resource_id AND r.environment = rps.environment
+                WHERE NOT rps.is_orphan
             ),
             nonzero_statuses AS (
                 SELECT environment, status, COUNT(*) AS count
