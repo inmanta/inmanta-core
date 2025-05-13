@@ -86,6 +86,10 @@ class CallArguments:
         return self._properties
 
     @property
+    def config(self) -> common.UrlMethod:
+        return self._config
+
+    @property
     def auth_token(self) -> auth.claim_type | None:
         return self._auth_token
 
