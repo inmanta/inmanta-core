@@ -1042,6 +1042,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         is called on server start.
         """
         environments = await data.Environment.get_list()
+
         for env in environments:
             autostart = await env.get(data.AUTOSTART_ON_START)
             if not autostart:
@@ -1077,8 +1078,6 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
     async def _stop_scheduler(
         self,
         env: data.Environment,
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
         Stop the scheduler for this environment and expire all its sessions.
@@ -1187,7 +1186,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
                         autostart_scheduler,
                         self._agent_procs[env],
                     )
-                    await self._stop_scheduler(refreshed_env, connection=connection)
+                    await self._stop_scheduler(refreshed_env)
                     start_new_process = True
                 else:
                     start_new_process = False

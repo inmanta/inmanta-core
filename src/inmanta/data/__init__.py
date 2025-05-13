@@ -4079,7 +4079,7 @@ class ResourceAction(BaseDocument):
                 if isinstance(message, dict):
                     pass
                     LOGGER.debug(f"GOT A DICT {message=}")
-                message = json.loads(message)
+                # message = json.loads(message)
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
