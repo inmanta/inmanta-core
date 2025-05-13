@@ -4809,18 +4809,13 @@ class Resource(BaseDocument):
         cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
     ) -> tuple[Optional[int], abc.Mapping[ResourceIdStr, ResourceState]]:
         query = f"""
-            WITH latest_released_version AS (
-                SELECT max(version) AS version
-                FROM configurationmodel
-                WHERE environment=$1 AND released
-            )
             SELECT
                 r.model,
                 rps.resource_id,
                 {const.RESOURCE_STATUS_QUERY}
             FROM {Resource.table_name()} AS r
                 INNER JOIN resource_persistent_state AS rps ON rps.environment=r.environment AND r.resource_id=rps.resource_id
-            WHERE r.environment=$1 AND r.model = (SELECT version FROM latest_released_version)
+            WHERE r.environment=$1 AND NOT rps.is_orphan
         """
         results = await cls.select_query(query, [env], no_obj=True, connection=connection)
         if not results:
