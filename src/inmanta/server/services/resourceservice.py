@@ -223,6 +223,8 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                 if log_action is not None:
                     action_name = log_action.name
 
+                LOGGER.debug(f'get_resource {con=}')
+                #13:35:39.829 DEBUG get_resource con=<PoolConnectionProxy <asyncpg.connection.Connection object at 0x798737650320> 0x79873769b760>
                 actions = await data.ResourceAction.get_log(
                     environment=env.id, resource_version_id=resource_id, action=action_name, limit=log_limit, connection=con
                 )
