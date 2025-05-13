@@ -4079,7 +4079,7 @@ class ResourceAction(BaseDocument):
                 if isinstance(message, dict):
                     pass
                     LOGGER.debug(f"GOT A DICT {message=}")
-                # message = json.loads(message)
+                message = json.loads(message)
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
@@ -4352,8 +4352,6 @@ class ResourceAction(BaseDocument):
 
         async with cls.get_connection() as con:
             async with con.transaction():
-                LOGGER.error(f"{query=}")
-                LOGGER.error(f"{con=}")
                 return [cls(**record, from_postgres=True) async for record in con.cursor(query, *values)]
 
     @classmethod
