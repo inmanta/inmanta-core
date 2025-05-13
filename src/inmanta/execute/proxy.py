@@ -23,10 +23,15 @@ from dataclasses import is_dataclass
 from typing import TYPE_CHECKING, Callable, Union
 
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
-from inmanta.ast import AttributeNotFound as AttributeNotFound
-from inmanta.ast import Location, NotFoundException, RuntimeException
-from inmanta.ast import UnknownException as UnknownException
-from inmanta.ast import UnsetException as UnsetException  # noqa F401
+from inmanta.ast import (
+    AttributeNotFound,
+    Location,
+    NotFoundException,
+    RuntimeException,
+    UndeclaredReference,
+    UnknownException,
+)
+from inmanta.ast import UnsetException  # noqa F401
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.references import Reference
 from inmanta.stable_api import stable_api
@@ -120,6 +125,7 @@ class DynamicProxy:
                         "It can only be converted to an inmanta entity at the plugin boundary",
                     )
                 dataclass_ref_type = dynamic_context.type_resolver(ref_type)
+                item._model_type = dataclass_ref_type
                 # Can not be typed correctly due to import loops
                 return dataclass_ref_type.from_python(
                     item, dynamic_context.resolver, dynamic_context.queue, dynamic_context.location
@@ -155,7 +161,10 @@ class DynamicProxy:
         return item
 
     @classmethod
-    def return_value(cls, value: object) -> Union[None, str, tuple[object, ...], int, float, bool, "DynamicProxy"]:
+    def return_value(
+        cls,
+        value: object,
+    ) -> Union[None, str, tuple[object, ...], int, float, bool, "DynamicProxy"]:
         """
         Converts a value from the internal domain to the plugin domain.
         """
@@ -171,8 +180,18 @@ class DynamicProxy:
         if isinstance(value, (str, tuple, int, float, bool)):
             return copy(value)
 
-        if isinstance(value, DynamicProxy):
+        # if a reference gets here, it has been validated, and we want to represent it as a reference, not a proxy
+        if isinstance(value, (Reference, DynamicProxy)):
             return value
+
+        # TODO: test cases
+        #   - plain plugin that gets a reference: allowed iff declared (or any)
+        #   - plugin that gets a reference in list/dict: allowed iff declared
+        #   - plugin that gets an entity with a reference attribute. Allowed but error on attr access unless allow_references()
+        #   - plugin that gets a dataclass with reference attributes. Allowed if declared
+        #       => How about a reference to a dataclass? Translated internally as dataclass of references, but that violates
+        #           the signature
+        #   - plugin that iterates over list with a reference in there
 
         if isinstance(value, dict):
             return DictProxy(value)
@@ -193,6 +212,26 @@ class DynamicProxy:
         except NotFoundException as e:
             # allow for hasattr(proxy, "some_attr")
             raise AttributeNotFound(e.stmt, e.name)
+
+        # Non-dataclass entities can not be explicit about reference support.
+        # The Python domain is a black box. We don't want to transparently pass unexpected values in there.
+        # TODO: allow_references() name
+        # => don't allow references in attributes. Can be explicitly allowed via allow_references() wrapper
+        if isinstance(value, Reference):
+            # TODO: message
+            # TODO: string format accepts reference. Should also raise this exception
+            # TODO: move part of this message to UndeclaredReference class?
+            raise UndeclaredReference(
+                (
+                    "Encountered reference attribute in instance. Plugins are only allowed to access reference attributes"
+                    " when declared explicitly. Either use a dataclass entity with attributes annotated with declared reference"
+                    " attributes (e.g. `int | Reference[int]`), or explicitly allow references on attribute access with the"
+                    # TODO: name
+                    " `inmanta.plugins.allow_reference_attributes()` wrapper."
+                    f" ({attribute}={value} on instance {self._get_instance()})"
+                ),
+                reference=value,
+            )
 
         return DynamicProxy.return_value(value)
 
@@ -231,6 +270,27 @@ class DynamicProxy:
 
     def __repr__(self) -> str:
         return "@%s" % repr(self._get_instance())
+
+
+class WithReferenceAttributes(DynamicProxy):
+    # TODO: docstring
+
+    def __init__(self, delegate: DynamicProxy) -> None:
+        object.__setattr__(self, "__delegate", delegate)
+
+    def _get_delegate(self) -> "Instance":
+        return object.__getattribute__(self, "__delegate")
+
+    def _get_instance(self) -> "Instance":
+        return self._get_delegate()._get_instance()
+
+    def __getattr__(self, attribute: str):
+        delegate = self._get_delegate()
+
+        try:
+            return getattr(delegate, attribute)
+        except UndeclaredReference as e:
+            return e.reference
 
 
 class SequenceProxy(DynamicProxy, JSONSerializable):
