@@ -6594,17 +6594,6 @@ _classes = [
     Scheduler,
 ]
 
-
-async def disconnect() -> None:
-    LOGGER.debug("Disconnecting data classes")
-    # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
-    # or until the gather itself is cancelled.
-    result = await asyncio.gather(*[cls.close_connection_pool() for cls in _classes], return_exceptions=True)
-    exceptions = [r for r in result if r is not None and isinstance(r, Exception)]
-    if exceptions:
-        raise exceptions[0]
-
-
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 
 
