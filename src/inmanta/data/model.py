@@ -1003,7 +1003,7 @@ class ModuleSourceMetadata(BaseModel):
 
     """
 
-    model_config: ClassVar[ConfigDict]= ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
     name: str
     hash_value: str
     is_byte_code: bool
@@ -1029,7 +1029,7 @@ class ModuleSource(BaseModel):
     :param source: the content of the file
     """
 
-    model_config: ClassVar[ConfigDict]= ConfigDict(frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
     metadata: ModuleSourceMetadata
     source: bytes
 

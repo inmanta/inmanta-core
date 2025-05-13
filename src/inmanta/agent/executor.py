@@ -222,8 +222,7 @@ class ExecutorBlueprint(EnvBlueprint):
                 "requirements": self.requirements,
                 # Use the hash values and name to create a stable identity
                 "sources": [
-                    [source.metadata.hash_value, source.metadata.name, source.metadata.is_byte_code]
-                    for source in self.sources
+                    [source.metadata.hash_value, source.metadata.name, source.metadata.is_byte_code] for source in self.sources
                 ],
                 "python_version": self.python_version,
             }

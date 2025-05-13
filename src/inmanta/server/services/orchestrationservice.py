@@ -669,10 +669,12 @@ class OrchestrationService(protocol.ServerSlice):
         )
         for inmanta_module_name, module_data in module_version_info.items():
             module_version = module_data.version
-            if not all([
-                (inmanta_module_name, module_version) in base_version_data,
-                set(module_data.for_agents).issubset(base_version_data[(inmanta_module_name, module_version)])
-            ]):
+            if not all(
+                [
+                    (inmanta_module_name, module_version) in base_version_data,
+                    set(module_data.for_agents).issubset(base_version_data[(inmanta_module_name, module_version)]),
+                ]
+            ):
                 raise BadRequest(
                     "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
                 )

@@ -15,12 +15,14 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
+
 import itertools
 import logging
 import sys
 import uuid
 
 import inmanta.data.sqlalchemy as models
+from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.executor import ModuleInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
@@ -134,7 +136,6 @@ class CodeManager:
                         ),
                     )
                 )
-
 
         if not module_install_specs:
             raise CouldNotResolveCode(agent_name, model_version)

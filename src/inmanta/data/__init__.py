@@ -29,7 +29,7 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
-from collections.abc import Awaitable,AsyncIterator, Callable, Collection, Iterable, Sequence, Set
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Iterable, Sequence, Set
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from itertools import chain
@@ -4073,6 +4073,12 @@ class ResourceAction(BaseDocument):
                 # Not 100% sure why this is needed, could depend on whether the data is
                 # retrieved through sql alchemy (automatically deserializes json into dict)
                 # or through regular asyncpg queries (no automatic deserialization)
+                if isinstance(message, str):
+                    pass
+                    LOGGER.debug(f"GOT A STR {message=}")
+                if isinstance(message, dict):
+                    pass
+                    LOGGER.debug(f"GOT A DICT {message=}")
                 message = json.loads(message)
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
@@ -4346,6 +4352,8 @@ class ResourceAction(BaseDocument):
 
         async with cls.get_connection() as con:
             async with con.transaction():
+                LOGGER.error(f"{query=}")
+                LOGGER.error(f"{con=}")
                 return [cls(**record, from_postgres=True) async for record in con.cursor(query, *values)]
 
     @classmethod
@@ -4444,6 +4452,7 @@ class ResourceAction(BaseDocument):
         return collector
 
     def to_dto(self) -> m.ResourceAction:
+        LOGGER.debug("RA TO DTO")
         return m.ResourceAction(
             environment=self.environment,
             version=self.version,
@@ -6586,12 +6595,6 @@ _classes = [
 ]
 
 
-def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
-    LOGGER.debug("Connecting data classes")
-    for cls in _classes:
-        cls.set_connection_pool(pool)
-
-
 async def disconnect() -> None:
     LOGGER.debug("Disconnecting data classes")
     # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
@@ -6741,8 +6744,7 @@ async def start_engine(
         ENGINE = create_async_engine(url=url_object, pool_pre_ping=True, poolclass=NullerPool, async_creator=bridge_creator)
         SESSION_FACTORY = async_sessionmaker(ENGINE)
     except Exception as e:
-        await pool.close()
-        await disconnect()
+        await stop_engine()
         raise e
 
     return pool

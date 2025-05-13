@@ -126,8 +126,6 @@ scheduler_db_connection_timeout: Option[float] = Option(
     is_float,
 )
 
-
-
 agent_executor_cap = Option[int](
     "agent",
     "executor-cap",

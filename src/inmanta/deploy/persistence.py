@@ -240,6 +240,7 @@ class ToDbUpdateManager(StateUpdateManager):
                     LOGGER.error("Attempting to set undeployable resource to deployable state")
                     raise AssertionError("Attempting to set undeployable resource to deployable state")
 
+                LOGGER.error(f"con={connection}")
                 resource_action = await data.ResourceAction.get(action_id=action_id, connection=connection)
                 if resource_action is None:
                     raise ValueError(
