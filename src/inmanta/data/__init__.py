@@ -4450,7 +4450,6 @@ class ResourceAction(BaseDocument):
         return collector
 
     def to_dto(self) -> m.ResourceAction:
-        LOGGER.debug("RA TO DTO")
         return m.ResourceAction(
             environment=self.environment,
             version=self.version,
