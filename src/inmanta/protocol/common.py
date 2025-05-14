@@ -965,6 +965,12 @@ class UrlMethod:
     def get_operation(self) -> str:
         return self._properties.operation
 
+    def get_path(self) -> str:
+        """
+        Returns the path part of the URL. Parameters in this path are templated using the <param> notation.
+        """
+        return self._properties.get_full_path()
+
 
 # Util functions
 def custom_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, util.JSONSerializable]:
