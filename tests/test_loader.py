@@ -20,7 +20,6 @@ import hashlib
 import importlib.abc
 import importlib.machinery
 import importlib.util
-import inspect
 import os
 import shutil
 import sys
@@ -83,48 +82,20 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependen
     mgr.register_code("std::testing::NullResource", single.MyHandler)
     mgr.register_code("multiple_plugin_files::NullResourceBis", multi.MyHandler)
 
-    def assert_content(source_info: ModuleSource, handler) -> str:
-        filename = inspect.getsourcefile(handler)
-        assert filename is not None
-        content: str
-        with open(filename, "rb") as fd:
-            content = fd.read()
-            assert source_info.content == content
-            assert len(source_info.hash) > 0
-            return content
-
     module_version_info = mgr.get_module_version_info()
     assert "multiple_plugin_files" in module_version_info.keys()
     assert "single_plugin_file" in module_version_info.keys()
 
-    #
-    # single_type_list: list[SourceInfo] = types["std::testing::NullResource"]
-    # multi_type_list: list[SourceInfo] = types["multiple_plugin_files::NullResourceBis"]
-    #
-    # assert len(single_type_list) == 1
-    # single_content: str = assert_content(single_type_list[0], single.MyHandler)
-    #
-    # assert len(multi_type_list) == 3
-    # multi_content: str = assert_content(
-    #     next(s for s in multi_type_list if s.module_name == "inmanta_plugins.multiple_plugin_files.handlers"), multi.MyHandler
-    # )
-    #
-    # # get_file_hashes
-    # mgr_contents: set[bytes] = {mgr.get_file_content(hash) for hash in mgr.get_file_hashes()}
-    # assert single_content in mgr_contents
-    # assert multi_content in mgr_contents
-    #
-    # with pytest.raises(KeyError):
-    #     mgr.get_file_content("test")
-    #
-    # # register type without source
-    # with pytest.raises(loader.SourceNotFoundException):
-    #     mgr.register_code("test2", str)
-    #
-    # # verify requirements behavior
-    # source_info: SourceInfo = single_type_list[0]
-    # # by default also install dependencies on other modules
-    # assert source_info.requires == expected_dependencies
+    assert module_version_info["single_plugin_file"].requirements == expected_dependencies
+    assert len(module_version_info["single_plugin_file"].files_in_module) == 1
+    assert len(module_version_info["multiple_plugin_files"].files_in_module) == 3
+
+    with pytest.raises(KeyError):
+        mgr.get_file_content("test")
+
+    # register type without source
+    with pytest.raises(loader.SourceNotFoundException):
+        mgr.register_code("test2", str)
 
 
 def test_code_loader(tmp_path, caplog):
