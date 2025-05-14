@@ -120,9 +120,6 @@ class OpenApiConverter:
             if "api" in url_method.properties.client_types
         }
 
-    def _format_path(self, path: str) -> str:
-        return path.replace("(?P<", "{").replace(">[^/]+)", "}")
-
     def _extract_operations_from_methods(self, api_methods: dict[str, UrlMethod], path: str) -> PathItem:
         path_item = PathItem()
         for http_method_name, url_method in api_methods.items():
