@@ -80,7 +80,7 @@ def put_partial(
 
 
 # Method for working with projects
-@auth(auth_label=const.AuthorizationLabel.PROJECT_WRITE, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.PROJECT_CREATE, read_only=False)
 @typedmethod(path="/project", operation="PUT", client_types=[ClientType.api], api_version=2)
 def project_create(name: str, project_id: Optional[uuid.UUID] = None) -> model.Project:
     """
@@ -91,7 +91,7 @@ def project_create(name: str, project_id: Optional[uuid.UUID] = None) -> model.P
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.PROJECT_WRITE, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.PROJECT_MODIFY, read_only=False)
 @typedmethod(path="/project/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
 def project_modify(id: uuid.UUID, name: str) -> model.Project:
     """
@@ -102,7 +102,7 @@ def project_modify(id: uuid.UUID, name: str) -> model.Project:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.PROJECT_WRITE, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.PROJECT_DELETE, read_only=False)
 @typedmethod(path="/project/<id>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def project_delete(id: uuid.UUID) -> None:
     """
@@ -134,7 +134,7 @@ def project_get(id: uuid.UUID, environment_details: bool = False) -> model.Proje
 
 
 # Methods for working with environments
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_WRITE, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_CREATE, read_only=False)
 @typedmethod(path="/environment", operation="PUT", client_types=[ClientType.api], api_version=2)
 def environment_create(
     project_id: uuid.UUID,
@@ -163,7 +163,7 @@ def environment_create(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_WRITE, read_only=False, environment_param="id")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_MODIFY, read_only=False, environment_param="id")
 @typedmethod(path="/environment/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
 def environment_modify(
     id: uuid.UUID,
@@ -195,7 +195,7 @@ def environment_modify(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_WRITE, read_only=False, environment_param="id")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_DELETE, read_only=False, environment_param="id")
 @typedmethod(path="/environment/<id>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def environment_delete(id: uuid.UUID) -> None:
     """
@@ -274,7 +274,7 @@ def resume_environment(tid: uuid.UUID) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_WRITE, read_only=False, environment_param="id")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_CLEAR, read_only=False, environment_param="id")
 @typedmethod(
     path="/decommission/<id>",
     operation="DELETE",
@@ -469,7 +469,7 @@ def notify_timer_update(tid: uuid.UUID) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_HALT_RESUME, read_only=False, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.EXECUTOR_HALT_RESUME, read_only=False, environment_param="tid")
 @typedmethod(
     path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
@@ -1513,7 +1513,6 @@ def get_environment_metrics(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.AUTH_USER, read_only=True)
 @typedmethod(path="/login", operation="POST", client_types=[ClientType.api], enforce_auth=False, api_version=2)
 def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
     """Login a user.
@@ -1685,7 +1684,7 @@ def discovered_resources_get_batch(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.GRAPHQL_WRITE, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.GRAPHQL_READ, read_only=False)
 @typedmethod(
     path="/graphql",
     operation="POST",
