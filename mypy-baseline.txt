@@ -649,7 +649,6 @@ src/inmanta/logging.py:0: error: Argument "root_handlers" to "FullLoggingConfig"
 src/inmanta/logging.py:0: error: Argument "root_log_level" to "FullLoggingConfig" has incompatible type "object"; expected "int | str | None"  [arg-type]
 src/inmanta/logging.py:0: error: Returning Any from function declared to return "dict[str, object]"  [no-any-return]
 src/inmanta/logging.py:0: error: Returning Any from function declared to return "dict[str, object]"  [no-any-return]
-src/inmanta/main.py:0: error: Need type annotation for "bar"  [var-annotated]
 src/inmanta/main.py:0: error: Returning Any from function declared to return "dict[str, Any] | None"  [no-any-return]
 src/inmanta/main.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
 src/inmanta/main.py:0: error: Value of type "dict[str, Any] | None" is not indexable  [index]
