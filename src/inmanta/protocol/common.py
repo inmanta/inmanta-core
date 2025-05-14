@@ -835,6 +835,12 @@ class MethodProperties:
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
         return url + self._path.generate_regex_path()
 
+    def get_full_path(self) -> str:
+        """
+        Return the path of this endpoint including the api prefix and version number.
+        """
+        return f"/{self._api_prefix}/v{self._api_version}{self._path.path}"
+
     def get_call_url(self, msg: dict[str, str]) -> str:
         """
         Create a calling url for the client
@@ -965,6 +971,12 @@ class UrlMethod:
 
     def get_operation(self) -> str:
         return self._properties.operation
+
+    def get_path(self) -> str:
+        """
+        Returns the path part of the URL. Parameters in this path are templated using the <param> notation.
+        """
+        return self._properties.get_full_path()
 
 
 # Util functions
