@@ -34,7 +34,7 @@ class CLI_user_setup:
     async def run(self, run_locally, username, password, *args, **kwargs):
         # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
-        runner = testing.CliRunner(mix_stderr=False)
+        runner = testing.CliRunner()
 
         def invoke():
             return runner.invoke(cli=cmd, input=f"{run_locally}\n{username}\n{password}")
