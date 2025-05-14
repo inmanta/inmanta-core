@@ -366,7 +366,7 @@ class Exporter:
         export_plugin: Optional[str] = None,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[Sequence[str]] = None,
-        bypass_base_version_check: bool = False
+        bypass_base_version_check: bool = False,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState]]]:
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
@@ -424,7 +424,7 @@ class Exporter:
                 partial_compile,
                 list(self._removed_resource_sets),
                 Project.get().metadata.pip,
-                bypass_base_version_check=bypass_base_version_check
+                bypass_base_version_check=bypass_base_version_check,
             )
             LOGGER.info("Committed resources with version %d" % self._version)
 

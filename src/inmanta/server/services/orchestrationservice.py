@@ -896,7 +896,9 @@ class OrchestrationService(protocol.ServerSlice):
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
-            await self._register_agent_code(partial_base_version, version, env.id, module_version_info, connection, bypass_base_version_check)
+            await self._register_agent_code(
+                partial_base_version, version, env.id, module_version_info, connection, bypass_base_version_check
+            )
 
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
@@ -1145,6 +1147,7 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                     module_version_info=module_version_info or {},
+                    bypass_base_version_check=bypass_base_version_check,
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)
