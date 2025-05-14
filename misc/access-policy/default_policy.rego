@@ -7,7 +7,7 @@ endpoint_data := data.endpoints[input.request.endpoint_id]
 # The environment used in the request
 request_environment := input.request.parameters[endpoint_data.environment_param] if {
     endpoint_data.environment_param != null
-} else := null 
+} else := null
 
 # Don't allow anything that is not explicitly allowed.
 default allowed := false
