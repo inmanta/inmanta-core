@@ -318,18 +318,9 @@ class ReferenceLike:
         if type(self) is not type(other):
             return False
 
-        my_args = self.arguments
         assert isinstance(other, ReferenceLike)  # mypy can't figure out the check above
-        other_args = other.arguments
 
-        if my_args.keys() != other_args.keys():
-            return False
-
-        for key in my_args:
-            if my_args[key] != other_args[key]:
-                return False
-
-        return True
+        return self.arguments == other.arguments
 
 
 class Mutator(ReferenceLike):
