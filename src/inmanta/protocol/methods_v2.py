@@ -52,6 +52,7 @@ def put_partial(
     resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[list[str]] = None,
     pip_config: Optional[PipConfig] = None,
+    bypass_base_version_check: bool = False,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> ReturnValue[int]:
     """
@@ -77,6 +78,9 @@ def put_partial(
               * version_info: Model version information
     :param pip_config: Pip config used by this version
     :param module_version_info: Map of (module name, module version) to InmantaModule
+    :param bypass_base_version_check: During partial compiles, a check is performed to make sure the source
+        code of modules in this partial version is identical to the source code in the base version. Set this
+        parameter to True to bypass this check.
 
     :return: The newly stored version number.
     """
