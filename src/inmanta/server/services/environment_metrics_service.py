@@ -33,7 +33,6 @@ from inmanta.data import (
     ENVIRONMENT_METRICS_RETENTION,
     Agent,
     Compile,
-    ConfigurationModel,
     Environment,
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
