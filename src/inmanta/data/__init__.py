@@ -4829,8 +4829,8 @@ class Resource(BaseDocument):
     @classmethod
     async def get_current_resource_state(cls, env: uuid.UUID, rid: ResourceIdStr) -> Optional[const.ResourceState]:
         """
-        Return the state of the given resource in the latest version of the configuration model
-        or None if the resource is not present in the latest version.
+        Return the current state of the given resource
+        or None if the resource is not present in the latest version (marked as an orphan).
         """
         query = f"""
             SELECT
