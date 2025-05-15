@@ -447,7 +447,6 @@ async def test_logging_on_code_loading_failure_missing_code(server, client, envi
         for resource_action in result.result["data"]
         for log_line in resource_action["messages"]
     )
-    assert False
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])

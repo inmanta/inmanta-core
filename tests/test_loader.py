@@ -57,8 +57,8 @@ def get_module_source(module: str, code: str) -> ModuleSource:
 @pytest.mark.parametrize(
     "install_all_dependencies,expected_dependencies",
     [
-        (True, ["inmanta-module-std", "lorem"]),
-        (False, ["lorem"]),
+        (True, {"inmanta-module-std", "lorem"}),
+        (False, {"lorem"}),
     ],
 )
 def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependencies, expected_dependencies):
@@ -86,7 +86,7 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependen
     assert "multiple_plugin_files" in module_version_info.keys()
     assert "single_plugin_file" in module_version_info.keys()
 
-    assert module_version_info["single_plugin_file"].requirements == expected_dependencies
+    assert set(module_version_info["single_plugin_file"].requirements) == expected_dependencies
     assert len(module_version_info["single_plugin_file"].files_in_module) == 1
     assert len(module_version_info["multiple_plugin_files"].files_in_module) == 3
 

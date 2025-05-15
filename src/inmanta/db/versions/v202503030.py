@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import json
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -136,7 +135,7 @@ async def update(connection: Connection) -> None:
 
             assert isinstance(model_version, int)
 
-            for file_hash, file_data in json.loads(source_refs).items():  # type: ignore
+            for file_hash, file_data in source_refs.items():  # type: ignore
                 file_path, python_module_name, requirements = file_data
                 inmanta_module_name = python_module_name.split(".")[1]
                 assert isinstance(inmanta_module_name, str)
