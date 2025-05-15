@@ -21,7 +21,6 @@ import dataclasses
 import datetime
 import enum
 import itertools
-import json
 import uuid
 from collections import defaultdict
 from collections.abc import Mapping, Sequence, Set
