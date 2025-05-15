@@ -163,7 +163,7 @@ class ModuleFiles(Base):
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="module_files_environment_fkey"),
         ForeignKeyConstraint(
             ["file_content_hash"], ["file.content_hash"], ondelete="RESTRICT", name="module_files_file_content_hash_fkey"
-        ),  # todo add test for restrict behaviour on delete
+        ),
         UniqueConstraint("inmanta_module_name", "inmanta_module_version", "environment", "python_module_name"),
     )
     __mapper_args__ = {"primary_key": ["inmanta_module_name", "inmanta_module_version", "environment", "python_module_name"]}

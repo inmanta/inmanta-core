@@ -121,7 +121,7 @@ class ToDbUpdateManager(StateUpdateManager):
         self.client = client
 
     def get_connection(self, connection: Optional[Connection] = None) -> AbstractAsyncContextManager[Connection]:
-        return data.Scheduler.get_connection(connection)  # TODO I think ?
+        return data.Scheduler.get_connection(connection)
 
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         """
