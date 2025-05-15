@@ -26,7 +26,7 @@ from inmanta.stable_api import stable_api
 
 # This query assumes that the resource_persistent_state table is present in the query as rps.
 # It returns the status of the resource in the "status" field.
-RESOURCE_STATUS_QUERY: typing.LiteralString = """
+SQL_RESOURCE_STATUS_SELECTOR: typing.LiteralString = """
 (
     CASE
         WHEN rps.is_orphan
@@ -42,7 +42,7 @@ RESOURCE_STATUS_QUERY: typing.LiteralString = """
         ELSE
             rps.last_non_deploying_status::text
     END
-) AS status
+)
 """
 
 

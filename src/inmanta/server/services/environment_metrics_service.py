@@ -439,7 +439,7 @@ class ResourceCountMetricsCollector(MetricsCollector):
         query: str = f"""
             WITH resource_statuses AS (
                 SELECT r.environment,
-                {const.RESOURCE_STATUS_QUERY}
+                {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
                 FROM {Resource.table_name()} AS r
                 INNER JOIN public.resource_persistent_state AS rps
                     ON r.resource_id = rps.resource_id AND r.environment = rps.environment

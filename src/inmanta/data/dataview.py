@@ -581,7 +581,7 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                         rps.resource_id_value,
                         r.model,
                         rps.environment,
-                        {const.RESOURCE_STATUS_QUERY}
+                        {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
                     FROM versioned_resource_state AS rps
             -- LEFT join for trivial `COUNT(*)`. Not applicable when filtering orphans because left table contains orphans.
                     {'' if self.drop_orphans else 'LEFT'} JOIN resource AS r
