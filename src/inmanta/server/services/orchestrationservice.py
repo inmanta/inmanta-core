@@ -808,6 +808,8 @@ class OrchestrationService(protocol.ServerSlice):
 
                 await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
                 await cm.recalculate_total(connection=connection)
+                # Ensure there is a record for every resource in the resource_persistent_state table.
+                await data.ResourcePersistentState.populate_for_version(env.id, version, connection=connection)
 
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
@@ -1107,9 +1109,6 @@ class OrchestrationService(protocol.ServerSlice):
                             f"The version {version_id} on environment {env.id} "
                             f"is older then the latest released version {latest_version}."
                         )
-
-                    # Ensure there is a record for every resource in the resource_persistent_state table.
-                    await data.ResourcePersistentState.populate_for_version(env.id, version_id, connection=connection)
 
                     # # Already mark undeployable resources as deployed to create a better UX (change the version counters)
                     undep = model.get_undeployable()

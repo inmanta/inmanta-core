@@ -5067,7 +5067,7 @@ class Resource(BaseDocument):
         version: int,
         *,
         projection: Optional[Collection[typing.LiteralString]],
-        projection_persistent: Optional[Collection[typing.LiteralString]],
+        projection_persistent: Optional[Collection[typing.LiteralString]] = None,
         project_attributes: Optional[Collection[typing.LiteralString]] = None,
         connection: Optional[Connection] = None,
     ) -> list[dict[str, object]]:
@@ -5079,26 +5079,44 @@ class Resource(BaseDocument):
         all projections must be disjoint, as they become named fields in the output record
         """
 
+        include_rps = projection_persistent is not None
+        if projection and "status" in projection:
+            raise Exception(
+                "`status` is not a valid option in the `projection` argument, use it in the `projection_persistent` instead"
+            )
+
         def collect_projection(projection: Optional[Collection[str]], prefix: str) -> str:
             if not projection:
                 return f"{prefix}.*"
             else:
-                return ",".join(f"{prefix}.{field}" for field in projection)
+                # status is a special case
+                return ",".join(
+                    f"{prefix}.{field}" if field != "status" else const.RESOURCE_STATUS_QUERY for field in projection
+                )
 
         if project_attributes:
             json_projection = "," + ",".join(f"r.attributes->'{v}' as {v}" for v in project_attributes)
         else:
             json_projection = ""
 
+        join_on_rps = (
+            "JOIN resource_persistent_state rps ON r.environment=rps.environment AND r.resource_id = rps.resource_id"
+            if include_rps
+            else ""
+        )
         query = f"""
-        SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_persistent, 'rps')} {json_projection}
-        FROM {cls.table_name()} r JOIN resource_persistent_state rps
-                                    ON r.environment=rps.environment AND r.resource_id = rps.resource_id
+        SELECT {collect_projection(projection, 'r')},
+        {collect_projection(projection_persistent, 'rps') if include_rps else ''}
+        {json_projection}
+        FROM {cls.table_name()} r
+        {join_on_rps}
         WHERE r.environment=$1 AND r.model = $2;
         """
         resource_records = await cls._fetch_query(query, environment, version, connection=connection)
         resources = [dict(record) for record in resource_records]
         for res in resources:
+            if "attributes" in res:
+                res["attributes"] = json.loads(res["attributes"])
             if project_attributes:
                 for k in project_attributes:
                     if res[k]:
@@ -5922,7 +5940,6 @@ class ConfigurationModel(BaseDocument):
         projection_a_resource: list[typing.LiteralString] = [
             "resource_id",
             "attribute_hash",
-            "status",
         ]
         projection_a_state: list[typing.LiteralString] = [
             "last_success",
@@ -5930,9 +5947,9 @@ class ConfigurationModel(BaseDocument):
             "last_deployed_attribute_hash",
             "last_non_deploying_status",
             "last_deploy",
+            "status",
         ]
         projection_a_attributes: list[typing.LiteralString] = ["requires", const.RESOURCE_ATTRIBUTE_SEND_EVENTS]
-        projection: list[typing.LiteralString] = ["resource_id", "status", "attribute_hash"]
 
         # get resources for agent
         resources = await Resource.get_resources_for_version_raw_with_persistent_state(
@@ -5992,7 +6009,9 @@ class ConfigurationModel(BaseDocument):
             # todo in next version
             next = []
 
-            vresources = await Resource.get_resources_for_version_raw(environment, version, projection, connection=connection)
+            vresources = await Resource.get_resources_for_version_raw_with_persistent_state(
+                environment, version, projection=projection_a_resource, projection_persistent=["status"], connection=connection
+            )
             id_to_resource = {r["resource_id"]: r for r in vresources}
 
             for res in work:

@@ -677,10 +677,11 @@ class ResourceScheduler(TaskManager):
                     raise KeyError()
                 version = cm_version.version
 
-            resources_from_db = await data.Resource.get_resources_for_version_raw(
+            resources_from_db = await data.Resource.get_resources_for_version_raw_with_persistent_state(
                 environment=self.environment,
                 version=version,
-                projection=ResourceRecord.__required_keys__,
+                projection=["resource_id", "attributes", "attribute_hash"],
+                projection_persistent=["status"],
                 connection=con,
             )
 
@@ -716,7 +717,7 @@ class ResourceScheduler(TaskManager):
                 await data.Resource.get_resources_since_version_raw(
                     self.environment,
                     since=self._state.version,
-                    projection=ResourceRecord.__required_keys__,
+                    projection=["resource_id", "attributes", "status", "attribute_hash"],
                     connection=con,
                 )
             )

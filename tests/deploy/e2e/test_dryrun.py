@@ -448,6 +448,7 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
         compiler_version=get_compiler_version(),
     )
     assert result.code == 200
+    # await data.ResourcePersistentState.populate_for_version(uuid.UUID(environment), version)
     # Pause agent3
     result = await client.agent_action(tid=environment, name="agent3", action=AgentAction.pause.name)
     assert result.code == 200
