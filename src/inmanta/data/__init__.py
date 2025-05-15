@@ -6644,20 +6644,20 @@ class ExternalInitAsyncPG(PGDialect_asyncpg):
     created
     """
 
-    def on_connect(self):
+    def on_connect(self) -> None:
         return None
 
 
 registry.impls["postgresql.asyncpgnoi"] = lambda: ExternalInitAsyncPG
 
 
-async def asyncpg_on_connect(connection):
+async def asyncpg_on_connect(connection: asyncpg.Connection) -> None:
     """
     Helper method to configure json serialization/deserialization when
     initializing the database connection pool.
     """
 
-    def _json_decoder(bin_value):
+    def _json_decoder(bin_value: bytes) -> object:
         return json.loads(bin_value.decode())
 
     await connection.set_type_codec(
@@ -6668,12 +6668,12 @@ async def asyncpg_on_connect(connection):
         format="binary",
     )
 
-    def _jsonb_encoder(str_value):
+    def _jsonb_encoder(str_value: str) -> bytes:
         # \x01 is the prefix for jsonb used by PostgreSQL.
         # asyncpg requires it when format='binary'
         return b"\x01" + str_value.encode()
 
-    def _jsonb_decoder(bin_value):
+    def _jsonb_decoder(bin_value: bytes) -> object:
         # the byte is the \x01 prefix for jsonb used by PostgreSQL.
         # asyncpg returns it when format='binary'
         return json.loads(bin_value[1:].decode())
