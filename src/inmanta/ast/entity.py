@@ -362,14 +362,16 @@ class Entity(NamedType, WithComment):
         if not (value_definition is self or value_definition.is_subclass(self)):
             raise RuntimeException(None, f"Invalid class type for {value}, should be {self}")
 
-        if value.is_reference():
+        # A reference to a dataclass is not the same as a dataclass.
+        # A reference to a non-dataclass instance however, is simply an instance of references in the DSL.
+        # => allow references for non-dataclass entity types, or when the dataclass supports coercion.
+        if value.is_reference() and self.has_custom_to_python() and not self.can_coerce(value):
             # TODO: warning when coercing? Consider if it may be out of the user's control
-            if not self.can_coerce(value):
-                # TODO: better message
-                # TODO: get rid of this exception if it's no longer used, use more generic exception instead
-                raise UnexpectedReferenceValidationError(
-                    msg=f"{value} is a reference, should be {self}", reference=value.dataclass_self
-                )
+            # TODO: better message
+            # TODO: get rid of this exception if it's no longer used, use more generic exception instead
+            raise UnexpectedReferenceValidationError(
+                msg=f"{value} is a reference, should be {self}", reference=value.dataclass_self
+            )
 
         return True
 

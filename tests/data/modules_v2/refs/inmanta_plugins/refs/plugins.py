@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Annotated, Any
 
 from inmanta import plugins
@@ -14,6 +14,16 @@ type Entity = Annotated[Any, ModelType["std::Entity"]]
 @plugin
 def takes_obj(v: object) -> None:
     ...
+
+
+@plugin
+def takes_obj_ref(v: object | Reference[object]) -> None:
+    ...
+
+
+@plugin
+def takes_obj_ref_only(v: Reference[object]) -> None:
+    assert isinstance(v, Reference)
 
 
 @plugin
@@ -33,6 +43,12 @@ def iterates_obj_list(l: Sequence[object]) -> None:
 
 
 @plugin
+def iterates_obj_list(l: Sequence[object]) -> None:
+    for x in l:
+        ...
+
+
+@plugin
 def iterates_str_list(l: Sequence[str]) -> None:
     for x in l:
         assert isinstance(x, str), type(x)
@@ -42,6 +58,18 @@ def iterates_str_list(l: Sequence[str]) -> None:
 def iterates_str_ref_list(l: Sequence[str | Reference[str]]) -> None:
     for x in l:
         assert isinstance(x, (str, Reference)), type(x)
+
+
+@plugin
+def iterates_object_dict(l: Mapping[str, object]) -> None:
+    for x in l.values():
+        ...
+
+
+@plugin
+def iterates_object_ref_dict(l: Mapping[str, object | Reference[object]]) -> None:
+    for x in l.values():
+        ...
 
 
 @plugin

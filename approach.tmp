@@ -52,3 +52,7 @@ can afford to get them. But current implementation is as described above.
 When a non-dataclass instance has a reference attribute, and this attribute is accessed from the plugin domain
 (`DynamicProxy.__getattr__()`), we want to get a `Reference`, not a `DynamicProxy` wrapping a `Reference`.
 References live in the Python domain, so we should expose them as such.
+
+
+TODO: why no indexes for dataclasses: makes references in relations very difficult, because you can never know if it might compact the list, which may affect `len`, iteration, arity, ...
+TODO: object means any non-magic DSL value. Those need to be explicit

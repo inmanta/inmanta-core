@@ -45,6 +45,7 @@ from inmanta.ast import (
     RuntimeException,
     TypeNotFoundException,
     TypingException,
+    UndeclaredReference,
     UnsetException,
     WithComment,
 )
@@ -1002,6 +1003,13 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         converted_args = []
         is_unknown = False
 
+        def reference_exception_msg(value: object, arg: PluginArgument) -> PluginTypeException:
+            contains: str = "is" if isinstance(value, Reference) else "contains"
+            return (
+                f"Value {value!r} for argument {arg.arg_name} of plugin {self.get_full_name()} {contains} a reference."
+                " To allow references, use `| Reference[...]` in your type annotation."
+            )
+
         # Validate all positional arguments
         for position, value in enumerate(args):
             # (1) Get the corresponding argument, fails if we don't have one
@@ -1016,7 +1024,20 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                     result = validate_and_convert_to_python_domain(arg.resolved_type, value)
                 except (UnsetException, MultiUnsetException):
                     raise
+                except UndeclaredReference as e:
+                    raise PluginTypeException(
+                        stmt=None,
+                        msg=reference_exception_msg(value, arg),
+                        cause=e,
+                    )
                 except RuntimeException as e:
+                    # some validators do not recognize references specially. Best-effort to raise tailored error message.
+                    if isinstance(value, Reference) and not isinstance(arg.resolved_type, inmanta_type.ReferenceType):
+                        raise PluginTypeException(
+                            stmt=None,
+                            msg=reference_exception_msg(value, arg),
+                            cause=e,
+                        )
                     raise PluginTypeException(
                         stmt=None,
                         msg=(

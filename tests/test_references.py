@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import json
 import logging
 import os
+import re
 import typing
 from logging import DEBUG
 from uuid import UUID
@@ -28,12 +29,12 @@ import pytest
 from inmanta import env, references, resources, util
 from inmanta.agent.handler import PythonLogger
 from inmanta.ast import (
-    ExplicitPluginException,
     ExternalException,
     PluginTypeException,
     RuntimeException,
     TypingException,
     UndeclaredReference,
+    WrappingRuntimeException,
 )
 from inmanta.data.model import ReleasedResourceDetails, ReleasedResourceState
 from inmanta.export import ResourceDict
@@ -212,32 +213,48 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
 
     # Scenario: plugin argument annotated as `object`
     run_snippet(snippet="refs::plugins::takes_obj('hello')")
-    run_snippet(snippet="refs::plugins::takes_obj(refs::create_string_reference('name'))")
+    with pytest.raises(PluginTypeException, match="is a reference"):
+        run_snippet(snippet="refs::plugins::takes_obj(refs::create_string_reference('name'))")
+    # Scenario: plugin argument annotated as `object | Reference[object]`
+    run_snippet(snippet="refs::plugins::takes_obj_ref('hello')")
+    run_snippet(snippet="refs::plugins::takes_obj_ref(refs::create_string_reference('name'))")
+    # Scenario: plugin argument annotated as `Reference[object]`
+    with pytest.raises(PluginTypeException, match=re.escape("Expected type: Reference[any]")):
+        run_snippet(snippet="refs::plugins::takes_obj_ref_only('hello')")
+    run_snippet(snippet="refs::plugins::takes_obj_ref_only(refs::create_string_reference('name'))")
     # Scenario: plugin argument annotated as `str`
     run_snippet(snippet="refs::plugins::takes_str('hello')")
-    with pytest.raises(PluginTypeException):
+    with pytest.raises(PluginTypeException, match="is a reference"):
         run_snippet(snippet="refs::plugins::takes_str(refs::create_string_reference('name'))")
     # Scenario: plugin argument annotated as `str | Reference[str]`
     run_snippet(snippet="refs::plugins::takes_str_ref('hello')")
     run_snippet(snippet="refs::plugins::takes_str_ref(refs::create_string_reference('name'))")
-    with pytest.raises(PluginTypeException):
+    with pytest.raises(PluginTypeException, match=re.escape("Expected type: Reference[string]")):
         # takes a str ref, not a bool ref
         run_snippet(snippet="refs::plugins::takes_str_ref(refs::create_bool_reference('name'))")
     # Scenario: plugin argument annotated as `Sequence[object]`
     run_snippet(snippet="refs::plugins::iterates_obj_list(['h', 'e'])")
     run_snippet(snippet="refs::plugins::iterates_obj_list(['h', 1])")
-    run_snippet(snippet="refs::plugins::iterates_obj_list(['h', refs::create_string_reference('name')])")
+    with pytest.raises(PluginTypeException, match="contains a reference"):
+        run_snippet(snippet="refs::plugins::iterates_obj_list(['h', refs::create_string_reference('name')])")
     # Scenario: plugin argument annotated as `Sequence[str]`
     run_snippet(snippet="refs::plugins::iterates_str_list(['h', 'e'])")
-    with pytest.raises(PluginTypeException):
+    with pytest.raises(PluginTypeException, match=re.escape("Expected type: string[]")):
         run_snippet(snippet="refs::plugins::iterates_str_list(['h', 1])")
-    with pytest.raises(PluginTypeException):
+    with pytest.raises(PluginTypeException, match="contains a reference"):
         run_snippet(snippet="refs::plugins::iterates_str_list(['h', refs::create_string_reference('name')])")
     # Scenario: plugin argument annotated as `Sequence[str | Reference[str]]`
     run_snippet(snippet="refs::plugins::iterates_str_ref_list(['h', 'e'])")
-    with pytest.raises(PluginTypeException):
+    with pytest.raises(PluginTypeException, match=re.escape("Expected type: (Reference[string] | string)[]")):
         run_snippet(snippet="refs::plugins::iterates_str_ref_list(['h', 1])")
     run_snippet(snippet="refs::plugins::iterates_str_ref_list(['h', refs::create_string_reference('name')])")
+    # Scenario: plugin argument annotated as `Mapping[str, object]`
+    run_snippet(snippet="refs::plugins::iterates_object_dict({'h': 'h', 'e': 'e'})")
+    with pytest.raises(PluginTypeException, match="contains a reference"):
+        run_snippet(snippet="refs::plugins::iterates_object_dict({'h': 'h', 'e': refs::create_string_reference('name')})")
+    # Scenario: plugin argument annotated as `Mapping[str, object | Reference[object]]`
+    run_snippet(snippet="refs::plugins::iterates_object_ref_dict({'h': 'h', 'e': 'e'})")
+    run_snippet(snippet="refs::plugins::iterates_object_ref_dict({'h': 'h', 'e': refs::create_string_reference('name')})")
 
     # Entities
 
@@ -246,12 +263,9 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     ### dataclasses allowed
     run_snippet("refs::plugins::takes_entity(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
     run_snippet("refs::plugins::takes_entity(refs::dc::NoRefsDataclass())")
-    ### references not allowed
-    # TODO: does this really make sense? as far as the model is concerned it's an instance.
-    with pytest.raises(PluginTypeException):
-        run_snippet("refs::plugins::takes_entity(refs::dc::create_all_refs_dataclass_reference('hello'))")
-    with pytest.raises(PluginTypeException):
-        run_snippet("refs::plugins::takes_entity(refs::dc::create_no_refs_dataclass_reference())")
+    ### references allowed, as long as no reference attribute is accessed
+    run_snippet("refs::plugins::takes_entity(refs::dc::create_all_refs_dataclass_reference('hello'))")
+    run_snippet("refs::plugins::takes_entity(refs::dc::create_no_refs_dataclass_reference())")
     ## dataclass annotation that does not support reference attrs
     ### plain dataclass
     run_snippet("refs::plugins::takes_no_refs_dataclass(refs::dc::NoRefsDataclass())")
@@ -274,20 +288,13 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     ## no reference
     run_snippet("refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value='Hello World!'))")
     ## reference
-    with pytest.raises(ExplicitPluginException) as exc_info:
+    with pytest.raises(WrappingRuntimeException) as exc_info:
         run_snippet("refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
     assert isinstance(exc_info.value.__cause__, UndeclaredReference)
     assert isinstance(exc_info.value.__cause__.reference, Reference)
     ## reference, plugin explicitly allows it
     run_snippet("refs::plugins::read_entity_ref_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
-    # TODO: a test with Reference[Test] showing the same behavior
 
-
-
-    # TODO: what about references inside lists / dicts / ...
-    # TODO: test with legacy-style annotation for specific dataclass entity. What is expected? Proxy or dataclass? I think
-    #       proxy, but current implementation results in dataclass, also on master?
-    # TODO: round-trip references? e.g. std::flatten
     # TODO: inheritance on reference return type (declare generic, return specific -> model instance = specific)
     # TODO: inheritance on return type
     # TODO: reference to wrong dataclass value

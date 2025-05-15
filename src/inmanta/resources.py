@@ -26,7 +26,6 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
 import inmanta.ast
 import inmanta.util
 from inmanta import const, references
-from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
 from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
@@ -424,13 +423,17 @@ class Resource(metaclass=ResourceMeta):
         except inmanta.ast.UnknownException as e:
             return e.unknown
         except inmanta.ast.PluginException as e:
-            raise ExplicitPluginException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
-        except CompilerException:
+            raise inmanta.ast.ExplicitPluginException(
+                None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e
+            )
+        except inmanta.ast.CompilerException:
             # Internal exceptions (like UnsetException) should be propagated without being wrapped
             # as they are used later on and wrapping them would break the compiler
             raise
         except Exception as e:
-            raise ExternalException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
+            raise inmanta.ast.ExternalException(
+                None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e
+            )
 
     @classmethod
     def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: "proxy.DynamicProxy") -> "Resource":

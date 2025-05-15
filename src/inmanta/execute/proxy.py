@@ -220,7 +220,8 @@ class DynamicProxy:
         if isinstance(value, Reference):
             # TODO: string format accepts reference. Should also raise this exception
             raise UndeclaredReference(
-                (
+                reference=value,
+                message=(
                     "Encountered reference value in instance attribute. Plugins are only allowed to access reference values"
                     " when declared explicitly. Either use a dataclass entity that supports references (e.g."
                     " `int | Reference[int]` attribute annotation), or explicitly allow references on attribute access with the"
@@ -228,7 +229,6 @@ class DynamicProxy:
                     " `inmanta.plugins.allow_reference_attributes()` wrapper."
                     f" ({attribute}={value} on instance {self._get_instance()})"
                 ),
-                reference=value,
             )
 
         return DynamicProxy.return_value(value)

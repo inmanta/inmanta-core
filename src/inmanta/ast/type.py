@@ -26,6 +26,7 @@ from collections import defaultdict, deque
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Optional
 
+from inmanta import references
 from inmanta.ast import (
     DuplicateException,
     Locatable,
@@ -36,10 +37,10 @@ from inmanta.ast import (
     NotFoundException,
     RuntimeException,
     TypingException,
+    UndeclaredReference,
 )
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.util import AnyType, NoneValue, Unknown
-from inmanta.references import Reference
 from inmanta.stable_api import stable_api
 
 if TYPE_CHECKING:
@@ -82,11 +83,11 @@ class Type(Locatable):
         # in the DSL. Even non-reference instances may contain reference attributes so they get additional runtime validation
         # on plugin attribute access (see DynamicProxy.__getattr__). So we can simply pass dataclass references along as
         # the instances that they are in the DSL, without having to reject them here.
-        if isinstance(value, Reference):
+        if isinstance(value, references.Reference):
             # TODO: make this an UndeclaredReference exception. May require making it a RuntimeException instead of a
             #       PluginException
             # TODO: message
-            raise RuntimeException(None, "undeclared reference")
+            raise UndeclaredReference(reference=value, message="undeclared reference")
         return True
 
     def type_string(self) -> Optional[str]:
@@ -249,15 +250,15 @@ class ReferenceType(Type):
         # TODO: fix! Consider making a protocol with dataclass_self?
         from inmanta.execute.runtime import Instance
         # TODO: test cases for each of these
-        ref: Optional[Reference[object]] = (
+        ref: Optional[references.Reference[object]] = (
             value
-            if isinstance(value, Reference)
+            if isinstance(value, references.Reference)
             else value.dataclass_self
             if (
                 self.is_dataclass
                 and isinstance(value, Instance)
                 and value.dataclass_self is not None
-                and isinstance(value.dataclass_self, Reference)
+                and isinstance(value.dataclass_self, references.Reference)
             )
             else None
         )
@@ -268,11 +269,8 @@ class ReferenceType(Type):
 
         raise TypingException(None, f"Invalid value {value} is not a subtype of {self.type_string()}")
 
-    def type_string(self) -> Optional[str]:
-        return self.element_type.type_string()
-
     def type_string_internal(self) -> str:
-        return f"Reference[{self.element_type.type_string()}]"
+        return f"Reference[{self.element_type.type_string_internal()}]"
 
     def is_attribute_type(self) -> bool:
         return self.element_type.is_attribute_type()
@@ -321,17 +319,19 @@ class OrReferenceType(ReferenceType):
 
     def validate(self, value: Optional[object]) -> bool:
         # We validate that the value is either a reference of the base type or the base type
+        reference_type_exception: RuntimeException
         try:
             # Validate that we are the reference
             return super().validate(value)
-        except RuntimeException:
+        except RuntimeException as e:
             # If not, fine
-            pass
+            reference_type_exception = e
         # Validate that we are the base type
-        return self.element_type.validate(value)
-
-    def type_string(self) -> Optional[str]:
-        return self.element_type.type_string()
+        try:
+            return self.element_type.validate(value)
+        except UndeclaredReference:
+            # the value is a reference, just not the right type => raise the first error message instead.
+            raise reference_type_exception
 
     def type_string_internal(self) -> str:
         element = self.element_type.type_string()
@@ -439,7 +439,7 @@ class NullableType(Type):
         return self.element_type.validate(value)
 
     def _wrap_type_string(self, string: str) -> str:
-        return "%s?" % string
+        return f"({string})?" if " " in string else f"{string}?"
 
     def type_string(self) -> Optional[str]:
         base_type_string: Optional[str] = self.element_type.type_string()
@@ -608,6 +608,7 @@ class Number(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
+        super().validate(value)
         if isinstance(value, AnyType):
             return True
 
@@ -651,6 +652,7 @@ class Float(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
+        super().validate(value)
         if isinstance(value, AnyType):
             return True
 
@@ -686,6 +688,7 @@ class Integer(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
+        super().validate(value)
         if isinstance(value, AnyType):
             return True
 
@@ -718,6 +721,7 @@ class Bool(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
+        super().validate(value)
         if isinstance(value, AnyType):
             return True
         if isinstance(value, bool):
@@ -756,6 +760,7 @@ class String(Primitive):
         Validate the given value to check if it satisfies the constraints
         associated with this type
         """
+        super().validate(value)
         if isinstance(value, AnyType):
             return True
         if not isinstance(value, str):
@@ -870,7 +875,7 @@ class TypedList(List):
         return TypedList(base)
 
     def _wrap_type_string(self, string: str) -> str:
-        return "%s[]" % string
+        return f"({string})[]" if " " in string else f"{string}[]"
 
     def type_string(self) -> Optional[str]:
         element_type_string = self.element_type.type_string()
