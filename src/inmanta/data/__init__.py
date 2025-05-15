@@ -45,8 +45,6 @@ import typing_inspect
 from asyncpg import Connection
 from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
-from sqlalchemy.dialects import registry
-from sqlalchemy.dialects.postgresql.asyncpg import PGDialect_asyncpg
 
 import inmanta.db.versions
 import inmanta.protocol
@@ -72,6 +70,8 @@ from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
 from sqlalchemy import URL, AdaptedConnection, NullPool
+from sqlalchemy.dialects import registry
+from sqlalchemy.dialects.postgresql.asyncpg import PGDialect_asyncpg
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import ConnectionPoolEntry
 
@@ -6603,7 +6603,7 @@ async def connect_pool(
         min_size=connection_pool_min_size,
         max_size=connection_pool_max_size,
         timeout=connection_timeout,
-        init=asyncpg_on_connect
+        init=asyncpg_on_connect,
     )
     try:
         set_connection_pool(pool)
@@ -6632,6 +6632,7 @@ async def disconnect_pool() -> None:
     finally:
         BaseDocument.remove_connection_pool()
 
+
 class ExternalInitAsyncPG(PGDialect_asyncpg):
     """
     Define our own postgres dialect to use in engine initialization. The parent dialect
@@ -6646,13 +6647,16 @@ class ExternalInitAsyncPG(PGDialect_asyncpg):
     def on_connect(self):
         return None
 
-registry.impls["postgresql.asyncpgnoi"] = lambda:ExternalInitAsyncPG
+
+registry.impls["postgresql.asyncpgnoi"] = lambda: ExternalInitAsyncPG
+
 
 async def asyncpg_on_connect(connection):
     """
     Helper method to configure json serialization/deserialization when
     initializing the database connection pool.
     """
+
     def _json_decoder(bin_value):
         return json.loads(bin_value.decode())
 
