@@ -174,7 +174,7 @@ class Config:
     def _clear_jwt_config_cache(cls) -> None:
         """
         Clear the cached JWT config. This method must be called after (re)loading
-        the config, because it can cause the cache to become out of sync.
+        the config, because it can cause the cache to become stale.
         """
         from inmanta.protocol.auth import auth
 
