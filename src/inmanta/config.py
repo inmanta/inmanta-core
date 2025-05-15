@@ -245,6 +245,7 @@ class Config:
         if section not in cls.get_instance():
             cls.get_instance().add_section(section)
         cls.get_instance().set(section, name, value)
+        cls._clear_jwt_config_cache()
 
     @classmethod
     def register_option(cls, option: "Option") -> None:
