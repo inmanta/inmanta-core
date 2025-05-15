@@ -3885,7 +3885,7 @@ class Compile(BaseDocument):
                         returncode=compile["returncode"],
                     )
                 )
-            for name, url in (json.loads(compile["links"]) if requested_compile["links"] else {}).items():
+            for name, url in cast(dict[str, list[str]], compile.get("links", {})).items():
                 links[name].add(*url)
 
         return m.CompileDetails(
@@ -3899,20 +3899,16 @@ class Compile(BaseDocument):
             version=requested_compile["version"],
             do_export=requested_compile["do_export"],
             force_update=requested_compile["force_update"],
-            metadata=json.loads(requested_compile["metadata"]) if requested_compile["metadata"] else {},
-            environment_variables=(
-                json.loads(requested_compile["used_environment_variables"])
-                if requested_compile["used_environment_variables"] is not None
-                else {}
-            ),
-            requested_environment_variables=(json.loads(requested_compile["requested_environment_variables"])),
-            mergeable_environment_variables=(json.loads(requested_compile["mergeable_environment_variables"])),
+            metadata=requested_compile["metadata"] or {},
+            environment_variables=requested_compile["used_environment_variables"] or {},
+            requested_environment_variables=requested_compile["requested_environment_variables"],
+            mergeable_environment_variables=requested_compile["mergeable_environment_variables"],
             partial=requested_compile["partial"],
             removed_resource_sets=requested_compile["removed_resource_sets"],
             exporter_plugin=requested_compile["exporter_plugin"],
             notify_failed_compile=requested_compile["notify_failed_compile"],
             failed_compile_message=requested_compile["failed_compile_message"],
-            compile_data=json.loads(requested_compile["compile_data"]) if requested_compile["compile_data"] else None,
+            compile_data=requested_compile["compile_data"],
             reports=reports,
             links={key: sorted(list(links)) for key, links in links.items()},
         )
@@ -4067,19 +4063,9 @@ class ResourceAction(BaseDocument):
         if self.changes == {}:
             self.changes = None
 
-        # load message json correctly
         if from_postgres and self.messages:
             new_messages = []
             for message in self.messages:
-                # Not 100% sure why this is needed, could depend on whether the data is
-                # retrieved through sql alchemy (automatically deserializes json into dict)
-                # or through regular asyncpg queries (no automatic deserialization)
-                if isinstance(message, str):
-                    pass
-                    LOGGER.debug(f"GOT A STR {message=}")
-                if isinstance(message, dict):
-                    pass
-                    LOGGER.debug(f"GOT A DICT {message=}")
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
@@ -5084,7 +5070,6 @@ class Resource(BaseDocument):
                 async for record in con.cursor(query, *values):
                     if no_obj:
                         record = dict(record)
-                        record["attributes"] = json.loads(record["attributes"])
                         cls.__mangle_dict(record)
                         resources_list.append(record)
                     else:
@@ -5107,11 +5092,7 @@ class Resource(BaseDocument):
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
         resource_records = await cls._fetch_query(query, *values, connection=connection)
-        resources = [dict(record) for record in resource_records]
-        for res in resources:
-            if "attributes" in res:
-                res["attributes"] = json.loads(res["attributes"])
-        return resources
+        return [dict(record) for record in resource_records]
 
     @classmethod
     async def get_resources_since_version_raw(
@@ -5149,8 +5130,6 @@ class Resource(BaseDocument):
                     # left join produced no resources
                     continue
                 resource: dict[str, object] = dict(raw_resource)
-                if "attributes" in resource:
-                    resource["attributes"] = resource["attributes"]
                 if projection is not None:
                     assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
@@ -5330,7 +5309,7 @@ class Resource(BaseDocument):
             return None
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
-        attributes = json.loads(record["attributes"])
+        attributes = record["attributes"]
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
