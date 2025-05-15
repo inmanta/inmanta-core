@@ -568,6 +568,7 @@ class OrchestrationService(protocol.ServerSlice):
             # Populate status field
             if res_obj.resource_id in resource_state:
                 res_obj.status = const.ResourceState[resource_state[res_obj.resource_id]]
+                res_obj.is_undefined = const.ResourceState[resource_state[res_obj.resource_id]] == const.ResourceState.undefined
             # Populate resource_set field
             if res_obj.resource_id in resource_sets:
                 res_obj.resource_set = resource_sets[res_obj.resource_id]
