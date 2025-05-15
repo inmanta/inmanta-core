@@ -6,7 +6,7 @@ requires = [
     "build~=1.0",
     "click-plugins~=1.0",
     # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
-    "click>=8.0,<8.2",
+    "click>=8.0,<8.3",
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab>=0.23,<2.0",
@@ -36,7 +36,7 @@ requires = [
     "toml~=0.10 ",
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
-    "strawberry-sqlalchemy-mapper==0.6.0",
+    "strawberry-sqlalchemy-mapper==0.6.1",
 ]
 
 

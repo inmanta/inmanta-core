@@ -76,7 +76,13 @@ def test_references_in_model(
         import refs
         import std::testing
 
-        test_ref = refs::create_test(value=refs::create_string_reference(name="CWD"))
+        subref = refs::create_string_reference(name="CWD")
+        # Test equals method
+        subref = refs::create_string_reference(name="CWD")
+
+        test_ref = refs::create_test(value=subref)
+        # Test equals method, does not work on dataclasses
+        # test_ref = refs::create_test(value=refs::create_string_reference(name="CWD"))
 
         std::testing::NullResource(
             name="test",

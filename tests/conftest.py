@@ -788,7 +788,7 @@ async def server_config(
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
         config.Config.set("server", "auth", str(enable_auth).lower())
-        config.Config.set("server", "enforce-access-policy", str(enable_auth).lower())
+        config.Config.set("server", "authorization-provider", "policy-engine")
 
         # Configure the access policy. This will only be used if server.auth is enabled.
         os.mkdir(os.path.join(state_dir, "policy_engine"))
@@ -1720,7 +1720,7 @@ class CLI:
     async def run(self, *args, **kwargs):
         # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
-        runner = testing.CliRunner(mix_stderr=False)
+        runner = testing.CliRunner()
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
         cmd_args.extend(args)
 

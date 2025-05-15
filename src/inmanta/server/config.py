@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import enum
 import logging
 import warnings
 from typing import Optional
@@ -159,13 +160,39 @@ server_ssl_key = Option(
 server_ssl_cert = Option(
     "server", "ssl_cert_file", None, "SSL certificate file for the server key. Leave blank to disable SSL", is_str_opt
 )
-enforce_access_policy = Option(
+
+
+class AuthorizationProviderName(enum.Enum):
+    """
+    An enum that contains the possible values for the server.authorization_provider config option.
+    """
+
+    legacy = "legacy"
+    policy_engine = "policy-engine"
+
+
+def _is_authorization_provider(value: str) -> str:
+    f"""
+    str, valid values: {', '.join(a.value for a in AuthorizationProviderName)}
+    """
+    value = value.lower()
+    try:
+        AuthorizationProviderName(value)
+    except ValueError:
+        raise ValueError(
+            f"Invalid value for config option {authorization_provider.get_full_name()}: {value}."
+            f" Valid values: {', '.join(a.value for a in AuthorizationProviderName)}"
+        )
+    else:
+        return value
+
+
+authorization_provider = Option(
     "server",
-    "enforce-access-policy",
-    False,
-    "If True, the access policy defined by the policy-engine.policy-file config option will be enforced on the API."
-    " If False, any access will be allowed.",
-    is_bool,
+    "authorization-provider",
+    AuthorizationProviderName.legacy.value,
+    "The authorization provider that should be used if authentication is enabled.",
+    _is_authorization_provider,
 )
 
 
