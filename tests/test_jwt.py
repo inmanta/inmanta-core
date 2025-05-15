@@ -208,6 +208,7 @@ jwt_username_claim=name
         )
 
     # Make sure the config starts from a clean slate
+    auth.AuthJWTConfig.reset()
     config.Config.load_config(str(config_file))
     config.Config.set("client_rest_transport", "port", str(port))
 

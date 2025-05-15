@@ -37,12 +37,14 @@ from inmanta import logging as inmanta_logging
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, SkipResource, TResource, provider
 from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.config import log_dir
+from inmanta.data.model import AuthMethod
 from inmanta.db.util import PGRestore
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol.auth import auth
 from inmanta.protocol.auth.policy_engine import path_opa_executable, policy_file
 from inmanta.references import mutator, reference
 from inmanta.resources import PurgeableResource, Resource, resource
+from inmanta.server.config import AuthorizationProviderName
 from inmanta.tornado import LoopResolverWithUnixSocketSuppport
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
 from packaging.requirements import Requirement
@@ -696,7 +698,7 @@ def log_state_tcp_ports(request, log_file):
 
 
 @pytest.fixture
-async def enable_auth() -> bool:
+def enable_auth() -> bool:
     """
     A fixture that indicates whether the server_config fixture should
     set server.auth to true or false.
@@ -705,7 +707,23 @@ async def enable_auth() -> bool:
 
 
 @pytest.fixture
-async def access_policy() -> str:
+def auth_method() -> AuthMethod:
+    """
+    A fixture that returns the authentication method configured by the server_config fixture.
+    """
+    return AuthMethod.oidc
+
+
+@pytest.fixture
+def authorization_provider() -> AuthorizationProviderName:
+    """
+    A fixture that returns the authorization provider configured by the server_config fixture.
+    """
+    return AuthorizationProviderName.policy_engine
+
+
+@pytest.fixture
+def access_policy() -> str:
     """
     A fixture that returns the access policy configured by the server_config fixture.
     """
@@ -752,8 +770,10 @@ async def server_config(
     unused_tcp_port_factory,
     auto_start_agent,
     no_agent,
-    access_policy: str,
     enable_auth: bool,
+    auth_method: AuthMethod,
+    authorization_provider: AuthorizationProviderName,
+    access_policy: str,
     path_policy_engine_executable: str,
 ):
     reset_metrics()
@@ -787,17 +807,15 @@ async def server_config(
         config.Config.set("agent", "executor-mode", "forking")
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
-        config.Config.set("server", "auth", str(enable_auth).lower())
-        config.Config.set("server", "authorization-provider", "policy-engine")
-
-        # Configure the access policy. This will only be used if server.auth is enabled.
-        os.mkdir(os.path.join(state_dir, "policy_engine"))
-        access_policy_file = os.path.join(state_dir, "policy_engine", "policy.rego")
-        with open(access_policy_file, "w") as fh:
-            fh.write(access_policy)
-        policy_file.set(access_policy_file)
-        path_opa_executable.set(path_policy_engine_executable)
-
+        utils.configure_auth(
+            auth=enable_auth,
+            ca=False,
+            ssl=False,
+            authentication_method=auth_method,
+            authorization_provider=authorization_provider,
+            access_policy=access_policy,
+            path_opa_executable=path_policy_engine_executable,
+        )
         yield config
 
     agentmanager.assert_no_start_scheduler = False
@@ -844,12 +862,30 @@ async def server(server_pre_start, request, auto_start_agent) -> abc.AsyncIterat
     ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"],
 )
 async def server_multi(
-    server_pre_start, inmanta_config, postgres_db, database_name, request, clean_reset, unused_tcp_port_factory
+    server_pre_start,
+    inmanta_config,
+    postgres_db,
+    database_name,
+    request,
+    clean_reset,
+    unused_tcp_port_factory,
+    auth_method: AuthMethod,
+    authorization_provider: AuthorizationProviderName,
+    access_policy: str,
+    path_policy_engine_executable: str,
 ):
     with tempfile.TemporaryDirectory() as state_dir:
         ssl, auth, ca = request.param
 
-        utils.configure_auth(auth, ca, ssl)
+        utils.configure_auth(
+            auth=auth,
+            ca=ca,
+            ssl=ssl,
+            authentication_method=auth_method,
+            authorization_provider=authorization_provider,
+            access_policy=access_policy,
+            path_opa_executable=path_policy_engine_executable,
+        )
 
         # Config.set() always expects a string value
         pg_password = "" if postgres_db.password is None else postgres_db.password
