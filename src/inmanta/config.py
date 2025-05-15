@@ -100,7 +100,6 @@ class Config:
         """
         Load the configuration file
         """
-
         cfg_files_in_config_dir: list[str]
         if config_dir and os.path.isdir(config_dir):
             cfg_files_in_config_dir = sorted(
@@ -115,16 +114,13 @@ class Config:
         files: list[str]
         if min_c_config_file is not None:
             files = [main_cfg_file] + cfg_files_in_config_dir + local_dot_inmanta_cfg_files + [min_c_config_file]
-            cls._min_c_config_file = min_c_config_file
 
         else:
             files = [main_cfg_file] + cfg_files_in_config_dir + local_dot_inmanta_cfg_files
-            cls._min_c_config_file = None
 
         config = LenientConfigParser(interpolation=Interpolation())
         config.read(files)
-        cls.__instance = config
-        cls._config_dir = config_dir
+        cls._set_config(config, config_dir, min_c_config_file)
 
     @classmethod
     def load_config_from_dict(
@@ -137,8 +133,7 @@ class Config:
         """
         config = LenientConfigParser(interpolation=Interpolation())
         config.read_dict(input_config)
-        cls.__instance = config
-        cls._config_dir = None
+        cls._set_config(config, config_dir=None, min_c_config_file=None)
 
     @classmethod
     def config_as_dict(cls) -> typing.Mapping[str, typing.Mapping[str, typing.Any]]:
@@ -162,10 +157,28 @@ class Config:
         return cls._get_instance()
 
     @classmethod
+    def _set_config(cls, config: LenientConfigParser, config_dir: Optional[str], min_c_config_file: Optional[str]) -> None:
+        cls.__instance = config
+        cls._config_dir = config_dir
+        cls._min_c_config_file = min_c_config_file
+        cls._clear_jwt_config_cache()
+
+    @classmethod
     def _reset(cls) -> None:
         cls.__instance = None
         cls._config_dir = None
         cls._min_c_config_file = None
+        cls._clear_jwt_config_cache()
+
+    @classmethod
+    def _clear_jwt_config_cache(cls) -> None:
+        """
+        Clear the cached JWT config. This method must be called after (re)loading
+        the config, because it can cause the cache to become out of sync.
+        """
+        from inmanta.protocol.auth import auth
+
+        auth.AuthJWTConfig.reset()
 
     @overload
     @classmethod
