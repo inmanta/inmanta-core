@@ -120,7 +120,7 @@ class Config:
 
         config = LenientConfigParser(interpolation=Interpolation())
         config.read(files)
-        cls._set_config(config, config_dir, min_c_config_file)
+        cls._save_loaded_config(config, config_dir, min_c_config_file)
 
     @classmethod
     def load_config_from_dict(
@@ -133,7 +133,16 @@ class Config:
         """
         config = LenientConfigParser(interpolation=Interpolation())
         config.read_dict(input_config)
-        cls._set_config(config, config_dir=None, min_c_config_file=None)
+        cls._save_loaded_config(config, config_dir=None, min_c_config_file=None)
+
+    @classmethod
+    def _save_loaded_config(
+        cls, config: LenientConfigParser, config_dir: Optional[str], min_c_config_file: Optional[str]
+    ) -> None:
+        cls.__instance = config
+        cls._config_dir = config_dir
+        cls._min_c_config_file = min_c_config_file
+        cls._config_updated()
 
     @classmethod
     def config_as_dict(cls) -> typing.Mapping[str, typing.Mapping[str, typing.Any]]:
@@ -157,27 +166,21 @@ class Config:
         return cls._get_instance()
 
     @classmethod
-    def _set_config(cls, config: LenientConfigParser, config_dir: Optional[str], min_c_config_file: Optional[str]) -> None:
-        cls.__instance = config
-        cls._config_dir = config_dir
-        cls._min_c_config_file = min_c_config_file
-        cls._clear_jwt_config_cache()
-
-    @classmethod
     def _reset(cls) -> None:
         cls.__instance = None
         cls._config_dir = None
         cls._min_c_config_file = None
-        cls._clear_jwt_config_cache()
+        cls._config_updated()
 
     @classmethod
-    def _clear_jwt_config_cache(cls) -> None:
+    def _config_updated(cls) -> None:
         """
-        Clear the cached JWT config. This method must be called after (re)loading
-        the config, because it can cause the cache to become stale.
+        This method must be called every time the configuration is updated.
         """
         from inmanta.protocol.auth import auth
 
+        # Clear the cached JWT config. It might have become out of sync with
+        # the configuration in this class.
         auth.AuthJWTConfig.reset()
 
     @overload
@@ -245,7 +248,7 @@ class Config:
         if section not in cls.get_instance():
             cls.get_instance().add_section(section)
         cls.get_instance().set(section, name, value)
-        cls._clear_jwt_config_cache()
+        cls._config_updated()
 
     @classmethod
     def register_option(cls, option: "Option") -> None:
