@@ -4812,13 +4812,14 @@ class Resource(BaseDocument):
         Fetches the states of all the resources in the given environment, excluding orphans
         """
         query = f"""
-            SELECT
+            SELECT DISTINCT ON (r.resource_id)
                 r.model,
-                rps.resource_id,
+                r.resource_id,
                 {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
             FROM {Resource.table_name()} AS r
                 INNER JOIN resource_persistent_state AS rps ON rps.environment=r.environment AND r.resource_id=rps.resource_id
             WHERE r.environment=$1 AND NOT rps.is_orphan
+            ORDER BY r.resource_id, r.model DESC
         """
         results = await cls.select_query(query, [env], no_obj=True, connection=connection)
         if not results:
