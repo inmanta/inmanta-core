@@ -6654,14 +6654,26 @@ async def disconnect_pool() -> None:
         BaseDocument.remove_connection_pool()
 
 class ExternalInitAsyncPG(PGDialect_asyncpg):
+    """
+    Define our own postgres dialect to use in engine initialization. The parent dialect
+    reconfigures json serialization/deserialization each time a connection is
+    checked out from the pool.
+
+    Overwriting the on_connect method here removes this redundant behaviour. The
+    configuration for json serialization is set once when the asyncpg pool is
+    created
+    """
 
     def on_connect(self):
         return None
 
-#registry.register("postgresql.asyncpgnoi", "pooltest", "ExternalInitAsyncPG")
 registry.impls["postgresql.asyncpgnoi"] = lambda:ExternalInitAsyncPG
 
 async def asyncpg_on_connect(connection):
+    """
+    Helper method to configure json serialization/deserialization when
+    initializing the database connection pool.
+    """
     def _json_decoder(bin_value):
         return json.loads(bin_value.decode())
 
