@@ -94,9 +94,10 @@ class OpenApiConverter:
         for path, methods in self.global_url_map.items():
             api_methods = self._filter_api_methods(methods)
             if len(api_methods) > 0:
-                path_in_openapi_format = self._format_path(path)
-                path_item = self._extract_operations_from_methods(api_methods, path_in_openapi_format)
-                paths[path_in_openapi_format] = path_item
+                url_method: UrlMethod = next(iter(methods.values()))
+                parameterized_path: str = url_method.get_path()
+                path_item = self._extract_operations_from_methods(api_methods, parameterized_path)
+                paths[parameterized_path] = path_item
         security: list[dict[SecuritySchemeName, list[Scope]]] | None = (
             # Set the security scheme globally for all endpoints.
             [{schema_name: []} for schema_name in self.type_converter.components.securitySchemes]
@@ -118,9 +119,6 @@ class OpenApiConverter:
             for method_name, url_method in methods.items()
             if "api" in url_method.properties.client_types
         }
-
-    def _format_path(self, path: str) -> str:
-        return path.replace("(?P<", "{").replace(">[^/]+)", "}")
 
     def _extract_operations_from_methods(self, api_methods: dict[str, UrlMethod], path: str) -> PathItem:
         path_item = PathItem()
@@ -354,7 +352,7 @@ class FunctionParameterHandler:
         self.non_path_and_non_header_params: dict[str, inspect.Parameter] = {}
 
         for param_name, param in self.all_params_dct.items():
-            if f"{{{param_name}}}" in self.path:
+            if f"<{param_name}>" in self.path:
                 self.path_params[param_name] = param
             elif (
                 param_name in self.method_properties.arg_options.keys()
