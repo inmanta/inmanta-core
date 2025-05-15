@@ -295,7 +295,7 @@ class ModelState:
             resource_intent = ResourceIntent(
                 resource_id=resource_id,
                 attribute_hash=res["attribute_hash"],
-                attributes=json.loads(res["attributes"]),
+                attributes=res["attributes"],
             )
             result.intent[resource_id] = resource_intent
 

@@ -45,6 +45,8 @@ import typing_inspect
 from asyncpg import Connection
 from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
+from sqlalchemy.dialects import registry
+from sqlalchemy.dialects.postgresql.asyncpg import PGDialect_asyncpg
 
 import inmanta.db.versions
 import inmanta.protocol
@@ -1145,14 +1147,13 @@ class Field(Generic[T]):
 
         # asyncpg does not convert a jsonb field to a dict
         if isinstance(value, str) and self.field_type is dict:
-            return json.loads(value)
+            return value
         # asyncpg does not convert an enum field to an enum type
         if isinstance(value, str) and issubclass(self.field_type, enum.Enum):
             return self.field_type[value]
         # decode typed json
-        if isinstance(value, str) and issubclass(self.field_type, pydantic.BaseModel):
-            jsv = json.loads(value)
-            return self.field_type(**jsv)
+        if isinstance(value, dict) and issubclass(self.field_type, pydantic.BaseModel):
+            return self.field_type(**value)
         if self.field_type == pydantic.AnyHttpUrl:
             return pydantic.TypeAdapter(pydantic.AnyHttpUrl).validate_python(value)
 
@@ -4079,7 +4080,6 @@ class ResourceAction(BaseDocument):
                 if isinstance(message, dict):
                     pass
                     LOGGER.debug(f"GOT A DICT {message=}")
-                message = json.loads(message)
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
@@ -5150,7 +5150,7 @@ class Resource(BaseDocument):
                     continue
                 resource: dict[str, object] = dict(raw_resource)
                 if "attributes" in resource:
-                    resource["attributes"] = json.loads(resource["attributes"])
+                    resource["attributes"] = resource["attributes"]
                 if projection is not None:
                     assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
@@ -5195,11 +5195,6 @@ class Resource(BaseDocument):
         """
         resource_records = await cls._fetch_query(query, environment, version, connection=connection)
         resources = [dict(record) for record in resource_records]
-        for res in resources:
-            if project_attributes:
-                for k in project_attributes:
-                    if res[k]:
-                        res[k] = json.loads(res[k])
         return resources
 
     @classmethod
@@ -6629,6 +6624,7 @@ async def connect_pool(
         min_size=connection_pool_min_size,
         max_size=connection_pool_max_size,
         timeout=connection_timeout,
+        init=asyncpg_on_connect
     )
     try:
         set_connection_pool(pool)
@@ -6656,6 +6652,44 @@ async def disconnect_pool() -> None:
         raise
     finally:
         BaseDocument.remove_connection_pool()
+
+class ExternalInitAsyncPG(PGDialect_asyncpg):
+
+    def on_connect(self):
+        return None
+
+#registry.register("postgresql.asyncpgnoi", "pooltest", "ExternalInitAsyncPG")
+registry.impls["postgresql.asyncpgnoi"] = lambda:ExternalInitAsyncPG
+
+async def asyncpg_on_connect(connection):
+    def _json_decoder(bin_value):
+        return json.loads(bin_value.decode())
+
+    await connection.set_type_codec(
+        "json",
+        encoder=str.encode,
+        decoder=_json_decoder,
+        schema="pg_catalog",
+        format="binary",
+    )
+
+    def _jsonb_encoder(str_value):
+        # \x01 is the prefix for jsonb used by PostgreSQL.
+        # asyncpg requires it when format='binary'
+        return b"\x01" + str_value.encode()
+
+    def _jsonb_decoder(bin_value):
+        # the byte is the \x01 prefix for jsonb used by PostgreSQL.
+        # asyncpg returns it when format='binary'
+        return json.loads(bin_value[1:].decode())
+
+    await connection.set_type_codec(
+        "jsonb",
+        encoder=_jsonb_encoder,
+        decoder=_jsonb_decoder,
+        schema="pg_catalog",
+        format="binary",
+    )
 
 
 async def start_engine(
@@ -6702,7 +6736,7 @@ async def start_engine(
     )
 
     url_object = URL.create(
-        drivername="postgresql+asyncpg",
+        drivername="postgresql+asyncpgnoi",
         username=database_username,
         password=database_password,
         host=database_host,
