@@ -1104,12 +1104,11 @@ class PluginException(Exception):
 
 
 # custom class to enable clean wrapping on the plugin boundary
-# TODO: name?
-class UndeclaredReference(references.UnexpectedReferenceException, PluginException):
+class UndeclaredReference(PluginException, references.UnexpectedReferenceException):
     """
     Undeclared reference encountered during plugin execution.
     """
 
-    def __init__(self, message, reference: references.Reference[references.RefValue]) -> None:
-        references.UnexpectedReferenceException.__init__(self, message, reference)
+    def __init__(self, *, reference: references.Reference[references.RefValue], message: str) -> None:
         PluginException.__init__(self, message)
+        references.UnexpectedReferenceException.__init__(self, message, reference)

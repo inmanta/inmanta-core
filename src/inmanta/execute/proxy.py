@@ -218,14 +218,12 @@ class DynamicProxy:
         # TODO: allow_references() name
         # => don't allow references in attributes. Can be explicitly allowed via allow_references() wrapper
         if isinstance(value, Reference):
-            # TODO: message
             # TODO: string format accepts reference. Should also raise this exception
-            # TODO: move part of this message to UndeclaredReference class?
             raise UndeclaredReference(
                 (
-                    "Encountered reference attribute in instance. Plugins are only allowed to access reference attributes"
-                    " when declared explicitly. Either use a dataclass entity with attributes annotated with declared reference"
-                    " attributes (e.g. `int | Reference[int]`), or explicitly allow references on attribute access with the"
+                    "Encountered reference value in instance attribute. Plugins are only allowed to access reference values"
+                    " when declared explicitly. Either use a dataclass entity that supports references (e.g."
+                    " `int | Reference[int]` attribute annotation), or explicitly allow references on attribute access with the"
                     # TODO: name
                     " `inmanta.plugins.allow_reference_attributes()` wrapper."
                     f" ({attribute}={value} on instance {self._get_instance()})"

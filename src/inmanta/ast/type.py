@@ -73,6 +73,20 @@ class Type(Locatable):
         Validate the given value to check if it satisfies the constraints associated with this type. Returns true iff
         validation succeeds, otherwise raises a :py:class:`inmanta.ast.RuntimeException`.
         """
+        # `object` / `"any"` allow all standard DSL values
+        # (and even not-officially-supported opaque values from plugin returns).
+        # Special DSL values like references require an explicit annotation so we don't leak them where they aren't expected.
+        # TODO: link ticket to do the same for Unknown
+        #
+        # References to dataclasses are even more of a special case in the sense that they are represented as plain instances
+        # in the DSL. Even non-reference instances may contain reference attributes so they get additional runtime validation
+        # on plugin attribute access (see DynamicProxy.__getattr__). So we can simply pass dataclass references along as
+        # the instances that they are in the DSL, without having to reject them here.
+        if isinstance(value, Reference):
+            # TODO: make this an UndeclaredReference exception. May require making it a RuntimeException instead of a
+            #       PluginException
+            # TODO: message
+            raise RuntimeException(None, "undeclared reference")
         return True
 
     def type_string(self) -> Optional[str]:
