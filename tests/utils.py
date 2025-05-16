@@ -60,6 +60,7 @@ from inmanta.deploy.state import ResourceIntent
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
 from inmanta.protocol.auth import policy_engine
+from inmanta.protocol.auth import auth
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.config import AuthorizationProviderName, server_auth_method
 from inmanta.server.extensions import ProductMetadata
@@ -1132,3 +1133,31 @@ def validate_version_numbers_migration_scripts(versions_folder: pathlib.Path) ->
         if not re.fullmatch(r"v([0-9]{9})\.py", file_name):
             raise Exception(f"Database migration script {file_name} has invalid format.")
     assert v1_found
+
+
+def get_auth_client(
+    env_to_role_dct: dict[str, str], is_admin: bool, client_types: abc.Sequence[const.ClientType] | None = None
+) -> protocol.Client:
+    """
+    Returns a client that uses an access token to authenticate to the server.
+
+    This method changes the `client_rest_transport.token` config option.
+
+    :param env_to_role_dct: A dictionary that maps the id of an environment to a list of roles that user has
+                            in that environment.
+    :param id_admin: A boolean that indicates whether the user is a global admin.
+    :param client_type: A sequence of client_types that should be included in the token.
+    """
+    if client_types is None:
+        client_types = [const.ClientType.api]
+    token = auth.encode_token(
+        client_types=[c.value for c in client_types],
+        expire=None,
+        custom_claims={
+            f"{const.INMANTA_URN}roles": env_to_role_dct,
+            f"{const.INMANTA_URN}is-admin": is_admin,
+        },
+    )
+    config.Config.set("client_rest_transport", "token", token)
+    return protocol.Client("client")
+

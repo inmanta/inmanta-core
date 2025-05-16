@@ -138,9 +138,7 @@ noc_specific_labels := {
     "environment.halt-resume",
     "notification.write",
 }
-all_noc_labels := {
-    label | some set in {read_only_labels, noc_specific_labels} some label in set
-}
+all_noc_labels := read_only_labels | noc_specific_labels
 
 allowed if {
     "noc" in input.token["urn:inmanta:roles"][request_environment]
@@ -154,9 +152,7 @@ operator_specific_labels := {
     "lsm.instance.write",
     "lsm.order.write",
 }
-all_operator_labels := {
-    label | some set in {all_noc_labels, operator_specific_labels} some label in set
-}
+all_operator_labels := all_noc_labels | operator_specific_labels
 
 allowed if {
     "operator" in input.token["urn:inmanta:roles"][request_environment]
@@ -177,9 +173,7 @@ admin_specific_labels := {
     "lsm.instance.migrate",
 }
 
-all_admin_labels := {
-    label | some set in {all_operator_labels, admin_specific_labels} some label in set
-}
+all_admin_labels := all_operator_labels | admin_specific_labels
 
 allowed if {
     "environment-admin" in input.token["urn:inmanta:roles"][request_environment]
@@ -197,9 +191,7 @@ expert_admin_specific_labels := {
     "environment.delete",
 }
 
-all_expert_admin_labels := {
-    label | some set in {all_operator_labels, expert_admin_specific_labels} some label in set
-}
+all_expert_admin_labels := all_operator_labels | expert_admin_specific_labels
 
 allowed if {
     "environment-expert-admin" in input.token["urn:inmanta:roles"][request_environment]

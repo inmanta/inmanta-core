@@ -31,6 +31,7 @@ from inmanta.protocol.auth import auth, decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.server import config as server_config
 from inmanta.server import protocol
+import utils
 
 
 @pytest.fixture
@@ -151,24 +152,6 @@ async def server_with_test_slice(
     await rs.stop()
 
 
-def get_client_with_role(
-    env_to_role_dct: dict[str, str], is_admin: bool, client_type: const.ClientType = const.ClientType.api
-) -> protocol.Client:
-    """
-    Returns a client that uses an access token for the given role.
-    """
-    token = auth.encode_token(
-        client_types=[str(client_type.value)],
-        expire=None,
-        custom_claims={
-            f"{const.INMANTA_URN}roles": env_to_role_dct,
-            f"{const.INMANTA_URN}is-admin": is_admin,
-        },
-    )
-    config.Config.set("client_rest_transport", "token", token)
-    return protocol.Client("client")
-
-
 @pytest.mark.parametrize(
     "access_policy",
     [
@@ -219,7 +202,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     """
     env_id = "11111111-1111-1111-1111-111111111111"
 
-    client = get_client_with_role(env_to_role_dct={env_id: "read-only"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: "read-only"}, is_admin=False)
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
@@ -229,7 +212,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     result = await client.admin_only_method()
     assert result.code == 403
 
-    client = get_client_with_role(env_to_role_dct={env_id: "read-write"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: "read-write"}, is_admin=False)
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
@@ -239,7 +222,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     result = await client.admin_only_method()
     assert result.code == 403
 
-    client = get_client_with_role(env_to_role_dct={env_id: "user"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: "user"}, is_admin=False)
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
@@ -249,7 +232,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     result = await client.admin_only_method()
     assert result.code == 403
 
-    client = get_client_with_role(env_to_role_dct={}, is_admin=True)
+    client = utils.get_auth_client(env_to_role_dct={}, is_admin=True)
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
@@ -282,12 +265,12 @@ async def test_fallback_to_legacy_provider(server_with_test_slice: protocol.Serv
     to the legacy authorization provider.
     """
     # ClientType == api -> Use policy engine authorization provider
-    client = get_client_with_role(env_to_role_dct={}, is_admin=False, client_type=const.ClientType.api)
+    client = utils.get_auth_client(env_to_role_dct={}, is_admin=False, client_types=[const.ClientType.api])
     result = await client.read_only_method()
     assert result.code == 403
 
     # ClientType == compiler -> Use legacy authorization provider
-    client = get_client_with_role(env_to_role_dct={}, is_admin=False, client_type=const.ClientType.compiler)
+    client = utils.get_auth_client(env_to_role_dct={}, is_admin=False, client_types=[const.ClientType.compiler])
     result = await client.read_only_method()
     assert result.code == 200
 
@@ -333,7 +316,7 @@ async def test_authorization_providers(server_with_test_slice: protocol.Server, 
     """
     Verify the behavior of the different authorization providers.
     """
-    client = get_client_with_role(env_to_role_dct={}, is_admin=False, client_type=const.ClientType.api)
+    client = utils.get_auth_client(env_to_role_dct={}, is_admin=False, client_types=[const.ClientType.api])
     result = await client.read_only_method()
     match server_config.AuthorizationProviderName(authorization_provider):
         case server_config.AuthorizationProviderName.legacy:
@@ -366,7 +349,7 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     monkeypatch.setattr(policy_engine.PolicyEngine, "does_satisfy_access_policy", save_input_data)
 
     env_id = "11111111-1111-1111-1111-111111111111"
-    client = get_client_with_role(env_to_role_dct={env_id: "read-write"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: "read-write"}, is_admin=False)
     result = await client.environment_scoped_method(env_id)
     assert result.code == 200
     assert input_policy_engine is not None
@@ -385,7 +368,7 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     assert token["urn:inmanta:roles"] == {env_id: "read-write"}
     assert token["urn:inmanta:is-admin"] is False
 
-    client = get_client_with_role(env_to_role_dct={}, is_admin=True)
+    client = utils.get_auth_client(env_to_role_dct={}, is_admin=True)
     input_policy_engine = None
     result = await client.read_only_method()
     assert result.code == 200
@@ -610,7 +593,7 @@ async def test_get_input_for_policy_engine(capture_input_for_policy_engine: Capt
     Verify that the input, provided to the policy engine, looks as expected.
     """
     env_id = str(uuid.uuid4())
-    client = get_client_with_role(env_to_role_dct={env_id: "test"}, is_admin=False, client_type=const.ClientType.api)
+    client = utils.get_auth_client(env_to_role_dct={env_id: "test"}, is_admin=False, client_types=[const.ClientType.api])
 
     arg1 = uuid.uuid4()
     arg2 = "test"
