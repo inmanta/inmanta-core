@@ -383,6 +383,7 @@ class Resource(metaclass=ResourceMeta):
                 )
 
         attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
+        # TODO: what about references? What about nested references? Call map_field in strict mode?
         if isinstance(attribute_value, util.Unknown):
             raise inmanta.ast.UnknownException(attribute_value)
         if not isinstance(agent_value, str):
@@ -409,7 +410,10 @@ class Resource(metaclass=ResourceMeta):
             elif hasattr(cls, "map") and field_name in cls.map:
                 value = cls.map[field_name](exporter, model_object)
             else:
-                value = getattr(model_object, field_name)
+                try:
+                    value = getattr(model_object, field_name)
+                except inmanta.ast.UndeclaredReference as e:
+                    value = e.reference
 
             # walk the entire model to find any value references. Additionally we also want to make sure we raise exceptions on:
             # - Unknowns

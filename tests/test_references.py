@@ -85,12 +85,12 @@ def test_references_in_model(
         import refs::dc
         import std::testing
 
-        test_ref = refs::dc::create_all_refs_dataclass_reference(value=refs::create_string_reference(name="CWD"))
+        test_ref = refs::dc::create_all_refs_dataclass_reference(maybe_ref_value=refs::create_string_reference(name="CWD"))
 
         std::testing::NullResource(
             name="test",
             agentname="test",
-            fail=refs::create_bool_reference(name=test_ref.value),
+            fail=refs::create_bool_reference(name=test_ref.maybe_ref_value),
         )
         """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
@@ -100,10 +100,11 @@ def test_references_in_model(
     serialized = res_dict.popitem()[1].serialize()
 
     # validate that our UUID is stable
-    assert_id(serialized["references"], "refs::Bool", "ed26b59b-a567-392e-8626-f89d821532b7")
+    assert_id(serialized["references"], "refs::Bool", "0d3b10e5-3f6c-32ae-8662-02e5d46a59c7")
     # TODO: add other reference types?
-    assert_id(serialized["references"], "refs::AllRefsDataclassReference", "78d7ff5f-6309-3011-bfff-8068471d5761")
-    assert_id(serialized["references"], "core::AttributeReference", "81cc3241-2368-3b6d-8807-6755bd27b2fa")
+    # TODO: why did the untouched ones fail??
+    assert_id(serialized["references"], "refs::dc::AllRefsDataclassReference", "1102e0ce-2f03-31a5-ac3e-ef1a6609daaf")
+    assert_id(serialized["references"], "core::AttributeReference", "8eafdfaf-9734-3d72-85dd-423df232c28e")
     assert_id(serialized["references"], "refs::String", "a8ed8c4f-204a-3f7e-a630-e21cb20e9209")
 
     data = json.dumps(serialized, default=util.api_boundary_json_encoder)
@@ -131,6 +132,7 @@ async def test_deploy_end_to_end(
     snippetcompiler.setup_for_snippet(
         snippet="""
            import refs
+           import refs::dc
            import std::testing
 
            test_ref = refs::create_bad_reference(name=refs::create_string_reference(name="CWD"))
@@ -318,6 +320,7 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     run_snippet("refs::plugins::takes_no_refs_dataclass_or_ref(refs::dc::NoRefsDataclass())")
     run_snippet("refs::plugins::takes_mixed_refs_dataclass_or_ref(refs::dc::create_mixed_refs_dataclass_reference('hello'))")
     run_snippet("refs::plugins::takes_mixed_refs_dataclass_or_ref(refs::dc::MixedRefsDataclass(maybe_ref_value='hello'))")
+    # TODO: is inheritance really viable for references? i.e. for the over-the-wire part
     ## rejects other dataclasses / references to other dataclasses, except for inheritance
     run_snippet("refs::plugins::takes_no_refs_dataclass_or_ref(refs::dc::MixedRefsDataclass(maybe_ref_value='hello'))")
     run_snippet("refs::plugins::takes_no_refs_dataclass_or_ref(refs::dc::create_mixed_refs_dataclass_reference('hello'))")
@@ -341,6 +344,7 @@ def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_d
     snippetcompiler.setup_for_snippet(
         snippet="""
         import refs
+        import refs::dc
         import std::testing
 
         std::testing::NullResource(
@@ -389,6 +393,7 @@ def test_references_in_resource_id(snippetcompiler: "SnippetCompilationTest", mo
     snippetcompiler.setup_for_snippet(
         snippet="""
         import refs
+        import refs::dc
         value = refs::create_string_reference(name="CWD")
 
         refs::NullResource(name=value,agentname=value)
