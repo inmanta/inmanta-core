@@ -177,7 +177,7 @@ class Config:
         """
         This method must be called every time the configuration is updated.
         """
-        from inmanta.protocol.auth import auth
+        from inmanta.protocol import auth
 
         # Clear the cached JWT config. It might have become out of sync with
         # the configuration in this class.
