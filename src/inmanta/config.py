@@ -98,7 +98,6 @@ class Config:
         """
         Load the configuration file
         """
-
         cfg_files_in_config_dir: list[str]
         if config_dir and os.path.isdir(config_dir):
             cfg_files_in_config_dir = sorted(
@@ -118,8 +117,13 @@ class Config:
 
         config = LenientConfigParser(interpolation=Interpolation())
         config.read(files)
+        cls._save_loaded_config(config, config_dir)
+
+    @classmethod
+    def _save_loaded_config(cls, config: LenientConfigParser, config_dir: Optional[str]) -> None:
         cls.__instance = config
         cls._config_dir = config_dir
+        cls._config_updated()
 
     @classmethod
     def _get_instance(cls) -> ConfigParser:
@@ -138,6 +142,18 @@ class Config:
     def _reset(cls) -> None:
         cls.__instance = None
         cls._config_dir = None
+        cls._config_updated()
+
+    @classmethod
+    def _config_updated(cls) -> None:
+        """
+        This method must be called every time the configuration is updated.
+        """
+        from inmanta.protocol import auth
+
+        # Clear the cached JWT config. It might have become out of sync with
+        # the configuration in this class.
+        auth.AuthJWTConfig.reset()
 
     @overload
     @classmethod
@@ -203,6 +219,7 @@ class Config:
         if section not in cls.get_instance():
             cls.get_instance().add_section(section)
         cls.get_instance().set(section, name, value)
+        cls._config_updated()
 
     @classmethod
     def register_option(cls, option: "Option") -> None:
