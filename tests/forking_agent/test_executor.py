@@ -37,6 +37,7 @@ from inmanta.agent import executor
 from inmanta.agent.executor import ExecutorBlueprint
 from inmanta.agent.forking_executor import MPManager
 from inmanta.data import PipConfig
+from inmanta.data.model import ModuleSourceMetadata
 from inmanta.protocol.ipc_light import ConnectionLost
 from utils import NOISY_LOGGERS, log_contains, retry_limited
 
@@ -131,7 +132,7 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
         sources=[],
         python_version=sys.version_info[:2],
     )  # No pip
-    simplest = await manager.get_executor("agent1", "test", [executor.ResourceInstallSpec("test::Test", 5, simplest_blueprint)])
+    simplest = await manager.get_executor("agent1", "test", [executor.ModuleInstallSpec("test", "123456", simplest_blueprint)])
 
     # check communications
     result = await simplest.call(Echo(["aaaa"]))
@@ -148,8 +149,13 @@ def test():
     """.encode(
         "utf-8"
     )
-    direct = inmanta.loader.ModuleSource(
-        "inmanta_plugins.test.testA", inmanta.util.hash_file(direct_content), False, direct_content
+    direct = inmanta.data.model.ModuleSource(
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.test.testA",
+            hash_value=inmanta.util.hash_file(direct_content),
+            is_byte_code=False,
+        ),
+        source=direct_content,
     )
     # Via server: source is sent via server
     server_content = """
@@ -159,7 +165,14 @@ def test():
         "utf-8"
     )
     server_content_hash = inmanta.util.hash_file(server_content)
-    via_server = inmanta.loader.ModuleSource("inmanta_plugins.test.testB", server_content_hash, False)
+    via_server = inmanta.data.model.ModuleSource(
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.test.testB",
+            hash_value=server_content_hash,
+            is_byte_code=False,
+        ),
+        source=server_content,
+    )
     # Upload
     res = await client.upload_file(id=server_content_hash, content=base64.b64encode(server_content).decode("ascii"))
     assert res.code == 200
@@ -184,8 +197,8 @@ def test():
     )
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
-    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
+    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test", 1, dummy)])
+    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test:DDD:Test", 1, full)])
 
     assert oldest_executor.id in manager.pool
 
@@ -211,7 +224,7 @@ def test():
         return oldest_executor not in manager.agent_map["agent2"]
 
     with caplog.at_level(logging.DEBUG):
-        _ = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, dummy)])
+        _ = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", dummy)])
         assert not oldest_executor.running
         assert full_runner.running
         await retry_limited(oldest_gone, 1)
@@ -229,7 +242,7 @@ def test():
         await x.join()
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 0, 10)
 
-    full_runner = await manager.get_executor("agent2", "internal:", [executor.ResourceInstallSpec("test::Test", 5, full)])
+    full_runner = await manager.get_executor("agent2", "internal:", [executor.ModuleInstallSpec("test::Test", "1", full)])
 
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 1, 1)
 
@@ -303,7 +316,14 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
 
 def test_hash_with_duplicates():
     env_id = uuid.uuid4()
-    source = inmanta.loader.ModuleSource("test", "aaaaa", False, None, None)
+    source = inmanta.data.model.ModuleSource(
+        metadata=ModuleSourceMetadata(
+            name="test",
+            hash_value="aaaaa",
+            is_byte_code=False,
+        ),
+        source="foo".encode(),
+    )
     requirement = "setuptools"
     simple = ExecutorBlueprint(
         environment_id=env_id,

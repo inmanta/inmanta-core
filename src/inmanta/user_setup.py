@@ -155,6 +155,7 @@ async def do_user_setup() -> None:
             "The version of the database is out of date: start the server to upgrade the database "
             "schema to the lastest version."
         )
+
     finally:
         await stop_engine()
 

@@ -109,7 +109,6 @@ scheduler_db_connection_pool_min_size: Option[int] = Option(
     "the resource scheduler.",
     is_lower_bounded_int(0),
 )
-
 scheduler_db_connection_pool_max_size: Option[int] = Option(
     "scheduler",
     "db-connection-pool-max-size",
@@ -118,7 +117,6 @@ scheduler_db_connection_pool_max_size: Option[int] = Option(
     "the resource scheduler.",
     is_lower_bounded_int(1),
 )
-
 scheduler_db_connection_timeout: Option[float] = Option(
     "scheduler",
     "db-connection-timeout",

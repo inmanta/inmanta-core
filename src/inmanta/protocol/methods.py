@@ -26,7 +26,7 @@ import inmanta.types
 from inmanta import const, data, resources
 from inmanta.const import ResourceState
 from inmanta.data import model
-from inmanta.data.model import PipConfig
+from inmanta.data.model import InmantaModule, PipConfig
 from inmanta.protocol import exceptions
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ArgOption
@@ -531,6 +531,7 @@ def put_version(
     tid: uuid.UUID,
     version: int,
     resources: list,
+    module_version_info: dict[str, InmantaModule],
     resource_state: dict[inmanta.types.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
     unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
     version_info: Optional[dict] = None,
@@ -553,6 +554,8 @@ def put_version(
     :param compiler_version: Optional. version of the compiler, if not provided, this call will return an error
     :param resource_sets: Optional. a dictionary describing which resource belongs to which resource set
     :param pip_config: Optional. Pip config used by this version
+    :param module_version_info: Map of (module name, module version) to InmantaModule
+
     """
 
 
@@ -855,22 +858,6 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
     :param tid: The environment
     :param agent: The agent to get the parameters from
     :param resource: The resource to query the parameters from
-    """
-
-
-@method(path="/codebatched/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
-def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
-    """
-    Upload batches of code for various resources associated with a specific version of a configuration model in an environment.
-
-    :param tid: The id of the environment to which the code belongs.
-    :param id: The version number of the configuration model.
-    :param resources: A dictionary where each key is a string representing a resource type.
-                  For each resource type, the value is a dictionary. This nested dictionary's keys are file hashes,
-                  and each key maps to a tuple. This tuple contains three elements: the file name, the module name,
-                  and a list of requirements.
-
-    The endpoint validates that all provided file references are valid and checks for conflicts with existing code entries.
     """
 
 

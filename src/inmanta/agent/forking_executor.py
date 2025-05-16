@@ -75,7 +75,8 @@ import threading
 import typing
 import uuid
 from asyncio import Future, transports
-from collections.abc import Mapping
+from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Awaitable
 
@@ -85,6 +86,7 @@ import inmanta.agent.executor
 import inmanta.agent.in_process_executor
 import inmanta.config
 import inmanta.const
+import inmanta.data
 import inmanta.env
 import inmanta.loader
 import inmanta.logging
@@ -95,7 +97,7 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.executor import DeployReport, GetFactReport
+from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
 from inmanta.protocol.ipc_light import (
@@ -107,7 +109,7 @@ from inmanta.protocol.ipc_light import (
     LogShipper,
     ReturnType,
 )
-from inmanta.types import ResourceIdStr, ResourceType
+from inmanta.types import ResourceIdStr
 from setproctitle import setproctitle
 
 LOGGER = logging.getLogger(LOGGER_NAME_EXECUTOR)
@@ -371,7 +373,7 @@ class StopCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]
         await context.stop_for(self.name)
 
 
-class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.Sequence[inmanta.loader.FailedModuleSource]]):
+class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedInmantaModules]):
     """
     Initialize the executor process:
     1. setup the client, using the session id of the agent
@@ -386,7 +388,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         venv_path: str,
         storage_folder: str,
         session_gid: uuid.UUID,
-        sources: list[inmanta.loader.ModuleSource],
+        sources: Sequence[inmanta.data.model.ModuleSource],
         venv_touch_interval: float = 60.0,
     ):
         """
@@ -400,7 +402,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         self.sources = sources
         self._venv_touch_interval = venv_touch_interval
 
-    async def call(self, context: ExecutorContext) -> typing.Sequence[inmanta.loader.FailedModuleSource]:
+    async def call(self, context: ExecutorContext) -> FailedInmantaModules:
         assert context.server.timer_venv_scheduler_interval is None, "InitCommand should be only called once!"
 
         loop = asyncio.get_running_loop()
@@ -419,40 +421,29 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, typing.S
         # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
 
-        sync_client = inmanta.protocol.SyncClient(client=context.client, ioloop=loop)
-        sources = [s.with_client(sync_client) for s in self.sources]
-
-        failed: list[inmanta.loader.FailedModuleSource] = []
-        in_place: list[inmanta.loader.ModuleSource] = []
+        failed: FailedInmantaModules = defaultdict(dict)
+        in_place: list[inmanta.data.model.ModuleSource] = []
         # First put all files on disk
-        for module_source in sources:
+        for module_source in self.sources:
             try:
                 await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
                 in_place.append(module_source)
             except Exception as e:
-                logger.info("Failed to load sources: %s", module_source, exc_info=True)
-                failed.append(
-                    inmanta.loader.FailedModuleSource(
-                        module_source=module_source,
-                        exception=e,
-                    )
-                )
+                logger.info("Failed to load source on disk: %s", module_source.metadata.name, exc_info=True)
+                inmanta_module_name = module_source.get_inmanta_module_name()
+                failed[inmanta_module_name][module_source.metadata.name] = e
 
         # then try to import them
         for module_source in in_place:
             try:
                 await loop.run_in_executor(
                     context.threadpool,
-                    functools.partial(loader.load_module, module_source.name, module_source.hash_value),
+                    functools.partial(loader.load_module, module_source.metadata.name, module_source.metadata.hash_value),
                 )
             except Exception as e:
-                logger.info("Failed to load sources: %s", module_source, exc_info=True)
-                failed.append(
-                    inmanta.loader.FailedModuleSource(
-                        module_source=module_source,
-                        exception=e,
-                    )
-                )
+                logger.info("Failed to import source: %s", module_source.metadata.name, exc_info=True)
+                inmanta_module_name = module_source.get_inmanta_module_name()
+                failed[inmanta_module_name][module_source.metadata.name] = e
 
         return failed
 
@@ -612,7 +603,7 @@ class MPProcess(PoolManager[executor.ExecutorId, executor.ExecutorId, "MPExecuto
         self.executor_virtual_env = venv
 
         # Set by init, keeps state for the underlying executors
-        self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = list()
+        self._failed_modules: FailedInmantaModules
 
         # threadpool for cleanup jobs
         self.worker_threadpool = worker_threadpool
@@ -759,8 +750,7 @@ class MPExecutor(executor.Executor, resourcepool.PoolMember[executor.ExecutorId]
         self.stop_task: Awaitable[None]
 
         # Set by init and parent class
-        self.failed_resource_results: typing.Sequence[inmanta.loader.FailedModuleSource] = process.failed_resource_results
-        self.failed_resources: executor.FailedResources = {}
+        self.failed_modules: FailedInmantaModules = process._failed_modules
 
     async def call(self, method: IPCMethod[ExecutorContext, ReturnType]) -> ReturnType:
         try:
@@ -924,7 +914,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
 
     async def create_member(self, blueprint: executor.ExecutorBlueprint) -> MPProcess:
         venv = await self.environment_manager.get_environment(blueprint.to_env_blueprint())
-        executor = await self.make_child_and_connect(blueprint, venv)
+        executor: MPProcess = await self.make_child_and_connect(blueprint, venv)
         try:
             LOGGER.debug(
                 "Child forked (pid: %s) for %s",
@@ -933,13 +923,13 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
             )
             storage_for_blueprint = os.path.join(self.code_folder, blueprint.blueprint_hash())
             os.makedirs(storage_for_blueprint, exist_ok=True)
-            failed_types = await executor.connection.call(
+            failed_modules = await executor.connection.call(
                 InitCommand(
-                    venv.env_path,
-                    storage_for_blueprint,
-                    self.session_gid,
-                    [x.for_transport() for x in blueprint.sources],
-                    self.venv_checkup_interval,
+                    venv_path=venv.env_path,
+                    storage_folder=storage_for_blueprint,
+                    session_gid=self.session_gid,
+                    sources=blueprint.sources,
+                    venv_touch_interval=self.venv_checkup_interval,
                 )
             )
             LOGGER.debug(
@@ -947,7 +937,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                 executor.process.pid,
                 self.render_id(blueprint),
             )
-            executor.failed_resource_results = failed_types
+            executor._failed_modules = failed_modules
             return executor
         except Exception:
             # Make sure to cleanup the executor process if its initialization fails.
@@ -1049,7 +1039,7 @@ class MPManager(
         self,
         agent_name: str,
         agent_uri: str,
-        code: typing.Collection[executor.ResourceInstallSpec],
+        code: typing.Collection[executor.ModuleInstallSpec],
     ) -> MPExecutor:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
@@ -1057,7 +1047,7 @@ class MPManager(
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param agent_uri: The name of the host on which the agent is running.
-        :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
+        :param code: Collection of ModuleInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
             handler code in its venv. Must have at least one element.
         :return: An Executor instance
@@ -1070,20 +1060,6 @@ class MPManager(
 
         # Use pool manager
         my_executor = await self.get(executor_id)
-
-        # translation from code to type can only be done here
-        if my_executor.failed_resource_results and not my_executor.failed_resources:
-            # If some code loading failed, resolve here
-            # reverse index
-            type_for_spec: dict[inmanta.loader.ModuleSource, list[ResourceType]] = collections.defaultdict(list)
-            for spec in code:
-                for source in spec.blueprint.sources:
-                    type_for_spec[source].append(spec.resource_type)
-            # resolve
-            for failed_resource_result in my_executor.failed_resource_results:
-                for rtype in type_for_spec.get(failed_resource_result.module_source, []):
-                    if rtype not in my_executor.failed_resources:
-                        my_executor.failed_resources[rtype] = failed_resource_result.exception
 
         # FIXME: recovery. If loading failed, we currently never rebuild https://github.com/inmanta/inmanta-core/issues/7695
         return my_executor

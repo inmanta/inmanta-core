@@ -741,6 +741,16 @@ class Id:
 
         self._version = version
 
+    def get_inmanta_module(self) -> str:
+        """
+        Utility method to parse the Inmanta module out of
+        the entity type for this Id.
+
+        e.g. Returns `std` for resources of type `std::testing::NullResource`
+        """
+        ns = self._entity_type.split("::", maxsplit=1)
+        return ns[0]
+
     def copy(self, *, version: int) -> "Id":
         """
         Creates a copy of this resource id for another model version.

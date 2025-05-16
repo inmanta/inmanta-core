@@ -28,11 +28,12 @@ import inmanta.protocol
 import inmanta.util
 from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
-from inmanta.agent.executor import DeployReport, DryrunReport, FailedResources, GetFactReport, ResourceDetails
+from inmanta.agent.executor import DeployReport, DryrunReport, FailedInmantaModules, GetFactReport, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
 from inmanta.data.model import AttributeStateChange
 from inmanta.loader import CodeLoader
+from inmanta.references import MutatorMissingError, ReferenceMissingError
 from inmanta.resources import Resource
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import NamedLock, join_threadpools
@@ -76,7 +77,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
 
         self._stopped = False
 
-        self.failed_resources: FailedResources = dict()
+        self.failed_modules: FailedInmantaModules = dict()
 
         self.cache_cleanup_tick_rate = inmanta.agent.config.agent_cache_cleanup_tick_rate.get()
         self.periodic_cache_cleanup_job: Optional[asyncio.Task[None]] = None
@@ -201,6 +202,15 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
                 )
                 if ctx.status is None:
                     ctx.set_resource_state(const.HandlerResourceState.deployed)
+            except (ReferenceMissingError, MutatorMissingError) as e:
+                ctx.set_resource_state(const.HandlerResourceState.unavailable)
+                ctx.exception(
+                    "Cannot find the source code for reference resolution for resource %(resource_id)s. Make sure you"
+                    "register the relevant code via the @reference decorator and that the relevant file(s) can be imported. "
+                    "(exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=repr(e),
+                )
             except SkipResourceForDependencies as e:
                 ctx.set_resource_state(const.HandlerResourceState.skipped_for_dependency)
                 ctx.warning(
@@ -518,7 +528,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
             self._loader = CodeLoader(code_dir, clean=True)
             # Lock to ensure only one actual install runs at a time
             self._loader_lock: asyncio.Lock = Lock()
-            # Keep track for each resource type of the last loaded version
+            # Keep track for each inmanta module of the last loaded version
             self._last_loaded_version: dict[str, executor.ExecutorBlueprint | None] = defaultdict(lambda: None)
             # Per-resource lock to serialize all actions per resource
             self._resource_loader_lock: NamedLock = NamedLock()
@@ -546,7 +556,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         await asyncio.gather(*(child.join() for child in self.executors.values()))
 
     async def get_executor(
-        self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ResourceInstallSpec]
+        self, agent_name: str, agent_uri: str, code: typing.Collection[executor.ModuleInstallSpec]
     ) -> InProcessExecutor:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
@@ -554,9 +564,9 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param agent_uri: The name of the host on which the agent is running.
-        :param code: Collection of ResourceInstallSpec defining the configuration for the Executor i.e.
-            which resource types it can act on and all necessary information to install the relevant
-            handler code in its venv. Must have at least one element.
+        :param code: Collection of ModuleInstallSpec defining the configuration for the Executor i.e.
+            all necessary information to install the relevant handler code in its venv. Must have
+            at least one element.
         :return: An Executor instance
         """
         if not self._running:
@@ -574,58 +584,58 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                     await out.start()
                     self.executors[agent_name] = out
         assert out.uri == agent_uri
-        out.failed_resources = await self.ensure_code(code)
+        out.failed_modules = await self.ensure_code(code)
 
         return out
 
-    async def ensure_code(self, code: typing.Collection[executor.ResourceInstallSpec]) -> executor.FailedResources:
+    async def ensure_code(self, code: typing.Collection[executor.ModuleInstallSpec]) -> FailedInmantaModules:
         """Ensure that the code for the given environment and version is loaded"""
 
-        failed_to_load: executor.FailedResources = {}
+        failed_to_load: FailedInmantaModules = defaultdict(dict)
 
         if self._loader is None:
             return failed_to_load
 
-        for resource_install_spec in code:
+        for module_install_spec in code:
             # only one logical thread can load a particular resource type at any time
-            async with self._resource_loader_lock.get(resource_install_spec.resource_type):
+            async with self._resource_loader_lock.get(module_install_spec.module_name):
                 # stop if the last successful load was this one
                 # The combination of the lock and this check causes the reloads to naturally 'batch up'
-                if self._last_loaded_version[resource_install_spec.resource_type] == resource_install_spec.blueprint:
+                if self._last_loaded_version[module_install_spec.module_name] == module_install_spec.blueprint:
                     self.logger.debug(
-                        "Handler code already installed for %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
+                        "Handler code already installed for module %s version=%d",
+                        module_install_spec.module_name,
+                        module_install_spec.module_version,
                     )
                     continue
 
                 try:
                     # Install required python packages and the list of ``ModuleSource`` with the provided pip config
                     self.logger.debug(
-                        "Installing handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
+                        "Installing module %s version=%s",
+                        module_install_spec.module_name,
+                        module_install_spec.module_version,
                     )
-                    await self._install(resource_install_spec.blueprint)
+                    await self._install(module_install_spec.blueprint)
                     self.logger.debug(
-                        "Installed handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
+                        "Installed module %s version=%s",
+                        module_install_spec.module_name,
+                        module_install_spec.module_version,
                     )
 
-                    self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.blueprint
+                    self._last_loaded_version[module_install_spec.module_name] = module_install_spec.blueprint
                 except Exception as e:
                     self.logger.exception(
-                        "Failed to install handler %s version=%d",
-                        resource_install_spec.resource_type,
-                        resource_install_spec.model_version,
+                        "Failed to install module %s version=%s",
+                        module_install_spec.module_name,
+                        module_install_spec.module_version,
                     )
-                    if resource_install_spec.resource_type not in failed_to_load:
-                        failed_to_load[resource_install_spec.resource_type] = Exception(
-                            f"Failed to install handler {resource_install_spec.resource_type} "
-                            f"version={resource_install_spec.model_version}: {e}"
-                        ).with_traceback(e.__traceback__)
-                    self._last_loaded_version[resource_install_spec.resource_type] = None
+                    failed_to_load[module_install_spec.module_name][module_install_spec.module_name] = Exception(
+                        f"Failed to install module {module_install_spec.module_name} "
+                        f"version={module_install_spec.module_version}: {e}"
+                    ).with_traceback(e.__traceback__)
+
+                    self._last_loaded_version[module_install_spec.module_name] = None
 
         return failed_to_load
 
