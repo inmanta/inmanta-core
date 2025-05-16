@@ -60,7 +60,7 @@ class AllRefsDataclassReference(AllRefsDataclassReferenceABC[AllRefsDataclass], 
 
 
 @reference("refs::dc::MixedRefsDataclass")
-class MixedRefsDataclassReference(AllRefsDataclassReferenceABC[MixedRefsDataclass], Reference[AllRefsDataclass]):
+class MixedRefsDataclassReference(AllRefsDataclassReferenceABC[MixedRefsDataclass], Reference[MixedRefsDataclass]):
     def __init__(self, maybe_ref_value: str | Reference[str]) -> None:
         super().__init__(maybe_ref_value, dc_type=MixedRefsDataclass)
 

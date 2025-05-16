@@ -32,12 +32,14 @@ from inmanta.ast import (
     Locatable,
     LocatableString,
     Location,
+    MultiUnsetException,
     Named,
     Namespace,
     NotFoundException,
     RuntimeException,
     TypingException,
     UndeclaredReference,
+    UnsetException,
 )
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.util import AnyType, NoneValue, Unknown
@@ -73,6 +75,10 @@ class Type(Locatable):
         """
         Validate the given value to check if it satisfies the constraints associated with this type. Returns true iff
         validation succeeds, otherwise raises a :py:class:`inmanta.ast.RuntimeException`.
+
+        In advanced cases where this class has a custom `to_python()`, translation-specific validation should be deferred
+        to that stage. Translation-specific means that the value is definitely of this DSL type, but it can not be converted to
+        the Python domain.
         """
         # `object` / `"any"` allow all standard DSL values
         # (and even not-officially-supported opaque values from plugin returns).
@@ -184,6 +190,8 @@ class Type(Locatable):
 
         should only be called if has_custom_to_python is True
         the instance must be valid according to the validate method
+
+        :raises RuntimeException: If there is a translation error.
         """
         return instance
 
@@ -216,7 +224,6 @@ class Type(Locatable):
         return hash(type(self))
 
 
-# TODO: I think this class is missing to_python. Write test that accepts Reference[dataclass]
 class ReferenceType(Type):
     """
     The type of a reference to something of type element_type
@@ -246,11 +253,12 @@ class ReferenceType(Type):
 
             self.is_dataclass = True
 
-    def validate(self, value: Optional[object]) -> bool:
+    def _get_reference(self, value: Optional[object]) -> Optional[references.Reference[object]]:
+        # TODO: docstring
         # TODO: fix! Consider making a protocol with dataclass_self?
         from inmanta.execute.runtime import Instance
         # TODO: test cases for each of these
-        ref: Optional[references.Reference[object]] = (
+        return (
             value
             if isinstance(value, references.Reference)
             else value.dataclass_self
@@ -262,12 +270,25 @@ class ReferenceType(Type):
             )
             else None
         )
+
+    def validate(self, value: Optional[object]) -> bool:
+        ref: Optional[references.Reference[object]] = self._get_reference(value)
         if ref is not None:
             assert ref._model_type is not None
             if ref._model_type.issubtype(self.element_type):
                 return True
 
-        raise TypingException(None, f"Invalid value {value} is not a subtype of {self.type_string()}")
+        # TODO: this message prints the union type for OrReference's super() call
+        raise TypingException(None, f"Invalid value {value} is not a subtype of {self}")
+
+    def has_custom_to_python(self) -> bool:
+        return self.is_dataclass
+
+    def to_python(self, instance: object) -> object:
+        result: Optional[references.Reference[object]] = self._get_reference(instance)
+        # wouldn't have passed validate otherwise
+        assert result is not None
+        return result
 
     def type_string_internal(self) -> str:
         return f"Reference[{self.element_type.type_string_internal()}]"
@@ -330,8 +351,19 @@ class OrReferenceType(ReferenceType):
         try:
             return self.element_type.validate(value)
         except UndeclaredReference:
-            # the value is a reference, just not the right type => raise the first error message instead.
+            # the value is a reference, just not the expected type => raise the first error message instead.
             raise reference_type_exception
+
+    def to_python(self, instance: object) -> object:
+        try:
+            super().validate(instance)
+        except RuntimeException:
+            if self.element_type.has_custom_to_python():
+                return self.element_type.to_python(instance)
+            else:
+                return DynamicProxy.return_value(instance)
+        else:
+            return super().to_python(instance)
 
     def type_string_internal(self) -> str:
         element = self.element_type.type_string()
@@ -1261,6 +1293,10 @@ class Union(Type):
                     else:
                         # Default conversion
                         return DynamicProxy.return_value(instance)
+            except (UnsetException, MultiUnsetException):
+                # TODO: test case with `MyDataclass | int` that gets a `MyDataclass` waiting for a value below an `if`
+                # let these exceptions with special meaning through
+                raise
             except RuntimeException:
                 # Validate fails, up to the next one
                 pass

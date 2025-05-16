@@ -37,6 +37,7 @@ from inmanta.ast import (
     NotFoundException,
     RuntimeException,
     TypingException,
+    UndeclaredReference,
     WithComment,
 )
 from inmanta.ast.statements.generator import SubConstructor
@@ -44,7 +45,7 @@ from inmanta.ast.type import Any as inm_Any
 from inmanta.ast.type import Float, NamedType, NullableType, ReferenceType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
-from inmanta.references import AttributeReference, PrimitiveTypes, Reference, RefValue, UnexpectedReferenceException
+from inmanta.references import AttributeReference, PrimitiveTypes, Reference, RefValue
 from inmanta.types import DataclassProtocol
 
 # pylint: disable-msg=R0902,R0904
@@ -349,8 +350,6 @@ class Entity(NamedType, WithComment):
     def validate(self, value: object) -> bool:
         """
         Validate the given value
-
-        :raises UnexpectedReferenceException
         """
         if isinstance(value, AnyType):
             return True
@@ -362,31 +361,6 @@ class Entity(NamedType, WithComment):
         if not (value_definition is self or value_definition.is_subclass(self)):
             raise RuntimeException(None, f"Invalid class type for {value}, should be {self}")
 
-        # A reference to a dataclass is not the same as a dataclass.
-        # A reference to a non-dataclass instance however, is simply an instance of references in the DSL.
-        # => allow references for non-dataclass entity types, or when the dataclass supports coercion.
-        if value.is_reference() and self.has_custom_to_python() and not self.can_coerce(value):
-            # TODO: warning when coercing? Consider if it may be out of the user's control
-            # TODO: better message
-            # TODO: get rid of this exception if it's no longer used, use more generic exception instead
-            raise UnexpectedReferenceValidationError(
-                msg=f"{value} is a reference, should be {self}", reference=value.dataclass_self
-            )
-
-        return True
-
-    def can_coerce(self, instance: Instance) -> bool:
-        # TODO: docstring. Also mention preconditions (validated, reference to dataclass)
-        if not self.has_custom_to_python():
-            # no custom logic for declared type => no coercion
-            return False
-        if instance.type is not self:
-            # allow inheritance: delegate to child type
-            return instance.type.can_coerce(instance)
-        dc_types = typing.get_type_hints(self._paired_dataclass)
-        for attr_type in self._paired_dataclass_field_types.values():
-            if not isinstance(attr_type, ReferenceType):
-                return False
         return True
 
     def add_implementation(self, implement: "Implementation") -> None:
@@ -766,6 +740,12 @@ class Entity(NamedType, WithComment):
             # Convert values
             # All values are primitive, so this is trivial
             kwargs = {k: v.get_value() for k, v in instance.slots.items() if k not in ["self", "requires", "provides"]}
+            for k, v in kwargs.items():
+                if isinstance(v, Reference) and not isinstance(self._paired_dataclass_field_types.get(k), ReferenceType):
+                    # TODO: better message
+                    raise UndeclaredReference(
+                        reference=v, message=f"{v} is a reference, should be {self._paired_dataclass_field_types[k]}"
+                    )
             return self._paired_dataclass(**kwargs)
 
         if instance.dataclass_self is None:
@@ -777,6 +757,7 @@ class Entity(NamedType, WithComment):
             instance.dataclass_self = create()
 
         return (
+            # TODO: warning when coercing? Consider if it may be out of the user's control
             # coerce if the dataclass definition is reference-compatible. Do not overwrite dataclass_self
             create()
             if isinstance(instance.dataclass_self, Reference)
@@ -908,10 +889,3 @@ class Implement(Locatable):
             return
         self.normalized = True
         self.constraint.normalize()
-
-
-class UnexpectedReferenceValidationError(RuntimeException, UnexpectedReferenceException):
-    # TODO: docstring. Only raised when ref is encountered where value is expected, but all other validation passed
-    def __init__(self, *, msg: str, reference: Reference[RefValue]) -> None:
-        RuntimeException.__init__(self, stmt=None, msg=msg)
-        UnexpectedReferenceException.__init__(self, msg=msg, reference=reference)

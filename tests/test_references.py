@@ -286,70 +286,52 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     ### basic inheritance
     run_snippet("refs::plugins::takes_no_refs_dataclass(refs::dc::MixedRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
     ### basic inheritance the wrong direction
-    with pytest.raises(PluginTypeException):
+    with pytest.raises(PluginTypeException, match=re.escape("Expected type: refs::dc::MixedRefsDataclass")):
         run_snippet("refs::plugins::takes_mixed_refs_dataclass(refs::dc::NoRefsDataclass())")
     ### references not allowed
-    with pytest.raises(PluginTypeException):
+    #### references to dataclass
+    with pytest.raises(PluginTypeException, match="contains a reference"):
         run_snippet("refs::plugins::takes_no_refs_dataclass(refs::dc::create_no_refs_dataclass_reference())")
-    with pytest.raises(PluginTypeException):
+    with pytest.raises(PluginTypeException, match="contains a reference"):
         run_snippet("refs::plugins::takes_mixed_refs_dataclass(refs::dc::create_mixed_refs_dataclass_reference('hello'))")
+    #### dataclass containing undeclared reference
+    with pytest.raises(PluginTypeException, match="contains a reference"):
+        run_snippet("refs::plugins::takes_no_refs_dataclass(refs::dc::NoRefsDataclass(non_ref_value=refs::create_string_reference('hello')))")
     ## dataclass type that supports reference attrs -> references are coerced
     ### references are coerced to dataclass of references
     run_snippet("refs::plugins::takes_all_refs_dataclass(refs::dc::create_all_refs_dataclass_reference('hello'))")
     ### references are coerced to dataclass of references, with inheritance
     run_snippet("refs::plugins::takes_dataclass(refs::dc::create_all_refs_dataclass_reference('hello'))")
-    with pytest.raises(PluginTypeException):
+    with pytest.raises(PluginTypeException, match="contains a reference"):
         run_snippet("refs::plugins::takes_dataclass(refs::dc::create_no_refs_dataclass_reference())")
 
     # Scenario: plugin annotated as Reference[<dataclass>]
     ## accepts a reference
     run_snippet("refs::plugins::takes_no_refs_dataclass_ref(refs::dc::create_no_refs_dataclass_reference())")
+    ## rejects a dataclass
+    with pytest.raises(PluginTypeException, match=re.escape("Expected type: Reference[refs::dc::NoRefsDataclass]")):
+        run_snippet("refs::plugins::takes_no_refs_dataclass_ref(refs::dc::NoRefsDataclass())")
 
-    # TODO: Reference[dataclass] annotation and | annotation
-
-    # TODO: read dataclass values
+    # Scenario: plugin annotated as <dataclass> | Reference[<dataclass>]
+    ## accepts either
+    run_snippet("refs::plugins::takes_no_refs_dataclass_or_ref(refs::dc::create_no_refs_dataclass_reference())")
+    run_snippet("refs::plugins::takes_no_refs_dataclass_or_ref(refs::dc::NoRefsDataclass())")
+    run_snippet("refs::plugins::takes_mixed_refs_dataclass_or_ref(refs::dc::create_mixed_refs_dataclass_reference('hello'))")
+    run_snippet("refs::plugins::takes_mixed_refs_dataclass_or_ref(refs::dc::MixedRefsDataclass(maybe_ref_value='hello'))")
+    ## rejects other dataclasses / references to other dataclasses, except for inheritance
+    run_snippet("refs::plugins::takes_no_refs_dataclass_or_ref(refs::dc::MixedRefsDataclass(maybe_ref_value='hello'))")
+    run_snippet("refs::plugins::takes_no_refs_dataclass_or_ref(refs::dc::create_mixed_refs_dataclass_reference('hello'))")
+    with pytest.raises(
+        PluginTypeException, match=re.escape("Expected type: Reference[refs::dc::MixedRefsDataclass] | refs::dc::MixedRefsDataclass")
+    ):
+        run_snippet("refs::plugins::takes_mixed_refs_dataclass_or_ref(refs::dc::AllRefsDataclass(maybe_ref_value='hello'))")
+    with pytest.raises(
+        PluginTypeException, match=re.escape("Expected type: Reference[refs::dc::MixedRefsDataclass] | refs::dc::MixedRefsDataclass")
+    ):
+        run_snippet("refs::plugins::takes_mixed_refs_dataclass_or_ref(refs::dc::create_all_refs_dataclass_reference('hello'))")
 
     # TODO: inheritance on reference return type (declare generic, return specific -> model instance = specific)
     # TODO: inheritance on return type
-    # TODO: reference to wrong dataclass value
-    # TODO: reference to sub/supertype
-    # TODO: make sure that `Test | Reference[Test]` is allowed (probably not so atm)
-
-    # TODO: test that has reference in model-custructed dataclass on non-annotated field
-    # TODO: test that has reference in non-dataclass instance, accessed from model
-
-
-    # TODO: plugins annotated as Reference[Entity] and Reference[Test]
-    return
-
-    # TODO
-    snippetcompiler.setup_for_snippet(
-        snippet="""\
-        import refs
-
-        test = refs::Test(value="test", non_ref_value=refs::create_string_reference(name="test"))
-        refs::read_dataclass_value(test)
-        """,
-    )
-
-    # TODO: appropriate assertions: should fail because of attr access
-    snippetcompiler.do_export()
-
-    assert False
-
-    snippetcompiler.setup_for_snippet(
-        snippet="""\
-        import refs
-
-        normal_entity = refs::NormalEntity(non_ref_value=refs::create_string_reference(name="test"))
-        test = refs::Test(value="test", non_ref_value=refs::create_string_reference(name="test"))
-        from_entity = refs::read_entity_value(normal_entity)
-        from_dataclass = refs::read_entity_value(test)
-        """,
-    )
-
-    # TODO: appropriate assertions: should be fine?????
-    snippetcompiler.do_export()
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
