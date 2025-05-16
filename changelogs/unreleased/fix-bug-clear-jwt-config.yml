@@ -1,4 +1,4 @@
 ---
 description: Fix bug where the JWT configuration is not cleared after reloading the configuration files.
 change-type: patch
-destination-branches: [master, iso8, iso7]
+destination-branches: [iso7]
