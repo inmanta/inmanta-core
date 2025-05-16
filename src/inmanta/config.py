@@ -120,9 +120,7 @@ class Config:
         cls._save_loaded_config(config, config_dir)
 
     @classmethod
-    def _save_loaded_config(
-        cls, config: LenientConfigParser, config_dir: Optional[str]
-    ) -> None:
+    def _save_loaded_config(cls, config: LenientConfigParser, config_dir: Optional[str]) -> None:
         cls.__instance = config
         cls._config_dir = config_dir
         cls._config_updated()
