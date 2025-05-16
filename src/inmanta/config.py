@@ -117,15 +117,14 @@ class Config:
 
         config = LenientConfigParser(interpolation=Interpolation())
         config.read(files)
-        cls._save_loaded_config(config, config_dir, min_c_config_file)
+        cls._save_loaded_config(config, config_dir)
 
     @classmethod
     def _save_loaded_config(
-        cls, config: LenientConfigParser, config_dir: Optional[str], min_c_config_file: Optional[str]
+        cls, config: LenientConfigParser, config_dir: Optional[str]
     ) -> None:
         cls.__instance = config
         cls._config_dir = config_dir
-        cls._min_c_config_file = min_c_config_file
         cls._config_updated()
 
     @classmethod
@@ -152,7 +151,7 @@ class Config:
         """
         This method must be called every time the configuration is updated.
         """
-        from inmanta.protocol.auth import auth
+        from inmanta.protocol import auth
 
         # Clear the cached JWT config. It might have become out of sync with
         # the configuration in this class.
