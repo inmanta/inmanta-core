@@ -528,9 +528,10 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
 
                 if is_resource_state_update:
                     # transient resource update
+                    is_undefined = status is const.ResourceState.undefined
                     if not is_resource_action_finished:
                         for res in resources:
-                            await res.update_fields(status=status, connection=inner_connection)
+                            await res.update_fields(status=status, is_undefined=is_undefined, connection=inner_connection)
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
                         return 200
@@ -543,6 +544,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                         for res in resources:
                             await res.update_fields(
                                 status=status,
+                                is_undefined=is_undefined,
                                 connection=inner_connection,
                             )
                             # Not very typeable

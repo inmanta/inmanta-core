@@ -4675,6 +4675,7 @@ class Resource(BaseDocument):
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
     :param status: The state of this resource, used e.g. in scheduling
+    :param is_undefined: If this resource is undefined
     :param resource_set: The resource set this resource belongs to. Used when doing partial compiles.
     """
 
@@ -4694,6 +4695,7 @@ class Resource(BaseDocument):
     attributes: dict[str, object] = {}
     attribute_hash: Optional[str]
     status: const.ResourceState = const.ResourceState.available
+    is_undefined: bool = False
 
     resource_set: Optional[str] = None
 
@@ -5163,7 +5165,8 @@ class Resource(BaseDocument):
         Create a new resource dao instance from this dao instance. Only creates the object without inserting it.
         The new instance will have the given version.
         """
-        new_resource_state = ResourceState.undefined if self.status is ResourceState.undefined else ResourceState.available
+        is_undefined = self.status is ResourceState.undefined
+        new_resource_state = ResourceState.undefined if is_undefined else ResourceState.available
         return Resource(
             environment=self.environment,
             model=new_version,
@@ -5174,6 +5177,7 @@ class Resource(BaseDocument):
             attributes=self.attributes.copy(),
             attribute_hash=self.attribute_hash,
             status=new_resource_state,
+            is_undefined=is_undefined,
             resource_set=self.resource_set,
             provides=self.provides,
         )
@@ -5434,6 +5438,7 @@ class Resource(BaseDocument):
             agent=self.agent,
             attributes=attributes,
             status=self.status,
+            is_undefined=self.is_undefined,
             resource_id_value=self.resource_id_value,
             resource_set=self.resource_set,
         )
