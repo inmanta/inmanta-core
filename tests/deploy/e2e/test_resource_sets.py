@@ -1352,6 +1352,10 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     result = await client.release_version(tid=environment, id=result.result["data"])
     assert result.code == 200
 
+    # Simulate the scheduler fixing the state after the release_version
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id="test::Resource[agent1,key=key5]")
+    await rps.update(is_undefined=False, blocked=state.Blocked.NOT_BLOCKED)
+
     result = await client.resource_list(tid=environment)
     assert result.code == 200
     assert len(result.result["data"]) == 7
@@ -1359,7 +1363,8 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     rid_to_res = {r["resource_id"]: r for r in result.result["data"]}
 
     assert rid_to_res["test::Resource[agent1,key=key1]"]["status"] == const.ResourceState.undefined.value
-    assert rid_to_res["test::Resource[agent1,key=key2]"]["status"] == const.ResourceState.available.value
+    # Resource is still set as deploying even though a new one released
+    assert rid_to_res["test::Resource[agent1,key=key2]"]["status"] == const.ResourceState.deploying.value
     assert rid_to_res["test::Resource[agent1,key=key3]"]["status"] == const.ResourceState.deployed.value
     assert rid_to_res["test::Resource[agent1,key=key4]"]["status"] == const.ResourceState.available.value
     assert rid_to_res["test::Resource[agent1,key=key5]"]["status"] == const.ResourceState.available.value
