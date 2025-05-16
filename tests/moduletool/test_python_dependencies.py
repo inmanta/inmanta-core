@@ -49,7 +49,7 @@ dummy-yummy # A comment
     """
     common.add_file(mod2, "requirements.txt", mod2_req_txt, msg="initial commit")
 
-    project = Project(project_dir, venv_path=os.path.join(project_dir, ".env"))
+    project = Project(project_dir, venv_path=os.path.join(project_dir, ".env"), autostd=False)
     Project.set(project)
     project.load_module("mod1", allow_v1=True)
     project.load_module("mod2", allow_v1=True)
