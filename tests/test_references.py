@@ -258,7 +258,7 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
 
     # Entities
 
-    # Scenario: plugin annotated as `Entity` or `Test` gets Reference[Test]
+    # Scenario: plugin annotated as `Entity`
     ## Entity annotation
     ### dataclasses allowed
     run_snippet("refs::plugins::takes_entity(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
@@ -266,7 +266,20 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     ### references allowed, as long as no reference attribute is accessed
     run_snippet("refs::plugins::takes_entity(refs::dc::create_all_refs_dataclass_reference('hello'))")
     run_snippet("refs::plugins::takes_entity(refs::dc::create_no_refs_dataclass_reference())")
-    ## dataclass annotation that does not support reference attrs
+
+    # Scenario: plugin annotated as `Entity` accesses reference attribute during plugin execution
+    ## no reference
+    run_snippet("refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value='Hello World!'))")
+    ## reference
+    with pytest.raises(WrappingRuntimeException) as exc_info:
+        run_snippet("refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
+    assert isinstance(exc_info.value.__cause__, UndeclaredReference)
+    assert isinstance(exc_info.value.__cause__.reference, Reference)
+    ## reference, plugin explicitly allows it
+    run_snippet("refs::plugins::read_entity_ref_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
+
+    # Scenario: plugin annotated as <dataclass> gets Reference[<dataclass>]
+    ## dataclass type that does not support reference attrs
     ### plain dataclass
     run_snippet("refs::plugins::takes_no_refs_dataclass(refs::dc::NoRefsDataclass())")
     run_snippet("refs::plugins::takes_mixed_refs_dataclass(refs::dc::MixedRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
@@ -280,20 +293,21 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
         run_snippet("refs::plugins::takes_no_refs_dataclass(refs::dc::create_no_refs_dataclass_reference())")
     with pytest.raises(PluginTypeException):
         run_snippet("refs::plugins::takes_mixed_refs_dataclass(refs::dc::create_mixed_refs_dataclass_reference('hello'))")
-    ## dataclass annotation that supports reference attrs -> references are coerced
+    ## dataclass type that supports reference attrs -> references are coerced
     ### references are coerced to dataclass of references
     run_snippet("refs::plugins::takes_all_refs_dataclass(refs::dc::create_all_refs_dataclass_reference('hello'))")
+    ### references are coerced to dataclass of references, with inheritance
+    run_snippet("refs::plugins::takes_dataclass(refs::dc::create_all_refs_dataclass_reference('hello'))")
+    with pytest.raises(PluginTypeException):
+        run_snippet("refs::plugins::takes_dataclass(refs::dc::create_no_refs_dataclass_reference())")
 
-    # Scenario: plugin annotated as `Entity` accesses reference attribute
-    ## no reference
-    run_snippet("refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value='Hello World!'))")
-    ## reference
-    with pytest.raises(WrappingRuntimeException) as exc_info:
-        run_snippet("refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
-    assert isinstance(exc_info.value.__cause__, UndeclaredReference)
-    assert isinstance(exc_info.value.__cause__.reference, Reference)
-    ## reference, plugin explicitly allows it
-    run_snippet("refs::plugins::read_entity_ref_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
+    # Scenario: plugin annotated as Reference[<dataclass>]
+    ## accepts a reference
+    run_snippet("refs::plugins::takes_no_refs_dataclass_ref(refs::dc::create_no_refs_dataclass_reference())")
+
+    # TODO: Reference[dataclass] annotation and | annotation
+
+    # TODO: read dataclass values
 
     # TODO: inheritance on reference return type (declare generic, return specific -> model instance = specific)
     # TODO: inheritance on return type

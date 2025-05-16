@@ -1,9 +1,13 @@
-entity NoRefsDataclass extends std::Dataclass:
+entity DataclassABC extends std::Dataclass: end
+
+entity NoRefsDataclass extends DataclassABC:
     string non_ref_value = "never a reference"
 end
-entity AllRefsDataclass extends std::Dataclass:
+
+entity AllRefsDataclass extends DataclassABC:
     string maybe_ref_value
 end
+
 entity MixedRefsDataclass extends NoRefsDataclass, AllRefsDataclass:
 end
 

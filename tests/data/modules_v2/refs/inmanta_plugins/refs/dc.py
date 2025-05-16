@@ -5,12 +5,17 @@ from inmanta.references import reference, Reference
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class NoRefsDataclass:
+class DataclassABC:
+    ...
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class NoRefsDataclass(DataclassABC):
     non_ref_value: str = "Hello World!"
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class AllRefsDataclass:
+class AllRefsDataclass(DataclassABC):
     maybe_ref_value: str | Reference[str]
 
 

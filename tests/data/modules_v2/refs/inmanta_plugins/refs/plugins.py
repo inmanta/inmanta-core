@@ -74,52 +74,61 @@ def iterates_object_ref_dict(l: Mapping[str, object | Reference[object]]) -> Non
 
 @plugin
 def takes_entity(instance: Entity) -> None:
-    assert isinstance(instance, DynamicProxy)
+    assert isinstance(instance, DynamicProxy), type(instance)
+
+
+@plugin
+def takes_dataclass(instance: dc.DataclassABC) -> None:
+    assert isinstance(instance, (dc.AllRefsDataclass, dc.NoRefsDataclass, dc.MixedRefsDataclass)), type(instance)
 
 
 @plugin
 def takes_all_refs_dataclass(instance: dc.AllRefsDataclass) -> None:
-    assert isinstance(instance, dc.AllRefsDataclass)
+    assert isinstance(instance, dc.AllRefsDataclass), type(instance)
+    assert isinstance(instance.maybe_ref_value, (Reference, str)), type(instance.maybe_ref_value)
 
 
 @plugin
 def takes_no_refs_dataclass(instance: dc.NoRefsDataclass) -> None:
-    assert isinstance(instance, dc.NoRefsDataclass)
+    assert isinstance(instance, dc.NoRefsDataclass), type(instance)
+    assert isinstance(instance.non_ref_value, str), type(instance.non_ref_value)
 
 
 @plugin
 def takes_mixed_refs_dataclass(instance: dc.MixedRefsDataclass) -> None:
-    assert isinstance(instance, dc.MixedRefsDataclass)
+    assert isinstance(instance, dc.MixedRefsDataclass), type(instance)
+    assert isinstance(instance.maybe_ref_value, (Reference, str)), type(instance.maybe_ref_value)
+    assert isinstance(instance.non_ref_value, str), type(instance.non_ref_value)
 
 
 @plugin
 def takes_all_refs_dataclass_ref(instance: Reference[dc.AllRefsDataclass]) -> None:
-    assert isinstance(instance, Reference)
+    assert isinstance(instance, Reference), type(instance)
 
 
 @plugin
 def takes_no_refs_dataclass_ref(instance: Reference[dc.NoRefsDataclass]) -> None:
-    assert isinstance(instance, Reference)
+    assert isinstance(instance, Reference), type(instance)
 
 
 @plugin
 def takes_mixed_refs_dataclass_ref(instance: Reference[dc.MixedRefsDataclass]) -> None:
-    assert isinstance(instance, Reference)
+    assert isinstance(instance, Reference), type(instance)
 
 
 @plugin
 def takes_all_refs_dataclass_or_ref(instance: dc.AllRefsDataclass | Reference[dc.AllRefsDataclass]) -> None:
-    assert isinstance(instance, (dc.AllRefsDataclass, Reference))
+    assert isinstance(instance, (dc.AllRefsDataclass, Reference)), type(instance)
 
 
 @plugin
 def takes_no_refs_dataclass_or_ref(instance: dc.NoRefsDataclass | Reference[dc.NoRefsDataclass]) -> None:
-    assert isinstance(instance, (dc.NoRefsDataclass, Reference))
+    assert isinstance(instance, (dc.NoRefsDataclass, Reference)), type(instance)
 
 
 @plugin
 def takes_mixed_refs_dataclass_or_ref(instance: dc.MixedRefsDataclass | Reference[dc.MixedRefsDataclass]) -> None:
-    assert isinstance(instance, (dc.MixedRefsDataclass, Reference))
+    assert isinstance(instance, (dc.MixedRefsDataclass, Reference)), type(instance)
 
 
 @plugin
