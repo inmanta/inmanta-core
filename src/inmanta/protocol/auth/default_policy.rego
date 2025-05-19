@@ -12,8 +12,6 @@ request_environment := input.request.parameters[endpoint_data.environment_param]
 # Don't allow anything that is not explicitly allowed.
 default allowed := false
 
-# TODO: Do we remove the read-only flag?
-
 ### General rules ###
 
 # Every user can change its own password
@@ -67,68 +65,9 @@ allowed if {
 }
 
 
-#{
-#    "agent.read",
-#    # TODO: endpoint still used
-#    #"agent.write",
-#    "auth.admin",
-#    "auth.change-password",
-#    "compilereport.read",
-#    "compiler.execute",
-#    "compiler.status.read",
-#    "deploy",
-#    "desired-state.read",
-#    "desired-state.write",
-#    "discovered_resources.read",
-#    "docs.read",
-#    "dryrun.read",
-#    "dryrun.write",
-#    "executor.halt-resume",
-#    "environment.halt-resume",
-#    "environment.read",
-#    "environment.create",
-#    "environment.modify",
-#    "environment.delete",
-#    "environment.clear",
-#    "environment.settings.read",
-#    "environment.settings.write",
-#    "fact.read",
-#    "fact.write",
-#    "files.read",
-#    "files.write",
-#    "graphql.read",
-#    "metrics.read",
-#    "notification.read",
-#    "notification.write",
-#    "parameter.read",
-#    "parameter.write",
-#    "pip_config.read",
-#    "project.read",
-#    "project.create",
-#    "project.modify",
-#    "project.delete",
-#    "resources.read",
-#    "status.read",
-#    "token",
-#
-#    "lsm.callback.read",
-#    "lsm.callback.write",
-#    "lsm.catalog.read",
-#    "lsm.catalog.write",
-#    "lsm.docs.read",
-#    "lsm.expert.write",
-#    "lsm.instance.migrate",
-#    "lsm.instance.read",
-#    "lsm.instance.write",
-#    "lsm.order.read",
-#    "lsm.order.write",
-#
-#    "support.support-archive.read",
-#}
-
 ## Role: noc ###
 
-# Can do all operations that do not alter the desired state or modify the settings.
+# Can do all operations in an environment that do not alter the desired state or modify the settings.
 
 noc_specific_labels := {
     "compiler.execute",
@@ -148,11 +87,13 @@ allowed if {
 
 ### Role: operator ###
 
+# Can create, update and delete service instances.
+
 operator_specific_labels := {
     "lsm.instance.write",
     "lsm.order.write",
 }
-all_operator_labels := all_noc_labels | operator_specific_labels
+all_operator_labels := read_only_labels | operator_specific_labels
 
 allowed if {
     "operator" in input.token["urn:inmanta:roles"][request_environment]
@@ -162,7 +103,7 @@ allowed if {
 
 ### Role: environment-admin ###
 
-# Can do schema updates, update-and-recompile, setting updates, but no expert mode
+# Can do everything in a specific environment except for expert mode actions.
 
 admin_specific_labels := {
     "desired-state.write",
@@ -173,7 +114,7 @@ admin_specific_labels := {
     "lsm.instance.migrate",
 }
 
-all_admin_labels := all_operator_labels | admin_specific_labels
+all_admin_labels := all_noc_labels | all_operator_labels | admin_specific_labels
 
 allowed if {
     "environment-admin" in input.token["urn:inmanta:roles"][request_environment]
@@ -183,7 +124,7 @@ allowed if {
 
 ### Role: environment-expert-admin ###
 
-# Can do everything including expert mode.
+# Can do everything in a specific environment including expert mode actions.
 
 expert_admin_specific_labels := {
     "lsm.expert.write",
@@ -215,8 +156,4 @@ allowed if {
     print(input.token["urn:inmanta:is_admin"])
     input.token["urn:inmanta:is_admin"] == true
 }
-
-
-# TODO: Assert that the intersection of the different sets is empty
-#count(read_only_labels) + count(all_noc_labels) + count(all_operator_labels) + count(all_admin_labels) + count(all_expert_admin_labels) == count(read_only_labels | all_noc_labels | all_operator_labels | all_admin_labels | all_expert_admin_labels)
 
