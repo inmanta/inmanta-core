@@ -162,7 +162,7 @@ def test_wild_null_path() -> None:
 
 @pytest.mark.parametrize(
     "escaped, unescaped",
-    [(r"a\.b\=\[\\\*", r"a.b=[\*"), ("a\.\.\.b", "a...b")],
+    [(r"a\.b\=\[\\\*", r"a.b=[\*"), (r"a\.\.\.b", "a...b")],
 )
 def test_escape_and_un_escape(escaped: str, unescaped: str) -> None:
     """
