@@ -77,6 +77,7 @@ setup(
     },
     # Packaging
     package_dir={"": "src"},
+    package_data={"inmanta.protocol.auth": ["*.rego"]},
     # All data files should be treated as namespace package according to
     # https://setuptools.pypa.io/en/latest/userguide/datafiles.html#subdirectory-for-data-files
     packages=find_namespace_packages(where="src"),

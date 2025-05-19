@@ -240,6 +240,8 @@ LOG_LEVEL_AS_INTEGER: abc.Mapping[LogLevel, int] = {
 INTEGER_AS_LOG_LEVEL: abc.Mapping[int, LogLevel] = {value: log_level for log_level, value in LOG_LEVEL_AS_INTEGER.items()}
 
 INMANTA_URN = "urn:inmanta:"
+INMANTA_IS_ADMIN_URN = f"{INMANTA_URN}is_admin"
+INMANTA_ROLES_URN = f"{INMANTA_URN}roles"
 
 
 class Compilestate(str, Enum):

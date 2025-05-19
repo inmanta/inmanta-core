@@ -24,14 +24,14 @@ from typing import Mapping
 import pytest
 
 import nacl.pwhash
+import utils
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod
 from inmanta.protocol import common, rest
-from inmanta.protocol.auth import auth, decorators, policy_engine, providers
+from inmanta.protocol.auth import decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.server import config as server_config
 from inmanta.server import protocol
-import utils
 
 
 @pytest.fixture

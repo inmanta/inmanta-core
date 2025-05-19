@@ -1,4 +1,4 @@
-package default_policy
+package policy
 
 # Write the information about the endpoint into a variable
 # to make the policy easier to read.
@@ -191,7 +191,7 @@ expert_admin_specific_labels := {
     "environment.delete",
 }
 
-all_expert_admin_labels := all_operator_labels | expert_admin_specific_labels
+all_expert_admin_labels := all_admin_labels | expert_admin_specific_labels
 
 allowed if {
     "environment-expert-admin" in input.token["urn:inmanta:roles"][request_environment]
@@ -212,7 +212,8 @@ allowed if {
 # Users with this privilege can also create/delete project and environments and add/delete users, etc.
 
 allowed if {
-    input.token["urn:inmanta:is_admin"]
+    print(input.token["urn:inmanta:is_admin"])
+    input.token["urn:inmanta:is_admin"] == true
 }
 
 

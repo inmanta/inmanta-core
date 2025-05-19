@@ -59,8 +59,7 @@ from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceIntent
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
-from inmanta.protocol.auth import policy_engine
-from inmanta.protocol.auth import auth
+from inmanta.protocol.auth import auth, policy_engine
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.config import AuthorizationProviderName, server_auth_method
 from inmanta.server.extensions import ProductMetadata
@@ -1154,10 +1153,9 @@ def get_auth_client(
         client_types=[c.value for c in client_types],
         expire=None,
         custom_claims={
-            f"{const.INMANTA_URN}roles": env_to_role_dct,
-            f"{const.INMANTA_URN}is-admin": is_admin,
+            const.INMANTA_ROLES_URN: env_to_role_dct,
+            const.INMANTA_IS_ADMIN_URN: is_admin,
         },
     )
     config.Config.set("client_rest_transport", "token", token)
     return protocol.Client("client")
-
