@@ -1098,4 +1098,3 @@ async def test_pause_all_agents_doesnt_pause_environment(server, environment, cl
     agents = await data.Agent.get_list()
     assert len(agents) == 1
     assert not agents[0].paused
-
