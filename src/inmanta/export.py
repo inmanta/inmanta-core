@@ -485,9 +485,10 @@ class Exporter:
 
         if is_undefined:
             self._resource_state[resource.id.resource_str()] = const.ResourceState.undefined
-            resource.is_undefined = True
         else:
             self._resource_state[resource.id.resource_str()] = const.ResourceState.available
+
+        resource.is_undefined = is_undefined
 
         self._resources[resource.id] = resource
 
