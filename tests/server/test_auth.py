@@ -191,7 +191,7 @@ async def server_with_test_slice(
 
         # Users marked as is-admin can execute any API endpoint.
         allowed if {
-            input.token["urn:inmanta:is-admin"]
+            input.token["urn:inmanta:is_admin"]
         }
         """.strip()
     ],
@@ -365,8 +365,8 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     assert "token" in input_policy_engine["input"]
     token = input_policy_engine["input"]["token"]
     assert token["urn:inmanta:ct"] == ["api"]
-    assert token["urn:inmanta:roles"] == {env_id: "read-write"}
-    assert token["urn:inmanta:is-admin"] is False
+    assert token[const.INMANTA_ROLES_URN] == {env_id: "read-write"}
+    assert token[const.INMANTA_IS_ADMIN_URN] is False
 
     client = utils.get_auth_client(env_to_role_dct={}, is_admin=True)
     input_policy_engine = None
@@ -382,8 +382,8 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     assert "token" in input_policy_engine["input"]
     token = input_policy_engine["input"]["token"]
     assert token["urn:inmanta:ct"] == ["api"]
-    assert token["urn:inmanta:roles"] == {}
-    assert token["urn:inmanta:is-admin"] is True
+    assert token[const.INMANTA_ROLES_URN] == {}
+    assert token[const.INMANTA_IS_ADMIN_URN] is True
 
 
 async def test_policy_engine_data() -> None:
@@ -604,5 +604,5 @@ async def test_get_input_for_policy_engine(capture_input_for_policy_engine: Capt
     assert pe_input["input"]["request"]["endpoint_id"] == "GET /api/v1/method-with-call-context"
     assert pe_input["input"]["request"]["parameters"] == {"arg1": arg1, "arg2": arg2}
     assert pe_input["input"]["token"]["urn:inmanta:ct"] == ["api"]
-    assert pe_input["input"]["token"]["urn:inmanta:roles"] == {env_id: "test"}
-    assert pe_input["input"]["token"]["urn:inmanta:is-admin"] is False
+    assert pe_input["input"]["token"][const.INMANTA_ROLES_URN] == {env_id: "test"}
+    assert pe_input["input"]["token"][const.INMANTA_IS_ADMIN_URN] is False
