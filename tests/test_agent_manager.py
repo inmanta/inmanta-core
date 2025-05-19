@@ -1082,3 +1082,20 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     LOGGER.info("Heartbeat good, unlocking")
     hanglock.set()
     await hangers
+
+
+async def test_pause_all_agents_doesnt_pause_environment(server, environment, client, agent) -> None:
+    """
+    Reproduces bug: https://github.com/inmanta/inmanta-core/issues/9081
+    """
+    agents = await data.Agent.get_list()
+    assert len(agents) == 1
+    assert not agents[0].paused
+
+    result = await client.all_agents_action(environment, AgentAction.pause.value)
+    assert result.code == 200
+
+    agents = await data.Agent.get_list()
+    assert len(agents) == 1
+    assert not agents[0].paused
+
