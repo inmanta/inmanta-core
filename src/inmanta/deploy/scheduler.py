@@ -121,7 +121,7 @@ class ResourceRecord(typing.TypedDict):
     """
 
     resource_id: str
-    status: str
+    is_undefined: bool
     attributes: Mapping[str, object]
     attribute_hash: str
 
@@ -155,11 +155,7 @@ class ModelVersion:
                 }
                 for resource in resources
             },
-            undefined={
-                ResourceIdStr(resource["resource_id"])
-                for resource in resources
-                if const.ResourceState(resource["status"]) is const.ResourceState.undefined
-            },
+            undefined={ResourceIdStr(resource["resource_id"]) for resource in resources if resource["is_undefined"]},
         )
 
 
@@ -680,8 +676,7 @@ class ResourceScheduler(TaskManager):
             resources_from_db = await data.Resource.get_resources_for_version_raw_with_persistent_state(
                 environment=self.environment,
                 version=version,
-                projection=["resource_id", "attributes", "attribute_hash"],
-                projection_persistent=["status"],
+                projection=ResourceRecord.__required_keys__,
                 connection=con,
             )
 
@@ -717,7 +712,7 @@ class ResourceScheduler(TaskManager):
                 await data.Resource.get_resources_since_version_raw(
                     self.environment,
                     since=self._state.version,
-                    projection=["resource_id", "attributes", "status", "attribute_hash"],
+                    projection=ResourceRecord.__required_keys__,
                     connection=con,
                 )
             )
