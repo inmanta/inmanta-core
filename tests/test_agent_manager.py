@@ -29,7 +29,7 @@ from uuid import UUID, uuid4
 import pytest
 from tornado.httpclient import AsyncHTTPClient
 
-from inmanta import config, data
+from inmanta import config, data, const
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result, handle, typedmethod
@@ -1088,13 +1088,22 @@ async def test_pause_all_agents_doesnt_pause_environment(server, environment, cl
     """
     Reproduces bug: https://github.com/inmanta/inmanta-core/issues/9081
     """
+    env_id = UUID(environment)
+    env = await data.Environment.get_by_id(env_id)
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    await agent_manager.ensure_agent_registered(env=env, nodename=agent.name)
+
     agents = await data.Agent.get_list()
-    assert len(agents) == 1
-    assert not agents[0].paused
+    assert len(agents) == 2
+    agent_dct = {agent.name: agent for agent in agents}
+    assert not agent_dct[const.AGENT_SCHEDULER_ID].paused
+    assert not agent_dct[agent.name].paused
 
     result = await client.all_agents_action(environment, AgentAction.pause.value)
     assert result.code == 200
 
     agents = await data.Agent.get_list()
-    assert len(agents) == 1
-    assert not agents[0].paused
+    assert len(agents) == 2
+    agent_dct = {agent.name: agent for agent in agents}
+    assert not agent_dct[const.AGENT_SCHEDULER_ID].paused
+    assert agent_dct[agent.name].paused
