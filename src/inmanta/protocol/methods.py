@@ -963,19 +963,6 @@ def get_agent_process(id: uuid.UUID):
     """
 
 
-# Get a list of all agents
-@auth(auth_label=const.AuthorizationLabel.AGENT_WRITE, read_only=False, environment_param="tid")
-@method(path="/agent/<id>", operation="POST", api=True, timeout=5, arg_options=ENV_OPTS, client_types=[const.ClientType.api])
-def trigger_agent(tid: uuid.UUID, id: str):
-    """
-    Request the server to reload an agent
-
-    :param tid: The environment this agent is defined in
-    :param id: The name of the agent
-    :return: The requested node
-    """
-
-
 @auth(auth_label=const.AuthorizationLabel.AGENT_READ, read_only=True, environment_param="tid")
 @method(path="/agent", operation="GET", api=True, timeout=5, arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def list_agents(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] = None, limit: Optional[int] = None):
