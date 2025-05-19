@@ -1286,6 +1286,8 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
         should_fork_server_be_defined=True,
         nb_executor_to_be_defined=1,
     )
+    result = await client.get_agents(environment)
+    assert result.code == 200
 
     # Retrieve the current processes, we should have more processes than `start_state_children`
     children_after_deployment = construct_scheduler_children(current_pid)
@@ -1332,18 +1334,25 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     }
     assert actual_data[0] == expected_data
 
-    await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
-
+    # We pause the executor so it doesn't try to deploy the resource
+    await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.value)
+    # Let's restart everything and check that the resource is considered as available
     snippetcompiler.setup_for_snippet(model, ministd=True, index_url="https://pypi.org/simple")
     version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    # Let's restart everything and check that the resource is considered as available
-    result = await client.resource_list(environment, deploy_summary=True)
-    assert result.code == 200
-    summary = result.result["metadata"]["deploy_summary"]
-    assert summary["by_state"]["available"] == 1, f"Unexpected summary: {summary}"
+    async def wait_for_available() -> bool:
+        """
+        Wait for the scheduler to set the resource to available
+        """
+        result = await client.resource_list(environment, deploy_summary=True)
+        assert result.code == 200
+        summary = result.result["metadata"]["deploy_summary"]
+        return summary["by_state"]["available"] == 1
+
+    # Wait for the scheduler to be up and set the status to available
+    await retry_limited(wait_for_available, timeout=5)
 
 
 async def test_rps_state_deploying(

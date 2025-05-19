@@ -461,6 +461,8 @@ async def test_resource_count_metric(clienthelper, client, agent):
     await wait_until_version_is_released(client, environment=env_uuid1, version=version_env1)
     await wait_until_version_is_released(client, environment=env_uuid2, version=version_env2)
 
+    await data.ResourcePersistentState.mark_orphans_not_in_version(environment=env_uuid1, version=int(version_env1))
+
     # adds the ResourceCountMetricsCollector
     rcmc = ResourceCountMetricsCollector()
     metrics_service.register_metric_collector(metrics_collector=rcmc)

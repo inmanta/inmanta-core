@@ -20,7 +20,6 @@ import asyncio
 import datetime
 import typing
 import uuid
-from collections.abc import Set
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Any, Callable, Coroutine, Mapping, Never, Optional, Sequence
@@ -278,11 +277,6 @@ class DummyStateManager(StateUpdateManager):
         intent: dict[ResourceIdStr, tuple[state.ResourceState, state.ResourceIntent]],
         update_blocked_state: bool,
         connection: Optional[Connection] = None,
-    ) -> None:
-        pass
-
-    async def mark_as_orphan(
-        self, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
     ) -> None:
         pass
 
