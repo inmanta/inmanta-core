@@ -706,7 +706,7 @@ def enable_auth() -> bool:
 
 
 @pytest.fixture
-def auth_method() -> AuthMethod:
+def authentication_method() -> AuthMethod:
     """
     A fixture that returns the authentication method configured by the server_config fixture.
     """
@@ -770,7 +770,7 @@ async def server_config(
     auto_start_agent,
     no_agent,
     enable_auth: bool,
-    auth_method: AuthMethod,
+    authentication_method: AuthMethod,
     authorization_provider: AuthorizationProviderName,
     access_policy: str,
     path_policy_engine_executable: str,
@@ -810,7 +810,7 @@ async def server_config(
             auth=enable_auth,
             ca=False,
             ssl=False,
-            authentication_method=auth_method,
+            authentication_method=authentication_method,
             authorization_provider=authorization_provider,
             access_policy=access_policy,
             path_opa_executable=path_policy_engine_executable,
@@ -868,7 +868,7 @@ async def server_multi(
     request,
     clean_reset,
     unused_tcp_port_factory,
-    auth_method: AuthMethod,
+    authentication_method: AuthMethod,
     authorization_provider: AuthorizationProviderName,
     access_policy: str,
     path_policy_engine_executable: str,
@@ -880,7 +880,7 @@ async def server_multi(
             auth=auth,
             ca=ca,
             ssl=ssl,
-            authentication_method=auth_method,
+            authentication_method=authentication_method,
             authorization_provider=authorization_provider,
             access_policy=access_policy,
             path_opa_executable=path_policy_engine_executable,

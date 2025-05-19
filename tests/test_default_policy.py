@@ -38,7 +38,7 @@ def read_file(file_name: str) -> str:
 
 
 @pytest.mark.parametrize("enable_auth", [True])
-@pytest.mark.parametrize("auth_method", [AuthMethod.database])
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
 @pytest.mark.parametrize("authorization_provider", [AuthorizationProviderName.policy_engine])
 @pytest.mark.parametrize(
     "access_policy",
@@ -111,7 +111,7 @@ async def test_default_policy(server, client, role: str | None, is_admin: bool, 
 
 
 @pytest.mark.parametrize("enable_auth", [True])
-@pytest.mark.parametrize("auth_method", [AuthMethod.database])
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
 @pytest.mark.parametrize("authorization_provider", [AuthorizationProviderName.policy_engine])
 @pytest.mark.parametrize(
     "access_policy",
