@@ -29,7 +29,7 @@ from uuid import UUID, uuid4
 import pytest
 from tornado.httpclient import AsyncHTTPClient
 
-from inmanta import config, data, const
+from inmanta import config, const, data
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result, handle, typedmethod
