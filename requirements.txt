@@ -37,7 +37,7 @@ pyyaml==6.0.2
 rpdb==0.2.0
 ruamel.yaml==0.18.10
 setproctitle==1.3.6
-setuptools==80.7.1
+setuptools==80.8.0
 sphinx==8.2.3
 sphinx-argparse==0.5.2
 sphinx-autodoc-annotation==1.0-1
