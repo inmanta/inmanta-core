@@ -529,4 +529,3 @@ async def test_resource_details(server, client, env_with_resources):
     assert result.result["data"]["requires_status"] == {
         "std::testing::NullResource[internal,name=/tmp/orphaned_req]": "orphaned"
     }
-

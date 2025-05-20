@@ -657,8 +657,11 @@ class OrchestrationService(protocol.ServerSlice):
         connection: Connection,
     ) -> dict[tuple[str, str], list[str]]:
         """
-        Retrieve which inmanta modules (name, version) are registered for all agents
-        for a given model version and a given environment.
+        Make sure that all code used in this partial version was
+        already registered in the base version.
+
+        Retrieve which inmanta modules (name, version) were registered for all agents
+        for the given base model version.
 
         Make sure that the same module versions are used in this partial version.
         """
@@ -669,12 +672,7 @@ class OrchestrationService(protocol.ServerSlice):
         )
         for inmanta_module_name, module_data in module_version_info.items():
             module_version = module_data.version
-            if not all(
-                [
-                    (inmanta_module_name, module_version) in base_version_data,
-                    set(module_data.for_agents).issubset(base_version_data[(inmanta_module_name, module_version)]),
-                ]
-            ):
+            if (inmanta_module_name, module_version) not in base_version_data:
                 raise BadRequest(
                     "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
                 )

@@ -1145,9 +1145,6 @@ class Field(Generic[T]):
         if isinstance(value, self.field_type):
             return value
 
-        # asyncpg does not convert a jsonb field to a dict
-        if isinstance(value, str) and self.field_type is dict:
-            return value
         # asyncpg does not convert an enum field to an enum type
         if isinstance(value, str) and issubclass(self.field_type, enum.Enum):
             return self.field_type[value]
