@@ -3436,8 +3436,8 @@ class Agent(BaseDocument):
         :return A list of agent names that have been paused/unpaused by this method.
         """
         if endpoint is None:
-            query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 RETURNING name"
-            values = [cls._get_value(paused), cls._get_value(env)]
+            query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 AND name!=$3 RETURNING name"
+            values = [cls._get_value(paused), cls._get_value(env), const.AGENT_SCHEDULER_ID]
         else:
             query = f"UPDATE {cls.table_name()} SET paused=$1 WHERE environment=$2 AND name=$3 RETURNING name"
             values = [cls._get_value(paused), cls._get_value(env), cls._get_value(endpoint)]
@@ -5184,8 +5184,6 @@ class Resource(BaseDocument):
         Create a new resource dao instance from this dao instance. Only creates the object without inserting it.
         The new instance will have the given version.
         """
-        is_undefined = self.status is ResourceState.undefined
-        new_resource_state = ResourceState.undefined if is_undefined else ResourceState.available
         return Resource(
             environment=self.environment,
             model=new_version,

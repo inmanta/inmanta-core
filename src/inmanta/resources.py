@@ -30,6 +30,7 @@ from inmanta.ast import CompilerException, ExplicitPluginException, ExternalExce
 from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
+from inmanta.util import dict_path
 
 if TYPE_CHECKING:
     from inmanta import export
@@ -245,7 +246,10 @@ def collect_references(value_reference_collector: ReferenceCollector | None, val
             ]
 
         case dict() | proxy.DictProxy():
-            return {key: collect_references(value_reference_collector, value, f"{path}.{key}") for key, value in value.items()}
+            return {
+                key: collect_references(value_reference_collector, value, f"{path}.{dict_path.NormalValue(key).escape()}")
+                for key, value in value.items()
+            }
 
         case references.Reference():
             if value_reference_collector is None:
