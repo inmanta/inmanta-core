@@ -1,0 +1,6 @@
+description: Rework the code transport between the compiler and the agent.
+issue-nr: 8729
+change-type: minor
+destination-branches: [master]
+sections:
+  upgrade-note: "{{description}}"
