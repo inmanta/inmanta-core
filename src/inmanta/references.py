@@ -332,6 +332,14 @@ class ReferenceLike:
     def arguments(self) -> collections.abc.Mapping[str, object]:
         return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
+    def __eq__(self, other: object) -> bool:
+        if type(self) is not type(other):
+            return False
+
+        assert isinstance(other, ReferenceLike)  # mypy can't figure out the check above
+
+        return self.arguments == other.arguments
+
 
 class Mutator(ReferenceLike):
     """A mutator that has side effects when executed"""

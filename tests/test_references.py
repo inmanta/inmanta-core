@@ -76,7 +76,13 @@ def test_references_in_model(
         import refs
         import std::testing
 
-        test_ref = refs::create_test(value=refs::create_string_reference(name="CWD"))
+        subref = refs::create_string_reference(name="CWD")
+        # Test equals method
+        subref = refs::create_string_reference(name="CWD")
+
+        test_ref = refs::create_test(value=subref)
+        # Test equals method, does not work on dataclasses
+        # test_ref = refs::create_test(value=refs::create_string_reference(name="CWD"))
 
         std::testing::NullResource(
             name="test",
@@ -175,6 +181,9 @@ async def test_deploy_end_to_end(
     assert result.code == 200
     details = ReleasedResourceDetails(**result.result["data"])
     assert details.status == ReleasedResourceState.deployed
+    result = await client.resource_logs(environment, "refs::DeepResource[test,name=test3]")
+    assert result.code == 200
+    assert [msg for msg in result.result["data"] if "Observed value: {'inner.something': 'testx'}" in msg["msg"]]
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:

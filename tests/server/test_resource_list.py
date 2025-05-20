@@ -34,12 +34,11 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 import inmanta.util
 import util.performance
 import utils
-from inmanta import const, data, resources, util
+from inmanta import const, data, util
 from inmanta.agent.executor import DeployReport
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource
-from inmanta.deploy import persistence, state
-from inmanta.deploy.state import DeployResult
+from inmanta.deploy import scheduler
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
@@ -113,6 +112,7 @@ async def test_has_only_one_version_from_resource(server, client):
         environment=env.id, resource_version_id=res2_key + ",v=%d" % version, attributes={"name": res2_name}
     )
     await res2_v1.insert()
+    # This version has both resources so we can populate just this version
     await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
 
     version = 2
@@ -130,7 +130,6 @@ async def test_has_only_one_version_from_resource(server, client):
         status=ResourceState.deploying,
     )
     await res2_v2.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
 
     version = 3
     res1_v3 = data.Resource.new(
@@ -140,7 +139,9 @@ async def test_has_only_one_version_from_resource(server, client):
         status=ResourceState.deployed,
     )
     await res1_v3.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
+
+    # This will mark res2 as an orphan since it is not on version 3
+    await data.ResourcePersistentState.mark_orphans_not_in_version(environment=env.id, version=version)
 
     version = 4
     res1_v4 = data.Resource.new(
@@ -150,7 +151,6 @@ async def test_has_only_one_version_from_resource(server, client):
         status=ResourceState.deployed,
     )
     await res1_v4.insert()
-    await data.ResourcePersistentState.populate_for_version(environment=env.id, model_version=version)
     await res1_v4.update_persistent_state(last_non_deploying_status=ResourceState.deployed)
 
     result = await client.resource_list(env.id, sort="status.asc")
@@ -170,8 +170,9 @@ async def env_with_resources(server, client):
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
+    max_version = 3
     # Add multiple versions of model, with 2 of them released
-    for i in range(1, 4):
+    for i in range(1, max_version + 1):
         cm = data.ConfigurationModel(
             environment=env.id,
             version=i,
@@ -184,10 +185,15 @@ async def env_with_resources(server, client):
         await cm.insert()
 
     async def create_resource(
-        agent: str, path: str, resource_type: str, status: ResourceState, versions: list[int], environment: UUID = env.id
+        agent: str,
+        path: str,
+        resource_type: str,
+        status: ResourceState,
+        versions: list[int],
+        environment: UUID = env.id,
     ):
+        key = f"{resource_type}[{agent},path={path}]"
         for version in versions:
-            key = f"{resource_type}[{agent},path={path}]"
             res = data.Resource.new(
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
@@ -195,25 +201,31 @@ async def env_with_resources(server, client):
                 status=status,
             )
             await res.insert()
-            await data.ResourcePersistentState.populate_for_version(environment=environment, model_version=version)
-            await res.update_persistent_state(
-                last_deploy=datetime.now(tz=UTC),
-                last_non_deploying_status=(
-                    status
-                    if status
-                    not in [
-                        ResourceState.available,
-                        ResourceState.deploying,
-                        ResourceState.undefined,
-                        ResourceState.skipped_for_undefined,
-                    ]
-                    else None
-                ),
-            )
+        # Populate RPS and mark each resource not in the max_version as orphaned
+        version = max(versions)
+        await data.ResourcePersistentState.populate_for_version(environment=environment, model_version=version)
+        await data.ResourcePersistentState.mark_orphans_not_in_version(environment=environment, version=max_version)
+
+        res = await data.Resource.get_one(resource_id=key)
+        await res.update_persistent_state(
+            last_deploy=datetime.now(tz=UTC),
+            last_non_deploying_status=(
+                status
+                if status
+                not in [
+                    ResourceState.available,
+                    ResourceState.deploying,
+                    ResourceState.undefined,
+                    ResourceState.skipped_for_undefined,
+                ]
+                else None
+            ),
+        )
 
     await create_resource("agent1", "/etc/file1", "test::File", ResourceState.available, [1, 2, 3])
-    await create_resource("agent1", "/etc/file2", "test::File", ResourceState.deploying, [1, 2])  # Orphaned
-    await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [2])  # Orphaned
+    # The following 2 resources are orphaned
+    await create_resource("agent1", "/etc/file2", "test::File", ResourceState.deploying, [1, 2])
+    await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [2])
     await create_resource("agent2", "/tmp/file4", "test::File", ResourceState.unavailable, [3])
     await create_resource("agent2", "/tmp/dir5", "test::Directory", ResourceState.skipped, [3])
     await create_resource("agent3", "/tmp/dir6", "test::Directory", ResourceState.deployed, [3])
@@ -713,14 +725,16 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
 
     deploy_counter = 0
     # The mix:
-    # 100 versions -> increments , all hashes change after 50 steps
-    # each with 5000 resources (50 sets of 100 resources)
+    # 2*<instances> versions -> increments , all hashes change after <instances> steps
+    # each version with 100 resources
     # one undefined
     # one skip for undef
     # one failed
     # one skipped
-    # 500 orphans: in second half, produce 10 orphans each
-    # every 10th version is not released
+    # orphans: in second half, produce 10 orphans each -> 10*<instances> orphans
+    # every 10th version is not released -> not sure what this means and if it still applies
+
+    dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=client)
 
     async def make_resource_set(tenant_index: int, iteration: int) -> int:
         is_full = tenant_index == 0 and iteration == 0
@@ -785,49 +799,35 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
             r for r in all_resources if r["resource_id"] in increment and r["agent"] == f"agent{tenant_index}"
         ]
 
-        to_db_update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
+        await dummy_scheduler._reset()
+        async with dummy_scheduler.state_update_manager.get_connection() as con:
+            await dummy_scheduler._recover_scheduler_state_using_increments_calculation(connection=con)
 
         async def deploy(resource: dict[str, object]) -> None:
             nonlocal deploy_counter
-            rid = ResourceIdStr(resource["resource_id"])
-            rvid = ResourceVersionIdStr(resource["resource_version_id"])
-            actionid = uuid.uuid4()
             deploy_counter = deploy_counter + 1
-            start_time: datetime = datetime.now().astimezone()
-            await to_db_update_manager.send_in_progress(actionid, resources.Id.parse_id(rvid))
+            rid = ResourceIdStr(resource["resource_id"])
+            action_id = uuid.uuid4()
+            rvid = ResourceVersionIdStr(resource["resource_version_id"])
+            deploy_intent = await dummy_scheduler.deploy_start(action_id, rid)
             if "sub=4]" in rid:
+                # never finish deploying r4
                 return
-            else:
-                if "sub=2]" in rid:
-                    status = const.HandlerResourceState.failed
-                    compliance_status = state.Compliance.NON_COMPLIANT
-                    deployment_result = DeployResult.FAILED
-                elif "sub=3]" in rid:
-                    status = const.HandlerResourceState.skipped
-                    compliance_status = state.Compliance.NON_COMPLIANT
-                    deployment_result = DeployResult.SKIPPED
-                else:
-                    status = const.HandlerResourceState.deployed
-                    compliance_status = state.Compliance.COMPLIANT
-                    deployment_result = DeployResult.DEPLOYED
-                await to_db_update_manager.send_deploy_done(
-                    attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resource),
-                    result=DeployReport(
+            if deploy_intent is not None:
+                await dummy_scheduler.deploy_done(
+                    deploy_intent,
+                    DeployReport(
                         rvid=rvid,
-                        action_id=actionid,
-                        resource_state=status,
+                        action_id=action_id,
+                        resource_state=(
+                            const.HandlerResourceState.failed
+                            if "sub=2]" in rid
+                            else const.HandlerResourceState.skipped if "sub=3]" in rid else const.HandlerResourceState.deployed
+                        ),
                         messages=[],
                         changes={},
                         change=None,
                     ),
-                    state=state.ResourceState(
-                        compliance=compliance_status,
-                        last_deploy_result=deployment_result,
-                        blocked=state.Blocked.NOT_BLOCKED,
-                        last_deployed=datetime.now().astimezone(),
-                    ),
-                    started=start_time,
-                    finished=datetime.now().astimezone(),
                 )
 
         await asyncio.gather(*(deploy(resource) for resource in resources_in_increment_for_agent))
@@ -850,10 +850,10 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
     assert result.code == 200
     assert result.result["metadata"]["deploy_summary"] == {
         "by_state": {
-            "available": very_big_env - 1,
+            "available": 0,
             "cancelled": 0,
             "deployed": (95 * very_big_env),
-            "deploying": 1,
+            "deploying": very_big_env,
             "failed": very_big_env,
             "skipped": very_big_env,
             "skipped_for_undefined": very_big_env,
@@ -871,9 +871,9 @@ async def test_resources_paging_performance(client, environment, very_big_env: i
     filters = [
         ({}, very_big_env * 110),
         ({"status": "!orphaned"}, very_big_env * 100),
-        ({"status": "deploying"}, 1),
+        ({"status": "deploying"}, very_big_env),
         ({"status": "deployed"}, 95 * very_big_env),
-        ({"status": "available"}, very_big_env - 1),
+        ({"status": "available"}, 0),
         ({"agent": "agent0"}, 110),
         ({"agent": "someotheragent"}, 0),
         ({"resource_id_value": "39"}, very_big_env),

@@ -251,7 +251,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         version: int,
         filter: Callable[[ResourceIdStr], bool] = lambda x: True,
         connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
-        only_update_from_states: Optional[Sequence[const.ResourceState]] = None,
     ) -> None:
         """
         Set the status of the provided resources as deployed
@@ -273,21 +272,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
 
         async with data.Resource.get_connection(connection.connection) as inner_connection:
             async with inner_connection.transaction():
-                # validate resources
-                if only_update_from_states is not None:
-                    resources = await data.Resource.get_resource_ids_with_status(
-                        env.id,
-                        resources_id_filtered,
-                        version,
-                        only_update_from_states,
-                        # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
-                        # cascading deletes
-                        lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
-                        connection=inner_connection,
-                    )
-                    if not resources:
-                        return None
-
                 resources_version_ids: list[ResourceVersionIdStr] = [
                     ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id_filtered
                 ]

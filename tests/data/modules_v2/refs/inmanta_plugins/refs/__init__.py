@@ -143,7 +143,8 @@ class Deep(ManagedResource, PurgeableResource):
 
     @classmethod
     def get_value(cls, _, resource) -> dict[str, object]:
-        return {"inner": resource.value}
+        # use a . to ensure proper escaping
+        return {"inner.something": resource.value}
 
 
 @provider("refs::DeepResource", name="null")
