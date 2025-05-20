@@ -783,10 +783,6 @@ class AgentManager(ServerSlice, SessionListener):
     async def get_agent_process(self, agent_sid: uuid.UUID) -> Apireturn:
         return await self.get_agent_process_report(agent_sid)
 
-    @handle(methods.trigger_agent, agent_id="id", env="tid")
-    async def trigger_agent(self, env: UUID, agent_id: str) -> Apireturn:
-        raise NotImplementedError()
-
     @handle(methods.list_agent_processes)
     async def list_agent_processes(
         self,
