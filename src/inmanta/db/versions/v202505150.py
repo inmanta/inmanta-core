@@ -27,6 +27,7 @@ async def update(connection: Connection) -> None:
         ALTER TABLE public.resource ADD COLUMN is_undefined BOOLEAN DEFAULT false;
 
         UPDATE public.resource
-        SET is_undefined = (status='undefined'::public.resourcestate);
+        SET is_undefined = true
+        WHERE status = 'undefined'::public.resourcestate;
     """
     await connection.execute(schema)

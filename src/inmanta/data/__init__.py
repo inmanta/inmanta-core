@@ -5165,8 +5165,6 @@ class Resource(BaseDocument):
         Create a new resource dao instance from this dao instance. Only creates the object without inserting it.
         The new instance will have the given version.
         """
-        is_undefined = self.status is ResourceState.undefined
-        new_resource_state = ResourceState.undefined if is_undefined else ResourceState.available
         return Resource(
             environment=self.environment,
             model=new_version,
@@ -5176,8 +5174,8 @@ class Resource(BaseDocument):
             agent=self.agent,
             attributes=self.attributes.copy(),
             attribute_hash=self.attribute_hash,
-            status=new_resource_state,
-            is_undefined=is_undefined,
+            status=ResourceState.undefined if self.is_undefined else ResourceState.available,
+            is_undefined=self.is_undefined,
             resource_set=self.resource_set,
             provides=self.provides,
         )

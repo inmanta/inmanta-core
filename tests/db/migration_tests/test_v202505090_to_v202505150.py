@@ -23,7 +23,8 @@ from collections import abc
 import asyncpg
 import pytest
 
-from inmanta import const, data
+from inmanta import data
+from inmanta.protocol import Client
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
@@ -39,6 +40,16 @@ async def test_add_is_undefined_to_resource_table(
 
     await migrate_db_from()
 
-    resources = await data.Resource.get_list()
-    for resource in resources:
-        assert resource.is_undefined == (resource.status == const.ResourceState.undefined)
+    env = await data.Environment.get_one(name="dev-3")
+    assert env
+
+    client = Client("client")
+    # Undefined resource
+    res = await client.get_resource(tid=env.id, id="test::Resource[agent1,key=key4],v=3")
+    assert res.code == 200
+    assert res.result["resource"]["is_undefined"]
+
+    # Available resource
+    res = await client.get_resource(tid=env.id, id="test::Resource[agent1,key=key8],v=3")
+    assert res.code == 200
+    assert not res.result["resource"]["is_undefined"]
