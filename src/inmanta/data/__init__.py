@@ -4675,7 +4675,7 @@ class Resource(BaseDocument):
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
     :param status: The state of this resource, used e.g. in scheduling
-    :param is_undefined: If this resource is undefined
+    :param is_undefined: If the desired state for resource is undefined
     :param resource_set: The resource set this resource belongs to. Used when doing partial compiles.
     """
 
