@@ -733,3 +733,5 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         module_version_info=module_version_info,
     )
     assert result.code == 200
+
+    await check_code_for_version(version=3, environment=environment, agent_names=["agent_X", "agent_Y", "agent_Z"])
