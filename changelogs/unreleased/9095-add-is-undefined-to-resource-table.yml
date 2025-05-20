@@ -1,0 +1,4 @@
+description: Add is_undefined to the Resource table
+issue-nr: 9095
+change-type: minor
+destination-branches: [master]

@@ -488,6 +488,8 @@ class Exporter:
         else:
             self._resource_state[resource.id.resource_str()] = const.ResourceState.available
 
+        resource.is_undefined = is_undefined
+
         self._resources[resource.id] = resource
 
     def resources_to_list(self) -> list[dict[str, Any]]:
