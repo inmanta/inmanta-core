@@ -4675,6 +4675,7 @@ class Resource(BaseDocument):
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
     :param status: The state of this resource, used e.g. in scheduling
+    :param is_undefined: If the desired state for resource is undefined
     :param resource_set: The resource set this resource belongs to. Used when doing partial compiles.
     """
 
@@ -5194,8 +5195,8 @@ class Resource(BaseDocument):
             agent=self.agent,
             attributes=self.attributes.copy(),
             attribute_hash=self.attribute_hash,
-            status=new_resource_state,
-            is_undefined=is_undefined,
+            status=ResourceState.undefined if self.is_undefined else ResourceState.available,
+            is_undefined=self.is_undefined,
             resource_set=self.resource_set,
             provides=self.provides,
         )
