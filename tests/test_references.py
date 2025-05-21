@@ -16,12 +16,14 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import contextlib
 import json
 import logging
 import os
 import re
 import typing
 from logging import DEBUG
+from typing import Optional
 from uuid import UUID
 
 import pytest
@@ -114,9 +116,9 @@ def test_references_in_model(
     assert not resource.fail and resource.fail is not None
 
     with caplog.at_level(DEBUG):
-        resource.get_reference_value(UUID("78d7ff5f-6309-3011-bfff-8068471d5761"), PythonLogger(logging.getLogger("test.refs")))
+        resource.get_reference_value(UUID("1102e0ce-2f03-31a5-ac3e-ef1a6609daaf"), PythonLogger(logging.getLogger("test.refs")))
 
-    log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference TestReference CWD")
+    log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference CWD")
 
 
 async def test_deploy_end_to_end(
@@ -269,14 +271,52 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     run_snippet("refs::plugins::takes_entity(refs::dc::create_all_refs_dataclass_reference('hello'))")
     run_snippet("refs::plugins::takes_entity(refs::dc::create_no_refs_dataclass_reference())")
 
+    # TODO: return type
+    # TODO: docstring
+    @contextlib.contextmanager
+    def raises_wrapped(exc_tp: type[Exception], *, match: Optional[str] = None) -> None:
+        with pytest.raises(WrappingRuntimeException) as exc_info:
+            yield
+        assert isinstance(exc_info.value.__cause__, exc_tp)
+        if match is not None:
+            msg: str = exc_info.value.__cause__.format()
+            assert re.search(match, msg) is not None, msg
+
     # Scenario: plugin annotated as `Entity` accesses reference attribute during plugin execution
     ## no reference
     run_snippet("refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value='Hello World!'))")
+    run_snippet("refs::plugins::read_entity_list_value(refs::ListContainer(value=['Hello', 'World!']))")
+    run_snippet("refs::plugins::read_entity_list_head(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))")
+    run_snippet("refs::plugins::read_entity_dict_value(refs::DictContainer(value={'Hello': 'World!', 'mykey': '42'}))")
+    run_snippet(
+        "refs::plugins::read_entity_dict_mykey(refs::DictContainer(value={'Hello': refs::create_string_reference('hello'), 'mykey': '42'}))"
+    )
     ## reference
-    with pytest.raises(WrappingRuntimeException) as exc_info:
+    ### in attribute
+    with raises_wrapped(UndeclaredReference, match="Encountered reference value in instance attribute"):
         run_snippet("refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
-    assert isinstance(exc_info.value.__cause__, UndeclaredReference)
-    assert isinstance(exc_info.value.__cause__.reference, Reference)
+    ### inside list attribute
+    with raises_wrapped(UndeclaredReference, match="Undeclared reference found"):
+        run_snippet("refs::plugins::read_entity_list_value(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))")
+    with raises_wrapped(UndeclaredReference, match="Undeclared reference found"):
+        run_snippet("refs::plugins::read_entity_list_head(refs::ListContainer(value=[refs::create_string_reference('hello'), 'Hello']))")
+    ### inside dict attribute
+    with raises_wrapped(UndeclaredReference, match="Undeclared reference found"):
+        run_snippet(
+            """\
+            refs::plugins::read_entity_dict_value(
+                refs::DictContainer(value={'Hello': 'World!', 'mykey': refs::create_string_reference('hello')})
+            )
+            """
+        )
+    with raises_wrapped(UndeclaredReference, match="Undeclared reference found"):
+        run_snippet(
+            """\
+            refs::plugins::read_entity_dict_mykey(
+                refs::DictContainer(value={'Hello': 'World!', 'mykey': refs::create_string_reference('hello')})
+            )
+            """
+        )
     ## reference, plugin explicitly allows it
     run_snippet("refs::plugins::read_entity_ref_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
 
@@ -320,7 +360,6 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     run_snippet("refs::plugins::takes_no_refs_dataclass_or_ref(refs::dc::NoRefsDataclass())")
     run_snippet("refs::plugins::takes_mixed_refs_dataclass_or_ref(refs::dc::create_mixed_refs_dataclass_reference('hello'))")
     run_snippet("refs::plugins::takes_mixed_refs_dataclass_or_ref(refs::dc::MixedRefsDataclass(maybe_ref_value='hello'))")
-    # TODO: is inheritance really viable for references? i.e. for the over-the-wire part
     ## rejects other dataclasses / references to other dataclasses, except for inheritance
     run_snippet("refs::plugins::takes_no_refs_dataclass_or_ref(refs::dc::MixedRefsDataclass(maybe_ref_value='hello'))")
     run_snippet("refs::plugins::takes_no_refs_dataclass_or_ref(refs::dc::create_mixed_refs_dataclass_reference('hello'))")
@@ -335,6 +374,9 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
 
     # TODO: inheritance on reference return type (declare generic, return specific -> model instance = specific)
     # TODO: inheritance on return type
+    # TODO: plugin that returns list attribute without reading elements, annotated without reference in return type
+    # TODO: takes_object(["list", "of", reference]) -> perhaps by making the proxy non-validated?
+    # TODO: takes_object_or_reference(["list", "of", reference]) -> perhaps by making the proxy non-validated?
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
@@ -387,7 +429,7 @@ def test_references_in_expression(snippetcompiler: "SnippetCompilationTest", mod
 
 
 def test_references_in_resource_id(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
-    """Test that references are rejected in expressions"""
+    """Test that references are rejected in the resource id value"""
     refs_module = os.path.join(modules_v2_dir, "refs")
 
     snippetcompiler.setup_for_snippet(
@@ -397,12 +439,17 @@ def test_references_in_resource_id(snippetcompiler: "SnippetCompilationTest", mo
         value = refs::create_string_reference(name="CWD")
 
         refs::NullResource(name=value,agentname=value)
-
         """,
         install_v2_modules=[env.LocalPackagePath(path=refs_module)],
         autostd=True,
     )
 
+    # TODO: when do we expect this error vs UndeclaredReference? The latter seems useful for custom handler implementations
+    #       =>
+    #       1 for non-id values, UndeclaredReference
+    #       2 for non-id values, user can use with_references()
+    #       3 for id values, provide the more to-the-point error message. Definitely relevant for 2 with id value.
+    #           But does 1 or 3 get preference?
     with pytest.raises(
         RuntimeException,
         match=r"Failed to get attribute 'name' for export on 'refs::NullResource'",

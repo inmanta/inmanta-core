@@ -49,7 +49,7 @@ class AllRefsDataclassReferenceABC[D: AllRefsDataclass](Reference[D]):
         return self._dc_type(maybe_ref_value=self.resolve_other(self.maybe_ref_value, logger))
 
     def __str__(self):
-        return f"{self._dc_type.__name__} {self.maybe_ref_value}"
+        return f"{self._dc_type.__name__}Reference {self.maybe_ref_value}"
 
 
 @reference("refs::dc::AllRefsDataclassReference")

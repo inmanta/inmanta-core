@@ -383,7 +383,7 @@ class Resource(metaclass=ResourceMeta):
                 )
 
         attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
-        # TODO: what about references? What about nested references? Call map_field in strict mode?
+        # TODO: what about references? What about nested references? Call map_field in strict mode? Already done via None arg
         if isinstance(attribute_value, util.Unknown):
             raise inmanta.ast.UnknownException(attribute_value)
         if not isinstance(agent_value, str):

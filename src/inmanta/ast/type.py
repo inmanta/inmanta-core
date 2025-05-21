@@ -1353,7 +1353,7 @@ class Literal(Union):
     """
 
     def __init__(self) -> None:
-        Union.__init__(self, [NullableType(Float()), Number(), Bool(), String(), TypedList(self), TypedDict(self)])
+        Union.__init__(self, [NullableType(Float()), Number(), Bool(), String(), TypedList(self), TypedDict(self), ReferenceType(self)])
 
     def type_string_internal(self) -> str:
         return "Literal"

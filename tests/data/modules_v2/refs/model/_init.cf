@@ -26,3 +26,13 @@ implement DeepResource using std::none
 entity NormalEntity:
     string non_ref_value
 end
+
+
+entity ListContainer:
+    string[] value
+end
+implement ListContainer using std::none
+entity DictContainer:
+    dict value
+end
+implement DictContainer using std::none

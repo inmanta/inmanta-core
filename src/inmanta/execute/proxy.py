@@ -20,7 +20,7 @@ import dataclasses
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from dataclasses import is_dataclass
-from typing import TYPE_CHECKING, Callable, Union
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
 from inmanta.ast import (
@@ -59,6 +59,13 @@ class DynamicUnwrapContext:
     type_resolver: TypeResolver
 
 
+# TODO: docstring & name (broader than return_value. Really a proxy context
+@dataclasses.dataclass(kw_only=True, frozen=True, slots=True)
+class DynamicReturnValueContext:
+    # TODO: better name
+    black_box: bool = False
+
+
 # this is here to avoid import loops
 # It would be nicer to have it as class method on entity, but that would cause proxy to import the entire compiler
 def get_inmanta_type_for_dataclass(for_type: type[object]) -> "Entity | None":
@@ -74,11 +81,21 @@ class DynamicProxy:
     by native code.
     """
 
-    def __init__(self, instance: "Instance") -> None:
+    # TODO: consider how to integrage JinjaProxy
+    def __init__(self, instance: "Instance", *, context: Optional[DynamicReturnValueContext] = None) -> None:
         object.__setattr__(self, "__instance", instance)
+        object.__setattr__(self, "__context", context if context is not None else self.default_context())
 
     def _get_instance(self) -> "Instance":
         return object.__getattribute__(self, "__instance")
+
+    def _get_context(self) -> DynamicReturnValueContext:
+        return object.__getattribute__(self, "__context")
+
+    # TODO: use single object for all defaults for memory impact
+    @classmethod
+    def default_context(cls) -> DynamicReturnValueContext:
+        return DynamicReturnValueContext(black_box=True)
 
     @classmethod
     def unwrap(cls, item: object, *, dynamic_context: DynamicUnwrapContext | None = None) -> object:
@@ -164,6 +181,9 @@ class DynamicProxy:
     def return_value(
         cls,
         value: object,
+        *,
+        # TODO: docstring
+        context: Optional[DynamicReturnValueContext] = None,
     ) -> Union[None, str, tuple[object, ...], int, float, bool, "DynamicProxy"]:
         """
         Converts a value from the internal domain to the plugin domain.
@@ -180,30 +200,34 @@ class DynamicProxy:
         if isinstance(value, (str, tuple, int, float, bool)):
             return copy(value)
 
-        # if a reference gets here, it has been validated, and we want to represent it as a reference, not a proxy
-        if isinstance(value, (Reference, DynamicProxy)):
+        if isinstance(value, Reference):
+            if context is not None and context.black_box:
+                # TODO: tailor-made exceptions from child classes, e.g. through class method with context?
+                raise UndeclaredReference(
+                    reference=value,
+                    # TODO: message
+                    message="Undeclared reference found",
+                )
+            else:
+                # if a reference gets here, it has been validated, and we want to represent it as a reference, not a proxy
+                return value
+
+        if isinstance(value, DynamicProxy):
+            # TODO: set black_box? + come up with test scenario
             return value
 
-        # TODO: test cases
-        #   - plain plugin that gets a reference: allowed iff declared (or any)
-        #   - plugin that gets a reference in list/dict: allowed iff declared
-        #   - plugin that gets an entity with a reference attribute. Allowed but error on attr access unless allow_references()
-        #   - plugin that gets a dataclass with reference attributes. Allowed if declared
-        #       => How about a reference to a dataclass? Translated internally as dataclass of references, but that violates
-        #           the signature
-        #   - plugin that iterates over list with a reference in there
-
         if isinstance(value, dict):
-            return DictProxy(value)
+            return DictProxy(value, context=context)
 
         if hasattr(value, "__len__"):
-            return SequenceProxy(value)
+            return SequenceProxy(value, context=context)
 
         if hasattr(value, "__call__"):
-            return CallProxy(value)
+            return CallProxy(value, context=context)
 
-        return DynamicProxy(value)
+        return DynamicProxy(value, context=context)
 
+    # TODO: see if we can use traceback.extract_stack() here to add a location to any exceptions, try-except style
     def __getattr__(self, attribute: str):
         instance = self._get_instance()
 
@@ -217,7 +241,7 @@ class DynamicProxy:
         # The Python domain is a black box. We don't want to transparently pass unexpected values in there.
         # TODO: allow_references() name
         # => don't allow references in attributes. Can be explicitly allowed via allow_references() wrapper
-        if isinstance(value, Reference):
+        if self._get_context().black_box and isinstance(value, Reference):
             # TODO: string format accepts reference. Should also raise this exception
             raise UndeclaredReference(
                 reference=value,
@@ -231,7 +255,13 @@ class DynamicProxy:
                 ),
             )
 
-        return DynamicProxy.return_value(value)
+        # TODO: consider the semantics of the context and how it's propagated. We've already checked `value` here, we primarily
+        #       want IT to be considered a black box, not to have it rejected if it's a reference. BUT for the other proxy
+        #       classes it would be great if they didn't have to all implement a custom check. So how to differentiate between
+        #       "I'm a black box calling return_value on an element value" and
+        #       "I'm calling return_value on an element value that I know to be a black box"?
+        # Contents of an entity are always a black box, regardless of the current context
+        return DynamicProxy.return_value(value, context=dataclasses.replace(self._get_context(), black_box=True))
 
     def __setattr__(self, attribute: str, value: object) -> None:
         raise Exception("Readonly object")
@@ -270,6 +300,7 @@ class DynamicProxy:
         return "@%s" % repr(self._get_instance())
 
 
+# TODO: restore this class + expand it to cover sequence, mapping, iterator
 class WithReferenceAttributes(DynamicProxy):
     # TODO: docstring
 
@@ -292,15 +323,20 @@ class WithReferenceAttributes(DynamicProxy):
 
 
 class SequenceProxy(DynamicProxy, JSONSerializable):
-    def __init__(self, iterator: Sequence) -> None:
-        DynamicProxy.__init__(self, iterator)
+    def __init__(self, iterator: Sequence, *, context: Optional[DynamicReturnValueContext] = None) -> None:
+        DynamicProxy.__init__(self, iterator, context=context)
+
+    @classmethod
+    def default_context(cls) -> DynamicReturnValueContext:
+        # unless specified otherwise, the elements of this type have been validated at the plugin boundary
+        return dataclasses.replace(super().default_context(), black_box=False)
 
     def __getitem__(self, key: str) -> object:
         instance = self._get_instance()
         if isinstance(key, str):
             raise RuntimeException(self, f"can not get a attribute {key}, {self._get_instance()} is a list")
 
-        return DynamicProxy.return_value(instance[key])
+        return DynamicProxy.return_value(instance[key], context=self._get_context())
 
     def __len__(self) -> int:
         return len(self._get_instance())
@@ -308,7 +344,8 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
     def __iter__(self) -> Iterable:
         instance = self._get_instance()
 
-        return IteratorProxy(instance.__iter__())
+        # TODO: is there any way to implement this so the context doesn't have to be passed everywhere explicitly?
+        return IteratorProxy(instance.__iter__(), context=self._get_context())
 
     def json_serialization_step(self) -> list[PrimitiveTypes]:
         # Ensure proper unwrapping by using __getitem__
@@ -316,15 +353,20 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
 
 
 class DictProxy(DynamicProxy, Mapping, JSONSerializable):
-    def __init__(self, mydict: dict[object, object]) -> None:
-        DynamicProxy.__init__(self, mydict)
+    def __init__(self, mydict: dict[object, object], *, context: Optional[DynamicReturnValueContext] = None) -> None:
+        DynamicProxy.__init__(self, mydict, context=context)
+
+    @classmethod
+    def default_context(cls) -> DynamicReturnValueContext:
+        # unless specified otherwise, the elements of this type have been validated at the plugin boundary
+        return dataclasses.replace(super().default_context(), black_box=False)
 
     def __getitem__(self, key):
         instance = self._get_instance()
         if not isinstance(key, str):
             raise RuntimeException(self, f"Expected string key, but got {key}, {self._get_instance()} is a dict")
 
-        return DynamicProxy.return_value(instance[key])
+        return DynamicProxy.return_value(instance[key], context=self._get_context())
 
     def __len__(self) -> int:
         return len(self._get_instance())
@@ -332,7 +374,7 @@ class DictProxy(DynamicProxy, Mapping, JSONSerializable):
     def __iter__(self):
         instance = self._get_instance()
 
-        return IteratorProxy(instance.__iter__())
+        return IteratorProxy(instance.__iter__(), context=self._get_context())
 
     def json_serialization_step(self) -> dict[str, PrimitiveTypes]:
         # Ensure proper unwrapping by using __getitem__
@@ -344,8 +386,13 @@ class CallProxy(DynamicProxy):
     Proxy a value that implements a __call__ function
     """
 
-    def __init__(self, instance: Callable[..., object]) -> None:
-        DynamicProxy.__init__(self, instance)
+    def __init__(self, instance: Callable[..., object], *, context: Optional[DynamicReturnValueContext] = None) -> None:
+        DynamicProxy.__init__(self, instance, context=context)
+
+    @classmethod
+    def default_context(cls) -> DynamicReturnValueContext:
+        # unless specified otherwise, the elements of this type have been validated at the plugin boundary
+        return dataclasses.replace(super().default_context(), black_box=False)
 
     def __call__(self, *args, **kwargs):
         instance = self._get_instance()
@@ -358,12 +405,12 @@ class IteratorProxy(DynamicProxy):
     Proxy an iterator call
     """
 
-    def __init__(self, iterator: Iterable[object]) -> None:
-        DynamicProxy.__init__(self, iterator)
+    def __init__(self, iterator: Iterable[object], *, context: Optional[DynamicReturnValueContext] = None) -> None:
+        DynamicProxy.__init__(self, iterator, context=context)
 
     def __iter__(self):
         return self
 
     def __next__(self):
         i = self._get_instance()
-        return DynamicProxy.return_value(next(i))
+        return DynamicProxy.return_value(next(i), context=self._get_context())
