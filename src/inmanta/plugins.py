@@ -1340,8 +1340,9 @@ def deprecated(
 
 
 # TODO: move up in file?
+# TODO: no longer just attributes
 def allow_reference_attributes(instance: object) -> object:
     if not isinstance(instance, DynamicProxy):
         # TODO
         raise ValueError()
-    return proxy.WithReferenceAttributes(instance)
+    return instance._allow_references()

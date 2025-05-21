@@ -377,6 +377,8 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     # TODO: plugin that returns list attribute without reading elements, annotated without reference in return type
     # TODO: takes_object(["list", "of", reference]) -> perhaps by making the proxy non-validated?
     # TODO: takes_object_or_reference(["list", "of", reference]) -> perhaps by making the proxy non-validated?
+    # TODO: takes_object_list([{"mykey"}: reference}])
+    # TODO: takes_object_or_reference_list([{"mykey"}: reference}])
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
