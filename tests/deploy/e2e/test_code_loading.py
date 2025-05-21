@@ -662,7 +662,6 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     assert result.code == 200
     await check_code_for_version(version=2, environment=environment, agent_names=["agent_X", "agent_Y"])
 
-
     # 3) Make sure we can provide new agents with already registered code:
     module_version_info = {
         "test": InmantaModuleDTO(
