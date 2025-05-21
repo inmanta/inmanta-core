@@ -454,7 +454,7 @@ class AuthorizationLabel(str, Enum):
     DOCS_READ = "docs.read"
     DRYRUN_READ = "dryrun.read"
     DRYRUN_WRITE = "dryrun.write"
-    EXECUTOR_HALT_RESUME = "executor.halt-resume"
+    AGENT_PAUSE_RESUME = "agent.pause-resume"
     ENVIRONMENT_HALT_RESUME = "environment.halt-resume"
     ENVIRONMENT_READ = "environment.read"
     ENVIRONMENT_CREATE = "environment.create"

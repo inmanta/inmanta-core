@@ -73,7 +73,7 @@ noc_specific_labels := {
     "compiler.execute",
     "deploy",
     "dryrun.write",
-    "executor.halt-resume",
+    "agent.pause-resume",
     "environment.halt-resume",
     "notification.write",
 }

@@ -469,7 +469,7 @@ def notify_timer_update(tid: uuid.UUID) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.EXECUTOR_HALT_RESUME, read_only=False, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.AGENT_PAUSE_RESUME, read_only=False, environment_param="tid")
 @typedmethod(
     path="/agent/<name>/<action>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
