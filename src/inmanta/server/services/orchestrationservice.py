@@ -675,7 +675,10 @@ class OrchestrationService(protocol.ServerSlice):
             module_version = module_data.version
             if (inmanta_module_name, module_version) not in base_version_data:
                 raise BadRequest(
-                    "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
+                    "Cannot perform partial export because the source code for module %s in this partial version is different "
+                    "from the source code of the base version. Consider running a full export instead. Alternatively, if you "
+                    "are sure the new code is compatible and want to forcefully update, you can bypass this version check with "
+                    "the `--bypass-base-version-check` CLI option." % inmanta_module_name
                 )
 
         return base_version_data
@@ -687,6 +690,7 @@ class OrchestrationService(protocol.ServerSlice):
         environment: uuid.UUID,
         module_version_info: dict[str, InmantaModuleDTO],
         connection: asyncpg.connection.Connection,
+        bypass_base_version_check: bool = False,
     ) -> None:
         """
         Helper method for the _put_version method.
@@ -700,9 +704,11 @@ class OrchestrationService(protocol.ServerSlice):
         :param environment: Environment this compile belongs to.
         :param module_version_info: Inmanta module information to register for this version.
         :param connection: DB connection expected to be managed by the caller method.
+        :param bypass_base_version_check: In case of a partial compile, this flag will disable the check
+            for source code consistency between the base version and the current partial version.
         """
         base_version_info: dict[tuple[str, str], list[str]] = {}
-        if partial_base_version is not None:
+        if partial_base_version is not None and not bypass_base_version_check:
             base_version_info = await self._check_version_info(
                 partial_base_version, environment, module_version_info, connection
             )
@@ -732,6 +738,7 @@ class OrchestrationService(protocol.ServerSlice):
         *,
         connection: asyncpg.connection.Connection,
         module_version_info: dict[str, InmantaModuleDTO],
+        bypass_base_version_check: bool = False,
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -746,6 +753,9 @@ class OrchestrationService(protocol.ServerSlice):
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
         :param module_version_info: Mapping of (module name, module version) to module DTO.
+        :param bypass_base_version_check: During partial compiles (i.e. partial_base_version is not None), a check is performed
+            to make sure the source code of modules in this partial version is identical to the source code in the base
+            version. Set this parameter to True to bypass this check.
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -885,7 +895,9 @@ class OrchestrationService(protocol.ServerSlice):
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
-            await self._register_agent_code(partial_base_version, version, env.id, module_version_info, connection)
+            await self._register_agent_code(
+                partial_base_version, version, env.id, module_version_info, connection, bypass_base_version_check
+            )
 
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
@@ -1020,6 +1032,7 @@ class OrchestrationService(protocol.ServerSlice):
         removed_resource_sets: Optional[list[str]] = None,
         pip_config: Optional[PipConfig] = None,
         module_version_info: dict[str, InmantaModuleDTO] | None = None,
+        bypass_base_version_check: bool = False,
     ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure
@@ -1133,6 +1146,7 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                     module_version_info=module_version_info or {},
+                    bypass_base_version_check=bypass_base_version_check,
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)

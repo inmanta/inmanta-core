@@ -559,10 +559,11 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
 
     Assert that agent Y can still get the code to deploy r2 in version V2
 
-    3) Partial export using different module version from the base version should raise an exception
+    3) Make sure we can provide during a partial export new agents with already registered code
 
-    4) Make sure we can provide during a partial export new agents with already registered code
+    4) Partial export using different module version from the base version should raise an exception
 
+    5) Check that this version check can be bypassed with the --bypass-base-version-check CLI option
 
     """
     codemanager = CodeManager()
@@ -661,45 +662,8 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     assert result.code == 200
     await check_code_for_version(version=2, environment=environment, agent_names=["agent_X", "agent_Y"])
 
-    # 3) Partial export using different module version from the base version should raise an exception:
 
-    altered_content = "#The OTHER code"
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(altered_content.encode())
-    hv2: str = sha1sum.hexdigest()
-    await client.upload_file(hv2, content=base64.b64encode(altered_content.encode()).decode("ascii"))
-
-    module_source_metadata2 = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv2,
-        is_byte_code=False,
-    )
-
-    mismatched_module_version_info = {
-        "test": InmantaModuleDTO(
-            name="test",
-            version="1.1.1",
-            files_in_module=[module_source_metadata2],
-            requirements=[],
-            for_agents=["agent_X"],
-        )
-    }
-
-    result = await client.put_partial(
-        tid=environment,
-        resources=resources,
-        resource_state={},
-        unknowns=[],
-        version_info={},
-        resource_sets=resource_sets,
-        module_version_info=mismatched_module_version_info,
-    )
-    assert result.code == 400
-    assert result.result["message"] == (
-        "Invalid request: Cannot perform partial export because of version mismatch " "for module test."
-    )
-
-    # 4) Make sure we can provide new agents with already registered code:
+    # 3) Make sure we can provide new agents with already registered code:
     module_version_info = {
         "test": InmantaModuleDTO(
             name="test",
@@ -735,3 +699,57 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     assert result.code == 200
 
     await check_code_for_version(version=3, environment=environment, agent_names=["agent_X", "agent_Y", "agent_Z"])
+
+    # 4) Partial export using different module version from the base version should raise an exception:
+
+    altered_content = "#The OTHER code"
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(altered_content.encode())
+    hv2: str = sha1sum.hexdigest()
+    await client.upload_file(hv2, content=base64.b64encode(altered_content.encode()).decode("ascii"))
+
+    module_source_metadata2 = ModuleSourceMetadata(
+        name="inmanta_plugins.test",
+        hash_value=hv2,
+        is_byte_code=False,
+    )
+
+    mismatched_module_version_info = {
+        "test": InmantaModuleDTO(
+            name="test",
+            version="1.1.1",
+            files_in_module=[module_source_metadata2],
+            requirements=[],
+            for_agents=["agent_X"],
+        )
+    }
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        resource_sets=resource_sets,
+        module_version_info=mismatched_module_version_info,
+    )
+    assert result.code == 400
+    assert result.result["message"] == (
+        "Invalid request: Cannot perform partial export because the source code for module test in this partial version is "
+        "different from the source code of the base version. Consider running a full export instead. Alternatively, "
+        "if you are sure the new code is compatible and want to forcefully update, you can bypass this version check with "
+        "the `--bypass-base-version-check` CLI option."
+    )
+
+    # Test we can bypass the check
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        resource_sets=resource_sets,
+        module_version_info=module_version_info,
+        bypass_base_version_check=True,
+    )
+    assert result.code == 200
