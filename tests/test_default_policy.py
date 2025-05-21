@@ -154,15 +154,6 @@ async def test_default_policy_change_password(server, client) -> None:
         client_types=[const.ClientType.api],
     )
 
-    # Create project and environment
-    result = await global_admin_client.project_create(name="test")
-    assert result.code == 200
-    project_id = result.result["data"]["id"]
-
-    result = await global_admin_client.environment_create(project_id=project_id, name="test")
-    assert result.code == 200
-    env_id = result.result["data"]["id"]
-
     result = await client.login(username=username1, password="password")
     assert result.code == 200
     token = result.result["data"]["token"]
