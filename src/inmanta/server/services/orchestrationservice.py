@@ -28,6 +28,7 @@ import asyncpg
 import asyncpg.connection
 import asyncpg.exceptions
 import pydantic
+from asyncpg import Connection
 
 import inmanta.exceptions
 import inmanta.util
@@ -35,14 +36,10 @@ from inmanta import const, data, tracing
 from inmanta.const import ResourceState
 from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode
 from inmanta.data.dataview import DesiredStateVersionView
-from inmanta.data.model import (
-    DesiredStateVersion,
-    PipConfig,
-    PromoteTriggerMethod,
-    ResourceDiff,
-    ResourceMinimal,
-    SchedulerStatusReport,
-)
+from inmanta.data.model import DesiredStateVersion
+from inmanta.data.model import InmantaModule as InmantaModuleDTO
+from inmanta.data.model import PipConfig, PromoteTriggerMethod, ResourceDiff, ResourceMinimal, SchedulerStatusReport
+from inmanta.data.sqlalchemy import AgentModules, InmantaModule
 from inmanta.db.util import ConnectionInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
@@ -653,6 +650,74 @@ class OrchestrationService(protocol.ServerSlice):
             work.extend(provides_tree[current])
         return list(skippeable - set(undeployable_ids))
 
+    async def _check_version_info(
+        self,
+        partial_base_version: int,
+        environment: uuid.UUID,
+        module_version_info: dict[str, InmantaModuleDTO],
+        connection: Connection,
+    ) -> dict[tuple[str, str], list[str]]:
+        """
+        Make sure that all code used in this partial version was
+        already registered in the base version.
+
+        Retrieve which inmanta modules (name, version) were registered for all agents
+        for the given base model version.
+
+        Make sure that the same module versions are used in this partial version.
+        """
+
+        # Map of (inmanta_module_name, inmanta_module_version) to list[agent_names]
+        base_version_data: dict[tuple[str, str], list[str]] = await AgentModules.get_agents_per_module(
+            model_version=partial_base_version, environment=environment, connection=connection
+        )
+        for inmanta_module_name, module_data in module_version_info.items():
+            module_version = module_data.version
+            if (inmanta_module_name, module_version) not in base_version_data:
+                raise BadRequest(
+                    "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
+                )
+
+        return base_version_data
+
+    async def _register_agent_code(
+        self,
+        partial_base_version: int | None,
+        version: int,
+        environment: uuid.UUID,
+        module_version_info: dict[str, InmantaModuleDTO],
+        connection: asyncpg.connection.Connection,
+    ) -> None:
+        """
+        Helper method for the _put_version method.
+
+        Register the relevant inmanta modules for all agents that need them.
+        Use the `module_version_info` dict to populate the relevant tables
+        AgentModules, InmantaModule and ModuleFiles.
+
+        :param partial_base_version: In case of a partial compile, base version it is based on.
+        :param version: Configuration model version.
+        :param environment: Environment this compile belongs to.
+        :param module_version_info: Inmanta module information to register for this version.
+        :param connection: DB connection expected to be managed by the caller method.
+        """
+        base_version_info: dict[tuple[str, str], list[str]] = {}
+        if partial_base_version is not None:
+            base_version_info = await self._check_version_info(
+                partial_base_version, environment, module_version_info, connection
+            )
+        else:
+            await InmantaModule.register_modules(
+                environment=environment, module_version_info=module_version_info, connection=connection
+            )
+        await AgentModules.register_modules_for_agents(
+            model_version=version,
+            environment=environment,
+            module_version_info=module_version_info,
+            connection=connection,
+            base_version_info=base_version_info,
+        )
+
     async def _put_version(
         self,
         env: data.Environment,
@@ -666,6 +731,7 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
+        module_version_info: dict[str, InmantaModuleDTO],
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -679,6 +745,7 @@ class OrchestrationService(protocol.ServerSlice):
         :param removed_resource_sets: When a partial compile is done, this parameter should indicate the names of the resource
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
+        :param module_version_info: Mapping of (module name, module version) to module DTO.
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -818,6 +885,8 @@ class OrchestrationService(protocol.ServerSlice):
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
+            await self._register_agent_code(partial_base_version, version, env.id, module_version_info, connection)
+
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
             all_rvids = [i.resource_version_str() for i in all_ids]
@@ -889,6 +958,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         unknowns: list[dict[str, PrimitiveTypes]],
         version_info: JsonType,
+        module_version_info: dict[str, InmantaModuleDTO],
         compiler_version: Optional[str] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,
@@ -908,7 +978,7 @@ class OrchestrationService(protocol.ServerSlice):
             raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
 
         unknowns_objs = self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
-        rid_to_resource = self._create_dao_resources_from_api_resources(
+        rid_to_resource: dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
             env_id=env.id,
             resources=resources,
             resource_state=resource_state,
@@ -930,6 +1000,7 @@ class OrchestrationService(protocol.ServerSlice):
                     resource_sets,
                     pip_config=pip_config,
                     connection=con,
+                    module_version_info=module_version_info or {},
                 )
             # This must be outside all transactions, as it relies on the result of _put_version
             # and it starts a background task, so it can't re-use this connection
@@ -948,6 +1019,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         removed_resource_sets: Optional[list[str]] = None,
         pip_config: Optional[PipConfig] = None,
+        module_version_info: dict[str, InmantaModuleDTO] | None = None,
     ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure
@@ -1044,7 +1116,6 @@ class OrchestrationService(protocol.ServerSlice):
 
                 # add shared resources
                 merged_resources = partial_update_merger.merge_updated_and_shared_resources(list(rid_to_resource.values()))
-                await data.Code.copy_versions(env.id, base_version, version, connection=con)
 
                 merged_unknowns = await partial_update_merger.merge_unknowns(
                     unknowns_in_partial_compile=self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
@@ -1061,6 +1132,7 @@ class OrchestrationService(protocol.ServerSlice):
                     removed_resource_sets=removed_resource_sets,
                     pip_config=pip_config,
                     connection=con,
+                    module_version_info=module_version_info or {},
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)

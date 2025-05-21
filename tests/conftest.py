@@ -180,6 +180,9 @@ logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
     "resourceaction_resource",
+    "inmanta_module",
+    "agent_modules",
+    "module_files",
 ]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
@@ -784,7 +787,6 @@ async def server_config(
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
-        config.Config.set("agent", "executor-mode", "forking")
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
         config.Config.set("server", "auth", str(enable_auth).lower())
@@ -872,7 +874,6 @@ async def server_multi(
         config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
-        config.Config.set("agent", "executor-mode", "forking")
         config.Config.set("agent", "executor-venv-retention-time", "60")
         config.Config.set("agent", "executor-retention-time", "10")
 
@@ -948,7 +949,7 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
 
         a.executor_manager = executor
         a.scheduler.executor_manager = executor
-        a.scheduler.code_manager = utils.DummyCodeManager(a._client)
+        a.scheduler.code_manager = utils.DummyCodeManager()
         await a.start()
         await utils.retry_limited(
             lambda: agentmanager.get_agent_client(tid=environment, endpoint=const.AGENT_SCHEDULER_ID, live_agent_only=True)
@@ -1060,7 +1061,7 @@ async def agent_multi(server_multi, environment_multi):
     executor = WriteBarierExecutorManager(executor)
     a.executor_manager = executor
     a.scheduler.executor_manager = executor
-    a.scheduler.code_manager = utils.DummyCodeManager(a._client)
+    a.scheduler.code_manager = utils.DummyCodeManager()
 
     await a.start()
 

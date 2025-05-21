@@ -389,6 +389,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
     version_env1 = str(await ClientHelper(client, env_uuid1).get_version())
@@ -426,6 +427,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
     resources_env2 = [
@@ -453,6 +455,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
     assert len(await data.Resource.get_list()) == 6
@@ -579,6 +582,7 @@ async def test_resource_count_metric_released(client, server, agent, clienthelpe
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -600,6 +604,7 @@ async def test_resource_count_metric_released(client, server, agent, clienthelpe
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 

@@ -1,0 +1,11 @@
+entity CodeInstallErrorResource extends std::PurgeableResource:
+    """
+    Resource whose handler code fails during installation.
+    """
+    string name
+    string agent
+    bool managed=true
+    bool purged=false
+end
+
+implement CodeInstallErrorResource using std::none

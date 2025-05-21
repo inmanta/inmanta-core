@@ -330,7 +330,14 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
 
 
 async def test_old_compiler(server, client, environment):
-    result = await client.put_version(tid=environment, version=123456, resources=[], unknowns=[], version_info={})
+    result = await client.put_version(
+        tid=environment,
+        version=123456,
+        resources=[],
+        unknowns=[],
+        version_info={},
+        module_version_info={},
+    )
     assert result.code == 400
 
 
@@ -529,7 +536,10 @@ exp::Test3(
     )
 
 
-@pytest.mark.parametrize("soft_delete", [True, False])
+@pytest.mark.parametrize(
+    "soft_delete",
+    [True, False],
+)
 async def test_resource_set(snippetcompiler, modules_dir: str, environment, client, agent, soft_delete: bool) -> None:
     """
     Test that resource sets are exported correctly, when a full compile or an incremental compile is done.

@@ -208,17 +208,12 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
             await res1.insert()
             resource_ids.append((res1.environment, res1.resource_version_id))
 
-        code = data.Code(version=version, resource="std::testing::NullResource", environment=env.id)
-        await code.insert()
-
         unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
         await unknown_parameter.insert()
 
-        return project, env, agent_proc, [agi1, agi2], agent, resource_ids, code, unknown_parameter
+        return project, env, agent_proc, [agi1, agi2], agent, resource_ids, unknown_parameter
 
-    async def assert_project_exists(
-        project, env, agent_proc, agent_instances, agent, resource_ids, code, unknown_parameter, exists
-    ):
+    async def assert_project_exists(project, env, agent_proc, agent_instances, agent, resource_ids, unknown_parameter, exists):
         def func(x):
             if exists:
                 return x is not None
@@ -234,7 +229,6 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         for environment, resource_version_id in resource_ids:
             id = Id.parse_id(resource_version_id)
             assert func(await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version))
-        assert func(await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version))
         assert func(await data.UnknownParameter.get_by_id(unknown_parameter.id))
 
     # Setup two environments
@@ -334,9 +328,6 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     )
     await resource_action.insert()
 
-    code = data.Code(version=version, resource="std::testing::NullResource", environment=env.id)
-    await code.insert()
-
     unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
     await unknown_parameter.insert()
 
@@ -354,7 +345,6 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
             await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version)
         ) is not None
     assert await data.ResourceAction.get_by_id(resource_action.action_id) is not None
-    assert (await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version)) is not None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is not None
     assert (await env.get(data.AUTO_DEPLOY)) is True
 
@@ -370,7 +360,6 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
         id = Id.parse_id(resource_version_id)
         assert (await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version)) is None
     assert await data.ResourceAction.get_by_id(resource_action.action_id) is None
-    assert (await data.Code.get_one(environment=code.environment, version=code.version)) is None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
     assert (await env.get(data.AUTO_DEPLOY)) is True
 
@@ -953,9 +942,6 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"name": name})
     await resource.insert()
 
-    code = data.Code(version=version, resource="std::testing::NullResource", environment=env.id)
-    await code.insert()
-
     unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
     await unknown_parameter.insert()
 
@@ -966,7 +952,6 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     assert (
         await data.Resource.get_one(environment=resource.environment, resource_id=id.resource_str(), model=id.version)
     ) is None
-    assert (await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version)) is None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
 
 
@@ -1757,103 +1742,6 @@ async def test_data_document_recursion(init_dataclasses_and_load_schema):
     await ra.insert()
 
 
-async def test_code(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    version = int(time.time())
-    cm = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm.insert()
-
-    code1 = data.Code(environment=env.id, resource="std::testing::NullResource", version=version, source_refs={"ref": "ref"})
-    await code1.insert()
-
-    code2 = data.Code(environment=env.id, resource="std::testing::NullResourceBis", version=version, source_refs={})
-    await code2.insert()
-
-    version2 = version + 1
-    cm2 = data.ConfigurationModel(
-        environment=env.id,
-        version=version2,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm2.insert()
-
-    code3 = data.Code(environment=env.id, resource="std::testing::NullResourceBis", version=version2, source_refs={})
-    await code3.insert()
-
-    # Test behavior of copy_versions. Create second environment to verify the method is restricted to the first one
-    env2 = data.Environment(name="dev2", project=project.id, repo_url="", repo_branch="")
-    await env2.insert()
-    await data.ConfigurationModel(environment=env2.id, version=code3.version, is_suitable_for_partial_compiles=False).insert()
-    await data.Code(environment=env2.id, resource="std::testing::NullResource", version=code3.version, source_refs={}).insert()
-    await data.Code.copy_versions(env.id, code3.version, code3.version + 1)
-
-    def assert_match_code(code1, code2):
-        assert code1 is not None
-        assert code2 is not None
-        assert code1.environment == code1.environment
-        assert code1.resource == code2.resource
-        assert code1.version == code2.version
-        shared_keys_source_refs = [
-            k for k in code1.source_refs if k in code2.source_refs and code1.source_refs[k] == code2.source_refs[k]
-        ]
-        assert len(shared_keys_source_refs) == len(code1.source_refs.keys())
-
-    code_file = await data.Code.get_version(env.id, version, "std::testing::NullResource")
-    assert_match_code(code_file, code1)
-
-    code_directory = await data.Code.get_version(env.id, version, "std::testing::NullResourceBis")
-    assert_match_code(code_directory, code2)
-
-    code_test = await data.Code.get_version(env.id, version, "std::Test")
-    assert code_test is None
-
-    code_list = await data.Code.get_versions(env.id, version)
-    ids_code_lost = [(c.environment, c.resource, c.version) for c in code_list]
-    assert len(code_list) == 2
-    assert (code1.environment, code1.resource, code1.version) in ids_code_lost
-    assert (code2.environment, code2.resource, code2.version) in ids_code_lost
-    code_list = await data.Code.get_versions(env.id, version + 1)
-    assert len(code_list) == 1
-    code = code_list[0]
-    assert (code.environment, code.resource, code.version) == (code3.environment, code3.resource, code3.version)
-    code_list = await data.Code.get_versions(env.id, version + 2)
-    assert len(code_list) == 1
-    assert (code_list[0].environment, code_list[0].resource, code_list[0].version, code_list[0].source_refs) == (
-        code3.environment,
-        code3.resource,
-        code3.version + 1,
-        code3.source_refs,
-    )
-    code_list = await data.Code.get_versions(env.id, version + 3)
-    assert len(code_list) == 0
-
-    # env2
-    code_list = await data.Code.get_versions(env2.id, code3.version)
-    assert len(code_list) == 1
-    code_list = await data.Code.get_versions(env2.id, code3.version + 1)
-    assert len(code_list) == 0
-
-    # make sure deleting the base code does not delete the copied code
-    await code3.delete()
-    assert len(await data.Code.get_versions(env.id, code3.version)) == 0
-    assert len(await data.Code.get_versions(env.id, code3.version + 1)) == 1
-
-
 @pytest.mark.parametrize("halted", [True, False])
 async def test_get_updated_before_active_env(init_dataclasses_and_load_schema, halted):
     # verify the call to "get_updated_before". If the env is halted it shouldn't return any result
@@ -2169,7 +2057,9 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
     table_names_in_classes_list = [x.table_name() for x in data._classes]
     # Schema management table is not in classes list
     # Join tables on resource and resource action is not in the classes list
-    assert len(table_names_in_classes_list) + 2 == len(table_names_in_database)
+    # The following tables are not in the classes list, they are managed via the sqlalchemy ORM.
+    sql_alchemy_tables: set[str] = {"inmanta_module", "module_files", "agent_modules"}
+    assert len(table_names_in_classes_list) + 2 + len(sql_alchemy_tables) == len(table_names_in_database)
     for item in table_names_in_classes_list:
         # The DB table name for the User class is named inmanta_user
         if item == "user":
@@ -2907,6 +2797,7 @@ async def test_get_current_resource_state(server, environment, client, clienthel
         ],
         resource_state={},
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200, result.result
 
@@ -2942,6 +2833,7 @@ async def test_get_current_resource_state(server, environment, client, clienthel
         ],
         resource_state={"std::testing::NullResource[agent1,name=test1]": const.ResourceState.undefined},
         compiler_version=util.get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200, result.result
 
