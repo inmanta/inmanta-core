@@ -36,7 +36,6 @@ from inmanta.data import (
     Environment,
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
-    Resource,
     Setting,
 )
 from inmanta.data.model import EnvironmentMetricsResult
@@ -438,11 +437,9 @@ class ResourceCountMetricsCollector(MetricsCollector):
     ) -> Sequence[MetricValue]:
         query: str = f"""
             WITH resource_statuses AS (
-                SELECT r.environment,
+                SELECT rps.environment,
                 {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
-                FROM {Resource.table_name()} AS r
-                INNER JOIN public.resource_persistent_state AS rps
-                    ON r.resource_id = rps.resource_id AND r.environment = rps.environment
+                FROM public.resource_persistent_state AS rps
                 WHERE NOT rps.is_orphan
             ),
             nonzero_statuses AS (
