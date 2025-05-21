@@ -51,6 +51,18 @@ if typing.TYPE_CHECKING:
 # defined in tests/data/modules_v2/refs
 
 
+# TODO: return type
+# TODO: docstring
+@contextlib.contextmanager
+def raises_wrapped(exc_tp: type[RuntimeException], *, match: Optional[str] = None) -> None:
+    with pytest.raises(WrappingRuntimeException) as exc_info:
+        yield
+    assert isinstance(exc_info.value.__cause__, exc_tp)
+    if match is not None:
+        msg: str = exc_info.value.__cause__.format()
+        assert re.search(match, msg) is not None, msg
+
+
 def round_trip_resource(resource):
     serialized = resource.serialize()
     data = json.dumps(serialized, default=util.api_boundary_json_encoder)
@@ -219,6 +231,11 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     run_snippet(snippet="refs::plugins::takes_obj('hello')")
     with pytest.raises(PluginTypeException, match="is a reference"):
         run_snippet(snippet="refs::plugins::takes_obj(refs::create_string_reference('name'))")
+    ## accepts list with a reference in it
+    run_snippet(snippet="refs::plugins::takes_obj(['hello', refs::create_string_reference('hello')])")
+    ## but raises exception on access
+    with raises_wrapped(UndeclaredReference, match="Undeclared reference found"):
+        run_snippet(snippet="refs::plugins::iterates_obj(['hello', refs::create_string_reference('hello')])")
     # Scenario: plugin argument annotated as `object | Reference[object]`
     run_snippet(snippet="refs::plugins::takes_obj_ref('hello')")
     run_snippet(snippet="refs::plugins::takes_obj_ref(refs::create_string_reference('name'))")
@@ -270,17 +287,6 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     ### references allowed, as long as no reference attribute is accessed
     run_snippet("refs::plugins::takes_entity(refs::dc::create_all_refs_dataclass_reference('hello'))")
     run_snippet("refs::plugins::takes_entity(refs::dc::create_no_refs_dataclass_reference())")
-
-    # TODO: return type
-    # TODO: docstring
-    @contextlib.contextmanager
-    def raises_wrapped(exc_tp: type[Exception], *, match: Optional[str] = None) -> None:
-        with pytest.raises(WrappingRuntimeException) as exc_info:
-            yield
-        assert isinstance(exc_info.value.__cause__, exc_tp)
-        if match is not None:
-            msg: str = exc_info.value.__cause__.format()
-            assert re.search(match, msg) is not None, msg
 
     # Scenario: plugin annotated as `Entity` accesses reference attribute during plugin execution
     ## no reference
@@ -375,10 +381,7 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     # TODO: inheritance on reference return type (declare generic, return specific -> model instance = specific)
     # TODO: inheritance on return type
     # TODO: plugin that returns list attribute without reading elements, annotated without reference in return type
-    # TODO: takes_object(["list", "of", reference]) -> perhaps by making the proxy non-validated?
-    # TODO: takes_object_or_reference(["list", "of", reference]) -> perhaps by making the proxy non-validated?
-    # TODO: takes_object_list([{"mykey"}: reference}])
-    # TODO: takes_object_or_reference_list([{"mykey"}: reference}])
+    # TODO: list of entities, access reference attribute
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:

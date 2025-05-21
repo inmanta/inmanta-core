@@ -25,6 +25,12 @@ def takes_obj(v: object) -> None:
 
 
 @plugin
+def iterates_obj(v: object) -> None:
+    for x in v:  # type: ignore
+        ...
+
+
+@plugin
 def takes_obj_ref(v: object | Reference[object]) -> None:
     ...
 

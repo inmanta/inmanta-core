@@ -500,7 +500,15 @@ def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, valu
     if expected_type.has_custom_to_python():
         return expected_type.to_python(value)
 
-    return DynamicProxy.return_value(value)
+    # TODO: REVERT -> WONTFIX -> DOCUMENT
+    context: Optional[DynamicReturnValueContext] = (
+        proxy.DynamicReturnValueContext(
+            type_validated=False,  # `object` annotation means it's a black box from here on out
+        )
+        if type(expected_type) in (inmanta_type.Type, inmanta_type.Any)
+        else None
+    )
+    return DynamicProxy.return_value(value, context=context)
 
 
 class PluginCallContext:

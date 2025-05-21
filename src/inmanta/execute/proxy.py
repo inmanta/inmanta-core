@@ -67,7 +67,7 @@ class DynamicReturnValueContext:
     """
     # TODO: better name
     allow_references: bool = True
-    # TODO: better name + docstring
+    # TODO: better name + docstring. Name something that indicates "contents" have not been validated
     type_validated: bool = True
 
 
