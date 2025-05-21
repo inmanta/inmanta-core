@@ -14,7 +14,7 @@ default allowed := false
 
 ### General rules ###
 
-# Every user can change its own password
+# Every user can change their own password
 allowed if {
     input.request.endpoint_id == "PATCH /api/v2/user/<username>/password"
     input.token.sub == input.request.parameters.username
