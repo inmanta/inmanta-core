@@ -730,7 +730,7 @@ def access_policy() -> str:
         package policy
 
         # Allow everything
-        default allowed:=true
+        default allow:=true
     """
 
 

@@ -158,7 +158,7 @@ async def server_with_test_slice(
         """
         package policy
 
-        default allowed := false
+        default allow := false
 
         # Write the information about the endpoint into a variable
         # to make the policy easier to read.
@@ -170,27 +170,27 @@ async def server_with_test_slice(
         } else := null
 
         # Any user can make read-only calls.
-        allowed if {
+        allow if {
             endpoint_data.read_only
         }
 
         # If the API endpoint is environment-scoped, users can call it if
         # they have the read-write role on that environment.
-        allowed if {
+        allow if {
             request_environment != null
             input.token["urn:inmanta:roles"][request_environment] == "read-write"
         }
 
         # Users with the user role in a given environment can execute API endpoints
         # with auth_label="user" in that environment.
-        allowed if {
+        allow if {
             endpoint_data.auth_label == "user"
             request_environment != null
             input.token["urn:inmanta:roles"][request_environment] == "user"
         }
 
         # Users marked as is-admin can execute any API endpoint.
-        allowed if {
+        allow if {
             input.token["urn:inmanta:is_admin"]
         }
         """.strip()
@@ -255,7 +255,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
         """
         package policy
 
-        default allowed := false
+        default allow := false
         """
     ],
 )
@@ -304,7 +304,7 @@ async def test_enforce_auth_method_property(
         """
         package policy
 
-        default allowed := false
+        default allow := false
         """
     ],
 )

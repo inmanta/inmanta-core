@@ -10,18 +10,18 @@ request_environment := input.request.parameters[endpoint_data.environment_param]
 } else := null
 
 # Don't allow anything that is not explicitly allowed.
-default allowed := false
+default allow := false
 
 ### General rules ###
 
 # Every user can change their own password
-allowed if {
+allow if {
     input.request.endpoint_id == "PATCH /api/v2/user/<username>/password"
     input.token.sub == input.request.parameters.username
 }
 
 # Any authenticated user is allowed read-only access on the environment independent endpoints.
-allowed if {
+allow if {
     endpoint_data.read_only
     endpoint_data.environment_param == null
 }
@@ -59,7 +59,7 @@ read_only_labels := {
     "graphql.read",
 }
 
-allowed if {
+allow if {
     "read-only" in input.token["urn:inmanta:roles"][request_environment]
     endpoint_data.auth_label in read_only_labels
 }
@@ -78,12 +78,12 @@ noc_specific_labels := {
 }
 all_noc_labels := read_only_labels | noc_specific_labels
 
-allowed if {
+allow if {
     "noc" in input.token["urn:inmanta:roles"][request_environment]
     endpoint_data.auth_label in all_noc_labels
 }
 
-allowed if {
+allow if {
     # noc users can trigger a compile, but they cannot update the model source.
     "noc" in input.token["urn:inmanta:roles"][request_environment]
     input.request.endpoint_id in ["GET /api/v1/notify/<id>", "POST /api/v1/notify/<id>"]
@@ -101,7 +101,7 @@ operator_specific_labels := {
 }
 all_operator_labels := read_only_labels | operator_specific_labels
 
-allowed if {
+allow if {
     "operator" in input.token["urn:inmanta:roles"][request_environment]
     endpoint_data.auth_label in all_operator_labels
 }
@@ -123,7 +123,7 @@ admin_specific_labels := {
 
 all_admin_labels := all_noc_labels | all_operator_labels | admin_specific_labels
 
-allowed if {
+allow if {
     "environment-admin" in input.token["urn:inmanta:roles"][request_environment]
     endpoint_data.auth_label in all_admin_labels
 }
@@ -141,13 +141,13 @@ expert_admin_specific_labels := {
 
 all_expert_admin_labels := all_admin_labels | expert_admin_specific_labels
 
-allowed if {
+allow if {
     "environment-expert-admin" in input.token["urn:inmanta:roles"][request_environment]
     endpoint_data.auth_label in all_expert_admin_labels
 }
 
 # Users can only create tokens scoped to the environment they are authorized for.
-allowed if {
+allow if {
     "environment-expert-admin" in input.token["urn:inmanta:roles"][request_environment]
     endpoint_data.auth_label == "token"
     input.request.parameters.tid == request_environment
@@ -159,7 +159,7 @@ allowed if {
 # Allow access to everything. This admin role is not scoped to a specific environment.
 # Users with this privilege can also create/delete project and environments and add/delete users, etc.
 
-allowed if {
+allow if {
     input.token["urn:inmanta:is_admin"] == true
 }
 
