@@ -70,7 +70,6 @@ allowed if {
 # Can do all operations in an environment that do not alter the desired state or modify the settings.
 
 noc_specific_labels := {
-    "compiler.execute",
     "deploy",
     "dryrun.write",
     "agent.pause-resume",
@@ -82,6 +81,13 @@ all_noc_labels := read_only_labels | noc_specific_labels
 allowed if {
     "noc" in input.token["urn:inmanta:roles"][request_environment]
     endpoint_data.auth_label in all_noc_labels
+}
+
+allowed if {
+    # noc users can trigger a compile, but they cannot update the model source.
+    "noc" in input.token["urn:inmanta:roles"][request_environment]
+    input.request.endpoint_id in ["GET /api/v1/notify/<id>", "POST /api/v1/notify/<id>"]
+    not input.request.parameters["update"]
 }
 
 
@@ -112,6 +118,7 @@ admin_specific_labels := {
     "lsm.callback.write",
     "lsm.catalog.write",
     "lsm.instance.migrate",
+    "compiler.execute",
 }
 
 all_admin_labels := all_noc_labels | all_operator_labels | admin_specific_labels
