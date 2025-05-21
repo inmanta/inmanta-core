@@ -153,7 +153,6 @@ allowed if {
 # Users with this privilege can also create/delete project and environments and add/delete users, etc.
 
 allowed if {
-    print(input.token["urn:inmanta:is_admin"])
     input.token["urn:inmanta:is_admin"] == true
 }
 
