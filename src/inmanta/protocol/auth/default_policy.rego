@@ -137,6 +137,7 @@ expert_admin_specific_labels := {
     "lsm.expert.write",
     "environment.clear",
     "environment.delete",
+    "token",
 }
 
 all_expert_admin_labels := all_admin_labels | expert_admin_specific_labels
@@ -144,13 +145,6 @@ all_expert_admin_labels := all_admin_labels | expert_admin_specific_labels
 allow if {
     "environment-expert-admin" in input.token["urn:inmanta:roles"][request_environment]
     endpoint_data.auth_label in all_expert_admin_labels
-}
-
-# Users can only create tokens scoped to the environment they are authorized for.
-allow if {
-    "environment-expert-admin" in input.token["urn:inmanta:roles"][request_environment]
-    endpoint_data.auth_label == "token"
-    input.request.parameters.tid == request_environment
 }
 
 
