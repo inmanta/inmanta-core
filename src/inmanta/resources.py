@@ -96,7 +96,7 @@ class resource:  # noqa: N801
                     stmt=None,
                     msg=(
                         f"Resource {fq_name_current_resource} is inheriting from the {fq_name_resource_decorator} decorator."
-                        f" Did you intent to inherit from {fq_name_resource_class} instead?"
+                        f" Did you intend to inherit from {fq_name_resource_class} instead?"
                     ),
                 )
             resource.validate()
