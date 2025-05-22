@@ -86,7 +86,6 @@ class DynamicProxy:
     by native code.
     """
 
-    # TODO: consider how to integrage JinjaProxy
     def __init__(self, instance: "Instance", *, parent_context: Optional[DynamicReturnValueContext] = None) -> None:
         object.__setattr__(self, "__instance", instance)
         object.__setattr__(self, "__context", self._from_parent_context(parent_context))
@@ -258,6 +257,10 @@ class DynamicProxy:
 
         return DynamicProxy(value, parent_context=new_context)
 
+    # TODO: docstring
+    def _return_value(self, value: object) -> object:
+        return DynamicProxy.return_value(value, context=self._get_context())
+
     # TODO: see if we can use traceback.extract_stack() here to add a location to any exceptions, try-except style
     def __getattr__(self, attribute: str):
         instance = self._get_instance()
@@ -293,7 +296,7 @@ class DynamicProxy:
         #       "I'm calling return_value on an element value that I know to be a black box"?
         # TODO: review this comment
         # Contents of an entity are always a black box, regardless of the current context
-        return DynamicProxy.return_value(value, context=self._get_context())
+        return self._return_value(value)
 
     def __setattr__(self, attribute: str, value: object) -> None:
         raise Exception("Readonly object")
@@ -341,21 +344,18 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
         # unless specified otherwise, the elements of this type have been validated at the plugin boundary
         return False
 
-    def __getitem__(self, key: str) -> object:
+    def __getitem__(self, key: int) -> object:
         instance = self._get_instance()
         if isinstance(key, str):
             raise RuntimeException(self, f"can not get a attribute {key}, {self._get_instance()} is a list")
 
-        return DynamicProxy.return_value(instance[key], context=self._get_context())
+        return self._return_value(instance[key])
+
+    def __iter__(self):
+        return (self._return_value(v) for v in self._get_instance())
 
     def __len__(self) -> int:
         return len(self._get_instance())
-
-    def __iter__(self) -> Iterable:
-        instance = self._get_instance()
-
-        # TODO: is there any way to implement this so the context doesn't have to be passed everywhere explicitly?
-        return IteratorProxy(instance.__iter__(), parent_context=self._get_context())
 
     def json_serialization_step(self) -> list[PrimitiveTypes]:
         # Ensure proper unwrapping by using __getitem__
@@ -376,15 +376,13 @@ class DictProxy(DynamicProxy, Mapping, JSONSerializable):
         if not isinstance(key, str):
             raise RuntimeException(self, f"Expected string key, but got {key}, {self._get_instance()} is a dict")
 
-        return DynamicProxy.return_value(instance[key], context=self._get_context())
+        return self._return_value(instance[key])
+
+    def __iter__(self):
+        return (self._return_value(v) for v in self._get_instance())
 
     def __len__(self) -> int:
         return len(self._get_instance())
-
-    def __iter__(self):
-        instance = self._get_instance()
-
-        return IteratorProxy(instance.__iter__(), parent_context=self._get_context())
 
     def json_serialization_step(self) -> dict[str, PrimitiveTypes]:
         # Ensure proper unwrapping by using __getitem__
@@ -408,24 +406,3 @@ class CallProxy(DynamicProxy):
         instance = self._get_instance()
 
         return instance(*args, **kwargs)
-
-
-class IteratorProxy(DynamicProxy):
-    """
-    Proxy an iterator call
-    """
-
-    def __init__(self, iterator: Iterable[object], *, parent_context: Optional[DynamicReturnValueContext] = None) -> None:
-        DynamicProxy.__init__(self, iterator, parent_context=parent_context)
-
-    @classmethod
-    def _black_box(cls) -> bool:
-        # unless specified otherwise, the elements of this type have been validated at the plugin boundary
-        return False
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        i = self._get_instance()
-        return DynamicProxy.return_value(next(i), context=self._get_context())
