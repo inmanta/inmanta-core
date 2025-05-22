@@ -26,10 +26,11 @@ import pytest
 
 import inmanta.resources
 from inmanta import config, const, module
-from inmanta.ast import CompilerException, ExternalException
+from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
 from inmanta.data import Environment, Resource
 from inmanta.export import DependencyCycleException
+from inmanta.module import InmantaModuleRequirement
 from inmanta.server import SLICE_RESOURCE
 from inmanta.server.server import Server
 from utils import LogSequence
@@ -854,3 +855,26 @@ async def test_export_duplicate(resource_container, snippetcompiler):
         snippetcompiler.do_export()
 
     assert "exists more than once in the configuration model" in str(exc.value)
+
+
+async def test_resource_inherits_from_decorator(snippetcompiler, local_module_package_index):
+    """
+    Verify that a clear error message is shown to the user if a resource inherits
+    from the resource decorator instead of the Resource class.
+    """
+    requirement = InmantaModuleRequirement.parse("invalid_resource_def")
+    snippetcompiler.setup_for_snippet(
+        "import invalid_resource_def",
+        install_project=True,
+        index_url=local_module_package_index,
+        python_requires=[requirement.get_python_package_requirement()],
+        autostd=False,
+    )
+
+    with pytest.raises(RuntimeException) as exc:
+        snippetcompiler.do_export()
+
+    assert (
+        "Resource inmanta_plugins.invalid_resource_def.Test is inheriting from the inmanta.resources.resource decorator."
+        " Did you intend to inherit from inmanta.resources.Resource instead?"
+    ) in str(exc.value)
