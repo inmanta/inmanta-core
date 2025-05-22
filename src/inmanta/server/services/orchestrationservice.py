@@ -673,6 +673,9 @@ class OrchestrationService(protocol.ServerSlice):
         )
         for inmanta_module_name, module_data in module_version_info.items():
             module_version = module_data.version
+            if not module_data.for_agents:
+                # No agent is using this module in this version
+                continue
             if (inmanta_module_name, module_version) not in base_version_data:
                 raise BadRequest(
                     "Cannot perform partial export because the source code for module %s in this partial version is different "
