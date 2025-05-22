@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import asyncio
 import datetime
 import logging
 import uuid
@@ -40,7 +39,6 @@ from inmanta.data.model import DesiredStateVersion
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
 from inmanta.data.model import PipConfig, PromoteTriggerMethod, ResourceDiff, ResourceMinimal, SchedulerStatusReport
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule
-from inmanta.db.util import ConnectionInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
@@ -1154,98 +1152,37 @@ class OrchestrationService(protocol.ServerSlice):
         :param agents: agents that have to be notified by the push, defaults to all
         """
         async with data.ConfigurationModel.get_connection(connection) as connection:
-            version_run_ahead_lock = asyncio.Event()
-            async with connection.transaction(), inmanta.util.FinallySet(version_run_ahead_lock):
-                with ConnectionInTransaction(connection) as connection_holder:
-                    # explicit lock to allow patching of increments for stale failures
-                    # (locks out patching stage of deploy_done to avoid races)
-                    await env.acquire_release_version_lock(connection=connection)
-                    model = await data.ConfigurationModel.get_version_internal(
-                        env.id, version_id, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE
+            async with connection.transaction():
+                # explicit lock to allow patching of increments for stale failures
+                # (locks out patching stage of deploy_done to avoid races)
+                await env.acquire_release_version_lock(connection=connection)
+                model = await data.ConfigurationModel.get_version_internal(
+                    env.id, version_id, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE
+                )
+                if model is None:
+                    return 404, {"message": "The request version does not exist."}
+
+                if model.released:
+                    raise Conflict(f"The version {version_id} on environment {env.id} is already released.")
+
+                latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
+
+                # ensure we are the latest version
+                # this does introduce a race condition, with any OTHER release running concurrently on this environment
+                # We could lock the get_version_nr_latest_version for update to prevent this
+                if model.version < (latest_version or -1):
+                    raise Conflict(
+                        f"The version {version_id} on environment {env.id} "
+                        f"is older then the latest released version {latest_version}."
                     )
-                    if model is None:
-                        return 404, {"message": "The request version does not exist."}
 
-                    if model.released:
-                        raise Conflict(f"The version {version_id} on environment {env.id} is already released.")
+                # Ensure there is a record for every resource in the resource_persistent_state table.
+                await data.ResourcePersistentState.populate_for_version(env.id, version_id, connection=connection)
 
-                    latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
-
-                    # ensure we are the latest version
-                    # this is required for the subsequent increment calculation to make sense
-                    # this does introduce a race condition, with any OTHER release running concurrently on this environment
-                    # We could lock the get_version_nr_latest_version for update to prevent this
-                    if model.version < (latest_version or -1):
-                        raise Conflict(
-                            f"The version {version_id} on environment {env.id} "
-                            f"is older then the latest released version {latest_version}."
-                        )
-
-                    # Ensure there is a record for every resource in the resource_persistent_state table.
-                    await data.ResourcePersistentState.populate_for_version(env.id, version_id, connection=connection)
-
-                    # # Already mark undeployable resources as deployed to create a better UX (change the version counters)
-                    undep = model.get_undeployable()
-                    now = datetime.datetime.now().astimezone()
-
-                    if undep:
-                        undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
-                        # not checking error conditions
-                        await self.resource_service.resource_action_update(
-                            env,
-                            undep_ids,
-                            action_id=uuid.uuid4(),
-                            started=now,
-                            finished=now,
-                            status=const.ResourceState.undefined,
-                            action=const.ResourceAction.deploy,
-                            changes={},
-                            messages=[],
-                            change=const.Change.nochange,
-                            send_events=False,
-                            connection=connection_holder,
-                        )
-
-                        skippable = model.get_skipped_for_undeployable()
-                        if skippable:
-                            skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
-                            # not checking error conditions
-                            await self.resource_service.resource_action_update(
-                                env,
-                                skippable_ids,
-                                action_id=uuid.uuid4(),
-                                started=now,
-                                finished=now,
-                                status=const.ResourceState.skipped_for_undefined,
-                                action=const.ResourceAction.deploy,
-                                changes={},
-                                messages=[],
-                                change=const.Change.nochange,
-                                send_events=False,
-                                connection=connection_holder,
-                            )
-
-                    if latest_version:
-                        (
-                            version,
-                            increment_ids,
-                            neg_increment,
-                            neg_increment_per_agent,
-                        ) = await self.resource_service.get_increment(
-                            env,
-                            version_id,
-                            connection=connection,
-                            run_ahead_lock=version_run_ahead_lock,
-                        )
-
-                        await self.resource_service.mark_deployed(
-                            env, neg_increment, now, version_id, connection=connection_holder
-                        )
-
-                    # Setting the model's released field to True is the trigger for the agents
-                    # to start pulling in the resources.
-                    # This has to be done after the resources outside of the increment have been marked as deployed.
-                    await model.update_fields(released=True, connection=connection)
+                # Setting the model's released field to True is the trigger for the agents
+                # to start pulling in the resources.
+                # This has to be done after the resources outside of the increment have been marked as deployed.
+                await model.update_fields(released=True, connection=connection)
 
             if connection.is_in_transaction():
                 raise RuntimeError(
