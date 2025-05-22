@@ -158,14 +158,24 @@ def takes_mixed_refs_dataclass_or_ref(instance: dc.MixedRefsDataclass | Referenc
 
 @plugin
 def read_entity_value(instance: Entity) -> None:
-    instance.maybe_ref_value  # expected to fail iff it's a reference
-    return None
+    assert isinstance(instance.maybe_ref_value, str), type(instance.maybe_ref_value)
 
 
 @plugin
 def read_entity_ref_value(instance: Entity) -> None:
     plugins.allow_reference_attributes(instance).maybe_ref_value
-    return None
+
+
+@plugin
+def read_list_entity_value(instances: Sequence[Entity]) -> None:
+    for instance in instances:
+        assert isinstance(instance.maybe_ref_value, str), type(instance.maybe_ref_value)
+
+
+@plugin
+def read_list_entity_ref_value(instances: Sequence[Entity]) -> None:
+    for instance in instances:
+        plugins.allow_reference_attributes(instance).maybe_ref_value
 
 
 # TODO: add a test case
@@ -195,3 +205,23 @@ def read_entity_dict_value(instance: DictContainer) -> None:
 @plugin
 def read_entity_dict_mykey(instance: DictContainer) -> None:
     assert isinstance(instance.value["mykey"], str), type(instance.value["mykey"])
+
+
+@plugin
+def inheritance_return_specific() -> dc.DataclassABC:
+    return dc.NoRefsDataclass()
+
+
+@plugin
+def inheritance_return_specific_ref() -> Reference[dc.DataclassABC]:
+    return dc.NoRefsDataclassReference()
+
+
+@plugin
+def returns_entity_list(instance: ListContainer) -> list[str]:
+    return instance.value
+
+
+@plugin
+def returns_entity_ref_list(instance: ListContainer) -> list[str | Reference[str]]:
+    return instance.value
