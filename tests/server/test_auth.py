@@ -18,18 +18,34 @@ Contact: code@inmanta.com
 
 import os
 import uuid
+from dataclasses import dataclass
+from typing import Mapping
 
 import pytest
 
-from inmanta import config, const
-from inmanta.protocol import common
-from inmanta.protocol.auth import auth, decorators, policy_engine
+import nacl.pwhash
+from inmanta import config, const, data
+from inmanta.data.model import AuthMethod
+from inmanta.protocol import common, rest
+from inmanta.protocol.auth import auth, decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
+from inmanta.server import config as server_config
 from inmanta.server import protocol
 
 
 @pytest.fixture
-async def server_with_test_slice(tmpdir, access_policy: str, path_policy_engine_executable: str) -> protocol.Server:
+def authorization_provider() -> str:
+    """
+    A fixture that represents the authorization provider that will be configured
+    by the server_with_test_slice fixture.
+    """
+    return server_config.AuthorizationProviderName.policy_engine.value
+
+
+@pytest.fixture
+async def server_with_test_slice(
+    tmpdir, access_policy: str, path_policy_engine_executable: str, authorization_provider: str
+) -> protocol.Server:
     """
     A fixture that returns a server with authentication and authorization enabled
     that has a TestSlice with several different API endpoints that require authorization
@@ -42,7 +58,6 @@ async def server_with_test_slice(tmpdir, access_policy: str, path_policy_engine_
         os.mkdir(directory)
 
     config.Config.set("server", "auth", "true")
-    config.Config.set("server", "enforce-access-policy", "true")
     config.Config.set("server", "auth_method", "database")
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
     config.Config.set("auth_jwt_default", "sign", "true")
@@ -55,6 +70,8 @@ async def server_with_test_slice(tmpdir, access_policy: str, path_policy_engine_
     config.Config.set("config", "log-dir", log_dir)
     config.state_dir.set(str(tmpdir))
 
+    # Configure authorization
+    config.Config.set("server", "authorization-provider", authorization_provider)
     os.mkdir(os.path.join(tmpdir, "policy_engine"))
     access_policy_file = os.path.join(tmpdir, "policy_engine", "policy.rego")
     with open(access_policy_file, "w") as fh:
@@ -65,7 +82,7 @@ async def server_with_test_slice(tmpdir, access_policy: str, path_policy_engine_
 
     # Define the TestSlice and its API endpoints
     @decorators.auth(auth_label="test", read_only=True)
-    @typedmethod(path="/read-only", operation="GET", client_types=["api"])
+    @typedmethod(path="/read-only", operation="GET", client_types=["api", "compiler"])
     def read_only_method() -> None:  # NOQA
         pass
 
@@ -82,6 +99,16 @@ async def server_with_test_slice(tmpdir, access_policy: str, path_policy_engine_
     @decorators.auth(auth_label="admin", read_only=False)
     @typedmethod(path="/admin-only", operation="POST", client_types=["api"])
     def admin_only_method() -> None:  # NOQA
+        pass
+
+    @decorators.auth(auth_label="test", read_only=False)
+    @typedmethod(path="/enforce-auth-disabled", operation="GET", client_types=["api"], enforce_auth=False)
+    def enforce_auth_disabled_method() -> None:  # NOQA
+        pass
+
+    @decorators.auth(auth_label="test", read_only=False)
+    @typedmethod(path="/method-with-call-context", operation="GET", client_types=["api"])
+    def call_context_method(arg1: uuid.UUID, arg2: str) -> None:  # NOQA
         pass
 
     class TestSlice(protocol.ServerSlice):
@@ -101,6 +128,16 @@ async def server_with_test_slice(tmpdir, access_policy: str, path_policy_engine_
         async def handle_admin_only_method(self, context: common.CallContext) -> None:  # NOQA
             return
 
+        @handle(enforce_auth_disabled_method)
+        async def handle_enforce_auth_disabled(self) -> None:  # NOQA
+            return
+
+        @handle(call_context_method, test="arg1")
+        async def handle_call_context_method(
+            self, call_context: common.CallContext, test: uuid.UUID, arg2: str
+        ) -> None:  # NOQA
+            return
+
     # Start the server
     rs = protocol.Server()
     test_slice = TestSlice(name="testslice")
@@ -114,12 +151,14 @@ async def server_with_test_slice(tmpdir, access_policy: str, path_policy_engine_
     await rs.stop()
 
 
-def get_client_with_role(env_to_role_dct: dict[str, str], is_admin: bool) -> protocol.Client:
+def get_client_with_role(
+    env_to_role_dct: dict[str, str], is_admin: bool, client_type: const.ClientType = const.ClientType.api
+) -> protocol.Client:
     """
     Returns a client that uses an access token for the given role.
     """
     token = auth.encode_token(
-        client_types=[str(const.ClientType.api.value)],
+        client_types=[str(client_type.value)],
         expire=None,
         custom_claims={
             f"{const.INMANTA_URN}roles": env_to_role_dct,
@@ -227,6 +266,84 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
         assert fh.read(1)
 
 
+@pytest.mark.parametrize(
+    "access_policy",
+    [
+        """
+        package policy
+
+        default allowed := false
+        """
+    ],
+)
+async def test_fallback_to_legacy_provider(server_with_test_slice: protocol.Server) -> None:
+    """
+    Verify that service tokens are not evaluated using the policy engine, but a fallback is done
+    to the legacy authorization provider.
+    """
+    # ClientType == api -> Use policy engine authorization provider
+    client = get_client_with_role(env_to_role_dct={}, is_admin=False, client_type=const.ClientType.api)
+    result = await client.read_only_method()
+    assert result.code == 403
+
+    # ClientType == compiler -> Use legacy authorization provider
+    client = get_client_with_role(env_to_role_dct={}, is_admin=False, client_type=const.ClientType.compiler)
+    result = await client.read_only_method()
+    assert result.code == 200
+
+
+@pytest.mark.parametrize(
+    "authorization_provider, return_code",
+    [
+        # policy_engine provider -> enforce_auth=False is ignored
+        (server_config.AuthorizationProviderName.policy_engine.value, 401),
+        # legacy provider -> enforce_auth=False is taken into account
+        (server_config.AuthorizationProviderName.legacy.value, 200),
+    ],
+)
+async def test_enforce_auth_method_property(
+    server_with_test_slice: protocol.Server, authorization_provider: str, return_code: int
+) -> None:
+    """
+    Ensure that the enforce_auth method property is taken into account by the legacy authorization provider,
+    but not by the policy engine authorization provider.
+    """
+    # Create a client that doesn't include an authorization token in its requests to the server.
+    config.Config.get("client_rest_transport", "token", None) is None
+    client = protocol.Client("client")
+    result = await client.enforce_auth_disabled_method()
+    assert result.code == return_code
+
+
+@pytest.mark.parametrize(
+    "access_policy",
+    [
+        """
+        package policy
+
+        default allowed := false
+        """
+    ],
+)
+@pytest.mark.parametrize(
+    "authorization_provider",
+    [a.value for a in server_config.AuthorizationProviderName],
+)
+async def test_authorization_providers(server_with_test_slice: protocol.Server, authorization_provider: str) -> None:
+    """
+    Verify the behavior of the different authorization providers.
+    """
+    client = get_client_with_role(env_to_role_dct={}, is_admin=False, client_type=const.ClientType.api)
+    result = await client.read_only_method()
+    match server_config.AuthorizationProviderName(authorization_provider):
+        case server_config.AuthorizationProviderName.legacy:
+            assert result.code == 200
+        case server_config.AuthorizationProviderName.policy_engine:
+            assert result.code == 403
+        case _:
+            raise Exception(f"Unknown authorization_provider: {authorization_provider}")
+
+
 async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, monkeypatch) -> None:
     """
     Verify that the protocol layer correctly composes the JSON document that is fed into the policy
@@ -302,6 +419,11 @@ async def test_policy_engine_data() -> None:
     def test_read_write(tid: uuid.UUID) -> None:  # NOQA
         pass
 
+    @decorators.auth(auth_label="other-test2", read_only=False, environment_param="tid")
+    @typedmethod(path="/read-write2/<tid>", operation="POST", client_types=["api", "agent"])
+    def test_param(tid: uuid.UUID) -> None:  # NOQA
+        pass
+
     data: dict[str, object] = common.MethodProperties.get_open_policy_agent_data()
     endpoint_id = "GET /api/v1/read-only"
     assert endpoint_id in data["endpoints"]
@@ -315,6 +437,14 @@ async def test_policy_engine_data() -> None:
     assert endpoint_id in data["endpoints"]
     read_write_method_metadata = data["endpoints"][endpoint_id]
     assert read_write_method_metadata["auth_label"] == "other-test"
+    assert read_write_method_metadata["read_only"] is False
+    assert read_write_method_metadata["client_types"] == ["api", "agent"]
+    assert read_write_method_metadata["environment_param"] == "tid"
+
+    endpoint_id = "POST /api/v1/read-write2/<tid>"
+    assert endpoint_id in data["endpoints"]
+    read_write_method_metadata = data["endpoints"][endpoint_id]
+    assert read_write_method_metadata["auth_label"] == "other-test2"
     assert read_write_method_metadata["read_only"] is False
     assert read_write_method_metadata["client_types"] == ["api", "agent"]
     assert read_write_method_metadata["environment_param"] == "tid"
@@ -363,6 +493,32 @@ async def test_auth_annotation_not_required() -> None:
         pass
 
     protocol.Server()._validate()
+
+
+async def test_provide_token_as_parameter(server: protocol.Server, client) -> None:
+    """
+    Validate whether the authorization token is handled correctly
+    when provided using a parameter instead of a header.
+    """
+    config.Config.set("server", "auth", "true")
+    config.Config.set("server", "auth_method", "database")
+    user = data.User(
+        username="admin",
+        password_hash=nacl.pwhash.str("adminadmin".encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    # No authorization token provided
+    result = await client.get_api_docs()
+    assert result.code == 401
+
+    response = await client.login("admin", "adminadmin")
+    assert response.code == 200
+    token = response.result["data"]["token"]
+
+    result = await client.get_api_docs(token=token)
+    assert result.code == 200
 
 
 async def test_auth_annotation() -> None:
@@ -415,3 +571,55 @@ async def test_auth_annotation() -> None:
         "read_only": False,
         "environment_param": None,
     }
+
+
+@dataclass
+class CapturedInput:
+    """
+    Object that contains the output of the `PolicyEngineAuthorizationProvider._get_input_for_policy_engine()` method.
+    """
+
+    value: dict[str, object] | None = None
+
+
+@pytest.fixture
+def capture_input_for_policy_engine(monkeypatch) -> CapturedInput:
+    """
+    Fixture that monkeypatches the PolicyEngineAuthorizationProvider._get_input_for_policy_engine() method to
+    capture its return value. After each invocation of the _get_input_for_policy_engine() method, the value
+    is stored in the returned CapturedInput object.
+    """
+    captured_input = CapturedInput()
+
+    original_get_input_for_policy_engine = providers.PolicyEngineAuthorizationProvider._get_input_for_policy_engine
+
+    def _get_input_for_policy_engine_wrapper(self, call_arguments: rest.CallArguments) -> Mapping[str, object]:
+        result = original_get_input_for_policy_engine(self, call_arguments)
+        captured_input.value = result
+        return result
+
+    monkeypatch.setattr(
+        providers.PolicyEngineAuthorizationProvider, "_get_input_for_policy_engine", _get_input_for_policy_engine_wrapper
+    )
+
+    return captured_input
+
+
+async def test_get_input_for_policy_engine(capture_input_for_policy_engine: CapturedInput, server_with_test_slice):
+    """
+    Verify that the input, provided to the policy engine, looks as expected.
+    """
+    env_id = str(uuid.uuid4())
+    client = get_client_with_role(env_to_role_dct={env_id: "test"}, is_admin=False, client_type=const.ClientType.api)
+
+    arg1 = uuid.uuid4()
+    arg2 = "test"
+    assert capture_input_for_policy_engine.value is None
+    result = await client.call_context_method(arg1, arg2)
+    assert result.code == 200
+    pe_input = capture_input_for_policy_engine.value
+    assert pe_input["input"]["request"]["endpoint_id"] == "GET /api/v1/method-with-call-context"
+    assert pe_input["input"]["request"]["parameters"] == {"arg1": arg1, "arg2": arg2}
+    assert pe_input["input"]["token"]["urn:inmanta:ct"] == ["api"]
+    assert pe_input["input"]["token"]["urn:inmanta:roles"] == {env_id: "test"}
+    assert pe_input["input"]["token"]["urn:inmanta:is-admin"] is False

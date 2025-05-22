@@ -1,0 +1,5 @@
+description: Added default equals implementation to references
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"

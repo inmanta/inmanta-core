@@ -84,6 +84,24 @@ class ReferenceCycleException(Exception):
         return self.get_message()
 
 
+class MutatorMissingError(TypeError):
+    """
+    Exception raised during reference resolution when the requested mutator
+    cannot be found in the set of registered mutators.
+
+    e.g. when no mutator was registered or in case of code loading failure.
+    """
+
+
+class ReferenceMissingError(TypeError):
+    """
+    Exception raised during reference resolution when the requested reference
+    cannot be found in the set of registered references.
+
+    e.g. when no reference was registered or in case of code loading failure.
+    """
+
+
 class Argument(pydantic.BaseModel):
     """Base class for reference (resolver) arguments"""
 
@@ -315,6 +333,14 @@ class ReferenceLike:
     def arguments(self) -> collections.abc.Mapping[str, object]:
         return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
+    def __eq__(self, other: object) -> bool:
+        if type(self) is not type(other):
+            return False
+
+        assert isinstance(other, ReferenceLike)  # mypy can't figure out the check above
+
+        return self.arguments == other.arguments
+
 
 class Mutator(ReferenceLike):
     """A mutator that has side effects when executed"""
@@ -414,7 +440,7 @@ class reference:
     def get_class(cls, name: str) -> type[Reference[RefValue]]:
         """Get the reference class registered with the given name"""
         if name not in cls._reference_classes:
-            raise TypeError(f"There is no reference class registered with name {name}")
+            raise ReferenceMissingError(f"There is no reference class registered with name {name}")
 
         return cls._reference_classes[name]
 
@@ -454,7 +480,7 @@ class mutator:
     def get_class(cls, name: str) -> type[Mutator]:
         """Get the mutator class registered with the given name"""
         if name not in cls._mutator_classes:
-            raise TypeError(f"There is no mutator class registered with name {name}")
+            raise MutatorMissingError(f"There is no mutator class registered with name {name}")
 
         return cls._mutator_classes[name]
 
@@ -492,7 +518,7 @@ class ReplaceValue(Mutator):
     """Replace a reference in the provided resource"""
 
     def __init__(self, resource: "inmanta.resources.Resource", value: Reference[PrimitiveTypes], destination: str) -> None:
-        """Change a value in the given resource at the given distination
+        """Change a value in the given resource at the given destination
 
         :param resource: The resource to replace the value in
         :param value: The value to replace in `resource` at `destination`

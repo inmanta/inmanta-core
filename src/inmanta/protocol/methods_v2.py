@@ -46,6 +46,7 @@ from inmanta.types import PrimitiveTypes, ResourceIdStr
 )
 def put_partial(
     tid: uuid.UUID,
+    module_version_info: dict[str, model.InmantaModule],
     resource_state: Optional[dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
     unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
     resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
@@ -75,6 +76,8 @@ def put_partial(
               * resources: a list of resource objects. Since the version is not known yet resource versions should be set to 0.
               * version_info: Model version information
     :param pip_config: Pip config used by this version
+    :param module_version_info: Map of (module name, module version) to InmantaModule
+
     :return: The newly stored version number.
     """
 
@@ -407,12 +410,15 @@ def reserve_version(tid: uuid.UUID) -> int:
 
 
 @auth(auth_label=const.AuthorizationLabel.DOCS_READ, read_only=True)
-@typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2)
-def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> ReturnValue[Union[OpenAPI, str]]:
+@typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2, token_param="token")
+def get_api_docs(
+    format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger, token: str | None = None
+) -> ReturnValue[Union[OpenAPI, str]]:
     """
     Get the OpenAPI definition of the API
 
     :param format: Use 'openapi' to get the schema in json format, leave empty or use 'swagger' to get the Swagger-UI view
+    :param token: If provided, use this token to authorize the request instead of the value from the authorization header.
     """
 
 
@@ -1427,24 +1433,6 @@ def update_notification(
     :param cleared: Whether the notification has been cleared
     :return: The updated notification
     :raise NotFound: When the referenced environment or notification is not found
-    """
-
-
-@typedmethod(
-    path="/code/<version>",
-    operation="GET",
-    agent_server=True,
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> list[model.Source]:
-    """
-    Get the code for the given version and the given resource
-    :param tid: The id of the environment
-    :param version: The id of the model version
-    :param resource_type: The type name of the resource
-    :raises NotFound: Raised when the version or type is not found
     """
 
 

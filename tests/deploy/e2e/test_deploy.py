@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import asyncio
 import logging
 import pathlib
 import uuid
@@ -28,7 +27,7 @@ import pytest
 from inmanta import config, const, data, execute
 from inmanta.config import Config
 from inmanta.data import SERVER_COMPILE
-from inmanta.data.model import SchedulerStatusReport
+from inmanta.data.model import ReleasedResourceState, SchedulerStatusReport
 from inmanta.deploy.state import Blocked, Compliance, DeployResult, ResourceState
 from inmanta.deploy.work import TaskPriority
 from inmanta.resources import Id
@@ -465,6 +464,7 @@ async def test_deploy_empty(server, client, clienthelper, environment, agent):
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -536,6 +536,7 @@ async def test_deploy_to_empty(server, client, clienthelper, environment, agent,
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -617,8 +618,20 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
+    resources = await data.Resource.get_list(environment=environment)
+    assert len(resources) == 4
+    # Assert that we get 2 undefined resources
+    undefined_state = [res for res in resources if res.status == const.ResourceState.undefined]
+    other_state = [res for res in resources if res.status != const.ResourceState.undefined]
+    assert len(undefined_state) == 2
+    assert len(other_state) == 2
+    # Assert that the undefined resources have is_undefined set to true
+    # And resources in any other state have it set to false
+    for resource in resources:
+        assert resource.is_undefined == (resource in undefined_state)
 
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
@@ -692,6 +705,7 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -767,6 +781,7 @@ async def test_unknown_parameters(
         unknowns=unknowns,
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -777,10 +792,12 @@ async def test_unknown_parameters(
 
     env_id = uuid.UUID(environment)
     if not halted:
-        params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
-        while len(params) < 3:
+
+        async def params_available():
             params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
-            await asyncio.sleep(0.1)
+            return len(params) >= 3
+
+        await retry_limited(params_available, 10)
 
         result = await client.get_param(env_id, "length", resource_id_wov)
         assert result.code == 200
@@ -1014,6 +1031,7 @@ async def test_deploy_and_events(
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -1072,6 +1090,7 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
+        module_version_info={},
     )
     assert result.code == 200
 
@@ -1217,6 +1236,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             unknowns=[],
             version_info={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
         )
         assert result.code == 200, result.result
 
@@ -1228,6 +1248,31 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         assert result.code == 200
 
         await wait_until_deployment_finishes(client, env_id, version=version)
+
+    async def assert_states(expected_states: dict[ResourceIdStr, ReleasedResourceState]) -> None:
+        # Verify behavior of resource_details() endpoint.
+        for rid, current_resource_state in expected_states.items():
+            result = await client.resource_details(tid=environment, rid=rid)
+            assert result.code == 200
+            assert (
+                result.result["data"]["status"] == current_resource_state.value
+            ), f"Got state {result.result['data']['status']} for resource {rid}, expected {current_resource_state.value}"
+
+        # Verify behavior of get_current_resource_state() endpoint
+        resource_state: Optional[const.ResourceState]
+        for rid, current_resource_state in expected_states.items():
+            resource_state = await data.Resource.get_current_resource_state(env=uuid.UUID(environment), rid=rid)
+            if resource_state is None:
+                assert ReleasedResourceState("orphaned") == current_resource_state
+            else:
+                assert isinstance(resource_state, const.ResourceState)
+                assert ReleasedResourceState(resource_state) == current_resource_state
+
+        # Verify behavior of resource_list() endpoint
+        result = await client.resource_list(tid=environment)
+        assert result.code == 200
+        actual_states = {r["resource_id"]: ReleasedResourceState(r["status"]) for r in result.result["data"]}
+        assert actual_states == expected_states
 
     resource_container.Provider.set_fail("agent1", "key2", 1)
     version = await clienthelper.get_version()
@@ -1241,6 +1286,15 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.undefined,
             ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.available,
         },
+    )
+    await assert_states(
+        {
+            ResourceIdStr("test::Resource[agent1,key=key1]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): ReleasedResourceState.failed,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): ReleasedResourceState.skipped,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): ReleasedResourceState.undefined,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): ReleasedResourceState.skipped_for_undefined,
+        }
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
@@ -1299,6 +1353,15 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.available,
         },
     )
+    await assert_states(
+        {
+            ResourceIdStr("test::Resource[agent1,key=key1]"): ReleasedResourceState.orphaned,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): ReleasedResourceState.deployed,
+        }
+    )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}
     for i in range(1, 6):
@@ -1323,6 +1386,15 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             ResourceIdStr("test::Resource[agent1,key=key4]"): const.ResourceState.undefined,
             ResourceIdStr("test::Resource[agent1,key=key5]"): const.ResourceState.available,
         },
+    )
+    await assert_states(
+        {
+            ResourceIdStr("test::Resource[agent1,key=key1]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key2]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key3]"): ReleasedResourceState.deployed,
+            ResourceIdStr("test::Resource[agent1,key=key4]"): ReleasedResourceState.undefined,
+            ResourceIdStr("test::Resource[agent1,key=key5]"): ReleasedResourceState.skipped_for_undefined,
+        }
     )
     result = await data.ResourcePersistentState.get_list(environment=environment)
     result_per_resource_id = {r.resource_id: r for r in result}

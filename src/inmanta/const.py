@@ -24,6 +24,27 @@ from typing import Optional
 
 from inmanta.stable_api import stable_api
 
+# This query assumes that the resource_persistent_state table is present in the query as rps.
+# It returns the status of the resource in the "status" field.
+SQL_RESOURCE_STATUS_SELECTOR: typing.LiteralString = """
+(
+    CASE
+        WHEN rps.is_orphan
+            THEN 'orphaned'
+        WHEN rps.is_deploying
+            THEN 'deploying'
+        WHEN rps.is_undefined
+            THEN 'undefined'
+        WHEN rps.blocked = 'BLOCKED'
+            THEN 'skipped_for_undefined'
+        WHEN rps.current_intent_attribute_hash <> rps.last_deployed_attribute_hash
+            THEN 'available'
+        ELSE
+            rps.last_non_deploying_status::text
+    END
+)
+"""
+
 
 class ResourceState(str, Enum):
     unavailable = "unavailable"  # This state is set by the agent when no handler is available for the resource

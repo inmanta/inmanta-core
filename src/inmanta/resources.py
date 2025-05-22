@@ -29,6 +29,7 @@ from inmanta import const, references
 from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
+from inmanta.util import dict_path
 
 if TYPE_CHECKING:
     from inmanta import export
@@ -83,7 +84,20 @@ class resource:  # noqa: N801
 
     @classmethod
     def validate(cls) -> None:
+        fq_name_resource_decorator = f"{cls.__module__}.{cls.__name__}"
+        fq_name_resource_class = f"{Resource.__module__}.{Resource.__name__}"
         for resource, _ in cls._resources.values():
+            if issubclass(resource, cls):
+                # If a Resource inherits from the resource decorator, the server goes into an infinite recursion.
+                # Here we make sure the user gets a clear error message (https://github.com/inmanta/inmanta-core/issues/8817).
+                fq_name_current_resource = f"{resource.__module__}.{resource.__name__}"
+                raise inmanta.ast.RuntimeException(
+                    stmt=None,
+                    msg=(
+                        f"Resource {fq_name_current_resource} is inheriting from the {fq_name_resource_decorator} decorator."
+                        f" Did you intend to inherit from {fq_name_resource_class} instead?"
+                    ),
+                )
             resource.validate()
 
     @classmethod
@@ -244,7 +258,10 @@ def collect_references(value_reference_collector: ReferenceCollector | None, val
             ]
 
         case dict() | proxy.DictProxy():
-            return {key: collect_references(value_reference_collector, value, f"{path}.{key}") for key, value in value.items()}
+            return {
+                key: collect_references(value_reference_collector, value, f"{path}.{dict_path.NormalValue(key).escape()}")
+                for key, value in value.items()
+            }
 
         case references.Reference():
             if value_reference_collector is None:
@@ -747,6 +764,16 @@ class Id:
             raise AttributeError("can't set attribute version")
 
         self._version = version
+
+    def get_inmanta_module(self) -> str:
+        """
+        Utility method to parse the Inmanta module out of
+        the entity type for this Id.
+
+        e.g. Returns `std` for resources of type `std::testing::NullResource`
+        """
+        ns = self._entity_type.split("::", maxsplit=1)
+        return ns[0]
 
     def copy(self, *, version: int) -> "Id":
         """

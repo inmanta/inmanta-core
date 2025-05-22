@@ -31,7 +31,7 @@ from tornado import escape
 from inmanta import const, tracing, util
 from inmanta.data.model import BaseModel
 from inmanta.protocol import common, exceptions
-from inmanta.protocol.auth import auth, policy_engine
+from inmanta.protocol.auth import auth, providers
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import config as server_config
 from inmanta.types import Apireturn, JsonType
@@ -56,7 +56,10 @@ class CallArguments:
     """
 
     def __init__(
-        self, config: common.UrlMethod, message: dict[str, Optional[object]], request_headers: Mapping[str, str]
+        self,
+        config: common.UrlMethod,
+        message: dict[str, Optional[object]],
+        request_headers: Mapping[str, str],
     ) -> None:
         """
         :param config: The method configuration that contains the metadata and functions to call
@@ -79,11 +82,34 @@ class CallArguments:
         self._processed: bool = False
 
     @property
+    def method_properties(self) -> common.MethodProperties:
+        return self._properties
+
+    @property
+    def config(self) -> common.UrlMethod:
+        return self._config
+
+    @property
+    def auth_token(self) -> auth.claim_type | None:
+        return self._auth_token
+
+    @property
     def call_args(self) -> dict[str, object]:
         if not self._processed:
             raise Exception("Process call first before accessing property")
 
         return self._call_args
+
+    def get_call_args_without_call_context_argument(self) -> dict[str, object]:
+        """
+        Return the call arguments of this invocation, but exclude the CallContext argument.
+        """
+        call_args = dict(self.call_args)
+        name_call_context_context_arg = self.get_call_context()
+        if name_call_context_context_arg and name_call_context_context_arg in call_args:
+            # Remove the CallContext argument. It cannot be serialized to JSON.
+            del call_args[name_call_context_context_arg]
+        return call_args
 
     @property
     def auth_username(self) -> Optional[str]:
@@ -496,6 +522,26 @@ class CallArguments:
 
         :return: A mapping of claims
         """
+        token: str | None = None
+
+        # Try to get token from parameters if token_param set in method properties.
+        token_param = self._properties.token_param
+        if token_param is not None and self._message.get(token_param):
+            token = self._message[token_param]
+
+        # Try to get token from header
+        if token is None:
+            token = self._get_auth_token_from_header()
+
+        if token is None:
+            return None
+
+        self._auth_token, cfg = auth.decode_token(token)
+
+        if cfg.jwt_username_claim in self._auth_token:
+            self._auth_username = str(self._auth_token[cfg.jwt_username_claim])
+
+    def _get_auth_token_from_header(self) -> str | None:
         header_value: Optional[str] = None
 
         if additional_header := server_config.server_additional_auth_header.get():
@@ -515,13 +561,7 @@ class CallArguments:
 
             header_value = parts[1]
 
-        if header_value is None:
-            return None
-
-        self._auth_token, cfg = auth.decode_token(header_value)
-
-        if cfg.jwt_username_claim in self._auth_token:
-            self._auth_username = str(self._auth_token[cfg.jwt_username_claim])
+        return header_value
 
     def authenticate(self, auth_enabled: bool) -> None:
         """Fetch any identity information and authenticate. This will also load this authentication
@@ -538,86 +578,14 @@ class CallArguments:
             # We only need a valid token when the endpoint enforces authentication
             raise exceptions.UnauthorizedException()
 
-    def _is_service_token(self) -> bool:
+    def is_service_request(self) -> bool:
         """
-        Return True iff self._auth_token is a service token (i.e. a token used by a service instead of a user).
+        Return True iff this is a machine-to-machine request.
         """
         ct_key: str = const.INMANTA_URN + "ct"
         assert self._auth_token is not None
         client_types_token = self._auth_token[ct_key]
         return any(ct in {const.ClientType.agent.value, const.ClientType.compiler.value} for ct in client_types_token)
-
-    async def authorize_request(self, auth_enabled: bool, policy_engine: policy_engine.PolicyEngine | None) -> None:
-        """Validate whether the token is authorized to perform this request.
-
-        :param auth_enabled: is authentication enabled?
-        :param policy_engine: The policy engine of the server. None if we are not running on the server
-                              or if auth is disabled.
-        """
-        if not auth_enabled:
-            return
-
-        if not server_config.enforce_access_policy.get():
-            return
-
-        if self._auth_token is None:
-            if self._config.properties.enforce_auth:
-                # We only need a valid token when the endpoint enforces authentication and auth is enabled
-                raise exceptions.UnauthorizedException()
-            return None
-
-        if self._is_service_token():
-            self._authorize_service_token()
-        else:
-            if policy_engine is None:
-                raise exceptions.Forbidden("The policy engine is not running.")
-            input_data = self._get_input_for_policy_engine()
-            if not await policy_engine.does_satisfy_access_policy(input_data):
-                raise exceptions.Forbidden("Request is not allowed by the access policy.")
-
-    def _authorize_service_token(self) -> None:
-        """
-        Validate whether self._auth_token is a valid service token.
-        If not, this method raises a Forbidden exception.
-        """
-        assert self._auth_token is not None
-        # Enforce environment restrictions
-        env_key: str = const.INMANTA_URN + "env"
-        if env_key in self._auth_token:
-            if env_key not in self.metadata:
-                raise exceptions.Forbidden("The authorization token is scoped to a specific environment.")
-
-            if self.metadata[env_key] != "all" and self._auth_token[env_key] != self.metadata[env_key]:
-                raise exceptions.Forbidden("The authorization token is not valid for the requested environment.")
-
-        # Enforce client_types restrictions
-        ct_key: str = const.INMANTA_URN + "ct"
-        if not any(ct for ct in self._auth_token[ct_key] if ct in self._config.properties.client_types):
-            raise exceptions.Forbidden(
-                "The authorization token does not have a valid client type for this call."
-                + f" ({self._auth_token[ct_key]} provided, {self._config.properties.client_types} expected)"
-            )
-
-    def _get_input_for_policy_engine(self) -> Mapping[str, object]:
-        """
-        Returns the input that should be provided to the policy engine to validate
-        whether this call is authorized or not.
-        """
-        method_properties = self._config.properties
-        call_args = dict(self.call_args)
-        name_call_context_context_arg = self.get_call_context()
-        if name_call_context_context_arg and name_call_context_context_arg in call_args:
-            # Remove the CallContext argument. It cannot be serialized to JSON.
-            del call_args[name_call_context_context_arg]
-        return {
-            "input": {
-                "request": {
-                    "endpoint_id": f"{method_properties.operation} {method_properties.get_full_path()}",
-                    "parameters": call_args,
-                },
-                "token": self._auth_token,
-            }
-        }
 
 
 # Shared
@@ -675,7 +643,9 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
             is_auth_enabled: bool = self.is_auth_enabled()
             arguments.authenticate(auth_enabled=is_auth_enabled)
             await arguments.process()
-            await arguments.authorize_request(auth_enabled=is_auth_enabled, policy_engine=await self.get_policy_engine())
+            authorization_provider = self.get_authorization_provider()
+            if authorization_provider:
+                await authorization_provider.authorize_request(arguments)
 
             LOGGER.debug(
                 "Calling method %s(%s) user=%s",
@@ -701,8 +671,8 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
             raise exceptions.ServerError(str(e.args))
 
     @abc.abstractmethod
-    async def get_policy_engine(self) -> policy_engine.PolicyEngine | None:
+    def get_authorization_provider(self) -> providers.AuthorizationProvider | None:
         """
-        Return the policy engine or None if no such engine exists because we are not running on the server.
+        Returns the authorization provider or None if we are not running on the server.
         """
         raise NotImplementedError()

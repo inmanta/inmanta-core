@@ -1,0 +1,2 @@
+include inmanta_plugins/invalid_resource_def/setup.cfg
+recursive-include inmanta_plugins/invalid_resource_def/model *.cf

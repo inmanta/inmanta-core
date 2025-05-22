@@ -45,7 +45,7 @@ from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import TaskPriority
 from inmanta.protocol import Client
 from inmanta.resources import Id
-from inmanta.types import ResourceIdStr, ResourceType, ResourceVersionIdStr
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 NB_ITERATIONS_PASS_IO_LOOP: int = 100
@@ -64,17 +64,11 @@ class ResourceVersionIntent:
     """
     Resource intent for a single resource at a specific version.
 
-    Includes model version and resource intent, as well as the full set of resource types that live on the resource's agent.
-    This list will never be empty, and will always include the resource's own type.
+    Includes model version and resource intent.
     """
 
     model_version: int
     intent: ResourceIntent
-    # All types that live on this agent. Required to ensure that the executor loads the appropriate code for this version,
-    # even if new versions come in before the executor is constructed.
-    # Should be dropped once this functionality moves to the code manager.
-    # At that point, the state's types_per_agent can be dropped as well.
-    all_types_for_agent: Collection[ResourceType]
 
 
 @dataclass(frozen=True)
@@ -121,7 +115,7 @@ class ResourceRecord(typing.TypedDict):
     """
 
     resource_id: str
-    status: str
+    is_undefined: bool
     attributes: Mapping[str, object]
     attribute_hash: str
 
@@ -155,11 +149,7 @@ class ModelVersion:
                 }
                 for resource in resources
             },
-            undefined={
-                ResourceIdStr(resource["resource_id"])
-                for resource in resources
-                if const.ResourceState(resource["status"]) is const.ResourceState.undefined
-            },
+            undefined={ResourceIdStr(resource["resource_id"]) for resource in resources if resource["is_undefined"]},
         )
 
 
@@ -361,7 +351,7 @@ class ResourceScheduler(TaskManager):
 
         self.environment = environment
         self.client = client
-        self.code_manager = CodeManager(client)
+        self.code_manager = CodeManager()
         self.executor_manager = executor_manager
         self.state_update_manager = ToDbUpdateManager(client, environment)
 
@@ -1054,7 +1044,6 @@ class ResourceScheduler(TaskManager):
                 connection=con,
             )
             # Mark orphaned resources
-            await self.state_update_manager.mark_as_orphan(self.environment, deleted, connection=con)
             await self.state_update_manager.set_last_processed_model_version(
                 self.environment, self._state.version, connection=con
             )
@@ -1140,7 +1129,6 @@ class ResourceScheduler(TaskManager):
             return ResourceVersionIntent(
                 model_version=self._state.version,
                 intent=resource_intent,
-                all_types_for_agent=list(self._state.types_per_agent[self._state.intent[resource].id.agent_name]),
             )
 
     async def deploy_start(self, action_id: uuid.UUID, resource: ResourceIdStr) -> Optional[DeployIntent]:
@@ -1157,7 +1145,6 @@ class ResourceScheduler(TaskManager):
                 intent=resource_intent,
                 dependencies=dependencies,
                 deploy_start=datetime.datetime.now().astimezone(),
-                all_types_for_agent=list(self._state.types_per_agent[self._state.intent[resource].id.agent_name]),
             )
             # Update the state in the database.
             await self.state_update_manager.send_in_progress(
@@ -1615,7 +1602,7 @@ class ResourceScheduler(TaskManager):
                     return report_model_version_mismatch(latest_model.version)
 
                 resource_states_in_db: Mapping[ResourceIdStr, const.ResourceState]
-                latest_version, resource_states_in_db = await data.Resource.get_resource_states_latest_version(
+                latest_version, resource_states_in_db = await data.Resource.get_latest_resource_states(
                     env=self.environment, connection=connection
                 )
                 if latest_version != self._state.version:

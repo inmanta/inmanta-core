@@ -310,7 +310,7 @@ async def test_call_arguments_defaults():
         test_method,
         "test_method",
     )
-    call = CallArguments(method, {"name": "test"}, {})
+    call = CallArguments(config=method, message={"name": "test"}, request_headers={})
     await call.process()
 
     assert call.call_args["name"] == "test"
@@ -348,7 +348,7 @@ async def test_pydantic():
         "test_method",
     )
     id = uuid.uuid4()
-    call = CallArguments(method, {"project": {"name": "test", "id": str(id)}}, {})
+    call = CallArguments(config=method, message={"project": {"name": "test", "id": str(id)}}, request_headers={})
     await call.process()
 
     project = call.call_args["project"]
@@ -356,7 +356,7 @@ async def test_pydantic():
     assert project.id == id
 
     with pytest.raises(exceptions.BadRequest):
-        call = CallArguments(method, {"project": {"name": "test", "id": "abcd"}}, {})
+        call = CallArguments(config=method, message={"project": {"name": "test", "id": "abcd"}}, request_headers={})
         await call.process()
 
 
@@ -2213,3 +2213,17 @@ async def test_get_description_foreach_http_status_code() -> None:
     assert response_code_to_description[200] == ""
     assert response_code_to_description[404] == ""
     assert response_code_to_description[500] == ""
+
+
+async def test_token_param_not_present_in_method_signature() -> None:
+    """
+    Verify that an exception is raised if the method defines a token_param, but
+    that parameter is not present in the signature of the method.
+    """
+    with pytest.raises(InvalidMethodDefinition) as excinfo:
+
+        @protocol.typedmethod(path="/test", operation="GET", client_types=[ClientType.api], token_param="test")
+        def test_method1() -> dict[str, str]:  # NOQA
+            pass
+
+    assert "token_param (test) is missing in parameters of method." in str(excinfo.value)
