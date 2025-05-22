@@ -87,9 +87,9 @@ class DynamicProxy:
     """
 
     # TODO: consider how to integrage JinjaProxy
-    def __init__(self, instance: "Instance", *, context: Optional[DynamicReturnValueContext] = None) -> None:
+    def __init__(self, instance: "Instance", *, parent_context: Optional[DynamicReturnValueContext] = None) -> None:
         object.__setattr__(self, "__instance", instance)
-        object.__setattr__(self, "__context", context if context is not None else self.default_context())
+        object.__setattr__(self, "__context", self._from_parent_context(parent_context))
 
     def _get_instance(self) -> "Instance":
         return object.__getattribute__(self, "__instance")
@@ -97,10 +97,20 @@ class DynamicProxy:
     def _get_context(self) -> DynamicReturnValueContext:
         return object.__getattribute__(self, "__context")
 
-    # TODO: use single object for all defaults for memory impact
+    # TODO: name and docstring
     @classmethod
-    def default_context(cls) -> DynamicReturnValueContext:
-        return DynamicReturnValueContext(allow_references=False, type_validated=False)
+    def _black_box(cls) -> bool:
+        return True
+
+    # TODO: docstring
+    @classmethod
+    def _from_parent_context(cls, parent_context: Optional[DynamicReturnValueContext]) -> DynamicReturnValueContext:
+        parent_context = parent_context if parent_context is not None else DynamicReturnValueContext()
+        return (
+            dataclasses.replace(parent_context, allow_references=False, type_validated=False)
+            if cls._black_box()
+            else parent_context
+        )
 
     # TODO: name: imply that it's a copy
     def _allow_references[P: DynamicProxy](self: P) -> P:
@@ -225,6 +235,7 @@ class DynamicProxy:
                 # if a reference gets here, it has been validated, and we want to represent it as a reference, not a proxy
                 return value
 
+        # TODO: shift this down?
         new_context: Optional[DynamicReturnValueContext] = (
             # we're proxying one level deeper than the current context => recalculate allow_references for proxied values
             dataclasses.replace(context, allow_references=context.type_validated)
@@ -237,15 +248,15 @@ class DynamicProxy:
             return value
 
         if isinstance(value, dict):
-            return DictProxy(value, context=new_context)
+            return DictProxy(value, parent_context=new_context)
 
         if hasattr(value, "__len__"):
-            return SequenceProxy(value, context=new_context)
+            return SequenceProxy(value, parent_context=new_context)
 
         if hasattr(value, "__call__"):
-            return CallProxy(value, context=new_context)
+            return CallProxy(value, parent_context=new_context)
 
-        return DynamicProxy(value, context=new_context)
+        return DynamicProxy(value, parent_context=new_context)
 
     # TODO: see if we can use traceback.extract_stack() here to add a location to any exceptions, try-except style
     def __getattr__(self, attribute: str):
@@ -282,7 +293,7 @@ class DynamicProxy:
         #       "I'm calling return_value on an element value that I know to be a black box"?
         # TODO: review this comment
         # Contents of an entity are always a black box, regardless of the current context
-        return DynamicProxy.return_value(value, context=dataclasses.replace(self._get_context(), type_validated=False))
+        return DynamicProxy.return_value(value, context=self._get_context())
 
     def __setattr__(self, attribute: str, value: object) -> None:
         raise Exception("Readonly object")
@@ -322,13 +333,13 @@ class DynamicProxy:
 
 
 class SequenceProxy(DynamicProxy, JSONSerializable):
-    def __init__(self, iterator: Sequence, *, context: Optional[DynamicReturnValueContext] = None) -> None:
-        DynamicProxy.__init__(self, iterator, context=context)
+    def __init__(self, iterator: Sequence, *, parent_context: Optional[DynamicReturnValueContext] = None) -> None:
+        DynamicProxy.__init__(self, iterator, parent_context=parent_context)
 
     @classmethod
-    def default_context(cls) -> DynamicReturnValueContext:
+    def _black_box(cls) -> bool:
         # unless specified otherwise, the elements of this type have been validated at the plugin boundary
-        return dataclasses.replace(super().default_context(), allow_references=True, type_validated=True)
+        return False
 
     def __getitem__(self, key: str) -> object:
         instance = self._get_instance()
@@ -344,7 +355,7 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
         instance = self._get_instance()
 
         # TODO: is there any way to implement this so the context doesn't have to be passed everywhere explicitly?
-        return IteratorProxy(instance.__iter__(), context=self._get_context())
+        return IteratorProxy(instance.__iter__(), parent_context=self._get_context())
 
     def json_serialization_step(self) -> list[PrimitiveTypes]:
         # Ensure proper unwrapping by using __getitem__
@@ -352,13 +363,13 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
 
 
 class DictProxy(DynamicProxy, Mapping, JSONSerializable):
-    def __init__(self, mydict: dict[object, object], *, context: Optional[DynamicReturnValueContext] = None) -> None:
-        DynamicProxy.__init__(self, mydict, context=context)
+    def __init__(self, mydict: dict[object, object], *, parent_context: Optional[DynamicReturnValueContext] = None) -> None:
+        DynamicProxy.__init__(self, mydict, parent_context=parent_context)
 
     @classmethod
-    def default_context(cls) -> DynamicReturnValueContext:
+    def _black_box(cls) -> bool:
         # unless specified otherwise, the elements of this type have been validated at the plugin boundary
-        return dataclasses.replace(super().default_context(), allow_references=True, type_validated=True)
+        return False
 
     def __getitem__(self, key):
         instance = self._get_instance()
@@ -373,7 +384,7 @@ class DictProxy(DynamicProxy, Mapping, JSONSerializable):
     def __iter__(self):
         instance = self._get_instance()
 
-        return IteratorProxy(instance.__iter__(), context=self._get_context())
+        return IteratorProxy(instance.__iter__(), parent_context=self._get_context())
 
     def json_serialization_step(self) -> dict[str, PrimitiveTypes]:
         # Ensure proper unwrapping by using __getitem__
@@ -385,13 +396,13 @@ class CallProxy(DynamicProxy):
     Proxy a value that implements a __call__ function
     """
 
-    def __init__(self, instance: Callable[..., object], *, context: Optional[DynamicReturnValueContext] = None) -> None:
-        DynamicProxy.__init__(self, instance, context=context)
+    def __init__(self, instance: Callable[..., object], *, parent_context: Optional[DynamicReturnValueContext] = None) -> None:
+        DynamicProxy.__init__(self, instance, parent_context=parent_context)
 
     @classmethod
-    def default_context(cls) -> DynamicReturnValueContext:
+    def _black_box(cls) -> bool:
         # unless specified otherwise, the elements of this type have been validated at the plugin boundary
-        return dataclasses.replace(super().default_context(), allow_references=True, type_validated=True)
+        return False
 
     def __call__(self, *args, **kwargs):
         instance = self._get_instance()
@@ -404,8 +415,13 @@ class IteratorProxy(DynamicProxy):
     Proxy an iterator call
     """
 
-    def __init__(self, iterator: Iterable[object], *, context: Optional[DynamicReturnValueContext] = None) -> None:
-        DynamicProxy.__init__(self, iterator, context=context)
+    def __init__(self, iterator: Iterable[object], *, parent_context: Optional[DynamicReturnValueContext] = None) -> None:
+        DynamicProxy.__init__(self, iterator, parent_context=parent_context)
+
+    @classmethod
+    def _black_box(cls) -> bool:
+        # unless specified otherwise, the elements of this type have been validated at the plugin boundary
+        return False
 
     def __iter__(self):
         return self

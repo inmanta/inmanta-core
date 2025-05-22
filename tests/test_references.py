@@ -349,7 +349,7 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
         """
     )
     ### reference
-    with raises_wrapped(UndeclaredReference, match="Undeclared reference found"):
+    with raises_wrapped(UndeclaredReference, match="Encountered reference value in instance attribute"):
         run_snippet(
             """\
             refs::plugins::read_list_entity_value(
@@ -442,6 +442,8 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     run_snippet(
         "refs::plugins::returns_entity_ref_list(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))"
     )
+
+    # TODO: allow_references() test on list access and iteration
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
