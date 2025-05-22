@@ -5108,10 +5108,6 @@ class Resource(BaseDocument):
         for res in resources:
             if "attributes" in res:
                 res["attributes"] = json.loads(res["attributes"])
-            if project_attributes:
-                for k in project_attributes:
-                    if res[k]:
-                        res[k] = json.loads(res[k])
         return resources
 
     @classmethod
