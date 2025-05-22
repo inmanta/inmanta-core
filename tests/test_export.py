@@ -866,5 +866,5 @@ async def test_resource_inherits_from_decorator(snippetcompiler, local_module_pa
 
     assert (
         "Resource inmanta_plugins.invalid_resource_def.Test is inheriting from the inmanta.resources.resource decorator."
-        " Did you intent to inherit from inmanta.resources.Resource instead?"
+        " Did you intend to inherit from inmanta.resources.Resource instead?"
     ) in str(exc.value)
