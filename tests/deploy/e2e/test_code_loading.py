@@ -749,6 +749,6 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         version_info={},
         resource_sets=resource_sets,
         module_version_info=module_version_info,
-        bypass_base_version_check=True,
+        force_handler_code_update=True,
     )
     assert result.code == 200

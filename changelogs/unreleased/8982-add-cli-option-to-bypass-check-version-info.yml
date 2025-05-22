@@ -1,4 +1,4 @@
 description: Add CLI option to bypass _check_version_info in _put_version.
 issue-nr: 8982
-change-type: major
+change-type: minor
 destination-branches: [master]
