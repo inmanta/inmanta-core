@@ -124,7 +124,13 @@ async def update(connection: Connection) -> None:
                 version,
                 source_refs,
                 resource
-            FROM public.code
+            FROM public.code as cod
+            where exists (
+                select 1
+                from configurationmodel AS con
+                where cod.environment=con.environment
+                AND cod.version=con.version
+            );
         """
         result = await connection.fetch(fetch_source_refs_query)
         for res in result:
