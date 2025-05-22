@@ -24,8 +24,9 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
 
 import inmanta.util
 from inmanta import plugins
-from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
+from inmanta import const, references, plugins
+from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException, RuntimeException
 from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType
@@ -83,7 +84,20 @@ class resource:  # noqa: N801
 
     @classmethod
     def validate(cls) -> None:
+        fq_name_resource_decorator = f"{cls.__module__}.{cls.__name__}"
+        fq_name_resource_class = f"{Resource.__module__}.{Resource.__name__}"
         for resource, _ in cls._resources.values():
+            if issubclass(resource, cls):
+                # If a Resource inherits from the resource decorator, the server goes into an infinite recursion.
+                # Here we make sure the user gets a clear error message (https://github.com/inmanta/inmanta-core/issues/8817).
+                fq_name_current_resource = f"{resource.__module__}.{resource.__name__}"
+                raise RuntimeException(
+                    stmt=None,
+                    msg=(
+                        f"Resource {fq_name_current_resource} is inheriting from the {fq_name_resource_decorator} decorator."
+                        f" Did you intend to inherit from {fq_name_resource_class} instead?"
+                    ),
+                )
             resource.validate()
 
     @classmethod
