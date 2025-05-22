@@ -900,7 +900,12 @@ class OrchestrationService(protocol.ServerSlice):
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
             await self._register_agent_code(
-                partial_base_version, version, env.id, module_version_info, force_handler_code_update=force_handler_code_update, connection=connection
+                partial_base_version,
+                version,
+                env.id,
+                module_version_info,
+                force_handler_code_update=force_handler_code_update,
+                connection=connection,
             )
 
             # Don't log ResourceActions without resource_version_ids, because
