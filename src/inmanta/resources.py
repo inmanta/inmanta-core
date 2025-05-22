@@ -24,9 +24,8 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
 
 import inmanta.util
 from inmanta import plugins
-from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
-from inmanta import const, references, plugins
 from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException, RuntimeException
+from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType

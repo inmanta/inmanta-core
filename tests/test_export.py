@@ -24,7 +24,7 @@ from typing import Optional
 import pytest
 
 import inmanta.resources
-from inmanta import config, const, module
+from inmanta import config, const
 from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
 from inmanta.data import Environment, Resource
@@ -797,4 +797,3 @@ async def test_resource_inherits_from_decorator(snippetcompiler, local_module_pa
         "Resource inmanta_plugins.invalid_resource_def.Test is inheriting from the inmanta.resources.resource decorator."
         " Did you intend to inherit from inmanta.resources.Resource instead?"
     ) in str(exc.value)
-
