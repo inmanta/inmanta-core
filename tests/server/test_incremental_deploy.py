@@ -156,6 +156,7 @@ class MultiVersionSetup:
                     version_info={},
                     resource_state={},
                     compiler_version=get_compiler_version(),
+                    module_version_info={},
                 )
                 assert res == 200
 
@@ -252,6 +253,7 @@ async def test_deploy(server, null_agent, environment, caplog, clienthelper):
             version_info={},
             resource_state={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
         )
         assert res == 200
 
@@ -293,6 +295,7 @@ async def test_deploy(server, null_agent, environment, caplog, clienthelper):
             version_info={},
             resource_state={},
             compiler_version=get_compiler_version(),
+            module_version_info={},
         )
         assert res == 200
 

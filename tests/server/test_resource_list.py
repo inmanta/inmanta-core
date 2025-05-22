@@ -765,9 +765,10 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 environment,
                 version,
                 attributes,
-                resource_state,
-                [],
-                {},
+                module_version_info={},
+                resource_state=resource_state,
+                unknowns=[],
+                version_info={},
                 compiler_version=inmanta.util.get_compiler_version(),
                 resource_sets=resource_sets,
             )
@@ -775,6 +776,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
         else:
             result = await client.put_partial(
                 environment,
+                module_version_info={},
                 resource_state=resource_state,
                 unknowns=[],
                 version_info={},
@@ -842,7 +844,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
 @pytest.mark.parametrize("instances", [2])  # set the size
 @pytest.mark.parametrize("trace", [False])  # make it analyze the queries
 async def test_resources_paging_performance(client, environment, very_big_env: int, trace: bool, async_finalizer):
-    """Scaling test, not part of the norma testsuite"""
+    """Scaling test, not part of the normal testsuite"""
     # Basic sanity
     result = await client.resource_list(environment, limit=5, deploy_summary=True)
     assert result.code == 200

@@ -655,6 +655,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             last_timestamp=last_timestamp,
             exclude_changes=exclude_changes,
         )
+
         resource_action_dtos = [resource_action.to_dto() for resource_action in resource_actions]
         links = {}
 

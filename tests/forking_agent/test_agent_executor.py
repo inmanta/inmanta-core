@@ -25,7 +25,7 @@ import uuid
 
 from inmanta import const
 from inmanta.agent import executor, forking_executor
-from inmanta.data.model import PipConfig
+from inmanta.data.model import ModuleSourceMetadata, PipConfig
 from inmanta.loader import ModuleSource
 from inmanta.signals import dump_ioloop_running, dump_threads
 from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
@@ -33,8 +33,8 @@ from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
 logger = logging.getLogger(__name__)
 
 
-def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ResourceInstallSpec]:
-    return [executor.ResourceInstallSpec("test::Test", 5, bp)]
+def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ModuleInstallSpec]:
+    return [executor.ModuleInstallSpec("test", "abcdef", bp)]
 
 
 async def test_process_manager(environment, pip_index, mpmanager_light: forking_executor.MPManager) -> None:
@@ -54,9 +54,11 @@ async def test_process_manager(environment, pip_index, mpmanager_light: forking_
         sha1sum.update(code)
         hv: str = sha1sum.hexdigest()
         return ModuleSource(
-            name=name,
-            hash_value=hv,
-            is_byte_code=False,
+            metadata=ModuleSourceMetadata(
+                name=name,
+                hash_value=hv,
+                is_byte_code=False,
+            ),
             source=code,
         )
 
@@ -274,9 +276,11 @@ def test():
     sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
     module_source1 = ModuleSource(
-        name="inmanta_plugins.test",
-        hash_value=hv,
-        is_byte_code=False,
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.test",
+            hash_value=hv,
+            is_byte_code=False,
+        ),
         source=code,
     )
     sources1 = ()
@@ -360,9 +364,11 @@ def test():
     sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
     module_source1 = ModuleSource(
-        name="inmanta_plugins.test",
-        hash_value=hv,
-        is_byte_code=False,
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.test",
+            hash_value=hv,
+            is_byte_code=False,
+        ),
         source=code,
     )
     sources1 = ()

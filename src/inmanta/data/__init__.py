@@ -62,6 +62,7 @@ from inmanta.const import (
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, BaseModel, PagingBoundaries, PipConfig, api_boundary_datetime_normalizer
+from inmanta.data.sqlalchemy import AgentModules, InmantaModule, ModuleFiles
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
@@ -69,6 +70,8 @@ from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
 from inmanta.util import parse_timestamp
 from sqlalchemy import URL, AdaptedConnection, NullPool
+from sqlalchemy.dialects import registry
+from sqlalchemy.dialects.postgresql.asyncpg import PGDialect_asyncpg
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import ConnectionPoolEntry
 
@@ -107,7 +110,6 @@ Locking order rules:
 In general, locks should be acquired consistently with delete cascade lock order, which is top down. Additional lock orderings
 are as follows. This list should be extended when new locks (explicit or implicit) are introduced. The rules below are written
 as `A -> B`, meaning A should be locked before B in any transaction that acquires a lock on both.
-- Code -> ConfigurationModel
 - Agentprocess -> Agentinstance -> Agent
 - ResourcePersistentState -> Scheduler
 """
@@ -1143,16 +1145,10 @@ class Field(Generic[T]):
         if isinstance(value, self.field_type):
             return value
 
-        # asyncpg does not convert a jsonb field to a dict
-        if isinstance(value, str) and self.field_type is dict:
-            return json.loads(value)
         # asyncpg does not convert an enum field to an enum type
         if isinstance(value, str) and issubclass(self.field_type, enum.Enum):
             return self.field_type[value]
         # decode typed json
-        if isinstance(value, str) and issubclass(self.field_type, pydantic.BaseModel):
-            jsv = json.loads(value)
-            return self.field_type(**jsv)
         if isinstance(value, dict) and issubclass(self.field_type, pydantic.BaseModel):
             return self.field_type(**value)
         if self.field_type == pydantic.AnyHttpUrl:
@@ -2712,7 +2708,11 @@ class Environment(BaseDocument):
             await Compile.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on report table
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
-            await Code.delete_all(environment=self.id, connection=con)
+
+            await AgentModules.delete_all(environment=self.id, connection=con)
+            await InmantaModule.delete_all(environment=self.id, connection=con)
+            await ModuleFiles.delete_all(environment=self.id, connection=con)
+
             await DiscoveredResource.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsGauge.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsTimer.delete_all(environment=self.id, connection=con)
@@ -3882,7 +3882,7 @@ class Compile(BaseDocument):
                         returncode=compile["returncode"],
                     )
                 )
-            for name, url in (json.loads(compile["links"]) if requested_compile["links"] else {}).items():
+            for name, url in cast(dict[str, list[str]], compile.get("links", {})).items():
                 links[name].add(*url)
 
         return m.CompileDetails(
@@ -3896,20 +3896,16 @@ class Compile(BaseDocument):
             version=requested_compile["version"],
             do_export=requested_compile["do_export"],
             force_update=requested_compile["force_update"],
-            metadata=json.loads(requested_compile["metadata"]) if requested_compile["metadata"] else {},
-            environment_variables=(
-                json.loads(requested_compile["used_environment_variables"])
-                if requested_compile["used_environment_variables"] is not None
-                else {}
-            ),
-            requested_environment_variables=(json.loads(requested_compile["requested_environment_variables"])),
-            mergeable_environment_variables=(json.loads(requested_compile["mergeable_environment_variables"])),
+            metadata=requested_compile["metadata"] or {},
+            environment_variables=requested_compile["used_environment_variables"] or {},
+            requested_environment_variables=requested_compile["requested_environment_variables"],
+            mergeable_environment_variables=requested_compile["mergeable_environment_variables"],
             partial=requested_compile["partial"],
             removed_resource_sets=requested_compile["removed_resource_sets"],
             exporter_plugin=requested_compile["exporter_plugin"],
             notify_failed_compile=requested_compile["notify_failed_compile"],
             failed_compile_message=requested_compile["failed_compile_message"],
-            compile_data=json.loads(requested_compile["compile_data"]) if requested_compile["compile_data"] else None,
+            compile_data=requested_compile["compile_data"],
             reports=reports,
             links={key: sorted(list(links)) for key, links in links.items()},
         )
@@ -4064,11 +4060,9 @@ class ResourceAction(BaseDocument):
         if self.changes == {}:
             self.changes = None
 
-        # load message json correctly
         if from_postgres and self.messages:
             new_messages = []
             for message in self.messages:
-                message = json.loads(message)
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
@@ -4990,7 +4984,6 @@ class Resource(BaseDocument):
                 async for record in con.cursor(query, *values):
                     if no_obj:
                         record = dict(record)
-                        record["attributes"] = json.loads(record["attributes"])
                         cls.__mangle_dict(record)
                         resources_list.append(record)
                     else:
@@ -5013,11 +5006,7 @@ class Resource(BaseDocument):
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
         resource_records = await cls._fetch_query(query, *values, connection=connection)
-        resources = [dict(record) for record in resource_records]
-        for res in resources:
-            if "attributes" in res:
-                res["attributes"] = json.loads(res["attributes"])
-        return resources
+        return [dict(record) for record in resource_records]
 
     @classmethod
     async def get_resources_since_version_raw(
@@ -5055,8 +5044,6 @@ class Resource(BaseDocument):
                     # left join produced no resources
                     continue
                 resource: dict[str, object] = dict(raw_resource)
-                if "attributes" in resource:
-                    resource["attributes"] = json.loads(resource["attributes"])
                 if projection is not None:
                     assert set(projection) <= resource.keys()
                 parsed_resources.append(resource)
@@ -5234,7 +5221,7 @@ class Resource(BaseDocument):
             return None
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
-        attributes = json.loads(record["attributes"])
+        attributes = record["attributes"]
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
@@ -5864,8 +5851,12 @@ class ConfigurationModel(BaseDocument):
         async with self.get_connection(connection=connection) as con:
             # Delete of compile record triggers cascading delete report table
             await Compile.delete_all(environment=self.environment, version=self.version, connection=con)
-            await Code.delete_all(environment=self.environment, version=self.version, connection=con)
             await DryRun.delete_all(environment=self.environment, model=self.version, connection=con)
+
+            await AgentModules.delete_version(environment=self.environment, model_version=self.version, connection=con)
+            await InmantaModule.delete_version(environment=self.environment, model_version=self.version, connection=con)
+            await ModuleFiles.delete_version(environment=self.environment, model_version=self.version, connection=con)
+
             await UnknownParameter.delete_all(environment=self.environment, version=self.version, connection=con)
             await self._execute_query(
                 "DELETE FROM public.resourceaction_resource WHERE environment=$1 AND resource_version=$2",
@@ -6130,63 +6121,6 @@ class ConfigurationModel(BaseDocument):
         if new_total is None:
             raise KeyError(f"Configurationmodel {self.version} in environment {self.environment} was deleted.")
         self.total = new_total
-
-
-class Code(BaseDocument):
-    """
-    A code deployment
-
-    :param environment: The environment this code belongs to
-    :param version: The version of configuration model it belongs to
-    :param resource: The resource type this code belongs to
-    :param sources: The source code of plugins (phasing out)  form:
-        {code_hash:(file_name, provider.__module__, source_code, [req])}
-    :param requires: Python requires for the source code above
-    :param source_refs: file hashes refering to files in the file store
-        {code_hash:(file_name, provider.__module__, [req])}
-    """
-
-    __primary_key__ = ("environment", "resource", "version")
-
-    environment: uuid.UUID
-    resource: str
-    version: int
-    source_refs: Optional[dict[str, tuple[str, str, list[str]]]] = None
-
-    @classmethod
-    async def get_version(cls, environment: uuid.UUID, version: int, resource: str) -> Optional["Code"]:
-        codes = await cls.get_list(environment=environment, version=version, resource=resource)
-        if len(codes) == 0:
-            return None
-
-        return codes[0]
-
-    @classmethod
-    async def get_versions(cls, environment: uuid.UUID, version: int) -> list["Code"]:
-        codes = await cls.get_list(environment=environment, version=version)
-        return codes
-
-    @classmethod
-    async def copy_versions(
-        cls,
-        environment: uuid.UUID,
-        old_version: int,
-        new_version: int,
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        """
-        Copy all code for one model version to another.
-        """
-        query: str = f"""
-            INSERT INTO {cls.table_name()} (environment, resource, version, source_refs)
-            SELECT environment, resource, $1, source_refs
-            FROM {cls.table_name()}
-            WHERE environment=$2 AND version=$3
-        """
-        await cls._execute_query(
-            query, cls._get_value(new_version), cls._get_value(environment), cls._get_value(old_version), connection=connection
-        )
 
 
 class DryRun(BaseDocument):
@@ -6521,7 +6455,6 @@ _classes = [
     ResourceAction,
     ResourcePersistentState,
     ConfigurationModel,
-    Code,
     Parameter,
     DryRun,
     Compile,
@@ -6535,8 +6468,8 @@ _classes = [
     Scheduler,
 ]
 
-
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
+
 
 # Name of core schema in the DB schema verions
 # prevent import loop
@@ -6573,6 +6506,7 @@ async def connect_pool(
         min_size=connection_pool_min_size,
         max_size=connection_pool_max_size,
         timeout=connection_timeout,
+        init=asyncpg_on_connect,
     )
     try:
         set_connection_pool(pool)
@@ -6600,6 +6534,60 @@ async def disconnect_pool() -> None:
         raise
     finally:
         BaseDocument.remove_connection_pool()
+
+
+class ExternalInitAsyncPG(PGDialect_asyncpg):
+    """
+    Define our own postgres dialect to use in engine initialization. The parent dialect
+    reconfigures json serialization/deserialization each time a connection is
+    checked out from the pool.
+
+    Overwriting the on_connect method here removes this redundant behaviour. The
+    configuration for json serialization is set once when the asyncpg pool is
+    created
+    """
+
+    def on_connect(self) -> None:
+        return None
+
+
+registry.impls["postgresql.asyncpgnoi"] = lambda: ExternalInitAsyncPG
+
+
+async def asyncpg_on_connect(connection: asyncpg.Connection) -> None:
+    """
+    Helper method to configure json serialization/deserialization when
+    initializing the database connection pool.
+    """
+
+    def _json_decoder(bin_value: bytes) -> object:
+        return json.loads(bin_value.decode())
+
+    await connection.set_type_codec(
+        "json",
+        encoder=str.encode,
+        decoder=_json_decoder,
+        schema="pg_catalog",
+        format="binary",
+    )
+
+    def _jsonb_encoder(str_value: str) -> bytes:
+        # \x01 is the prefix for jsonb used by PostgreSQL.
+        # asyncpg requires it when format='binary'
+        return b"\x01" + str_value.encode()
+
+    def _jsonb_decoder(bin_value: bytes) -> object:
+        # the byte is the \x01 prefix for jsonb used by PostgreSQL.
+        # asyncpg returns it when format='binary'
+        return json.loads(bin_value[1:].decode())
+
+    await connection.set_type_codec(
+        "jsonb",
+        encoder=_jsonb_encoder,
+        decoder=_jsonb_decoder,
+        schema="pg_catalog",
+        format="binary",
+    )
 
 
 async def start_engine(
@@ -6646,7 +6634,7 @@ async def start_engine(
     )
 
     url_object = URL.create(
-        drivername="postgresql+asyncpg",
+        drivername="postgresql+asyncpgnoi",
         username=database_username,
         password=database_password,
         host=database_host,

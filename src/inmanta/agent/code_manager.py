@@ -16,28 +16,26 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import asyncio
+import itertools
 import logging
 import sys
 import uuid
-from typing import Collection
 
-from inmanta import protocol
+import inmanta.data.sqlalchemy as models
+from inmanta import data
 from inmanta.agent import executor
-from inmanta.agent.executor import ResourceInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
-from inmanta.loader import ModuleSource
-from inmanta.protocol import Client, SyncClient
-from inmanta.types import ResourceType
+from inmanta.agent.executor import ModuleInstallSpec
+from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util.async_lru import async_lru_cache
+from sqlalchemy import and_, select
 
 LOGGER = logging.getLogger(__name__)
 
 
 class CouldNotResolveCode(Exception):
 
-    def __init__(self, resource_type: str, version: int, error_message: str) -> None:
-        self.msg = f"Failed to get source code for {resource_type} version={version}, result={error_message}"
+    def __init__(self, agent_name: str, version: int) -> None:
+        self.msg = f"Failed to get source code for agent `{agent_name}` on version {version}."
         super().__init__(self.msg)
 
 
@@ -48,87 +46,97 @@ class CodeManager:
     Caches heavily
     """
 
-    def __init__(self, client: Client) -> None:
-        self._client = client
-
-    @async_lru_cache(maxsize=5)
-    async def get_pip_config(self, environment: uuid.UUID, version: int) -> PipConfig:
-        response = await self._client.get_pip_config(tid=environment, version=version)
-        if response.code != 200:
-            raise Exception("Could not get pip config from server " + str(response.result))
-        assert response.result is not None  # mypy
-        pip_config = response.result["data"]
-        if pip_config is None:
-            return LEGACY_PIP_DEFAULT
-        return PipConfig(**pip_config)
-
     @async_lru_cache(maxsize=1024)
-    async def get_code_for_type(self, environment: uuid.UUID, version: int, resource_type: ResourceType) -> ResourceInstallSpec:
-        result: protocol.Result = await self._client.get_source_code(environment, version, resource_type)
-        if result.code == 200 and result.result is not None:
-            sync_client = SyncClient(client=self._client, ioloop=asyncio.get_running_loop())
-            requirements: set[str] = set()
-            sources: list["ModuleSource"] = []
-            # Encapsulate source code details in ``ModuleSource`` objects
-            for source in result.result["data"]:
-                sources.append(
-                    ModuleSource(
-                        name=source["module_name"],
-                        is_byte_code=source["is_byte_code"],
-                        hash_value=source["hash"],
-                        _client=sync_client,
-                    )
-                )
-                requirements.update(source["requirements"])
-            resource_install_spec = ResourceInstallSpec(
-                resource_type,
-                version,
-                executor.ExecutorBlueprint(
-                    environment_id=environment,
-                    pip_config=await self.get_pip_config(environment, version),
-                    requirements=list(requirements),
-                    sources=sources,
-                    python_version=sys.version_info[:2],
+    async def get_code(self, environment: uuid.UUID, model_version: int, agent_name: str) -> list[ModuleInstallSpec]:
+        """
+        Get the list of installation specifications (i.e. pip config, python package dependencies,
+        Inmanta modules sources) required to deploy resources on a given agent for a given configuration
+        model version.
+
+        :return: list of ModuleInstallSpec for this agent and this model version.
+        """
+
+        module_install_specs = []
+        modules_for_agent = (
+            select(
+                models.AgentModules.inmanta_module_name,
+                models.AgentModules.inmanta_module_version,
+                models.InmantaModule.requirements,
+                models.ModuleFiles.python_module_name,
+                models.ModuleFiles.file_content_hash,
+                models.ModuleFiles.is_byte_code,
+                models.File.content,
+                models.ConfigurationModel.pip_config,
+            )
+            .join(
+                models.InmantaModule,
+                and_(
+                    models.AgentModules.inmanta_module_name == models.InmantaModule.name,
+                    models.AgentModules.inmanta_module_version == models.InmantaModule.version,
+                    models.AgentModules.environment == models.InmantaModule.environment,
                 ),
             )
-            return resource_install_spec
-        else:
-            raise CouldNotResolveCode(resource_type, version, str(result.get_result()))
+            .join(
+                models.ModuleFiles,
+                and_(
+                    models.InmantaModule.name == models.ModuleFiles.inmanta_module_name,
+                    models.InmantaModule.version == models.ModuleFiles.inmanta_module_version,
+                    models.InmantaModule.environment == models.ModuleFiles.environment,
+                ),
+            )
+            .join(
+                models.File,
+                models.ModuleFiles.file_content_hash == models.File.content_hash,
+            )
+            .join(
+                models.ConfigurationModel,
+                and_(
+                    models.AgentModules.cm_version == models.ConfigurationModel.version,
+                    models.AgentModules.environment == models.ConfigurationModel.environment,
+                ),
+            )
+            .where(
+                models.AgentModules.environment == environment,
+                models.AgentModules.agent_name == agent_name,
+                models.AgentModules.cm_version == model_version,
+            )
+            .order_by(models.AgentModules.inmanta_module_name)
+        )
 
-    async def get_code(
-        self, environment: uuid.UUID, version: int, resource_types: Collection[ResourceType]
-    ) -> tuple[Collection[ResourceInstallSpec], executor.FailedResources]:
-        """
-        Get the collection of installation specifications (i.e. pip config, python package dependencies,
-        Inmanta modules sources) required to deploy a given version for the provided resource types.
+        async with data.get_session() as session:
+            result = await session.execute(modules_for_agent)
+            for module_name, rows in itertools.groupby(result.all(), key=lambda r: r.inmanta_module_name):
+                rows_list = list(rows)
+                assert rows_list
+                assert len({row.inmanta_module_version for row in rows_list}) == 1
 
-        Expects at least one resource type.
-
-        :return: Tuple of:
-            - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
-            - set of invalid resource_types (no handler code and/or invalid pip config)
-        """
-        if not resource_types:
-            raise ValueError(f"{self.__class__.__name__}.get_code() expects at least one resource type")
-
-        resource_install_specs: list[ResourceInstallSpec] = []
-        invalid_resources: executor.FailedResources = {}
-        for resource_type in set(resource_types):
-            try:
-                resource_install_specs.append(await self.get_code_for_type(environment, version, resource_type))
-            except CouldNotResolveCode as e:
-                LOGGER.error(
-                    "%s",
-                    e.msg,
+                _pip_config = rows_list[0].pip_config
+                assert all(row.pip_config == _pip_config for row in rows_list)
+                pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
+                module_install_specs.append(
+                    ModuleInstallSpec(
+                        module_name=module_name,
+                        module_version=rows_list[0].inmanta_module_version,
+                        blueprint=executor.ExecutorBlueprint(
+                            pip_config=pip_config,
+                            requirements=rows_list[0].requirements,
+                            sources=[
+                                ModuleSource(
+                                    metadata=ModuleSourceMetadata(
+                                        name=row.python_module_name,
+                                        hash_value=row.file_content_hash,
+                                        is_byte_code=row.is_byte_code,
+                                    ),
+                                    source=row.content,
+                                )
+                                for row in rows_list
+                            ],
+                            python_version=sys.version_info[:2],
+                            environment_id=environment,
+                        ),
+                    )
                 )
-                invalid_resources[resource_type] = e
-            except Exception as e:
-                LOGGER.error(
-                    "Failed to get source code for %s version=%d",
-                    resource_type,
-                    version,
-                    exc_info=True,
-                )
-                invalid_resources[resource_type] = e
 
-        return resource_install_specs, invalid_resources
+        if not module_install_specs:
+            raise CouldNotResolveCode(agent_name, model_version)
+        return module_install_specs

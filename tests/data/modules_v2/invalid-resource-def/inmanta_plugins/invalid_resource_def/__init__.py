@@ -1,5 +1,5 @@
 """
-Copyright 2023 Inmanta
+Copyright 2025 Inmanta
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,13 +16,9 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import os
-from collections import abc
-
-import pytest
+from inmanta.resources import resource
 
 
-@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202308020.sql"))
-async def test_add_indexes_for_cascading_delete(migrate_db_from: abc.Callable[[], abc.Awaitable[None]]) -> None:
-    # This migration script only adds indexes. Just verify that the script doesn't fail.
-    await migrate_db_from()
+@resource("invalid_resource_def::Test", agent="agent1", id_attribute="id")
+class Test(resource):
+    pass
