@@ -70,7 +70,7 @@ RVID_OPTS = {"rvid": ArgOption(getter=convert_resource_version_id)}
 
 
 # Method for working with projects
-@auth(auth_label=const.AuthorizationLabel.PROJECT_WRITE, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.PROJECT_CREATE, read_only=False)
 @method(path="/project", operation="PUT", client_types=[const.ClientType.api])
 def create_project(name: str, project_id: Optional[uuid.UUID] = None):
     """
@@ -81,7 +81,7 @@ def create_project(name: str, project_id: Optional[uuid.UUID] = None):
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.PROJECT_WRITE, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.PROJECT_MODIFY, read_only=False)
 @method(path="/project/<id>", operation="POST", client_types=[const.ClientType.api])
 def modify_project(id: uuid.UUID, name: str):
     """
@@ -92,7 +92,7 @@ def modify_project(id: uuid.UUID, name: str):
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.PROJECT_WRITE, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.PROJECT_DELETE, read_only=False)
 @method(path="/project/<id>", operation="DELETE", client_types=[const.ClientType.api])
 def delete_project(id: uuid.UUID):
     """
@@ -121,7 +121,7 @@ def get_project(id: uuid.UUID):
 
 
 # Methods for working with environments
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_WRITE, read_only=False, environment_param="environment_id")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_CREATE, read_only=False, environment_param="environment_id")
 @method(path="/environment", operation="PUT", client_types=[const.ClientType.api])
 def create_environment(
     project_id: uuid.UUID,
@@ -141,7 +141,7 @@ def create_environment(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_WRITE, read_only=False, environment_param="id")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_MODIFY, read_only=False, environment_param="id")
 @method(path="/environment/<id>", operation="POST", client_types=[const.ClientType.api])
 def modify_environment(id: uuid.UUID, name: str, repository: Optional[str] = None, branch: Optional[str] = None):
     """
@@ -156,7 +156,7 @@ def modify_environment(id: uuid.UUID, name: str, repository: Optional[str] = Non
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_WRITE, read_only=False, environment_param="id")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_DELETE, read_only=False, environment_param="id")
 @method(path="/environment/<id>", operation="DELETE", client_types=[const.ClientType.api])
 def delete_environment(id: uuid.UUID):
     """
@@ -275,7 +275,7 @@ def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_WRITE, read_only=False, environment_param="id")
+@auth(auth_label=const.AuthorizationLabel.ENVIRONMENT_CLEAR, read_only=False, environment_param="id")
 @method(
     path="/decommission/<id>",
     operation="DELETE",

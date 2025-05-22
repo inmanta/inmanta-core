@@ -1,0 +1,4 @@
+---
+description: Add default access policy file.
+change-type: minor
+destination-branches: [master]
