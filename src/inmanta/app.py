@@ -466,7 +466,7 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         default=False,
     )
     parser.add_argument(
-        "--force_handler_code_update",
+        "--force-handler-code-update",
         dest="force_handler_code_updatek",
         help=(
             "[Expert] Force handler code update during partial compile. This is otherwise only allowed for full compiles. "

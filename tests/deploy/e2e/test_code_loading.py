@@ -734,10 +734,12 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     )
     assert result.code == 400
     assert result.result["message"] == (
-        "Invalid request: Cannot perform partial export because the source code for module test in this partial version is "
-        "different from the source code of the base version. Consider running a full export instead. Alternatively, "
-        "if you are sure the new code is compatible and want to forcefully update, you can bypass this version check with "
-        "the `--bypass-base-version-check` CLI option."
+        "Invalid request: Cannot perform partial export because the source code for "
+        "module test in this partial version is different from the currently "
+        "registered source code. Consider running a full export instead. "
+        "Alternatively, if you are sure the new code is compatible and want to "
+        "forcefully update, you can bypass this version check with the "
+        "`--force-handler-code-update` CLI option."
     )
 
     # Test we can bypass the check
