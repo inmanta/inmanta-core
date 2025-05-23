@@ -34,7 +34,7 @@ from tornado import gen, queues, routing, web
 import inmanta.protocol.endpoints
 from inmanta import tracing
 from inmanta.data.model import ExtensionStatus, ReportedStatus, SliceStatus
-from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods
+from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods, methods_v2
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
@@ -174,7 +174,11 @@ class Server(endpoints.Endpoint):
             for properties in properties_list:
                 # All endpoints used by end-users must have an @auth annotation.
                 has_auth_annotation = properties.authorization_metadata is not None
-                if properties.is_external_interface() and not has_auth_annotation:
+                if (
+                    properties.is_external_interface()
+                    and not has_auth_annotation
+                    and not properties.function == methods_v2.login
+                ):
                     raise Exception(f"API endpoint {method_name} is missing an @auth annotation.")
 
     async def start(self) -> None:

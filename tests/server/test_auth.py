@@ -24,10 +24,11 @@ from typing import Mapping
 import pytest
 
 import nacl.pwhash
+import utils
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod
 from inmanta.protocol import common, rest
-from inmanta.protocol.auth import auth, decorators, policy_engine, providers
+from inmanta.protocol.auth import decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.server import config as server_config
 from inmanta.server import protocol
@@ -151,31 +152,13 @@ async def server_with_test_slice(
     await rs.stop()
 
 
-def get_client_with_role(
-    env_to_role_dct: dict[str, str], is_admin: bool, client_type: const.ClientType = const.ClientType.api
-) -> protocol.Client:
-    """
-    Returns a client that uses an access token for the given role.
-    """
-    token = auth.encode_token(
-        client_types=[str(client_type.value)],
-        expire=None,
-        custom_claims={
-            f"{const.INMANTA_URN}roles": env_to_role_dct,
-            f"{const.INMANTA_URN}is-admin": is_admin,
-        },
-    )
-    config.Config.set("client_rest_transport", "token", token)
-    return protocol.Client("client")
-
-
 @pytest.mark.parametrize(
     "access_policy",
     [
         """
         package policy
 
-        default allowed := false
+        default allow := false
 
         # Write the information about the endpoint into a variable
         # to make the policy easier to read.
@@ -187,28 +170,28 @@ def get_client_with_role(
         } else := null
 
         # Any user can make read-only calls.
-        allowed if {
+        allow if {
             endpoint_data.read_only
         }
 
         # If the API endpoint is environment-scoped, users can call it if
         # they have the read-write role on that environment.
-        allowed if {
+        allow if {
             request_environment != null
             input.token["urn:inmanta:roles"][request_environment] == "read-write"
         }
 
         # Users with the user role in a given environment can execute API endpoints
         # with auth_label="user" in that environment.
-        allowed if {
+        allow if {
             endpoint_data.auth_label == "user"
             request_environment != null
             input.token["urn:inmanta:roles"][request_environment] == "user"
         }
 
         # Users marked as is-admin can execute any API endpoint.
-        allowed if {
-            input.token["urn:inmanta:is-admin"]
+        allow if {
+            input.token["urn:inmanta:is_admin"]
         }
         """.strip()
     ],
@@ -219,7 +202,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     """
     env_id = "11111111-1111-1111-1111-111111111111"
 
-    client = get_client_with_role(env_to_role_dct={env_id: "read-only"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: "read-only"}, is_admin=False)
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
@@ -229,7 +212,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     result = await client.admin_only_method()
     assert result.code == 403
 
-    client = get_client_with_role(env_to_role_dct={env_id: "read-write"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: "read-write"}, is_admin=False)
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
@@ -239,7 +222,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     result = await client.admin_only_method()
     assert result.code == 403
 
-    client = get_client_with_role(env_to_role_dct={env_id: "user"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: "user"}, is_admin=False)
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
@@ -249,7 +232,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     result = await client.admin_only_method()
     assert result.code == 403
 
-    client = get_client_with_role(env_to_role_dct={}, is_admin=True)
+    client = utils.get_auth_client(env_to_role_dct={}, is_admin=True)
     result = await client.read_only_method()
     assert result.code == 200
     result = await client.environment_scoped_method(env_id)
@@ -272,7 +255,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
         """
         package policy
 
-        default allowed := false
+        default allow := false
         """
     ],
 )
@@ -282,12 +265,12 @@ async def test_fallback_to_legacy_provider(server_with_test_slice: protocol.Serv
     to the legacy authorization provider.
     """
     # ClientType == api -> Use policy engine authorization provider
-    client = get_client_with_role(env_to_role_dct={}, is_admin=False, client_type=const.ClientType.api)
+    client = utils.get_auth_client(env_to_role_dct={}, is_admin=False, client_types=[const.ClientType.api])
     result = await client.read_only_method()
     assert result.code == 403
 
     # ClientType == compiler -> Use legacy authorization provider
-    client = get_client_with_role(env_to_role_dct={}, is_admin=False, client_type=const.ClientType.compiler)
+    client = utils.get_auth_client(env_to_role_dct={}, is_admin=False, client_types=[const.ClientType.compiler])
     result = await client.read_only_method()
     assert result.code == 200
 
@@ -321,7 +304,7 @@ async def test_enforce_auth_method_property(
         """
         package policy
 
-        default allowed := false
+        default allow := false
         """
     ],
 )
@@ -333,7 +316,7 @@ async def test_authorization_providers(server_with_test_slice: protocol.Server, 
     """
     Verify the behavior of the different authorization providers.
     """
-    client = get_client_with_role(env_to_role_dct={}, is_admin=False, client_type=const.ClientType.api)
+    client = utils.get_auth_client(env_to_role_dct={}, is_admin=False, client_types=[const.ClientType.api])
     result = await client.read_only_method()
     match server_config.AuthorizationProviderName(authorization_provider):
         case server_config.AuthorizationProviderName.legacy:
@@ -366,7 +349,7 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     monkeypatch.setattr(policy_engine.PolicyEngine, "does_satisfy_access_policy", save_input_data)
 
     env_id = "11111111-1111-1111-1111-111111111111"
-    client = get_client_with_role(env_to_role_dct={env_id: "read-write"}, is_admin=False)
+    client = utils.get_auth_client(env_to_role_dct={env_id: "read-write"}, is_admin=False)
     result = await client.environment_scoped_method(env_id)
     assert result.code == 200
     assert input_policy_engine is not None
@@ -382,10 +365,10 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     assert "token" in input_policy_engine["input"]
     token = input_policy_engine["input"]["token"]
     assert token["urn:inmanta:ct"] == ["api"]
-    assert token["urn:inmanta:roles"] == {env_id: "read-write"}
-    assert token["urn:inmanta:is-admin"] is False
+    assert token[const.INMANTA_ROLES_URN] == {env_id: "read-write"}
+    assert token[const.INMANTA_IS_ADMIN_URN] is False
 
-    client = get_client_with_role(env_to_role_dct={}, is_admin=True)
+    client = utils.get_auth_client(env_to_role_dct={}, is_admin=True)
     input_policy_engine = None
     result = await client.read_only_method()
     assert result.code == 200
@@ -399,8 +382,8 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     assert "token" in input_policy_engine["input"]
     token = input_policy_engine["input"]["token"]
     assert token["urn:inmanta:ct"] == ["api"]
-    assert token["urn:inmanta:roles"] == {}
-    assert token["urn:inmanta:is-admin"] is True
+    assert token[const.INMANTA_ROLES_URN] == {}
+    assert token[const.INMANTA_IS_ADMIN_URN] is True
 
 
 async def test_policy_engine_data() -> None:
@@ -610,7 +593,7 @@ async def test_get_input_for_policy_engine(capture_input_for_policy_engine: Capt
     Verify that the input, provided to the policy engine, looks as expected.
     """
     env_id = str(uuid.uuid4())
-    client = get_client_with_role(env_to_role_dct={env_id: "test"}, is_admin=False, client_type=const.ClientType.api)
+    client = utils.get_auth_client(env_to_role_dct={env_id: "test"}, is_admin=False, client_types=[const.ClientType.api])
 
     arg1 = uuid.uuid4()
     arg2 = "test"
@@ -621,5 +604,5 @@ async def test_get_input_for_policy_engine(capture_input_for_policy_engine: Capt
     assert pe_input["input"]["request"]["endpoint_id"] == "GET /api/v1/method-with-call-context"
     assert pe_input["input"]["request"]["parameters"] == {"arg1": arg1, "arg2": arg2}
     assert pe_input["input"]["token"]["urn:inmanta:ct"] == ["api"]
-    assert pe_input["input"]["token"]["urn:inmanta:roles"] == {env_id: "test"}
-    assert pe_input["input"]["token"]["urn:inmanta:is-admin"] is False
+    assert pe_input["input"]["token"][const.INMANTA_ROLES_URN] == {env_id: "test"}
+    assert pe_input["input"]["token"][const.INMANTA_IS_ADMIN_URN] is False

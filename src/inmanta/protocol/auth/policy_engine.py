@@ -179,7 +179,7 @@ class PolicyEngine:
             LOGGER.error("Policy engine is not running. Call OpaServer.start() first.")
             return False
         request = HTTPRequest(
-            url=f"http://{self._hostname}/v1/data/policy/allowed",
+            url=f"http://{self._hostname}/v1/data/policy/allow",
             method="POST",
             headers={"Content-Type": "application/json"},
             body=json.dumps(input_data, default=util.api_boundary_json_encoder),
