@@ -5298,6 +5298,7 @@ class Resource(BaseDocument):
                 resource_id_value,
                 agent,
                 status,
+                is_undefined,
                 attributes,
                 attribute_hash,
                 resource_set,
@@ -5316,6 +5317,7 @@ class Resource(BaseDocument):
                         ELSE 'available'::resourcestate
                         END
                     ) AS status,
+                    r.is_undefined,
                     r.attributes AS attributes,
                     r.attribute_hash,
                     r.resource_set,
