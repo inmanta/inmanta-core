@@ -445,7 +445,7 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
         compiler_version=get_compiler_version(),
         module_version_info={},
     )
-
+    assert result.code == 200
     # Pause agent3
     result = await client.agent_action(tid=environment, name="agent3", action=AgentAction.pause.name)
     assert result.code == 200
