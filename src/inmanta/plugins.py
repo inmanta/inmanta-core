@@ -1005,6 +1005,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         def reference_exception_msg(value: object, arg: PluginArgument) -> PluginTypeException:
             contains: str = "is" if isinstance(value, Reference) else "contains"
+            # TODO: "contains an undeclared reference"?
             return (
                 f"Value {value!r} for argument {arg.arg_name} of plugin {self.get_full_name()} {contains} a reference."
                 " To allow references, use `| Reference[...]` in your type annotation."

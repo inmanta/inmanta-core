@@ -8,6 +8,7 @@ tentative:
     - fix breaking bug on unions involving a dataclass -> TODO: what's this about? Iirc there's a TODO note about it. Verify this claim
     - allow references in dict (and deprecated untyped list) attributes
     - TODO: follow-up ticket: std plugin annotations
+    - validate DC attributes. Don't allow references unless declared
 
 
 from test scenarios:
