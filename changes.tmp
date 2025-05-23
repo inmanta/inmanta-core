@@ -1,10 +1,25 @@
 tentative:
-    - string format raises exception on reference
+    - string format raises exception on reference -> TODO
     - attribute access on attr that happens to be reference raises exception
     - attribute access on valid (explicit in dataclass or explicit in access) reference attribute returns reference, not proxy
     - plugins now properly validate Ref[Dataclass] vs Dataclass
     - support inheritance for dataclasses, both for registering them and on the plugin boundary -> map instance-to-dataclass rather than entity-to-dataclass
     - Ref[DC] passed to plugin now results in a proper reference. Only coerced when plugin does not accept references and dataclass supports it
-    - fix breaking bug on unions involving a dataclass
+    - fix breaking bug on unions involving a dataclass -> TODO: what's this about? Iirc there's a TODO note about it. Verify this claim
     - allow references in dict (and deprecated untyped list) attributes
     - TODO: follow-up ticket: std plugin annotations
+
+
+from test scenarios:
+    - require explicit annotation for object, list[object] etc
+    - Reference[object] was printed as Reference[None]
+    - during type validation: point out references, instead of simple "has incompatible type", for primitives but also list[str] etc
+    - validation error: correctly report expected type for unions of type and reference
+    - allow inheritance for dataclasses: correctly link children with associated dataclass, rather than top-level parent
+        TODO: add test that returns such a child dataclass, not wrapped in reference
+    - allow references in dict attribute values
+    - raise runtime error when instance attribute is accessed that turns out to be a reference (including nested) because references can not be declared in DSL
+        + add explicit allow method
+    - pass Ref[DC] as such to plugins, rather than as DC with ref attrs
+    - type validation: don't allow Reference[DC] for plugins annotated as DC (unless coerce possible) and vice versa
+    - nested references & dataclass references in plugins are represented as reference rather than proxy

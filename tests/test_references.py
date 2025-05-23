@@ -216,7 +216,6 @@ async def test_deploy_end_to_end(
 
 # TODO: critical review of this test's contents. Should inheritance-based tests be moved? Should dataclass-based tests be moved?
 # TODO: name -> more like "references in plugins"
-# TODO: run these tests on master to see which fail
 def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
     # TODO: docstring
     refs_module = os.path.join(modules_v2_dir, "refs")
