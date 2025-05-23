@@ -59,9 +59,9 @@ class DynamicUnwrapContext:
     type_resolver: TypeResolver
 
 
-# TODO: docstring & name (broader than return_value. Really a proxy context
+# TODO: docstring
 @dataclasses.dataclass(kw_only=True, frozen=True, slots=True)
-class DynamicReturnValueContext:
+class ProxyContext:
     """
     :param allow_references: Allow values returned / proxied by this instance to be references.
     """
@@ -86,14 +86,14 @@ class DynamicProxy:
     by native code.
     """
 
-    def __init__(self, instance: "Instance", *, parent_context: Optional[DynamicReturnValueContext] = None) -> None:
+    def __init__(self, instance: "Instance", *, parent_context: Optional[ProxyContext] = None) -> None:
         object.__setattr__(self, "__instance", instance)
         object.__setattr__(self, "__context", self._from_parent_context(parent_context))
 
     def _get_instance(self) -> "Instance":
         return object.__getattribute__(self, "__instance")
 
-    def _get_context(self) -> DynamicReturnValueContext:
+    def _get_context(self) -> ProxyContext:
         return object.__getattribute__(self, "__context")
 
     # TODO: name and docstring
@@ -103,8 +103,8 @@ class DynamicProxy:
 
     # TODO: docstring
     @classmethod
-    def _from_parent_context(cls, parent_context: Optional[DynamicReturnValueContext]) -> DynamicReturnValueContext:
-        parent_context = parent_context if parent_context is not None else DynamicReturnValueContext()
+    def _from_parent_context(cls, parent_context: Optional[ProxyContext]) -> ProxyContext:
+        parent_context = parent_context if parent_context is not None else ProxyContext()
         return (
             dataclasses.replace(parent_context, allow_references=False, type_validated=False)
             if cls._black_box()
@@ -205,7 +205,7 @@ class DynamicProxy:
         value: object,
         *,
         # TODO: docstring
-        context: Optional[DynamicReturnValueContext] = None,
+        context: Optional[ProxyContext] = None,
     ) -> Union[None, str, tuple[object, ...], int, float, bool, "DynamicProxy"]:
         """
         Converts a value from the internal domain to the plugin domain.
@@ -235,7 +235,7 @@ class DynamicProxy:
                 return value
 
         # TODO: shift this down?
-        new_context: Optional[DynamicReturnValueContext] = (
+        new_context: Optional[ProxyContext] = (
             # we're proxying one level deeper than the current context => recalculate allow_references for proxied values
             dataclasses.replace(context, allow_references=context.type_validated)
             if context is not None
@@ -336,7 +336,7 @@ class DynamicProxy:
 
 
 class SequenceProxy(DynamicProxy, JSONSerializable):
-    def __init__(self, iterator: Sequence, *, parent_context: Optional[DynamicReturnValueContext] = None) -> None:
+    def __init__(self, iterator: Sequence, *, parent_context: Optional[ProxyContext] = None) -> None:
         DynamicProxy.__init__(self, iterator, parent_context=parent_context)
 
     @classmethod
@@ -363,7 +363,7 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
 
 
 class DictProxy(DynamicProxy, Mapping, JSONSerializable):
-    def __init__(self, mydict: dict[object, object], *, parent_context: Optional[DynamicReturnValueContext] = None) -> None:
+    def __init__(self, mydict: dict[object, object], *, parent_context: Optional[ProxyContext] = None) -> None:
         DynamicProxy.__init__(self, mydict, parent_context=parent_context)
 
     @classmethod
@@ -394,7 +394,7 @@ class CallProxy(DynamicProxy):
     Proxy a value that implements a __call__ function
     """
 
-    def __init__(self, instance: Callable[..., object], *, parent_context: Optional[DynamicReturnValueContext] = None) -> None:
+    def __init__(self, instance: Callable[..., object], *, parent_context: Optional[ProxyContext] = None) -> None:
         DynamicProxy.__init__(self, instance, parent_context=parent_context)
 
     @classmethod
