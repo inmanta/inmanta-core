@@ -45,6 +45,7 @@ from inmanta.ast import (
     RuntimeException,
     TypeNotFoundException,
     TypingException,
+    UndeclaredReference,
     UnsetException,
     WithComment,
 )
@@ -52,7 +53,8 @@ from inmanta.ast.type import NamedType
 from inmanta.ast.type import Null as Null  # Moved, part of stable api
 from inmanta.ast.type import ReferenceType
 from inmanta.config import Config
-from inmanta.execute.proxy import DynamicProxy, DynamicUnwrapContext, get_inmanta_type_for_dataclass
+from inmanta.execute import proxy
+from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.references import Reference
@@ -408,13 +410,13 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
             return inmanta_type.create_union(bases)
 
     if dataclasses.is_dataclass(python_type):
-        entity = get_inmanta_type_for_dataclass(python_type)
+        entity = proxy.get_inmanta_type_for_dataclass(python_type)
         if entity:
             return entity
         raise TypingException(None, f"invalid type {python_type}, this dataclass has no associated inmanta entity")
 
     if dataclasses.is_dataclass(python_type):
-        entity = get_inmanta_type_for_dataclass(python_type)
+        entity = proxy.get_inmanta_type_for_dataclass(python_type)
         if entity:
             return entity
         raise TypingException(None, f"invalid type {python_type}, this dataclass has no associated inmanta entity")
@@ -1001,6 +1003,14 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         converted_args = []
         is_unknown = False
 
+        def reference_exception_msg(value: object, arg: PluginArgument) -> PluginTypeException:
+            contains: str = "is" if isinstance(value, Reference) else "contains"
+            # TODO: "contains an undeclared reference"?
+            return (
+                f"Value {value!r} for argument {arg.arg_name} of plugin {self.get_full_name()} {contains} a reference."
+                " To allow references, use `| Reference[...]` in your type annotation."
+            )
+
         # Validate all positional arguments
         for position, value in enumerate(args):
             # (1) Get the corresponding argument, fails if we don't have one
@@ -1015,7 +1025,20 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                     result = validate_and_convert_to_python_domain(arg.resolved_type, value)
                 except (UnsetException, MultiUnsetException):
                     raise
+                except UndeclaredReference as e:
+                    raise PluginTypeException(
+                        stmt=None,
+                        msg=reference_exception_msg(value, arg),
+                        cause=e,
+                    )
                 except RuntimeException as e:
+                    # some validators do not recognize references specially. Best-effort to raise tailored error message.
+                    if isinstance(value, Reference) and not isinstance(arg.resolved_type, inmanta_type.ReferenceType):
+                        raise PluginTypeException(
+                            stmt=None,
+                            msg=reference_exception_msg(value, arg),
+                            cause=e,
+                        )
                     raise PluginTypeException(
                         stmt=None,
                         msg=(
@@ -1158,7 +1181,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         value = DynamicProxy.unwrap(
             value,
-            dynamic_context=DynamicUnwrapContext(
+            dynamic_context=proxy.DynamicUnwrapContext(
                 resolver=resolver,
                 queue=queue,
                 location=location,
@@ -1315,3 +1338,12 @@ def deprecated(
     if function is not None:
         return inner(function)
     return inner
+
+
+# TODO: move up in file?
+# TODO: no longer just attributes
+def allow_reference_attributes(instance: object) -> object:
+    if not isinstance(instance, DynamicProxy):
+        # TODO
+        raise ValueError()
+    return instance._allow_references()

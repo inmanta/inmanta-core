@@ -20,7 +20,7 @@ import traceback
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
-from inmanta import warnings
+from inmanta import references, warnings
 from inmanta.ast import export
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
@@ -1084,12 +1084,27 @@ class UnknownException(Exception):
         self.unknown = unknown
 
 
+
 class AttributeNotFound(NotFoundException, AttributeError):
     """
     Exception used for backwards compatibility with try-except blocks around some_proxy.some_attr.
     This previously raised `NotFoundException` which is currently deprecated in this context.
     Its new behavior is to raise an AttributeError for compatibility with Python's builtin `hasattr`.
     """
+
+
+# TODO: does references.UnexpectedReferenceException still have value? Is it raised or caught anywhere? It complicates things
+# custom class to enable clean wrapping on the plugin boundary
+class UndeclaredReference(RuntimeException, references.UnexpectedReferenceException):
+    """
+    Undeclared reference encountered during plugin execution.
+    """
+
+    def __init__(
+        self, *, stmt: Optional[Locatable] = None, reference: references.Reference[references.RefValue], message: str
+    ) -> None:
+        RuntimeException.__init__(self, stmt, message)
+        references.UnexpectedReferenceException.__init__(self, message, reference)
 
 
 @stable_api
