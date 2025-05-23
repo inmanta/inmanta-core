@@ -22,7 +22,7 @@ import logging
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Sequence
-from typing import Any, Callable, Optional, Union, cast
+from typing import Any, Optional, Union, cast
 
 from asyncpg.connection import Connection
 from pydantic import ValidationError
@@ -242,71 +242,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
             environment.id, resource_type, attributes, connection=connection
         )
         return [r.to_dto() for r in result]
-
-    async def mark_deployed(
-        self,
-        env: data.Environment,
-        resources_id: abc.Set[ResourceIdStr],
-        timestamp: datetime.datetime,
-        version: int,
-        filter: Callable[[ResourceIdStr], bool] = lambda x: True,
-        connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
-    ) -> None:
-        """
-        Set the status of the provided resources as deployed
-        :param env: Environment to consider.
-        :param resources_id: Set of resources to mark as deployed.
-        :param timestamp: Timestamp for the log message and the resource action entry.
-        :param version: Version of the resources to consider.
-        :param filter: Filter function that takes a resource id as an argument and returns True if it should be kept.
-        """
-        if not resources_id:
-            return
-
-        # performance-critical path: avoid parsing cost if we can
-        resources_id_filtered = [res_id for res_id in resources_id if filter(res_id)]
-        if not resources_id_filtered:
-            return
-
-        action_id = uuid.uuid4()
-
-        async with data.Resource.get_connection(connection.connection) as inner_connection:
-            async with inner_connection.transaction():
-                resources_version_ids: list[ResourceVersionIdStr] = [
-                    ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id_filtered
-                ]
-
-                resource_action = data.ResourceAction(
-                    environment=env.id,
-                    version=version,
-                    resource_version_ids=resources_version_ids,
-                    action_id=action_id,
-                    action=const.ResourceAction.deploy,
-                    started=timestamp,
-                    messages=[
-                        {
-                            "level": "INFO",
-                            "msg": "Setting deployed due to known good status",
-                            "args": [],
-                            "timestamp": timestamp.isoformat(timespec="microseconds"),
-                        }
-                    ],
-                    changes={},
-                    status=const.ResourceState.deployed,
-                    change=const.Change.nochange,
-                    finished=timestamp,
-                )
-                await resource_action.insert(connection=inner_connection)
-                self.log_resource_action(
-                    env.id,
-                    resources_version_ids,
-                    const.LogLevel.INFO.to_int,
-                    timestamp,
-                    "Setting deployed due to known good status",
-                )
-
-                await data.Resource.set_deployed_multi(env.id, resources_id_filtered, version, connection=inner_connection)
-                # Resource persistent state should not be affected
 
     async def get_increment(
         self,

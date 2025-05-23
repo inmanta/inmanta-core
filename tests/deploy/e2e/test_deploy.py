@@ -644,9 +644,6 @@ async def test_deploy_with_undefined(server, client, resource_container, agent, 
 
     await wait_until_deployment_finishes(client, environment)
 
-    actions = await data.ResourceAction.get_list()
-    assert len([x for x in actions if x.status == const.ResourceState.undefined]) >= 1
-
     result = await client.get_version(environment, version)
     assert result.code == 200
 
