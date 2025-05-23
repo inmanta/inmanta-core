@@ -798,7 +798,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         resource_set_validator = ResourceSetValidator(set(rid_to_resource.values()))
         undeployable_ids: abc.Sequence[ResourceIdStr] = [
-            res.resource_id for res in rid_to_resource.values() if res.status in const.UNDEPLOYABLE_STATES
+            res.resource_id for res in rid_to_resource.values() if res.is_undefined
         ]
         updated_resource_sets: abc.Set[str] = {sr for sr in resource_sets.values() if sr is not None}
         deleted_resource_sets_as_set: abc.Set[str] = set(removed_resource_sets)
@@ -1181,7 +1181,6 @@ class OrchestrationService(protocol.ServerSlice):
 
                 # Setting the model's released field to True is the trigger for the agents
                 # to start pulling in the resources.
-                # This has to be done after the resources outside of the increment have been marked as deployed.
                 await model.update_fields(released=True, connection=connection)
 
             if connection.is_in_transaction():
