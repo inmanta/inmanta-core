@@ -133,3 +133,12 @@ class UserService(server_protocol.ServerSlice):
         if context.auth_username:
             return model.CurrentUser(username=context.auth_username)
         raise exceptions.NotFound("No current user found, probably an API token is used.")
+
+    @protocol.handle(protocol.methods_v2.set_claim)
+    def set_claim(username: str, claim_name: str, claim_value: str) -> None:
+        raise NotImplementedError()
+
+    @protocol.handle(protocol.methods_v2.delete_claim)
+    def delete_claim(username: str, claim_name: str) -> None:
+        raise NotImplementedError()
+
