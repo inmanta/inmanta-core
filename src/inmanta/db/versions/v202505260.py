@@ -29,7 +29,7 @@ async def update(connection: Connection) -> None:
             user_id uuid NOT NULL,
             claim_name VARCHAR NOT NULL,
             PRIMARY KEY(user_id, claim_name),
-            FOREIGN KEY (user_id) REFERENCES public.inmanta_user(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES public.inmanta_user(id) ON DELETE CASCADE
         );
     """
     await connection.execute(schema)
