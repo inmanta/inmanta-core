@@ -30,13 +30,12 @@ import pytest
 from inmanta import const, data, util
 from inmanta.agent.executor import DeployReport
 from inmanta.const import Change, ResourceState
-from inmanta.data.model import ResourceId
 from inmanta.deploy import persistence, state
 from inmanta.resources import Id
 from inmanta.server import SLICE_ORCHESTRATION, SLICE_RESOURCE
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
-from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+from inmanta.types import ResourceVersionIdStr
 from inmanta.util import get_compiler_version
 from utils import assert_no_warning
 
@@ -171,9 +170,10 @@ class MultiVersionSetup:
                 if resource_state == const.ResourceState.available:
                     # initial state can not be set
                     continue
-
-                await update_manager.send_in_progress(action_id, Id.parse_id(rid))
+                parsed_rid = Id.parse_id(rid)
+                await update_manager.send_in_progress(action_id, parsed_rid)
                 if resource_state not in const.TRANSIENT_STATES:
+                    # Handler resource state
                     match resource_state:
                         case const.ResourceState.deployed:
                             handler_resource_state = const.HandlerResourceState.deployed
@@ -183,12 +183,20 @@ class MultiVersionSetup:
                             handler_resource_state = const.HandlerResourceState.unavailable
                         case _:
                             handler_resource_state = const.HandlerResourceState.skipped
+                    # Compliance
+                    match resource_state:
+                        case const.ResourceState.deployed:
+                            compliance = state.Compliance.COMPLIANT
+                        case const.ResourceState.undefined:
+                            compliance = state.Compliance.UNDEFINED
+                        case _:
+                            compliance = state.Compliance.NON_COMPLIANT
                     await update_manager.send_deploy_done(
                         attribute_hash=util.make_attribute_hash(
-                            resource_id=ResourceIdStr(rid), attributes=self.versions[version][0]
+                            resource_id=parsed_rid.resource_str(), attributes=self.versions[version][0]
                         ),
                         result=DeployReport(
-                            rvid=ResourceVersionIdStr(rid),
+                            rvid=parsed_rid.resource_version_str(),
                             action_id=action_id,
                             resource_state=handler_resource_state,
                             messages=[],
@@ -196,11 +204,7 @@ class MultiVersionSetup:
                             change=const.Change.nochange,
                         ),
                         state=state.ResourceState(
-                            compliance=(
-                                state.Compliance.COMPLIANT
-                                if resource_state is const.ResourceState.deployed
-                                else state.Compliance.NON_COMPLIANT
-                            ),
+                            compliance=compliance,
                             last_deploy_result=state.DeployResult.DEPLOYED,
                             blocked=(
                                 state.Blocked.BLOCKED
@@ -287,12 +291,13 @@ async def test_deploy(server, client, null_agent, environment, caplog, clienthel
         for resource in resources:
             action_id = uuid.uuid4()
             now = datetime.now()
-            await update_manager.send_in_progress(action_id, Id.parse_id(resource["id"]))
+            rid = Id.parse_id(resource["id"])
+            await update_manager.send_in_progress(action_id, rid)
 
             await update_manager.send_deploy_done(
-                attribute_hash=util.make_attribute_hash(resource_id=ResourceIdStr(resource["id"]), attributes=resource),
+                attribute_hash=util.make_attribute_hash(resource_id=rid.resource_str(), attributes=resource),
                 result=DeployReport(
-                    rvid=ResourceVersionIdStr(resource["id"]),
+                    rvid=rid.resource_version_str(),
                     action_id=action_id,
                     resource_state=const.HandlerResourceState.deployed,
                     messages=[],
@@ -427,7 +432,6 @@ async def test_deploy_scenarios_added_by_send_event_cad(server, client, null_age
 
 async def test_deploy_cad_double(server, null_agent, environment, caplog, client, clienthelper):
     version = await clienthelper.get_version()
-    rid = ResourceId("test::Resource[agent1,key=key1]")
     rvid = ResourceVersionIdStr(f"test::Resource[agent1,key=key1],v={version}")
     rvid2 = ResourceVersionIdStr(f"test::Resource[agent2,key=key2],v={version}")
 
@@ -457,9 +461,10 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
         update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
         action_id = uuid.uuid4()
         start_time: datetime = datetime.now().astimezone()
-        await update_manager.send_in_progress(action_id, Id.parse_id(rvid))
+        rid = Id.parse_id(rvid)
+        await update_manager.send_in_progress(action_id, rid)
         await update_manager.send_deploy_done(
-            attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resources[0]),
+            attribute_hash=util.make_attribute_hash(resource_id=rid.resource_str(), attributes=resources[0]),
             result=DeployReport(
                 rvid=rvid,
                 action_id=action_id,

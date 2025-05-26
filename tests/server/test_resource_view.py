@@ -24,7 +24,6 @@ from inmanta import const, data, util
 from inmanta.agent import executor
 from inmanta.deploy import persistence, state
 from inmanta.resources import Id
-from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
 
 async def test_consistent_resource_state_reporting(
@@ -87,13 +86,13 @@ async def test_consistent_resource_state_reporting(
     env = uuid.UUID(environment)
     update_manager = persistence.ToDbUpdateManager(client, env)
     action_id = uuid.uuid4()
-    rvid = f"{rid},v={version1}"
+    rvid = Id.parse_id(f"{rid},v={version1}")
     now = datetime.datetime.now()
-    await update_manager.send_in_progress(action_id, Id.parse_id(rvid))
+    await update_manager.send_in_progress(action_id, rvid)
     await update_manager.send_deploy_done(
-        attribute_hash=util.make_attribute_hash(resource_id=ResourceIdStr(rid), attributes=resources[0]),
+        attribute_hash=util.make_attribute_hash(resource_id=rvid.resource_str(), attributes=resources[0]),
         result=executor.DeployReport(
-            rvid=ResourceVersionIdStr(f"{rid},v={version1}"),
+            rvid=rvid.resource_version_str(),
             action_id=action_id,
             resource_state=const.HandlerResourceState.failed,
             messages=[],

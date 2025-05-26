@@ -44,7 +44,6 @@ from inmanta.server.services.environment_metrics_service import (
     MetricValueTimer,
     ResourceCountMetricsCollector,
 )
-from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import get_compiler_version, make_attribute_hash, parse_timestamp
 from utils import ClientHelper, wait_until_version_is_released
 
@@ -498,13 +497,13 @@ async def test_resource_count_metric(clienthelper, client, agent):
 
     update_manager = persistence.ToDbUpdateManager(client, env_uuid1)
     now = datetime.now()
-    rvid = "test::Resource[agent1,key=key2],v=" + version_env1
-    await update_manager.send_in_progress(action_id, Id.parse_id(rvid))
+    rvid = Id.parse_id("test::Resource[agent1,key=key2],v=" + version_env1)
+    await update_manager.send_in_progress(action_id, rvid)
 
     await update_manager.send_deploy_done(
-        attribute_hash=make_attribute_hash(resource_id=ResourceIdStr(rvid), attributes=resources_env1_v2[0]),
+        attribute_hash=make_attribute_hash(resource_id=rvid.resource_str(), attributes=resources_env1_v2[0]),
         result=executor.DeployReport(
-            rvid=ResourceVersionIdStr(rvid),
+            rvid=rvid.resource_version_str(),
             action_id=action_id,
             resource_state=const.HandlerResourceState.deployed,
             messages=[],
