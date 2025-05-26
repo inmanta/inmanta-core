@@ -29,7 +29,7 @@ import pytest
 
 from inmanta import const, data, util
 from inmanta.agent.executor import DeployReport
-from inmanta.const import Change, ResourceAction, ResourceState
+from inmanta.const import Change, ResourceState
 from inmanta.data.model import ResourceId
 from inmanta.deploy import persistence, state
 from inmanta.resources import Id
@@ -401,7 +401,7 @@ async def test_deploy_scenarios_added_by_send_event(server, client, null_agent, 
     assert_no_warning(caplog)
 
 
-async def test_deploy_scenarios_added_by_send_event_cad(server, null_agent, environment, caplog):
+async def test_deploy_scenarios_added_by_send_event_cad(server, client, null_agent, environment, caplog):
     # ensure CAD does not change send_event
     with caplog.at_level(logging.WARNING):
         # acquire raw server
@@ -420,7 +420,7 @@ async def test_deploy_scenarios_added_by_send_event_cad(server, null_agent, envi
         setup.add_resource("R5", "A1 D1", False, requires=[id2])
 
         setup.add_resource("R6", "A1 D1", False, requires=[id1], agent="agent2")
-        await setup.setup(orchestration_service, resource_service, env)
+        await setup.setup(client, orchestration_service, resource_service, env)
 
     assert_no_warning(caplog)
 
