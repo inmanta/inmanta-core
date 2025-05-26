@@ -671,14 +671,14 @@ class OrchestrationService(protocol.ServerSlice):
         base_version_data: dict[tuple[str, str], list[str]] = await AgentModules.get_agents_per_module(
             model_version=partial_base_version, environment=environment, connection=connection
         )
-        for inmanta_module_name, module_data in module_version_info.items():
-            module_version = module_data.version
-            if (inmanta_module_name, module_version) not in base_version_data:
-                raise BadRequest(
-                    "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
-                )
-
         return base_version_data
+        # for inmanta_module_name, module_data in module_version_info.items():
+        #     module_version = module_data.version
+        #     if (inmanta_module_name, module_version) not in base_version_data:
+        #         raise BadRequest(
+        #             "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
+        #         )
+
 
     async def _register_agent_code(
         self,
