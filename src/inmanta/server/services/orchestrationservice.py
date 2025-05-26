@@ -669,13 +669,12 @@ class OrchestrationService(protocol.ServerSlice):
         base_version_data: dict[tuple[str, str], list[str]] = await AgentModules.get_agents_per_module(
             model_version=partial_base_version, environment=environment, connection=connection
         )
-        for inmanta_module_name, module_data in module_version_info.items():
-            module_version = module_data.version
-            if (inmanta_module_name, module_version) not in base_version_data:
-                raise BadRequest(
-                    "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
-                )
-
+        # for inmanta_module_name, module_data in module_version_info.items():
+        #     module_version = module_data.version
+        #     if (inmanta_module_name, module_version) not in base_version_data:
+        #         raise BadRequest(
+        #             "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
+        #         )
         return base_version_data
 
     async def _register_agent_code(
@@ -704,10 +703,9 @@ class OrchestrationService(protocol.ServerSlice):
             base_version_info = await self._check_version_info(
                 partial_base_version, environment, module_version_info, connection
             )
-        else:
-            await InmantaModule.register_modules(
-                environment=environment, module_version_info=module_version_info, connection=connection
-            )
+        await InmantaModule.register_modules(
+            environment=environment, module_version_info=module_version_info, connection=connection
+        )
         await AgentModules.register_modules_for_agents(
             model_version=version,
             environment=environment,
@@ -1153,8 +1151,7 @@ class OrchestrationService(protocol.ServerSlice):
         """
         async with data.ConfigurationModel.get_connection(connection) as connection:
             async with connection.transaction():
-                # explicit lock to allow patching of increments for stale failures
-                # (locks out patching stage of deploy_done to avoid races)
+                # explicit lock to prevent racing with this code itself.
                 await env.acquire_release_version_lock(connection=connection)
                 model = await data.ConfigurationModel.get_version_internal(
                     env.id, version_id, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE
