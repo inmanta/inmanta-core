@@ -1153,8 +1153,7 @@ class OrchestrationService(protocol.ServerSlice):
         """
         async with data.ConfigurationModel.get_connection(connection) as connection:
             async with connection.transaction():
-                # explicit lock to allow patching of increments for stale failures
-                # (locks out patching stage of deploy_done to avoid races)
+                # explicit lock to prevent racing with this code itself.
                 await env.acquire_release_version_lock(connection=connection)
                 model = await data.ConfigurationModel.get_version_internal(
                     env.id, version_id, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE
