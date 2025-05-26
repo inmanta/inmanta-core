@@ -6327,6 +6327,49 @@ class User(BaseDocument):
         return m.User(username=self.username, auth_method=self.auth_method)
 
 
+class Claim(BaseDocument):
+    """Claims included in the authorization token of a user."""
+
+    __primary_key__ = ("user_id", "key")
+
+    user_id: uuid.UUID
+    key: str
+    value: str
+
+    @classmethod
+    async def get_claims_for_user(cls, username: str) -> Sequence[m.Claim]:
+        query = f"""
+            SELECT c.key, c.value
+            FROM {User.table_name()} AS u INNER JOIN {Claim.table_name()} AS c ON u.id=c.user_id
+            WHERE u.username=$1
+        """
+        return [
+            Claim(from_postgres=True, user_id=r["user_id"], key=r["key"], value=r["value"])
+            for r in await cls._fetch_query(query, username)
+        ]
+
+    @classmethod
+    async def set_claim(cls, username: str, key: str, value: str) -> None:
+        query = f"""
+            INSERT INTO {Claim.table_name()} (user_id, key, value)
+            VALUES($1, $2, $3)
+            ON CONFLICT (user_id, key) DO UPDATE
+            SET value=$3
+        """
+        return await cls._execute_query(query, username, key, value)
+
+    @classmethod
+    async def delete_claim(cls, username: str, key: str) -> None:
+        query = f"""
+            DELETE FROM {Claim.table_name()} WHERE user_id=$1 AND key=$2
+        """
+        # TODO: Check if records exists.
+        return await cls._execute_query(query, username, key)
+
+    def to_dao(self) -> m.User:
+        return m.Claim(key=key, value=value)
+
+
 class DiscoveredResource(BaseDocument):
     """
     :param environment: the environment of the resource

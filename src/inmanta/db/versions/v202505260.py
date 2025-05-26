@@ -27,8 +27,9 @@ async def update(connection: Connection) -> None:
     schema = """
         CREATE TABLE IF NOT EXISTS public.claim(
             user_id uuid NOT NULL,
-            claim_name VARCHAR NOT NULL,
-            PRIMARY KEY(user_id, claim_name),
+            key VARCHAR NOT NULL,
+            value VARCHAR NOT NULL,
+            PRIMARY KEY(user_id, key),
             FOREIGN KEY (user_id) REFERENCES public.inmanta_user(id) ON DELETE CASCADE
         );
     """

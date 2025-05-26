@@ -482,3 +482,4 @@ class AuthorizationLabel(str, Enum):
     STATUS_READ = "status.read"
     TOKEN = "token"
     CLAIM_WRITE = "claim.write"
+    CLAIM_READ = "claim.read"
