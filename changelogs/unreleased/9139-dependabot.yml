@@ -2,4 +2,5 @@ change-type: patch
 description: Bump tornado from 6.4.2 to 6.5.1
 destination-branches:
 - iso8
-sections: {}
+sections:
+  other-note: "Bump tornado version to 6.5.1 (CVE-2025-47287)"
