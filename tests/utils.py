@@ -243,7 +243,7 @@ class LogSequence:
         if not self.allow_errors:
             # first error is later
             idxe = self._find("", logging.ERROR, "", self.index, min_level)
-            assert idxe == -1 or idxe >= index, f"Unexpected ERROR log line found: {self.caplog.records[idxe]}"
+            assert idxe == -1 or idxe >= index
         assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
@@ -348,7 +348,7 @@ async def wait_until_version_is_released(client, environment: uuid.UUID, version
     await retry_limited(_is_version_released, timeout=10)
 
 
-async def wait_for_version(client, environment, cnt: int, compile_timeout: int = 30):
+async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     """
     :param compile_timeout: Raise an AssertionError if the compilation didn't finish after this amount of seconds.
     """
@@ -356,13 +356,12 @@ async def wait_for_version(client, environment, cnt: int, compile_timeout: int =
     # Wait until the server is no longer compiling
     # wait for it to finish
     async def compile_done():
-        result = await client.get_reports(environment)
-        assert result.code == 200
-        return all(r["success"] is not None for r in result.result["reports"])
+        compiling = await client.is_compiling(environment)
+        code = compiling.code
+        return code == 204
 
     await retry_limited(compile_done, compile_timeout)
 
-    # Output compile report for debugging purposes
     reports = await client.get_reports(environment)
     for report in reports.result["reports"]:
         data = await client.get_report(report["id"])
