@@ -6339,7 +6339,7 @@ class Claim(BaseDocument):
     value: str
 
     @classmethod
-    async def get_claims_for_user(cls, username: str) -> Sequence[m.Claim]:
+    async def get_claims_for_user(cls, username: str) -> Sequence["Claim"]:
         query = f"""
             SELECT c.user_id, c.key, c.value
             FROM {User.table_name()} AS u INNER JOIN {Claim.table_name()} AS c ON u.id=c.user_id
@@ -6363,7 +6363,7 @@ class Claim(BaseDocument):
             ON CONFLICT (user_id, key) DO UPDATE
             SET value=$3
         """
-        return await cls._execute_query(query, username, key, value)
+        await cls._execute_query(query, username, key, value)
 
     @classmethod
     async def delete_claim(cls, username: str, key: str) -> None:
@@ -6372,9 +6372,9 @@ class Claim(BaseDocument):
             WHERE user_id=(SELECT id FROM {User.table_name()} WHERE username=$1) AND key=$2
         """
         # TODO: Check if records exists.
-        return await cls._execute_query(query, username, key)
+        await cls._execute_query(query, username, key)
 
-    def to_dto(self) -> m.User:
+    def to_dto(self) -> m.Claim:
         return m.Claim(key=self.key, value=self.value)
 
 
