@@ -421,7 +421,7 @@ async def test_list_actionlog(server, environment, client, cli, null_agent, clie
                 data.LogLine.log(level=const.LogLevel.INFO, msg="Deployed successfully", timestamp=now),
             ],
             changes={},
-            change=const.Change.created,
+            change=const.Change.nochange,
         ),
         state=state.ResourceState(
             compliance=state.Compliance.COMPLIANT,
@@ -486,7 +486,7 @@ async def test_show_messages_actionlog(server, environment, client, cli, null_ag
             resource_state=const.HandlerResourceState.deployed,
             messages=messages,
             changes={},
-            change=const.Change.purged,
+            change=const.Change.nochange,
         ),
         state=state.ResourceState(
             compliance=state.Compliance.COMPLIANT,

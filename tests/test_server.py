@@ -354,10 +354,11 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     # Finish the deploy
     now = datetime.now()
     for res, action_id in deploy_ids:
+        rid = Id.parse_id(res["id"])
         await update_manager.send_deploy_done(
-            attribute_hash=util.make_attribute_hash(resource_id=res["id"], attributes=res),
+            attribute_hash=util.make_attribute_hash(resource_id=rid.resource_str(), attributes=res),
             result=executor.DeployReport(
-                rvid=res["id"],
+                rvid=rid.resource_version_str(),
                 action_id=action_id,
                 resource_state=const.HandlerResourceState.deployed,
                 messages=[],

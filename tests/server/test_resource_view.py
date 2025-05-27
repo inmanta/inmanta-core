@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import datetime
+import typing
 import uuid
 
 import utils
@@ -44,7 +45,7 @@ async def test_consistent_resource_state_reporting(
     rid = "test::Resource[agent1,key=key1]"
     rid2 = "test::Resource[agent1,key=key2]"
 
-    async def _put_version(version: int) -> list:
+    async def _put_version(version: int) -> list[dict[str, typing.Any]]:
         resources = [
             {
                 "key": "key1",
