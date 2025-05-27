@@ -760,9 +760,6 @@ src/inmanta/data/__init__.py:0: error: "DocumentMeta" has no attribute "close_co
 src/inmanta/data/__init__.py:0: error: Incompatible types in "await" (actual type "Pool", expected type "Awaitable[Any]")  [misc]
 src/inmanta/data/__init__.py:0: error: Returning Any from function declared to return "Pool"  [no-any-return]
 src/inmanta/protocol/rest/server.py:0: error: Argument 1 to "get_global_url_map" of "RESTServer" has incompatible type "Sequence[CallTarget]"; expected "list[CallTarget]"  [arg-type]
-src/inmanta/protocol/rest/server.py:0: error: Argument 1 to "Application" has incompatible type "list[Rule]"; expected "list[Rule | list[Any] | tuple[str | Matcher, Any] | tuple[str | Matcher, Any, dict[str, Any]] | tuple[str | Matcher, Any, dict[str, Any], str]] | None"  [arg-type]
-src/inmanta/protocol/rest/server.py:0: note: "List" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
-src/inmanta/protocol/rest/server.py:0: note: Consider using "Sequence" instead, which is covariant
 src/inmanta/protocol/rest/client.py:0: error: Incompatible types in assignment (expression has type "str | int | None", variable has type "int")  [assignment]
 src/inmanta/protocol/rest/client.py:0: error: Value expression in dictionary comprehension has incompatible type "str"; expected type "bytes"  [misc]
 src/inmanta/protocol/rest/client.py:0: error: Incompatible types in assignment (expression has type "str | int | None", variable has type "int")  [assignment]
@@ -835,7 +832,6 @@ src/inmanta/ast/statements/define.py:0: error: Return type "None" of "register_t
 src/inmanta/ast/statements/define.py:0: error: Incompatible types in assignment (expression has type "Namespace | None", variable has type "Namespace")  [assignment]
 src/inmanta/agent/handler.py:0: error: Argument 3 to "log" of "LogLine" has incompatible type "**dict[str, object]"; expected "datetime | None"  [arg-type]
 src/inmanta/agent/handler.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
-src/inmanta/agent/handler.py:0: error: Argument 2 to "chain_future" has incompatible type "concurrent.futures._base.Future[T]"; expected "_asyncio.Future[Any]"  [arg-type]
 src/inmanta/server/extensions.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/parser/plyInmantaParser.py:0: error: Argument 1 to "DefineImport" has incompatible type "str"; expected "LocatableString"  [arg-type]
 src/inmanta/parser/plyInmantaParser.py:0: error: Argument 1 to "DefineImport" has incompatible type "str"; expected "LocatableString"  [arg-type]
