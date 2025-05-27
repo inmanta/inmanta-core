@@ -1579,8 +1579,8 @@ def set_claim(username: str, key: str, value: str) -> None:
 @typedmethod(path="/claim/<username>", operation="GET", client_types=[ClientType.api], api_version=2)
 def list_claims(username: str) -> list[model.Claim]:
     """
-    Returns the list of claims that will be included for the given user into the token generated
-    by the login endpoint.
+    Returns the list of custom claims that will be included into the tokens generated for the given user
+    by the login endpoint. The result is sorted by the key of the claim in ascending order.
 
     :param username: The username for which the claims will be returned.
     """

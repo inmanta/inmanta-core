@@ -18,6 +18,8 @@ Contact: code@inmanta.com
 
 import pytest
 
+from collections.abc import Sequence
+
 import nacl.pwhash
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod, Claim
@@ -206,15 +208,21 @@ async def test_claims(server: protocol.Server, auth_client: endpoints.Client, cl
         )
         await user.insert()
 
-    def assert_claims_in_token(token: str, expected_claims: dict[str, str]) -> None:
-        claims, _ = auth.decode_token(token)
-        for key, value in expected_claims.items():
-            assert claims[key] == value, f"claim {key}={value} not found. Actual claims: {claims}"
-
-    for username in [username1, username2]:
+    async def assert_claims(username: str, expected_claims: Sequence[Claim]) -> None:
         result = await auth_client.list_claims(username=username)
         assert result.code == 200
-        assert not result.result["data"]
+        actual_claims = [Claim(**r) for r in result.result["data"]]
+        # The list_claims should return claims in ASC order with respect to the key of the claim.
+        assert sorted(expected_claims, key=lambda x: x.key) == actual_claims
+
+        result = await client.login(username, password)
+        assert result.code == 200
+        claims_in_token, _ = auth.decode_token(token=result.result["data"]["token"])
+        for claim in expected_claims:
+            assert claim.value == claims_in_token[claim.key]
+
+    await assert_claims(username=username1, expected_claims=[])
+    await assert_claims(username=username2, expected_claims=[])
 
     # Add claim for users
     result = await auth_client.set_claim(username=username1, key="test1", value="val")
@@ -224,21 +232,8 @@ async def test_claims(server: protocol.Server, auth_client: endpoints.Client, cl
     assert result.code == 200
 
     # Verify claims
-    result = await auth_client.list_claims(username=username1)
-    assert result.code == 200
-    assert [Claim(**r) for r in result.result["data"]] == [Claim(key="test1", value="val")]
-
-    result = await client.login(username1, password)
-    assert result.code == 200
-    assert_claims_in_token(token=result.result["data"]["token"], expected_claims={"test1": "val"})
-
-    result = await auth_client.list_claims(username=username2)
-    assert result.code == 200
-    assert [Claim(**r) for r in result.result["data"]] == [Claim(key="test1", value="other_val")]
-
-    result = await client.login(username2, password)
-    assert result.code == 200
-    assert_claims_in_token(token=result.result["data"]["token"], expected_claims={"test1": "other_val"})
+    await assert_claims(username=username1, expected_claims=[Claim(key="test1", value="val")])
+    await assert_claims(username=username2, expected_claims=[Claim(key="test1", value="other_val")])
 
     # Update claims
     result = await auth_client.set_claim(username=username1, key="test2", value="test")
@@ -248,19 +243,6 @@ async def test_claims(server: protocol.Server, auth_client: endpoints.Client, cl
     assert result.code == 200
 
     # Verify claims
-    result = await auth_client.list_claims(username=username1)
-    assert result.code == 200
-    assert [Claim(**r) for r in result.result["data"]] == [Claim(key="test1", value="val"), Claim(key="test2", value="test")]
-
-    result = await client.login(username1, password)
-    assert result.code == 200
-    assert_claims_in_token(token=result.result["data"]["token"], expected_claims={"test1": "val", "test2": "test"})
-
-    result = await auth_client.list_claims(username=username2)
-    assert result.code == 200
-    assert [Claim(**r) for r in result.result["data"]] == [Claim(key="test1", value="new_val")]
-
-    result = await client.login(username2, password)
-    assert result.code == 200
-    assert_claims_in_token(token=result.result["data"]["token"], expected_claims={"test1": "new_val"})
+    await assert_claims(username=username1, expected_claims=[Claim(key="test1", value="val"), Claim(key="test2", value="test")])
+    await assert_claims(username=username2, expected_claims=[Claim(key="test1", value="new_val")])
 

@@ -6342,6 +6342,7 @@ class Claim(BaseDocument):
             SELECT c.user_id, c.key, c.value
             FROM {User.table_name()} AS u INNER JOIN {Claim.table_name()} AS c ON u.id=c.user_id
             WHERE u.username=$1
+            ORDER BY c.user_id, c.key ASC
         """
         return [
             Claim(from_postgres=True, user_id=r["user_id"], key=r["key"], value=r["value"])
