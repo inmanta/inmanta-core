@@ -6339,7 +6339,7 @@ class Claim(BaseDocument):
     @classmethod
     async def get_claims_for_user(cls, username: str) -> Sequence[m.Claim]:
         query = f"""
-            SELECT c.key, c.value
+            SELECT c.user_id, c.key, c.value
             FROM {User.table_name()} AS u INNER JOIN {Claim.table_name()} AS c ON u.id=c.user_id
             WHERE u.username=$1
         """
@@ -6352,7 +6352,11 @@ class Claim(BaseDocument):
     async def set_claim(cls, username: str, key: str, value: str) -> None:
         query = f"""
             INSERT INTO {Claim.table_name()} (user_id, key, value)
-            VALUES($1, $2, $3)
+            VALUES(
+                (SELECT id FROM {User.table_name()} WHERE username=$1),
+                $2,
+                $3
+            )
             ON CONFLICT (user_id, key) DO UPDATE
             SET value=$3
         """
@@ -6361,13 +6365,14 @@ class Claim(BaseDocument):
     @classmethod
     async def delete_claim(cls, username: str, key: str) -> None:
         query = f"""
-            DELETE FROM {Claim.table_name()} WHERE user_id=$1 AND key=$2
+            DELETE FROM {Claim.table_name()}
+            WHERE user_id=(SELECT id FROM {User.table_name()} WHERE username=$1) AND key=$2
         """
         # TODO: Check if records exists.
         return await cls._execute_query(query, username, key)
 
-    def to_dao(self) -> m.User:
-        return m.Claim(key=key, value=value)
+    def to_dto(self) -> m.User:
+        return m.Claim(key=self.key, value=self.value)
 
 
 class DiscoveredResource(BaseDocument):

@@ -1563,7 +1563,7 @@ def set_password(username: str, password: str) -> None:
 
 
 @auth(auth_label=const.AuthorizationLabel.CLAIM_WRITE, read_only=False)
-@typedmethod(path="/claim/<key>/<value>", operation="POST", client_types=[ClientType.api], api_version=2)
+@typedmethod(path="/claim/<username>/<key>/<value>", operation="POST", client_types=[ClientType.api], api_version=2)
 def set_claim(username: str, key: str, value: str) -> None:
     """
     Set the claim that should be included in the authorization token for a certain user.

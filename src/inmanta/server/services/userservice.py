@@ -118,7 +118,12 @@ class UserService(server_protocol.ServerSlice):
         except nacl.exceptions.InvalidkeyError:
             raise exceptions.UnauthorizedException()
 
-        token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims={"sub": username})
+        auth_claims = await data.Claim.get_claims_for_user(username)
+        custom_claims = {
+            "sub": username,
+            **{c.key: c.value for c in auth_claims},
+        }
+        token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims=custom_claims)
         return common.ReturnValue(
             status_code=200,
             headers={"Authorization": f"Bearer {token}"},
@@ -135,14 +140,14 @@ class UserService(server_protocol.ServerSlice):
         raise exceptions.NotFound("No current user found, probably an API token is used.")
 
     @protocol.handle(protocol.methods_v2.set_claim)
-    async def set_claim(username: str, key: str, value: str) -> None:
+    async def set_claim(self, username: str, key: str, value: str) -> None:
         await data.Claim.set_claim(username=username, key=key, value=value)
 
     @protocol.handle(protocol.methods_v2.list_claims)
-    async def list_claims(username: str) -> list[model.Claim]:
+    async def list_claims(self, username: str) -> list[model.Claim]:
         return [r.to_dto() for r in await data.Claim.get_claims_for_user(username=username)]
 
     @protocol.handle(protocol.methods_v2.delete_claim)
-    async def delete_claim(username: str, key: str) -> None:
+    async def delete_claim(self, username: str, key: str) -> None:
         await data.Claim.delete_claim(username=username, key=key)
 
