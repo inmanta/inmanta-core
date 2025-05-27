@@ -567,7 +567,9 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     """
     codemanager = CodeManager()
 
-    async def check_code_for_version(version: int, environment: str, agent_names: Sequence[str]):
+    async def check_code_for_version(
+        version: int, environment: str, agent_names: Sequence[str], expected_source: bytes = b"#The code"
+    ):
         """
         Helper method to check that all agents get the same code
         """
@@ -578,7 +580,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
             )
             assert len(module_install_specs) == 1
             assert len(module_install_specs[0].blueprint.sources) == 1
-            assert module_install_specs[0].blueprint.sources[0].source == b"#The code"
+            assert module_install_specs[0].blueprint.sources[0].source == expected_source
 
     version = await clienthelper.get_version()
     resources = [
@@ -694,10 +696,17 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         resource_sets=resource_sets,
         module_version_info=mismatched_module_version_info,
     )
-    assert result.code == 400
-    assert result.result["message"] == (
-        "Invalid request: Cannot perform partial export because of version mismatch " "for module test."
+    # Version check is temporarily disabled
+
+    # assert result.code == 400
+    # assert result.result["message"] == (
+    #     "Invalid request: Cannot perform partial export because of version mismatch " "for module test."
+    # )
+    assert result.code == 200
+    await check_code_for_version(
+        version=3, environment=environment, agent_names=["agent_X"], expected_source=b"#The OTHER code"
     )
+    await check_code_for_version(version=3, environment=environment, agent_names=["agent_Y"], expected_source=b"#The code")
 
     # 4) Make sure we can provide new agents with already registered code:
     module_version_info = {
@@ -734,4 +743,9 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     )
     assert result.code == 200
 
-    await check_code_for_version(version=3, environment=environment, agent_names=["agent_X", "agent_Y", "agent_Z"])
+    await check_code_for_version(
+        version=4, environment=environment, agent_names=["agent_Y", "agent_Z"], expected_source=b"#The code"
+    )
+    await check_code_for_version(
+        version=4, environment=environment, agent_names=["agent_X"], expected_source=b"#The OTHER code"
+    )
