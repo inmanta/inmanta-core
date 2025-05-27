@@ -34,4 +34,3 @@ async def update(connection: Connection) -> None:
         );
     """
     await connection.execute(schema)
-

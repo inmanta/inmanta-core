@@ -16,9 +16,9 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import pytest
-
 from collections.abc import Sequence
+
+import pytest
 
 import nacl.pwhash
 from inmanta import config, const, data
@@ -245,4 +245,3 @@ async def test_claims(server: protocol.Server, auth_client: endpoints.Client, cl
     # Verify claims
     await assert_claims(username=username1, expected_claims=[Claim(key="test1", value="val"), Claim(key="test2", value="test")])
     await assert_claims(username=username2, expected_claims=[Claim(key="test1", value="new_val")])
-

@@ -150,4 +150,3 @@ class UserService(server_protocol.ServerSlice):
     @protocol.handle(protocol.methods_v2.delete_claim)
     async def delete_claim(self, username: str, key: str) -> None:
         await data.Claim.delete_claim(username=username, key=key)
-
