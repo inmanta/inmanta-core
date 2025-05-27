@@ -295,13 +295,9 @@ setup(name="test")
     with open(setup_py_path, "w") as setup_file:
         setup_file.write(setup_py_content)
 
-    # We have two possible errors:
-    # we install two packages, that fail differently
-    # The order of failure is not fixed
-    expected = re.escape("Packages this-package-does-not-exist were not found. No indexes were used.")
-    other_expected = r"Packages setuptools.*were not found\. No indexes were used\."
+    expected = "Packages this-package-does-not-exist were not found. No indexes were used."
 
-    with pytest.raises(env.PackageNotFound, match=f"{expected}|{other_expected}"):
+    with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
         deactive_venv.install_for_config(
             requirements=[inmanta.util.parse_requirement(requirement="this-package-does-not-exist")],
             paths=[env.LocalPackagePath(path=str(tmpdir))],

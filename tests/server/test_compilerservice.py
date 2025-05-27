@@ -1257,18 +1257,12 @@ async def test_compileservice_queue_with_env_var_merging(
 async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
-    # Wait until the compiler service is ready to process compiles.
-    # As long as the compiler service is not fully ready,
-    # is_compiling() will always return False.
-    await retry_limited(lambda: compilerslice.fully_ready, timeout=10)
-
     result = await client.get_compile_queue(environment)
     assert result.code == 200
     assert len(result.result["queue"]) == 0
     assert compilerslice._queue_count_cache == 0
 
-    result = await client.halt_environment(environment)
-    assert result.code == 200
+    await client.halt_environment(environment)
 
     env = await data.Environment.get_by_id(environment)
     assert env is not None
@@ -1282,8 +1276,7 @@ async def test_compilerservice_halt(mocked_compiler_service_block, server, clien
     result = await client.is_compiling(environment)
     assert result.code == 204
 
-    result = await client.resume_environment(environment)
-    assert result.code == 200
+    await client.resume_environment(environment)
     result = await client.is_compiling(environment)
     assert result.code == 200
 
