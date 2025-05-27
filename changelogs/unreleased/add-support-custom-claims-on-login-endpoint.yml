@@ -1,0 +1,4 @@
+---
+description: Added support for custom claims on login endpoint.
+change-type: minor
+destination-branches: [master]
