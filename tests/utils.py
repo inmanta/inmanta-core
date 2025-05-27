@@ -53,13 +53,15 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, ModuleInstallSpec
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig, SchedulerStatusReport
+from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceIntent
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
+from inmanta.protocol.auth import auth, policy_engine
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.config import AuthorizationProviderName, server_auth_method
 from inmanta.server.extensions import ProductMetadata
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.types import Apireturn, ResourceIdStr
@@ -282,11 +284,31 @@ def assert_no_warning(caplog, loggers_to_allow: list[str] = NOISY_LOGGERS):
         assert record.levelname != "WARNING" or (record.name in loggers_to_allow), str(record) + record.getMessage()
 
 
-def configure_auth(auth: bool, ca: bool, ssl: bool) -> None:
+def configure_auth(
+    auth: bool,
+    ca: bool,
+    ssl: bool,
+    authentication_method: AuthMethod | None = None,
+    authorization_provider: AuthorizationProviderName | None = None,
+    access_policy: str | None = None,
+    path_opa_executable: str | None = None,
+) -> None:
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
     if auth:
         config.Config.set("server", "auth", "true")
-        config.Config.set("server", "authorization-provider", "policy-engine")
+        if authentication_method:
+            server_auth_method.set(authentication_method.value)
+        if authorization_provider:
+            config.Config.set("server", "authorization-provider", authorization_provider.value)
+        if access_policy:
+            assert path_opa_executable is not None
+            state_dir = config.state_dir.get()
+            os.mkdir(os.path.join(state_dir, "policy_engine"))
+            access_policy_file = os.path.join(state_dir, "policy_engine", "policy.rego")
+            with open(access_policy_file, "w") as fh:
+                fh.write(access_policy)
+            policy_engine.policy_file.set(access_policy_file)
+            policy_engine.path_opa_executable.set(path_opa_executable)
     for x, ct in [
         ("server", None),
         ("agent_rest_transport", ["agent"]),
@@ -1109,3 +1131,30 @@ def validate_version_numbers_migration_scripts(versions_folder: pathlib.Path) ->
         if not re.fullmatch(r"v([0-9]{9})\.py", file_name):
             raise Exception(f"Database migration script {file_name} has invalid format.")
     assert v1_found
+
+
+def get_auth_client(
+    env_to_role_dct: dict[str, str], is_admin: bool, client_types: abc.Sequence[const.ClientType] | None = None
+) -> protocol.Client:
+    """
+    Returns a client that uses an access token to authenticate to the server.
+
+    This method changes the `client_rest_transport.token` config option.
+
+    :param env_to_role_dct: A dictionary that maps the id of an environment to a list of roles that user has
+                            in that environment.
+    :param id_admin: A boolean that indicates whether the user is a global admin.
+    :param client_type: A sequence of client_types that should be included in the token.
+    """
+    if client_types is None:
+        client_types = [const.ClientType.api]
+    token = auth.encode_token(
+        client_types=[c.value for c in client_types],
+        expire=None,
+        custom_claims={
+            const.INMANTA_ROLES_URN: env_to_role_dct,
+            const.INMANTA_IS_ADMIN_URN: is_admin,
+        },
+    )
+    config.Config.set("client_rest_transport", "token", token)
+    return protocol.Client("client")
