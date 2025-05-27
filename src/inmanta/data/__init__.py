@@ -4842,18 +4842,6 @@ class Resource(BaseDocument):
         return const.ResourceState(results[0]["status"])
 
     @classmethod
-    async def set_deployed_multi(
-        cls,
-        environment: uuid.UUID,
-        resource_ids: Sequence[ResourceIdStr],
-        version: int,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        query = "UPDATE resource SET status='deployed' WHERE environment=$1 AND model=$2 AND resource_id =ANY($3) "
-        async with cls.get_connection(connection) as connection:
-            await connection.execute(query, environment, version, resource_ids)
-
-    @classmethod
     async def reset_resource_state(
         cls,
         environment: uuid.UUID,

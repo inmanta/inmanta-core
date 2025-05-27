@@ -343,47 +343,6 @@ def strip_version(v):
     return sub(",v=[0-9]+", "", v)
 
 
-async def test_deploy_scenarios(server, client, null_agent, environment, caplog):
-    with caplog.at_level(logging.WARNING):
-        # acquire raw server
-        orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
-        resource_service = server.get_slice(SLICE_RESOURCE)
-
-        # acquire env object
-        env = await data.Environment.get_by_id(uuid.UUID(environment))
-
-        setup = MultiVersionSetup()
-
-        setup.add_resource("R1", "A1 A1 V1 D1", True)
-        setup.add_resource("R2", "A1 E1 D1", True)
-        setup.add_resource("R3", "A1 E1 E1 A1", True)
-        setup.add_resource("R4", "A1 D1", False)
-        setup.add_resource("R5", "A1 A2 D1", False)
-        setup.add_resource("R6", "A1 D2", True)
-        setup.add_resource("R7", "A1 D2 D1", True)
-        setup.add_resource("R8", "D1 A1 E1 D1", False)
-        setup.add_resource("R9", "A1 E2 D1", True)
-        setup.add_resource("R10", "A1 A1 D1", False)
-        setup.add_resource("R13", "A1 A1 A1 A1 A1", True)
-        setup.add_resource("R14", "A1 A1 d1 D1", False)  # issue 5434
-        setup.add_resource("R15", "SU1 A1", False)
-        setup.add_resource("R16", "A1 SU1 A1", True)
-        setup.add_resource("R17", "D1 SU1 A1", False)
-        setup.add_resource("R18", "UD1 A1", False)
-        setup.add_resource("R19", "UD1 D1", False)
-        setup.add_resource("R20", "A1 UD1", True)
-        setup.add_resource("R21", "S1", True)
-        setup.add_resource("R22", "S1 D1", True)
-        setup.add_resource("R23", "A1 S1 D1", True)
-        setup.add_resource("R24", "UA1", True)
-        setup.add_resource("R25", "UA1 D1", True)
-        setup.add_resource("R26", "A1 UA1 D1", True)
-
-        await setup.setup(client, orchestration_service, resource_service, env)
-
-    assert_no_warning(caplog)
-
-
 async def test_deploy_scenarios_added_by_send_event(server, client, null_agent, environment, caplog):
     with caplog.at_level(logging.WARNING):
         # acquire raw server
