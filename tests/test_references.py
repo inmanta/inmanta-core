@@ -378,6 +378,8 @@ def test_ref_serialization():
         def __init__(self, keys):
             super().__init__()
             self.keys = keys
+            self.none_attr = None
+            self.recursive_dict = {"key": {"sub_key": "value"}}
 
     round_trip_ref(TestReference({"a": "A"}))
 
