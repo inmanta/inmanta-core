@@ -31,7 +31,6 @@ import typing_inspect
 from pydantic import ValidationError
 
 import inmanta
-import inmanta.resources
 from inmanta import util
 from inmanta.types import ResourceIdStr, StrictJson
 from inmanta.util import dict_path
@@ -301,6 +300,8 @@ class ReferenceLike:
 
     def serialize_arguments(self) -> Tuple[uuid.UUID, list[ArgumentTypes]]:
         """Serialize the arguments to this class"""
+        # TODO: fix import loop: consider whether references should import resources or be more lightweight
+        import inmanta.resources
         arguments: list[ArgumentTypes] = []
         for name, value in self.arguments.items():
             match value:
@@ -314,9 +315,9 @@ class ReferenceLike:
                 case Reference():
                     model = value.serialize()
                     arguments.append(ReferenceArgument(name=name, id=model.id))
+
                 case inmanta.resources.Resource() as v:
                     arguments.append(ResourceArgument(name=name, id=v.id.resource_str()))
-
                 case type() if value in [str, float, int, bool]:
                     arguments.append(PythonTypeArgument(name=name, value=value.__name__))
 
@@ -540,3 +541,14 @@ def is_reference_of(instance: typing.Optional[object], type_class: type[object])
         return False
 
     return instance.get_reference_type() == type_class
+
+
+# TODO: name
+class UnexpectedReferenceException(Exception):
+    # TODO
+    """
+    """
+
+    def __init__(self, msg: str, reference: Reference[RefValue]):
+        super().__init__(msg)
+        self.reference: Reference[RefValue] = reference

@@ -26,7 +26,6 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
 import inmanta.ast
 import inmanta.util
 from inmanta import const, references
-from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException, RuntimeException
 from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
@@ -92,7 +91,7 @@ class resource:  # noqa: N801
                 # If a Resource inherits from the resource decorator, the server goes into an infinite recursion.
                 # Here we make sure the user gets a clear error message (https://github.com/inmanta/inmanta-core/issues/8817).
                 fq_name_current_resource = f"{resource.__module__}.{resource.__name__}"
-                raise RuntimeException(
+                raise inmanta.ast.RuntimeException(
                     stmt=None,
                     msg=(
                         f"Resource {fq_name_current_resource} is inheriting from the {fq_name_resource_decorator} decorator."
@@ -401,6 +400,7 @@ class Resource(metaclass=ResourceMeta):
                 )
 
         attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
+        # TODO: what about references? What about nested references? Call map_field in strict mode? Already done via None arg
         if isinstance(attribute_value, util.Unknown):
             raise inmanta.ast.UnknownException(attribute_value)
         if not isinstance(agent_value, str):
@@ -427,7 +427,10 @@ class Resource(metaclass=ResourceMeta):
             elif hasattr(cls, "map") and field_name in cls.map:
                 value = cls.map[field_name](exporter, model_object)
             else:
-                value = getattr(model_object, field_name)
+                try:
+                    value = getattr(model_object, field_name)
+                except inmanta.ast.UndeclaredReference as e:
+                    value = e.reference
 
             # walk the entire model to find any value references. Additionally we also want to make sure we raise exceptions on:
             # - Unknowns
@@ -441,13 +444,17 @@ class Resource(metaclass=ResourceMeta):
         except inmanta.ast.UnknownException as e:
             return e.unknown
         except inmanta.ast.PluginException as e:
-            raise ExplicitPluginException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
-        except CompilerException:
+            raise inmanta.ast.ExplicitPluginException(
+                None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e
+            )
+        except inmanta.ast.CompilerException:
             # Internal exceptions (like UnsetException) should be propagated without being wrapped
             # as they are used later on and wrapping them would break the compiler
             raise
         except Exception as e:
-            raise ExternalException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
+            raise inmanta.ast.ExternalException(
+                None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e
+            )
 
     @classmethod
     def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: "proxy.DynamicProxy") -> "Resource":
