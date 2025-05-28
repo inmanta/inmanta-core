@@ -375,7 +375,7 @@ class ToDbUpdateManager(StateUpdateManager):
 
     async def mark_as_orphan(
         self, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
-    ):
+    ) -> None:
         await data.ResourcePersistentState.mark_as_orphan(environment, resource_ids, connection=connection)
 
     async def set_last_processed_model_version(

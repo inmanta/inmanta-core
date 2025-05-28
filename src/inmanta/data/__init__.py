@@ -4501,7 +4501,9 @@ class ResourcePersistentState(BaseDocument):
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
 
     @classmethod
-    async def mark_as_orphan(cls, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None):
+    async def mark_as_orphan(
+        cls, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
+    ) -> None:
         """
         Set the is_orphan column to True on all given resources
         """
