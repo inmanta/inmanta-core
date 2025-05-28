@@ -87,7 +87,7 @@ class CodeManager:
 
         # Bookkeeping to warn only once per module name for modules
         # imported only in plugin code, but not in model code.
-        self._missing_import_module_warnings = []
+        self._missing_import_module_warnings: list[str] = []
 
     def build_agent_map(self, resources: dict["Id", "Resource"]) -> None:
         """
@@ -125,7 +125,6 @@ class CodeManager:
 
         self._register_inmanta_module(module_name, loaded_modules[module_name])
 
-
         registered_agents: set[str] = self._types_to_agent.get(type_name, set())
         self._update_agents_for_module(module_name, registered_agents)
 
@@ -133,8 +132,6 @@ class CodeManager:
         if inmanta_module_name in self.module_version_info:
             # This module was already registered
             return
-
-
 
         module_sources: list[ModuleSource] = []
 
