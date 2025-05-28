@@ -85,6 +85,10 @@ class CodeManager:
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[str, "InmantaModule"] = {}
 
+        # Bookkeeping to warn only once per module name for modules
+        # imported only in plugin code, but not in model code.
+        self._missing_import_module_warnings = []
+
     def build_agent_map(self, resources: dict["Id", "Resource"]) -> None:
         """
         Construct a map of which agents are registered to deploy which resource type.
@@ -108,20 +112,33 @@ class CodeManager:
 
         # get the module
         module_name = get_inmanta_module_name(instance.__module__)
+        loaded_modules = module.Project.get().modules
 
-        self._register_inmanta_module(module_name)
+        if module_name not in loaded_modules:
+            if module_name not in self._missing_import_module_warnings:
+                LOGGER.warning(
+                    "Module %s is imported in plugin code but not in model code. Either remove the unused import, "
+                    "or make sure to import the module in model code." % module_name
+                )
+                self._missing_import_module_warnings.append(module_name)
+            return
+
+        self._register_inmanta_module(module_name, loaded_modules[module_name])
+
 
         registered_agents: set[str] = self._types_to_agent.get(type_name, set())
         self._update_agents_for_module(module_name, registered_agents)
 
-    def _register_inmanta_module(self, inmanta_module_name: str) -> None:
+    def _register_inmanta_module(self, inmanta_module_name: str, module: "module.Module") -> None:
         if inmanta_module_name in self.module_version_info:
             # This module was already registered
             return
 
+
+
         module_sources: list[ModuleSource] = []
 
-        for absolute_path, fqn_module_name in module.Project.get().modules[inmanta_module_name].get_plugin_files():
+        for absolute_path, fqn_module_name in module.get_plugin_files():
             source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
             self.__file_info[absolute_path] = source_info
             module_sources.append(source_info)

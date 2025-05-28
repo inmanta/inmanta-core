@@ -61,7 +61,7 @@ def get_module_source(module: str, code: str) -> ModuleSource:
         (False, {"lorem"}),
     ],
 )
-def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependencies, expected_dependencies):
+def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependencies, expected_dependencies, caplog):
     """Verify the code manager"""
     original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
@@ -78,9 +78,21 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv, install_all_dependen
     import inmanta_plugins.multiple_plugin_files.handlers as multi
     import inmanta_plugins.single_plugin_file as single
 
+    # non_imported_plugin_file was not loaded in the project
+    # we check that a warning is produced when we attempt to register
+    # some of its code
+    import inmanta_plugins.non_imported_plugin_file as non_imported
+
     mgr = loader.CodeManager()
     mgr.register_code("std::testing::NullResource", single.MyHandler)
     mgr.register_code("multiple_plugin_files::NullResourceBis", multi.MyHandler)
+    mgr.register_code("non_imported_plugin_file::NullResourceBis", non_imported.MyHandler)
+
+    assert (
+        "Module non_imported_plugin_file is imported in plugin code but not in model code. "
+        "Either remove the unused import, or make sure to import the module in model code."
+    ) in caplog.messages
+
 
     module_version_info = mgr.get_module_version_info()
     assert "multiple_plugin_files" in module_version_info.keys()
