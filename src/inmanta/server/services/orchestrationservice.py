@@ -659,6 +659,8 @@ class OrchestrationService(protocol.ServerSlice):
         Make sure that all code used in this partial version was
         already registered in the base version.
 
+        Code that is not used by agents in this version is not checked, and should therefore not be updated.
+
         Retrieve which inmanta modules (name, version) were registered for all agents
         for the given base model version.
 
@@ -669,6 +671,7 @@ class OrchestrationService(protocol.ServerSlice):
         base_version_data: dict[tuple[str, str], list[str]] = await AgentModules.get_agents_per_module(
             model_version=partial_base_version, environment=environment, connection=connection
         )
+
         for inmanta_module_name, module_data in module_version_info.items():
             module_version = module_data.version
             if not module_data.for_agents:

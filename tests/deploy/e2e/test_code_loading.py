@@ -640,7 +640,9 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
 
     assert result.code == 200
 
-    await check_code_for_version(version=1, environment=environment, agent_names=["agent_X", "agent_Y"], module_name="test", expected_source=b"#The code")
+    await check_code_for_version(
+        version=1, environment=environment, agent_names=["agent_X", "agent_Y"], module_name="test", expected_source=b"#The code"
+    )
 
     resources = [
         {
@@ -665,7 +667,9 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         module_version_info=module_version_info,
     )
     assert result.code == 200
-    await check_code_for_version(version=2, environment=environment, agent_names=["agent_X", "agent_Y"], module_name="test", expected_source=b"#The code")
+    await check_code_for_version(
+        version=2, environment=environment, agent_names=["agent_X", "agent_Y"], module_name="test", expected_source=b"#The code"
+    )
 
     # 3) Partial export using different module version from the base version should raise an exception:
 
@@ -706,10 +710,12 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         "Invalid request: Cannot perform partial export because the source code for module test in this partial version is "
         "different from the currently registered source code. Consider running a full export instead. Alternatively, if you "
         "are sure the new code is compatible and want to forcefully update, you can bypass this version check with the "
-         "`--force-handler-code-update` CLI option."
+        "`--force-handler-code-update` CLI option."
     )
 
-    await check_code_for_version(version=2, environment=environment, agent_names=["agent_X", "agent_Y"], module_name="test", expected_source=b"#The code")
+    await check_code_for_version(
+        version=2, environment=environment, agent_names=["agent_X", "agent_Y"], module_name="test", expected_source=b"#The code"
+    )
 
     # 4) Make sure we can provide new agents with already registered code:
     module_version_info = {
@@ -747,5 +753,9 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     assert result.code == 200
 
     await check_code_for_version(
-        version=3, environment=environment, agent_names=["agent_X", "agent_Y", "agent_Z"], module_name="test", expected_source=b"#The code"
+        version=3,
+        environment=environment,
+        agent_names=["agent_X", "agent_Y", "agent_Z"],
+        module_name="test",
+        expected_source=b"#The code",
     )
