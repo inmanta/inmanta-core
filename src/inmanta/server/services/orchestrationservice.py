@@ -714,9 +714,10 @@ class OrchestrationService(protocol.ServerSlice):
             base_version_info = await self._check_version_info(
                 partial_base_version, environment, module_version_info, connection
             )
-        await InmantaModule.register_modules(
-            environment=environment, module_version_info=module_version_info, connection=connection
-        )
+        else:
+            await InmantaModule.register_modules(
+                environment=environment, module_version_info=module_version_info, connection=connection
+            )
         await AgentModules.register_modules_for_agents(
             model_version=version,
             environment=environment,
