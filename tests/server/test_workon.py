@@ -578,7 +578,9 @@ async def assert_workon_state(
     assert (python == str(os.path.realpath(expected_dir.join(".env", "bin", "python")))) != invert_python_assert
     assert ps1_prefix == ("" if invert_ps1_assert else f"({arg}) ")
     assert empty == ""
-    assert result.stderr.strip() == expect_stderr.strip()
+    # Ignore the warning about pkg_resources being deprecated until pyformance doesn't use it anymore.
+    stderr = "\n".join([r for r in result.stderr.strip().split("\n") if "pkg_resources" not in r])
+    assert stderr == expect_stderr.strip()
 
 
 @pytest.mark.slowtest
