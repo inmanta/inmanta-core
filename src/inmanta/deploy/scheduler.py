@@ -513,23 +513,17 @@ class ResourceScheduler(TaskManager):
 
         :param connection: Connection to use for db operations. Should not be in a transaction context.
         """
-        try:
-            model: ModelVersion = await self._get_single_model_version_from_db(connection=connection)
-        except KeyError:
-            # No model version has been released yet.
-            return
-        # Rely on the incremental calculation to determine which resources should be deployed and which not.
-        up_to_date_resources: Set[ResourceIdStr]
-        up_to_date_resources, last_deploy_time = await ConfigurationModel.get_last_deployed_and_neg_increment(
-            self.environment, model.version, connection=connection
-        )
-        await self._new_version(
-            [model],
-            up_to_date_resources=up_to_date_resources,
-            last_deploy_time=last_deploy_time,
-            reason="Deploy was triggered because the scheduler was started",
-            connection=connection,
-        )
+        async with self._intent_lock, self.state_update_manager.get_connection(connection) as con:
+            await data.Scheduler._execute_query(
+                f"""
+                        UPDATE {data.ResourcePersistentState.table_name()}
+                        SET blocked=false
+                        WHERE environment=$1
+                    """,
+                self.environment,
+                connection=con,
+            )
+            await self.repair(reason="Recovering scheduler state")
 
     async def deploy(
         self,
