@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import os
+import json
 import uuid
 from dataclasses import dataclass
 from typing import Mapping
@@ -606,3 +607,60 @@ async def test_get_input_for_policy_engine(capture_input_for_policy_engine: Capt
     assert pe_input["input"]["token"]["urn:inmanta:ct"] == ["api"]
     assert pe_input["input"]["token"][const.INMANTA_ROLES_URN] == {env_id: "test"}
     assert pe_input["input"]["token"][const.INMANTA_IS_ADMIN_URN] is False
+
+
+@pytest.mark.parametrize(
+    "access_policy",
+    [
+        """
+        package policy
+
+        default allow := false
+
+        # The environment used in the request
+        request_environment := input.request.parameters[endpoint_data.environment_param] if {
+            endpoint_data.environment_param != null
+        } else := null
+
+        allow if {
+            input.token["urn:inmanta:roles"][request_environment] == "a_role"
+        }
+        """
+    ],
+)
+async def test_claims_set_by_login_endpoint(server_with_test_slice: protocol.Server, authorization_provider: str) -> None:
+    """
+    Verify that claims, included in the authorization token by the login endpoint, can be handled by the policy engine.
+    """
+    env_id = uuid.uuid4()
+    admin_client = utils.get_auth_client(env_to_role_dct={}, is_admin=True)
+
+    # Add user
+    username = "test"
+    password = "testtest"
+    user = data.User(
+        username=username,
+        password_hash=nacl.pwhash.str(password.encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    config.Config.set("client_rest_transport", "token", None)
+    unauth_client = protocol.Client("client")
+
+    result = await unauth_client.login(username=username, password=password)
+    assert result.code == 200
+    config.Config.set("client_rest_transport", "token", result.result["data"]["token"])
+    client = protocol.Client("client")
+    result = await client.environment_scoped_method(env_id)
+    assert result.code == 403
+
+    #result = await admin_client.set_claim(username="test", key="urn:inmanta:roles", value=json.dumps({env_id: "a_role"}))
+    #assert result.code == 200
+
+
+
+
+
+
+
