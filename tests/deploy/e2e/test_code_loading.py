@@ -759,3 +759,24 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         module_name="test",
         expected_source=b"#The code",
     )
+
+    # 5) Make sure we can force code update via the force_handler_code_update option
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        resource_sets=resource_sets,
+        module_version_info=mismatched_module_version_info,
+        force_handler_code_update=True,
+    )
+    assert result.code == 200
+    await check_code_for_version(
+        version=4,
+        environment=environment,
+        agent_names=["agent_X", "agent_Y", "agent_Z"],
+        module_name="test",
+        expected_source=b"#The OTHER code",
+    )
