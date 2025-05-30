@@ -39,6 +39,7 @@ from inmanta.agent.executor import DeployReport
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource
 from inmanta.deploy import scheduler
+from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
@@ -739,7 +740,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
 
     dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=client)
 
-    async def make_resource_set(tenant_index: int, iteration: int) -> int:
+    async def make_resource_set(tenant_index: int, iteration: int) -> list[dict[str, object]]:
         is_full = tenant_index == 0 and iteration == 0
         if is_full:
             version = await clienthelper.get_version()
@@ -834,11 +835,20 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 )
 
         await asyncio.gather(*(deploy(resource) for resource in resources_in_increment_for_agent))
+        return resources_in_increment_for_agent
 
+    first_iteration_resources = {}
     for iteration in [0, 1]:
         for tenant in range(instances):
-            await make_resource_set(tenant, iteration)
+            resources = await make_resource_set(tenant, iteration)
             logging.getLogger(__name__).warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
+            # Since we are using null_agent we need to manually mark orphans
+            if iteration == 0:
+                first_iteration_resources[tenant] = {Id.parse_id(res["id"]).resource_str() for res in resources}
+            elif iteration == 1:
+                new_rids = {Id.parse_id(res["id"]).resource_str() for res in resources}
+                orphans = first_iteration_resources[tenant] - new_rids
+                await dummy_scheduler.state_update_manager.mark_as_orphan(environment=environment, resource_ids=orphans)
 
     return instances
 
