@@ -1,0 +1,4 @@
+change-type: patch
+description: Add deprecation warning to resource_action_update
+destination-branches:
+- iso8

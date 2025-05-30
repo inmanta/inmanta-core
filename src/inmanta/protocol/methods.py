@@ -458,6 +458,8 @@ def resource_action_update(
     send_events: bool = False,
 ):
     """
+    [DEPRECATED]: This api method will be removed in iso9
+
     Send a resource update to the server
 
     :param tid: The id of the environment this resource belongs to
