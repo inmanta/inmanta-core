@@ -40,7 +40,7 @@ from inmanta import const
 from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
-from inmanta.const import Change
+from inmanta.const import Change, ExecutorStatus
 from inmanta.data import LogLine
 from inmanta.data.model import AttributeStateChange, ModuleSource, PipConfig
 from inmanta.env import PythonEnvironment
@@ -511,6 +511,7 @@ class DeployReport:
     messages: list[LogLine]
     changes: dict[str, AttributeStateChange]
     change: Optional[Change]
+    executor_status: ExecutorStatus = ExecutorStatus.down
 
     def __post_init__(self) -> None:
         if self.status in {*const.TRANSIENT_STATES, *const.UNDEPLOYABLE_STATES, const.ResourceState.dry}:
@@ -528,7 +529,7 @@ class DeployReport:
         return const.ResourceState(self.resource_state)
 
     @classmethod
-    def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext) -> "DeployReport":
+    def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext, executor_status:ExecutorStatus) -> "DeployReport":
         if ctx.status is None:
             ctx.warning("Deploy status field is None, failing!")
             ctx.set_resource_state(const.HandlerResourceState.failed)
@@ -541,6 +542,7 @@ class DeployReport:
             messages=ctx.logs,
             changes=ctx.changes,
             change=ctx.change,
+            executor_status=executor_status,
         )
 
     @classmethod
@@ -552,6 +554,7 @@ class DeployReport:
             messages=[message],
             changes={},
             change=Change.nochange,
+            executor_status=ExecutorStatus.down,
         )
 
 

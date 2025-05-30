@@ -494,7 +494,7 @@ WITH agent_counts AS (
                     AND a_inner.name=$1
                     AND a_inner.id_primary IS NOT NULL
             )
-                THEN 'up'
+                THEN a.executor_status
                 ELSE 'down'
         END AS status,
         COUNT(*)

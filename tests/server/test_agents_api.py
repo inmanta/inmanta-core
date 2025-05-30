@@ -15,7 +15,7 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
-
+import asyncio
 import datetime
 import json
 import uuid
@@ -39,10 +39,13 @@ async def env_with_agents(client, environment: str) -> None:
 
     # create scheduler
     process_sid = uuid.uuid4()
+    breakpoint()
     await data.AgentProcess(hostname="localhost", environment=env_uuid, sid=process_sid).insert()
     id_primary = uuid.uuid4()
     await data.AgentInstance(id=id_primary, process=process_sid, name="scheduler-instance", tid=env_uuid).insert()
+    breakpoint()
     scheduler_agent = await data.Agent.get_one(environment=env_uuid, name=inmanta.const.AGENT_SCHEDULER_ID)
+    breakpoint()
     await scheduler_agent.update(id_primary=id_primary, last_failover=(datetime.datetime.now() - datetime.timedelta(minutes=5)))
 
     async def create_agent(

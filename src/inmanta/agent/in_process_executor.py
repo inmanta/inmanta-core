@@ -30,7 +30,7 @@ from inmanta import const, data, env, tracing
 from inmanta.agent import executor, handler
 from inmanta.agent.executor import DeployReport, DryrunReport, FailedInmantaModules, GetFactReport, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
-from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
+from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource, ExecutorStatus
 from inmanta.data.model import AttributeStateChange
 from inmanta.loader import CodeLoader
 from inmanta.references import MutatorMissingError, ReferenceMissingError
@@ -273,7 +273,12 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             if set_fact_response.code != 200:
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-        return DeployReport.from_ctx(resource_details.rvid, ctx)
+        executor_status=ExecutorStatus.up
+
+        if self.failed_modules:
+            executor_status=ExecutorStatus.degraded
+
+        return DeployReport.from_ctx(resource_details.rvid, ctx, executor_status=executor_status)
 
     async def dry_run(
         self,
