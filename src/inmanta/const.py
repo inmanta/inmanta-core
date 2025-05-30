@@ -345,6 +345,7 @@ class AgentStatus(str, Enum):
     up = "up"
     down = "down"
 
+
 class ExecutorStatus(str, Enum):
     """
     Status of the executor of a logical agent:
@@ -352,6 +353,7 @@ class ExecutorStatus(str, Enum):
         - degraded: the executor didn't successfully load all handler code
         - up: the executor came up successfully
     """
+
     up = "up"
     degraded = "degraded"
     down = "down"

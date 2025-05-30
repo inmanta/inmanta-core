@@ -465,7 +465,9 @@ class AgentManager(ServerSlice, SessionListener):
             LOGGER.debug("Removing endpoints %s from session %s on %s", endpoints_to_remove, session.id, session.nodename)
 
             endpoints_with_new_primary += await self._failover_endpoints(session, endpoints_to_remove)
-            endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session, endpoints_to_add) # TODO look into _ensure_primary_if_not_exists
+            endpoints_with_new_primary += await self._ensure_primary_if_not_exists(
+                session, endpoints_to_add
+            )  # TODO look into _ensure_primary_if_not_exists
             self.endpoints_for_sid[session.id] = endpoints_in_session
 
         self.add_background_task(
@@ -601,7 +603,9 @@ class AgentManager(ServerSlice, SessionListener):
         new_active_session = self._get_session_to_failover_agent(tid, endpoint_name)
         if new_active_session:
             self.tid_endpoint_to_session[key] = new_active_session
-            set_state_call = new_active_session.get_client().set_state(endpoint_name, enabled=True)  # TODO can endpoint name be != scheduler_id ?
+            set_state_call = new_active_session.get_client().set_state(
+                endpoint_name, enabled=True
+            )  # TODO can endpoint name be != scheduler_id ?
             self.add_background_task(set_state_call)
         elif key in self.tid_endpoint_to_session:
             del self.tid_endpoint_to_session[key]
@@ -627,7 +631,9 @@ class AgentManager(ServerSlice, SessionListener):
             if key not in self.tid_endpoint_to_session and agent_statuses[endpoint] != AgentStatus.paused:
                 LOGGER.debug("set session %s as primary for agent %s in env %s", session.id, endpoint, session.tid)
                 self.tid_endpoint_to_session[key] = session
-                self.add_background_task(session.get_client().set_state(endpoint, enabled=True))   # TODO can endpoint name be != scheduler_id ?
+                self.add_background_task(
+                    session.get_client().set_state(endpoint, enabled=True)
+                )  # TODO can endpoint name be != scheduler_id ?
                 result.append((endpoint, session.id))
         return result
 

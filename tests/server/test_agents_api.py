@@ -15,7 +15,7 @@ limitations under the License.
 
 Contact: code@inmanta.com
 """
-import asyncio
+
 import datetime
 import json
 import uuid

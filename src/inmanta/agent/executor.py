@@ -529,7 +529,7 @@ class DeployReport:
         return const.ResourceState(self.resource_state)
 
     @classmethod
-    def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext, executor_status:ExecutorStatus) -> "DeployReport":
+    def from_ctx(cls, rvid: ResourceVersionIdStr, ctx: HandlerContext, executor_status: ExecutorStatus) -> "DeployReport":
         if ctx.status is None:
             ctx.warning("Deploy status field is None, failing!")
             ctx.set_resource_state(const.HandlerResourceState.failed)
