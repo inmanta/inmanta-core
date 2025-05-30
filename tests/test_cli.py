@@ -22,9 +22,11 @@ import uuid
 
 import pytest
 
-from inmanta import data
-from inmanta.const import Change, ResourceAction, ResourceState
-from inmanta.util import get_compiler_version
+from inmanta import const, data
+from inmanta.agent import executor
+from inmanta.deploy import persistence, state
+from inmanta.resources import Id
+from inmanta.util import get_compiler_version, make_attribute_hash
 from utils import get_resource
 
 
@@ -375,55 +377,61 @@ async def test_list_actionlog(server, environment, client, cli, null_agent, clie
     resource2 = get_resource(version, key="test2")
     await clienthelper.put_version_simple(resources=[resource1, resource2], version=version, wait_for_released=True)
 
-    result = await null_agent._client.resource_action_update(
-        tid=environment,
-        resource_ids=[resource1["id"]],
-        action_id=uuid.uuid4(),
-        action=ResourceAction.deploy,
-        started=datetime.datetime.now(),
-        finished=datetime.datetime.now(),
-        status=ResourceState.failed,
-        messages=[
-            {
-                "level": "INFO",
-                "msg": "Deploying",
-                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
-                "args": [],
-            },
-            {
-                "level": "ERROR",
-                "msg": "Deployment failed",
-                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
-                "args": [],
-                "status": ResourceState.failed.value,
-            },
-        ],
-        changes={},
-        change=Change.nochange,
-        send_events=False,
+    action_id = uuid.uuid4()
+    env_id = uuid.UUID(environment)
+    update_manager = persistence.ToDbUpdateManager(client, env_id)
+    now = datetime.datetime.now()
+    rid1 = Id.parse_id(resource1["id"])
+    await update_manager.send_in_progress(action_id, rid1)
+
+    await update_manager.send_deploy_done(
+        attribute_hash=make_attribute_hash(resource_id=rid1.resource_str(), attributes=resource1),
+        result=executor.DeployReport(
+            rvid=rid1.resource_version_str(),
+            action_id=action_id,
+            resource_state=const.HandlerResourceState.failed,
+            messages=[
+                data.LogLine.log(level=const.LogLevel.INFO, msg="Deploying", timestamp=now),
+                data.LogLine.log(level=const.LogLevel.ERROR, msg="Deployment failed", timestamp=now),
+            ],
+            changes={},
+            change=const.Change.nochange,
+        ),
+        state=state.ResourceState(
+            compliance=state.Compliance.NON_COMPLIANT,
+            last_deploy_result=state.DeployResult.FAILED,
+            blocked=state.Blocked.NOT_BLOCKED,
+            last_deployed=now,
+        ),
+        started=now,
+        finished=now,
     )
-    assert result.code == 200, result.result
-    result = await null_agent._client.resource_action_update(
-        tid=environment,
-        resource_ids=[resource2["id"]],
-        action_id=uuid.uuid4(),
-        action=ResourceAction.deploy,
-        started=datetime.datetime.now(),
-        finished=datetime.datetime.now(),
-        status=ResourceState.deployed,
-        messages=[
-            {
-                "level": "INFO",
-                "msg": "Deployed successfully",
-                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
-                "args": [],
-            },
-        ],
-        changes={},
-        change=Change.nochange,
-        send_events=False,
+
+    action_id = uuid.uuid4()
+    rid2 = Id.parse_id(resource2["id"])
+    await update_manager.send_in_progress(action_id, rid2)
+    await update_manager.send_deploy_done(
+        attribute_hash=make_attribute_hash(resource_id=rid2.resource_str(), attributes=resource2),
+        result=executor.DeployReport(
+            rvid=rid2.resource_version_str(),
+            action_id=action_id,
+            resource_state=const.HandlerResourceState.deployed,
+            messages=[
+                data.LogLine.log(level=const.LogLevel.INFO, msg="Deploying", timestamp=now),
+                data.LogLine.log(level=const.LogLevel.INFO, msg="Deployed successfully", timestamp=now),
+            ],
+            changes={},
+            change=const.Change.nochange,
+        ),
+        state=state.ResourceState(
+            compliance=state.Compliance.COMPLIANT,
+            last_deploy_result=state.DeployResult.DEPLOYED,
+            blocked=state.Blocked.NOT_BLOCKED,
+            last_deployed=now,
+        ),
+        started=now,
+        finished=now,
     )
-    assert result.code == 200
 
     # Get all resource actions for resource1
     result = await cli.run("action-log", "list", "-e", str(environment), "--rvid", resource1["id"])
@@ -460,36 +468,39 @@ async def test_show_messages_actionlog(server, environment, client, cli, null_ag
     resource1 = get_resource(version, key="test1")
     await clienthelper.put_version_simple(resources=[resource1], version=version, wait_for_released=True)
 
-    result = await null_agent._client.resource_action_update(
-        tid=environment,
-        resource_ids=[resource1["id"]],
-        action_id=uuid.uuid4(),
-        action=ResourceAction.deploy,
-        started=datetime.datetime.now(),
-        finished=datetime.datetime.now(),
-        status=ResourceState.deployed,
-        messages=[
-            {
-                "level": "DEBUG",
-                "msg": "Started deployment",
-                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
-                "args": [],
-            },
-            {
-                "level": "INFO",
-                "msg": "Deployed successfully",
-                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
-                "args": [],
-            },
-        ],
-        changes={},
-        change=Change.nochange,
-        send_events=False,
+    update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
+    res1_id = Id.parse_id(resource1["id"])
+    action_id = uuid.uuid4()
+    await update_manager.send_in_progress(action_id, res1_id)
+    assert result.code == 200
+    now = datetime.datetime.now().astimezone()
+    messages = [
+        data.LogLine.log(level=const.LogLevel.DEBUG, msg="Started deployment", timestamp=now, keyword=123, none=None),
+        data.LogLine.log(level=const.LogLevel.INFO, msg="Deployed successfully", timestamp=now),
+    ]
+    await update_manager.send_deploy_done(
+        attribute_hash=make_attribute_hash(resource_id=res1_id.resource_str(), attributes=resource1),
+        result=executor.DeployReport(
+            rvid=res1_id.resource_version_str(),
+            action_id=action_id,
+            resource_state=const.HandlerResourceState.deployed,
+            messages=messages,
+            changes={},
+            change=const.Change.nochange,
+        ),
+        state=state.ResourceState(
+            compliance=state.Compliance.COMPLIANT,
+            last_deploy_result=state.DeployResult.DEPLOYED,
+            blocked=state.Blocked.NOT_BLOCKED,
+            last_deployed=now,
+        ),
+        started=now,
+        finished=now,
     )
     assert result.code == 200
 
     # Obtain action_id
-    result = await client.get_resource(tid=environment, id=resource1["id"], logs=True, log_action=ResourceAction.deploy)
+    result = await client.get_resource(tid=environment, id=resource1["id"], logs=True, log_action=const.ResourceAction.deploy)
     assert result.code == 200
     assert len(result.result["logs"]) == 1
     action_id = result.result["logs"][0]["action_id"]

@@ -1,0 +1,5 @@
+description: Removed the resource_action_update endpoint
+change-type: major
+destination-branches: [master]
+sections:
+  deprecation-note: "{{description}}"

@@ -18,7 +18,6 @@ Contact: code@inmanta.com
 Module defining the v1 rest api
 """
 
-import datetime
 import uuid
 from typing import Any, Literal, Optional, Union
 
@@ -442,40 +441,6 @@ def get_resource(
                       To retrieve more entries, use  /api/v2/resource_actions
                       (:func:`~inmanta.protocol.methods_v2.get_resource_actions`)
                       If None, a default limit (set to 1000) is applied.
-    """
-
-
-@method(path="/resource", operation="POST", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
-def resource_action_update(
-    tid: uuid.UUID,
-    resource_ids: list,
-    action_id: uuid.UUID,
-    action: const.ResourceAction,
-    started: Optional[datetime.datetime] = None,
-    finished: Optional[datetime.datetime] = None,
-    status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]] = None,
-    messages: list = [],
-    changes: dict = {},
-    change: Optional[const.Change] = None,
-    send_events: bool = False,
-):
-    """
-    Send a resource update to the server
-
-    :param tid: The id of the environment this resource belongs to
-    :param resource_ids: The resource with the given resource_version_id id from the agent
-    :param action_id: A unique id to indicate the resource action that has be updated
-    :param action: The action performed
-    :param started: Optional. The timestamp when this action was started. When this action (action_id) has not been saved yet,
-                    started has to be defined.
-    :param finished: Optional. The timestamp when this action was finished. Afterwards, no changes with the same action_id
-                    can be stored. The status field also has to be set.
-    :param status: Optional. The current status of the resource (if known)
-    :param messages: Optional. A list of log entries to add to this entry.
-    :param changes: Optional. A dict of changes to this resource. The key of this dict indicates the attributes/fields that
-                   have been changed. The value contains the new value and/or the original value.
-    :param change: Optional. The result of the changes
-    :param send_events: Optional. [DEPRECATED] The value of this field is not used anymore.
     """
 
 

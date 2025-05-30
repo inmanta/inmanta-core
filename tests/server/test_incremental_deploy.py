@@ -29,8 +29,7 @@ import pytest
 
 from inmanta import const, data, util
 from inmanta.agent.executor import DeployReport
-from inmanta.const import Change, ResourceAction, ResourceState
-from inmanta.data.model import ResourceId
+from inmanta.const import Change, ResourceState
 from inmanta.deploy import persistence, state
 from inmanta.resources import Id
 from inmanta.server import SLICE_ORCHESTRATION, SLICE_RESOURCE
@@ -52,12 +51,11 @@ class MultiVersionSetup:
     E  - error
     D  - deployed
     d  - deploying
-    p  - processing events
     SU - skipped for undefined
     UD - undefined
     """
 
-    scenario_step_regex = re.compile(r"(A|E|D|d|p|S|SU|UA|UD)([0-9]+)")
+    scenario_step_regex = re.compile(r"(A|E|D|d|S|SU|UA|UD)([0-9]+)")
 
     def __init__(self):
         self.firstversion: int = 100
@@ -141,8 +139,9 @@ class MultiVersionSetup:
             self.states_per_version[v][rvid] = state
         return rid
 
-    async def setup(self, serverdirect: OrchestrationService, resource_service: ResourceService, env: data.Environment):
+    async def setup(self, client, serverdirect: OrchestrationService, resource_service: ResourceService, env: data.Environment):
         latest_released_version = -1
+        update_manager = persistence.ToDbUpdateManager(client, env.id)
         for version in range(0, len(self.versions)):
             # allocate a bunch of versions!
             v = await env.get_next_version()
@@ -171,24 +170,52 @@ class MultiVersionSetup:
                 if resource_state == const.ResourceState.available:
                     # initial state can not be set
                     continue
+                parsed_rid = Id.parse_id(rid)
+                await update_manager.send_in_progress(action_id, parsed_rid)
                 if resource_state not in const.TRANSIENT_STATES:
-                    finished = now
-                else:
-                    finished = None
-                result = await resource_service.resource_action_update(
-                    env,
-                    [rid],
-                    action_id,
-                    ResourceAction.deploy,
-                    now,
-                    finished,
-                    status=resource_state,
-                    messages=[],
-                    changes={},
-                    change=None,
-                    send_events=False,
-                )
-                assert result == 200
+                    # Handler resource state
+                    match resource_state:
+                        case const.ResourceState.deployed:
+                            handler_resource_state = const.HandlerResourceState.deployed
+                        case const.ResourceState.failed:
+                            handler_resource_state = const.HandlerResourceState.failed
+                        case const.ResourceState.unavailable:
+                            handler_resource_state = const.HandlerResourceState.unavailable
+                        case _:
+                            handler_resource_state = const.HandlerResourceState.skipped
+                    # Compliance
+                    match resource_state:
+                        case const.ResourceState.deployed:
+                            compliance = state.Compliance.COMPLIANT
+                        case const.ResourceState.undefined:
+                            compliance = state.Compliance.UNDEFINED
+                        case _:
+                            compliance = state.Compliance.NON_COMPLIANT
+                    await update_manager.send_deploy_done(
+                        attribute_hash=util.make_attribute_hash(
+                            resource_id=parsed_rid.resource_str(), attributes=self.versions[version][0]
+                        ),
+                        result=DeployReport(
+                            rvid=parsed_rid.resource_version_str(),
+                            action_id=action_id,
+                            resource_state=handler_resource_state,
+                            messages=[],
+                            changes={},
+                            change=const.Change.nochange,
+                        ),
+                        state=state.ResourceState(
+                            compliance=compliance,
+                            last_deploy_result=state.DeployResult.DEPLOYED,
+                            blocked=(
+                                state.Blocked.BLOCKED
+                                if handler_resource_state is const.HandlerResourceState.skipped
+                                else state.Blocked.NOT_BLOCKED
+                            ),
+                            last_deployed=now,
+                        ),
+                        started=now,
+                        finished=now,
+                    )
 
         assert latest_released_version != -1
 
@@ -204,14 +231,13 @@ class MultiVersionSetup:
         } == set(pos).union(set(neg))
 
 
-async def test_deploy(server, null_agent, environment, caplog, clienthelper):
+async def test_deploy(server, client, null_agent, environment, caplog, clienthelper):
     """
     Test basic deploy mechanism mocking
     """
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
-        resource_service = server.get_slice(SLICE_RESOURCE)
 
         # acquire env object
         env = await data.Environment.get_by_id(uuid.UUID(environment))
@@ -260,25 +286,33 @@ async def test_deploy(server, null_agent, environment, caplog, clienthelper):
         result, _ = await orchestration_service.release_version(env, version, False)
         assert result == 200
 
-        resource_ids = [x["id"] for x in resources]
+        # Deploy each resource
+        update_manager = persistence.ToDbUpdateManager(client, env.id)
+        for resource in resources:
+            action_id = uuid.uuid4()
+            now = datetime.now()
+            rid = Id.parse_id(resource["id"])
+            await update_manager.send_in_progress(action_id, rid)
 
-        # Start the deploy
-        action_id = uuid.uuid4()
-        now = datetime.now()
-        result = await resource_service.resource_action_update(
-            env,
-            resource_ids,
-            action_id,
-            const.ResourceAction.deploy,
-            now,
-            now,
-            status=ResourceState.deployed,
-            messages=[],
-            changes={},
-            change=None,
-            send_events=False,
-        )
-        assert result == 200
+            await update_manager.send_deploy_done(
+                attribute_hash=util.make_attribute_hash(resource_id=rid.resource_str(), attributes=resource),
+                result=DeployReport(
+                    rvid=rid.resource_version_str(),
+                    action_id=action_id,
+                    resource_state=const.HandlerResourceState.deployed,
+                    messages=[],
+                    changes={},
+                    change=const.Change.updated,
+                ),
+                state=state.ResourceState(
+                    compliance=state.Compliance.COMPLIANT,
+                    last_deploy_result=state.DeployResult.DEPLOYED,
+                    blocked=state.Blocked.NOT_BLOCKED,
+                    last_deployed=now,
+                ),
+                started=now,
+                finished=now,
+            )
 
         result, payload = await orchestration_service.get_version(env, version)
         assert result == 200
@@ -309,48 +343,7 @@ def strip_version(v):
     return sub(",v=[0-9]+", "", v)
 
 
-async def test_deploy_scenarios(server, null_agent, environment, caplog):
-    with caplog.at_level(logging.WARNING):
-        # acquire raw server
-        orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
-        resource_service = server.get_slice(SLICE_RESOURCE)
-
-        # acquire env object
-        env = await data.Environment.get_by_id(uuid.UUID(environment))
-
-        setup = MultiVersionSetup()
-
-        setup.add_resource("R1", "A1 A1 V1 D1", True)
-        setup.add_resource("R2", "A1 E1 D1", True)
-        setup.add_resource("R3", "A1 E1 E1 A1", True)
-        setup.add_resource("R4", "A1 D1", False)
-        setup.add_resource("R5", "A1 A2 D1", False)
-        setup.add_resource("R6", "A1 D2", True)
-        setup.add_resource("R7", "A1 D2 D1", True)
-        setup.add_resource("R8", "D1 A1 E1 D1", False)
-        setup.add_resource("R9", "A1 E2 D1", True)
-        setup.add_resource("R10", "A1 A1 D1", False)
-        setup.add_resource("R13", "A1 A1 A1 A1 A1", True)
-        setup.add_resource("R14", "A1 A1 d1 D1", False)  # issue 5434
-        setup.add_resource("R15", "SU1 A1", False)
-        setup.add_resource("R16", "A1 SU1 A1", True)
-        setup.add_resource("R17", "D1 SU1 A1", False)
-        setup.add_resource("R18", "UD1 A1", False)
-        setup.add_resource("R19", "UD1 D1", False)
-        setup.add_resource("R20", "A1 UD1", True)
-        setup.add_resource("R21", "S1", True)
-        setup.add_resource("R22", "S1 D1", True)
-        setup.add_resource("R23", "A1 S1 D1", True)
-        setup.add_resource("R24", "UA1", True)
-        setup.add_resource("R25", "UA1 D1", True)
-        setup.add_resource("R26", "A1 UA1 D1", True)
-
-        await setup.setup(orchestration_service, resource_service, env)
-
-    assert_no_warning(caplog)
-
-
-async def test_deploy_scenarios_added_by_send_event(server, null_agent, environment, caplog):
+async def test_deploy_scenarios_added_by_send_event(server, client, null_agent, environment, caplog):
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         orchestration_service = server.get_slice(SLICE_ORCHESTRATION)
@@ -367,12 +360,12 @@ async def test_deploy_scenarios_added_by_send_event(server, null_agent, environm
         setup.add_resource("R4", "A1 D1", True, requires=[id3])
         setup.add_resource("R5", "A1 D1", False, requires=[id2])
 
-        await setup.setup(orchestration_service, resource_service, env)
+        await setup.setup(client, orchestration_service, resource_service, env)
 
     assert_no_warning(caplog)
 
 
-async def test_deploy_scenarios_added_by_send_event_cad(server, null_agent, environment, caplog):
+async def test_deploy_scenarios_added_by_send_event_cad(server, client, null_agent, environment, caplog):
     # ensure CAD does not change send_event
     with caplog.at_level(logging.WARNING):
         # acquire raw server
@@ -391,14 +384,13 @@ async def test_deploy_scenarios_added_by_send_event_cad(server, null_agent, envi
         setup.add_resource("R5", "A1 D1", False, requires=[id2])
 
         setup.add_resource("R6", "A1 D1", False, requires=[id1], agent="agent2")
-        await setup.setup(orchestration_service, resource_service, env)
+        await setup.setup(client, orchestration_service, resource_service, env)
 
     assert_no_warning(caplog)
 
 
 async def test_deploy_cad_double(server, null_agent, environment, caplog, client, clienthelper):
     version = await clienthelper.get_version()
-    rid = ResourceId("test::Resource[agent1,key=key1]")
     rvid = ResourceVersionIdStr(f"test::Resource[agent1,key=key1],v={version}")
     rvid2 = ResourceVersionIdStr(f"test::Resource[agent2,key=key2],v={version}")
 
@@ -428,9 +420,10 @@ async def test_deploy_cad_double(server, null_agent, environment, caplog, client
         update_manager = persistence.ToDbUpdateManager(client, uuid.UUID(environment))
         action_id = uuid.uuid4()
         start_time: datetime = datetime.now().astimezone()
-        await update_manager.send_in_progress(action_id, Id.parse_id(rvid))
+        rid = Id.parse_id(rvid)
+        await update_manager.send_in_progress(action_id, rid)
         await update_manager.send_deploy_done(
-            attribute_hash=util.make_attribute_hash(resource_id=rid, attributes=resources[0]),
+            attribute_hash=util.make_attribute_hash(resource_id=rid.resource_str(), attributes=resources[0]),
             result=DeployReport(
                 rvid=rvid,
                 action_id=action_id,

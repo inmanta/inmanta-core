@@ -22,14 +22,13 @@ import logging
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Sequence
-from typing import Any, Optional, Union, cast
+from typing import Any, Optional, cast
 
 from asyncpg.connection import Connection
 from pydantic import ValidationError
 from tornado.httputil import url_concat
 
 from inmanta import const, data, util
-from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT, InvalidSort, model
 from inmanta.data.dataview import (
     DiscoveredResourceView,
@@ -50,10 +49,9 @@ from inmanta.data.model import (
     VersionedResource,
     VersionedResourceDetails,
 )
-from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
-from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_RESOURCE, SLICE_TRANSPORT, agentmanager
@@ -62,7 +60,6 @@ from inmanta.server import extensions, protocol
 from inmanta.server.services.environmentlistener import EnvironmentAction, EnvironmentListener
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceType, ResourceVersionIdStr
-from inmanta.util import parse_timestamp
 
 resource_discovery = extensions.BoolFeature(
     slice=SLICE_RESOURCE,
@@ -302,242 +299,6 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
                     self._increment_cache[env.id] = (version, positive, negative, negative_per_agent, run_ahead_lock)
         return increment
 
-    @handle(methods.resource_action_update, env="tid")
-    async def resource_action_update(
-        self,
-        env: data.Environment,
-        resource_ids: list[ResourceVersionIdStr],
-        action_id: uuid.UUID,
-        action: const.ResourceAction,
-        started: datetime.datetime,
-        finished: datetime.datetime,
-        status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
-        messages: list[dict[str, Any]],
-        changes: dict[ResourceVersionIdStr, dict[str, object]],
-        change: const.Change,
-        send_events: bool,
-        keep_increment_cache: bool = False,
-        only_update_from_states: Optional[set[const.ResourceState]] = None,
-        *,
-        connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
-    ) -> Apireturn:
-        def convert_legacy_state(
-            status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
-        ) -> Optional[const.ResourceState]:
-            if status is None or isinstance(status, const.ResourceState):
-                return status
-            if status == const.DeprecatedResourceState.processing_events:
-                return const.ResourceState.deploying
-            else:
-                raise BadRequest(f"Unsupported deprecated resources state {status.value}")
-
-        # TODO: get rid of this?
-        status = convert_legacy_state(status)
-
-        # can update resource state
-        is_resource_state_update = action in STATE_UPDATE
-        # this ra is finishing
-        is_resource_action_finished = finished is not None
-
-        if is_resource_state_update:
-            # if status update, status is required
-            if status is None:
-                error_and_log(
-                    "Cannot perform state update without a status.",
-                    resource_ids=resource_ids,
-                    action=action,
-                    action_id=action_id,
-                )
-            # and needs to be valid
-            if status not in VALID_STATES_ON_STATE_UPDATE:
-                error_and_log(
-                    f"Status {status} is not valid on action {action}",
-                    resource_ids=resource_ids,
-                    action=action,
-                    action_id=action_id,
-                )
-            if status in TRANSIENT_STATES:
-                if not is_resource_action_finished:
-                    pass
-                else:
-                    error_and_log(
-                        "The finished field must not be set for transient states",
-                        status=status,
-                        resource_ids=resource_ids,
-                        action=action,
-                        action_id=action_id,
-                    )
-            else:
-                if is_resource_action_finished:
-                    pass
-                else:
-                    error_and_log(
-                        "The finished field must be set for none transient states",
-                        status=status,
-                        resource_ids=resource_ids,
-                        action=action,
-                        action_id=action_id,
-                    )
-
-        assert all(Id.is_resource_version_id(rvid) for rvid in resource_ids)
-
-        resources: list[data.Resource]
-        async with data.Resource.get_connection(connection.connection) as inner_connection:
-            async with inner_connection.transaction():
-                # validate resources
-                resources = await data.Resource.get_resources(
-                    env.id,
-                    resource_ids,
-                    # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
-                    # cascading deletes
-                    lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
-                    connection=inner_connection,
-                )
-                if len(resources) == 0 or (len(resources) != len(resource_ids)):
-                    raise NotFound(
-                        message="The resources with the given ids do not exist in the given environment. "
-                        f"Only {len(resources)} of {len(resource_ids)} resources found."
-                    )
-
-                if only_update_from_states is not None:
-                    resources = [resource for resource in resources if resource.status in only_update_from_states]
-                    if not resources:
-                        return 200, {"message": "no resources with the given state found"}
-                    resource_ids = [resource.resource_version_id for resource in resources]
-
-                # validate transitions
-                if is_resource_state_update:
-                    # no escape from terminal
-                    if any(resource.status != status and resource.status in TERMINAL_STATES for resource in resources):
-                        LOGGER.error("Attempting to set undeployable resource to deployable state")
-                        raise AssertionError("Attempting to set undeployable resource to deployable state")
-
-                version = Id.parse_id(resource_ids[0]).version
-
-                # get instance
-                resource_action = await data.ResourceAction.get(action_id=action_id, connection=inner_connection)
-                if resource_action is None:
-                    # new
-                    if started is None:
-                        raise ServerError(message="A resource action can only be created with a start datetime.")
-
-                    resource_action = data.ResourceAction(
-                        environment=env.id,
-                        version=version,
-                        resource_version_ids=resource_ids,
-                        action_id=action_id,
-                        action=action,
-                        started=started,
-                    )
-                    await resource_action.insert(connection=inner_connection)
-                else:
-                    # existing
-                    if resource_action.finished is not None:
-                        raise ServerError(
-                            message="An resource action can only be updated when it has not been finished yet. This action "
-                            f"finished at {resource_action.finished}"
-                        )
-                for msg in messages:
-                    # All other data is stored in the database. The msg was already formatted at the client side.
-                    self.log_resource_action(
-                        env.id,
-                        resource_ids,
-                        const.LogLevel(msg["level"]).to_int,
-                        parse_timestamp(msg["timestamp"]),
-                        msg["msg"],
-                    )
-                await resource_action.set_and_save(
-                    messages=[
-                        {
-                            **msg,
-                            "timestamp": parse_timestamp(msg["timestamp"]).isoformat(timespec="microseconds"),
-                        }
-                        for msg in messages
-                    ],
-                    changes=changes,
-                    status=status,
-                    change=change,
-                    finished=finished,
-                    connection=inner_connection,
-                )
-
-                if is_resource_state_update:
-                    # transient resource update
-                    is_undefined = status is const.ResourceState.undefined
-                    if not is_resource_action_finished:
-                        for res in resources:
-                            await res.update_fields(status=status, is_undefined=is_undefined, connection=inner_connection)
-                        if not keep_increment_cache:
-                            self.clear_env_cache(env)
-                        return 200
-
-                    else:
-                        # final resource update
-                        if not keep_increment_cache:
-                            self.clear_env_cache(env)
-
-                        for res in resources:
-                            await res.update_fields(
-                                status=status,
-                                is_undefined=is_undefined,
-                                connection=inner_connection,
-                            )
-                            # Not very typeable
-                            extra_fields: dict[str, Any] = {}
-
-                            if change is not None and change != Change.nochange:
-                                extra_fields["last_produced_events"] = finished
-
-                            if status == ResourceState.deployed:
-                                extra_fields["last_success"] = resource_action.started
-                            if status not in {
-                                ResourceState.deploying,
-                                ResourceState.undefined,
-                                ResourceState.skipped_for_undefined,
-                            }:
-                                extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
-                                extra_fields["last_deployed_attribute_hash"] = res.attribute_hash
-                                extra_fields["last_deploy"] = finished
-                                extra_fields["last_deployed_version"] = version
-
-                            await res.update_persistent_state(
-                                is_deploying=True if status == ResourceState.deploying else False,
-                                **extra_fields,
-                                connection=inner_connection,
-                            )
-
-                            if (
-                                "purged" in res.attributes
-                                and res.attributes["purged"]
-                                and status == const.ResourceState.deployed
-                            ):
-                                await data.Parameter.delete_all(
-                                    environment=env.id, resource_id=res.resource_id, connection=inner_connection
-                                )
-
-        if is_resource_state_update and is_resource_action_finished:
-
-            def post_deploy_update() -> None:
-                waiting_agents = {
-                    (Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides
-                }
-
-                for agent, resource_id in waiting_agents:
-                    aclient = self.agentmanager_service.get_agent_client(env.id, agent)
-                    if aclient is not None:
-                        if change is None:
-                            my_change = const.Change.nochange
-                        else:
-                            my_change = change
-
-                        self.add_background_task(
-                            aclient.resource_event(env.id, agent, resource_id, send_events, status, my_change, changes)
-                        )
-
-            connection.call_after_tx(post_deploy_update)
-
-        return 200
-
     @handle(methods_v2.get_resource_actions, env="tid")
     async def get_resource_actions(
         self,
@@ -551,7 +312,7 @@ class ResourceService(protocol.ServerSlice, EnvironmentListener):
         action_id: Optional[uuid.UUID] = None,
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
-        exclude_changes: Optional[list[Change]] = None,
+        exclude_changes: Optional[list[const.Change]] = None,
     ) -> ReturnValue[list[ResourceAction]]:
         if exclude_changes is None:
             exclude_changes = []

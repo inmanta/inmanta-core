@@ -32,7 +32,7 @@ from inmanta.deploy import persistence, state
 from inmanta.loader import InmantaModule
 from inmanta.protocol.common import Result
 from inmanta.resources import Id
-from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+from inmanta.types import ResourceIdStr
 from inmanta.util import get_compiler_version
 
 
@@ -1333,12 +1333,12 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
 
     # Set key 3 to deployed
     action_id = uuid.uuid4()
-    rvid3 = ResourceVersionIdStr(f"test::Resource[agent1,key=key3],v={version}")
-    await update_manager.send_in_progress(action_id=action_id, resource_id=Id.parse_id(rvid3))
+    rvid3 = Id.parse_id(f"test::Resource[agent1,key=key3],v={version}")
+    await update_manager.send_in_progress(action_id=action_id, resource_id=rvid3)
     await update_manager.send_deploy_done(
-        attribute_hash=util.make_attribute_hash(ResourceIdStr("test::Resource[agent1,key=key3]"), attributes=resources[2]),
+        attribute_hash=util.make_attribute_hash(rvid3.resource_str(), attributes=resources[2]),
         result=executor.DeployReport(
-            rvid=rvid3,
+            rvid=rvid3.resource_version_str(),
             action_id=action_id,
             resource_state=const.HandlerResourceState.deployed,
             messages=[],
