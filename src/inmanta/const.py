@@ -346,6 +346,19 @@ class AgentStatus(str, Enum):
     down = "down"
 
 
+class ExecutorStatus(str, Enum):
+    """
+    Status of the executor of a logical agent:
+        - down: the executor didn't come up successfully
+        - degraded: the executor didn't successfully load all handler code
+        - up: the executor came up successfully
+    """
+
+    up = "up"
+    degraded = "degraded"
+    down = "down"
+
+
 class ParameterSource(str, Enum):
     fact = "fact"
     plugin = "plugin"

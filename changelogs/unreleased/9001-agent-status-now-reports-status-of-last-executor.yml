@@ -1,0 +1,4 @@
+description: Agent status now reports the status of the last executor it tried to build.
+issue-nr: 9001
+change-type: patch
+destination-branches: [master]
