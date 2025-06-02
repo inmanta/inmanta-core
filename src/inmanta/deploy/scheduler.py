@@ -491,7 +491,8 @@ class ResourceScheduler(TaskManager):
                 # 1 - Very first release for an environment.
                 # 2 - The scheduler's last processed version (i.e. the previously latest released version)
                 #   does not exist anymore when the scheduler starts, so it can't build its in-memory state.
-                # 3 - The user explicitly requests to start with a clean scheduler state (via the RESET_DEPLOY_PROGRESS_ON_START option)
+                # 3 - The user explicitly requests to start with a clean scheduler state
+                #   (via the RESET_DEPLOY_PROGRESS_ON_START option)
 
                 # Set running flag because we're ready to start accepting tasks.
                 # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
