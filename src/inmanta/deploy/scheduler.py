@@ -504,26 +504,30 @@ class ResourceScheduler(TaskManager):
                 # Set running flag because we're ready to start accepting tasks.
                 # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
                 self._running = True
-                await self._recover_scheduler_state_using_increments_calculation(connection=con)
-
-    async def _recover_scheduler_state_using_increments_calculation(self, *, connection: asyncpg.connection.Connection) -> None:
-        """
-        This method exists for backwards compatibility reasons. It initializes the scheduler state
-        by relying on the increments calculation logic. This method starts the deployment process.
-
-        :param connection: Connection to use for db operations. Should not be in a transaction context.
-        """
-        async with self._intent_lock, self.state_update_manager.get_connection(connection) as con:
-            await data.Scheduler._execute_query(
-                f"""
+                try:
+                    model: ModelVersion = await self._get_single_model_version_from_db(connection=con)
+                except KeyError:
+                    return
+                await data.Scheduler._execute_query(
+                    f"""
                         UPDATE {data.ResourcePersistentState.table_name()}
-                        SET blocked=false
+                        SET blocked='NOT_BLOCKED'
                         WHERE environment=$1
+                        AND NOT is_orphan
                     """,
-                self.environment,
-                connection=con,
-            )
-            await self.repair(reason="Recovering scheduler state")
+                    self.environment,
+                    connection=con,
+                )
+                last_deployed, up_to_date_resources = await data.ResourcePersistentState.get_last_deployed_and_up_to_date(
+                    self.environment, connection=con
+                )
+                await self._new_version(
+                    [model],
+                    reason="Deploy was triggered because the scheduler was started",
+                    last_deploy_time=last_deployed,
+                    up_to_date_resources=up_to_date_resources,
+                    connection=con,
+                )
 
     async def deploy(
         self,
