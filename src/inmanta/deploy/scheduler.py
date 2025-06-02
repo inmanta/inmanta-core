@@ -220,7 +220,10 @@ class TaskManager(abc.ABC):
     @abstractmethod
     async def report_executor_status(self, agent_name: str, executor_status: ExecutorStatus) -> None:
         """
-        Report the status of an executor
+        Report the status of an executor for a given agent.
+
+        :param agent_name: The agent.
+        :param executor_status: The status of the executor to set for this agent.
         """
 
 

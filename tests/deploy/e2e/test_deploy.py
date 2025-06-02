@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import asyncio
 import logging
 import pathlib
 import uuid
@@ -407,7 +406,6 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     result = await client.get_scheduler_status(env_id)
     assert result.code == 200
     selective_comparison(result.result["data"], build_expected_state(resources, []).model_dump())
-    await asyncio.sleep(1000)
 
 
 async def check_server_state_vs_scheduler_state(client, environment, scheduler):

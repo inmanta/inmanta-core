@@ -1168,7 +1168,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
     # Let's check the agent table and check that all agents are presents and not paused
     await assert_is_paused(client, environment, {"agent1": False, "agent2": False, "agent3": False})
 
-    # await asyncio.sleep(1000)
     await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
     assert result.code == 200
     file_to_remove.unlink()
