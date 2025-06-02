@@ -488,26 +488,20 @@ class ResourceScheduler(TaskManager):
                     )
             else:
                 # This case can occur in three different situations:
-                #   1 A model version has been released, but the scheduler didn't process any version yet.
-                #     In this case there is no scheduler state to restore.
-                #   2 The last processed version has been deleted since the scheduler was last running
-                #   3 We migrated the Inmanta server from an old version, that didn't have the resource state
-                #     tracking in the database, to a version that does. To cover this case, we rely on the
-                #     increment calculation to determine which resources have to be considered dirty and which
-                #     not. This migration code path can be removed in a later major version.
-                #
-                # In cases 1 and 2, all resources are expected to be in the increment (scheduler hasn't processed any versions
-                # means we haven't ever deployed anything yet), so those could be covered by simply reading in only the latest
-                # version, or by keeping state as is and calling into normal read_version() flow. However, while the migration
-                # path is still required for backwards compatibility (3) anyway, we unifi the three cases for simplicity.
+                # 1 - Very first release for an environment.
+                # 2 - The scheduler's last processed version (i.e. the previously latest released version)
+                #   does not exist anymore when the scheduler starts, so it can't build its in-memory state.
+                # 3 - The user explicitly requests to start with a clean scheduler state (via the RESET_DEPLOY_PROGRESS_ON_START option)
 
                 # Set running flag because we're ready to start accepting tasks.
                 # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
                 self._running = True
                 try:
+                    # Fetch the latest released version return if we don't have any
                     model: ModelVersion = await self._get_single_model_version_from_db(connection=con)
                 except KeyError:
                     return
+                # Reset blocked status in case there was a bug in marking resources as blocked
                 await data.Scheduler._execute_query(
                     f"""
                         UPDATE {data.ResourcePersistentState.table_name()}
@@ -518,6 +512,7 @@ class ResourceScheduler(TaskManager):
                     self.environment,
                     connection=con,
                 )
+                # Get the last_deploy times and up to date resources from the RPS table to restore the state
                 last_deployed, up_to_date_resources = await data.ResourcePersistentState.get_last_deployed_and_up_to_date(
                     self.environment, connection=con
                 )

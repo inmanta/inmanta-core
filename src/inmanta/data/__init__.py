@@ -4640,6 +4640,10 @@ class ResourcePersistentState(BaseDocument):
     async def get_last_deployed_and_up_to_date(
         cls, environment: uuid.UUID, *, connection: Optional[Connection] = None
     ) -> tuple[dict[ResourceIdStr, datetime.datetime], set[ResourceIdStr]]:
+        """
+        Returns the last_deploy time for each non-orphan resource in this environment
+        Also returns a set of resources that are known to be in a good state
+        """
         query = f"""
             SELECT
                 rps.resource_id,
