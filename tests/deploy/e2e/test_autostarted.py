@@ -109,7 +109,7 @@ async def setup_environment_with_agent(client, project_name):
     1) Create a project with name project_name and create an environment.
     2) Deploy a model which requires one autostarted agent. The agent does not have code so it will mark the version as
        failed.
-    3) Wait until the autostarted agent is up.
+    3) Wait until the autostarted agent is created. Its status is 'down' since the executor can't be created.
     """
     create_project_result = await client.create_project(project_name)
     assert create_project_result.code == 200
@@ -159,12 +159,13 @@ async def setup_environment_with_agent(client, project_name):
     result = await client.list_agents(tid=env_id)
     assert result.code == 200
 
-    while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
+    while len([x for x in result.result["agents"] if x["state"] == "down"]) < 1:
         result = await client.list_agents(tid=env_id)
+        logger.debug(result.result["agents"])
         await asyncio.sleep(0.1)
 
     assert len(result.result["agents"]) == 1
-    assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
+    assert len([x for x in result.result["agents"] if x["state"] == "down"]) == 1
 
     return project_id, env_id
 
@@ -256,14 +257,16 @@ async def test_auto_deploy_no_splay(server, client, clienthelper: ClientHelper, 
 
     # check if agent 1 is started by the server
     # deploy will fail because handler code is not uploaded to the server
+    # executor status should be set to 'down'
     result = await client.list_agents(tid=environment)
     assert result.code == 200
 
-    while len(result.result["agents"]) == 0 or result.result["agents"][0]["state"] == "down":
+    async def one_agent_created_with_executor_down():
         result = await client.list_agents(tid=environment)
-        await asyncio.sleep(0.1)
 
-    assert len(result.result["agents"]) == 1
+        return len(result.result["agents"]) == 1 and result.result["agents"][0]["state"] == "down"
+
+    await retry_limited(one_agent_created_with_executor_down, 1)
 
 
 async def test_deploy_no_code(resource_container, client, clienthelper, environment):
@@ -1165,6 +1168,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
     # Let's check the agent table and check that all agents are presents and not paused
     await assert_is_paused(client, environment, {"agent1": False, "agent2": False, "agent3": False})
 
+    # await asyncio.sleep(1000)
     await client.all_agents_action(tid=environment, action=AgentAction.pause.value)
     assert result.code == 200
     file_to_remove.unlink()

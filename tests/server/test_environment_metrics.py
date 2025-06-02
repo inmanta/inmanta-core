@@ -760,7 +760,7 @@ async def test_agent_count_metric(clienthelper, client, server):
     # 3 environments: one created by the environment fixture (dependency of agent fixture), two created above
     assert len(gauges_by_status) == 3
     # 3 states for each environment => 9 rows in matrix
-    assert all(statuses.keys() == {"paused", "up", "down"} for _, statuses in gauges_by_status.items())
+    assert all(statuses.keys() == {"paused", "up", "down", "degraded"} for _, statuses in gauges_by_status.items())
     # verify counts
     assert gauges_by_status[env1.id]["paused"].count == 1
     assert gauges_by_status[env2.id]["paused"].count == 2  # agent3 is not used by any resource but it should still be counted
@@ -791,7 +791,7 @@ async def test_agent_count_metric_empty_datapoint(client, server):
     # environment and 1 for the second)
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
-    assert len(result_gauge) == 6
+    assert len(result_gauge) == 8
     assert all(gauge.metric_name == "resource.agent_count" and gauge.count == 0 for gauge in result_gauge)
 
 

@@ -494,7 +494,12 @@ WITH agent_counts AS (
                     AND a_inner.name=$1
                     AND a_inner.id_primary IS NOT NULL
             )
-                THEN a.executor_status
+                -- Do we have to cast to text here??
+                -- Without the cast:
+                -- ERROR:  invalid input value for enum executor_status: "paused"
+                -- LINE 6:                 THEN 'paused'
+
+                THEN a.executor_status::TEXT
                 ELSE 'down'
         END AS status,
         COUNT(*)
@@ -505,7 +510,7 @@ WITH agent_counts AS (
 -- inject zeroes for missing values in the environment - status matrix
 SELECT e.id AS environment, s.status, COALESCE(a.count, 0) AS count
 FROM {Environment.table_name()} AS e
-CROSS JOIN (VALUES ('paused'), ('up'), ('down')) AS s(status)
+CROSS JOIN (VALUES ('paused'), ('up'), ('down'), ('degraded')) AS s(status)
 LEFT JOIN agent_counts AS a
     ON a.environment = e.id AND a.status = s.status
 ORDER BY environment, s.status

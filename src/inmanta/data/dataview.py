@@ -1250,7 +1250,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
                                                        AND a_inner.name=$2
                                                        AND a_inner.id_primary IS NOT NULL
                                              )
-                                                 THEN a.executor_status
+                                                 THEN a.executor_status::TEXT
                                                  ELSE 'down'
                                          END
                                      ) AS status

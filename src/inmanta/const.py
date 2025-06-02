@@ -344,6 +344,7 @@ class AgentStatus(str, Enum):
     paused = "paused"
     up = "up"
     down = "down"
+    degraded = "degraded"
 
 
 class ExecutorStatus(str, Enum):
