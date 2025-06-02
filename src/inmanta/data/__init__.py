@@ -4608,11 +4608,8 @@ class ResourcePersistentState(BaseDocument):
                     ELSE 'NOT_BLOCKED'
                 END
             FROM {Resource.table_name()} AS r
-            WHERE r.environment=$1 AND r.model=$2 AND NOT EXISTS(
-                SELECT *
-                FROM {cls.table_name()} AS rps
-                WHERE rps.environment=r.environment AND rps.resource_id=r.resource_id
-            )
+            WHERE r.environment=$1 AND r.model=$2
+            ON CONFLICT DO NOTHING
             """,
             environment,
             model_version,
