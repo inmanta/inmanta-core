@@ -494,11 +494,6 @@ WITH agent_counts AS (
                     AND a_inner.name=$1
                     AND a_inner.id_primary IS NOT NULL
             )
-                -- Do we have to cast to text here??
-                -- Without the cast:
-                -- ERROR:  invalid input value for enum executor_status: "paused"
-                -- LINE 6:                 THEN 'paused'
-
                 THEN a.executor_status::TEXT
                 ELSE 'down'
         END AS status,

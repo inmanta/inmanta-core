@@ -22,7 +22,7 @@ from asyncpg import Connection
 async def update(connection: Connection) -> None:
     """
     Add executor_status column to the agent table.
-    It denotes the state of the latest executor built for this agent:
+    It denotes the state of the latest executor used by this agent:
         - down: the executor didn't come up successfully
         - degraded: the executor didn't successfully load all handler code
         - up: the executor came up successfully
