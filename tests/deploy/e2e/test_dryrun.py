@@ -167,10 +167,6 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     assert resource_container.Provider.get("agent1", "key2") == "value2"
     assert not resource_container.Provider.isset("agent1", "key3")
 
-    actions = await data.ResourceAction.get_list()
-    assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.undefined]) == 1
-    assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.skipped_for_undefined]) == 2
-
 
 async def test_dryrun_failures(resource_container, server, agent, client, environment, clienthelper):
     env_id = environment

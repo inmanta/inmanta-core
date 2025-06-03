@@ -641,9 +641,11 @@ def test_ref_serialization():
 
     @reference("test::Test")
     class TestReference(Reference[str]):
-        def __init__(self, keys):
+
+        def __init__(self, keys, none_attr=None):
             super().__init__()
             self.keys = keys
+            self.none_attr = None
 
     round_trip_ref(TestReference({"a": "A"}))
 

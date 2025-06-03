@@ -210,7 +210,7 @@ class ReferenceCollector:
                     self._add_reference(v)
 
             case dict():
-                for k, v in value.values():
+                for k, v in value.items():
                     self._add_reference(v)
 
             case references.Reference():

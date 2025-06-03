@@ -36,7 +36,7 @@ from inmanta.types import ResourceIdStr, StrictJson
 from inmanta.util import dict_path
 
 ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z0-9_]+::)+[A-Z][A-z0-9_-]*$")]
-PrimitiveTypes = str | float | int | bool
+PrimitiveTypes = str | float | int | bool | None
 
 
 # The name of an attribute on the class where dataclasses store field information. This is an integral part of the
@@ -305,7 +305,7 @@ class ReferenceLike:
         arguments: list[ArgumentTypes] = []
         for name, value in self.arguments.items():
             match value:
-                case str() | int() | float() | bool():
+                case str() | int() | float() | bool() | None:
                     arguments.append(LiteralArgument(name=name, value=value))
                 case dict() | list():
                     try:

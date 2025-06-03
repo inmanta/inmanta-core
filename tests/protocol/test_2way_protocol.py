@@ -32,6 +32,7 @@ from inmanta.protocol import method
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.server import SLICE_SESSION_MANAGER
+from inmanta.server.config import AuthorizationProviderName
 from inmanta.server.protocol import Server, ServerSlice, SessionListener
 from utils import configure_auth, retry_limited
 
@@ -129,7 +130,7 @@ async def assert_agent_counter(agent: Agent, reconnect: int, disconnected: int) 
 
 async def test_2way_protocol(inmanta_config, server_config, no_tid_check, postgres_db, database_name):
     # Authentication complicates this even further
-    configure_auth(auth=True, ca=False, ssl=False)
+    configure_auth(auth=True, ca=False, ssl=False, authorization_provider=AuthorizationProviderName.legacy)
     rs = Server()
     server = SessionSpy()
     rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)

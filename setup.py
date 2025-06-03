@@ -29,14 +29,15 @@ requires = [
     "pyyaml~=6.0",
     "setuptools",
     "texttable~=1.0",
-    "tornado~=6.0",
+    # tornado>6.5 because of CVE https://github.com/advisories/GHSA-7cx3-6m66-7c5m
+    "tornado>6.5",
     # lower bound because of ilevkivskyi/typing_inspect#100
     "typing_inspect~=0.9",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
-    "strawberry-sqlalchemy-mapper==0.6.1",
+    "strawberry-sqlalchemy-mapper==0.6.2",
 ]
 
 

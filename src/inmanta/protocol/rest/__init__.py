@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import abc
+import copy
 import inspect
 import json
 import logging
@@ -74,6 +75,7 @@ class CallArguments:
         self._argspec: inspect.FullArgSpec = inspect.getfullargspec(self._properties.function)
 
         self._call_args: JsonType = {}
+        self._method_call_args: JsonType = {}
         self._headers: dict[str, str] = {}
         self._metadata: dict[str, object] = {}
         self._auth_token: Optional[auth.claim_type] = None
@@ -95,21 +97,23 @@ class CallArguments:
 
     @property
     def call_args(self) -> dict[str, object]:
+        """
+        The arguments formatted according to the signature of the @handle method of the API endpoint.
+        """
         if not self._processed:
             raise Exception("Process call first before accessing property")
 
         return self._call_args
 
-    def get_call_args_without_call_context_argument(self) -> dict[str, object]:
+    @property
+    def method_call_args(self) -> dict[str, object]:
         """
-        Return the call arguments of this invocation, but exclude the CallContext argument.
+        The call arguments formatted according to the signature of the @method method of the API endpoint.
         """
-        call_args = dict(self.call_args)
-        name_call_context_context_arg = self.get_call_context()
-        if name_call_context_context_arg and name_call_context_context_arg in call_args:
-            # Remove the CallContext argument. It cannot be serialized to JSON.
-            del call_args[name_call_context_context_arg]
-        return call_args
+        if not self._processed:
+            raise Exception("Process call first before accessing property")
+
+        return self._method_call_args
 
     @property
     def auth_username(self) -> Optional[str]:
@@ -296,12 +300,6 @@ class CallArguments:
         # validate types
         call_args = self._properties.validate_arguments(call_args)
 
-        for arg, value in call_args.items():
-            # run getters
-            value = await self._run_getters(arg, value)
-
-            self._call_args[arg] = value
-
         # discard session handling data
         if self._properties.agent_server and "sid" in all_fields:
             all_fields.remove("sid")
@@ -309,12 +307,20 @@ class CallArguments:
         if self._properties.varkw:
             # add all other arguments to the call args as well
             for field in all_fields:
-                self._call_args[field] = self._message[field]
+                call_args[field] = self._message[field]
 
         if len(all_fields) > 0 and self._argspec.varkw is None:
             raise exceptions.BadRequest(
                 "request contains fields %s that are not declared in method and no kwargs argument is provided." % all_fields
             )
+
+        self._method_call_args = copy.deepcopy(call_args)
+
+        for arg, value in call_args.items():
+            # run getters
+            value = await self._run_getters(arg, value)
+
+            self._call_args[arg] = value
 
         # rename arguments if the handler requests this
         if hasattr(self._config.handler, "__protocol_mapping__"):
