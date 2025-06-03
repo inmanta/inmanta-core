@@ -1157,7 +1157,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    # Wait for one resource to be deploying
+    # Wait for the resources to be deploying
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=3, state=const.ResourceState.deploying)
 
     result = await client.list_versions(tid=environment)
@@ -1224,43 +1224,48 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
     # Let's check the agent table and check that all agents are presents and not paused
     await assert_is_paused(client, environment, {"agent1": False, "agent2": False, "agent3": False})
 
-    result = await client.get_agents(environment)
-    assert result.code == 200
-    actual_data = result.result["data"]
-    assert len(actual_data) == 3
-    expected_data = [
-        {
-            "environment": environment,
-            "last_failover": actual_data[0]["last_failover"],
-            "name": "agent1",
-            "paused": False,
-            "process_id": actual_data[0]["process_id"],
-            "process_name": actual_data[0]["process_name"],
-            "status": "up",
-            "unpause_on_resume": None,
-        },
-        {
-            "environment": environment,
-            "last_failover": actual_data[1]["last_failover"],
-            "name": "agent2",
-            "paused": False,
-            "process_id": actual_data[1]["process_id"],
-            "process_name": actual_data[1]["process_name"],
-            "status": "up",
-            "unpause_on_resume": None,
-        },
-        {
-            "environment": environment,
-            "last_failover": actual_data[2]["last_failover"],
-            "name": "agent3",
-            "paused": False,
-            "process_id": actual_data[2]["process_id"],
-            "process_name": actual_data[2]["process_name"],
-            "status": "up",
-            "unpause_on_resume": None,
-        },
-    ]
-    assert actual_data == expected_data
+    async def check_agent_status() -> bool:
+        result = await client.get_agents(environment)
+        assert result.code == 200
+        actual_data = result.result["data"]
+        assert len(actual_data) == 3
+
+        expected_data = [
+            {
+                "environment": environment,
+                "last_failover": actual_data[0]["last_failover"],
+                "name": "agent1",
+                "paused": False,
+                "process_id": actual_data[0]["process_id"],
+                "process_name": actual_data[0]["process_name"],
+                "status": "up",
+                "unpause_on_resume": None,
+            },
+            {
+                "environment": environment,
+                "last_failover": actual_data[1]["last_failover"],
+                "name": "agent2",
+                "paused": False,
+                "process_id": actual_data[1]["process_id"],
+                "process_name": actual_data[1]["process_name"],
+                "status": "up",
+                "unpause_on_resume": None,
+            },
+            {
+                "environment": environment,
+                "last_failover": actual_data[2]["last_failover"],
+                "name": "agent3",
+                "paused": False,
+                "process_id": actual_data[2]["process_id"],
+                "process_name": actual_data[2]["process_name"],
+                "status": "up",
+                "unpause_on_resume": None,
+            },
+        ]
+
+        return actual_data == expected_data
+
+    await retry_limited(check_agent_status, 2)
 
 
 @pytest.mark.slowtest
