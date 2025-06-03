@@ -35,7 +35,7 @@ import pytest
 from psutil import NoSuchProcess, Process
 
 from inmanta import config, const, data
-from inmanta.const import AgentAction
+from inmanta.const import AgentAction, ExecutorStatus
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
@@ -54,6 +54,7 @@ async def wait_for_resources_in_state(client, environment: uuid.UUID, nr_of_reso
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
+        logger.debug(summary)
         return summary["by_state"][state.value] == nr_of_resources
 
     await retry_limited(_done_waiting, timeout=10)
@@ -1470,6 +1471,8 @@ async def test_code_install_success_code_load_error_for_provider(
     Check that the agent can still deploy the SuccessResource even if a code loading failure
     occurred when installing the code necessary to deploy the CodeInstallErrorResource.
 
+    This agent status should be set to "degraded" since it could only load some of the handler code.
+
     """  # noqa: E501
 
     # First, configure everything
@@ -1483,8 +1486,8 @@ async def test_code_install_success_code_load_error_for_provider(
     import minimalinstallfailuremodule
     import successhandlermodule
 
-    r_1 = minimalinstallfailuremodule::CodeInstallErrorResource(name="test_failure", agent="agent_1")
-    r_2 = successhandlermodule::SuccessResource(name="test_success", agent="agent_1")
+    agent_1_fail_resource = minimalinstallfailuremodule::CodeInstallErrorResource(name="test_failure", agent="agent_1")
+    agent_1_success_resource = successhandlermodule::SuccessResource(name="test_success", agent="agent_1")
         """,  # noqa: E501
         ministd=True,
         index_url="https://pypi.org/simple",
@@ -1495,8 +1498,105 @@ async def test_code_install_success_code_load_error_for_provider(
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
+
+    # Check that the agent status is set to the executor status of the last deploy:
+
+    snippetcompiler.setup_for_snippet(
+        """
+    import successhandlermodule
+    import minimalinstallfailuremodule
+
+
+    agent_1_success_resource = successhandlermodule::SuccessResource(name="test_success_2", agent="agent_1")
+
+        """,  # noqa: E501
+        ministd=True,
+        index_url="https://pypi.org/simple",
+    )
+
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
+
+    async def check_agent_status(expected_status: ExecutorStatus, agent_name: str) -> bool:
+        agent = await data.Agent.get(env=uuid.UUID(environment), endpoint=agent_name)
+        status = agent.get_status()
+        return status == expected_status
+
+    await retry_limited(partial(check_agent_status, ExecutorStatus.degraded, "agent_1"), 2)
+
+    snippetcompiler.setup_for_snippet(
+        """
+    import successhandlermodule
+    import minimalinstallfailuremodule
+
+    agent_1_fail_resource = minimalinstallfailuremodule::CodeInstallErrorResource(name="test_failure_2", agent="agent_1")
+
+        """,  # noqa: E501
+        ministd=True,
+        index_url="https://pypi.org/simple",
+    )
+
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
+
+    await retry_limited(partial(check_agent_status, ExecutorStatus.down, "agent_1"), 2)
+
+    # Nasty bug:
+    # likely related to https://inmanta.slack.com/archives/CKRF0C8R3/p1748857336695209?thread_ts=1748421161.346619&cid=CKRF0C8R3
+
+    # Reproduction
+
+    # 1 initial compile importing:     import minimalinstallfailuremodule
+    # I'd expect the following to work:
+
+    # --------------------- START ---------------------
+    #
+    #       snippetcompiler.setup_for_snippet(
+    #           """
+    #       import successhandlermodule
+    #
+    #       agent_1_success_resource = successhandlermodule::SuccessResource(name="test_success_3", agent="agent_1")
+    #
+    #           """,  # noqa: E501
+    #           ministd=True,
+    #           index_url="https://pypi.org/simple",
+    #       )
+    #
+    #       version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    #       result = await client.release_version(environment, version, push=False)
+    #       assert result.code == 200
+    #
+    #       await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)  # NOQA E501
+    #       await retry_limited(partial(check_agent_status, ExecutorStatus.up, "agent_1"), 2)
+    #
+    # --------------------- END ---------------------
+
+    # Error trace:
+
+    #       self = <inmanta.loader.CodeManager object at 0x7ce78c1acc80>
+    #       type_name = 'minimalinstallfailuremodule::CodeInstallErrorResource'
+    #       instance = <class 'inmanta_plugins.minimalinstallfailuremodule.CodeInstallErrorResource'>
+    #
+    #           def register_code(self, type_name: str, instance: object) -> None:
+    #               """Register the given type_object under the type_name and register the source associated with this type object.  # NOQA E501
+    #               This method assumes the build_agent_map method was called first.
+    #
+    #               :param type_name: The inmanta type name for which the source of type_object will be registered.
+    #                   For example std::testing::NullResource
+    #               :param instance: An instance for which the code needs to be registered.
+    #               """
+    #               file_name = self.get_object_source(instance)
+    #               if file_name is None:
+    #       >           raise SourceNotFoundException(f"Unable to locate source code of instance {instance} for entity {type_name}")  # NOQA E501
+    #       E           inmanta.loader.SourceNotFoundException: Unable to locate source code of instance <class 'inmanta_plugins.minimalinstallfailuremodule.CodeInstallErrorResource'> for entity minimalinstallfailuremodule::CodeInstallErrorResource  # NOQA E501
 
 
 @pytest.mark.slowtest

@@ -3348,9 +3348,11 @@ class Agent(BaseDocument):
     def get_status(self) -> AgentStatus:
         if self.paused:
             return AgentStatus.paused
+        # Case for the scheduler agent
         if self.primary is not None:
             return AgentStatus.up
-        return AgentStatus.down
+
+        return AgentStatus[self.executor_status]
 
     def to_dict(self) -> JsonType:
         base = BaseDocument.to_dict(self)

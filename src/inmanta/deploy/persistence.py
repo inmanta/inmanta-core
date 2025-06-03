@@ -354,11 +354,13 @@ class ToDbUpdateManager(StateUpdateManager):
         )
 
     async def report_executor_status(self, agent_name: str, executor_status: ExecutorStatus) -> None:
+        LOGGER.error(f"SETTING EXEC STATUS {agent_name=} {executor_status=}")
+
         async with data.Agent.get_connection() as connection:
             async with connection.transaction():
                 agent = await data.Agent.get_one(connection=connection, environment=self.environment, name=agent_name)
                 if agent is None:
-                    raise ValueError(f"Agent {agent_name} does not exist in environment {self.environment}.")
+                    raise ValueError("Agent %s does not exist in environment %s." % agent_name, self.environment)
                 await agent.update_fields(connection=connection, executor_status=executor_status)
 
     async def update_resource_intent(
