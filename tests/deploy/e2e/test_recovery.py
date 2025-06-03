@@ -162,14 +162,14 @@ async def test_scheduler_initialization(
             last_deployed=last_deployed[1],
         ),
         "test::Resource[agent1,key=key2]": ResourceState(
-            compliance=Compliance.NON_COMPLIANT if not reset_state else Compliance.HAS_UPDATE,
-            last_deploy_result=DeployResult.FAILED if not reset_state else DeployResult.NEW,
+            compliance=Compliance.NON_COMPLIANT,
+            last_deploy_result=DeployResult.FAILED,
             blocked=Blocked.NOT_BLOCKED,
             last_deployed=last_deployed[2],
         ),
         "test::Resource[agent1,key=key3]": ResourceState(
-            compliance=Compliance.NON_COMPLIANT if not reset_state else Compliance.HAS_UPDATE,
-            last_deploy_result=DeployResult.SKIPPED if not reset_state else DeployResult.NEW,
+            compliance=Compliance.NON_COMPLIANT,
+            last_deploy_result=DeployResult.SKIPPED,
             blocked=Blocked.NOT_BLOCKED,  # we don't restore TRANSIENT status atm
             last_deployed=last_deployed[3],
         ),

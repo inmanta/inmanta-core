@@ -455,54 +455,10 @@ class ResourceScheduler(TaskManager):
 
             environment: Optional[data.Environment] = await data.Environment.get_by_id(self.environment, connection=con)
             assert environment is not None
-            should_restore_state: bool = not typing.cast(
+            reset_deploy_progress: bool = typing.cast(
                 bool, await environment.get(data.RESET_DEPLOY_PROGRESS_ON_START, connection=con)
             )
-
-            # Check if we can restore the scheduler state from a previous run
-            restored_state: Optional[ModelState] = (
-                await ModelState.create_from_db(self.environment, connection=con) if should_restore_state else None
-            )
-            if restored_state is not None:
-                # Restore scheduler state like it was before the scheduler went down
-                self._state = restored_state
-                self._work = work.ScheduledWork(
-                    requires=self._state.requires.requires_view(),
-                    provides=self._state.requires.provides_view(),
-                    new_agent_notify=self._create_agent,
-                )
-                restored_version: int = self._state.version
-                # Set running flag because we're ready to start accepting tasks.
-                # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
-                self._running = True
-                # All resources get a timer
-                await self.read_version(connection=con)
-                async with self._scheduler_lock:
-                    self._timer_manager.update_timers(self._state.intent.keys() - self._state.dirty)
-
-                if self._state.version == restored_version:
-                    # no new version was present. Simply trigger a deploy for everything that's not in a known good state
-                    await self.deploy(
-                        reason="Deploy was triggered because the resource scheduler was started",
-                        priority=TaskPriority.INTERVAL_DEPLOY,
-                    )
-            else:
-                # This case can occur in three different situations:
-                # 1 - Very first release for an environment.
-                # 2 - The scheduler's last processed version (i.e. the previously latest released version)
-                #   does not exist anymore when the scheduler starts, so it can't build its in-memory state.
-                # 3 - The user explicitly requests to start with a clean scheduler state
-                #   (via the RESET_DEPLOY_PROGRESS_ON_START option)
-
-                # Set running flag because we're ready to start accepting tasks.
-                # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
-                self._running = True
-                try:
-                    # Fetch the latest released version return if we don't have any
-                    model: ModelVersion = await self._get_single_model_version_from_db(connection=con)
-                except KeyError:
-                    return
-                # Reset blocked status in case there was a bug in marking resources as blocked
+            if reset_deploy_progress:
                 await data.Scheduler._execute_query(
                     f"""
                         UPDATE {data.ResourcePersistentState.table_name()}
@@ -513,17 +469,36 @@ class ResourceScheduler(TaskManager):
                     self.environment,
                     connection=con,
                 )
-                # Get the last_deploy times and up to date resources from the RPS table to restore the state
-                last_deployed, up_to_date_resources = await data.ResourcePersistentState.get_last_deployed_and_up_to_date(
-                    self.environment, connection=con
+
+            # Check if we can restore the scheduler state from a previous run
+            restored_state: Optional[ModelState] = (
+                await ModelState.create_from_db(self.environment, connection=con)
+            )
+
+            if restored_state is not None:
+                # Restore scheduler state like it was before the scheduler went down
+                self._state = restored_state
+                self._work = work.ScheduledWork(
+                    requires=self._state.requires.requires_view(),
+                    provides=self._state.requires.provides_view(),
+                    new_agent_notify=self._create_agent,
                 )
-                await self._new_version(
-                    [model],
-                    reason="Deploy was triggered because the scheduler was started",
-                    last_deploy_time=last_deployed,
-                    up_to_date_resources=up_to_date_resources,
-                    connection=con,
+            initialized_version: int = self._state.version
+            # Set running flag because we're ready to start accepting tasks.
+            # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
+            self._running = True
+            # All resources get a timer
+            await self.read_version(connection=con)
+            async with self._scheduler_lock:
+                self._timer_manager.update_timers(self._state.intent.keys() - self._state.dirty)
+
+            if self._state.version == initialized_version:
+                # no new version was present. Simply trigger a deploy for everything that's not in a known good state
+                await self.deploy(
+                    reason="Deploy was triggered because the resource scheduler was started",
+                    priority=TaskPriority.INTERVAL_DEPLOY,
                 )
+
 
     async def deploy(
         self,
