@@ -41,6 +41,7 @@ from inmanta.server.services.environment_metrics_service import (
     MetricValueTimer,
     ResourceCountMetricsCollector,
 )
+from inmanta.types import ResourceIdStr
 from inmanta.util import get_compiler_version, parse_timestamp
 from utils import ClientHelper, wait_until_version_is_released
 
@@ -464,7 +465,9 @@ async def test_resource_count_metric(clienthelper, client, agent):
     await wait_until_version_is_released(client, environment=env_uuid1, version=version_env1)
     await wait_until_version_is_released(client, environment=env_uuid2, version=version_env2)
 
-    await data.ResourcePersistentState.mark_orphans_not_in_version(environment=env_uuid1, version=int(version_env1))
+    await data.ResourcePersistentState.mark_as_orphan(
+        environment=env_uuid1, resource_ids={ResourceIdStr("test::Resource[agent1,key=key1]")}
+    )
 
     # adds the ResourceCountMetricsCollector
     rcmc = ResourceCountMetricsCollector()
@@ -573,7 +576,9 @@ async def test_resource_count_metric(clienthelper, client, agent):
     # Wait until the latest version is released
     await wait_until_version_is_released(client, environment=env_uuid1, version=version_env1)
 
-    await data.ResourcePersistentState.mark_orphans_not_in_version(environment=env_uuid1, version=int(version_env1))
+    await data.ResourcePersistentState.mark_as_orphan(
+        environment=env_uuid1, resource_ids={ResourceIdStr("test::Resource[agent1,key=key3]")}
+    )
 
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()

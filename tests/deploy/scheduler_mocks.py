@@ -22,7 +22,7 @@ import typing
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from typing import Any, Callable, Coroutine, Mapping, Never, Optional, Sequence
+from typing import Any, Callable, Coroutine, Mapping, Never, Optional, Sequence, Set
 from uuid import UUID
 
 import asyncpg
@@ -283,6 +283,14 @@ class DummyStateManager(StateUpdateManager):
 
     async def set_last_processed_model_version(
         self, environment: UUID, version: int, connection: Optional[Connection] = None
+    ) -> None:
+        pass
+
+    async def mark_as_orphan(
+        self,
+        environment: UUID,
+        resource_ids: Set[ResourceIdStr],
+        connection: Optional[Connection] = None,
     ) -> None:
         pass
 
