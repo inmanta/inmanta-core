@@ -169,19 +169,20 @@ async def test_primary_selection(server, environment):
     await data.Agent(environment=env.id, name="agent3", paused=False).insert()
 
     # one session
-    ts1 = MockSession(uuid4(), env.id, {"agent1", "agent2"}, "ts1")
+    ts1 = MockSession(sid=uuid4(), tid=env.id, endpoint_names={"agent1", "agent2"}, nodename="ts1")
     await am.new_session(ts1, set(ts1.endpoint_names))
     await am._session_listener_actions.join()
     assert len(am.sessions) == 1
 
     # cross talk session
-    ts2 = MockSession(uuid4(), env2.id, {"agent1", "agent2"}, "ts2")
+    ts2 = MockSession(sid=uuid4(), tid=env2.id, endpoint_names={"agent1", "agent2"}, nodename="ts2")
     await am.new_session(ts2, set(ts2.endpoint_names))
     await am._session_listener_actions.join()
     assert len(am.sessions) == 2
 
     ts1.get_client().set_state.assert_called_with("agent2", enabled=True)
     ts1.get_client().reset_mock()
+
     await retry_limited(
         assert_state_agents_retry(env.id, AgentStatus.paused, AgentStatus.up, AgentStatus.down, sid2=ts1.id), 10
     )
@@ -200,7 +201,7 @@ async def test_primary_selection(server, environment):
     )
 
     # second session
-    ts2 = MockSession(uuid4(), env.id, {"agent3", "agent2"}, "ts2")
+    ts2 = MockSession(sid=uuid4(), tid=env.id, endpoint_names={"agent3", "agent2"}, nodename="ts2")
     await am.new_session(ts2, set(ts2.endpoint_names))
     await am._session_listener_actions.join()
     assert len(am.sessions) == 3

@@ -42,7 +42,7 @@ from inmanta import logging as inmanta_logging
 from inmanta import tracing
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config, config_map_to_str, scheduler_log_config
-from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus
+from inmanta.const import AGENT_SCHEDULER_ID, UNDEPLOYABLE_NAMES, AgentAction, AgentStatus, ExecutorStatus
 from inmanta.data import APILIMIT, Environment, InvalidSort, model
 from inmanta.data.model import DataBaseReport
 from inmanta.protocol import encode_token, handle, methods, methods_v2
@@ -637,11 +637,13 @@ class AgentManager(ServerSlice, SessionListener):
         """
         If the given session is the primary for a given endpoint, failover to a new session.
 
+        :param endpoints: set of agent names to detach from this session
+
         :return: The endpoints that got a new primary.
 
         Note: Always call under session lock.
         """
-        agent_statuses = await data.Agent.get_statuses(session.tid, endpoints)
+        agent_statuses: dict[str, Optional[AgentStatus]] = await data.Agent.get_statuses(session.tid, endpoints)
         result = []
         for endpoint_name in endpoints:
             key = (session.tid, endpoint_name)
@@ -766,7 +768,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         Note: This method must be called under session lock
         """
-        saved = data.Agent(environment=env.id, name=nodename, paused=False)
+        saved = data.Agent(environment=env.id, name=nodename, paused=False, executor_status=ExecutorStatus.down)
         await saved.insert(connection=connection)
 
         key = (env.id, nodename)

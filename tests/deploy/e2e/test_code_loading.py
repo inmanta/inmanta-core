@@ -33,6 +33,7 @@ from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
+from inmanta.const import AgentStatus
 from inmanta.data import AgentModules, InmantaModule, ModuleFiles, PipConfig
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import process_env
@@ -521,6 +522,9 @@ async def test_logging_on_code_loading_error(server, client, environment, client
     resourceBBB_failure_message = (
         "All resources of type `test::ResourceBBB` failed to load handler code or install handler code dependencies: "
     )
+
+    agent = await data.Agent.get(env=environment, endpoint="agent1")
+    assert agent.get_status() == AgentStatus.down
 
     def check_for_message(data, must_be_present: str) -> None:
         """

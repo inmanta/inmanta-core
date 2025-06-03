@@ -28,7 +28,7 @@ from asyncpg import Connection, UniqueViolationError
 
 from inmanta import const, data
 from inmanta.agent import executor
-from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, ResourceState
+from inmanta.const import TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, ExecutorStatus, ResourceState
 from inmanta.data import LogLine
 from inmanta.deploy import state
 from inmanta.protocol import Client
@@ -361,6 +361,14 @@ class ToDbUpdateManager(StateUpdateManager):
             messages=fact_result.messages,
             status=fact_result.resource_state,
         )
+
+    async def report_executor_status(self, agent_name: str, executor_status: ExecutorStatus) -> None:
+        async with data.Agent.get_connection() as connection:
+            async with connection.transaction():
+                agent = await data.Agent.get_one(connection=connection, environment=self.environment, name=agent_name)
+                if agent is None:
+                    raise ValueError("Agent %s does not exist in environment %s." % agent_name, self.environment)
+                await agent.update_fields(connection=connection, executor_status=executor_status)
 
     async def update_resource_intent(
         self,
