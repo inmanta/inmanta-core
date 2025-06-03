@@ -54,7 +54,6 @@ async def wait_for_resources_in_state(client, environment: uuid.UUID, nr_of_reso
         result = await client.resource_list(environment, deploy_summary=True)
         assert result.code == 200
         summary = result.result["metadata"]["deploy_summary"]
-        logger.debug(summary)
         return summary["by_state"][state.value] == nr_of_resources
 
     await retry_limited(_done_waiting, timeout=10)
@@ -1471,7 +1470,7 @@ async def test_code_install_success_code_load_error_for_provider(
     Check that the agent can still deploy the SuccessResource even if a code loading failure
     occurred when installing the code necessary to deploy the CodeInstallErrorResource.
 
-    This agent status should be set to "degraded" since it could only load some of the handler code.
+    Check that agent status correctly reflects the status of the last used executor.
 
     """  # noqa: E501
 
@@ -1549,35 +1548,75 @@ async def test_code_install_success_code_load_error_for_provider(
 
     await retry_limited(partial(check_agent_status, ExecutorStatus.down, "agent_1"), 2)
 
+
+@pytest.mark.xfail
+@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_code_registration_bug_reproduction(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    clienthelper,
+    environment,
+    auto_start_agent: bool,
+    async_finalizer,
+    monkeypatch,
+    tmp_path,
+):
+    # First, configure everything
+    config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
+
+    snippetcompiler.setup_for_snippet(
+        """
+    import successhandlermodule
+    import minimalinstallfailuremodule
+
+
+    agent_1_success_resource = successhandlermodule::SuccessResource(name="test_success_1", agent="agent_1")
+
+        """,  # noqa: E501
+        ministd=True,
+        index_url="https://pypi.org/simple",
+    )
+
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
+
+    async def check_agent_status(expected_status: ExecutorStatus, agent_name: str) -> bool:
+        agent = await data.Agent.get(env=uuid.UUID(environment), endpoint=agent_name)
+        status = agent.get_status()
+        return status == expected_status
+
+    await retry_limited(partial(check_agent_status, ExecutorStatus.degraded, "agent_1"), 2)
+
     # Nasty bug:
     # likely related to https://inmanta.slack.com/archives/CKRF0C8R3/p1748857336695209?thread_ts=1748421161.346619&cid=CKRF0C8R3
 
     # Reproduction
 
-    # 1 initial compile importing:     import minimalinstallfailuremodule
+    # 1 initial compile importing minimalinstallfailuremodule
+    # 2 second compile without importing minimalinstallfailuremodule
     # I'd expect the following to work:
 
-    # --------------------- START ---------------------
-    #
-    #       snippetcompiler.setup_for_snippet(
-    #           """
-    #       import successhandlermodule
-    #
-    #       agent_1_success_resource = successhandlermodule::SuccessResource(name="test_success_3", agent="agent_1")
-    #
-    #           """,  # noqa: E501
-    #           ministd=True,
-    #           index_url="https://pypi.org/simple",
-    #       )
-    #
-    #       version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
-    #       result = await client.release_version(environment, version, push=False)
-    #       assert result.code == 200
-    #
-    #       await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)  # NOQA E501
-    #       await retry_limited(partial(check_agent_status, ExecutorStatus.up, "agent_1"), 2)
-    #
-    # --------------------- END ---------------------
+    snippetcompiler.setup_for_snippet(
+        """
+    import successhandlermodule
+    agent_1_success_resource = successhandlermodule::SuccessResource(name="test_success_2", agent="agent_1")
+        """,  # noqa: E501
+        ministd=True,
+        index_url="https://pypi.org/simple",
+    )
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
+    await retry_limited(partial(check_agent_status, ExecutorStatus.up, "agent_1"), 2)
 
     # Error trace:
 

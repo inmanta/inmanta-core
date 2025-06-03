@@ -190,7 +190,6 @@ class Deploy(Task):
 
                 await task_manager.report_executor_status(agent_name=agent, executor_status=executor_status)
 
-                # await asyncio.sleep(1000)
                 assert reason is not None  # Should always be set for deploy
                 # Deploy
                 try:
