@@ -659,6 +659,8 @@ class OrchestrationService(protocol.ServerSlice):
         Make sure that all code used in this partial version was
         already registered in the base version.
 
+        Code that is not used by agents in this version is not checked, and should therefore not be updated.
+
         Retrieve which inmanta modules (name, version) were registered for all agents
         for the given base model version.
 
@@ -669,12 +671,20 @@ class OrchestrationService(protocol.ServerSlice):
         base_version_data: dict[tuple[str, str], list[str]] = await AgentModules.get_agents_per_module(
             model_version=partial_base_version, environment=environment, connection=connection
         )
-        # for inmanta_module_name, module_data in module_version_info.items():
-        #     module_version = module_data.version
-        #     if (inmanta_module_name, module_version) not in base_version_data:
-        #         raise BadRequest(
-        #             "Cannot perform partial export because of version mismatch for module %s." % inmanta_module_name
-        #         )
+
+        for inmanta_module_name, module_data in module_version_info.items():
+            module_version = module_data.version
+            if not module_data.for_agents:
+                # No agent is using this module in this version
+                continue
+            if (inmanta_module_name, module_version) not in base_version_data:
+                raise BadRequest(
+                    f"Cannot perform partial export because the source code for module {inmanta_module_name} in this partial "
+                    "version is different from the currently registered source code. Consider running a full export instead. "
+                    "Alternatively, if you are sure the new code is compatible and want to forcefully update, you can bypass "
+                    "this version check with the `--force-handler-code-update` CLI option."
+                )
+
         return base_version_data
 
     async def _register_agent_code(
@@ -683,6 +693,8 @@ class OrchestrationService(protocol.ServerSlice):
         version: int,
         environment: uuid.UUID,
         module_version_info: dict[str, InmantaModuleDTO],
+        *,
+        force_handler_code_update: bool = False,
         connection: asyncpg.connection.Connection,
     ) -> None:
         """
@@ -696,16 +708,19 @@ class OrchestrationService(protocol.ServerSlice):
         :param version: Configuration model version.
         :param environment: Environment this compile belongs to.
         :param module_version_info: Inmanta module information to register for this version.
+        :param force_handler_code_update: In case of a partial compile, this flag will disable the check
+            for source code consistency between the base version and the current partial version.
         :param connection: DB connection expected to be managed by the caller method.
         """
         base_version_info: dict[tuple[str, str], list[str]] = {}
-        if partial_base_version is not None:
+        if partial_base_version is not None and not force_handler_code_update:
             base_version_info = await self._check_version_info(
                 partial_base_version, environment, module_version_info, connection
             )
-        await InmantaModule.register_modules(
-            environment=environment, module_version_info=module_version_info, connection=connection
-        )
+        else:
+            await InmantaModule.register_modules(
+                environment=environment, module_version_info=module_version_info, connection=connection
+            )
         await AgentModules.register_modules_for_agents(
             model_version=version,
             environment=environment,
@@ -728,6 +743,7 @@ class OrchestrationService(protocol.ServerSlice):
         *,
         connection: asyncpg.connection.Connection,
         module_version_info: dict[str, InmantaModuleDTO],
+        force_handler_code_update: bool = False,
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -742,6 +758,9 @@ class OrchestrationService(protocol.ServerSlice):
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
         :param module_version_info: Mapping of (module name, module version) to module DTO.
+        :param force_handler_code_update: During partial compiles (i.e. partial_base_version is not None), a check is performed
+            to make sure the source code of modules in this partial version is identical to the source code in the base
+            version. Set this parameter to True to bypass this check.
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -881,7 +900,14 @@ class OrchestrationService(protocol.ServerSlice):
             for agent in all_agents:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
-            await self._register_agent_code(partial_base_version, version, env.id, module_version_info, connection)
+            await self._register_agent_code(
+                partial_base_version,
+                version,
+                env.id,
+                module_version_info,
+                force_handler_code_update=force_handler_code_update,
+                connection=connection,
+            )
 
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
@@ -1016,6 +1042,7 @@ class OrchestrationService(protocol.ServerSlice):
         removed_resource_sets: Optional[list[str]] = None,
         pip_config: Optional[PipConfig] = None,
         module_version_info: dict[str, InmantaModuleDTO] | None = None,
+        force_handler_code_update: bool = False,
     ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure
@@ -1129,6 +1156,7 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                     module_version_info=module_version_info or {},
+                    force_handler_code_update=force_handler_code_update,
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)

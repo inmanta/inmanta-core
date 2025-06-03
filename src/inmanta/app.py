@@ -466,6 +466,17 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         default=False,
     )
     parser.add_argument(
+        "--force-handler-code-update",
+        dest="force_handler_code_update",
+        help=(
+            "[Expert] Force handler code update during partial compile. This is otherwise only allowed for full compiles. "
+            "Use with extreme caution, and only when confident that all code is compatible with previous versions. "
+            "This option will be ignored if it is not set along with the --partial option."
+        ),
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--delete-resource-set",
         dest="delete_resource_set",
         help="Remove a resource set as part of a partial compile. This option can be provided multiple times and should always "
@@ -588,6 +599,7 @@ def export(options: argparse.Namespace) -> None:
                 export_plugin=options.export_plugin,
                 partial_compile=options.partial_compile,
                 resource_sets_to_remove=list(resource_sets_to_remove),
+                force_handler_code_update=options.force_handler_code_update,
             )
 
         if not summary_reporter.is_failure() and options.deploy:
