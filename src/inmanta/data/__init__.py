@@ -4501,31 +4501,18 @@ class ResourcePersistentState(BaseDocument):
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
 
     @classmethod
-    async def mark_orphans_not_in_version(
-        cls,
-        environment: UUID,
-        version: int,
-        connection: Optional[Connection] = None,
+    async def mark_as_orphan(
+        cls, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
     ) -> None:
         """
-        Marks all persisted resources that do not exist in the given version as orphans.
+        Set the is_orphan column to True on all given resources
         """
         query = f"""
-            UPDATE {cls.table_name()} AS rps
+            UPDATE {cls.table_name()}
             SET is_orphan=TRUE
-            WHERE
-                rps.environment=$1
-                AND NOT rps.is_orphan
-                AND NOT EXISTS(
-                    SELECT 1
-                    FROM {Resource.table_name()} AS r
-                    WHERE
-                        r.environment=rps.environment
-                        AND r.resource_id=rps.resource_id
-                        AND r.model=$2
-                )
+            WHERE environment=$1 AND resource_id=ANY($2)
         """
-        await cls._execute_query(query, environment, version, connection=connection)
+        await cls._execute_query(query, environment, resource_ids, connection=connection)
 
     @classmethod
     async def update_resource_intent(
@@ -4625,11 +4612,8 @@ class ResourcePersistentState(BaseDocument):
                     ELSE 'NOT_BLOCKED'
                 END
             FROM {Resource.table_name()} AS r
-            WHERE r.environment=$1 AND r.model=$2 AND NOT EXISTS(
-                SELECT *
-                FROM {cls.table_name()} AS rps
-                WHERE rps.environment=r.environment AND rps.resource_id=r.resource_id
-            )
+            WHERE r.environment=$1 AND r.model=$2
+            ON CONFLICT DO NOTHING
             """,
             environment,
             model_version,
