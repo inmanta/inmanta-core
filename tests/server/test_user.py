@@ -16,13 +16,11 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-from collections.abc import Sequence
-
 import pytest
 
 import nacl.pwhash
 from inmanta import config, const, data
-from inmanta.data.model import AuthMethod, Claim
+from inmanta.data.model import AuthMethod
 from inmanta.protocol import endpoints
 from inmanta.protocol.auth import auth
 from inmanta.server import SLICE_USER, protocol
@@ -191,57 +189,3 @@ async def test_environment_create_token(server: protocol.Server, auth_client: en
     response = await auth_client.environment_create_token(tid=env_id, client_types=["api"])
     assert response.code == 200
     assert response.result["data"]
-
-
-async def test_claims(server: protocol.Server, auth_client: endpoints.Client, client: endpoints.Client) -> None:
-    """
-    Verify support to add custom claims to tokens generated using the login endpoint.
-    """
-    username1 = "user1"
-    username2 = "user2"
-    password = "password"
-    for username in [username1, username2]:
-        user = data.User(
-            username=username,
-            password_hash=nacl.pwhash.str(password.encode()).decode(),
-            auth_method=AuthMethod.database,
-        )
-        await user.insert()
-
-    async def assert_claims(username: str, expected_claims: Sequence[Claim]) -> None:
-        result = await auth_client.list_claims(username=username)
-        assert result.code == 200
-        actual_claims = [Claim(**r) for r in result.result["data"]]
-        # The list_claims should return claims in ASC order with respect to the key of the claim.
-        assert sorted(expected_claims, key=lambda x: x.key) == actual_claims
-
-        result = await client.login(username, password)
-        assert result.code == 200
-        claims_in_token, _ = auth.decode_token(token=result.result["data"]["token"])
-        for claim in expected_claims:
-            assert claim.value == claims_in_token[claim.key]
-
-    await assert_claims(username=username1, expected_claims=[])
-    await assert_claims(username=username2, expected_claims=[])
-
-    # Add claim for users
-    result = await auth_client.set_claim(username=username1, key="test1", value="val")
-    assert result.code == 200
-
-    result = await auth_client.set_claim(username=username2, key="test1", value="other_val")
-    assert result.code == 200
-
-    # Verify claims
-    await assert_claims(username=username1, expected_claims=[Claim(key="test1", value="val")])
-    await assert_claims(username=username2, expected_claims=[Claim(key="test1", value="other_val")])
-
-    # Update claims
-    result = await auth_client.set_claim(username=username1, key="test2", value="test")
-    assert result.code == 200
-
-    result = await auth_client.set_claim(username=username2, key="test1", value="new_val")
-    assert result.code == 200
-
-    # Verify claims
-    await assert_claims(username=username1, expected_claims=[Claim(key="test1", value="val"), Claim(key="test2", value="test")])
-    await assert_claims(username=username2, expected_claims=[Claim(key="test1", value="new_val")])

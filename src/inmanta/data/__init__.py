@@ -6329,53 +6329,70 @@ class User(BaseDocument):
         return m.User(username=self.username, auth_method=self.auth_method)
 
 
-class Claim(BaseDocument):
-    """Claims included in the authorization token of a user."""
+class Role(BaseDocument):
 
-    __primary_key__ = ("user_id", "key")
+    __primary_key__ = ("id", "name")
 
-    user_id: uuid.UUID
-    key: str
-    value: str
+    id: uuid.UUID
+    name: str
 
     @classmethod
-    async def get_claims_for_user(cls, username: str) -> Sequence["Claim"]:
+    async def assign_role_to_user(cls, username: str, role: m.Role) -> None:
+        """
+        Assign the given role to the given user.
+        """
+        async with cls.get_connection() as connection:
+            create_role_query = f"""
+                INSERT INTO {cls.table_name()}(id, name)
+                VALUES($1, $2)
+                ON CONFLICT DO NOTHING
+            """
+            await cls._execute_query(create_role_query, uuid.uuid4(), role.name, connection=connection)
+            assign_role_query = f"""
+                INSERT INTO public.role_assignment(user_id, environment, role_id)
+                VALUES(
+                    (SELECT id FROM {User.table_name()} WHERE username=$1),
+                    $2,
+                    (SELECT id FROM {cls.table_name()} WHERE name=$3)
+                );
+            """
+            await cls._execute_query(assign_role_query, username, role.environment, role.name, connection=connection)
+
+    @classmethod
+    async def unassign_role_from_user(cls, username: str, role: m.Role) -> None:
+        """
+        Unassign the given role from the given user.
+        """
+        async with cls.get_connection() as connection:
+            unassign_role_query = f"""
+                DELETE FROM public.role_assignment
+                WHERE user_id=(SELECT id FROM {User.table_name()} WHERE username=$1)
+                      AND environment=$2
+                      AND role_id=(SELECT id FROM {cls.table_name()} WHERE name=$3);
+            """
+            await cls._execute_query(unassign_role_query, username, role.environment, role.name, connection=connection)
+            delete_role_query = f"""
+                DELETE FROM {cls.table_name()} AS rol
+                WHERE name=$1
+                      AND NOT EXISTS(
+                          SELECT 1
+                          FROM public.role_assignment AS ras
+                          WHERE ras.role_id=rol.id
+                      );
+            """
+            await cls._execute_query(delete_role_query, role.name, connection=connection)
+
+    @classmethod
+    async def get_roles_for_user(cls, username: str) -> list[m.Role]:
         query = f"""
-            SELECT c.user_id, c.key, c.value
-            FROM {User.table_name()} AS u INNER JOIN {Claim.table_name()} AS c ON u.id=c.user_id
+            SELECT ras.environment, rol.name
+            FROM {User.table_name()} AS u
+                INNER JOIN public.role_assignment AS ras ON u.id=ras.user_id
+                INNER JOIN {cls.table_name()} AS rol ON ras.role_id=rol.id
             WHERE u.username=$1
-            ORDER BY c.user_id, c.key ASC
+            ORDER BY ras.environment, rol.name
         """
-        return [
-            Claim(from_postgres=True, user_id=r["user_id"], key=r["key"], value=r["value"])
-            for r in await cls._fetch_query(query, username)
-        ]
-
-    @classmethod
-    async def set_claim(cls, username: str, key: str, value: str) -> None:
-        query = f"""
-            INSERT INTO {Claim.table_name()} (user_id, key, value)
-            VALUES(
-                (SELECT id FROM {User.table_name()} WHERE username=$1),
-                $2,
-                $3
-            )
-            ON CONFLICT (user_id, key) DO UPDATE
-            SET value=$3
-        """
-        await cls._execute_query(query, username, key, value)
-
-    @classmethod
-    async def delete_claim(cls, username: str, key: str) -> None:
-        query = f"""
-            DELETE FROM {Claim.table_name()}
-            WHERE user_id=(SELECT id FROM {User.table_name()} WHERE username=$1) AND key=$2
-        """
-        # TODO: Check if records exists.
-        await cls._execute_query(query, username, key)
-
-    def to_dto(self) -> m.Claim:
-        return m.Claim(key=self.key, value=self.value)
+        return [m.Role(environment=r["environment"], name=r["name"]) for r in await cls._fetch_query(query, username)]
 
 
 class DiscoveredResource(BaseDocument):

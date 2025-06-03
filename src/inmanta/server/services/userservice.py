@@ -17,6 +17,8 @@ Contact: code@inmanta.com
 """
 
 import logging
+import uuid
+from collections.abc import Mapping
 
 import asyncpg
 
@@ -118,10 +120,10 @@ class UserService(server_protocol.ServerSlice):
         except nacl.exceptions.InvalidkeyError:
             raise exceptions.UnauthorizedException()
 
-        auth_claims = await data.Claim.get_claims_for_user(username)
-        custom_claims = {
+        roles: list[model.Role] = await data.Role.get_roles_for_user(username)
+        custom_claims: Mapping[str, str | list[str] | Mapping[str, str]] = {
             "sub": username,
-            **{c.key: c.value for c in auth_claims},
+            const.INMANTA_ROLES_URN: {str(r.environment): r.name for r in roles},
         }
         token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims=custom_claims)
         return common.ReturnValue(
@@ -139,14 +141,18 @@ class UserService(server_protocol.ServerSlice):
             return model.CurrentUser(username=context.auth_username)
         raise exceptions.NotFound("No current user found, probably an API token is used.")
 
-    @protocol.handle(protocol.methods_v2.set_claim)
-    async def set_claim(self, username: str, key: str, value: str) -> None:
-        await data.Claim.set_claim(username=username, key=key, value=value)
+    @protocol.handle(protocol.methods_v2.list_roles)
+    async def list_roles(self) -> list[str]:
+        return [r.name for r in await data.Role.get_list(order_by_column="name")]
 
-    @protocol.handle(protocol.methods_v2.list_claims)
-    async def list_claims(self, username: str) -> list[model.Claim]:
-        return [r.to_dto() for r in await data.Claim.get_claims_for_user(username=username)]
+    @protocol.handle(protocol.methods_v2.list_roles_for_user)
+    async def list_roles_for_user(self, username: str) -> list[model.Role]:
+        return await data.Role.get_roles_for_user(username)
 
-    @protocol.handle(protocol.methods_v2.delete_claim)
-    async def delete_claim(self, username: str, key: str) -> None:
-        await data.Claim.delete_claim(username=username, key=key)
+    @protocol.handle(protocol.methods_v2.assign_role)
+    async def assign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
+        await data.Role.assign_role_to_user(username, model.Role(environment=environment, name=role))
+
+    @protocol.handle(protocol.methods_v2.unassign_role)
+    async def unassign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
+        await data.Role.unassign_role_from_user(username, model.Role(environment=environment, name=role))

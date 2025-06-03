@@ -1,4 +1,4 @@
 ---
-description: Added support for custom claims on login endpoint.
+description: "Added support to assign roles to users when `server.auth_method=database` is used."
 change-type: minor
 destination-branches: [master]

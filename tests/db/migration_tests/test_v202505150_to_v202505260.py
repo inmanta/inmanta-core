@@ -33,7 +33,8 @@ async def test_add_claim_table(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
     get_tables_in_db: abc.Callable[[], abc.Awaitable[list[str]]],
 ) -> None:
-
-    assert "claim" not in await get_tables_in_db()
+    assert "role" not in await get_tables_in_db()
+    assert "role_assignment" not in await get_tables_in_db()
     await migrate_db_from()
-    assert "claim" in await get_tables_in_db()
+    assert "role" in await get_tables_in_db()
+    assert "role_assignment" in await get_tables_in_db()

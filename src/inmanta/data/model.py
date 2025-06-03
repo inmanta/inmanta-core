@@ -781,17 +781,20 @@ class User(BaseModel):
     auth_method: AuthMethod
 
 
-class Claim(BaseModel):
-    """A claim of an authorization token."""
-
-    key: str
-    value: str
-
-
 class CurrentUser(BaseModel):
     """Information about the current logged in user"""
 
     username: str
+
+
+class Role(BaseModel):
+    """
+    :param environment: The environment scope of the role.
+    :param name: The name of the role.
+    """
+
+    environment: uuid.UUID
+    name: str
 
 
 class LoginReturn(BaseModel):
