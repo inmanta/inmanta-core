@@ -61,7 +61,7 @@ def get_inmanta_module_name(python_module_name: str) -> str:
 
 
 class SourceNotFoundException(Exception):
-    """This exception is raised when the source of the provided type is not found"""
+    """This exception is raised when module source is not found"""
 
 
 class CodeManager:
@@ -84,10 +84,6 @@ class CodeManager:
 
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[str, "InmantaModule"] = {}
-
-        # Bookkeeping to warn only once per module name for modules
-        # imported only in plugin code, but not in model code.
-        self._missing_import_module_warnings: list[str] = []
 
     def build_agent_map(self, resources: dict["Id", "Resource"]) -> None:
         """
@@ -115,13 +111,10 @@ class CodeManager:
         loaded_modules = module.Project.get().modules
 
         if module_name not in loaded_modules:
-            if module_name not in self._missing_import_module_warnings:
-                LOGGER.warning(
-                    "Module %s is imported in plugin code but not in model code. Either remove the unused import, "
-                    "or make sure to import the module in model code." % module_name
-                )
-                self._missing_import_module_warnings.append(module_name)
-            return
+            raise SourceNotFoundException(
+                "Module %s is imported in plugin code but not in model code. Either remove the unused import, "
+                "or make sure to import the module in model code." % module_name
+            )
 
         self._register_inmanta_module(module_name, loaded_modules[module_name])
 
