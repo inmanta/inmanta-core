@@ -75,9 +75,8 @@ async def env_with_agents(client, environment: str) -> None:
     await create_agent(name="failover1", last_failover=(datetime.datetime.now() - datetime.timedelta(minutes=1)))  # up
     await create_agent(name="failover2", last_failover=datetime.datetime.now())  # up
 
-    # These names start with z_* to control the order of the returned agent list e.g. in test_agents_paging.
-    await create_agent(name="z_a_agent_with_degraded_executor", executor_status=ExecutorStatus.degraded)  # degraded
-    await create_agent(name="z_z_agent_with_down_executor", executor_status=ExecutorStatus.down)  # down
+    await create_agent(name="agent_with_degraded_executor", executor_status=ExecutorStatus.degraded)  # degraded
+    await create_agent(name="agent_with_down_executor", executor_status=ExecutorStatus.down)  # down
 
 
 async def test_agent_list_filters(client, environment: str, env_with_agents: None) -> None:
@@ -111,6 +110,10 @@ async def test_agent_list_filters(client, environment: str, env_with_agents: Non
     assert all(["with_instance" in agent["name"] for agent in result.result["data"]])
 
     result = await client.get_agents(environment, filter={"name": "agent", "status": "down"})
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+
+    result = await client.get_agents(environment, filter={"name": "agent", "status": "degraded"})
     assert result.code == 200
     assert len(result.result["data"]) == 1
 

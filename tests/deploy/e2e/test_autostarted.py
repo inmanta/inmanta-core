@@ -1510,7 +1510,7 @@ async def test_code_install_success_code_load_error_for_provider(
 
     agent_1_success_resource = successhandlermodule::SuccessResource(name="test_success_2", agent="agent_1")
 
-        """,  # noqa: E501
+        """,
         ministd=True,
         index_url="https://pypi.org/simple",
     )
@@ -1535,7 +1535,7 @@ async def test_code_install_success_code_load_error_for_provider(
 
     agent_1_fail_resource = minimalinstallfailuremodule::CodeInstallErrorResource(name="test_failure_2", agent="agent_1")
 
-        """,  # noqa: E501
+        """,
         ministd=True,
         index_url="https://pypi.org/simple",
     )
@@ -1577,7 +1577,7 @@ async def test_code_registration_bug_reproduction(
 
     agent_1_success_resource = successhandlermodule::SuccessResource(name="test_success_1", agent="agent_1")
 
-        """,  # noqa: E501
+        """,
         ministd=True,
         index_url="https://pypi.org/simple",
     )
@@ -1608,7 +1608,7 @@ async def test_code_registration_bug_reproduction(
         """
     import successhandlermodule
     agent_1_success_resource = successhandlermodule::SuccessResource(name="test_success_2", agent="agent_1")
-        """,  # noqa: E501
+        """,
         ministd=True,
         index_url="https://pypi.org/simple",
     )
