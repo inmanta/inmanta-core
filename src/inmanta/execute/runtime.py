@@ -35,7 +35,7 @@ from inmanta.ast import (
     OptionalValueException,
     RuntimeException,
 )
-from inmanta.ast.type import ReferenceValue, Type
+from inmanta.ast.type import MaybeReference, Type
 from inmanta.execute import dataflow
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.util import NoneValue, Unknown
@@ -1209,7 +1209,7 @@ class ExecutionContext(Resolver):
 
 
 # also extends locatable
-class Instance(ExecutionContext, ReferenceValue):
+class Instance(ExecutionContext, MaybeReference):
     def set_location(self, location: Location) -> None:
         Locatable.set_location(self, location)
         self.locations.append(location)
@@ -1275,10 +1275,12 @@ class Instance(ExecutionContext, ReferenceValue):
     def get_type(self) -> "Entity":
         return self.type
 
-    # TODO: check if this is used in latest implementation
-    def is_reference(self) -> bool:
-        # TODO: docstring
-        return self.dataclass_self is not None and isinstance(self.dataclass_self, references.Reference)
+    def is_reference(self) -> Optional[references.Reference]:
+        return (
+            self.dataclass_self
+            if self.dataclass_self is not None and isinstance(self.dataclass_self, references.Reference)
+            else None
+        )
 
     def set_attribute(self, name: str, value: object, location: Location, recur: bool = True) -> None:
         if name not in self.slots:

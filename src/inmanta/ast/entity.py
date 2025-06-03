@@ -742,9 +742,13 @@ class Entity(NamedType, WithComment):
             kwargs = {k: v.get_value() for k, v in instance.slots.items() if k not in ["self", "requires", "provides"]}
             for k, v in kwargs.items():
                 if isinstance(v, Reference) and not isinstance(self._paired_dataclass_field_types.get(k), ReferenceType):
-                    # TODO: better message
                     raise UndeclaredReference(
-                        reference=v, message=f"{v} is a reference, should be {self._paired_dataclass_field_types[k]}"
+                        reference=v,
+                        message=(
+                            f"Attribute {k} for dataclass instance '{instance}' is a reference. Declared type is"
+                            f" {self._paired_dataclass_field_types[k]}. To allow references, use a `... | Reference[...]`"
+                            " annotation."
+                        ),
                     )
             return self._paired_dataclass(**kwargs)
 

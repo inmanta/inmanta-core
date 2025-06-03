@@ -49,17 +49,16 @@ if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement
 
 
-# TODO: if this protocol ends up staying, the UnexpectedReferenceValidationError probably belongs next to it. Consider where
-#   else they should be used.
-# TODO: name
+# TODO: is there no better way than this?
 @typing.runtime_checkable
-class ReferenceValue(typing.Protocol):
-    # TODO
+class MaybeReference(typing.Protocol):
     """
     DSL value that may represent a reference in the Python domain, while having a different value in the DSL domain.
     """
-    def is_reference(self) -> bool:
+
+    def is_reference(self) -> Optional[references.Reference]:
         """
+        If this DSL value represents a reference value, returns the associated reference object. Otherwise returns None.
         """
         ...
 
@@ -90,10 +89,15 @@ class Type(Locatable):
         # on plugin attribute access (see DynamicProxy.__getattr__). So we can simply pass dataclass references along as
         # the instances that they are in the DSL, without having to reject them here.
         if isinstance(value, references.Reference):
-            # TODO: make this an UndeclaredReference exception. May require making it a RuntimeException instead of a
-            #       PluginException
-            # TODO: message
-            raise UndeclaredReference(reference=value, message="undeclared reference")
+            raise UndeclaredReference(
+                reference=value,
+                message=(
+                    "References are not allowed for values of type `object`. While the `object` Python is technically"
+                    " compatible with any value, references are considered special DSL values and are therefore guarded so"
+                    " that they don't accidentally show up where they are not expected. To work with references, explicitly"
+                    " declare support with a `object | Reference[object]` annotation."
+                ),
+            )
         return True
 
     def type_string(self) -> Optional[str]:
@@ -254,20 +258,19 @@ class ReferenceType(Type):
             self.is_dataclass = True
 
     def _get_reference(self, value: Optional[object]) -> Optional[references.Reference[object]]:
-        # TODO: docstring
-        # TODO: fix! Consider making a protocol with dataclass_self?
+        """
+        If the given DSL value represents a reference, returns the associated reference object. Otherwise returns None.
+
+        This includes DSL dataclass instances with reference attributes, if they were initially constructed in the Python
+        domain as a reference to a dataclass instance (and converted on the boundary).
+        """
         from inmanta.execute.runtime import Instance
         # TODO: test cases for each of these
         return (
             value
             if isinstance(value, references.Reference)
-            else value.dataclass_self
-            if (
-                self.is_dataclass
-                and isinstance(value, Instance)
-                and value.dataclass_self is not None
-                and isinstance(value.dataclass_self, references.Reference)
-            )
+            else value.is_reference()
+            if isinstance(value, MaybeReference)
             else None
         )
 
@@ -328,7 +331,6 @@ class ReferenceType(Type):
         return self.element_type.issupertype(other.element_type)
 
 
-# TODO: this class!
 class OrReferenceType(ReferenceType):
     """
     This class represents the shorthand for Reference[T] | T
@@ -528,6 +530,7 @@ class NullableType(Type):
         return isinstance(other, Null) or other.issubtype(self.element_type)
 
 
+# TODO: add test case that uses "any" instead of object => expectation is that it's fine because it inherits Type's validate
 class Any(Type):
     """
     this type represents the any type, similar to Python's
