@@ -28,6 +28,7 @@ import utils
 from inmanta import config, const, data
 from inmanta.agent.agent_new import Agent
 from inmanta.deploy.state import Blocked, Compliance, DeployResult, ResourceState
+from inmanta.util import get_compiler_version
 
 
 @pytest.fixture
@@ -74,6 +75,8 @@ async def test_scheduler_initialization(
     resource_container.Provider.set(agent="agent1", key="key", value="key1")
     resource_container.Provider.set(agent="agent1", key="key", value="key2")
     resource_container.Provider.set(agent="agent1", key="key", value="key3")
+    resource_container.Provider.set(agent="agent1", key="key", value="key4")
+    resource_container.Provider.set(agent="agent1", key="key", value="key5")
     resource_container.Provider.set_fail(agent="agent1", key="key2", failcount=1)
 
     version = await clienthelper.get_version()
@@ -102,9 +105,37 @@ async def test_scheduler_initialization(
             "purged": False,
             "send_event": False,
         },
+        {
+            "key": "key4",
+            "value": "val4",
+            "id": f"test::Resource[agent1,key=key4],v={version}",
+            "requires": [],
+            "purged": False,
+            "send_event": False,
+        },
+        {
+            "key": "key5",
+            "value": "val5",
+            "id": f"test::Resource[agent1,key=key5],v={version}",
+            "requires": [f"test::Resource[agent1,key=key4],v={version}"],
+            "purged": False,
+            "send_event": False,
+        },
     ]
     # Deploy and release version
-    await clienthelper.put_version_simple(version=version, resources=resources)
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={
+            "test::Resource[agent1,key=key4]": const.ResourceState.undefined
+        },
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        module_version_info={},
+    )
+    assert res.code == 200, res.result
     result = await client.release_version(environment, version)
     assert result.code == 200
     await clienthelper.wait_for_deployed()
@@ -113,6 +144,8 @@ async def test_scheduler_initialization(
         ("test::Resource[agent1,key=key1]", const.ResourceState.deployed),
         ("test::Resource[agent1,key=key2]", const.ResourceState.failed),
         ("test::Resource[agent1,key=key3]", const.ResourceState.skipped),
+        ("test::Resource[agent1,key=key4]", const.ResourceState.undefined),
+        ("test::Resource[agent1,key=key5]", const.ResourceState.skipped_for_undefined),
     ]:
         result = await client.resource_details(tid=environment, rid=rid)
         assert result.code == 200
@@ -131,7 +164,7 @@ async def test_scheduler_initialization(
     # get deploy timestamps
     async def get_last_deployed() -> dict[int, datetime.datetime]:
         result: dict[str, datetime.datetime] = {}
-        for i in range(1, 4):
+        for i in range(1, 6):
             rid = f"test::Resource[agent1,key=key{i}]"
             rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=rid)
             assert rps is not None
@@ -173,6 +206,19 @@ async def test_scheduler_initialization(
             blocked=Blocked.NOT_BLOCKED,  # we don't restore TRANSIENT status atm
             last_deployed=last_deployed[3],
         ),
+        # If reset_state=True we will reset the blocked status to NOT_BLOCKED
+        "test::Resource[agent1,key=key4]": ResourceState(
+            compliance=Compliance.UNDEFINED,
+            last_deploy_result=DeployResult.NEW,
+            blocked=Blocked.BLOCKED if not reset_state else Blocked.NOT_BLOCKED,
+            last_deployed=last_deployed[4],
+        ),
+        "test::Resource[agent1,key=key5]": ResourceState(
+            compliance=Compliance.HAS_UPDATE,
+            last_deploy_result=DeployResult.NEW,
+            blocked=Blocked.BLOCKED if not reset_state else Blocked.NOT_BLOCKED,
+            last_deployed=last_deployed[5],
+        ),
     }
 
     # unpause agent1 -> start deploying
@@ -206,3 +252,36 @@ async def test_scheduler_initialization(
     assert last_deployed_after[1] == last_deployed[1]
     assert last_deployed_after[2] > last_deployed[2]
     assert last_deployed_after[3] > last_deployed[3]
+
+    assert agent.scheduler._state.resource_state == {
+        "test::Resource[agent1,key=key1]": ResourceState(
+            compliance=Compliance.COMPLIANT,
+            last_deploy_result=DeployResult.DEPLOYED,
+            blocked=Blocked.NOT_BLOCKED,
+            last_deployed=last_deployed_after[1],
+        ),
+        "test::Resource[agent1,key=key2]": ResourceState(
+            compliance=Compliance.COMPLIANT,
+            last_deploy_result=DeployResult.DEPLOYED,
+            blocked=Blocked.NOT_BLOCKED,
+            last_deployed=last_deployed_after[2],
+        ),
+        "test::Resource[agent1,key=key3]": ResourceState(
+            compliance=Compliance.COMPLIANT,
+            last_deploy_result=DeployResult.DEPLOYED,
+            blocked=Blocked.NOT_BLOCKED,
+            last_deployed=last_deployed_after[3],
+        ),
+        "test::Resource[agent1,key=key4]": ResourceState(
+            compliance=Compliance.UNDEFINED,
+            last_deploy_result=DeployResult.NEW,
+            blocked=Blocked.BLOCKED,
+            last_deployed=last_deployed_after[4],
+        ),
+        "test::Resource[agent1,key=key5]": ResourceState(
+            compliance=Compliance.HAS_UPDATE,
+            last_deploy_result=DeployResult.NEW,
+            blocked=Blocked.BLOCKED,
+            last_deployed=last_deployed_after[5],
+        ),
+    }
