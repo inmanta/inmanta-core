@@ -29,6 +29,7 @@ from typing import Literal, Tuple
 import pydantic
 import typing_inspect
 from pydantic import ValidationError
+from typing import Optional
 
 import inmanta
 from inmanta import util
@@ -533,6 +534,37 @@ class ReplaceValue(Mutator):
         value = self.resolve_other(self.value, logger)
         dict_path_expr = dict_path.to_path(self.destination)
         dict_path_expr.set_element(self.resource, value)
+
+
+@typing.runtime_checkable
+class MaybeReference(typing.Protocol):
+    """
+    DSL value that may represent a reference in the Python domain, while having a different value in the DSL domain.
+    """
+
+    def is_reference(self) -> Optional[Reference]:
+        """
+        If this DSL value represents a reference value, returns the associated reference object. Otherwise returns None.
+        """
+        ...
+
+
+def is_reference(value: object) -> Optional[Reference]:
+    """
+    Iff the given value is a reference or a DSL value that represents a reference, returns the associated reference.
+    Otherwise returns None.
+
+    This includes DSL dataclass instances with reference attributes, if they were initially constructed in the Python
+    domain as a reference to a dataclass instance (and converted on the boundary).
+    """
+    return (
+        # TODO: test cases for each of these
+        value
+        if isinstance(value, Reference)
+        else value.is_reference()
+        if isinstance(value, MaybeReference)
+        else None
+    )
 
 
 def is_reference_of(instance: typing.Optional[object], type_class: type[object]) -> bool:

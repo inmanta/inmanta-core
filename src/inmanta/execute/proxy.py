@@ -23,6 +23,7 @@ from dataclasses import is_dataclass
 from typing import TYPE_CHECKING, Callable, Optional, Union
 
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
+from inmanta import references
 from inmanta.ast import (
     AttributeNotFound,
     Location,
@@ -33,7 +34,6 @@ from inmanta.ast import (
 )
 from inmanta.ast import UnsetException  # noqa F401
 from inmanta.execute.util import NoneValue, Unknown
-from inmanta.references import Reference
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
 from inmanta.util import JSONSerializable
@@ -147,7 +147,7 @@ class DynamicProxy:
 
             return dict(map(recurse_dict_item, item.items()))
 
-        if isinstance(item, Reference):
+        if isinstance(item, references.Reference):
             ref_type = item.get_reference_type()
             if ref_type is None:
                 raise RuntimeException(
@@ -222,7 +222,7 @@ class DynamicProxy:
         if isinstance(value, (str, tuple, int, float, bool)):
             return copy(value)
 
-        if isinstance(value, Reference):
+        if isinstance(value, references.Reference):
             if context is not None and not context.allow_references:
                 # TODO: tailor-made exceptions from child classes, e.g. through class method with context?
                 raise UndeclaredReference(
@@ -275,7 +275,7 @@ class DynamicProxy:
         # The Python domain is a black box. We don't want to transparently pass unexpected values in there.
         # TODO: allow_references() name
         # => don't allow references in attributes. Can be explicitly allowed via allow_references() wrapper
-        if not self._get_context().allow_references and isinstance(value, Reference):
+        if not self._get_context().allow_references and isinstance(value, references.Reference):
             # TODO: string format accepts reference. Should also raise this exception
             raise UndeclaredReference(
                 reference=value,

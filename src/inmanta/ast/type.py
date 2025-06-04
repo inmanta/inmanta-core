@@ -49,18 +49,7 @@ if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement
 
 
-# TODO: is there no better way than this?
-@typing.runtime_checkable
-class MaybeReference(typing.Protocol):
-    """
-    DSL value that may represent a reference in the Python domain, while having a different value in the DSL domain.
-    """
-
-    def is_reference(self) -> Optional[references.Reference]:
-        """
-        If this DSL value represents a reference value, returns the associated reference object. Otherwise returns None.
-        """
-        ...
+# TODO: move this to inmanta.references + add helper function / method that takes any value
 
 
 @stable_api
@@ -257,25 +246,8 @@ class ReferenceType(Type):
 
             self.is_dataclass = True
 
-    def _get_reference(self, value: Optional[object]) -> Optional[references.Reference[object]]:
-        """
-        If the given DSL value represents a reference, returns the associated reference object. Otherwise returns None.
-
-        This includes DSL dataclass instances with reference attributes, if they were initially constructed in the Python
-        domain as a reference to a dataclass instance (and converted on the boundary).
-        """
-        from inmanta.execute.runtime import Instance
-        # TODO: test cases for each of these
-        return (
-            value
-            if isinstance(value, references.Reference)
-            else value.is_reference()
-            if isinstance(value, MaybeReference)
-            else None
-        )
-
     def validate(self, value: Optional[object]) -> bool:
-        ref: Optional[references.Reference[object]] = self._get_reference(value)
+        ref: Optional[references.Reference[object]] = references.is_reference(value)
         if ref is not None:
             assert ref._model_type is not None
             if ref._model_type.issubtype(self.element_type):
@@ -288,7 +260,7 @@ class ReferenceType(Type):
         return self.is_dataclass
 
     def to_python(self, instance: object) -> object:
-        result: Optional[references.Reference[object]] = self._get_reference(instance)
+        result: Optional[references.Reference[object]] = references.is_reference(instance)
         # wouldn't have passed validate otherwise
         assert result is not None
         return result

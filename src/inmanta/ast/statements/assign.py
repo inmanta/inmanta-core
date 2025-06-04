@@ -584,13 +584,7 @@ class FormattedString(ReferenceStatement):
         value: object = expression.execute(requires, resolver, queue)
         if isinstance(value, Unknown):
             return Unknown(self)
-        reference: Optional[references.Reference] = (
-            value
-            if isinstance(value, references.Reference)
-            else value.is_reference()
-            if isinstance(value, ast.type.MaybeReference)
-            else None
-        )
+        reference: Optional[references.Reference] = references.is_reference(value)
         if reference is not None:
             # TODO: add tests
             raise UndeclaredReference(
