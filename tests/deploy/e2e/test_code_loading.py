@@ -632,10 +632,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         version_info={},
         compiler_version=get_compiler_version(),
         module_version_info=module_version_info,
-        resource_sets={
-            "test::ResType_A[agent_X,key=key1]": "set-a",
-            "test::ResType_A[agent_Y,key=key1]": "set-b"
-        }
+        resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
     )
 
     assert result.code == 200
