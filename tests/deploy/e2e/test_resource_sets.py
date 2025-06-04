@@ -505,6 +505,101 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
 
     assert all(line in result.result["message"] for line in expected_lines)
 
+    # Swap them
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-b-old", "test::Resource[agent1,key=key2]": "set-a-old"},
+        module_version_info={},
+    )
+
+    assert result.code == 200, result.result
+
+    # Swap the new sets and removal of the old one
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-new", "test::Resource[agent1,key=key2]": "set-b-new"},
+        module_version_info={},
+        removed_resource_sets=["set-b-old", "set-a-old"],
+    )
+
+    assert result.code == 200, result.result
+
+    # Allow move into shared
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-new"},
+        module_version_info={},
+        removed_resource_sets=["set-b-new"],
+    )
+
+    assert result.code == 200, result.result
+
+    resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
+    resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
+    expected_resource_sets = {"test::Resource[agent1,key=key1]": "set-a-new", "test::Resource[agent1,key=key2]": None}
+    assert resource_sets_from_db == expected_resource_sets
+
+    # Don't allow escape out of shared
+    # Swap the new sets and removal of the old one
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-new", "test::Resource[agent1,key=key2]": "set-b-new"},
+        module_version_info={},
+    )
+    assert result.code == 400, result.result
+    assert (
+        "Invalid request: A partial compile cannot migrate resources: "
+        "trying to move test::Resource[agent1,key=key2] from resource set None to set-b-new." in result.result["message"]
+    )
+
+    # Don't allow escape out of shared
+    # Swap the new sets and removal of the old one
+    # Try to trick it by providing None as an updated set
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial
+        + [
+            {
+                "key": "key3",
+                "value": "value2",
+                "id": "test::Resource[agent1,key=key3],v=0",
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            }
+        ],
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={
+            "test::Resource[agent1,key=key1]": "set-a-new",
+            "test::Resource[agent1,key=key2]": "set-b-new",
+            "test::Resource[agent1,key=key3]": None,
+        },
+        module_version_info={},
+    )
+    assert result.code == 400, result.result
+    assert (
+        "Invalid request: A partial compile cannot migrate resources: "
+        "trying to move test::Resource[agent1,key=key2] from resource set None to set-b-new." in result.result["message"]
+    )
+
 
 async def test_put_partial_update_not_in_resource_set(server, client, environment, clienthelper):
     """
