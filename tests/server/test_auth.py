@@ -745,3 +745,4 @@ async def test_roles(server: protocol.Server, client) -> None:
     for env_id in [env1_id, env2_id]:
         result = await user2_client.list_notifications(tid=env_id)
         assert result.code == 403
+

@@ -6509,6 +6509,7 @@ _classes = [
     DiscoveredResource,
     File,
     Scheduler,
+    Role,
 ]
 
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
