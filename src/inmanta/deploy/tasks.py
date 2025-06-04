@@ -100,13 +100,13 @@ class Task(abc.ABC):
         # that failed to load/install:
         inmanta_module_name = self.id.get_inmanta_module()
 
+        LOGGER.error(f"{my_executor.failed_modules=}")
+
         if inmanta_module_name in my_executor.failed_modules:
             raise ExceptionGroup(
-                """
-                    The following modules cannot be loaded: %s.
-                """
+                "The following modules cannot be loaded: %s."
                 % ", ".join([e for e in my_executor.failed_modules[inmanta_module_name].keys()]),
-                [e for e in my_executor.failed_modules[inmanta_module_name].values()],
+                [e.with_traceback(e.__traceback__) for e in my_executor.failed_modules[inmanta_module_name].values()],
             )
 
         return my_executor
@@ -173,10 +173,12 @@ class Deploy(Task):
                     log_line = data.LogLine.log(
                         logging.ERROR,
                         "All resources of type `%(res_type)s` failed to load handler code or install handler code "
-                        "dependencies: `%(error)s`\n%(traceback)s",
+                        "dependencies:\n%(error)s\n%(traceback)s\n%(other_info)s\n%(other_info2)s",
                         res_type=executor_resource_details.id.entity_type,
-                        error=str(e),
+                        error="".join(traceback.format_exception(e)),
                         traceback="".join(traceback.format_tb(e.__traceback__)),
+                        other_info=traceback.print_exception(e),
+                        other_info2=str(e),
                     )
                     # Not attached to ctx, needs to be flushed to logger explicitly
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
