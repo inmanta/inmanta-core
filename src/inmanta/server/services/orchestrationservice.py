@@ -66,6 +66,12 @@ PERFORM_CLEANUP: bool = True
 # Kill switch for cleanup, for use when working with historical data
 
 
+def get_printable_name_for_resource_set(native: str | None) -> str:
+    if native is None:
+        return "<SHARED>"
+    return native
+
+
 class CrossResourceSetDependencyError(Exception):
     def __init__(self, resource_id1: ResourceIdStr, resource_id2: ResourceIdStr) -> None:
         """
@@ -265,7 +271,8 @@ class PartialUpdateMerger:
                 raise BadRequest(
                     "A partial compile only migrate resources between resource set that are pushed together:"
                     f" trying to move {res.resource_id} from resource set "
-                    f"{matching_resource_old_model.resource_set} to {res.resource_set}."
+                    f"{get_printable_name_for_resource_set(matching_resource_old_model.resource_set)} "
+                    f"to {get_printable_name_for_resource_set(res.resource_set)}."
                 )
 
             if res.resource_set is None and res.attribute_hash != matching_resource_old_model.attribute_hash:
@@ -873,7 +880,8 @@ class OrchestrationService(protocol.ServerSlice):
                             "a full compile is necessary for this process:\n"
                         )
                         msg += "\n".join(
-                            f"    {rid} moved from {rids_unchanged_resource_sets[rid]} to {resource_sets.get(rid)}"
+                            f"    {rid} moved from {get_printable_name_for_resource_set(rids_unchanged_resource_sets[rid])} "
+                            f"to {get_printable_name_for_resource_set(resource_sets.get(rid))}"
                             for rid in resources_that_moved_resource_sets
                         )
 
