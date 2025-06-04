@@ -541,14 +541,3 @@ def is_reference_of(instance: typing.Optional[object], type_class: type[object])
         return False
 
     return instance.get_reference_type() == type_class
-
-
-# TODO: name
-class UnexpectedReferenceException(Exception):
-    # TODO
-    """
-    """
-
-    def __init__(self, msg: str, reference: Reference[RefValue]):
-        super().__init__(msg)
-        self.reference: Reference[RefValue] = reference

@@ -1093,9 +1093,8 @@ class AttributeNotFound(NotFoundException, AttributeError):
     """
 
 
-# TODO: does references.UnexpectedReferenceException still have value? Is it raised or caught anywhere? It complicates things
 # custom class to enable clean wrapping on the plugin boundary
-class UndeclaredReference(RuntimeException, references.UnexpectedReferenceException):
+class UndeclaredReference(RuntimeException):
     """
     Undeclared reference encountered during plugin execution.
     """
@@ -1104,7 +1103,7 @@ class UndeclaredReference(RuntimeException, references.UnexpectedReferenceExcept
         self, *, stmt: Optional[Locatable] = None, reference: references.Reference[references.RefValue], message: str
     ) -> None:
         RuntimeException.__init__(self, stmt, message)
-        references.UnexpectedReferenceException.__init__(self, message, reference)
+        self.reference: Reference[RefValue] = reference
 
 
 @stable_api

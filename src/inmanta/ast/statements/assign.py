@@ -24,6 +24,7 @@ from string import Formatter
 from typing import TYPE_CHECKING, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
+from inmanta import ast, references
 from inmanta.ast import (
     AttributeException,
     DuplicateException,
@@ -35,6 +36,8 @@ from inmanta.ast import (
     RuntimeException,
     TypeAnchor,
     TypingException,
+    UndeclaredReference,
+    type,
 )
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import (
@@ -567,6 +570,40 @@ class FormattedString(ReferenceStatement):
         super().__init__(variables)
         self._format_string = format_string
 
+    def _resolve_value(
+        self,
+        name: str,
+        expression: "Reference",
+        requires: dict[object, object],
+        resolver: Resolver,
+        queue: QueueScheduler,
+    ) -> object | Unknown:
+        """
+        Resolve value expression, then validate and optionally coerce value.
+        """
+        value: object = expression.execute(requires, resolver, queue)
+        if isinstance(value, Unknown):
+            return Unknown(self)
+        reference: Optional[references.Reference] = (
+            value
+            if isinstance(value, references.Reference)
+            else value.is_reference()
+            if isinstance(value, ast.type.MaybeReference)
+            else None
+        )
+        if reference is not None:
+            # TODO: add tests
+            raise UndeclaredReference(
+                stmt=self,
+                reference=reference,
+                message=(
+                    f"Encountered reference in string format for variable `{name}`. This is not supported."
+                )
+            )
+        if isinstance(value, float) and (value - int(value)) == 0:
+            return int(value)
+        return value
+
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         return dataflow.NodeStub("StringFormat.get_node() placeholder for %s" % self).reference()
 
@@ -588,12 +625,9 @@ class StringFormat(FormattedString):
     def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         result_string = self._format_string
         for _var, str_id in self._variables:
-            value = _var.execute(requires, resolver, queue)
+            value: object | Unknown = self._resolve_value(str_id, _var, requires, resolver, queue)
             if isinstance(value, Unknown):
-                return Unknown(self)
-            if isinstance(value, float) and (value - int(value)) == 0:
-                value = int(value)
-
+                return value
             result_string = result_string.replace(str_id, str(value))
 
         return result_string
@@ -642,11 +676,9 @@ class StringFormatV2(FormattedString):
 
         kwargs = {}
         for _var, full_name in self._variables.items():
-            value = _var.execute(requires, resolver, queue)
+            value: object | Unknown = self._resolve_value(full_name, _var, requires, resolver, queue)
             if isinstance(value, Unknown):
-                return Unknown(self)
-            if isinstance(value, float) and (value - int(value)) == 0:
-                value = int(value)
+                return value
             kwargs[full_name] = value
 
         try:
