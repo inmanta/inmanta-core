@@ -263,8 +263,9 @@ class PartialUpdateMerger:
                 # Unless between resource sets we are updating
                 # Shared set is never in modified_resource_sets, so no escape from there
                 raise BadRequest(
-                    f"A partial compile cannot migrate resources: trying to move {res.resource_id} from resource set"
-                    f" {matching_resource_old_model.resource_set} to {res.resource_set}."
+                    "A partial compile only migrate resources between resource set that are pushed together:"
+                    f" trying to move {res.resource_id} from resource set "
+                    f"{matching_resource_old_model.resource_set} to {res.resource_set}."
                 )
 
             if res.resource_set is None and res.attribute_hash != matching_resource_old_model.attribute_hash:

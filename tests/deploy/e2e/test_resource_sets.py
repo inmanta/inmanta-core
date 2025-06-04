@@ -564,7 +564,7 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
     )
     assert result.code == 400, result.result
     assert (
-        "Invalid request: A partial compile cannot migrate resources: "
+        "Invalid request: A partial compile only migrate resources between resource set that are pushed together: "
         "trying to move test::Resource[agent1,key=key2] from resource set None to set-b-new." in result.result["message"]
     )
 
@@ -596,7 +596,7 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
     )
     assert result.code == 400, result.result
     assert (
-        "Invalid request: A partial compile cannot migrate resources: "
+        "A partial compile only migrate resources between resource set that are pushed together: "
         "trying to move test::Resource[agent1,key=key2] from resource set None to set-b-new." in result.result["message"]
     )
 
