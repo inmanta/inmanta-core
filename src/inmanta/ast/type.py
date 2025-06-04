@@ -49,9 +49,6 @@ if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement
 
 
-# TODO: move this to inmanta.references + add helper function / method that takes any value
-
-
 @stable_api
 class Type(Locatable):
     """

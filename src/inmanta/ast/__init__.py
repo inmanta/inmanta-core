@@ -20,7 +20,7 @@ import traceback
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
-from inmanta import references, warnings
+from inmanta import warnings
 from inmanta.ast import export
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
@@ -28,6 +28,7 @@ from inmanta.types import DataclassProtocol
 from inmanta.warnings import InmantaWarning
 
 if TYPE_CHECKING:
+    from inmanta import references
     from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast.entity import Entity
     from inmanta.ast.statements import Statement  # noqa: F401
@@ -1100,10 +1101,10 @@ class UndeclaredReference(RuntimeException):
     """
 
     def __init__(
-        self, *, stmt: Optional[Locatable] = None, reference: references.Reference[references.RefValue], message: str
+        self, *, stmt: Optional[Locatable] = None, reference: "references.Reference[references.RefValue]", message: str
     ) -> None:
         RuntimeException.__init__(self, stmt, message)
-        self.reference: Reference[RefValue] = reference
+        self.reference: references.Reference[RefValue] = reference
 
 
 @stable_api

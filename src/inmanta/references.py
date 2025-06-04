@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import inmanta.resources
 import abc
 import builtins
 import collections
@@ -301,8 +302,6 @@ class ReferenceLike:
 
     def serialize_arguments(self) -> Tuple[uuid.UUID, list[ArgumentTypes]]:
         """Serialize the arguments to this class"""
-        # TODO: fix import loop: consider whether references should import resources or be more lightweight
-        import inmanta.resources
         arguments: list[ArgumentTypes] = []
         for name, value in self.arguments.items():
             match value:
