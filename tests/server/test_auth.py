@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import os
 import uuid
 from dataclasses import dataclass
+from functools import partial
 from typing import Mapping
 
 import pytest
@@ -32,6 +33,7 @@ from inmanta.protocol.auth import decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.server import config as server_config
 from inmanta.server import protocol
+from inmanta.server.bootloader import InmantaBootloader
 
 
 @pytest.fixture
@@ -635,7 +637,7 @@ async def test_get_input_for_policy_engine(capture_input_for_policy_engine: Capt
 )
 @pytest.mark.parametrize("authentication_method", [AuthMethod.database])
 @pytest.mark.parametrize("enable_auth", [True])
-async def test_roles(server: protocol.Server, client) -> None:
+async def test_role_assignment(server: protocol.Server, client) -> None:
     """
     Verify that roles set for a user can be used in the access policy.
     """
@@ -694,6 +696,14 @@ async def test_roles(server: protocol.Server, client) -> None:
     assert result.code == 200
     assert not result.result["data"]
 
+    # Create role
+    result = await admin_client.create_role(name="a_role")
+    assert result.code == 200
+
+    result = await admin_client.list_roles()
+    assert result.code == 200
+    assert result.result["data"] == ["a_role"]
+
     # Assign roles
     result = await admin_client.assign_role(username=username1, environment=env1_id, role="a_role")
     assert result.code == 200
@@ -707,10 +717,6 @@ async def test_roles(server: protocol.Server, client) -> None:
     await verify_role_assignment(username=username1, expected_roles=expected_roles_username1)
     expected_roles_username2 = [Role(environment=env1_id, name="a_role")]
     await verify_role_assignment(username=username2, expected_roles=expected_roles_username2)
-
-    result = await admin_client.list_roles()
-    assert result.code == 200
-    assert result.result["data"] == ["a_role"]
 
     user1_client = await create_client_for_user(username=username1, password=password)
     for env_id in [env1_id, env2_id]:
@@ -746,3 +752,143 @@ async def test_roles(server: protocol.Server, client) -> None:
         result = await user2_client.list_notifications(tid=env_id)
         assert result.code == 403
 
+    # Remove last role assignment for role a_role
+    result = await admin_client.unassign_role(username=username1, environment=env1_id, role="a_role")
+    assert result.code == 200
+    # Remove role a_role
+    result = await admin_client.delete_role(name="a_role")
+    assert result.code == 200
+
+    result = await admin_client.list_roles()
+    assert result.code == 200
+    assert not result.result["data"]
+
+
+@pytest.mark.parametrize("enable_auth", [True])
+async def test_roles_failure_scenarios(server: protocol.Server, client, environment) -> None:
+    """
+    Test the failure scenario's when manipulating roles and role assignments.
+    """
+    result = await client.add_user(username="user", password="useruser")
+    assert result.code == 200
+
+    # Create role that already exists
+    result = await client.create_role(name="role")
+    assert result.code == 200
+    result = await client.create_role(name="role")
+    assert result.code == 400
+    assert "Role role already exists." in result.result["message"]
+
+    # Delete non-existing role
+    result = await client.delete_role(name="missing")
+    assert result.code == 400
+    assert "Role missing doesn't exist" in result.result["message"]
+
+    # Delete role still assigned to user
+    result = await client.assign_role(username="user", environment=environment, role="role")
+    assert result.code == 200
+    result = await client.delete_role(name="role")
+    assert result.code == 400
+    assert "Role role cannot be delete because it's still assigned to a user." in result.result["message"]
+
+    # Assign role: user doens't exist
+    result = await client.assign_role(username="missing", environment=environment, role="role")
+    assert result.code == 400
+    assert (
+        "Cannot assign role role to user missing."
+        f" Role role, environment {environment} or user missing doesn't exist." in result.result["message"]
+    )
+
+    # Assign role: role doesn't exist
+    result = await client.assign_role(username="user", environment=environment, role="missing")
+    assert result.code == 400
+    assert (
+        "Cannot assign role missing to user user."
+        f" Role missing, environment {environment} or user user doesn't exist." in result.result["message"]
+    )
+
+    # Assign role: environment doesn't exist
+    id_non_existing_env = uuid.uuid4()
+    result = await client.assign_role(username="user", environment=id_non_existing_env, role="role")
+    assert result.code == 400
+    assert (
+        "Cannot assign role role to user user."
+        f" Role role, environment {id_non_existing_env} or user user doesn't exist." in result.result["message"]
+    )
+
+    # Unassign role: user doesn't exist
+    result = await client.unassign_role(username="missing", environment=environment, role="role")
+    assert result.code == 400
+    assert f"Role role (environment={environment}) is not assigned to user missing" in result.result["message"]
+
+    # Unassign role: role doesn't exist
+    result = await client.unassign_role(username="user", environment=environment, role="missing")
+    assert result.code == 400
+    assert f"Role missing (environment={environment}) is not assigned to user user" in result.result["message"]
+
+    # Unassign role: environment doesn't exist
+    result = await client.unassign_role(username="user", environment=id_non_existing_env, role="role")
+    assert result.code == 400
+    assert f"Role role (environment={id_non_existing_env}) is not assigned to user user" in result.result["message"]
+
+
+@pytest.mark.parametrize(
+    "access_policy",
+    [
+        """
+        package policy
+
+        roles := ["role_a", "role_b"]
+
+        default allow := true
+        """
+    ],
+)
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
+@pytest.mark.parametrize("enable_auth", [True])
+async def test_synchronization_roles_with_db(server: protocol.Server, client, async_finalizer) -> None:
+    """
+    Verify that the roles defined in the access policy are correctly synchronized into the database.
+    """
+    result = await client.list_roles()
+    assert result.code == 200
+    assert result.result["data"] == ["role_a", "role_b"]
+
+    # Ensure that updates to the roles list are correctly reflected into the database.
+    await server.stop()
+    policy_file = policy_engine.policy_file.get()
+    with open(policy_file, "w") as fh:
+        fh.write(
+            """
+        package policy
+
+        roles := ["role_a", "role_c"]
+
+        default allow := true
+        """
+        )
+    ibl = InmantaBootloader(configure_logging=False)
+    async_finalizer.add(partial(ibl.stop, timeout=20))
+    await ibl.start()
+
+    result = await client.list_roles()
+    assert result.code == 200
+    assert result.result["data"] == ["role_a", "role_b", "role_c"]
+
+    # Ensure that the absence of the roles list doesn't update anything in the database.
+    await ibl.stop()
+    with open(policy_file, "w") as fh:
+        fh.write(
+            """
+        package policy
+
+        default allow := true
+        """
+        )
+    ibl = InmantaBootloader(configure_logging=False)
+    async_finalizer.add(partial(ibl.stop, timeout=20))
+    await ibl.start()
+
+    result = await client.list_roles()
+    assert result.code == 200
+    assert result.result["data"] == ["role_a", "role_b", "role_c"]

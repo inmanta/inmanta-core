@@ -35,8 +35,9 @@ async def update(connection: Connection) -> None:
             environment UUID NOT NULL,
             role_id UUID NOT NULL,
             PRIMARY KEY(user_id, environment, role_id),
+            FOREIGN KEY (environment) REFERENCES public.environment(id) ON DELETE CASCADE,
             FOREIGN KEY (user_id) REFERENCES public.inmanta_user(id) ON DELETE CASCADE,
-            FOREIGN KEY (role_id) REFERENCES public.role(id) ON DELETE CASCADE
+            FOREIGN KEY (role_id) REFERENCES public.role(id) ON DELETE RESTRICT
         );
     """
     await connection.execute(schema)

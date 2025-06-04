@@ -145,14 +145,39 @@ class UserService(server_protocol.ServerSlice):
     async def list_roles(self) -> list[str]:
         return [r.name for r in await data.Role.get_list(order_by_column="name")]
 
+    @protocol.handle(protocol.methods_v2.create_role)
+    async def create_role(self, name: str) -> None:
+        try:
+            await data.Role(id=uuid.uuid4(), name=name).insert()
+        except asyncpg.UniqueViolationError:
+            raise exceptions.BadRequest(f"Role {name} already exists.")
+
+    @protocol.handle(protocol.methods_v2.delete_role)
+    async def delete_role(self, name: str) -> None:
+        try:
+            await data.Role.delete_role(name=name)
+        except data.RoleStillAssignedException:
+            raise exceptions.BadRequest(f"Role {name} cannot be delete because it's still assigned to a user.")
+        except KeyError:
+            raise exceptions.BadRequest(f"Role {name} doesn't exist.")
+
     @protocol.handle(protocol.methods_v2.list_roles_for_user)
     async def list_roles_for_user(self, username: str) -> list[model.Role]:
         return await data.Role.get_roles_for_user(username)
 
     @protocol.handle(protocol.methods_v2.assign_role)
     async def assign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
-        await data.Role.assign_role_to_user(username, model.Role(environment=environment, name=role))
+        try:
+            await data.Role.assign_role_to_user(username, model.Role(environment=environment, name=role))
+        except data.CannotAssignRoleException:
+            raise exceptions.BadRequest(
+                f"Cannot assign role {role} to user {username}."
+                f" Role {role}, environment {environment} or user {username} doesn't exist."
+            )
 
     @protocol.handle(protocol.methods_v2.unassign_role)
     async def unassign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
-        await data.Role.unassign_role_from_user(username, model.Role(environment=environment, name=role))
+        try:
+            await data.Role.unassign_role_from_user(username, model.Role(environment=environment, name=role))
+        except KeyError:
+            raise exceptions.BadRequest(f"Role {role} (environment={environment}) is not assigned to user {username}")

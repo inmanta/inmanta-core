@@ -483,3 +483,5 @@ class AuthorizationLabel(str, Enum):
     TOKEN = "token"
     ROLES_READ = "roles.read"
     ROLES_WRITE = "roles.write"
+    ROLE_ASSIGNMENT_READ = "role_assignment.read"
+    ROLE_ASSIGNMENT_WRITE = "role_assignment.write"

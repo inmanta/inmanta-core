@@ -1570,7 +1570,27 @@ def list_roles() -> list[str]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ROLES_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.ROLES_WRITE, read_only=False)
+@typedmethod(path="/roles", operation="POST", client_types=[ClientType.api], api_version=2)
+def create_role(name: str) -> None:
+    """
+    Create a new role.
+
+    :param name: The name of the role to create.
+    """
+
+
+@auth(auth_label=const.AuthorizationLabel.ROLES_WRITE, read_only=False)
+@typedmethod(path="/roles", operation="DELETE", client_types=[ClientType.api], api_version=2)
+def delete_role(name: str) -> None:
+    """
+    Delete a role.
+
+    :param name: The name of the role to delete.
+    """
+
+
+@auth(auth_label=const.AuthorizationLabel.ROLE_ASSIGNMENT_READ, read_only=True)
 @typedmethod(path="/role_assignment/<username>", operation="GET", client_types=[ClientType.api], api_version=2)
 def list_roles_for_user(username: str) -> list[model.Role]:
     """
@@ -1580,7 +1600,7 @@ def list_roles_for_user(username: str) -> list[model.Role]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ROLES_WRITE, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.ROLE_ASSIGNMENT_WRITE, read_only=False)
 @typedmethod(path="/role_assignment/<username>", operation="POST", client_types=[ClientType.api], api_version=2)
 def assign_role(username: str, environment: uuid.UUID, role: str) -> None:
     """
@@ -1592,7 +1612,7 @@ def assign_role(username: str, environment: uuid.UUID, role: str) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.ROLES_WRITE, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.ROLE_ASSIGNMENT_WRITE, read_only=False)
 @typedmethod(path="/role_assignment/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def unassign_role(username: str, environment: uuid.UUID, role: str) -> None:
     """
