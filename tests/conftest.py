@@ -126,7 +126,7 @@ import weakref
 from collections import abc, defaultdict, namedtuple
 from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
-from typing import Any, Callable, Dict, Generic, Optional, Union, cast
+from typing import Any, Callable, Dict, Generic, Optional, Union
 
 import asyncpg
 import psutil
