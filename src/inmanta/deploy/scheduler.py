@@ -695,6 +695,12 @@ class ResourceScheduler(TaskManager):
                     projection=ResourceRecord.__required_keys__,
                     connection=con,
                 )
+                if self._state.version > 0
+                else await data.Resource.get_resources_latest_version_raw(
+                    self.environment,
+                    projection=ResourceRecord.__required_keys__,
+                    connection=con,
+                )
             )
             new_versions: Sequence[ModelVersion] = [
                 ModelVersion.from_db_records(

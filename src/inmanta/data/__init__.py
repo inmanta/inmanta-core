@@ -5023,6 +5023,47 @@ class Resource(BaseDocument):
         return result
 
     @classmethod
+    async def get_resources_latest_version_raw(
+        cls,
+        environment: uuid.UUID,
+        *,
+        projection: Optional[Collection[typing.LiteralString]],
+        connection: Optional[Connection] = None,
+    ) -> list[tuple[int, list[dict[str, object]]]]:
+        """
+        Returns a tuple with the latest released version and a list of resources.
+        These resources are returned as raw dicts with the requested fields
+        """
+        resource_columns: typing.LiteralString = ", ".join(f"r.{c}" for c in projection) if projection is not None else "r.*"
+        query_latest = f"""
+        WITH latest_released_version AS (
+            SELECT MAX(version) AS version
+            FROM public.configurationmodel
+            WHERE released IS TRUE
+              AND environment=$1
+        )
+        SELECT lrv.version, {resource_columns}
+        FROM {cls.table_name()} as r
+        JOIN latest_released_version lrv
+          ON r.model=lrv.version
+        WHERE r.environment=$1
+        """
+        resource_records = await cls._fetch_query(
+            query_latest,
+            cls._get_value(environment),
+            connection=connection,
+        )
+        if len(resource_records) == 0:
+            return []
+        parsed_resources: list[dict[str, object]] = []
+        for raw_resource in resource_records:
+            resource: dict[str, object] = dict(raw_resource)
+            del resource["version"]
+            parsed_resources.append(resource)
+
+        return [(typing.cast(int, resource_records[0]["version"]), parsed_resources)]
+
+    @classmethod
     async def get_resources_for_version_raw_with_persistent_state(
         cls,
         environment: uuid.UUID,
