@@ -600,7 +600,7 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         "trying to move test::Resource[agent1,key=key2] from resource set <SHARED> to set-b-new." in result.result["message"]
     )
 
-    ### Reset for require provides test
+    # Reset for require provides test
     version = await clienthelper.get_version()
     resources = [
         {
@@ -633,7 +633,7 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
     )
     assert result.code == 200
 
-    ## Try to move on part of require-provide to new resource set, updating both sets
+    # Try to move on part of require-provide to new resource set, updating both sets
     version = 0
     resources = [
         {
@@ -669,7 +669,7 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         "test::Resource[agent1,key=key1], but they belong to different resource sets." in result.result["message"]
     )
 
-    ## Try to move on part of require-provide updating only requires
+    # Try to move on part of require-provide updating only requires
     version = 0
     resources = [
         {
