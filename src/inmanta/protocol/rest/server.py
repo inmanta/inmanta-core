@@ -292,13 +292,12 @@ class RESTServer(RESTBase):
         global_url_map: dict[str, dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
 
         rules: list[routing.Rule] = []
-        rules.extend(additional_rules)
 
         for url, handler_config in global_url_map.items():
             rules.append(routing.Rule(routing.PathMatches(url), RESTHandler, {"transport": self, "config": handler_config}))
             LOGGER.debug("Registering handler(s) for url %s and methods %s", url, ", ".join(handler_config.keys()))
 
-        application = web.Application(rules, compress_response=True)
+        application = web.Application(handlers=[*additional_rules, *rules], compress_response=True)
 
         crt = inmanta_config.Config.get("server", "ssl_cert_file", None)
         key = inmanta_config.Config.get("server", "ssl_key_file", None)

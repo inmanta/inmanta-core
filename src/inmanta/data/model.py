@@ -786,6 +786,16 @@ class CurrentUser(BaseModel):
     username: str
 
 
+class RoleAssignment(BaseModel):
+    """
+    :param environment: The environment scope of the role.
+    :param name: The name of the role.
+    """
+
+    environment: uuid.UUID
+    name: str
+
+
 class LoginReturn(BaseModel):
     """
     Login information
