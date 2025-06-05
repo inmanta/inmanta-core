@@ -59,6 +59,7 @@ class DynamicUnwrapContext:
     type_resolver: TypeResolver
 
 
+# TODO: remember to check std module to ensure Jinja guards references. Add test!
 # TODO: docstring
 @dataclasses.dataclass(kw_only=True, frozen=True, slots=True)
 class ProxyContext:
