@@ -600,6 +600,103 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         "trying to move test::Resource[agent1,key=key2] from resource set <SHARED> to set-b-new." in result.result["message"]
     )
 
+    ### Reset for require provides test
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key1]"],
+        },
+    ]
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-old", "test::Resource[agent1,key=key2]": "set-a-old"},
+        module_version_info={},
+    )
+    assert result.code == 200
+
+    ## Try to move on part of require-provide to new resource set, updating both sets
+    version = 0
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key1]"],
+        },
+    ]
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-old", "test::Resource[agent1,key=key2]": "set-b-old"},
+        module_version_info={},
+    )
+    assert result.code == 400, result.result
+    assert (
+        "Invalid request: A dependency exists between resources test::Resource[agent1,key=key2] and "
+        "test::Resource[agent1,key=key1], but they belong to different resource sets." in result.result["message"]
+    )
+
+    ## Try to move on part of require-provide updating only requires
+    version = 0
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-b-old"},
+        module_version_info={},
+    )
+    assert result.code == 400, result.result
+    assert (
+        "Invalid request: The following Resource(s) cannot be migrated to a different resource set using a partial compile"
+        in result.result["message"]
+    )
+
 
 async def test_put_partial_update_not_in_resource_set(server, client, environment, clienthelper):
     """
