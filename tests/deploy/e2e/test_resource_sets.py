@@ -474,7 +474,6 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         unknowns=[],
         version_info=None,
         resource_sets={"test::Resource[agent1,key=key1]": "set-b-old", "test::Resource[agent1,key=key2]": "set-a-old"},
-        module_version_info={},
     )
 
     assert result.code == 200, result.result
@@ -487,7 +486,6 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         unknowns=[],
         version_info=None,
         resource_sets={"test::Resource[agent1,key=key1]": "set-a-new", "test::Resource[agent1,key=key2]": "set-b-new"},
-        module_version_info={},
         removed_resource_sets=["set-b-old", "set-a-old"],
     )
 
@@ -501,7 +499,6 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         unknowns=[],
         version_info=None,
         resource_sets={"test::Resource[agent1,key=key1]": "set-a-new"},
-        module_version_info={},
         removed_resource_sets=["set-b-new"],
     )
 
@@ -521,7 +518,6 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         unknowns=[],
         version_info=None,
         resource_sets={"test::Resource[agent1,key=key1]": "set-a-new", "test::Resource[agent1,key=key2]": "set-b-new"},
-        module_version_info={},
     )
     assert result.code == 400, result.result
     assert (
@@ -553,7 +549,6 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
             "test::Resource[agent1,key=key2]": "set-b-new",
             "test::Resource[agent1,key=key3]": None,
         },
-        module_version_info={},
     )
     assert result.code == 400, result.result
     assert (
@@ -590,7 +585,6 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         version_info={},
         compiler_version=get_compiler_version(),
         resource_sets={"test::Resource[agent1,key=key1]": "set-a-old", "test::Resource[agent1,key=key2]": "set-a-old"},
-        module_version_info={},
     )
     assert result.code == 200
 
@@ -622,7 +616,6 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         unknowns=[],
         version_info=None,
         resource_sets={"test::Resource[agent1,key=key1]": "set-a-old", "test::Resource[agent1,key=key2]": "set-b-old"},
-        module_version_info={},
     )
     assert result.code == 400, result.result
     assert (
@@ -650,7 +643,6 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         unknowns=[],
         version_info=None,
         resource_sets={"test::Resource[agent1,key=key1]": "set-b-old"},
-        module_version_info={},
     )
     assert result.code == 400, result.result
     assert (
