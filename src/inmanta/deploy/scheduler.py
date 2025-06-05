@@ -461,10 +461,28 @@ class ResourceScheduler(TaskManager):
             if reset_deploy_progress:
                 await data.Scheduler._execute_query(
                     f"""
-                        UPDATE {data.ResourcePersistentState.table_name()}
-                        SET blocked='NOT_BLOCKED'
-                        WHERE environment=$1
-                        AND NOT is_orphan
+                    WITH latest_released_version AS (
+                        SELECT MAX(version) AS version
+                        FROM public.configurationmodel
+                        WHERE released IS TRUE
+                          AND environment=$1
+                    ),
+                    resource_with_latest_model AS (
+                        SELECT r.resource_id, r.environment
+                        FROM resource r
+                        JOIN latest_released_version lrv
+                          ON r.model=lrv.version
+                        WHERE r.environment=$1
+                    )
+                    UPDATE {data.ResourcePersistentState.table_name()} AS rps
+                    SET is_orphan=NOT EXISTS (
+                        SELECT 1
+                        FROM resource_with_latest_model r
+                        WHERE r.resource_id=rps.resource_id
+                          AND r.environment=rps.environment
+                    )
+                    WHERE rps.environment=$1;
+
                     """,
                     self.environment,
                     connection=con,
@@ -472,7 +490,7 @@ class ResourceScheduler(TaskManager):
 
             # Check if we can restore the scheduler state from a previous run
             restored_state: Optional[ModelState] = (
-                await ModelState.create_from_db(self.environment, connection=con)
+                await ModelState.create_from_db(self.environment, connection=con) if not reset_deploy_progress else None
             )
 
             if restored_state is not None:
@@ -498,7 +516,6 @@ class ResourceScheduler(TaskManager):
                     reason="Deploy was triggered because the resource scheduler was started",
                     priority=TaskPriority.INTERVAL_DEPLOY,
                 )
-
 
     async def deploy(
         self,

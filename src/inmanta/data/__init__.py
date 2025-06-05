@@ -4620,35 +4620,6 @@ class ResourcePersistentState(BaseDocument):
             connection=connection,
         )
 
-    @classmethod
-    async def get_last_deployed_and_up_to_date(
-        cls, environment: uuid.UUID, *, connection: Optional[Connection] = None
-    ) -> tuple[dict[ResourceIdStr, datetime.datetime], set[ResourceIdStr]]:
-        """
-        Returns the last_deploy time for each non-orphan resource in this environment
-        Also returns a set of resources that are known to be in a good state
-        """
-        query = f"""
-            SELECT
-                rps.resource_id,
-                rps.last_deploy,
-                {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
-            FROM {cls.table_name()} AS rps
-            WHERE rps.environment=$1
-                AND NOT rps.is_orphan
-        """
-        result = await cls._fetch_query(query, environment, connection=connection)
-        up_to_date_resources: set[ResourceIdStr] = set()
-        last_deployed: dict[ResourceIdStr, datetime.datetime] = {}
-        for r in result:
-            rid = r["resource_id"]
-            last_deploy = r["last_deploy"]
-            if ResourceState(r["status"]) is ResourceState.deployed:
-                up_to_date_resources.add(rid)
-            if last_deploy:
-                last_deployed[rid] = last_deploy
-        return last_deployed, up_to_date_resources
-
     def get_compliance_status(self) -> Optional[state.Compliance]:
         """
         Return the Compliance associated with this resource_persistent_state. Returns None for orphaned resources.

@@ -126,7 +126,7 @@ import weakref
 from collections import abc, defaultdict, namedtuple
 from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
-from typing import Any, Callable, Dict, Generic, Optional, Union
+from typing import Any, Callable, Dict, Generic, Optional, Union, cast
 
 import asyncpg
 import psutil
@@ -997,8 +997,18 @@ async def agent_factory(server, monkeypatch) -> AsyncIterator[Callable[[uuid.UUI
 
     global DISABLE_STATE_CHECK
     try:
+        reset_deploy_by_environment: dict[uuid.UUID, bool] = {}
         if not DISABLE_STATE_CHECK:
             for agent in agents:
+                # Check if RESET_DEPLOY_PROGRESS_ON_START is set for the environment of this agent
+                reset_deploy_progress: Optional[bool] = reset_deploy_by_environment.get(agent.environment, None)
+                if reset_deploy_progress is None:
+                    env = await data.Environment.get_by_id(agent.environment)
+                    assert env is not None
+                    reset_deploy_progress = cast(bool, await env.get(data.RESET_DEPLOY_PROGRESS_ON_START))
+                    reset_deploy_by_environment[agent.environment] = reset_deploy_progress
+                if reset_deploy_progress:
+                    continue
                 await agent.stop_working()
                 the_state = copy.deepcopy(dict(agent.scheduler._state.resource_state))
                 for r, state in the_state.items():
