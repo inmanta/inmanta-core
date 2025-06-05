@@ -120,10 +120,10 @@ class UserService(server_protocol.ServerSlice):
         except nacl.exceptions.InvalidkeyError:
             raise exceptions.UnauthorizedException()
 
-        roles: list[model.Role] = await data.Role.get_roles_for_user(username)
+        role_assignments: list[model.RoleAssignment] = await data.Role.get_roles_for_user(username)
         custom_claims: Mapping[str, str | list[str] | Mapping[str, str]] = {
             "sub": username,
-            const.INMANTA_ROLES_URN: {str(r.environment): r.name for r in roles},
+            const.INMANTA_ROLES_URN: {str(r.environment): r.name for r in role_assignments},
         }
         token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims=custom_claims)
         return common.ReturnValue(
@@ -162,13 +162,13 @@ class UserService(server_protocol.ServerSlice):
             raise exceptions.BadRequest(f"Role {name} doesn't exist.")
 
     @protocol.handle(protocol.methods_v2.list_roles_for_user)
-    async def list_roles_for_user(self, username: str) -> list[model.Role]:
+    async def list_roles_for_user(self, username: str) -> list[model.RoleAssignment]:
         return await data.Role.get_roles_for_user(username)
 
     @protocol.handle(protocol.methods_v2.assign_role)
     async def assign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
         try:
-            await data.Role.assign_role_to_user(username, model.Role(environment=environment, name=role))
+            await data.Role.assign_role_to_user(username, model.RoleAssignment(environment=environment, name=role))
         except data.CannotAssignRoleException:
             raise exceptions.BadRequest(
                 f"Cannot assign role {role} to user {username}."
@@ -178,6 +178,6 @@ class UserService(server_protocol.ServerSlice):
     @protocol.handle(protocol.methods_v2.unassign_role)
     async def unassign_role(self, username: str, environment: uuid.UUID, role: str) -> None:
         try:
-            await data.Role.unassign_role_from_user(username, model.Role(environment=environment, name=role))
+            await data.Role.unassign_role_from_user(username, model.RoleAssignment(environment=environment, name=role))
         except KeyError:
             raise exceptions.BadRequest(f"Role {role} (environment={environment}) is not assigned to user {username}")

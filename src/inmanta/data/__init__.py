@@ -6321,7 +6321,7 @@ class Role(BaseDocument):
     name: str
 
     @classmethod
-    async def assign_role_to_user(cls, username: str, role: m.Role) -> None:
+    async def assign_role_to_user(cls, username: str, role_assignment: m.RoleAssignment) -> None:
         """
         Assign the given role to the given user.
         """
@@ -6334,12 +6334,12 @@ class Role(BaseDocument):
             )
         """
         try:
-            await cls._execute_query(assign_role_query, username, role.environment, role.name)
+            await cls._execute_query(assign_role_query, username, role_assignment.environment, role_assignment.name)
         except (asyncpg.NotNullViolationError, asyncpg.ForeignKeyViolationError):
             raise CannotAssignRoleException()
 
     @classmethod
-    async def unassign_role_from_user(cls, username: str, role: m.Role) -> None:
+    async def unassign_role_from_user(cls, username: str, role_assignment: m.RoleAssignment) -> None:
         """
         Unassign the given role from the given user.
         """
@@ -6350,12 +6350,12 @@ class Role(BaseDocument):
                   AND role_id=(SELECT id FROM {cls.table_name()} WHERE name=$3)
             RETURNING *
         """
-        result = await cls._fetchrow(unassign_role_query, username, role.environment, role.name)
+        result = await cls._fetchrow(unassign_role_query, username, role_assignment.environment, role_assignment.name)
         if result is None:
             raise KeyError()
 
     @classmethod
-    async def get_roles_for_user(cls, username: str) -> list[m.Role]:
+    async def get_roles_for_user(cls, username: str) -> list[m.RoleAssignment]:
         query = f"""
             SELECT ras.environment, rol.name
             FROM {User.table_name()} AS u
@@ -6364,7 +6364,7 @@ class Role(BaseDocument):
             WHERE u.username=$1
             ORDER BY ras.environment, rol.name
         """
-        return [m.Role(environment=r["environment"], name=r["name"]) for r in await cls._fetch_query(query, username)]
+        return [m.RoleAssignment(environment=r["environment"], name=r["name"]) for r in await cls._fetch_query(query, username)]
 
     @classmethod
     async def ensure_roles(cls, roles: Sequence[str]) -> None:

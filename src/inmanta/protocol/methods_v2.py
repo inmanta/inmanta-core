@@ -1592,7 +1592,7 @@ def delete_role(name: str) -> None:
 
 @auth(auth_label=const.AuthorizationLabel.ROLE_ASSIGNMENT_READ, read_only=True)
 @typedmethod(path="/role_assignment/<username>", operation="GET", client_types=[ClientType.api], api_version=2)
-def list_roles_for_user(username: str) -> list[model.Role]:
+def list_roles_for_user(username: str) -> list[model.RoleAssignment]:
     """
     Returns the roles assigned to the given user.
 

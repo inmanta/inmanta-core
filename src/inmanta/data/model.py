@@ -786,7 +786,7 @@ class CurrentUser(BaseModel):
     username: str
 
 
-class Role(BaseModel):
+class RoleAssignment(BaseModel):
     """
     :param environment: The environment scope of the role.
     :param name: The name of the role.
