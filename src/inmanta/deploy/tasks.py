@@ -30,7 +30,6 @@ import pyformance
 from inmanta import data, resources
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployReport
-from inmanta.const import ExecutorStatus
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
 from inmanta.types import ResourceIdStr
