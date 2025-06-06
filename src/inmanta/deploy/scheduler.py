@@ -702,6 +702,7 @@ class ResourceScheduler(TaskManager):
                     connection=con,
                 )
             )
+            print(f"res -> {resources_by_version}")
             new_versions: Sequence[ModelVersion] = [
                 ModelVersion.from_db_records(
                     version,

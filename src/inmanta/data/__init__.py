@@ -5043,10 +5043,12 @@ class Resource(BaseDocument):
               AND environment=$1
         )
         SELECT lrv.version, {resource_columns}
-        FROM {cls.table_name()} as r
+        FROM {ConfigurationModel.table_name()} AS m
         JOIN latest_released_version lrv
-          ON r.model=lrv.version
-        WHERE r.environment=$1
+            ON m.version=lrv.version
+        LEFT JOIN {cls.table_name()} AS r
+            ON m.environment=r.environment AND m.version=r.model
+        WHERE m.environment=$1
         """
         resource_records = await cls._fetch_query(
             query_latest,
@@ -5057,6 +5059,9 @@ class Resource(BaseDocument):
             return []
         parsed_resources: list[dict[str, object]] = []
         for raw_resource in resource_records:
+            if raw_resource["resource_id"] is None:
+                # left join produced no resources special case for empty model
+                continue
             resource: dict[str, object] = dict(raw_resource)
             del resource["version"]
             parsed_resources.append(resource)
