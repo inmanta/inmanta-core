@@ -344,20 +344,6 @@ class AgentStatus(str, Enum):
     paused = "paused"
     up = "up"
     down = "down"
-    degraded = "degraded"
-
-
-class ExecutorStatus(str, Enum):
-    """
-    Status of the executor of a logical agent:
-        - down: the executor didn't come up successfully
-        - degraded: the executor didn't successfully load all handler code
-        - up: the executor came up successfully
-    """
-
-    up = "up"
-    degraded = "degraded"
-    down = "down"
 
 
 class ParameterSource(str, Enum):
@@ -495,3 +481,7 @@ class AuthorizationLabel(str, Enum):
     RESOURCES_READ = "resources.read"
     STATUS_READ = "status.read"
     TOKEN = "token"
+    ROLES_READ = "roles.read"
+    ROLES_WRITE = "roles.write"
+    ROLE_ASSIGNMENT_READ = "role_assignment.read"
+    ROLE_ASSIGNMENT_WRITE = "role_assignment.write"

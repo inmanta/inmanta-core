@@ -27,7 +27,6 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 import inmanta.const
 from inmanta import data
-from inmanta.const import ExecutorStatus
 from inmanta.server import SLICE_AGENT_MANAGER, config
 from inmanta.util import parse_timestamp
 
@@ -47,12 +46,10 @@ async def env_with_agents(client, environment: str) -> None:
     await scheduler_agent.update(id_primary=id_primary, last_failover=(datetime.datetime.now() - datetime.timedelta(minutes=5)))
 
     async def create_agent(
-        *,
         name: str,
         paused: bool = False,
         last_failover: Optional[datetime.datetime] = None,
         unpause_on_resume: Optional[bool] = None,
-        executor_status: ExecutorStatus = ExecutorStatus.up,
     ):
         id_primary = None
         await data.Agent(
@@ -62,7 +59,6 @@ async def env_with_agents(client, environment: str) -> None:
             paused=paused,
             last_failover=last_failover,
             unpause_on_resume=unpause_on_resume,
-            executor_status=executor_status,
         ).insert()
 
     await create_agent(name="first_agent")  # up
@@ -75,19 +71,16 @@ async def env_with_agents(client, environment: str) -> None:
     await create_agent(name="failover1", last_failover=(datetime.datetime.now() - datetime.timedelta(minutes=1)))  # up
     await create_agent(name="failover2", last_failover=datetime.datetime.now())  # up
 
-    await create_agent(name="agent_with_degraded_executor", executor_status=ExecutorStatus.degraded)  # degraded
-    await create_agent(name="agent_with_down_executor", executor_status=ExecutorStatus.down)  # down
-
 
 async def test_agent_list_filters(client, environment: str, env_with_agents: None) -> None:
     result = await client.get_agents(environment)
     assert result.code == 200
-    assert len(result.result["data"]) == 11
+    assert len(result.result["data"]) == 9
 
     # Test status filters
     result = await client.get_agents(environment, filter={"status": "down"})
     assert result.code == 200
-    assert len(result.result["data"]) == 1
+    assert len(result.result["data"]) == 0
 
     result = await client.get_agents(environment, filter={"status": "up"})
     assert result.code == 200
@@ -111,11 +104,7 @@ async def test_agent_list_filters(client, environment: str, env_with_agents: Non
 
     result = await client.get_agents(environment, filter={"name": "agent", "status": "down"})
     assert result.code == 200
-    assert len(result.result["data"]) == 1
-
-    result = await client.get_agents(environment, filter={"name": "agent", "status": "degraded"})
-    assert result.code == 200
-    assert len(result.result["data"]) == 1
+    assert len(result.result["data"]) == 0
 
 
 def agent_names(agents: list[dict[str, str]]) -> list[str]:

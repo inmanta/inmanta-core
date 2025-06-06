@@ -31,7 +31,7 @@ from asyncpg import Connection
 from inmanta import const
 from inmanta.agent import Agent, executor
 from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ModuleInstallSpec, ResourceDetails
-from inmanta.const import Change, ExecutorStatus
+from inmanta.const import Change
 from inmanta.deploy import state
 from inmanta.deploy.persistence import StateUpdateManager
 from inmanta.deploy.scheduler import ModelVersion, ResourceScheduler
@@ -268,9 +268,6 @@ class DummyStateManager(StateUpdateManager):
 
     async def dryrun_update(self, env: UUID, dryrun_result: DryrunReport) -> None:
         self.state[Id.parse_id(dryrun_result.rvid).resource_str()] = const.ResourceState.dry
-
-    async def report_executor_status(self, agent_name: str, executor_status: ExecutorStatus) -> None:
-        pass
 
     async def update_resource_intent(
         self,

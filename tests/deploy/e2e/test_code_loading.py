@@ -33,7 +33,6 @@ from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
-from inmanta.const import AgentStatus
 from inmanta.data import AgentModules, InmantaModule, ModuleFiles, PipConfig
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import process_env
@@ -523,9 +522,6 @@ async def test_logging_on_code_loading_error(server, client, environment, client
         "All resources of type `test::ResourceBBB` failed to load handler code or install handler code dependencies: "
     )
 
-    agent = await data.Agent.get(env=environment, endpoint="agent1")
-    assert agent.get_status() == AgentStatus.down
-
     def check_for_message(data, must_be_present: str) -> None:
         """
         Helper method to assert the presence of the must_be_present string
@@ -636,6 +632,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         version_info={},
         compiler_version=get_compiler_version(),
         module_version_info=module_version_info,
+        resource_sets={"test::ResType_A[agent_X,key=key1]": "set-a", "test::ResType_A[agent_Y,key=key1]": "set-b"},
     )
 
     assert result.code == 200
@@ -665,7 +662,6 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         module_version_info=module_version_info,
     )
     assert result.code == 200
-
     await check_code_for_version(version=2, environment=environment, agent_names=["agent_X", "agent_Y"])
 
     # 3) Partial export using different module version from the base version should raise an exception:

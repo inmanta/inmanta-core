@@ -28,6 +28,9 @@ import asyncpg
 import pytest
 
 from inmanta import const, data
+from inmanta.agent import executor
+from inmanta.deploy import persistence, state
+from inmanta.resources import Id
 from inmanta.server import SLICE_ENVIRONMENT_METRICS, protocol
 from inmanta.server.services.environment_metrics_service import (
     DEFAULT_CATEGORY,
@@ -42,7 +45,7 @@ from inmanta.server.services.environment_metrics_service import (
     ResourceCountMetricsCollector,
 )
 from inmanta.types import ResourceIdStr
-from inmanta.util import get_compiler_version, parse_timestamp
+from inmanta.util import get_compiler_version, make_attribute_hash, parse_timestamp
 from utils import ClientHelper, wait_until_version_is_released
 
 env_uuid = uuid.uuid4()
@@ -493,22 +496,32 @@ async def test_resource_count_metric(clienthelper, client, agent):
     assert total_res == 3
 
     # change the state of one of the resources
-    now = datetime.now()
     action_id = uuid.uuid4()
-    aclient = agent._client
-    result = await aclient.resource_action_update(
-        env_uuid1,
-        ["test::Resource[agent1,key=key2],v=" + version_env1],
-        action_id,
-        "deploy",
-        now,
-        now,
-        "deployed",
-        [],
-        {},
-    )
 
-    assert result.code == 200
+    update_manager = persistence.ToDbUpdateManager(client, env_uuid1)
+    now = datetime.now()
+    rvid = Id.parse_id("test::Resource[agent1,key=key2],v=" + version_env1)
+    await update_manager.send_in_progress(action_id, rvid)
+
+    await update_manager.send_deploy_done(
+        attribute_hash=make_attribute_hash(resource_id=rvid.resource_str(), attributes=resources_env1_v2[0]),
+        result=executor.DeployReport(
+            rvid=rvid.resource_version_str(),
+            action_id=action_id,
+            resource_state=const.HandlerResourceState.deployed,
+            messages=[],
+            changes={},
+            change=const.Change.updated,
+        ),
+        state=state.ResourceState(
+            compliance=state.Compliance.COMPLIANT,
+            last_deploy_result=state.DeployResult.DEPLOYED,
+            blocked=state.Blocked.NOT_BLOCKED,
+            last_deployed=now,
+        ),
+        started=now,
+        finished=now,
+    )
 
     # flush the metrics for the second time:
     # 60 records in total and 5 with a count different from 0
@@ -765,7 +778,7 @@ async def test_agent_count_metric(clienthelper, client, server):
     # 3 environments: one created by the environment fixture (dependency of agent fixture), two created above
     assert len(gauges_by_status) == 3
     # 3 states for each environment => 9 rows in matrix
-    assert all(statuses.keys() == {"paused", "up", "down", "degraded"} for _, statuses in gauges_by_status.items())
+    assert all(statuses.keys() == {"paused", "up", "down"} for _, statuses in gauges_by_status.items())
     # verify counts
     assert gauges_by_status[env1.id]["paused"].count == 1
     assert gauges_by_status[env2.id]["paused"].count == 2  # agent3 is not used by any resource but it should still be counted
@@ -796,7 +809,7 @@ async def test_agent_count_metric_empty_datapoint(client, server):
     # environment and 1 for the second)
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
-    assert len(result_gauge) == 8
+    assert len(result_gauge) == 6
     assert all(gauge.metric_name == "resource.agent_count" and gauge.count == 0 for gauge in result_gauge)
 
 

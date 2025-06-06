@@ -170,7 +170,6 @@ class Deploy(Task):
                 except ModuleLoadingException as e:
                     log_line = e.to_log_line()
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
-                    await task_manager.report_executor_status(agent_name=agent, executor_status=ExecutorStatus.degraded)
                     deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
                     return
 
@@ -190,12 +189,10 @@ class Deploy(Task):
                     )
                     # Not attached to ctx, needs to be flushed to logger explicitly
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
-                    await task_manager.report_executor_status(agent_name=agent, executor_status=ExecutorStatus.down)
                     deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
 
                     return
 
-                executor_status = ExecutorStatus.up
                 if my_executor.failed_modules:
 
                     # We only create this exception to use its LogLine builder.
@@ -203,9 +200,6 @@ class Deploy(Task):
                     # but we want to log a warning  because not all handler code was successfully loaded.
                     exception = ModuleLoadingException(agent_name=agent, failed_modules=my_executor.failed_modules)
                     failed_modules_warning_log_line = exception.create_log_line_for_failed_modules(level=logging.WARNING)
-                    executor_status = ExecutorStatus.degraded
-
-                await task_manager.report_executor_status(agent_name=agent, executor_status=executor_status)
 
                 assert reason is not None  # Should always be set for deploy
                 # Deploy
@@ -353,17 +347,17 @@ class ModuleLoadingException(Exception):
         """
         Helper method to cleanly display module loading errors in the web console.
         """
-        unpack_failed_modules = {}
-        for inmanta_module_name, failed_modules_data in self.failed_modules.items():
+        failed_modules = {}
+        for _, failed_modules_data in self.failed_modules.items():
             for python_module, exception_text in failed_modules_data.items():
                 # TODO: fix this hack.
                 # To be correctly displayed on multiple lines on the web-console, this needs to be:
                 #    - a list of strings (will be displayed in the JSON editor)
-                unpack_failed_modules[".".join([inmanta_module_name, python_module])] = str(exception_text).split("\n")
+                failed_modules[python_module] = str(exception_text).split("\n")
 
         return data.LogLine.log(
             level=level,
             msg="Agent %s failed loading the following modules: %s." % (self.agent_name, ", ".join(self.failed_modules.keys())),
             timestamp=None,
-            **unpack_failed_modules,
+            errors=failed_modules,
         )

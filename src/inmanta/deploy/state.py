@@ -202,7 +202,6 @@ class ModelState:
     dirty: set["ResourceIdStr"] = dataclasses.field(default_factory=set)
     # group resources by agent to allow efficient triggering of a deploy for a single agent
     resources_by_agent: dict[str, set["ResourceIdStr"]] = dataclasses.field(default_factory=lambda: defaultdict(set))
-    agent_statuses: dict[str, const.AgentStatus] = dataclasses.field(default_factory=dict)
 
     @classmethod
     async def create_from_db(
@@ -224,9 +223,6 @@ class ModelState:
             return None
 
         result = ModelState(version=last_processed_model_version)
-        agent_statuses = await data.Agent.get_statuses(env_id=environment, agent_names=None)
-        result.agent_statuses = {k: v for k, v in agent_statuses.items() if v is not None}
-
         resource_records: Sequence[Mapping[str, object]] = (
             await data.Resource.get_resources_for_version_raw_with_persistent_state(
                 environment=environment,
