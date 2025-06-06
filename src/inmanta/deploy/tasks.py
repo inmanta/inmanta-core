@@ -349,10 +349,7 @@ class ModuleLoadingException(Exception):
         failed_modules = {}
         for _, failed_modules_data in self.failed_modules.items():
             for python_module, exception_text in failed_modules_data.items():
-                # TODO: fix this hack.
-                # To be correctly displayed on multiple lines on the web-console, this needs to be:
-                #    - a list of strings (will be displayed in the JSON editor)
-                failed_modules[python_module] = str(exception_text).split("\n")
+                failed_modules[python_module] = str(exception_text)
 
         return data.LogLine.log(
             level=level,
