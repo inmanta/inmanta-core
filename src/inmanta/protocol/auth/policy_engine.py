@@ -28,7 +28,7 @@ from typing import Mapping
 from tornado import httpclient
 from tornado.httpclient import HTTPRequest
 
-from inmanta import config, const
+from inmanta import config, const, data
 from inmanta import tornado as inmanta_tornado
 from inmanta import util
 from inmanta.protocol import common
@@ -69,6 +69,7 @@ class PolicyEngine:
 
     def __init__(self) -> None:
         self._state_dir: str = self._initialize_storage()
+        self._policy_engine_log = os.path.join(config.log_dir.get(), "policy_engine.log")
         self._process: asyncio.subprocess.Process | None = None
         self.running = False
         # The OPA server will listen on this unix socket.
@@ -105,11 +106,9 @@ class PolicyEngine:
             raise Exception(f"Config option {path_opa_executable.get_full_name()} was not set.")
         if not os.path.isfile(opa_executable):
             raise Exception(f"Config option {path_opa_executable.get_full_name()} doesn't point to a file: {opa_executable}.")
-        log_dir = config.log_dir.get()
-        policy_engine_log = os.path.join(log_dir, "policy_engine.log")
         log_file_handle = None
         try:
-            log_file_handle = open(policy_engine_log, "wb+")
+            log_file_handle = open(self._policy_engine_log, "wb+")
             self._process = await asyncio.create_subprocess_exec(
                 opa_executable,
                 "run",
@@ -130,10 +129,11 @@ class PolicyEngine:
         finally:
             if log_file_handle is not None:
                 log_file_handle.close()
-        await self._wait_until_opa_server_is_up(policy_engine_log)
+        await self._wait_until_opa_server_is_up()
+        await self._synchronize_roles_to_db()
         self.running = True
 
-    async def _wait_until_opa_server_is_up(self, policy_engine_log_file: str) -> None:
+    async def _wait_until_opa_server_is_up(self) -> None:
         now: float = time.time()
         health_endpoint = f"http://{self._hostname}/health?plugins&bundles"
         while True:
@@ -146,7 +146,7 @@ class PolicyEngine:
                     raise Exception(
                         f"Timeout: Policy engine didn't start in {const.POLICY_ENGINE_STARTUP_TIMEOUT} seconds."
                         f"\n\n{e}\n\n"
-                        f"Please see {policy_engine_log_file} for more information."
+                        f"Please see {self._policy_engine_log} for more information."
                     )
                 else:
                     await asyncio.sleep(0.1)
@@ -171,6 +171,45 @@ class PolicyEngine:
         self._process = None
         self.running = False
 
+    async def _evaluate_policy(
+        self,
+        query: str,
+        error_message: str,
+        input_data: Mapping[str, object] | None = None,
+    ) -> dict[str, object]:
+        """
+        Perform a query on the policy engine and return the response.
+
+        :param query: The query to execute.
+        :param error_message: The error message to write to the log file of the server in case the query fails to execute.
+        :param input_data: The input_data for the query.
+        :return: The response body of the call to the policy engine or an empty dictionary if the query fails to execute.
+        """
+        body: str = json.dumps(input_data, default=util.api_boundary_json_encoder) if input_data is not None else ""
+        request = HTTPRequest(
+            url=f"http://{self._hostname}/v1/data/policy/{query}",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            body=body,
+        )
+        try:
+            response = await self._client.fetch(request)
+            if response.code != 200:
+                LOGGER.error(
+                    "% (query=%s, input_data=%s). See %s for more information.",
+                    error_message,
+                    query,
+                    body,
+                    self._policy_engine_log,
+                )
+                return {}
+            return json.loads(response.body.decode())
+        except Exception:
+            LOGGER.exception(
+                "% (query=%s, input_data=%s). See %s for more information.", error_message, query, body, self._policy_engine_log
+            )
+            return {}
+
     async def does_satisfy_access_policy(self, input_data: Mapping[str, object]) -> bool:
         """
         Return True iff the policy evaluates to True.
@@ -178,25 +217,32 @@ class PolicyEngine:
         if not self.running:
             LOGGER.error("Policy engine is not running. Call OpaServer.start() first.")
             return False
-        request = HTTPRequest(
-            url=f"http://{self._hostname}/v1/data/policy/allow",
-            method="POST",
-            headers={"Content-Type": "application/json"},
-            body=json.dumps(input_data, default=util.api_boundary_json_encoder),
+        response = await self._evaluate_policy(
+            query="allow", error_message="Failed to evaluate access policy", input_data=input_data
         )
-        try:
-            response = await self._client.fetch(request)
-            if response.code != 200:
-                LOGGER.error(
-                    "Failed to evaluate access policy for %s.",
-                    json.dumps(input_data, default=util.api_boundary_json_encoder),
-                )
-                return False
-            response_body = json.loads(response.body.decode())
-            return "result" in response_body and response_body["result"] is True
-        except Exception:
-            LOGGER.exception(
-                "Failed to evaluate access policy for %s.",
-                json.dumps(input_data, default=util.api_boundary_json_encoder),
-            )
-            return False
+        return "result" in response and response["result"] is True
+
+    async def _get_roles(self) -> list[str]:
+        """
+        Return the roles defined in the access policy.
+        """
+        response = await self._evaluate_policy(query="roles", error_message="Failed to get roles from access policy.")
+        if "result" not in response:
+            # The policy didn't define any roles.
+            return []
+        roles = response["result"]
+        if not isinstance(roles, list):
+            raise Exception(f"roles defined in access policy must be a list, got: {roles}")
+        for elem in roles:
+            if not isinstance(elem, str):
+                raise Exception(f"The list of roles defined in the access policy contains a non-string element: {elem}")
+        return roles
+
+    async def _synchronize_roles_to_db(self) -> None:
+        """
+        Make sure that the roles defined in the access policy are also present in the database.
+        """
+        roles = await self._get_roles()
+        if not roles:
+            return
+        await data.Role.ensure_roles(roles)

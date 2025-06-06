@@ -1562,6 +1562,69 @@ def set_password(username: str, password: str) -> None:
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.ROLES_READ, read_only=True)
+@typedmethod(path="/roles", operation="GET", client_types=[ClientType.api], api_version=2)
+def list_roles() -> list[str]:
+    """
+    Returns the names of the roles that exist.
+    """
+
+
+@auth(auth_label=const.AuthorizationLabel.ROLES_WRITE, read_only=False)
+@typedmethod(path="/roles", operation="POST", client_types=[ClientType.api], api_version=2)
+def create_role(name: str) -> None:
+    """
+    Create a new role.
+
+    :param name: The name of the role to create.
+    """
+
+
+@auth(auth_label=const.AuthorizationLabel.ROLES_WRITE, read_only=False)
+@typedmethod(path="/roles", operation="DELETE", client_types=[ClientType.api], api_version=2)
+def delete_role(name: str) -> None:
+    """
+    Delete a role.
+
+    :param name: The name of the role to delete.
+    """
+
+
+@auth(auth_label=const.AuthorizationLabel.ROLE_ASSIGNMENT_READ, read_only=True)
+@typedmethod(path="/role_assignment/<username>", operation="GET", client_types=[ClientType.api], api_version=2)
+def list_roles_for_user(username: str) -> list[model.RoleAssignment]:
+    """
+    Returns the roles assigned to the given user.
+
+    :param username: The name of the user for which the roles are returned.
+    """
+
+
+@auth(auth_label=const.AuthorizationLabel.ROLE_ASSIGNMENT_WRITE, read_only=False)
+@typedmethod(path="/role_assignment/<username>", operation="POST", client_types=[ClientType.api], api_version=2)
+def assign_role(username: str, environment: uuid.UUID, role: str) -> None:
+    """
+    Assign a role to a certain user.
+
+    :param username: The name of the user the role will be assigned to.
+    :param environment: The environment scope of the role.
+    :param role: The name of the role that should be assigned to the user.
+    """
+
+
+@auth(auth_label=const.AuthorizationLabel.ROLE_ASSIGNMENT_WRITE, read_only=False)
+@typedmethod(path="/role_assignment/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
+def unassign_role(username: str, environment: uuid.UUID, role: str) -> None:
+    """
+    Remove a role from a certain user.
+
+    :param username: The name of the user from which to unassign the role.
+    :param environment: The environment scope of the role.
+    :param role: The name of the role that should be unassigned from the user.
+    :raise BadRequest: If the user with the given username doesn't have the given role assigned.
+    """
+
+
 @typedmethod(
     path="/discovered/<discovered_resource_id>",
     operation="POST",
