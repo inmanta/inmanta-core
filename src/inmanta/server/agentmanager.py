@@ -636,11 +636,13 @@ class AgentManager(ServerSlice, SessionListener):
         """
         If the given session is the primary for a given endpoint, failover to a new session.
 
+        :param endpoints: set of agent names to detach from this session
+
         :return: The endpoints that got a new primary.
 
         Note: Always call under session lock.
         """
-        agent_statuses = await data.Agent.get_statuses(session.tid, endpoints)
+        agent_statuses: dict[str, Optional[AgentStatus]] = await data.Agent.get_statuses(session.tid, endpoints)
         result = []
         for endpoint_name in endpoints:
             key = (session.tid, endpoint_name)

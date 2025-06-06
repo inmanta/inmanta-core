@@ -1,0 +1,3 @@
+description: Improve the logging of code loading failures during resource deployment.
+change-type: patch
+destination-branches: [master]
