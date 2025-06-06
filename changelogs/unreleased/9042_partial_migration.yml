@@ -1,0 +1,6 @@
+description: For partial compile, allow resources to move between resource sets if both sets are being updated
+issue-nr: 9042
+change-type: minor
+destination-branches: [master, iso8]
+sections:
+  minor-improvement: "{{description}}"

@@ -32,7 +32,7 @@ from inmanta.deploy import persistence, state
 from inmanta.loader import InmantaModule
 from inmanta.protocol.common import Result
 from inmanta.resources import Id
-from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+from inmanta.types import ResourceIdStr
 from inmanta.util import get_compiler_version
 
 
@@ -504,6 +504,198 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
     ]
 
     assert all(line in result.result["message"] for line in expected_lines)
+
+    # Swap them
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-b-old", "test::Resource[agent1,key=key2]": "set-a-old"},
+        module_version_info={},
+    )
+
+    assert result.code == 200, result.result
+
+    # Swap the new sets and removal of the old one
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-new", "test::Resource[agent1,key=key2]": "set-b-new"},
+        module_version_info={},
+        removed_resource_sets=["set-b-old", "set-a-old"],
+    )
+
+    assert result.code == 200, result.result
+
+    # Allow move into shared
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-new"},
+        module_version_info={},
+        removed_resource_sets=["set-b-new"],
+    )
+
+    assert result.code == 200, result.result
+
+    resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
+    resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
+    expected_resource_sets = {"test::Resource[agent1,key=key1]": "set-a-new", "test::Resource[agent1,key=key2]": None}
+    assert resource_sets_from_db == expected_resource_sets
+
+    # Don't allow escape out of shared
+    # Swap the new sets and removal of the old one
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-new", "test::Resource[agent1,key=key2]": "set-b-new"},
+        module_version_info={},
+    )
+    assert result.code == 400, result.result
+    assert (
+        "Invalid request: A partial compile only migrate resources between resource set that are pushed together: "
+        "trying to move test::Resource[agent1,key=key2] from resource set <SHARED> to set-b-new." in result.result["message"]
+    )
+
+    # Don't allow escape out of shared
+    # Swap the new sets and removal of the old one
+    # Try to trick it by providing None as an updated set
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial
+        + [
+            {
+                "key": "key3",
+                "value": "value2",
+                "id": "test::Resource[agent1,key=key3],v=0",
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            }
+        ],
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={
+            "test::Resource[agent1,key=key1]": "set-a-new",
+            "test::Resource[agent1,key=key2]": "set-b-new",
+            "test::Resource[agent1,key=key3]": None,
+        },
+        module_version_info={},
+    )
+    assert result.code == 400, result.result
+    assert (
+        "A partial compile only migrate resources between resource set that are pushed together: "
+        "trying to move test::Resource[agent1,key=key2] from resource set <SHARED> to set-b-new." in result.result["message"]
+    )
+
+    # Reset for require provides test
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key1]"],
+        },
+    ]
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-old", "test::Resource[agent1,key=key2]": "set-a-old"},
+        module_version_info={},
+    )
+    assert result.code == 200
+
+    # Try to move on part of require-provide to new resource set, updating both sets
+    version = 0
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key1]"],
+        },
+    ]
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-old", "test::Resource[agent1,key=key2]": "set-b-old"},
+        module_version_info={},
+    )
+    assert result.code == 400, result.result
+    assert (
+        "Invalid request: A dependency exists between resources test::Resource[agent1,key=key2] and "
+        "test::Resource[agent1,key=key1], but they belong to different resource sets." in result.result["message"]
+    )
+
+    # Try to move on part of require-provide updating only requires
+    version = 0
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-b-old"},
+        module_version_info={},
+    )
+    assert result.code == 400, result.result
+    assert (
+        "Invalid request: The following Resource(s) cannot be migrated to a different resource set using a partial compile"
+        in result.result["message"]
+    )
 
 
 async def test_put_partial_update_not_in_resource_set(server, client, environment, clienthelper):
@@ -1333,12 +1525,12 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
 
     # Set key 3 to deployed
     action_id = uuid.uuid4()
-    rvid3 = ResourceVersionIdStr(f"test::Resource[agent1,key=key3],v={version}")
-    await update_manager.send_in_progress(action_id=action_id, resource_id=Id.parse_id(rvid3))
+    rvid3 = Id.parse_id(f"test::Resource[agent1,key=key3],v={version}")
+    await update_manager.send_in_progress(action_id=action_id, resource_id=rvid3)
     await update_manager.send_deploy_done(
-        attribute_hash=util.make_attribute_hash(ResourceIdStr("test::Resource[agent1,key=key3]"), attributes=resources[2]),
+        attribute_hash=util.make_attribute_hash(rvid3.resource_str(), attributes=resources[2]),
         result=executor.DeployReport(
-            rvid=rvid3,
+            rvid=rvid3.resource_version_str(),
             action_id=action_id,
             resource_state=const.HandlerResourceState.deployed,
             messages=[],

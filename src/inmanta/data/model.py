@@ -411,8 +411,7 @@ class ResourceDeploySummary(BaseModel):
 class LogLine(BaseModel):
     # Override the setting from the BaseModel class as such that the level field is
     # serialized using the name of the enum instead of its value. This is required
-    # to make sure that data sent to the API endpoints resource_action_update
-    # and send_deploy_done are serialized consistently using the name of the enum.
+    # to make sure that data sent over the API is serialized consistently using the name of the enum.
     model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
 
     level: const.LogLevel
@@ -785,6 +784,16 @@ class CurrentUser(BaseModel):
     """Information about the current logged in user"""
 
     username: str
+
+
+class RoleAssignment(BaseModel):
+    """
+    :param environment: The environment scope of the role.
+    :param name: The name of the role.
+    """
+
+    environment: uuid.UUID
+    name: str
 
 
 class LoginReturn(BaseModel):

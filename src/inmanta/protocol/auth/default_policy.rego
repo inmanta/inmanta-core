@@ -1,5 +1,8 @@
 package policy
 
+# Define roles
+roles := ["read-only", "noc", "operator", "environment-admin", "environment-expert-admin"]
+
 # Write the information about the endpoint into a variable
 # to make the policy easier to read.
 endpoint_data := data.endpoints[input.request.endpoint_id]
