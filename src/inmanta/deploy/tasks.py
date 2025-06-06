@@ -29,6 +29,7 @@ import pyformance
 from inmanta import data, resources
 from inmanta.agent import executor
 from inmanta.agent.executor import DeployReport
+from inmanta.const import ExecutorStatus
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
 from inmanta.types import ResourceIdStr
@@ -179,8 +180,15 @@ class Deploy(Task):
                     )
                     # Not attached to ctx, needs to be flushed to logger explicitly
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
+                    await task_manager.report_executor_status(agent_name=agent, executor_status=ExecutorStatus.down)
                     deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
                     return
+
+                executor_status = ExecutorStatus.up
+                if my_executor.failed_modules:
+                    executor_status = ExecutorStatus.degraded
+
+                await task_manager.report_executor_status(agent_name=agent, executor_status=executor_status)
 
                 assert reason is not None  # Should always be set for deploy
                 # Deploy
