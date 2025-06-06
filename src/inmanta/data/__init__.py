@@ -5063,7 +5063,6 @@ class Resource(BaseDocument):
                 # left join produced no resources special case for empty model
                 continue
             resource: dict[str, object] = dict(raw_resource)
-            del resource["version"]
             parsed_resources.append(resource)
 
         return [(typing.cast(int, resource_records[0]["version"]), parsed_resources)]
