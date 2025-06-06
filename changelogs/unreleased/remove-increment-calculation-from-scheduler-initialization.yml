@@ -1,0 +1,4 @@
+change-type: patch
+description: Remove increment calculation from scheduler initialization
+destination-branches:
+- master

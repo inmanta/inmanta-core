@@ -723,7 +723,7 @@ async def test_deploy_summary(server, client, env_with_resources):
 
 
 @pytest.fixture
-async def very_big_env(server, client, environment, clienthelper, null_agent, instances: int) -> int:
+async def very_big_env(server, client, environment, clienthelper, null_agent, monkeypatch, instances: int) -> int:
     env_obj = await data.Environment.get_by_id(environment)
     await env_obj.set(data.AUTO_DEPLOY, True)
 
@@ -739,6 +739,15 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
     # every 10th version is not released -> not sure what this means and if it still applies
 
     dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=client)
+
+    async def mock_run(self) -> None:
+        """Mocks the call to TaskRunner._run."""
+        return
+
+    # We want dummy_scheduler._running=True so that read_version runs correctly
+    # But we don't want the TaskRunner to actually run anything that is scheduled (we will do that manually)
+    monkeypatch.setattr("inmanta.deploy.scheduler.TaskRunner._run", mock_run)
+    await dummy_scheduler._initialize()
 
     async def make_resource_set(tenant_index: int, iteration: int) -> list[dict[str, object]]:
         is_full = tenant_index == 0 and iteration == 0
@@ -791,21 +800,19 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
             version = result.result["data"]
         await utils.wait_until_version_is_released(client, environment, version)
 
+        # Updates the scheduler state
+        await dummy_scheduler.read_version()
+
         # Get all resources
         result = await client.get_version(tid=environment, id=version)
         assert result.code == 200
         all_resources: list[dict[str, object]] = result.result["resources"]
 
-        # Filter out resources part of the increment
-        increment: set[ResourceIdStr]
-        increment, _ = await data.ConfigurationModel.get_increment(environment, version)
-        resources_in_increment_for_agent: list[dict[str, object]] = [
-            r for r in all_resources if r["resource_id"] in increment and r["agent"] == f"agent{tenant_index}"
+        resources_in_dirty_set: list[dict[str, object]] = [
+            r
+            for r in all_resources
+            if r["resource_id"] in dummy_scheduler._state.dirty and r["agent"] == f"agent{tenant_index}"
         ]
-
-        await dummy_scheduler._reset()
-        async with dummy_scheduler.state_update_manager.get_connection() as con:
-            await dummy_scheduler._recover_scheduler_state_using_increments_calculation(connection=con)
 
         async def deploy(resource: dict[str, object]) -> None:
             nonlocal deploy_counter
@@ -834,8 +841,8 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                     ),
                 )
 
-        await asyncio.gather(*(deploy(resource) for resource in resources_in_increment_for_agent))
-        return resources_in_increment_for_agent
+        await asyncio.gather(*(deploy(resource) for resource in resources_in_dirty_set))
+        return resources_in_dirty_set
 
     first_iteration_resources = {}
     for iteration in [0, 1]:
