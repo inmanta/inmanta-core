@@ -1205,7 +1205,7 @@ class ResourceScheduler(TaskManager):
         # Only make calls towards the DB if we notice an actual status change
         in_memory_agent_status: const.AgentStatus | None = self._state.agent_statuses.get(agent_name)
 
-        if in_memory_agent_status is None or in_memory_agent_status is const.AgentStatus.paused:
+        if in_memory_agent_status is const.AgentStatus.paused:
             return
         if in_memory_agent_status != const.AgentStatus[executor_status]:
             await self.state_update_manager.report_executor_status(agent_name=agent_name, executor_status=executor_status)
