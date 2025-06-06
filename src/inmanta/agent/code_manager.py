@@ -137,6 +137,6 @@ class CodeManager:
                     )
                 )
 
-        if not module_install_specs or agent_name == "agent_code_missing":
+        if not module_install_specs:
             raise CouldNotResolveCode(agent_name, model_version)
         return module_install_specs

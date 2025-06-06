@@ -3321,7 +3321,7 @@ class Agent(BaseDocument):
     paused: bool = False
     id_primary: Optional[uuid.UUID] = None
     unpause_on_resume: Optional[bool] = None
-    executor_status: ExecutorStatus = ExecutorStatus.down
+    executor_status: ExecutorStatus = ExecutorStatus.up
 
     @property
     def primary(self) -> Optional[uuid.UUID]:

@@ -220,7 +220,7 @@ class TaskManager(abc.ABC):
     @abstractmethod
     async def report_executor_status(self, agent_name: str, executor_status: ExecutorStatus) -> None:
         """
-        Report the status of an executor for a given agent.
+        Report the status of an executor for the latest "version" of a given agent.
 
         :param agent_name: The agent.
         :param executor_status: The status of the executor to set for this agent.
@@ -1202,6 +1202,7 @@ class ResourceScheduler(TaskManager):
         await self.state_update_manager.set_parameters(fact_result=report)
 
     async def report_executor_status(self, agent_name: str, executor_status: ExecutorStatus) -> None:
+        # add bookeeping in self.state, only write to the db if it changed
         await self.state_update_manager.report_executor_status(agent_name=agent_name, executor_status=executor_status)
 
     async def _update_scheduler_state_for_finished_deploy(

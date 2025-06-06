@@ -768,7 +768,8 @@ class AgentManager(ServerSlice, SessionListener):
 
         Note: This method must be called under session lock
         """
-        saved = data.Agent(environment=env.id, name=nodename, paused=False, executor_status=ExecutorStatus.down)
+        # Assume executor status is up
+        saved = data.Agent(environment=env.id, name=nodename, paused=False, executor_status=ExecutorStatus.up)
         await saved.insert(connection=connection)
 
         key = (env.id, nodename)

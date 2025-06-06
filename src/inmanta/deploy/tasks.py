@@ -22,6 +22,7 @@ import datetime
 import logging
 import traceback
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import pyformance
@@ -100,15 +101,11 @@ class Task(abc.ABC):
         # that failed to load/install:
         inmanta_module_name = self.id.get_inmanta_module()
 
-        LOGGER.error(f"{my_executor.failed_modules=}")
-
         if inmanta_module_name in my_executor.failed_modules:
-            raise ExceptionGroup(
-                "The following modules cannot be loaded: %s."
-                % ", ".join([e for e in my_executor.failed_modules[inmanta_module_name].keys()]),
-                [e.with_traceback(e.__traceback__) for e in my_executor.failed_modules[inmanta_module_name].values()],
+            raise ModuleLoadingException(
+                agent_name=agent_name,
+                failed_modules={k:v for k,v in my_executor.failed_modules.items() if k == inmanta_module_name}
             )
-
         return my_executor
 
 
@@ -151,6 +148,8 @@ class Deploy(Task):
             # We collect state here to report back in the finally block.
             # This try-finally block ensures we report at the end of the task.
             deploy_report: DeployReport
+            failed_modules_warning_log_line: data.LogLine | None = None
+
             try:
                 # Dependencies are always set when calling deploy_start
                 assert deploy_intent.dependencies is not None
@@ -168,26 +167,45 @@ class Deploy(Task):
                         agent_name=agent,
                         version=version,
                     )
+                except ModuleLoadingException as e:
+                    log_line=e.to_log_line()
+                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
+                    await task_manager.report_executor_status(agent_name=agent, executor_status=ExecutorStatus.degraded)
+                    deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
+                    return
 
                 except Exception as e:
                     log_line = data.LogLine.log(
                         logging.ERROR,
                         "All resources of type `%(res_type)s` failed to load handler code or install handler code "
-                        "dependencies:\n%(error)s\n%(traceback)s\n%(other_info)s\n%(other_info2)s",
+                        "dependencies:",
                         res_type=executor_resource_details.id.entity_type,
-                        error="".join(traceback.format_exception(e)),
-                        traceback="".join(traceback.format_tb(e.__traceback__)),
-                        other_info=traceback.print_exception(e),
-                        other_info2=str(e),
+                        agent=agent,
+                        error= [
+                            single_line for iterator in [
+                                multi_line.split("\n") for multi_line in traceback.format_exception(e)
+                            ] for single_line in iterator if single_line
+                        ]
+
                     )
                     # Not attached to ctx, needs to be flushed to logger explicitly
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     await task_manager.report_executor_status(agent_name=agent, executor_status=ExecutorStatus.down)
                     deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
+
                     return
 
                 executor_status = ExecutorStatus.up
                 if my_executor.failed_modules:
+
+                    # We only create this exception to use its LogLine builder.
+                    # We don't raise it since the executor was successfully created for this resource
+                    # but we want to log a warning  because not all handler code was successfully loaded.
+                    exception = ModuleLoadingException(
+                        agent_name=agent,
+                        failed_modules=my_executor.failed_modules
+                    )
+                    failed_modules_warning_log_line = exception.create_log_line_for_failed_modules(level=logging.WARNING)
                     executor_status = ExecutorStatus.degraded
 
                 await task_manager.report_executor_status(agent_name=agent, executor_status=executor_status)
@@ -220,6 +238,8 @@ class Deploy(Task):
             finally:
                 # We signaled start, so we signal end
                 try:
+                    if failed_modules_warning_log_line:
+                        deploy_report.messages.append(failed_modules_warning_log_line)
                     await task_manager.deploy_done(deploy_intent, deploy_report)
                 except Exception:
                     LOGGER.error(
@@ -316,3 +336,39 @@ class RefreshFact(Task):
 
         get_fact_report = await my_executor.get_facts(executor_resource_details)
         await task_manager.fact_refresh_done(get_fact_report)
+
+
+
+
+
+class ModuleLoadingException(Exception):
+
+    def __init__(self, agent_name:str, failed_modules: Mapping[str, Mapping[str, Exception]]) -> None:
+        self.msg = "The following modules cannot be loaded: %s." % ", ".join([e for e in failed_modules.keys()]),
+        self.failed_modules = failed_modules
+        self.agent_name = agent_name
+        super().__init__(self.msg)
+
+    def to_log_line(self) -> data.LogLine:
+        return self.create_log_line_for_failed_modules(level=logging.ERROR)
+
+    def create_log_line_for_failed_modules(
+        self,
+        level: int,
+    ) -> data.LogLine:
+        """
+        Helper method to cleanly display module loading errors in the web console.
+        """
+        unpack_failed_modules = {}
+        for inmanta_module_name, failed_modules_data in self.failed_modules.items():
+            for python_module, exception_text in failed_modules_data.items():
+                # TODO: fix this hack.
+                # To be correctly displayed on multiple lines on the web-console, this needs to be:
+                #    - a list of strings (will be displayed in the JSON editor)
+                unpack_failed_modules[".".join([inmanta_module_name, python_module])] = str(exception_text).split("\n")
+
+        return data.LogLine.log(
+            level=level,
+            msg="Agent %s failed loading the following modules: %s." % (self.agent_name, ", ".join(self.failed_modules.keys())),
+            **unpack_failed_modules,
+        )

@@ -34,10 +34,12 @@ async def update(connection: Connection) -> None:
             'down'
         );
 
-        ALTER TABLE public.agent ADD COLUMN executor_status executor_status DEFAULT 'down'::public.executor_status;
+        ALTER TABLE public.agent ADD COLUMN executor_status executor_status DEFAULT 'up'::public.executor_status;
 
+
+        -- Assume status is up, until proven otherwise
         UPDATE public.agent
-        SET executor_status = 'down'::public.executor_status;
+        SET executor_status = 'up'::public.executor_status;
 
         ALTER TABLE  public.agent ALTER COLUMN executor_status SET NOT NULL;
     """
