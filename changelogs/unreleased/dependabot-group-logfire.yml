@@ -1,4 +1,4 @@
 description: Created logfire group for dependabot
 change-type: patch
 destination-branches:
-  - patch
+  - master
