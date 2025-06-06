@@ -1563,7 +1563,7 @@ def set_password(username: str, password: str) -> None:
 
 
 @auth(auth_label=const.AuthorizationLabel.ROLES_READ, read_only=True)
-@typedmethod(path="/roles", operation="GET", client_types=[ClientType.api], api_version=2)
+@typedmethod(path="/role", operation="GET", client_types=[ClientType.api], api_version=2)
 def list_roles() -> list[str]:
     """
     Returns the names of the roles that exist.
@@ -1571,7 +1571,7 @@ def list_roles() -> list[str]:
 
 
 @auth(auth_label=const.AuthorizationLabel.ROLES_WRITE, read_only=False)
-@typedmethod(path="/roles", operation="POST", client_types=[ClientType.api], api_version=2)
+@typedmethod(path="/role", operation="POST", client_types=[ClientType.api], api_version=2)
 def create_role(name: str) -> None:
     """
     Create a new role.
@@ -1581,7 +1581,7 @@ def create_role(name: str) -> None:
 
 
 @auth(auth_label=const.AuthorizationLabel.ROLES_WRITE, read_only=False)
-@typedmethod(path="/roles", operation="DELETE", client_types=[ClientType.api], api_version=2)
+@typedmethod(path="/role", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def delete_role(name: str) -> None:
     """
     Delete a role.
