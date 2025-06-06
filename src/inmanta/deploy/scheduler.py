@@ -1202,8 +1202,13 @@ class ResourceScheduler(TaskManager):
         await self.state_update_manager.set_parameters(fact_result=report)
 
     async def report_executor_status(self, agent_name: str, executor_status: ExecutorStatus) -> None:
-        # add bookeeping in self.state, only write to the db if it changed
-        await self.state_update_manager.report_executor_status(agent_name=agent_name, executor_status=executor_status)
+        # Only make calls towards the DB if we notice an actual status change
+        in_memory_agent_status: const.AgentStatus | None = self._state.agent_statuses.get(agent_name)
+
+        if in_memory_agent_status is None or in_memory_agent_status is const.AgentStatus.paused:
+            return
+        if in_memory_agent_status != const.AgentStatus[executor_status]:
+            await self.state_update_manager.report_executor_status(agent_name=agent_name, executor_status=executor_status)
 
     async def _update_scheduler_state_for_finished_deploy(
         self, deploy_intent: DeployIntent, result: executor.DeployReport, finished: datetime.datetime

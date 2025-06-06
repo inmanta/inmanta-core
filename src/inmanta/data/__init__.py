@@ -3334,15 +3334,24 @@ class Agent(BaseDocument):
 
     @classmethod
     async def get_statuses(
-        cls, env_id: uuid.UUID, agent_names: Set[str], *, connection: Optional[asyncpg.connection.Connection] = None
+        cls, env_id: uuid.UUID, agent_names: Set[str] | None, *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> dict[str, Optional[AgentStatus]]:
+        """
+        Retrieve the status for a set of agent names in a given environment,
+        or the status of all agents in this environment if `agent_names` is None.
+        """
         result: dict[str, Optional[AgentStatus]] = {}
-        for agent_name in agent_names:
-            agent = await cls.get_one(environment=env_id, name=agent_name, connection=connection)
-            if agent:
-                result[agent_name] = agent.get_status()
-            else:
-                result[agent_name] = None
+        if agent_names:
+            for agent_name in agent_names:
+                agent = await cls.get_one(environment=env_id, name=agent_name, connection=connection)
+                if agent:
+                    result[agent_name] = agent.get_status()
+                else:
+                    result[agent_name] = None
+        else:
+            agents: list[Agent] = await cls.get_list(environment=env_id)
+            result = {agent.name: agent.get_status() for agent in agents}
+
         return result
 
     def get_status(self) -> AgentStatus:

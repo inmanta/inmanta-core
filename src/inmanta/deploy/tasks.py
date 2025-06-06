@@ -104,7 +104,7 @@ class Task(abc.ABC):
         if inmanta_module_name in my_executor.failed_modules:
             raise ModuleLoadingException(
                 agent_name=agent_name,
-                failed_modules={k:v for k,v in my_executor.failed_modules.items() if k == inmanta_module_name}
+                failed_modules={k: v for k, v in my_executor.failed_modules.items() if k == inmanta_module_name},
             )
         return my_executor
 
@@ -168,7 +168,7 @@ class Deploy(Task):
                         version=version,
                     )
                 except ModuleLoadingException as e:
-                    log_line=e.to_log_line()
+                    log_line = e.to_log_line()
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     await task_manager.report_executor_status(agent_name=agent, executor_status=ExecutorStatus.degraded)
                     deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
@@ -181,12 +181,12 @@ class Deploy(Task):
                         "dependencies:",
                         res_type=executor_resource_details.id.entity_type,
                         agent=agent,
-                        error= [
-                            single_line for iterator in [
-                                multi_line.split("\n") for multi_line in traceback.format_exception(e)
-                            ] for single_line in iterator if single_line
-                        ]
-
+                        error=[
+                            single_line
+                            for iterator in [multi_line.split("\n") for multi_line in traceback.format_exception(e)]
+                            for single_line in iterator
+                            if single_line
+                        ],
                     )
                     # Not attached to ctx, needs to be flushed to logger explicitly
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
@@ -201,10 +201,7 @@ class Deploy(Task):
                     # We only create this exception to use its LogLine builder.
                     # We don't raise it since the executor was successfully created for this resource
                     # but we want to log a warning  because not all handler code was successfully loaded.
-                    exception = ModuleLoadingException(
-                        agent_name=agent,
-                        failed_modules=my_executor.failed_modules
-                    )
+                    exception = ModuleLoadingException(agent_name=agent, failed_modules=my_executor.failed_modules)
                     failed_modules_warning_log_line = exception.create_log_line_for_failed_modules(level=logging.WARNING)
                     executor_status = ExecutorStatus.degraded
 
@@ -338,13 +335,10 @@ class RefreshFact(Task):
         await task_manager.fact_refresh_done(get_fact_report)
 
 
-
-
-
 class ModuleLoadingException(Exception):
 
-    def __init__(self, agent_name:str, failed_modules: Mapping[str, Mapping[str, Exception]]) -> None:
-        self.msg = "The following modules cannot be loaded: %s." % ", ".join([e for e in failed_modules.keys()]),
+    def __init__(self, agent_name: str, failed_modules: Mapping[str, Mapping[str, Exception]]) -> None:
+        self.msg = ("The following modules cannot be loaded: %s." % ", ".join([e for e in failed_modules.keys()]),)
         self.failed_modules = failed_modules
         self.agent_name = agent_name
         super().__init__(self.msg)
@@ -370,5 +364,6 @@ class ModuleLoadingException(Exception):
         return data.LogLine.log(
             level=level,
             msg="Agent %s failed loading the following modules: %s." % (self.agent_name, ", ".join(self.failed_modules.keys())),
+            timestamp=None,
             **unpack_failed_modules,
         )

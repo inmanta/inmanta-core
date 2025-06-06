@@ -1505,7 +1505,12 @@ async def test_code_install_success_code_load_error_for_provider(
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
 
-    # Check that the agent status is set to the executor status of the last deploy:
+    async def check_agent_status(expected_status: ExecutorStatus, agent_name: str) -> bool:
+        agent = await data.Agent.get(env=uuid.UUID(environment), endpoint=agent_name)
+        status = agent.get_status()
+        return status == expected_status
+
+    await retry_limited(partial(check_agent_status, ExecutorStatus.degraded, "agent_1"), 2)
 
     snippetcompiler.setup_for_snippet(
         """
@@ -1525,11 +1530,7 @@ async def test_code_install_success_code_load_error_for_provider(
     assert result.code == 200
 
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
-
-    async def check_agent_status(expected_status: ExecutorStatus, agent_name: str) -> bool:
-        agent = await data.Agent.get(env=uuid.UUID(environment), endpoint=agent_name)
-        status = agent.get_status()
-        return status == expected_status
+    await retry_limited(partial(check_agent_status, ExecutorStatus.degraded, "agent_1"), 2)
 
     await retry_limited(partial(check_agent_status, ExecutorStatus.degraded, "agent_1"), 2)
 
@@ -1551,7 +1552,7 @@ async def test_code_install_success_code_load_error_for_provider(
 
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
 
-    await retry_limited(partial(check_agent_status, ExecutorStatus.down, "agent_1"), 2)
+    await retry_limited(partial(check_agent_status, ExecutorStatus.degraded, "agent_1"), 2)
 
 
 @pytest.mark.slowtest
