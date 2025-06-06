@@ -466,18 +466,13 @@ class ResourceScheduler(TaskManager):
                         FROM public.configurationmodel
                         WHERE released IS TRUE
                           AND environment=$1
-                    ),
-                    resource_with_latest_model AS (
-                        SELECT r.resource_id, r.environment
-                        FROM resource r
-                        JOIN latest_released_version lrv
-                          ON r.model=lrv.version
-                        WHERE r.environment=$1
                     )
                     UPDATE {data.ResourcePersistentState.table_name()} AS rps
                     SET is_orphan=NOT EXISTS (
                         SELECT 1
-                        FROM resource_with_latest_model r
+                        FROM resource r
+                        JOIN latest_released_version lrv
+                          ON r.model=lrv.version
                         WHERE r.resource_id=rps.resource_id
                           AND r.environment=rps.environment
                     )
