@@ -740,6 +740,13 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, mo
 
     dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=client)
 
+    async def mock_run(self) -> None:
+        """Mocks the call to TaskRunner._run."""
+        return
+
+    # We want dummy_scheduler._running=True so that read_version runs correctly
+    # But we don't want the TaskRunner to actually run anything that is scheduled (we will do that manually)
+    monkeypatch.setattr("inmanta.deploy.scheduler.TaskRunner._run", mock_run)
     await dummy_scheduler._initialize()
 
     async def make_resource_set(tenant_index: int, iteration: int) -> list[dict[str, object]]:
@@ -793,11 +800,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, mo
             version = result.result["data"]
         await utils.wait_until_version_is_released(client, environment, version)
 
-        async def mock_run(self) -> None:
-            """Mocks the call to TaskRunner._run."""
-            return
-
-        monkeypatch.setattr("inmanta.deploy.scheduler.TaskRunner._run", mock_run)
+        # Updates the scheduler state
         await dummy_scheduler.read_version()
 
         # Get all resources
