@@ -685,15 +685,25 @@ class OrchestrationService(protocol.ServerSlice):
         """
 
         # Map of (inmanta_module_name, inmanta_module_version) to list[agent_names]
-        base_version_data: dict[tuple[str, str], list[str]] = await AgentModules.get_agents_per_module(
+        base_version_data: dict[tuple[str, str], list[str]]
+        base_version_modules: set[str]
+        base_version_data, base_version_modules = await AgentModules.get_agents_per_module(
             model_version=partial_base_version, environment=environment, connection=connection
         )
+
+        modules_to_register: set[str] = set()
 
         for inmanta_module_name, module_data in module_version_info.items():
             module_version = module_data.version
             if not module_data.for_agents:
                 # No agent is using this module in this version
                 continue
+
+            if inmanta_module_name not in base_version_modules:
+                # This is a new module, make sure we register it later
+                modules_to_register.add(inmanta_module_name)
+                continue
+
             if (inmanta_module_name, module_version) not in base_version_data:
                 raise BadRequest(
                     f"Cannot perform partial export because the source code for module {inmanta_module_name} in this partial "
@@ -702,7 +712,7 @@ class OrchestrationService(protocol.ServerSlice):
                     "this version check with the `--allow-handler-code-update` CLI option."
                 )
 
-        return base_version_data
+        return base_version_data, modules_to_register
 
     async def _register_agent_code(
         self,
@@ -730,9 +740,14 @@ class OrchestrationService(protocol.ServerSlice):
         :param connection: DB connection expected to be managed by the caller method.
         """
         base_version_info: dict[tuple[str, str], list[str]] = {}
+        modules_to_register: set[str]
         if partial_base_version is not None and not allow_handler_code_update:
-            base_version_info = await self._check_version_info(
+            base_version_info, modules_to_register = await self._check_version_info(
                 partial_base_version, environment, module_version_info, connection
+            )
+            new_modules_version_info = {k: v for k, v in module_version_info.items() if k in modules_to_register}
+            await InmantaModule.register_modules(
+                environment=environment, module_version_info=new_modules_version_info, connection=connection
             )
         else:
             await InmantaModule.register_modules(

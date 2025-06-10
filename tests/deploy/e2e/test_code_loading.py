@@ -563,6 +563,10 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
 
     4) Make sure we can provide during a partial export new agents with already registered code
 
+    5) Make sure we can provide during a partial export new or existing agents with new modules
+
+    6) Make sure we can bypass module version check during partial export with the allow_handler_code_update option
+
 
     """
     codemanager = CodeManager()
@@ -761,7 +765,78 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         expected_source=b"#The code",
     )
 
-    # 5) Make sure we can force code update via the allow_handler_code_update option
+    # 5) Make sure we can provide agents with new modules:
+
+    content = "#Yet some other code"
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(content.encode())
+    hv3: str = sha1sum.hexdigest()
+    await client.upload_file(hv3, content=base64.b64encode(content.encode()).decode("ascii"))
+
+    module_source_metadata3 = ModuleSourceMetadata(
+        name="inmanta_plugins.new_module",
+        hash_value=hv3,
+        is_byte_code=False,
+    )
+
+    module_version_info = {
+        "new_module": InmantaModuleDTO(
+            name="new_module",
+            version="0.0.0",
+            files_in_module=[module_source_metadata3],
+            requirements=[],
+            for_agents=["agent_Z", "agent_A"],
+        )
+    }
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::ResType_A[agent_Z,key=key1],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::ResType_A[agent_A,key=key1],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {
+        "test::ResType_A[agent_Z,key=key1]": "set-b",
+    }
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        resource_sets=resource_sets,
+        module_version_info=module_version_info,
+    )
+    assert result.code == 200
+
+    await check_code_for_version(
+        version=4,
+        environment=environment,
+        agent_names=["agent_X", "agent_Y", "agent_Z"],
+        module_name="test",
+        expected_source=b"#The code",
+    )
+    await check_code_for_version(
+        version=4,
+        environment=environment,
+        agent_names=["agent_Z", "agent_A"],
+        module_name="new_module",
+        expected_source=b"#Yet some other code",
+    )
+
+    # 6) Make sure we can force code update via the allow_handler_code_update option
 
     result = await client.put_partial(
         tid=environment,
@@ -775,7 +850,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
     )
     assert result.code == 200
     await check_code_for_version(
-        version=4,
+        version=5,
         environment=environment,
         agent_names=["agent_X", "agent_Y", "agent_Z"],
         module_name="test",

@@ -219,10 +219,13 @@ class AgentModules(Base):
     @classmethod
     async def get_agents_per_module(
         cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
-    ) -> dict[tuple[str, str], list[str]]:
+    ) -> tuple[dict[tuple[str, str], list[str]], set[str]]:
         """
         Retrieve the list of agents that require each inmanta module (name, version)
-        as a map of (inmanta_module_name, inmanta_module_version) to list[agent_name]
+        as a map of (inmanta_module_name, inmanta_module_version) to list[agent_name].
+
+        This map is the first element of the tuple returned by this method.
+        The second element of this tuple is the set of registered modules for this version.
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.
@@ -248,11 +251,13 @@ class AgentModules(Base):
         async with connection.transaction():
             values = [model_version, environment]
             in_db_module_data: dict[tuple[str, str], list[str]] = defaultdict(list)
+            modules_in_version: set[str] = set()
             async for record in connection.cursor(query, *values):
                 in_db_module_data[str(record["inmanta_module_name"]), str(record["inmanta_module_version"])].append(
                     str(record["agent_name"])
                 )
-            return in_db_module_data
+                modules_in_version.add(str(record["inmanta_module_name"]))
+            return (in_db_module_data, modules_in_version)
 
     @classmethod
     async def register_modules_for_agents(
