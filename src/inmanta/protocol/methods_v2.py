@@ -52,7 +52,7 @@ def put_partial(
     resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[list[str]] = None,
     pip_config: Optional[PipConfig] = None,
-    force_handler_code_update: bool = False,
+    allow_handler_code_update: bool = False,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> ReturnValue[int]:
     """
@@ -78,9 +78,9 @@ def put_partial(
               * version_info: Model version information
     :param pip_config: Pip config used by this version
     :param module_version_info: Map of (module name, module version) to InmantaModule
-    :param force_handler_code_update: During partial compiles, a check is performed to make sure the source
+    :param allow_handler_code_update: During partial compiles, a check is performed to make sure the source
         code of modules in this partial version is identical to the source code in the base version. Set this
-        parameter to True to bypass this check.
+        parameter to True to bypass this check and allow updating handler code during a partial export.
 
     :return: The newly stored version number.
     """

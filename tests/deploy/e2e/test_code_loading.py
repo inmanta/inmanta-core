@@ -711,7 +711,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         "Invalid request: Cannot perform partial export because the source code for module test in this partial version is "
         "different from the currently registered source code. Consider running a full export instead. Alternatively, if you "
         "are sure the new code is compatible and want to forcefully update, you can bypass this version check with the "
-        "`--force-handler-code-update` CLI option."
+        "`--allow-handler-code-update` CLI option."
     )
 
     await check_code_for_version(
@@ -761,7 +761,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         expected_source=b"#The code",
     )
 
-    # 5) Make sure we can force code update via the force_handler_code_update option
+    # 5) Make sure we can force code update via the allow_handler_code_update option
 
     result = await client.put_partial(
         tid=environment,
@@ -771,7 +771,7 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         version_info={},
         resource_sets=resource_sets,
         module_version_info=mismatched_module_version_info,
-        force_handler_code_update=True,
+        allow_handler_code_update=True,
     )
     assert result.code == 200
     await check_code_for_version(

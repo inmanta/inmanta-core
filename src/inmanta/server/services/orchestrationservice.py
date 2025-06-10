@@ -699,7 +699,7 @@ class OrchestrationService(protocol.ServerSlice):
                     f"Cannot perform partial export because the source code for module {inmanta_module_name} in this partial "
                     "version is different from the currently registered source code. Consider running a full export instead. "
                     "Alternatively, if you are sure the new code is compatible and want to forcefully update, you can bypass "
-                    "this version check with the `--force-handler-code-update` CLI option."
+                    "this version check with the `--allow-handler-code-update` CLI option."
                 )
 
         return base_version_data
@@ -711,7 +711,7 @@ class OrchestrationService(protocol.ServerSlice):
         environment: uuid.UUID,
         module_version_info: dict[str, InmantaModuleDTO],
         *,
-        force_handler_code_update: bool = False,
+        allow_handler_code_update: bool = False,
         connection: asyncpg.connection.Connection,
     ) -> None:
         """
@@ -725,12 +725,12 @@ class OrchestrationService(protocol.ServerSlice):
         :param version: Configuration model version.
         :param environment: Environment this compile belongs to.
         :param module_version_info: Inmanta module information to register for this version.
-        :param force_handler_code_update: In case of a partial compile, this flag will disable the check
+        :param allow_handler_code_update: In case of a partial compile, this flag will disable the check
             for source code consistency between the base version and the current partial version.
         :param connection: DB connection expected to be managed by the caller method.
         """
         base_version_info: dict[tuple[str, str], list[str]] = {}
-        if partial_base_version is not None and not force_handler_code_update:
+        if partial_base_version is not None and not allow_handler_code_update:
             base_version_info = await self._check_version_info(
                 partial_base_version, environment, module_version_info, connection
             )
@@ -760,7 +760,7 @@ class OrchestrationService(protocol.ServerSlice):
         *,
         connection: asyncpg.connection.Connection,
         module_version_info: dict[str, InmantaModuleDTO],
-        force_handler_code_update: bool = False,
+        allow_handler_code_update: bool = False,
     ) -> None:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
@@ -775,7 +775,7 @@ class OrchestrationService(protocol.ServerSlice):
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
         :param module_version_info: Mapping of (module name, module version) to module DTO.
-        :param force_handler_code_update: During partial compiles (i.e. partial_base_version is not None), a check is performed
+        :param allow_handler_code_update: During partial compiles (i.e. partial_base_version is not None), a check is performed
             to make sure the source code of modules in this partial version is identical to the source code in the base
             version. Set this parameter to True to bypass this check.
 
@@ -923,7 +923,7 @@ class OrchestrationService(protocol.ServerSlice):
                 version,
                 env.id,
                 module_version_info,
-                force_handler_code_update=force_handler_code_update,
+                allow_handler_code_update=allow_handler_code_update,
                 connection=connection,
             )
 
@@ -1060,7 +1060,7 @@ class OrchestrationService(protocol.ServerSlice):
         removed_resource_sets: Optional[list[str]] = None,
         pip_config: Optional[PipConfig] = None,
         module_version_info: dict[str, InmantaModuleDTO] | None = None,
-        force_handler_code_update: bool = False,
+        allow_handler_code_update: bool = False,
     ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure
@@ -1174,7 +1174,7 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                     module_version_info=module_version_info or {},
-                    force_handler_code_update=force_handler_code_update,
+                    allow_handler_code_update=allow_handler_code_update,
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)
