@@ -265,6 +265,12 @@ async def test_auto_deploy_no_splay(server, client, clienthelper: ClientHelper, 
 
     assert len(result.result["agents"]) == 1
 
+    async def one_agent_created() -> bool:
+        result = await client.list_agents(tid=environment)
+        return len(result.result["agents"]) == 1
+
+    await retry_limited(one_agent_created, 1)
+
 
 async def test_deploy_no_code(resource_container, client, clienthelper, environment):
     """
@@ -1154,7 +1160,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    # Wait for one resource to be deploying
+    # Wait for the resources to be deploying
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=3, state=const.ResourceState.deploying)
 
     result = await client.list_versions(tid=environment)

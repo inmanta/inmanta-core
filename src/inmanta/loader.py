@@ -61,7 +61,7 @@ def get_inmanta_module_name(python_module_name: str) -> str:
 
 
 class SourceNotFoundException(Exception):
-    """This exception is raised when the source of the provided type is not found"""
+    """This exception is raised when module source is not found"""
 
 
 class CodeManager:
@@ -108,20 +108,27 @@ class CodeManager:
 
         # get the module
         module_name = get_inmanta_module_name(instance.__module__)
+        loaded_modules = module.Project.get().modules
 
-        self._register_inmanta_module(module_name)
+        if module_name not in loaded_modules:
+            raise SourceNotFoundException(
+                "Module %s is imported in plugin code but not in model code. Either remove the unused import, "
+                "or make sure to import the module in model code." % module_name
+            )
+
+        self._register_inmanta_module(module_name, loaded_modules[module_name])
 
         registered_agents: set[str] = self._types_to_agent.get(type_name, set())
         self._update_agents_for_module(module_name, registered_agents)
 
-    def _register_inmanta_module(self, inmanta_module_name: str) -> None:
+    def _register_inmanta_module(self, inmanta_module_name: str, module: "module.Module") -> None:
         if inmanta_module_name in self.module_version_info:
             # This module was already registered
             return
 
         module_sources: list[ModuleSource] = []
 
-        for absolute_path, fqn_module_name in module.Project.get().modules[inmanta_module_name].get_plugin_files():
+        for absolute_path, fqn_module_name in module.get_plugin_files():
             source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
             self.__file_info[absolute_path] = source_info
             module_sources.append(source_info)

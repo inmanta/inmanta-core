@@ -639,6 +639,7 @@ src/inmanta/loader.py:0: error: Argument 1 to "getsourcefile" has incompatible t
 src/inmanta/loader.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "PluginModuleFinder")  [assignment]
 src/inmanta/loader.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "PluginModuleFinder")  [assignment]
 src/inmanta/loader.py:0: error: Missing type parameters for generic type Module  [type-arg]
+src/inmanta/loader.py:0: error: Missing type parameters for generic type Module  [type-arg]
 src/inmanta/loader.py:0: error: No return value expected  [return-value]
 src/inmanta/loader.py:0: error: Return type "bytes" of "get_source" incompatible with return type "str | None" in supertype "InspectLoader"  [override]
 src/inmanta/logging.py:0: error: Argument "root_handlers" to "FullLoggingConfig" has incompatible type "object"; expected "list[str] | None"  [arg-type]
