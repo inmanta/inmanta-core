@@ -4501,31 +4501,18 @@ class ResourcePersistentState(BaseDocument):
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
 
     @classmethod
-    async def mark_orphans_not_in_version(
-        cls,
-        environment: UUID,
-        version: int,
-        connection: Optional[Connection] = None,
+    async def mark_as_orphan(
+        cls, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
     ) -> None:
         """
-        Marks all persisted resources that do not exist in the given version as orphans.
+        Set the is_orphan column to True on all given resources
         """
         query = f"""
-            UPDATE {cls.table_name()} AS rps
+            UPDATE {cls.table_name()}
             SET is_orphan=TRUE
-            WHERE
-                rps.environment=$1
-                AND NOT rps.is_orphan
-                AND NOT EXISTS(
-                    SELECT 1
-                    FROM {Resource.table_name()} AS r
-                    WHERE
-                        r.environment=rps.environment
-                        AND r.resource_id=rps.resource_id
-                        AND r.model=$2
-                )
+            WHERE environment=$1 AND resource_id=ANY($2)
         """
-        await cls._execute_query(query, environment, version, connection=connection)
+        await cls._execute_query(query, environment, resource_ids, connection=connection)
 
     @classmethod
     async def update_resource_intent(
@@ -4625,11 +4612,8 @@ class ResourcePersistentState(BaseDocument):
                     ELSE 'NOT_BLOCKED'
                 END
             FROM {Resource.table_name()} AS r
-            WHERE r.environment=$1 AND r.model=$2 AND NOT EXISTS(
-                SELECT *
-                FROM {cls.table_name()} AS rps
-                WHERE rps.environment=r.environment AND rps.resource_id=r.resource_id
-            )
+            WHERE r.environment=$1 AND r.model=$2
+            ON CONFLICT DO NOTHING
             """,
             environment,
             model_version,
@@ -4840,18 +4824,6 @@ class Resource(BaseDocument):
             return None
         assert len(results) == 1
         return const.ResourceState(results[0]["status"])
-
-    @classmethod
-    async def set_deployed_multi(
-        cls,
-        environment: uuid.UUID,
-        resource_ids: Sequence[ResourceIdStr],
-        version: int,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> None:
-        query = "UPDATE resource SET status='deployed' WHERE environment=$1 AND model=$2 AND resource_id =ANY($3) "
-        async with cls.get_connection(connection) as connection:
-            await connection.execute(query, environment, version, resource_ids)
 
     @classmethod
     async def reset_resource_state(
@@ -6329,6 +6301,104 @@ class User(BaseDocument):
         return m.User(username=self.username, auth_method=self.auth_method)
 
 
+class RoleStillAssignedException(Exception):
+    """
+    The role is still assigned to a user.
+    """
+
+
+class CannotAssignRoleException(Exception):
+    """
+    Role cannot be assigned to user.
+    """
+
+
+class Role(BaseDocument):
+
+    __primary_key__ = ("id", "name")
+
+    id: uuid.UUID
+    name: str
+
+    @classmethod
+    async def assign_role_to_user(cls, username: str, role_assignment: m.RoleAssignment) -> None:
+        """
+        Assign the given role to the given user.
+        """
+        assign_role_query = f"""
+            INSERT INTO public.role_assignment(user_id, environment, role_id)
+            VALUES(
+                (SELECT id FROM {User.table_name()} WHERE username=$1),
+                $2,
+                (SELECT id FROM {cls.table_name()} WHERE name=$3)
+            )
+        """
+        try:
+            await cls._execute_query(assign_role_query, username, role_assignment.environment, role_assignment.name)
+        except (asyncpg.NotNullViolationError, asyncpg.ForeignKeyViolationError):
+            raise CannotAssignRoleException()
+
+    @classmethod
+    async def unassign_role_from_user(cls, username: str, role_assignment: m.RoleAssignment) -> None:
+        """
+        Unassign the given role from the given user.
+        """
+        unassign_role_query = f"""
+            DELETE FROM public.role_assignment
+            WHERE user_id=(SELECT id FROM {User.table_name()} WHERE username=$1)
+                  AND environment=$2
+                  AND role_id=(SELECT id FROM {cls.table_name()} WHERE name=$3)
+            RETURNING *
+        """
+        result = await cls._fetchrow(unassign_role_query, username, role_assignment.environment, role_assignment.name)
+        if result is None:
+            raise KeyError()
+
+    @classmethod
+    async def get_roles_for_user(cls, username: str) -> list[m.RoleAssignment]:
+        query = f"""
+            SELECT ras.environment, rol.name
+            FROM {User.table_name()} AS u
+                INNER JOIN public.role_assignment AS ras ON u.id=ras.user_id
+                INNER JOIN {cls.table_name()} AS rol ON ras.role_id=rol.id
+            WHERE u.username=$1
+            ORDER BY ras.environment, rol.name
+        """
+        return [m.RoleAssignment(environment=r["environment"], name=r["name"]) for r in await cls._fetch_query(query, username)]
+
+    @classmethod
+    async def ensure_roles(cls, roles: Sequence[str]) -> None:
+        """
+        Insert the given roles into the role table if they don't exist yet.
+        """
+        values_str = ",\n".join(f"(${1 + (i * 2)}, ${2 + (i * 2)})" for i in range(len(roles)))
+        query = f"""
+            INSERT INTO {cls.table_name()}(id, name)
+            VALUES {values_str}
+            ON CONFLICT DO NOTHING
+        """
+        value_pairs = [(uuid.uuid4(), role) for role in roles]
+        values = list(itertools.chain.from_iterable(value_pairs))
+        await cls._execute_query(query, *values)
+
+    @classmethod
+    async def delete_role(cls, name: str) -> None:
+        query = f"""
+           DELETE FROM {cls.table_name()} AS rol
+           WHERE name=$1
+           returning *
+        """
+        try:
+            result = await cls._fetchrow(query, name)
+        except asyncpg.ForeignKeyViolationError:
+            # Role is still assigned to a certain user
+            raise RoleStillAssignedException()
+        else:
+            if result is None:
+                # Role doesn't exist
+                raise KeyError()
+
+
 class DiscoveredResource(BaseDocument):
     """
     :param environment: the environment of the resource
@@ -6443,6 +6513,7 @@ _classes = [
     DiscoveredResource,
     File,
     Scheduler,
+    Role,
 ]
 
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions

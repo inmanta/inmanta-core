@@ -39,6 +39,7 @@ from inmanta.agent.executor import DeployReport
 from inmanta.const import ResourceState
 from inmanta.data.model import LatestReleasedResource
 from inmanta.deploy import scheduler
+from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
@@ -141,7 +142,7 @@ async def test_has_only_one_version_from_resource(server, client):
     await res1_v3.insert()
 
     # This will mark res2 as an orphan since it is not on version 3
-    await data.ResourcePersistentState.mark_orphans_not_in_version(environment=env.id, version=version)
+    await data.ResourcePersistentState.mark_as_orphan(environment=env.id, resource_ids={ResourceIdStr(res2_key)})
 
     version = 4
     res1_v4 = data.Resource.new(
@@ -191,6 +192,7 @@ async def env_with_resources(server, client):
         status: ResourceState,
         versions: list[int],
         environment: UUID = env.id,
+        orphan: bool = False,
     ):
         key = f"{resource_type}[{agent},path={path}]"
         for version in versions:
@@ -201,10 +203,12 @@ async def env_with_resources(server, client):
                 status=status,
             )
             await res.insert()
-        # Populate RPS and mark each resource not in the max_version as orphaned
+        # Populate RPS
         version = max(versions)
         await data.ResourcePersistentState.populate_for_version(environment=environment, model_version=version)
-        await data.ResourcePersistentState.mark_orphans_not_in_version(environment=environment, version=max_version)
+        # Mark orphans as such
+        if orphan:
+            await data.ResourcePersistentState.mark_as_orphan(environment=environment, resource_ids={ResourceIdStr(key)})
 
         res = await data.Resource.get_one(resource_id=key)
         await res.update_persistent_state(
@@ -224,8 +228,8 @@ async def env_with_resources(server, client):
 
     await create_resource("agent1", "/etc/file1", "test::File", ResourceState.available, [1, 2, 3])
     # The following 2 resources are orphaned
-    await create_resource("agent1", "/etc/file2", "test::File", ResourceState.deploying, [1, 2])
-    await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [2])
+    await create_resource("agent1", "/etc/file2", "test::File", ResourceState.deploying, [1, 2], orphan=True)
+    await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [2], orphan=True)
     await create_resource("agent2", "/tmp/file4", "test::File", ResourceState.unavailable, [3])
     await create_resource("agent2", "/tmp/dir5", "test::Directory", ResourceState.skipped, [3])
     await create_resource("agent3", "/tmp/dir6", "test::Directory", ResourceState.deployed, [3])
@@ -736,7 +740,7 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
 
     dummy_scheduler = scheduler.ResourceScheduler(uuid.UUID(environment), executor_manager=None, client=client)
 
-    async def make_resource_set(tenant_index: int, iteration: int) -> int:
+    async def make_resource_set(tenant_index: int, iteration: int) -> list[dict[str, object]]:
         is_full = tenant_index == 0 and iteration == 0
         if is_full:
             version = await clienthelper.get_version()
@@ -831,11 +835,20 @@ async def very_big_env(server, client, environment, clienthelper, null_agent, in
                 )
 
         await asyncio.gather(*(deploy(resource) for resource in resources_in_increment_for_agent))
+        return resources_in_increment_for_agent
 
+    first_iteration_resources = {}
     for iteration in [0, 1]:
         for tenant in range(instances):
-            await make_resource_set(tenant, iteration)
+            resources = await make_resource_set(tenant, iteration)
             logging.getLogger(__name__).warning("deploys: %d, tenant: %d, iteration: %d", deploy_counter, tenant, iteration)
+            # Since we are using null_agent we need to manually mark orphans
+            if iteration == 0:
+                first_iteration_resources[tenant] = {Id.parse_id(res["id"]).resource_str() for res in resources}
+            elif iteration == 1:
+                new_rids = {Id.parse_id(res["id"]).resource_str() for res in resources}
+                orphans = first_iteration_resources[tenant] - new_rids
+                await dummy_scheduler.state_update_manager.mark_as_orphan(environment=environment, resource_ids=orphans)
 
     return instances
 

@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump logfire from 3.16.1 to 3.17.0
+destination-branches:
+- master
+sections: {}

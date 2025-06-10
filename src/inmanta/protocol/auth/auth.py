@@ -41,7 +41,7 @@ def encode_token(
     environment: Optional[str] = None,
     idempotent: bool = False,
     expire: Optional[float] = None,
-    custom_claims: Optional[dict[str, str | list[str]]] = None,
+    custom_claims: Optional[Mapping[str, str | list[str] | Mapping[str, str]]] = None,
 ) -> str:
     cfg = AuthJWTConfig.get_sign_config()
     if cfg is None:

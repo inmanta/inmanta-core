@@ -57,6 +57,11 @@ async def test_default_policy(server, client, role: str | None, is_admin: bool, 
     """
     Test the behavior of the default policy.
     """
+    # Verify default roles, defined in the policy, are synchronized to the database.
+    result = await client.list_roles()
+    assert result.code == 200
+    assert result.result["data"] == sorted(["read-only", "noc", "operator", "environment-admin", "environment-expert-admin"])
+
     # Create a user
     user = data.User(
         username="user",
