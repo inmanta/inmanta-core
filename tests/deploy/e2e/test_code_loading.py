@@ -515,7 +515,7 @@ async def test_logging_on_code_loading_error(server, client, environment, client
 
     await wait_until_deployment_finishes(client, environment, version=version, timeout=10)
 
-    expected_error_message = 'Agent agent1 failed loading the following modules: test.'
+    expected_error_message = "Agent agent1 failed loading the following modules: test."
 
     def check_for_message(data, must_be_present: str) -> None:
         """
