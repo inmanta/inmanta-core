@@ -671,7 +671,7 @@ class OrchestrationService(protocol.ServerSlice):
         environment: uuid.UUID,
         module_version_info: dict[str, InmantaModuleDTO],
         connection: Connection,
-    ) -> dict[tuple[str, str], list[str]]:
+    ) -> tuple[dict[tuple[str, str], list[str]], set[str]]:
         """
         Make sure that all code used in this partial version was
         already registered in the base version.
