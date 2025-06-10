@@ -73,26 +73,29 @@ class ProxyContext:
 
     :param validated: True iff the object to proxy has been validated at the plugin boundary.
     :param allow_references: Allow reference values, either because they have been declared and validated, or because
-        explicitly requested. Typically the same as `validated` but kept as a separate field to allow overrides for a single
-        proxy object while maintaining behavior for nested proxies.
+        explicitly requested. Defaults to allow references iff the object has been validated. Kept as a separate field to
+        allow overrides for a single proxy object while maintaining behavior for nested proxies.
     """
     validated: bool = True
-    allow_references: bool = True
+    allow_references: Optional[bool] = None
 
     def nested(self: Self, validated: Optional[bool] = None) -> Self:
         """
         Returns a context object for values nested one level deeper than the current context.
 
-        :param validated: If the nested context should be considered to be validated or not. Defaults to the current context's
-            value.
+        :param validated: Whether the nested context should be considered to be validated. Defaults to the current
+            context's value.
         """
         validated = validated if validated is not None else self.validated
         return dataclasses.replace(
             self,
             validated=validated,
-            # we're proxying elements one level deeper than the current context => derive allow_references for proxied values
-            allow_references=validated,
+            # we're proxying elements one level deeper than the current context => reset allow_references to default behavior
+            allow_references=None,
         )
+
+    def should_allow_references(self) -> bool:
+        return self.allow_references if self.allow_references is not None else self.validated
 
 
 # this is here to avoid import loops
@@ -237,7 +240,7 @@ class DynamicProxy:
             return copy(value)
 
         if isinstance(value, references.Reference):
-            if context is not None and not context.allow_references:
+            if context is not None and not context.should_allow_references():
                 # TODO: tailor-made exceptions from child classes, e.g. through class method with context?
                 raise UndeclaredReference(
                     reference=value,
@@ -251,21 +254,28 @@ class DynamicProxy:
         if isinstance(value, DynamicProxy):
             return value
 
-        new_context: ProxyContext = context if context is not None else ProxyContext()
+        def nested_context(*, validated: Optional[bool] = None) -> Optional[ProxyContext]:
+            return (
+                context.nested(validated=validated)
+                if context is not None
+                else ProxyContext(validated=validated)
+                if validated is not None
+                else None
+            )
 
         if isinstance(value, dict):
-            return DictProxy(value, element_context=new_context.nested())
+            return DictProxy(value, element_context=nested_context())
 
         if hasattr(value, "__len__"):
-            return SequenceProxy(value, element_context=new_context.nested())
+            return SequenceProxy(value, element_context=nested_context())
 
         if hasattr(value, "__call__"):
-            return CallProxy(value, element_context=new_context.nested())
+            return CallProxy(value, element_context=nested_context())
 
         return DynamicProxy(
             value,
             # DSL instances are a black box as far as boundary validation is concerned
-            element_context=new_context.nested(validated=False),
+            element_context=nested_context(validated=False)
         )
 
     # TODO: docstring
@@ -286,7 +296,7 @@ class DynamicProxy:
         # The Python domain is a black box. We don't want to transparently pass unexpected values in there.
         # TODO: allow_references() name
         # => don't allow references in attributes. Can be explicitly allowed via allow_references() wrapper
-        if not self._get_element_context().allow_references and isinstance(value, references.Reference):
+        if not self._get_element_context().should_allow_references() and isinstance(value, references.Reference):
             # TODO: string format accepts reference. Should also raise this exception
             raise UndeclaredReference(
                 reference=value,
