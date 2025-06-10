@@ -896,6 +896,7 @@ class Agent(Base):
     paused: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
     id_primary: Mapped[Optional[uuid.UUID]] = mapped_column(UUID)
     unpause_on_resume: Mapped[Optional[bool]] = mapped_column(Boolean)
+    executor_status: Mapped[str] = mapped_column(Enum("up", "degraded", "down", name="executor_status"))
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="agent")
     agentinstance: Mapped["AgentInstance"] = relationship("AgentInstance", back_populates="agent")

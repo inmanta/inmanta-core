@@ -56,6 +56,7 @@ from inmanta.const import (
     NAME_RESOURCE_ACTION_LOGGER,
     UNDEPLOYABLE_NAMES,
     AgentStatus,
+    ExecutorStatus,
     LogLevel,
     ResourceState,
 )
@@ -3305,9 +3306,11 @@ class Agent(BaseDocument):
     :param name: The name of this agent
     :param last_failover: Moment at which the primary was last changed
     :param paused: is this agent paused (if so, skip it)
-    :param primary: what is the current active instance (if none, state is down)
+    :param primary: what is the current active instance (if none, state is down). Only relevant for the $__scheduler agent.
     :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
         persist paused state when halting.
+    :param executor_status: Status of the latest executor that was built (or attempted to be built). Only relevant
+        for logical agents (i.e. non $__scheduler agents)
     """
 
     __primary_key__ = ("environment", "name")
@@ -3318,6 +3321,7 @@ class Agent(BaseDocument):
     paused: bool = False
     id_primary: Optional[uuid.UUID] = None
     unpause_on_resume: Optional[bool] = None
+    executor_status: ExecutorStatus = ExecutorStatus.up
 
     @property
     def primary(self) -> Optional[uuid.UUID]:
@@ -3330,23 +3334,34 @@ class Agent(BaseDocument):
 
     @classmethod
     async def get_statuses(
-        cls, env_id: uuid.UUID, agent_names: Set[str], *, connection: Optional[asyncpg.connection.Connection] = None
+        cls, env_id: uuid.UUID, agent_names: Set[str] | None, *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> dict[str, Optional[AgentStatus]]:
+        """
+        Retrieve the status for a set of agent names in a given environment,
+        or the status of all agents in this environment if `agent_names` is None.
+        """
         result: dict[str, Optional[AgentStatus]] = {}
-        for agent_name in agent_names:
-            agent = await cls.get_one(environment=env_id, name=agent_name, connection=connection)
-            if agent:
-                result[agent_name] = agent.get_status()
-            else:
-                result[agent_name] = None
+        if agent_names:
+            for agent_name in agent_names:
+                agent = await cls.get_one(environment=env_id, name=agent_name, connection=connection)
+                if agent:
+                    result[agent_name] = agent.get_status()
+                else:
+                    result[agent_name] = None
+        else:
+            agents: list[Agent] = await cls.get_list(environment=env_id)
+            result = {agent.name: agent.get_status() for agent in agents}
+
         return result
 
     def get_status(self) -> AgentStatus:
         if self.paused:
             return AgentStatus.paused
+        # Case for the scheduler agent
         if self.primary is not None:
             return AgentStatus.up
-        return AgentStatus.down
+
+        return AgentStatus[self.executor_status]
 
     def to_dict(self) -> JsonType:
         base = BaseDocument.to_dict(self)
@@ -3956,7 +3971,7 @@ class LogLine(DataDocument):
         - msg: the message to write to logs (value type: str)
         - args: the args that can be passed to the logger (value type: list)
         - level: the log level of the message (value type: str, example: "CRITICAL")
-        - kwargs: the key-word args that where used to generated the log (value type: list)
+        - kwargs: the key-word args that were used to generate the log (value type: list)
         - timestamp: the time at which the LogLine was created (value type: datetime.datetime)
     """
 
