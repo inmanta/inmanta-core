@@ -36,7 +36,6 @@ import asyncpg
 from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.const import ExecutorStatus
 from inmanta.data import ConfigurationModel, Environment
 from inmanta.data.model import Discrepancy, SchedulerStatusReport
 from inmanta.deploy import timers, work
@@ -215,15 +214,6 @@ class TaskManager(abc.ABC):
     async def fact_refresh_done(self, report: executor.GetFactReport) -> None:
         """
         Report the result of a fact refresh.
-        """
-
-    @abstractmethod
-    async def report_executor_status(self, agent_name: str, executor_status: ExecutorStatus) -> None:
-        """
-        Report the status of an executor for a given agent.
-
-        :param agent_name: The agent.
-        :param executor_status: The status of the executor to set for this agent.
         """
 
 
@@ -1200,9 +1190,6 @@ class ResourceScheduler(TaskManager):
 
     async def fact_refresh_done(self, report: executor.GetFactReport) -> None:
         await self.state_update_manager.set_parameters(fact_result=report)
-
-    async def report_executor_status(self, agent_name: str, executor_status: ExecutorStatus) -> None:
-        await self.state_update_manager.report_executor_status(agent_name=agent_name, executor_status=executor_status)
 
     async def _update_scheduler_state_for_finished_deploy(
         self, deploy_intent: DeployIntent, result: executor.DeployReport, finished: datetime.datetime

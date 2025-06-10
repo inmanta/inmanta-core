@@ -35,7 +35,7 @@ import pytest
 from psutil import NoSuchProcess, Process
 
 from inmanta import config, const, data
-from inmanta.const import AgentAction, ExecutorStatus
+from inmanta.const import AgentAction
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
@@ -109,7 +109,7 @@ async def setup_environment_with_agent(client, project_name):
     1) Create a project with name project_name and create an environment.
     2) Deploy a model which requires one autostarted agent. The agent does not have code so it will mark the version as
        failed.
-    3) Wait until the autostarted agent is created. Its status is 'down' since the executor can't be created.
+    3) Wait until the autostarted agent is up.
     """
     create_project_result = await client.create_project(project_name)
     assert create_project_result.code == 200
@@ -159,13 +159,12 @@ async def setup_environment_with_agent(client, project_name):
     result = await client.list_agents(tid=env_id)
     assert result.code == 200
 
-    while len([x for x in result.result["agents"] if x["state"] == "down"]) < 1:
+    while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
         result = await client.list_agents(tid=env_id)
-        logger.debug(result.result["agents"])
         await asyncio.sleep(0.1)
 
     assert len(result.result["agents"]) == 1
-    assert len([x for x in result.result["agents"] if x["state"] == "down"]) == 1
+    assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
 
     return project_id, env_id
 
@@ -257,16 +256,20 @@ async def test_auto_deploy_no_splay(server, client, clienthelper: ClientHelper, 
 
     # check if agent 1 is started by the server
     # deploy will fail because handler code is not uploaded to the server
-    # executor status should be set to 'down'
     result = await client.list_agents(tid=environment)
     assert result.code == 200
 
-    async def one_agent_created_with_executor_down():
+    while len(result.result["agents"]) == 0 or result.result["agents"][0]["state"] == "down":
         result = await client.list_agents(tid=environment)
+        await asyncio.sleep(0.1)
 
-        return len(result.result["agents"]) == 1 and result.result["agents"][0]["state"] == "down"
+    assert len(result.result["agents"]) == 1
 
-    await retry_limited(one_agent_created_with_executor_down, 1)
+    async def one_agent_created() -> bool:
+        result = await client.list_agents(tid=environment)
+        return len(result.result["agents"]) == 1
+
+    await retry_limited(one_agent_created, 1)
 
 
 async def test_deploy_no_code(resource_container, client, clienthelper, environment):
@@ -1224,48 +1227,43 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
     # Let's check the agent table and check that all agents are presents and not paused
     await assert_is_paused(client, environment, {"agent1": False, "agent2": False, "agent3": False})
 
-    async def check_agent_status() -> bool:
-        result = await client.get_agents(environment)
-        assert result.code == 200
-        actual_data = result.result["data"]
-        assert len(actual_data) == 3
-
-        expected_data = [
-            {
-                "environment": environment,
-                "last_failover": actual_data[0]["last_failover"],
-                "name": "agent1",
-                "paused": False,
-                "process_id": actual_data[0]["process_id"],
-                "process_name": actual_data[0]["process_name"],
-                "status": "up",
-                "unpause_on_resume": None,
-            },
-            {
-                "environment": environment,
-                "last_failover": actual_data[1]["last_failover"],
-                "name": "agent2",
-                "paused": False,
-                "process_id": actual_data[1]["process_id"],
-                "process_name": actual_data[1]["process_name"],
-                "status": "up",
-                "unpause_on_resume": None,
-            },
-            {
-                "environment": environment,
-                "last_failover": actual_data[2]["last_failover"],
-                "name": "agent3",
-                "paused": False,
-                "process_id": actual_data[2]["process_id"],
-                "process_name": actual_data[2]["process_name"],
-                "status": "up",
-                "unpause_on_resume": None,
-            },
-        ]
-
-        return actual_data == expected_data
-
-    await retry_limited(check_agent_status, 2)
+    result = await client.get_agents(environment)
+    assert result.code == 200
+    actual_data = result.result["data"]
+    assert len(actual_data) == 3
+    expected_data = [
+        {
+            "environment": environment,
+            "last_failover": actual_data[0]["last_failover"],
+            "name": "agent1",
+            "paused": False,
+            "process_id": actual_data[0]["process_id"],
+            "process_name": actual_data[0]["process_name"],
+            "status": "up",
+            "unpause_on_resume": None,
+        },
+        {
+            "environment": environment,
+            "last_failover": actual_data[1]["last_failover"],
+            "name": "agent2",
+            "paused": False,
+            "process_id": actual_data[1]["process_id"],
+            "process_name": actual_data[1]["process_name"],
+            "status": "up",
+            "unpause_on_resume": None,
+        },
+        {
+            "environment": environment,
+            "last_failover": actual_data[2]["last_failover"],
+            "name": "agent3",
+            "paused": False,
+            "process_id": actual_data[2]["process_id"],
+            "process_name": actual_data[2]["process_name"],
+            "status": "up",
+            "unpause_on_resume": None,
+        },
+    ]
+    assert actual_data == expected_data
 
 
 @pytest.mark.slowtest
@@ -1475,8 +1473,6 @@ async def test_code_install_success_code_load_error_for_provider(
     Check that the agent can still deploy the SuccessResource even if a code loading failure
     occurred when installing the code necessary to deploy the CodeInstallErrorResource.
 
-    Check that agent status correctly reflects the status of the last used executor.
-
     """  # noqa: E501
 
     # First, configure everything
@@ -1490,8 +1486,8 @@ async def test_code_install_success_code_load_error_for_provider(
     import minimalinstallfailuremodule
     import successhandlermodule
 
-    agent_1_fail_resource = minimalinstallfailuremodule::CodeInstallErrorResource(name="test_failure", agent="agent_1")
-    agent_1_success_resource = successhandlermodule::SuccessResource(name="test_success", agent="agent_1")
+    r_1 = minimalinstallfailuremodule::CodeInstallErrorResource(name="test_failure", agent="agent_1")
+    r_2 = successhandlermodule::SuccessResource(name="test_success", agent="agent_1")
         """,  # noqa: E501
         ministd=True,
         index_url="https://pypi.org/simple",
@@ -1502,56 +1498,8 @@ async def test_code_install_success_code_load_error_for_provider(
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
 
-    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
-
-    # Check that the agent status is set to the executor status of the last deploy:
-
-    snippetcompiler.setup_for_snippet(
-        """
-    import successhandlermodule
-    import minimalinstallfailuremodule
-
-
-    agent_1_success_resource = successhandlermodule::SuccessResource(name="test_success_2", agent="agent_1")
-
-        """,
-        ministd=True,
-        index_url="https://pypi.org/simple",
-    )
-
-    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
-    result = await client.release_version(environment, version, push=False)
-    assert result.code == 200
-
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
-
-    async def check_agent_status(expected_status: ExecutorStatus, agent_name: str) -> bool:
-        agent = await data.Agent.get(env=uuid.UUID(environment), endpoint=agent_name)
-        status = agent.get_status()
-        return status == expected_status
-
-    await retry_limited(partial(check_agent_status, ExecutorStatus.degraded, "agent_1"), 2)
-
-    snippetcompiler.setup_for_snippet(
-        """
-    import successhandlermodule
-    import minimalinstallfailuremodule
-
-    agent_1_fail_resource = minimalinstallfailuremodule::CodeInstallErrorResource(name="test_failure_2", agent="agent_1")
-
-        """,
-        ministd=True,
-        index_url="https://pypi.org/simple",
-    )
-
-    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
-    result = await client.release_version(environment, version, push=False)
-    assert result.code == 200
-
-    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.unavailable)
-
-    await retry_limited(partial(check_agent_status, ExecutorStatus.down, "agent_1"), 2)
 
 
 @pytest.mark.slowtest

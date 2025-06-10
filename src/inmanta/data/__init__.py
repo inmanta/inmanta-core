@@ -56,7 +56,6 @@ from inmanta.const import (
     NAME_RESOURCE_ACTION_LOGGER,
     UNDEPLOYABLE_NAMES,
     AgentStatus,
-    ExecutorStatus,
     LogLevel,
     ResourceState,
 )
@@ -3306,11 +3305,9 @@ class Agent(BaseDocument):
     :param name: The name of this agent
     :param last_failover: Moment at which the primary was last changed
     :param paused: is this agent paused (if so, skip it)
-    :param primary: what is the current active instance (if none, state is down). Only relevant for the $__scheduler agent.
+    :param primary: what is the current active instance (if none, state is down)
     :param unpause_on_resume: whether this agent should be unpaused when resuming from environment-wide halt. Used to
         persist paused state when halting.
-    :param executor_status: Status of the latest executor that was built (or attempted to be built). Only relevant
-        for logical agents (i.e. non $__scheduler agents)
     """
 
     __primary_key__ = ("environment", "name")
@@ -3321,7 +3318,6 @@ class Agent(BaseDocument):
     paused: bool = False
     id_primary: Optional[uuid.UUID] = None
     unpause_on_resume: Optional[bool] = None
-    executor_status: ExecutorStatus = ExecutorStatus.down
 
     @property
     def primary(self) -> Optional[uuid.UUID]:
@@ -3348,11 +3344,9 @@ class Agent(BaseDocument):
     def get_status(self) -> AgentStatus:
         if self.paused:
             return AgentStatus.paused
-        # Case for the scheduler agent
         if self.primary is not None:
             return AgentStatus.up
-
-        return AgentStatus[self.executor_status]
+        return AgentStatus.down
 
     def to_dict(self) -> JsonType:
         base = BaseDocument.to_dict(self)
