@@ -20,7 +20,7 @@ import dataclasses
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from dataclasses import is_dataclass
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import TYPE_CHECKING, Callable, Optional, Self, Union
 
 # Keep UnsetException, UnknownException and AttributeNotFound in place for backward compat with <iso8
 from inmanta import references
@@ -60,16 +60,39 @@ class DynamicUnwrapContext:
 
 
 # TODO: remember to check std module to ensure Jinja guards references. Add test!
-# TODO: docstring
 @dataclasses.dataclass(kw_only=True, frozen=True, slots=True)
 class ProxyContext:
     """
-    :param allow_references: Allow values returned / proxied by this instance to be references.
+    Context for creating proxy objects. Declares whether the object has already passed certain validation or whether certain
+    special values are expected where the object appears.
+
+    E.g. a top-level plugin argument will have been validated at the boundary, and an undeclared reference would have been
+    rejected by that validation. In contrast, an opaque DSL instance's attributes have had no boundary validation, and may
+    contain references that are not (can not be) declared. Since we require reference support to always be explicit, we have
+    to reject reference values in such cases.
+
+    :param validated: True iff the object to proxy has been validated at the plugin boundary.
+    :param allow_references: Allow reference values, either because they have been declared and validated, or because
+        explicitly requested. Typically the same as `validated` but kept as a separate field to allow overrides for a single
+        proxy object while maintaining behavior for nested proxies.
     """
-    # TODO: better name
+    validated: bool = True
     allow_references: bool = True
-    # TODO: better name + docstring. Name something that indicates "contents" have not been validated
-    type_validated: bool = True
+
+    def nested(self: Self, validated: Optional[bool] = None) -> Self:
+        """
+        Returns a context object for values nested one level deeper than the current context.
+
+        :param validated: If the nested context should be considered to be validated or not. Defaults to the current context's
+            value.
+        """
+        validated = validated if validated is not None else self.validated
+        return dataclasses.replace(
+            self,
+            validated=validated,
+            # we're proxying elements one level deeper than the current context => derive allow_references for proxied values
+            allow_references=validated,
+        )
 
 
 # this is here to avoid import loops
@@ -87,37 +110,27 @@ class DynamicProxy:
     by native code.
     """
 
-    def __init__(self, instance: "Instance", *, parent_context: Optional[ProxyContext] = None) -> None:
+    def __init__(self, instance: "Instance", *, element_context: Optional[ProxyContext] = None) -> None:
+        """
+        :param instance: The object to proxy.
+        :param element_context: The context this object lives in. The proxy context for the object's element values (e.g. attributes)
+            is derived from this.
+        """
         object.__setattr__(self, "__instance", instance)
-        object.__setattr__(self, "__context", self._from_parent_context(parent_context))
+        object.__setattr__(self, "__element_context", element_context if element_context is not None else ProxyContext())
 
     def _get_instance(self) -> "Instance":
         return object.__getattribute__(self, "__instance")
 
-    def _get_context(self) -> ProxyContext:
-        return object.__getattribute__(self, "__context")
-
-    # TODO: name and docstring
-    @classmethod
-    def _black_box(cls) -> bool:
-        return True
-
-    # TODO: docstring
-    @classmethod
-    def _from_parent_context(cls, parent_context: Optional[ProxyContext]) -> ProxyContext:
-        parent_context = parent_context if parent_context is not None else ProxyContext()
-        return (
-            dataclasses.replace(parent_context, allow_references=False, type_validated=False)
-            if cls._black_box()
-            else parent_context
-        )
+    def _get_element_context(self) -> ProxyContext:
+        return object.__getattribute__(self, "__element_context")
 
     # TODO: name: imply that it's a copy
     def _allow_references[P: DynamicProxy](self: P) -> P:
         # TODO: docstring
         # don't just call constructor for backwards compatibility: some children outside of core might not have context arg
         new: P = copy(self)
-        object.__setattr__(new, "__context", dataclasses.replace(self._get_context(), allow_references=True))
+        object.__setattr__(new, "__element_context", dataclasses.replace(self._get_element_context(), allow_references=True))
         return new
 
     @classmethod
@@ -235,32 +248,29 @@ class DynamicProxy:
                 # if a reference gets here, it has been validated, and we want to represent it as a reference, not a proxy
                 return value
 
-        # TODO: shift this down?
-        new_context: Optional[ProxyContext] = (
-            # we're proxying one level deeper than the current context => recalculate allow_references for proxied values
-            dataclasses.replace(context, allow_references=context.type_validated)
-            if context is not None
-            else None
-        )
-
         if isinstance(value, DynamicProxy):
-            # TODO: set type_validated? + come up with test scenario
             return value
 
+        new_context: ProxyContext = context if context is not None else ProxyContext()
+
         if isinstance(value, dict):
-            return DictProxy(value, parent_context=new_context)
+            return DictProxy(value, element_context=new_context.nested())
 
         if hasattr(value, "__len__"):
-            return SequenceProxy(value, parent_context=new_context)
+            return SequenceProxy(value, element_context=new_context.nested())
 
         if hasattr(value, "__call__"):
-            return CallProxy(value, parent_context=new_context)
+            return CallProxy(value, element_context=new_context.nested())
 
-        return DynamicProxy(value, parent_context=new_context)
+        return DynamicProxy(
+            value,
+            # DSL instances are a black box as far as boundary validation is concerned
+            element_context=new_context.nested(validated=False),
+        )
 
     # TODO: docstring
     def _return_value(self, value: object) -> object:
-        return DynamicProxy.return_value(value, context=self._get_context())
+        return DynamicProxy.return_value(value, context=self._get_element_context())
 
     # TODO: see if we can use traceback.extract_stack() here to add a location to any exceptions, try-except style
     def __getattr__(self, attribute: str):
@@ -276,7 +286,7 @@ class DynamicProxy:
         # The Python domain is a black box. We don't want to transparently pass unexpected values in there.
         # TODO: allow_references() name
         # => don't allow references in attributes. Can be explicitly allowed via allow_references() wrapper
-        if not self._get_context().allow_references and isinstance(value, references.Reference):
+        if not self._get_element_context().allow_references and isinstance(value, references.Reference):
             # TODO: string format accepts reference. Should also raise this exception
             raise UndeclaredReference(
                 reference=value,
@@ -337,13 +347,8 @@ class DynamicProxy:
 
 
 class SequenceProxy(DynamicProxy, JSONSerializable):
-    def __init__(self, iterator: Sequence, *, parent_context: Optional[ProxyContext] = None) -> None:
-        DynamicProxy.__init__(self, iterator, parent_context=parent_context)
-
-    @classmethod
-    def _black_box(cls) -> bool:
-        # unless specified otherwise, the elements of this type have been validated at the plugin boundary
-        return False
+    def __init__(self, iterator: Sequence, *, element_context: Optional[ProxyContext] = None) -> None:
+        DynamicProxy.__init__(self, iterator, element_context=element_context)
 
     def __getitem__(self, key: int) -> object:
         instance = self._get_instance()
@@ -364,13 +369,8 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
 
 
 class DictProxy(DynamicProxy, Mapping, JSONSerializable):
-    def __init__(self, mydict: dict[object, object], *, parent_context: Optional[ProxyContext] = None) -> None:
-        DynamicProxy.__init__(self, mydict, parent_context=parent_context)
-
-    @classmethod
-    def _black_box(cls) -> bool:
-        # unless specified otherwise, the elements of this type have been validated at the plugin boundary
-        return False
+    def __init__(self, mydict: dict[object, object], *, element_context: Optional[ProxyContext] = None) -> None:
+        DynamicProxy.__init__(self, mydict, element_context=element_context)
 
     def __getitem__(self, key):
         instance = self._get_instance()
@@ -395,13 +395,8 @@ class CallProxy(DynamicProxy):
     Proxy a value that implements a __call__ function
     """
 
-    def __init__(self, instance: Callable[..., object], *, parent_context: Optional[ProxyContext] = None) -> None:
-        DynamicProxy.__init__(self, instance, parent_context=parent_context)
-
-    @classmethod
-    def _black_box(cls) -> bool:
-        # unless specified otherwise, the elements of this type have been validated at the plugin boundary
-        return False
+    def __init__(self, instance: Callable[..., object], *, element_context: Optional[ProxyContext] = None) -> None:
+        DynamicProxy.__init__(self, instance, element_context=element_context)
 
     def __call__(self, *args, **kwargs):
         instance = self._get_instance()
