@@ -76,6 +76,9 @@ class InmantaModule(Base):
         :param connection: The asyncpg connection to use.
         """
 
+        if not module_version_info:
+            return
+
         insert_modules_query = f"""
             INSERT INTO {InmantaModule.__tablename__}(
                 name,
@@ -219,10 +222,10 @@ class AgentModules(Base):
     @classmethod
     async def get_agents_per_module(
         cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
-    ) -> tuple[dict[tuple[str, str], list[str]], set[str]]:
+    ) -> dict[str, dict[str, set[str]]]:
         """
         Retrieve the list of agents that require each inmanta module (name, version)
-        as a map of (inmanta_module_name, inmanta_module_version) to list[agent_name].
+        as a map of inmanta_module_name -> inmanta_module_version -> list[agent_name].
 
         This map is the first element of the tuple returned by this method.
         The second element of this tuple is the set of registered modules for this version.
@@ -250,14 +253,12 @@ class AgentModules(Base):
          """
         async with connection.transaction():
             values = [model_version, environment]
-            in_db_module_data: dict[tuple[str, str], list[str]] = defaultdict(list)
-            modules_in_version: set[str] = set()
+            in_db_module_data: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
             async for record in connection.cursor(query, *values):
-                in_db_module_data[str(record["inmanta_module_name"]), str(record["inmanta_module_version"])].append(
+                in_db_module_data[str(record["inmanta_module_name"])][str(record["inmanta_module_version"])].add(
                     str(record["agent_name"])
                 )
-                modules_in_version.add(str(record["inmanta_module_name"]))
-            return (in_db_module_data, modules_in_version)
+            return in_db_module_data
 
     @classmethod
     async def register_modules_for_agents(
@@ -265,7 +266,7 @@ class AgentModules(Base):
         model_version: int,
         environment: uuid.UUID,
         module_version_info: dict[str, InmantaModuleDTO],
-        base_version_info: dict[tuple[str, str], list[str]],
+        base_version_info: dict[str, dict[str, set[str]]],
         connection: asyncpg.Connection,
     ) -> None:
         """
@@ -279,7 +280,7 @@ class AgentModules(Base):
         :param module_version_info: Map of module name to inmanta module data. For a full compile, this map
             contains all module info. For partial compiles, it only contains info for the subset of modules
             required by the exported resources.
-        :param base_version_info: Map of (module name, module version) to the list of agents requiring these
+        :param base_version_info: Map of module name -> module version -> set of agents requiring these
             modules in the base version this partial compile is based on.
         :param connection: The asyncpg connection to use.
         :return:
@@ -314,17 +315,21 @@ class AgentModules(Base):
                         )
                     )
 
-            for (inmanta_module_name, inmanta_module_version), for_agents in base_version_info.items():
-                for agent_name in for_agents:
-                    values.append(
-                        (
-                            model_version,
-                            environment,
-                            agent_name,
-                            inmanta_module_name,
-                            inmanta_module_version,
+            for (
+                inmanta_module_name,
+                module_version_data,
+            ) in base_version_info.items():
+                for inmanta_module_version, for_agents in module_version_data.items():
+                    for agent_name in for_agents:
+                        values.append(
+                            (
+                                model_version,
+                                environment,
+                                agent_name,
+                                inmanta_module_name,
+                                inmanta_module_version,
+                            )
                         )
-                    )
 
             await connection.executemany(
                 query,

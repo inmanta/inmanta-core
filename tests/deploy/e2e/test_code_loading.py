@@ -586,9 +586,9 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
                 if module.module_name == module_name:
                     assert len(module.blueprint.sources) == 1
                     assert module.blueprint.sources[0].source == expected_source
-                    return
-
-            assert False, f"Module {module_name} is not registered in version {version}."
+                    break
+            else:
+                assert False, f"Module {module_name} is not registered in version {version}."
 
     version = await clienthelper.get_version()
     resources = [
@@ -855,4 +855,12 @@ async def test_code_loading_after_partial(server, agent, client, environment, cl
         agent_names=["agent_X", "agent_Y", "agent_Z"],
         module_name="test",
         expected_source=b"#The OTHER code",
+    )
+
+    await check_code_for_version(
+        version=5,
+        environment=environment,
+        agent_names=["agent_Z", "agent_A"],
+        module_name="new_module",
+        expected_source=b"#Yet some other code",
     )

@@ -26,6 +26,7 @@ from typing import Literal, Optional, cast
 import asyncpg
 import asyncpg.connection
 import asyncpg.exceptions
+import more_itertools
 import pydantic
 from asyncpg import Connection
 
@@ -670,8 +671,10 @@ class OrchestrationService(protocol.ServerSlice):
         partial_base_version: int,
         environment: uuid.UUID,
         module_version_info: dict[str, InmantaModuleDTO],
+        *,
+        allow_handler_code_update: bool = False,
         connection: Connection,
-    ) -> tuple[dict[tuple[str, str], list[str]], set[str]]:
+    ) -> tuple[dict[str, dict[str, set[str]]], dict[str, InmantaModuleDTO]]:
         """
         Make sure that all code used in this partial version was
         already registered in the base version.
@@ -682,16 +685,16 @@ class OrchestrationService(protocol.ServerSlice):
         for the given base model version.
 
         Make sure that the same module versions are used in this partial version.
+
         """
 
-        # Map of (inmanta_module_name, inmanta_module_version) to list[agent_names]
-        base_version_data: dict[tuple[str, str], list[str]]
-        base_version_modules: set[str]
-        base_version_data, base_version_modules = await AgentModules.get_agents_per_module(
+        # Map of inmanta_module_name -> inmanta_module_version -> list[agent_names]
+        base_version_data: dict[str, dict[str, set[str]]]
+        base_version_data = await AgentModules.get_agents_per_module(
             model_version=partial_base_version, environment=environment, connection=connection
         )
 
-        modules_to_register: set[str] = set()
+        modules_to_register: dict[str, InmantaModuleDTO] = {}
 
         for inmanta_module_name, module_data in module_version_info.items():
             module_version = module_data.version
@@ -699,18 +702,29 @@ class OrchestrationService(protocol.ServerSlice):
                 # No agent is using this module in this version
                 continue
 
-            if inmanta_module_name not in base_version_modules:
+            if inmanta_module_name not in base_version_data:
                 # This is a new module, make sure we register it later
-                modules_to_register.add(inmanta_module_name)
+                modules_to_register[inmanta_module_name] = module_version_info[inmanta_module_name]
                 continue
 
-            if (inmanta_module_name, module_version) not in base_version_data:
-                raise BadRequest(
-                    f"Cannot perform partial export because the source code for module {inmanta_module_name} in this partial "
-                    "version is different from the currently registered source code. Consider running a full export instead. "
-                    "Alternatively, if you are sure the new code is compatible and want to forcefully update, you can bypass "
-                    "this version check with the `--allow-handler-code-update` CLI option."
-                )
+            if allow_handler_code_update:
+                agents_in_old_version: dict[str, set[str]]
+                agents_in_old_version = base_version_data[inmanta_module_name]
+
+                old_version = more_itertools.one(agents_in_old_version.keys())
+                base_version_data[inmanta_module_name][module_version] = base_version_data[inmanta_module_name][old_version]
+                modules_to_register[inmanta_module_name] = module_version_info[inmanta_module_name]
+
+                del base_version_data[inmanta_module_name][old_version]
+            else:
+                registered_version = more_itertools.one(base_version_data[inmanta_module_name].keys())
+                if registered_version != module_version:
+                    raise BadRequest(
+                        f"Cannot perform partial export because the source code for module {inmanta_module_name} in this "
+                        "partial version is different from the currently registered source code. Consider running a full "
+                        "export instead. Alternatively, if you are sure the new code is compatible and want to forcefully "
+                        "update, you can bypass this version check with the `--allow-handler-code-update` CLI option."
+                    )
 
         return base_version_data, modules_to_register
 
@@ -739,15 +753,18 @@ class OrchestrationService(protocol.ServerSlice):
             for source code consistency between the base version and the current partial version.
         :param connection: DB connection expected to be managed by the caller method.
         """
-        base_version_info: dict[tuple[str, str], list[str]] = {}
-        modules_to_register: set[str]
-        if partial_base_version is not None and not allow_handler_code_update:
+        base_version_info: dict[str, dict[str, set[str]]] = {}
+        modules_to_register: dict[str, InmantaModuleDTO]
+        if partial_base_version is not None:
             base_version_info, modules_to_register = await self._check_version_info(
-                partial_base_version, environment, module_version_info, connection
+                partial_base_version,
+                environment,
+                module_version_info,
+                allow_handler_code_update=allow_handler_code_update,
+                connection=connection,
             )
-            new_modules_version_info = {k: v for k, v in module_version_info.items() if k in modules_to_register}
             await InmantaModule.register_modules(
-                environment=environment, module_version_info=new_modules_version_info, connection=connection
+                environment=environment, module_version_info=modules_to_register, connection=connection
             )
         else:
             await InmantaModule.register_modules(
