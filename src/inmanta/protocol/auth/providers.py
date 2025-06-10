@@ -144,10 +144,11 @@ class PolicyEngineAuthorizationProvider(AuthorizationProvider):
         await self._legacy_authorization_provider.stop()
 
     async def _do_authorize_request(self, call_arguments: "rest.CallArguments") -> None:
+        if call_arguments.method_properties.function == methods_v2.login:
+            # On a login call the authorization is done using the provided username and password.
+            # No need to authorize the token.
+            return
         if call_arguments.auth_token is None:
-            if call_arguments.method_properties.function == methods_v2.login:
-                # The login endpoint doesn't require authentication.
-                return
             raise exceptions.UnauthorizedException()
         if call_arguments.is_service_request():
             # Service (machine-to-machine) requests always use the legacy provider.

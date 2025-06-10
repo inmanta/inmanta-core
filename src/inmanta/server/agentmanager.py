@@ -94,7 +94,6 @@ Model in server         On Agent
 |               |
 +---------------+
 
-resource_action_update
 
 dryrun_update
 
