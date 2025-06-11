@@ -671,11 +671,21 @@ class OrchestrationService(protocol.ServerSlice):
         partial_base_version: int,
         environment: uuid.UUID,
         module_version_info: dict[str, InmantaModuleDTO],
+        modules_version,# TODO typing+naming
         *,
         allow_handler_code_update: bool = False,
         connection: Connection,
-    ) -> tuple[dict[str, dict[str, set[str]]], dict[str, InmantaModuleDTO]]:
+    ) -> tuple[dict[str, dict[str, set[str]]], dict[str, InmantaModuleDTO]]: # TODO typing+
         """
+
+        TOO big doc string -> code smell
+        method is not self-contained enough
+        1 method = 1 'story'
+        if it evolves -> change the docstring and then reflect on it
+        and refactor the method if need be
+        and interface should be designed and not deduced
+        ie meaningfull inputs/outputs that can be described with words
+
         Make sure that all code used in this partial version was
         already registered in the base version.
 
@@ -688,13 +698,12 @@ class OrchestrationService(protocol.ServerSlice):
 
         """
 
+        """
+        should return which modules are new ie not previously known and updated (if allowed)
+        should return which agents are using which modules
+        """
         # Map of inmanta_module_name -> inmanta_module_version -> list[agent_names]
-        base_version_data: dict[str, dict[str, set[str]]]
-        base_version_data = await AgentModules.get_agents_per_module(
-            model_version=partial_base_version, environment=environment, connection=connection
-        )
-
-        modules_to_register: dict[str, InmantaModuleDTO] = {}
+        # base_version_data: dict[str, dict[str, set[str]]]
 
         for inmanta_module_name, module_data in module_version_info.items():
             module_version = module_data.version
@@ -702,22 +711,9 @@ class OrchestrationService(protocol.ServerSlice):
                 # No agent is using this module in this version
                 continue
 
-            if inmanta_module_name not in base_version_data:
-                # This is a new module, make sure we register it later
-                modules_to_register[inmanta_module_name] = module_version_info[inmanta_module_name]
-                continue
 
-            if allow_handler_code_update:
-                agents_in_old_version: dict[str, set[str]]
-                agents_in_old_version = base_version_data[inmanta_module_name]
-
-                old_version = more_itertools.one(agents_in_old_version.keys())
-                base_version_data[inmanta_module_name][module_version] = base_version_data[inmanta_module_name][old_version]
-                modules_to_register[inmanta_module_name] = module_version_info[inmanta_module_name]
-
-                del base_version_data[inmanta_module_name][old_version]
-            else:
-                registered_version = more_itertools.one(base_version_data[inmanta_module_name].keys())
+            if not allow_handler_code_update:
+                registered_version = modules_version[inmanta_module_name]
                 if registered_version != module_version:
                     raise BadRequest(
                         f"Cannot perform partial export because the source code for module {inmanta_module_name} in this "
@@ -726,7 +722,8 @@ class OrchestrationService(protocol.ServerSlice):
                         "update, you can bypass this version check with the `--allow-handler-code-update` CLI option."
                     )
 
-        return base_version_data, modules_to_register
+            # TODO go over ful implementation again / cleanup / optimize
+
 
     async def _register_agent_code(
         self,
@@ -755,14 +752,31 @@ class OrchestrationService(protocol.ServerSlice):
         """
         base_version_info: dict[str, dict[str, set[str]]] = {}
         modules_to_register: dict[str, InmantaModuleDTO]
+
+
+        # Each component should define its own interface
+        # 1. _check_version_info
+        # 2. register_modules_for_agents
+        #
+        # whats each compo interface, what data does it need
         if partial_base_version is not None:
-            base_version_info, modules_to_register = await self._check_version_info(
+
+            agent_modules: dict[str, set[str]]
+            modules_version: dict[str, str]
+            agent_modules, modules_version = await AgentModules.get_agents_per_module(
+                model_version=partial_base_version, environment=environment, connection=connection
+            )
+
+            await self._check_version_info(
                 partial_base_version,
                 environment,
                 module_version_info,
+                modules_version,
                 allow_handler_code_update=allow_handler_code_update,
                 connection=connection,
             )
+            # TODO : also check for full compiles ?
+            modules_to_register = {module_name: inmanta_module for module_name, inmanta_module in module_version_info.items() if inmanta_module.for_agents}
             await InmantaModule.register_modules(
                 environment=environment, module_version_info=modules_to_register, connection=connection
             )
@@ -775,6 +789,8 @@ class OrchestrationService(protocol.ServerSlice):
             environment=environment,
             module_version_info=module_version_info,
             connection=connection,
+            agent_modules=agent_modules,
+            modules_version=modules_version,
             base_version_info=base_version_info,
         )
 

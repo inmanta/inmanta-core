@@ -222,7 +222,7 @@ class AgentModules(Base):
     @classmethod
     async def get_agents_per_module(
         cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
-    ) -> dict[str, dict[str, set[str]]]:
+    ) -> tuple[dict[str, set[str]], dict[str, str]]:
         """
         Retrieve the list of agents that require each inmanta module (name, version)
         as a map of inmanta_module_name -> inmanta_module_version -> list[agent_name].
@@ -253,35 +253,41 @@ class AgentModules(Base):
          """
         async with connection.transaction():
             values = [model_version, environment]
-            in_db_module_data: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+            agent_modules: dict[str, set[str]] = set()
+            modules_version: dict[str, str]
+
             async for record in connection.cursor(query, *values):
-                in_db_module_data[str(record["inmanta_module_name"])][str(record["inmanta_module_version"])].add(
-                    str(record["agent_name"])
-                )
-            return in_db_module_data
+                if record["inmanta_module_name"] in modules_version:
+                    raise Exception(
+                        "Cannot perform partial export because the source code for module in this "
+                    )
+                    # TODO update bail out message + condition (check version is different)
+                    # TODO consider alterative exception Exception badrequest ??
+
+                modules_version[record["inmanta_module_name"]] = str(record["inmanta_module_version"])
+
+                agent_modules[record["inmanta_module_name"]].add(str(record["agent_name"]))
+
+            return agent_modules, modules_version
 
     @classmethod
     async def register_modules_for_agents(
         cls,
         model_version: int,
         environment: uuid.UUID,
-        module_version_info: dict[str, InmantaModuleDTO],
-        base_version_info: dict[str, dict[str, set[str]]],
+        agent_modules,
+        agent_modules,
         connection: asyncpg.Connection,
     ) -> None:
         """
-        Register inmanta modules (name, version) required by each agent.
+        Register inmanta modules (name, version) required by each agent for a given model version.
+
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.
 
         :param model_version: The model version for which to register modules per agent.
         :param environment: The environment for which to register modules per agent.
-        :param module_version_info: Map of module name to inmanta module data. For a full compile, this map
-            contains all module info. For partial compiles, it only contains info for the subset of modules
-            required by the exported resources.
-        :param base_version_info: Map of module name -> module version -> set of agents requiring these
-            modules in the base version this partial compile is based on.
         :param connection: The asyncpg connection to use.
         :return:
         """
@@ -314,22 +320,6 @@ class AgentModules(Base):
                             inmanta_module_data.version,
                         )
                     )
-
-            for (
-                inmanta_module_name,
-                module_version_data,
-            ) in base_version_info.items():
-                for inmanta_module_version, for_agents in module_version_data.items():
-                    for agent_name in for_agents:
-                        values.append(
-                            (
-                                model_version,
-                                environment,
-                                agent_name,
-                                inmanta_module_name,
-                                inmanta_module_version,
-                            )
-                        )
 
             await connection.executemany(
                 query,
