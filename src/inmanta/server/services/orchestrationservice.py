@@ -680,8 +680,6 @@ class OrchestrationService(protocol.ServerSlice):
         """
         Make sure that modules used in this partial version are either new modules, or that the version
         being used is the same as the registered version for the base compile.
-
-        Code that is not used by agents in this version is not checked, and should therefore not be updated.
         """
 
         for inmanta_module_name, module_data in modules_version_in_current_export.items():
@@ -718,8 +716,12 @@ class OrchestrationService(protocol.ServerSlice):
         Use the `module_version_info` dict to populate the relevant tables
         AgentModules, InmantaModule and ModuleFiles.
 
+
         The `module_version_info` map contains inmanta modules used by resources that are
         being exported in this version.
+        Modules passed in the `module_version_info` argument that are not used by agents in
+        this version will not be uploaded.
+
 
         This means that for partial compile, this method has to make sure that:
             - the version of these modules is the same as the one used in the base version.
