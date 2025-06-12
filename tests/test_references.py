@@ -442,8 +442,8 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
         "refs::plugins::returns_entity_ref_list(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))"
     )
 
-    # TODO: allow_references() test on list access and iteration
-    # TODO: verify that allow_references() only allows it on that level, not nested
+    # TODO: allow_reference_values() test on list access and iteration
+    # TODO: verify that allow_reference_values() only allows it on that level, not nested
 
 
 def test_reference_cycle(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:

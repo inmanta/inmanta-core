@@ -163,7 +163,7 @@ def read_entity_value(instance: Entity) -> None:
 
 @plugin
 def read_entity_ref_value(instance: Entity) -> None:
-    plugins.allow_reference_attributes(instance).maybe_ref_value
+    plugins.allow_reference_values(instance).maybe_ref_value
 
 
 @plugin
@@ -175,12 +175,12 @@ def read_list_entity_value(instances: Sequence[Entity]) -> None:
 @plugin
 def read_list_entity_ref_value(instances: Sequence[Entity]) -> None:
     for instance in instances:
-        plugins.allow_reference_attributes(instance).maybe_ref_value
+        plugins.allow_reference_values(instance).maybe_ref_value
 
 
 # TODO: add a test case
 # TODO: same with dict
-# TODO: same with allow_references()
+# TODO: same with allow_reference_values()
 @plugin
 def read_entity_list_value(instance: ListContainer) -> None:
     for x in instance.value:

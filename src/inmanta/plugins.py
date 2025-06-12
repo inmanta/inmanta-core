@@ -1340,21 +1340,31 @@ def deprecated(
     return inner
 
 
-# TODO: move up in file?
-# TODO: no longer just attributes
-# TODO: this docstring is no good yet
-def allow_reference_values(instance: object) -> object:
+@stable_api
+def allow_reference_values[T](instance: T) -> T:  # T not bound to DynamicProxy because it is not a user-exposed type
     """
-    For the given DSL instance, list or dict, allow accessing undeclared reference values (attributes, list elements or dict
-    values respectively). Reference values are otherwise rejected on access because not all plugins can be assumed to be
-    compatible with them.
+    For the given DSL instance, or list or dict nested inside an instance, allow accessing undeclared reference values
+    (attributes, list elements or dict values respectively). Reference values are otherwise rejected on access because
+    not all plugins can be assumed to be compatible with them, and may reasonably expect values of the DSL attributes' declared
+    type.
 
-    While this function explicitly allows accessing undeclared reference values, those really only occur where it is impossible
-    to declare statically that references are expected. In practice this means when navigating instance attributes or relations
-    (at any depth). For plugin arguments or dataclasses, reference support can be declared directly via type annotations, in
-    which case no special access function is required.
+    Does not allow nested access. Each object for which reference elements are expected should be wrapped separately, e.g.
+    `allow_reference_values(my_instance.my_relation).maybe_reference` rather than
+    `allow_reference_values(my_instance).my_relation.maybe_reference`.
+
+    This function is not required for plugin arguments or dataclasses. In those cases, reference support can be declared
+    directly via type annotations (e.g. `int | Reference[int]`), in which case no special access function is required.
     """
     if not isinstance(instance, DynamicProxy):
-        # TODO
-        raise ValueError()
+        extra: str = (
+            # special-case common (assumed) case
+            "Python lists and dicts do not need this wrapper, because they are out of the compiler's control."
+            if isinstance(instance, (list, dict))
+            else ""
+        )
+        # TODO: test case
+        raise ValueError(
+            f"allow_reference_values() should only be called on inmanta instances, lists or dicts. {extra}"
+            f" Got `{instance}` of type `{type(instance).__name__}`"
+        )
     return instance._allow_references()
