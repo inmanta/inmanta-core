@@ -174,6 +174,7 @@ class Type(Locatable):
         """
         return False
 
+    # TODO: add `*, path: str`, for instantiating ProxyContext? First get review on ProxyContext
     def to_python(self, instance: object) -> "object":
         """
         Convert an instance of this type to its python form

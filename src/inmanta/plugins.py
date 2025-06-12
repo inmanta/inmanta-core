@@ -497,7 +497,6 @@ def validate_and_convert_to_python_domain(*, name: str, expected_type: inmanta_t
         # if the value is None, it becomes None
         return None
 
-    # TODO: pass name to to_python?
     if expected_type.has_custom_to_python():
         return expected_type.to_python(value)
 
