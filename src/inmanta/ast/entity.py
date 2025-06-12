@@ -19,10 +19,12 @@ Contact: code@inmanta.com
 import dataclasses
 import importlib
 import inspect
+import logging
 import typing
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
+import inmanta.ast.attribute
 from inmanta import plugins
 from inmanta.ast import (
     CompilerException,
@@ -48,9 +50,6 @@ from inmanta.execute.util import AnyType, NoneValue
 from inmanta.references import AttributeReference, PrimitiveTypes, Reference, RefValue
 from inmanta.types import DataclassProtocol
 
-# pylint: disable-msg=R0902,R0904
-
-
 if TYPE_CHECKING:
     from inmanta.ast.blocks import BasicBlock
     from inmanta.ast import Namespaced
@@ -59,7 +58,8 @@ if TYPE_CHECKING:
     from inmanta.ast.statements.define import DefineAttribute, DefineImport, DefineIndex  # noqa: F401
     from inmanta.execute.runtime import ExecutionContext  # noqa: F401
 
-import inmanta.ast.attribute
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Entity(NamedType, WithComment):
@@ -760,14 +760,16 @@ class Entity(NamedType, WithComment):
 
             instance.dataclass_self = create()
 
-        return (
-            # TODO: warning when coercing? Consider if it may be out of the user's control
+        if isinstance(instance.dataclass_self, Reference):
+            LOGGER.debug(
+                "Coercing dataclass reference `%s` to a dataclass with reference attributes to satisfy plugin type constraints",
+                instance.dataclass_self,
+            )
             # coerce if the dataclass definition is reference-compatible. Do not overwrite dataclass_self
-            create()
-            if isinstance(instance.dataclass_self, Reference)
+            return create()
+        else:
             # or simply return the linked dataclass instance
-            else instance.dataclass_self
-        )
+            return instance.dataclass_self
 
     def from_python(self, value: object, resolver: Resolver, queue: QueueScheduler, location: Location) -> Instance:
         """
