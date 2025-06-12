@@ -586,7 +586,6 @@ class FormattedString(ReferenceStatement):
             return Unknown(self)
         reference: Optional[references.Reference] = references.is_reference(value)
         if reference is not None:
-            # TODO: add tests
             raise UndeclaredReference(
                 stmt=self,
                 reference=reference,

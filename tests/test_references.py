@@ -215,9 +215,10 @@ async def test_deploy_end_to_end(
 
 
 # TODO: critical review of this test's contents. Should inheritance-based tests be moved? Should dataclass-based tests be moved?
-# TODO: name -> more like "references in plugins"
-def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
-    # TODO: docstring
+def test_references_in_plugins(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """
+    Verify the validation of references in plugins, both on the boundary, and on access through a proxy.
+    """
     refs_module = os.path.join(modules_v2_dir, "refs")
 
     # set up project
@@ -232,7 +233,6 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
         Wrapper around snippetcompiler.setup_for_snippet + runs compile and export.
         Passes appropriate options and prepends snippet with refs import.
         """
-        # TODO: fix/discuss bug that causes dataclass error to be raised if associated model file is not loaded
         snippetcompiler.setup_for_snippet(f"import refs import refs::dc import refs::plugins\n{snippet}", install_project=False, autostd=True)
         snippetcompiler.do_export()
 
@@ -665,3 +665,32 @@ def test_ref_serialization():
     baddy = TestReference({"a": tr})
     with pytest.raises(ValueError):
         baddy.serialize()
+
+
+def test_references_string_format(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """
+    Verify the behavior of references in the string format operations.
+    """
+    refs_module = os.path.join(modules_v2_dir, "refs")
+
+    # set up project
+    snippetcompiler.setup_for_snippet(
+        "import refs",
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+        autostd=True,
+    )
+
+    def run_snippet(snippet: str) -> None:
+        """
+        Wrapper around snippetcompiler.setup_for_snippet + runs compile and export.
+        Passes appropriate options and prepends snippet with refs import.
+        """
+        snippetcompiler.setup_for_snippet(f"import refs\n{snippet}", install_project=False, autostd=True)
+        snippetcompiler.do_export()
+
+    # f-string format
+    with pytest.raises(UndeclaredReference, match="Encountered reference in string format for variable `ref`"):
+        run_snippet("ref = refs::create_string_reference('Hello') f'Hello {ref}'")
+    # old-style string format
+    with pytest.raises(UndeclaredReference, match="Encountered reference in string format for variable `{{ref}}`"):
+        run_snippet("ref = refs::create_string_reference('Hello') 'Hello {{ref}}'")
