@@ -34,7 +34,7 @@ from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
-from inmanta.data.model import InmantaModule, ModuleSource
+from inmanta.data.model import AgentName, InmantaModule, InmantaModuleName, ModuleSource
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -80,7 +80,7 @@ class CodeManager:
         # To which python module do these python files belong
         self.__file_info: dict[str, ModuleSource] = {}
 
-        self._types_to_agent: dict[str, set[str]] = defaultdict(set)
+        self._types_to_agent: dict[str, set[AgentName]] = defaultdict(set)
 
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[str, "InmantaModule"] = {}
@@ -118,7 +118,7 @@ class CodeManager:
 
         self._register_inmanta_module(module_name, loaded_modules[module_name])
 
-        registered_agents: set[str] = self._types_to_agent.get(type_name, set())
+        registered_agents: set[AgentName] = self._types_to_agent.get(type_name, set())
         self._update_agents_for_module(module_name, registered_agents)
 
     def _register_inmanta_module(self, inmanta_module_name: str, module: "module.Module") -> None:
@@ -145,11 +145,11 @@ class CodeManager:
             for_agents=[],
         )
 
-    def _update_agents_for_module(self, inmanta_module_name: str, registered_agents: set[str]) -> None:
+    def _update_agents_for_module(self, inmanta_module_name: str, registered_agents: set[AgentName]) -> None:
         """
         Helper method to add the given agents to the list of registered agents for the given Inmanta module.
         """
-        old_set: set[str] = set(self.module_version_info[inmanta_module_name].for_agents)
+        old_set: set[AgentName] = set(self.module_version_info[inmanta_module_name].for_agents)
         self.module_version_info[inmanta_module_name].for_agents = list(old_set.union(registered_agents))
 
     def get_object_source(self, instance: object) -> Optional[str]:
@@ -163,7 +163,7 @@ class CodeManager:
         """Return the hashes of all source files"""
         return (info.metadata.hash_value for info in self.__file_info.values())
 
-    def get_module_version_info(self) -> dict[str, "InmantaModule"]:
+    def get_module_version_info(self) -> dict[InmantaModuleName, "InmantaModule"]:
         """Return all module version info"""
         return self.module_version_info
 

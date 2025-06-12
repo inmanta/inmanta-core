@@ -1076,6 +1076,11 @@ class ModuleSource(BaseModel):
         return self.metadata.get_inmanta_module_name()
 
 
+type InmantaModuleName = str
+type InmantaModuleVersion = str
+type AgentName = str
+
+
 class InmantaModule(BaseModel):
     """
     This class represents an Inmanta module during code upload.
@@ -1089,8 +1094,8 @@ class InmantaModule(BaseModel):
         deploy resources.
     """
 
-    name: str
-    version: str
+    name: InmantaModuleName
+    version: InmantaModuleVersion
     files_in_module: list[ModuleSourceMetadata]
     requirements: list[str]
-    for_agents: list[str]
+    for_agents: list[AgentName]
