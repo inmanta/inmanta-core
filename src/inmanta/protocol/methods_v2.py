@@ -78,9 +78,9 @@ def put_partial(
               * version_info: Model version information
     :param pip_config: Pip config used by this version
     :param module_version_info: Map of (module name, module version) to InmantaModule
-    :param allow_handler_code_update: During partial compiles, a check is performed to make sure the source
-        code of modules in this partial version is identical to the source code in the base version. Set this
-        parameter to True to bypass this check and allow updating handler code during a partial export.
+    :param allow_handler_code_update: [Expert] Allow handler code update during partial compile. This is otherwise
+        only allowed for full compiles. Use with extreme caution, and only when confident that all code is compatible
+        with previous versions.
 
     :return: The newly stored version number.
     """
