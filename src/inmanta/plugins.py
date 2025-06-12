@@ -1342,7 +1342,18 @@ def deprecated(
 
 # TODO: move up in file?
 # TODO: no longer just attributes
-def allow_reference_attributes(instance: object) -> object:
+# TODO: this docstring is no good yet
+def allow_reference_values(instance: object) -> object:
+    """
+    For the given DSL instance, list or dict, allow accessing undeclared reference values (attributes, list elements or dict
+    values respectively). Reference values are otherwise rejected on access because not all plugins can be assumed to be
+    compatible with them.
+
+    While this function explicitly allows accessing undeclared reference values, those really only occur where it is impossible
+    to declare statically that references are expected. In practice this means when navigating instance attributes or relations
+    (at any depth). For plugin arguments or dataclasses, reference support can be declared directly via type annotations, in
+    which case no special access function is required.
+    """
     if not isinstance(instance, DynamicProxy):
         # TODO
         raise ValueError()
