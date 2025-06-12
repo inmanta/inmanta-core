@@ -25,7 +25,7 @@ import inmanta.types
 from inmanta import const, data, resources
 from inmanta.const import ResourceState
 from inmanta.data import model
-from inmanta.data.model import InmantaModule, InmantaModuleName, PipConfig
+from inmanta.data.model import InmantaModule, PipConfig
 from inmanta.protocol import exceptions
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ArgOption
@@ -496,7 +496,7 @@ def put_version(
     tid: uuid.UUID,
     version: int,
     resources: list,
-    module_version_info: dict[InmantaModuleName, InmantaModule],
+    module_version_info: dict[str, InmantaModule],
     resource_state: dict[inmanta.types.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
     unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
     version_info: Optional[dict] = None,

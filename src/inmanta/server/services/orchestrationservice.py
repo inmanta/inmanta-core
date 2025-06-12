@@ -687,7 +687,8 @@ class OrchestrationService(protocol.ServerSlice):
         for inmanta_module_name, module_data in modules_version_in_current_export.items():
 
             if inmanta_module_name not in registered_modules_version:
-                # This is a new module that didn't exist in the previous version
+                # This didn't exist in the previous version: nothing
+                # to check, we always allow new modules registration.
                 continue
 
             registered_version = registered_modules_version[inmanta_module_name]
@@ -705,7 +706,7 @@ class OrchestrationService(protocol.ServerSlice):
         partial_base_version: int | None,
         version: int,
         environment: uuid.UUID,
-        module_version_info: dict[InmantaModuleName, InmantaModuleDTO],
+        module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
         *,
         allow_handler_code_update: bool = False,
         connection: asyncpg.connection.Connection,
@@ -717,11 +718,12 @@ class OrchestrationService(protocol.ServerSlice):
         Use the `module_version_info` dict to populate the relevant tables
         AgentModules, InmantaModule and ModuleFiles.
 
-        The `module_version_info` dict contains inmanta modules used by resources that are
+        The `module_version_info` map contains inmanta modules used by resources that are
         being exported in this version.
 
         This means that for partial compile, this method has to make sure that:
-            - the version of these modules is the same as the one used in the base version
+            - the version of these modules is the same as the one used in the base version.
+                (this check can be exceptionally bypassed with the allow_handler_code_update flag)
             - all other inmanta modules registered in the base version are registered again
               for this version. (e.g. to be able to repair an existing resource that wasn't
               exported in this partial compile)
@@ -798,7 +800,7 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
-        module_version_info: dict[InmantaModuleName, InmantaModuleDTO],
+        module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
         allow_handler_code_update: bool = False,
     ) -> None:
         """
@@ -813,7 +815,7 @@ class OrchestrationService(protocol.ServerSlice):
         :param removed_resource_sets: When a partial compile is done, this parameter should indicate the names of the resource
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
-        :param module_version_info: Mapping of (module name, module version) to module DTO. This represents all inmanta
+        :param module_version_info: Mapping of module name to in-memory representation of a module. This represents all inmanta
             modules that might be used during deployment of resources in the current [partial] version.
         :param allow_handler_code_update: During partial compiles (i.e. partial_base_version is not None), a check is performed
             to make sure the source code of modules in this partial version is identical to the source code in the base
@@ -1038,7 +1040,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         unknowns: list[dict[str, PrimitiveTypes]],
         version_info: JsonType,
-        module_version_info: dict[InmantaModuleName, InmantaModuleDTO],
+        module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
         compiler_version: Optional[str] = None,
         resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         pip_config: Optional[PipConfig] = None,

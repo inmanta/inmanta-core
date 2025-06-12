@@ -78,9 +78,6 @@ class InmantaModule(Base):
         :param connection: The asyncpg connection to use.
         """
 
-        if not modules:
-            return
-
         insert_modules_query = f"""
             INSERT INTO {InmantaModule.__tablename__}(
                 name,
@@ -226,7 +223,8 @@ class AgentModules(Base):
         cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
     ) -> tuple[dict[InmantaModuleName, set[AgentName]], dict[InmantaModuleName, InmantaModuleVersion]]:
         """
-        Retrieve agents registered per module name and registered module version.
+        Retrieve all registered modules for a given model version.
+        Return agents registered per module name and module version per module name.
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.
@@ -259,9 +257,12 @@ class AgentModules(Base):
             async for record in connection.cursor(query, *values):
                 if record["inmanta_module_name"] in modules_version:
                     if record["inmanta_module_version"] != modules_version[str(record["inmanta_module_name"])]:
+                        # Should never happen
                         raise Exception(
-                            f"Inconsistent database state for model version {model_version}. A single version is expected"
-                            f"per inmanta module. Too many versions registered for module {record["inmanta_module_name"]}."
+                            f"Inconsistent database state for model version {model_version}. A single version is expected "
+                            f"per inmanta module. At least the two following versions are registered for module "
+                            f"{record["inmanta_module_name"]}: [{record["inmanta_module_version"]}, "
+                            f"{modules_version[str(record["inmanta_module_name"])]}]"
                         )
 
                 modules_version[str(record["inmanta_module_name"])] = str(record["inmanta_module_version"])
@@ -275,8 +276,8 @@ class AgentModules(Base):
         cls,
         model_version: int,
         environment: uuid.UUID,
-        module_to_agents_map: dict[str, set[str]],
-        module_to_version_map: dict[str, str],
+        module_to_agents_map: dict[InmantaModuleName, set[AgentName]],
+        module_to_version_map: dict[InmantaModuleName, InmantaModuleVersion],
         connection: asyncpg.Connection,
     ) -> None:
         """
