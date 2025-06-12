@@ -309,15 +309,23 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
     )
     ## reference
     ### in attribute
-    with raises_wrapped(UndeclaredReference, match="Encountered reference value in instance attribute"):
+    with raises_wrapped(UndeclaredReference, match="Encountered undeclared reference .* Encountered at instance.maybe_ref_value"):
         run_snippet("refs::plugins::read_entity_value(refs::dc::AllRefsDataclass(maybe_ref_value=refs::create_string_reference('hello')))")
     ### inside list attribute
-    with raises_wrapped(UndeclaredReference, match="Undeclared reference found"):
-        run_snippet("refs::plugins::read_entity_list_value(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))")
-    with raises_wrapped(UndeclaredReference, match="Undeclared reference found"):
-        run_snippet("refs::plugins::read_entity_list_head(refs::ListContainer(value=[refs::create_string_reference('hello'), 'Hello']))")
+    with raises_wrapped(UndeclaredReference, match="Encountered undeclared reference .* Encountered at instance\.value\[1\]"):
+        run_snippet(
+            """\
+            refs::plugins::read_entity_list_value(refs::ListContainer(value=['Hello', refs::create_string_reference('hello')]))
+            """
+        )
+    with raises_wrapped(UndeclaredReference, match="Encountered undeclared reference .* Encountered at instance\.value\[0\]"):
+        run_snippet(
+            "refs::plugins::read_entity_list_head(refs::ListContainer(value=[refs::create_string_reference('hello'), 'Hello']))"
+        )
     ### inside dict attribute
-    with raises_wrapped(UndeclaredReference, match="Undeclared reference found"):
+    with raises_wrapped(
+        UndeclaredReference, match="Encountered undeclared reference .* Encountered at instance\.value\['mykey'\]"
+    ):
         run_snippet(
             """\
             refs::plugins::read_entity_dict_value(
@@ -325,7 +333,9 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
             )
             """
         )
-    with raises_wrapped(UndeclaredReference, match="Undeclared reference found"):
+    with raises_wrapped(
+        UndeclaredReference, match="Encountered undeclared reference .* Encountered at instance\.value\['mykey'\]"
+    ):
         run_snippet(
             """\
             refs::plugins::read_entity_dict_mykey(
@@ -348,7 +358,7 @@ def test_undeclared_references(snippetcompiler: "SnippetCompilationTest", module
         """
     )
     ### reference
-    with raises_wrapped(UndeclaredReference, match="Encountered reference value in instance attribute"):
+    with raises_wrapped(UndeclaredReference, match="Encountered undeclared reference .* Encountered at instances\[1\]\.maybe_ref_value"):
         run_snippet(
             """\
             refs::plugins::read_list_entity_value(

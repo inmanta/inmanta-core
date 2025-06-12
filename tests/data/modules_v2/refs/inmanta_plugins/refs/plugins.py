@@ -191,7 +191,7 @@ def read_entity_list_value(instance: ListContainer) -> None:
 
 @plugin
 def read_entity_list_head(instance: ListContainer) -> None:
-    assert isinstance(instance.value[0], str), type(instance.value[i])
+    assert isinstance(instance.value[0], str), type(instance.value[0])
 
 
 @plugin

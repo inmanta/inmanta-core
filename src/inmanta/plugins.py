@@ -484,7 +484,7 @@ def to_dsl_type(python_type: type[object], location: Range, resolver: Namespace)
     return inmanta_type.Any()
 
 
-def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, value: object) -> object:
+def validate_and_convert_to_python_domain(*, name: str, expected_type: inmanta_type.Type, value: object) -> object:
     """
     Given a model domain value and an inmanta type, produce the corresponding python object
 
@@ -497,10 +497,11 @@ def validate_and_convert_to_python_domain(expected_type: inmanta_type.Type, valu
         # if the value is None, it becomes None
         return None
 
+    # TODO: pass name to to_python?
     if expected_type.has_custom_to_python():
         return expected_type.to_python(value)
 
-    return DynamicProxy.return_value(value)
+    return DynamicProxy.return_value(value, context=proxy.ProxyContext(path=name, validated=True))
 
 
 class PluginCallContext:
@@ -1014,7 +1015,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         # Validate all positional arguments
         for position, value in enumerate(args):
             # (1) Get the corresponding argument, fails if we don't have one
-            arg = self.get_arg(position)
+            arg: PluginArgument = self.get_arg(position)
             result: object
             if isinstance(value, Unknown):
                 result = value
@@ -1022,7 +1023,11 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             else:
                 try:
                     # (4) Validate the input value
-                    result = validate_and_convert_to_python_domain(arg.resolved_type, value)
+                    result = validate_and_convert_to_python_domain(
+                        name=arg.arg_name,
+                        expected_type=arg.resolved_type,
+                        value=value,
+                    )
                 except (UnsetException, MultiUnsetException):
                     raise
                 except UndeclaredReference as e:
@@ -1054,7 +1059,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         # Validate all kw arguments
         for name, value in kwargs.items():
             # (1) Get the corresponding kwarg, fails if we don't have one
-            kwarg = self.get_kwarg(name)
+            kwarg: PluginArgument = self.get_kwarg(name)
 
             # (3) Make sure that our argument is not provided twice
             if kwarg.arg_position is not None and kwarg.arg_position < len(args):
@@ -1068,7 +1073,11 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 is_unknown = True
             else:
                 try:
-                    result = validate_and_convert_to_python_domain(kwarg.resolved_type, value)
+                    result = validate_and_convert_to_python_domain(
+                        name=kwarg.arg_name,
+                        expected_type=kwarg.resolved_type,
+                        value=value,
+                    )
                 except (UnsetException, MultiUnsetException):
                     raise
                 except RuntimeException as e:
@@ -1112,6 +1121,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         cls.deprecated = True
         cls.replaced_by = replaced_by
 
+    # TODO: no longer in use?
     def __call__(self, *args: object, **kwargs: object) -> object:
         """
         The function call itself

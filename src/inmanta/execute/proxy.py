@@ -64,7 +64,7 @@ class DynamicUnwrapContext:
 class ProxyContext:
     """
     Context for creating proxy objects. Declares whether the object has already passed certain validation or whether certain
-    special values are expected where the object appears.
+    special values are expected in the object's values (attributes, list elements, ...).
 
     E.g. a top-level plugin argument will have been validated at the boundary, and an undeclared reference would have been
     rejected by that validation. In contrast, an opaque DSL instance's attributes have had no boundary validation, and may
@@ -72,30 +72,32 @@ class ProxyContext:
     to reject reference values in such cases.
 
     :param validated: True iff the object to proxy has been validated at the plugin boundary.
-    :param allow_references: Allow reference values, either because they have been declared and validated, or because
-        explicitly requested. Defaults to allow references iff the object has been validated. Kept as a separate field to
-        allow overrides for a single proxy object while maintaining behavior for nested proxies.
+    :param allow_reference_values: Allow references for values accessed through this proxy. Either because they have been
+        declared and validated, or because explicitly requested. Defaults to allow references iff the object has been
+        validated. Kept as a separate field to allow overrides for a single proxy object while maintaining behavior for
+        nested proxies.
+    :param path: The path, within the plugin's argument namespace, where this object lives. Should be compatible with
+        composition at the tail, e.g. `list_arg[0].attr`.
     """
+    path: str
     validated: bool = True
-    allow_references: Optional[bool] = None
+    allow_reference_values: Optional[bool] = None
 
-    def nested(self: Self, validated: Optional[bool] = None) -> Self:
+    def nested(self: Self, *, relative_path: str) -> Self:
         """
         Returns a context object for values nested one level deeper than the current context.
 
-        :param validated: Whether the nested context should be considered to be validated. Defaults to the current
-            context's value.
+        :param relative_path: The path of new object, relative to the current context.
         """
-        validated = validated if validated is not None else self.validated
         return dataclasses.replace(
             self,
-            validated=validated,
-            # we're proxying elements one level deeper than the current context => reset allow_references to default behavior
-            allow_references=None,
+            path=self.path + relative_path,
+            # we're proxying elements one level deeper than the current context => reset allow_reference_values to default behavior
+            allow_reference_values=None,
         )
 
     def should_allow_references(self) -> bool:
-        return self.allow_references if self.allow_references is not None else self.validated
+        return self.allow_reference_values if self.allow_reference_values is not None else self.validated
 
 
 # this is here to avoid import loops
@@ -113,20 +115,19 @@ class DynamicProxy:
     by native code.
     """
 
-    def __init__(self, instance: "Instance", *, element_context: Optional[ProxyContext] = None) -> None:
+    def __init__(self, instance: "Instance", *, context: Optional[ProxyContext] = None) -> None:
         """
         :param instance: The object to proxy.
-        :param element_context: The context this object lives in. The proxy context for the object's element values (e.g. attributes)
-            is derived from this.
+        :param context: The context this object lives in.
         """
         object.__setattr__(self, "__instance", instance)
-        object.__setattr__(self, "__element_context", element_context if element_context is not None else ProxyContext())
+        object.__setattr__(self, "__context", context if context is not None else ProxyContext())
 
     def _get_instance(self) -> "Instance":
         return object.__getattribute__(self, "__instance")
 
-    def _get_element_context(self) -> ProxyContext:
-        return object.__getattribute__(self, "__element_context")
+    def _get_context(self) -> ProxyContext:
+        return object.__getattribute__(self, "__context")
 
     def _allow_references[P: DynamicProxy](self: P) -> P:
         """
@@ -136,7 +137,7 @@ class DynamicProxy:
         """
         # don't just call constructor for backwards compatibility: some children outside of core might not have context arg
         new: P = copy(self)
-        object.__setattr__(new, "__element_context", dataclasses.replace(self._get_element_context(), allow_references=True))
+        object.__setattr__(new, "__context", dataclasses.replace(self._get_context(), allow_reference_values=True))
         return new
 
     @classmethod
@@ -224,12 +225,16 @@ class DynamicProxy:
         cls,
         value: object,
         *,
-        # TODO: docstring
-        context: Optional[ProxyContext] = None,
+        context: Optional[ProxyContext] = None,  # optional for backwards compatibility
     ) -> Union[None, str, tuple[object, ...], int, float, bool, "DynamicProxy"]:
         """
         Converts a value from the internal domain to the plugin domain.
+
+        :param context: The context in which the given object lives. If None, assumes that the value has already passed
+            validation. When None, the object's string representation, rather than its name is used for error reporting.
         """
+        context = context if context is not None else ProxyContext(path=f"<{value}>")
+
         if value is None:
             return None
 
@@ -243,49 +248,56 @@ class DynamicProxy:
             return copy(value)
 
         if isinstance(value, references.Reference):
-            if context is not None and not context.should_allow_references():
-                # TODO: tailor-made exceptions from child classes, e.g. through class method with context?
-                raise UndeclaredReference(
-                    reference=value,
-                    # TODO: message
-                    message="Undeclared reference found",
-                )
-            else:
-                # if a reference gets here, it has been validated, and we want to represent it as a reference, not a proxy
-                return value
+            # if a reference gets here, it has been validated, and we want to represent it as a reference, not a proxy
+            return value
 
         if isinstance(value, DynamicProxy):
             return value
 
-        def nested_context(*, validated: Optional[bool] = None) -> Optional[ProxyContext]:
-            return (
-                context.nested(validated=validated)
-                if context is not None
-                else ProxyContext(validated=validated)
-                if validated is not None
-                else None
-            )
-
         if isinstance(value, dict):
-            return DictProxy(value, element_context=nested_context())
+            return DictProxy(value, context=context)
 
         if hasattr(value, "__len__"):
-            return SequenceProxy(value, element_context=nested_context())
+            return SequenceProxy(value, context=context)
 
         if hasattr(value, "__call__"):
-            return CallProxy(value, element_context=nested_context())
+            return CallProxy(value, context=context)
 
         return DynamicProxy(
             value,
             # DSL instances are a black box as far as boundary validation is concerned
-            element_context=nested_context(validated=False)
+            # => from here on out, consider the object not validated
+            context=dataclasses.replace(context, validated=False)
         )
 
-    # TODO: docstring
-    def _return_value(self, value: object) -> object:
-        return DynamicProxy.return_value(value, context=self._get_element_context())
+    def _return_value(self, value, *, relative_path: str) -> object:
+        """
+        Return a value that was accessed through this proxy object. Validates for undeclared references and propagates context
+        appropriately.
+        """
+        context: ProxyContext = self._get_context()
+        value_context: ProxyContext = context.nested(relative_path=relative_path)
 
-    # TODO: see if we can use traceback.extract_stack() here to add a location to any exceptions, try-except style
+        if isinstance(value, references.Reference) and not context.should_allow_references():
+            # TODO: string format accepts reference. Should also raise this exception. Already done?
+            # TODO: see if we can use traceback.extract_stack() here to add a location to any exceptions, try-except style
+
+            # Non-dataclass entities can not be explicit about reference support.
+            # The Python domain is a black box. We don't want to transparently pass unexpected values in there.
+            # => don't allow references in attributes. Can be explicitly allowed via allow_reference_attributes() wrapper
+            raise UndeclaredReference(
+                reference=value,
+                message=(
+                    "Encountered undeclared reference value during plugin execution. Plugins are only allowed to access"
+                    " reference values when declared explicitly. Either use a dataclass entity that supports references (e.g."
+                    " `int | Reference[int]` attribute annotation), or explicitly allow references on attribute access with the"
+                    " `inmanta.plugins.allow_reference_values()` wrapper."
+                    f" Encountered at {value_context.path} (= `{value}`)."
+                ),
+            )
+
+        return DynamicProxy.return_value(value, context=value_context)
+
     def __getattr__(self, attribute: str):
         instance = self._get_instance()
 
@@ -295,32 +307,7 @@ class DynamicProxy:
             # allow for hasattr(proxy, "some_attr")
             raise AttributeNotFound(e.stmt, e.name)
 
-        # Non-dataclass entities can not be explicit about reference support.
-        # The Python domain is a black box. We don't want to transparently pass unexpected values in there.
-        # TODO: allow_references() name
-        # => don't allow references in attributes. Can be explicitly allowed via allow_references() wrapper
-        if not self._get_element_context().should_allow_references() and isinstance(value, references.Reference):
-            # TODO: string format accepts reference. Should also raise this exception
-            raise UndeclaredReference(
-                reference=value,
-                message=(
-                    "Encountered reference value in instance attribute. Plugins are only allowed to access reference values"
-                    " when declared explicitly. Either use a dataclass entity that supports references (e.g."
-                    " `int | Reference[int]` attribute annotation), or explicitly allow references on attribute access with the"
-                    # TODO: name
-                    " `inmanta.plugins.allow_reference_attributes()` wrapper."
-                    f" ({attribute}={value} on instance {self._get_instance()})"
-                ),
-            )
-
-        # TODO: consider the semantics of the context and how it's propagated. We've already checked `value` here, we primarily
-        #       want IT to be considered a black box, not to have it rejected if it's a reference. BUT for the other proxy
-        #       classes it would be great if they didn't have to all implement a custom check. So how to differentiate between
-        #       "I'm a black box calling return_value on an element value" and
-        #       "I'm calling return_value on an element value that I know to be a black box"?
-        # TODO: review this comment
-        # Contents of an entity are always a black box, regardless of the current context
-        return self._return_value(value)
+        return self._return_value(value, relative_path=f".{attribute}")
 
     def __setattr__(self, attribute: str, value: object) -> None:
         raise Exception("Readonly object")
@@ -360,18 +347,18 @@ class DynamicProxy:
 
 
 class SequenceProxy(DynamicProxy, JSONSerializable):
-    def __init__(self, iterator: Sequence, *, element_context: Optional[ProxyContext] = None) -> None:
-        DynamicProxy.__init__(self, iterator, element_context=element_context)
+    def __init__(self, iterator: Sequence, *, context: Optional[ProxyContext] = None) -> None:
+        DynamicProxy.__init__(self, iterator, context=context)
 
     def __getitem__(self, key: int) -> object:
         instance = self._get_instance()
         if isinstance(key, str):
             raise RuntimeException(self, f"can not get a attribute {key}, {self._get_instance()} is a list")
 
-        return self._return_value(instance[key])
+        return self._return_value(instance[key], relative_path=f"[{key!r}]")
 
     def __iter__(self):
-        return (self._return_value(v) for v in self._get_instance())
+        return (self._return_value(v, relative_path=f"[{i}]") for i, v in enumerate(self._get_instance()))
 
     def __len__(self) -> int:
         return len(self._get_instance())
@@ -382,18 +369,19 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
 
 
 class DictProxy(DynamicProxy, Mapping, JSONSerializable):
-    def __init__(self, mydict: dict[object, object], *, element_context: Optional[ProxyContext] = None) -> None:
-        DynamicProxy.__init__(self, mydict, element_context=element_context)
+    def __init__(self, mydict: dict[object, object], *, context: Optional[ProxyContext] = None) -> None:
+        DynamicProxy.__init__(self, mydict, context=context)
 
     def __getitem__(self, key):
         instance = self._get_instance()
         if not isinstance(key, str):
             raise RuntimeException(self, f"Expected string key, but got {key}, {self._get_instance()} is a dict")
 
-        return self._return_value(instance[key])
+        return self._return_value(instance[key], relative_path=f"[{key!r}]")
 
     def __iter__(self):
-        return (self._return_value(v) for v in self._get_instance())
+        # keys are always strings => relative_path doesn't matter that much. Pointing to the mapping itself seems appropriate.
+        return (self._return_value(v, relative_path="") for v in self._get_instance())
 
     def __len__(self) -> int:
         return len(self._get_instance())
@@ -408,8 +396,8 @@ class CallProxy(DynamicProxy):
     Proxy a value that implements a __call__ function
     """
 
-    def __init__(self, instance: Callable[..., object], *, element_context: Optional[ProxyContext] = None) -> None:
-        DynamicProxy.__init__(self, instance, element_context=element_context)
+    def __init__(self, instance: Callable[..., object], *, context: Optional[ProxyContext] = None) -> None:
+        DynamicProxy.__init__(self, instance, context=context)
 
     def __call__(self, *args, **kwargs):
         instance = self._get_instance()
