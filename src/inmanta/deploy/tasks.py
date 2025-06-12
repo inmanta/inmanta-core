@@ -167,7 +167,7 @@ class Deploy(Task):
                         version=version,
                     )
                 except ModuleLoadingException as e:
-                    log_line = e.to_log_line()
+                    log_line = e.create_log_line_for_failed_modules()
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
                     return
@@ -175,13 +175,12 @@ class Deploy(Task):
                 except Exception as e:
                     log_line = data.LogLine.log(
                         logging.ERROR,
-                        "All resources of type `%(res_type)s` failed to load handler code or install handler code "
-                        "dependencies:",
+                        "All resources of type `%(res_type)s` failed to install handler code dependencies:",
                         res_type=executor_resource_details.id.entity_type,
                         agent=agent,
                         error=[
                             single_line
-                            for iterator in [multi_line.split("\n") for multi_line in traceback.format_exception(e)]
+                            for iterator in [multi_line.splitlines() for multi_line in traceback.format_exception(e)]
                             for single_line in iterator
                             if single_line
                         ],
@@ -336,12 +335,9 @@ class ModuleLoadingException(Exception):
         self.agent_name = agent_name
         super().__init__(self.msg)
 
-    def to_log_line(self) -> data.LogLine:
-        return self.create_log_line_for_failed_modules(level=logging.ERROR)
-
     def create_log_line_for_failed_modules(
         self,
-        level: int,
+        level: int = logging.ERROR,
     ) -> data.LogLine:
         """
         Helper method to cleanly display module loading errors in the web console.
