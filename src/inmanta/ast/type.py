@@ -68,7 +68,7 @@ class Type(Locatable):
         # `object` / `"any"` allow all standard DSL values
         # (and even not-officially-supported opaque values from plugin returns).
         # Special DSL values like references require an explicit annotation so we don't leak them where they aren't expected.
-        # TODO: link ticket to do the same for Unknown
+        # TODO(after-first-review): link ticket to do the same for Unknown
         #
         # References to dataclasses are even more of a special case in the sense that they are represented as plain instances
         # in the DSL. Even non-reference instances may contain reference attributes so they get additional runtime validation
@@ -174,7 +174,7 @@ class Type(Locatable):
         """
         return False
 
-    # TODO: add `*, path: str`, for instantiating ProxyContext? First get review on ProxyContext
+    # TODO(after-first-review): add `*, path: str`, for instantiating ProxyContext? First get review on ProxyContext
     def to_python(self, instance: object) -> "object":
         """
         Convert an instance of this type to its python form
@@ -215,7 +215,11 @@ class Type(Locatable):
         return hash(type(self))
 
 
-class ReferenceType(Type):
+# TODO: docstring. Make proper Type ABC, with implementations for common methods?
+class SupportsReferenceType: ...
+
+
+class ReferenceType(Type, SupportsReferenceType):
     """
     The type of a reference to something of type element_type
 
@@ -227,7 +231,7 @@ class ReferenceType(Type):
         :param element_type: the type we refer to
         """
         super().__init__()
-        assert not isinstance(element_type, ReferenceType)
+        assert not isinstance(element_type, SupportsReferenceType)
         self.element_type = element_type
         self.is_dataclass = False
         if element_type.is_entity():
@@ -251,8 +255,7 @@ class ReferenceType(Type):
             if ref._model_type.issubtype(self.element_type):
                 return True
 
-        # TODO: this message prints the union type for OrReference's super() call
-        raise TypingException(None, f"Invalid value {value} is not a subtype of {self}")
+        raise TypingException(None, f"Invalid value: {value} is not a subtype of {self}")
 
     def has_custom_to_python(self) -> bool:
         return self.is_dataclass
@@ -274,9 +277,6 @@ class ReferenceType(Type):
 
     def get_no_reference(self) -> "Type":
         return self.element_type
-
-    def with_base_type(self, base_type: "Type") -> "Type":
-        return super().with_base_type(base_type)
 
     def corresponds_to(self, type: "Type") -> bool:
         if builtins.type(type) != builtins.type(self):
@@ -301,7 +301,7 @@ class ReferenceType(Type):
         return self.element_type.issupertype(other.element_type)
 
 
-class OrReferenceType(ReferenceType):
+class OrReferenceType(Type, SupportsReferenceType):
     """
     This class represents the shorthand for Reference[T] | T
 
@@ -310,32 +310,33 @@ class OrReferenceType(ReferenceType):
     create_unions will compact unions to use this class when relevant
     """
 
+    def __init__(self, element_type: Type) -> None:
+        self.element_type: Type = element_type
+        self.reference_type: ReferenceType = ReferenceType(element_type)
+
     def validate(self, value: Optional[object]) -> bool:
         # We validate that the value is either a reference of the base type or the base type
         reference_type_exception: RuntimeException
-        try:
+        if references.is_reference(value):
             # Validate that we are the reference
-            return super().validate(value)
-        except RuntimeException as e:
-            # If not, fine
-            reference_type_exception = e
-        # Validate that we are the base type
-        try:
+            return self.reference_type.validate(value)
+        else:
+            # Validate that we are the base type
             return self.element_type.validate(value)
-        except UndeclaredReference:
-            # the value is a reference, just not the expected type => raise the first error message instead.
-            raise reference_type_exception
+
+    def has_custom_to_python(self) -> bool:
+        return self.reference_type.has_custom_to_python() or self.element_type.has_custom_to_python()
 
     def to_python(self, instance: object) -> object:
         try:
-            super().validate(instance)
+            self.reference_type.validate(instance)
         except RuntimeException:
             if self.element_type.has_custom_to_python():
                 return self.element_type.to_python(instance)
             else:
                 return DynamicProxy.return_value(instance)
         else:
-            return super().to_python(instance)
+            return self.reference_type.to_python(instance)
 
     def type_string_internal(self) -> str:
         element = self.element_type.type_string()
@@ -350,8 +351,17 @@ class OrReferenceType(ReferenceType):
             return False
         return other.element_type == self.element_type
 
+    def __hash__(self) -> int:
+        return hash((type(self), self.element_type))
+
     def is_attribute_type(self) -> bool:
         return self.element_type.is_attribute_type()
+
+    def get_base_type(self) -> "Type":
+        return self.element_type
+
+    def get_no_reference(self) -> "Type":
+        return self.element_type
 
     def corresponds_to(self, type: "Type") -> bool:
         # The model always allow reference, we allow the type in the python domain to be tighter
@@ -364,7 +374,7 @@ class OrReferenceType(ReferenceType):
         return False
 
     def issupertype(self, other: "Type") -> bool:
-        if not isinstance(other, ReferenceType):
+        if not isinstance(other, SupportsReferenceType):
             return self.element_type.issupertype(other)
         return self.element_type.issupertype(other.element_type)
 

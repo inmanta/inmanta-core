@@ -1037,7 +1037,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                     )
                 except RuntimeException as e:
                     # some validators do not recognize references specially. Best-effort to raise tailored error message.
-                    if isinstance(value, Reference) and not isinstance(arg.resolved_type, inmanta_type.ReferenceType):
+                    if isinstance(value, Reference) and not isinstance(arg.resolved_type, inmanta_type.SupportsReferenceType):
                         raise PluginTypeException(
                             stmt=None,
                             msg=reference_exception_msg(value, arg),

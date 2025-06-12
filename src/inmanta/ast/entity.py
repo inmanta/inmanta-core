@@ -44,7 +44,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import Any as inm_Any
-from inmanta.ast.type import Float, NamedType, NullableType, ReferenceType, Type
+from inmanta.ast.type import Float, NamedType, NullableType, SupportsReferenceType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, ResultVariable, dataflow
 from inmanta.execute.util import AnyType, NoneValue
 from inmanta.references import AttributeReference, PrimitiveTypes, Reference, RefValue
@@ -741,7 +741,7 @@ class Entity(NamedType, WithComment):
             # All values are primitive, so this is trivial
             kwargs = {k: v.get_value() for k, v in instance.slots.items() if k not in ["self", "requires", "provides"]}
             for k, v in kwargs.items():
-                if isinstance(v, Reference) and not isinstance(self._paired_dataclass_field_types.get(k), ReferenceType):
+                if isinstance(v, Reference) and not isinstance(self._paired_dataclass_field_types.get(k), SupportsReferenceType):
                     raise UndeclaredReference(
                         reference=v,
                         message=(
