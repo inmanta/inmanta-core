@@ -66,6 +66,12 @@ PERFORM_CLEANUP: bool = True
 # Kill switch for cleanup, for use when working with historical data
 
 
+def get_printable_name_for_resource_set(native: str | None) -> str:
+    if native is None:
+        return "<SHARED>"
+    return native
+
+
 class CrossResourceSetDependencyError(Exception):
     def __init__(self, resource_id1: ResourceIdStr, resource_id2: ResourceIdStr) -> None:
         """
@@ -167,6 +173,7 @@ class PartialUpdateMerger:
         self.rids_in_partial_compile = rids_in_partial_compile
         self.updated_resource_sets = updated_resource_sets
         self.deleted_resource_sets = deleted_resource_sets
+        self.modified_resource_sets = updated_resource_sets | deleted_resource_sets
         self.updated_and_shared_resources_old = updated_and_shared_resources_old
         self.non_shared_resources_in_partial_update_old: abc.Mapping[ResourceIdStr, data.Resource] = {
             rid: r for rid, r in self.updated_and_shared_resources_old.items() if r.resource_set is not None
@@ -236,7 +243,9 @@ class PartialUpdateMerger:
         shared_resources = {r.resource_id: r for r in updated_and_shared_resources if r.resource_set is None}
         updated_resources = {r.resource_id: r for r in updated_and_shared_resources if r.resource_set is not None}
         shared_resources_merged = {r.resource_id: r for r in self._merge_shared_resources(shared_resources)}
-        result = {**updated_resources, **shared_resources_merged}
+        # Updated go last, so that in case of overlap, we get the updated one
+        # Validation on move is done later
+        result = {**shared_resources_merged, **updated_resources}
         self._validate_constraints(result)
         return result
 
@@ -252,10 +261,18 @@ class PartialUpdateMerger:
                 continue
             matching_resource_old_model = self.updated_and_shared_resources_old[res.resource_id]
 
-            if res.resource_set != matching_resource_old_model.resource_set:
+            if (
+                res.resource_set != matching_resource_old_model.resource_set
+                and matching_resource_old_model.resource_set not in self.modified_resource_sets
+            ):
+                # We can't move resource
+                # Unless between resource sets we are updating
+                # Shared set is never in modified_resource_sets, so no escape from there
                 raise BadRequest(
-                    f"A partial compile cannot migrate resources: trying to move {res.resource_id} from resource set"
-                    f" {matching_resource_old_model.resource_set} to {res.resource_set}."
+                    "A partial compile only migrate resources between resource set that are pushed together:"
+                    f" trying to move {res.resource_id} from resource set "
+                    f"{get_printable_name_for_resource_set(matching_resource_old_model.resource_set)} "
+                    f"to {get_printable_name_for_resource_set(res.resource_set)}."
                 )
 
             if res.resource_set is None and res.attribute_hash != matching_resource_old_model.attribute_hash:
@@ -863,7 +880,8 @@ class OrchestrationService(protocol.ServerSlice):
                             "a full compile is necessary for this process:\n"
                         )
                         msg += "\n".join(
-                            f"    {rid} moved from {rids_unchanged_resource_sets[rid]} to {resource_sets[rid]}"
+                            f"    {rid} moved from {get_printable_name_for_resource_set(rids_unchanged_resource_sets[rid])} "
+                            f"to {get_printable_name_for_resource_set(resource_sets.get(rid))}"
                             for rid in resources_that_moved_resource_sets
                         )
 

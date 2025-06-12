@@ -9,6 +9,11 @@ updates:
   allow:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
+  groups:
+    logfire:
+      patterns:
+        - "logfire"
+        - "opentelemetry*"
   ignore:
     # #6668
     - dependency-name: "pytest-inmanta-extensions"
@@ -28,6 +33,11 @@ updates:
   allow:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
+  groups:
+    logfire:
+      patterns:
+        - "logfire"
+        - "opentelemetry*"
   ignore:
     # #6668
     - dependency-name: "pytest-inmanta-extensions"
