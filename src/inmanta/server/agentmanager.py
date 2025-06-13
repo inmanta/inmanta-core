@@ -279,8 +279,6 @@ class AgentManager(ServerSlice, SessionListener):
         await data.Agent.persist_on_halt(env.id, connection=connection)
         await self._pause_agent(env, connection=connection)  # excludes scheduler
         await self._pause_agent(env, endpoint=const.AGENT_SCHEDULER_ID, connection=connection)
-        # TODO: don't think this is required
-        #await self._autostarted_agent_manager._stop_scheduler(env)
 
     async def resume_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
@@ -289,8 +287,6 @@ class AgentManager(ServerSlice, SessionListener):
         to_unpause: list[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
         await asyncio.gather(*[self._unpause_agent(env, agent, connection=connection) for agent in to_unpause])
         await self._unpause_agent(env, endpoint=const.AGENT_SCHEDULER_ID, connection=connection)
-        # TODO: don't think this is required
-        #await self._autostarted_agent_manager._ensure_scheduler(env.id)
 
     @handle(methods_v2.all_agents_action, env="tid")
     async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:

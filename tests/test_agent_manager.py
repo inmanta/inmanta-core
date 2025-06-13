@@ -1097,38 +1097,15 @@ async def test_pause_all_agents_doesnt_pause_environment(
     env_id = UUID(environment)
     env = await data.Environment.get_by_id(env_id)
     agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
 
-    #async def scheduler_action_logged(action: str) -> bool:
-    #    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
-    #    try:
-    #        await inmanta.util.retry_limited(
-    #            lambda: len(autostarted_agent_manager._agent_procs) == (1 if action == "started" else 0), timeout=2
-    #        )
-    #    except asyncio.TimeoutError:
-    #        return False
-    #    else:
-    #        return True
-
-    #    expected_log: str = f"Scheduler {action}"
-    #    try:
-    #        await inmanta.util.retry_limited(
-    #            lambda: any(expected_log in record.message for record in caplog.records), timeout=5
-    #        )
-    #    except asyncio.TimeoutError:
-    #        return False
-    #    else:
-    #        return True
+    await agent_manager.ensure_agent_registered(env=env, nodename=agent.name)
 
     async def wait_for_state(*, active: bool) -> None:
-        await inmanta.util.retry_limited(
+        await retry_limited(
             lambda: len(autostarted_agent_manager._agent_procs) == (1 if active else 0), timeout=2
         )
 
-    with caplog.at_level(logging.INFO):
-        autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
-        #await autostarted_agent_manager._ensure_scheduler(env=env.id)
-        await agent_manager.ensure_agent_registered(env=env, nodename=agent.name)
-    assert len(autostarted_agent_manager._agent_procs) == 1
     await wait_for_state(active=True)
 
     agents = await data.Agent.get_list()
@@ -1138,13 +1115,14 @@ async def test_pause_all_agents_doesnt_pause_environment(
     assert not agent_dct[agent.name].paused
 
     await wait_for_state(active=True)
-    with caplog.at_level(logging.INFO):
-        result = (
-            await client.halt_environment(environment)
-            if halt_environment
-            else await client.all_agents_action(environment, AgentAction.pause.value)
-        )
+    # pause agents / halt environment
+    result = (
+        await client.halt_environment(environment)
+        if halt_environment
+        else await client.all_agents_action(environment, AgentAction.pause.value)
+    )
     assert result.code == 200
+    # scheduler should be down only if the environment was halted
     await wait_for_state(active=not halt_environment)
 
     agents = await data.Agent.get_list()
@@ -1153,15 +1131,16 @@ async def test_pause_all_agents_doesnt_pause_environment(
     assert agent_dct[const.AGENT_SCHEDULER_ID].paused == halt_environment
     assert agent_dct[agent.name].paused
 
+    # scheduler still down (if it was down before)
     await wait_for_state(active=not halt_environment)
-    with caplog.at_level(logging.INFO):
-        # resume
-        result = (
-            await client.resume_environment(environment)
-            if halt_environment
-            else await client.all_agents_action(environment, AgentAction.unpause.value)
-        )
+    # unpause agents / resume environment
+    result = (
+        await client.resume_environment(environment)
+        if halt_environment
+        else await client.all_agents_action(environment, AgentAction.unpause.value)
+    )
     assert result.code == 200
+    # scheduler should be up again if it was halted before
     await wait_for_state(active=True)
 
     agents = await data.Agent.get_list()
@@ -1169,6 +1148,7 @@ async def test_pause_all_agents_doesnt_pause_environment(
     agent_dct = {agent.name: agent for agent in agents}
     assert not agent_dct[const.AGENT_SCHEDULER_ID].paused
     assert not agent_dct[agent.name].paused
+
     import pprint
     pprint.pprint(caplog.records)
     assert False
