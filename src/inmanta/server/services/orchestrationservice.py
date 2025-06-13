@@ -681,7 +681,7 @@ class OrchestrationService(protocol.ServerSlice):
         Make sure that modules used in this partial version are either new modules, or that the version
         being used is the same as the registered version for the base compile.
         """
-        LOGGER.warning(f"calling _check_version_info")
+
         for inmanta_module_name, module_data in modules_version_in_current_export.items():
 
             if inmanta_module_name not in registered_modules_version:
@@ -691,8 +691,6 @@ class OrchestrationService(protocol.ServerSlice):
 
             registered_version = registered_modules_version[inmanta_module_name]
             module_version = module_data.version
-            LOGGER.warning(f"{inmanta_module_name=} {registered_version=} {module_version=}")
-
             if registered_version != module_version:
                 raise BadRequest(
                     f"Cannot perform partial export because the source code for module {inmanta_module_name} in this "
@@ -1182,13 +1180,6 @@ class OrchestrationService(protocol.ServerSlice):
                             base_version,
                         )
 
-                LOGGER.warning(
-                    "Resources SETS %s .",
-                    str(resource_sets),
-                )
-                LOGGER.warning(
-                    f"MVI {module_version_info}"
-                )
                 rid_to_resource: dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
                     env_id=env.id,
                     resources=resources,
