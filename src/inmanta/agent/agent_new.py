@@ -173,7 +173,6 @@ class Agent(SessionEndpoint):
             cfg.agent_deploy_interval.set(agent_deploy_interval)
 
     async def on_reconnect(self) -> None:
-        # TODO: this returns False...
         result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)
         if result.code == 200 and result.result is not None:
             state = result.result

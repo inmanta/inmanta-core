@@ -29,7 +29,6 @@ from uuid import UUID, uuid4
 import pytest
 from tornado.httpclient import AsyncHTTPClient
 
-import inmanta.util
 from inmanta import config, const, data
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
@@ -1087,9 +1086,7 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
 
 
 @pytest.mark.parametrize("halt_environment", (True, False))
-async def test_pause_all_agents_doesnt_pause_environment(
-    server, environment, client, agent, halt_environment: bool, caplog
-) -> None:
+async def test_pause_all_agents_doesnt_pause_environment(server, environment, client, agent, halt_environment: bool) -> None:
     """
     Reproduces bug: https://github.com/inmanta/inmanta-core/issues/9081. Additionally verifies that halting the entire
     environment does halt the scheduler process.
@@ -1148,7 +1145,3 @@ async def test_pause_all_agents_doesnt_pause_environment(
     agent_dct = {agent.name: agent for agent in agents}
     assert not agent_dct[const.AGENT_SCHEDULER_ID].paused
     assert not agent_dct[agent.name].paused
-
-    import pprint
-    pprint.pprint(caplog.records)
-    assert False
