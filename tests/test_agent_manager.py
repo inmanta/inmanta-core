@@ -1099,9 +1099,7 @@ async def test_pause_all_agents_doesnt_pause_environment(server, environment, cl
     await agent_manager.ensure_agent_registered(env=env, nodename=agent.name)
 
     async def wait_for_state(*, active: bool) -> None:
-        await retry_limited(
-            lambda: len(autostarted_agent_manager._agent_procs) == (1 if active else 0), timeout=2
-        )
+        await retry_limited(lambda: len(autostarted_agent_manager._agent_procs) == (1 if active else 0), timeout=2)
 
     await wait_for_state(active=True)
 
