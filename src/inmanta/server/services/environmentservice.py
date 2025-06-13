@@ -321,7 +321,9 @@ class EnvironmentService(protocol.ServerSlice):
             raise BadRequest(f"Project with id={project_id} already has an environment with name {name}")
 
         if environment_id is None:
-            environment_id = uuid.uuid4()
+
+            environment_id = uuid.UUID("2c63310f-e9e4-426c-b083-75e5413e082b")
+            # environment_id = uuid.uuid4()
 
         if (repository is None and branch is not None) or (repository is not None and branch is None):
             raise BadRequest("Repository and branch should be set together.")
