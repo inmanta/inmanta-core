@@ -487,7 +487,6 @@ class Exporter:
         conn: protocol.SyncClient,
         code_manager: loader.CodeManager,
         *,
-        do_upload: bool,
     ) -> None:
         """Deploy code to the server"""
 
@@ -511,8 +510,7 @@ class Exporter:
                 if not type_name.startswith("core::"):
                     code_manager.register_code(resource_type, obj)
 
-        if do_upload:
-            upload_code(conn, code_manager)
+        upload_code(conn, code_manager)
 
     def commit_resources(
         self,
@@ -542,8 +540,7 @@ class Exporter:
         code_manager = loader.CodeManager()
         code_manager.build_agent_map(self._resources)
 
-        # partial exports use the same code as the version they're based on
-        self.register_code(conn, code_manager, do_upload=not partial_compile)
+        self.register_code(conn, code_manager)
 
         LOGGER.info("Uploading %d files" % len(self._file_store))
 

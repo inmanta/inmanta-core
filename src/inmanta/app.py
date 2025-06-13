@@ -457,10 +457,10 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "--partial",
         dest="partial_compile",
         help=(
-            "Execute a partial export. Does not upload new Python code to the server: it is assumed to be unchanged since the"
-            " last full export. Multiple partial exports for disjunct resource sets may be performed concurrently but not"
-            " concurrent with a full export. When used in combination with the ``--json`` option, 0 is used as a placeholder "
-            "for the model version."
+            "Execute a partial export. All code used in this partial version will be checked against the code used in the"
+            " base version to make sure it remained unchanged. Multiple partial exports for disjunct resource sets may be"
+            " performed concurrently but not concurrent with a full export. When used in combination with the"
+            " ``--json`` option, 0 is used as a placeholder for the model version."
         ),
         action="store_true",
         default=False,
