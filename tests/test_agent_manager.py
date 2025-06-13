@@ -1091,8 +1091,8 @@ async def test_pause_all_agents_doesnt_pause_environment(
     server, environment, client, agent, halt_environment: bool, caplog
 ) -> None:
     """
-    Reproduces bug: https://github.com/inmanta/inmanta-core/issues/9081. Additionally verifiest that halting the entire
-    environment does pause the scheduler "agent".
+    Reproduces bug: https://github.com/inmanta/inmanta-core/issues/9081. Additionally verifies that halting the entire
+    environment does halt the scheduler process.
     """
     env_id = UUID(environment)
     env = await data.Environment.get_by_id(env_id)
