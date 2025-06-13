@@ -486,7 +486,6 @@ class Exporter:
         self,
         conn: protocol.SyncClient,
         code_manager: loader.CodeManager,
-        *,
     ) -> None:
         """Deploy code to the server"""
 
