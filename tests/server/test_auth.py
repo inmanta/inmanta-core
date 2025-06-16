@@ -105,3 +105,26 @@ async def test_provide_token_as_parameter(server: protocol.Server, client) -> No
 
     result = await client.get_api_docs(token=token)
     assert result.code == 200
+
+
+async def test_login_failed(server, client) -> None:
+    """
+    Ensure that a meaningful error message is returned when incorrect
+    credentials are provided to the login endpoint.
+    """
+    user = data.User(
+        username="admin",
+        password_hash=nacl.pwhash.str("admin".encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    # Invalid username
+    result = await client.login(username="test", password="test")
+    assert result.code == 401
+    assert "Invalid username or password" == result.result["message"]
+
+    # Invalid password
+    result = await client.login(username="admin", password="test")
+    assert result.code == 401
+    assert "Invalid username or password" == result.result["message"]
