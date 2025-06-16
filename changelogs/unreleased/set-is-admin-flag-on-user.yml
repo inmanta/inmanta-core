@@ -1,4 +1,4 @@
 ---
 description: Added support to mark a user as an admin user.
-change-type: patch
+change-type: minor
 destination-branches: [master]
