@@ -1,0 +1,4 @@
+---
+description: Added support to mark a user as an admin user.
+change-type: patch
+destination-branches: [master]
