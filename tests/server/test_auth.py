@@ -949,3 +949,28 @@ async def test_is_admin_role(server: protocol.Server, client: protocol.Client) -
 
     result = await admin_client.set_is_admin(username="non_existing_user", is_admin=True)
     assert result.code == 400
+
+
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
+@pytest.mark.parametrize("enable_auth", [True])
+async def test_login_failed(server, client) -> None:
+    """
+    Ensure that a meaningful error message is returned when incorrect
+    credentials are provided to the login endpoint.
+    """
+    user = data.User(
+        username="admin",
+        password_hash=nacl.pwhash.str("admin".encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    # Invalid username
+    result = await client.login(username="test", password="test")
+    assert result.code == 401
+    assert "Invalid username or password" == result.result["message"]
+
+    # Invalid password
+    result = await client.login(username="admin", password="test")
+    assert result.code == 401
+    assert "Invalid username or password" == result.result["message"]

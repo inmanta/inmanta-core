@@ -71,11 +71,14 @@ class UnauthorizedException(BaseHttpException):
     An exception raised when access to this resource is unauthorized
     """
 
-    def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
-        msg = "Access to this resource is unauthorized"
-        if message is not None:
-            msg += ": " + message
-
+    def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None, no_prefix: bool = False) -> None:
+        """
+        :param no_prefix: Don't add the 'Access to this resource is unauthorized: ' prefix to message if provided.
+        """
+        default_msg = "Access to this resource is unauthorized"
+        msg = default_msg if message is None else message
+        if message is not None and not no_prefix:
+            msg = f"{default_msg}: {msg}"
         super().__init__(401, msg, details)
 
 
