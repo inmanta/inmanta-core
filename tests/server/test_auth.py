@@ -949,4 +949,3 @@ async def test_is_admin_role(server: protocol.Server, client: protocol.Client) -
 
     result = await admin_client.set_is_admin(username="non_existing_user", is_admin=True)
     assert result.code == 400
-

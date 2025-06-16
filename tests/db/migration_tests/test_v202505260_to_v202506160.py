@@ -20,7 +20,6 @@ import os
 import re
 from collections import abc
 
-import asyncpg
 import pytest
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")

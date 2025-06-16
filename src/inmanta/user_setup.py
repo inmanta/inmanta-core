@@ -139,12 +139,7 @@ async def do_user_setup() -> None:
         pw_hash = nacl.pwhash.str(password.encode())
 
         # insert the user
-        user = data.User(
-            username=username,
-            password_hash=pw_hash.decode(),
-            auth_method=AuthMethod.database,
-            is_admin=True
-        )
+        user = data.User(username=username, password_hash=pw_hash.decode(), auth_method=AuthMethod.database, is_admin=True)
         await user.insert()
 
         click.echo(f"{'User %s: ' % username : <50}{click.style('created', fg='green')}")
