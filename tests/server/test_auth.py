@@ -148,6 +148,17 @@ async def server_with_test_slice(
     await rs.stop()
 
 
+async def create_client_for_user(client, username: str, password: str) -> protocol.Client:
+    """
+    Create a client for the given user that uses a token containing the roles
+    the user has at the moment this method is called.
+    """
+    result = await client.login(username=username, password=password)
+    assert result.code == 200
+    config.Config.set("client_rest_transport", "token", result.result["data"]["token"])
+    return protocol.Client("client")
+
+
 @pytest.mark.parametrize(
     "access_policy",
     [
@@ -665,16 +676,6 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
         )
         await user.insert()
 
-    async def create_client_for_user(username: str, password: str) -> protocol.Client:
-        """
-        Create a client for the given user that uses a token containing the roles
-        the user has at the moment this method is called.
-        """
-        result = await client.login(username=username, password=password)
-        assert result.code == 200
-        config.Config.set("client_rest_transport", "token", result.result["data"]["token"])
-        return protocol.Client("client")
-
     async def verify_role_assignment(username: str, expected_assignments: list[RoleAssignment]) -> None:
         result = await admin_client.list_roles_for_user(username=username)
         assert result.code == 200
@@ -687,9 +688,9 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
         assert result.code == 200
         assert not result.result["data"]
 
-        client = await create_client_for_user(username, password)
+        client_for_user = await create_client_for_user(client, username, password)
         for env_id in [env1_id, env2_id]:
-            result = await client.environment_get(env_id)
+            result = await client_for_user.environment_get(env_id)
             assert result.code == 403
 
     result = await admin_client.list_roles()
@@ -721,11 +722,11 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
     expected_role_assignments_username2 = [RoleAssignment(environment=env1_id, name="a_role")]
     await verify_role_assignment(username=username2, expected_assignments=expected_role_assignments_username2)
 
-    user1_client = await create_client_for_user(username=username1, password=password)
+    user1_client = await create_client_for_user(client, username=username1, password=password)
     for env_id in [env1_id, env2_id]:
         result = await user1_client.list_notifications(tid=env_id)
         assert result.code == 200
-    user2_client = await create_client_for_user(username=username2, password=password)
+    user2_client = await create_client_for_user(client, username=username2, password=password)
     for env_id in [env1_id, env2_id]:
         result = await user2_client.list_notifications(tid=env_id)
         assert result.code == (200 if env_id == env1_id else 403)
@@ -746,11 +747,11 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
     assert result.code == 200
     assert result.result["data"] == ["a_role"]
 
-    user1_client = await create_client_for_user(username=username1, password=password)
+    user1_client = await create_client_for_user(client, username=username1, password=password)
     for env_id in [env1_id, env2_id]:
         result = await user1_client.list_notifications(tid=env_id)
         assert result.code == (200 if env_id == env1_id else 403)
-    user2_client = await create_client_for_user(username=username2, password=password)
+    user2_client = await create_client_for_user(client, username=username2, password=password)
     for env_id in [env1_id, env2_id]:
         result = await user2_client.list_notifications(tid=env_id)
         assert result.code == 403
@@ -895,3 +896,57 @@ async def test_synchronization_roles_with_db(server: protocol.Server, client, as
     result = await client.list_roles()
     assert result.code == 200
     assert result.result["data"] == ["role_a", "role_b", "role_c"]
+
+
+@pytest.mark.parametrize(
+    "access_policy",
+    [
+        """
+        package policy
+
+        default allow := false
+
+        # Users marked as is-admin can execute any API endpoint.
+        allow if {
+            input.token["urn:inmanta:is_admin"]
+        }
+        """.strip()
+    ],
+)
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
+@pytest.mark.parametrize("enable_auth", [True])
+async def test_is_admin_role(server: protocol.Server, client: protocol.Client) -> None:
+    admin_user = "admin"
+    regular_user = "user"
+    for username in [admin_user, regular_user]:
+        user = data.User(
+            username=username,
+            password_hash=nacl.pwhash.str(username.encode()).decode(),
+            auth_method=AuthMethod.database,
+            is_admin=(username == "admin"),
+        )
+        await user.insert()
+
+    admin_client = await create_client_for_user(client, username=admin_user, password=admin_user)
+
+    user_client = await create_client_for_user(client, username=regular_user, password=regular_user)
+    result = await user_client.environment_list()
+    assert result.code == 403
+
+    result = await admin_client.set_is_admin(username=regular_user, is_admin=True)
+    assert result.code == 200
+
+    user_client = await create_client_for_user(client, username=regular_user, password=regular_user)
+    result = await user_client.environment_list()
+    assert result.code == 200
+
+    result = await admin_client.set_is_admin(username=regular_user, is_admin=False)
+    assert result.code == 200
+
+    user_client = await create_client_for_user(client, username=regular_user, password=regular_user)
+    result = await user_client.environment_list()
+    assert result.code == 403
+
+    result = await admin_client.set_is_admin(username="non_existing_user", is_admin=True)
+    assert result.code == 400
+

@@ -1562,6 +1562,14 @@ def set_password(username: str, password: str) -> None:
     """
 
 
+@auth(auth_label=const.AuthorizationLabel.ROLE_IS_ADMIN, read_only=False)
+@typedmethod(path="/is_admin", operation="PATCH", client_types=[ClientType.api], api_version=2)
+def set_is_admin(username: str, is_admin: bool) -> None:
+    """
+    Set whether the given user is an admin or not.
+    """
+
+
 @auth(auth_label=const.AuthorizationLabel.ROLES_READ, read_only=True)
 @typedmethod(path="/role", operation="GET", client_types=[ClientType.api], api_version=2)
 def list_roles() -> list[str]:

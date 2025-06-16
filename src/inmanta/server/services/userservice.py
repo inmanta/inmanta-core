@@ -124,6 +124,7 @@ class UserService(server_protocol.ServerSlice):
         custom_claims: Mapping[str, str | list[str] | Mapping[str, str]] = {
             "sub": username,
             const.INMANTA_ROLES_URN: {str(r.environment): r.name for r in role_assignments},
+            const.INMANTA_IS_ADMIN_URN: user.is_admin,
         }
         token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims=custom_claims)
         return common.ReturnValue(
@@ -181,3 +182,10 @@ class UserService(server_protocol.ServerSlice):
             await data.Role.unassign_role_from_user(username, model.RoleAssignment(environment=environment, name=role))
         except KeyError:
             raise exceptions.BadRequest(f"Role {role} (environment={environment}) is not assigned to user {username}")
+
+    @protocol.handle(protocol.methods_v2.set_is_admin)
+    async def set_is_admin(self, username: str, is_admin: bool) -> None:
+        try:
+            await data.User.set_is_admin(username=username, is_admin=is_admin)
+        except KeyError:
+            raise exceptions.BadRequest(f"No user exists with username {username}.")

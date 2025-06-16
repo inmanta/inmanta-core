@@ -778,6 +778,7 @@ class User(BaseModel):
 
     username: str
     auth_method: AuthMethod
+    is_admin: bool
 
 
 class CurrentUser(BaseModel):
