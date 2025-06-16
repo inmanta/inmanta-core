@@ -65,6 +65,7 @@ class Forbidden(BaseHttpException):
 
         super().__init__(403, msg, details)
 
+
 class UnauthorizedException(BaseHttpException):
     """
     An exception raised when access to this resource is unauthorized
