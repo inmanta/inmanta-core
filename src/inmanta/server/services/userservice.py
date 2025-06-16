@@ -115,11 +115,11 @@ class UserService(server_protocol.ServerSlice):
         invalid_username_password_msg = "Invalid username or password"
         user = await data.User.get_one(username=username)
         if not user or not user.password_hash:
-            raise exceptions.UnauthorizedException(message=invalid_username_password_msg)
+            raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix = True)
         try:
             nacl.pwhash.verify(user.password_hash.encode(), password.encode())
         except nacl.exceptions.InvalidkeyError:
-            raise exceptions.UnauthorizedException(message=invalid_username_password_msg)
+            raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix = True)
 
         role_assignments: list[model.RoleAssignment] = await data.Role.get_roles_for_user(username)
         custom_claims: Mapping[str, str | list[str] | Mapping[str, str]] = {

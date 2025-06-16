@@ -895,3 +895,28 @@ async def test_synchronization_roles_with_db(server: protocol.Server, client, as
     result = await client.list_roles()
     assert result.code == 200
     assert result.result["data"] == ["role_a", "role_b", "role_c"]
+
+
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
+@pytest.mark.parametrize("enable_auth", [True])
+async def test_login_failed(server, client) -> None:
+    """
+    Ensure that a meaningful error message is returned when incorrect
+    credentials are provided to the login endpoint.
+    """
+    user = data.User(
+        username="admin",
+        password_hash=nacl.pwhash.str("admin".encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    # Invalid username
+    result = await client.login(username="test", password="test")
+    assert result.code == 401
+    assert "Invalid username or password" == result.result["message"]
+
+    # Invalid password
+    result = await client.login(username="admin", password="test")
+    assert result.code == 401
+    assert "Invalid username or password" == result.result["message"]
