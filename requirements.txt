@@ -13,7 +13,7 @@ docstring-parser==0.16
 # documentation
 email-validator==2.2.0
 furo==2024.8.6
-graphviz==0.20.3
+graphviz==0.21
 inmanta-dev-dependencies==2.167.0
 inmanta-module-std
 inmanta-sphinx==2.3.0
