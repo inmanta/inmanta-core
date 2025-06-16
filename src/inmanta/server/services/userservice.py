@@ -121,7 +121,7 @@ class UserService(server_protocol.ServerSlice):
             raise exceptions.UnauthorizedException()
 
         role_assignments: list[model.RoleAssignment] = await data.Role.get_roles_for_user(username)
-        custom_claims: Mapping[str, str | list[str] | Mapping[str, str]] = {
+        custom_claims: Mapping[str, str | bool | list[str] | Mapping[str, str]] = {
             "sub": username,
             const.INMANTA_ROLES_URN: {str(r.environment): r.name for r in role_assignments},
             const.INMANTA_IS_ADMIN_URN: user.is_admin,
