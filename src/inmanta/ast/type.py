@@ -338,6 +338,10 @@ class OrReferenceType(Type, SupportsReferenceType):
         else:
             return self.reference_type.to_python(instance)
 
+    def type_string(self) -> str:
+        # unfortunately, this type is used (by necessity) for attribute types.
+        return self.element_type.type_string()
+
     def type_string_internal(self) -> str:
         element = self.element_type.type_string()
         return f"Reference[{element}] | {element}"
