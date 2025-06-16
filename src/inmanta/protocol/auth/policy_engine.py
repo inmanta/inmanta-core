@@ -56,7 +56,11 @@ policy_engine_log_level = config.Option(
     is_opa_log_level,
 )
 path_opa_executable = config.Option(
-    "policy_engine", "executable", "/opt/inmanta/bin/opa", "Path to the executable that runs the Open Policy Agent.", config.is_str
+    "policy_engine",
+    "executable",
+    "/opt/inmanta/bin/opa",
+    "Path to the executable that runs the Open Policy Agent.",
+    config.is_str,
 )
 
 
