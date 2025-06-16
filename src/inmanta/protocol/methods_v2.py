@@ -1567,6 +1567,9 @@ def set_password(username: str, password: str) -> None:
 def set_is_admin(username: str, is_admin: bool) -> None:
     """
     Set whether the given user is an admin or not.
+
+    :param username: The username of the user for which the admin status has to be updated.
+    :param is_admin: True iff the given user should be an admin user.
     """
 
 
