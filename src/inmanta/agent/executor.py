@@ -564,7 +564,7 @@ class Executor(abc.ABC):
     """
 
     # Maps inmanta module names to the map of their python modules that failed during installation.
-    failed_modules: FailedInmantaModules
+    failed_modules: "FailedInmantaModules"
 
     @abc.abstractmethod
     async def execute(

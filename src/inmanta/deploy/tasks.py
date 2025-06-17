@@ -103,7 +103,7 @@ class Task(abc.ABC):
         if inmanta_module_name in my_executor.failed_modules:
             raise ModuleLoadingException(
                 agent_name=agent_name,
-                failed_modules={k: v for k, v in my_executor.failed_modules.items() if k == inmanta_module_name},
+                failed_modules=my_executor.failed_modules,
             )
         return my_executor
 
@@ -147,7 +147,6 @@ class Deploy(Task):
             # We collect state here to report back in the finally block.
             # This try-finally block ensures we report at the end of the task.
             deploy_report: DeployReport
-            failed_modules_warning_log_line: data.LogLine | None = None
 
             try:
                 # Dependencies are always set when calling deploy_start
@@ -167,7 +166,7 @@ class Deploy(Task):
                         version=version,
                     )
                 except ModuleLoadingException as e:
-                    log_line = e.create_log_line_for_failed_modules()
+                    log_line = e.create_log_line_for_failed_modules(verbose_message=False)
                     log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
                     deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
                     return
@@ -197,7 +196,10 @@ class Deploy(Task):
                     # We don't raise it since the executor was successfully created for this resource
                     # but we want to log a warning  because not all handler code was successfully loaded.
                     exception = ModuleLoadingException(agent_name=agent, failed_modules=my_executor.failed_modules)
-                    failed_modules_warning_log_line = exception.create_log_line_for_failed_modules(level=logging.WARNING)
+                    failed_modules_warning_log_line = exception.create_log_line_for_failed_modules(level=logging.WARNING, verbose_message=True)
+
+                    failed_modules_warning_log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
+
 
                 assert reason is not None  # Should always be set for deploy
                 # Deploy
@@ -227,8 +229,6 @@ class Deploy(Task):
             finally:
                 # We signaled start, so we signal end
                 try:
-                    if failed_modules_warning_log_line:
-                        deploy_report.messages.append(failed_modules_warning_log_line)
                     await task_manager.deploy_done(deploy_intent, deploy_report)
                 except Exception:
                     LOGGER.error(
@@ -338,18 +338,29 @@ class ModuleLoadingException(Exception):
     def create_log_line_for_failed_modules(
         self,
         level: int = logging.ERROR,
+        *,
+        verbose_message: bool = False
     ) -> data.LogLine:
         """
         Helper method to cleanly display module loading errors in the web console.
         """
-        failed_modules = {}
-        for _, failed_modules_data in self.failed_modules.items():
-            for python_module, exception_text in failed_modules_data.items():
-                failed_modules[python_module] = str(exception_text)
+        formatted_module_loading_errors = ""
 
+        N_FAILURES = sum(len(v) for v in  self.failed_modules.values())
+        failure_index = 1
+
+        for _, failed_modules_data in self.failed_modules.items():
+            for python_module, exception in failed_modules_data.items():
+                formatted_module_loading_errors+=f"Error {failure_index}/{N_FAILURES}:\n"
+                formatted_module_loading_errors+=f"In module {python_module}:\n"
+                formatted_module_loading_errors+=exception.get_message()
+                failure_index += 1
+        message = "Agent %s failed loading the following modules: %s." % (self.agent_name, ", ".join(self.failed_modules.keys()))
+        if verbose_message:
+            message += f"\n{formatted_module_loading_errors}"
         return data.LogLine.log(
             level=level,
-            msg="Agent %s failed loading the following modules: %s." % (self.agent_name, ", ".join(self.failed_modules.keys())),
+            msg=message,
             timestamp=None,
-            errors=failed_modules,
+            errors=formatted_module_loading_errors,
         )
