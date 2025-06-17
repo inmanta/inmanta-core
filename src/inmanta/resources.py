@@ -221,7 +221,7 @@ class ReferenceSubCollector:
             case _:
                 pass
 
-    def add_reference(self, path: str, reference: "references.Reference[PrimitiveTypes]") -> None:
+    def add_reference(self, path: str, reference: "references.Reference[references.PrimitiveTypes]") -> None:
         """Add a new attribute map to a value reference that we found at the given path.
 
         :param path: The path where the value needs to be inserted
