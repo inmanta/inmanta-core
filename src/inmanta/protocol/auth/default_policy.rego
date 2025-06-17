@@ -35,23 +35,23 @@ allow if {
 
 read_only_labels := {
     "agent.read",
-    "compilereport.read",
+    "compile-report.read",
     "compiler.status.read",
     "desired-state.read",
-    "discovered_resources.read",
+    "discovered-resources.read",
     "docs.read",
     "dryrun.read",
     "environment.read",
-    "environment.settings.read",
+    "environment.setting.read",
     "fact.read",
-    "files.read",
+    "file.read",
     "graphql.read",
     "metrics.read",
     "notification.read",
     "parameter.read",
-    "pip_config.read",
+    "pip-config.read",
     "project.read",
-    "resources.read",
+    "resource.read",
     "status.read",
     "lsm.callback.read",
     "lsm.catalog.read",
@@ -59,7 +59,6 @@ read_only_labels := {
     "lsm.instance.read",
     "lsm.order.read",
     "support.support-archive.read",
-    "graphql.read",
 }
 
 allow if {
@@ -117,7 +116,7 @@ allow if {
 admin_specific_labels := {
     "desired-state.write",
     "environment.modify",
-    "environment.settings.write",
+    "environment.setting.write",
     "lsm.callback.write",
     "lsm.catalog.write",
     "lsm.instance.migrate",

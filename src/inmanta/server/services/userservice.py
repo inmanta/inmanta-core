@@ -123,11 +123,11 @@ class UserService(server_protocol.ServerSlice):
             raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
 
         role_assignments: list[model.RoleAssignment] = await data.Role.get_roles_for_user(username)
-        env_to_roles_dct = defaultdict(list)
+        env_to_roles_dct: dict[str, list[str]] = defaultdict(list)
         for assignment in role_assignments:
             env_to_roles_dct[str(assignment.environment)].append(assignment.name)
 
-        custom_claims: Mapping[str, str | list[str] | Mapping[str, str]] = {
+        custom_claims: Mapping[str, str | bool | Mapping[str, list[str]]] = {
             "sub": username,
             const.INMANTA_ROLES_URN: env_to_roles_dct,
             const.INMANTA_IS_ADMIN_URN: user.is_admin,
