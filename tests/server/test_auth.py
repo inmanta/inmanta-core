@@ -29,7 +29,7 @@ import utils
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod, RoleAssignment
 from inmanta.protocol import common, rest
-from inmanta.protocol.auth import decorators, policy_engine, providers, auth
+from inmanta.protocol.auth import auth, decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.server import config as server_config
 from inmanta.server import protocol

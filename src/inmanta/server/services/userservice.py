@@ -18,8 +18,8 @@ Contact: code@inmanta.com
 
 import logging
 import uuid
-from collections.abc import Mapping
 from collections import defaultdict
+from collections.abc import Mapping
 
 import asyncpg
 
