@@ -445,7 +445,7 @@ class AuthorizationLabel(str, Enum):
     USER_READ = "user.read"
     USER_WRITE = "user.write"
     USER_CHANGE_PASSWORD = "user.change-password"
-    COMPILEREPORT_READ = "compilereport.read"
+    COMPILE_REPORT_READ = "compile-report.read"
     COMPILER_EXECUTE = "compiler.execute"
     COMPILER_STATUS_READ = "compiler.status.read"
     DEPLOY = "deploy"

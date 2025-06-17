@@ -845,7 +845,7 @@ def diff(file_id_1: str, file_id_2: str):
 # Get a list of compile reports
 
 
-@auth(auth_label=const.AuthorizationLabel.COMPILEREPORT_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.COMPILE_REPORT_READ, read_only=True, environment_param="tid")
 @method(path="/compilereport", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def get_reports(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] = None, limit: Optional[int] = None):
     """
@@ -862,7 +862,7 @@ def get_reports(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] 
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.COMPILEREPORT_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.COMPILE_REPORT_READ, read_only=True)
 @method(path="/compilereport/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_report(id: uuid.UUID):
     """

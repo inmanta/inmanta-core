@@ -579,7 +579,7 @@ def get_db_status() -> DataBaseReport:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.COMPILEREPORT_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.COMPILE_REPORT_READ, read_only=True)
 @typedmethod(
     path="/compiledata/<id>",
     operation="GET",
@@ -905,7 +905,7 @@ def get_fact(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr, id: uuid.UUID) ->
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.COMPILEREPORT_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.COMPILE_REPORT_READ, read_only=True, environment_param="tid")
 @typedmethod(path="/compilereport", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def get_compile_reports(
     tid: uuid.UUID,
@@ -965,7 +965,7 @@ def get_compile_reports(
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.COMPILEREPORT_READ, read_only=True, environment_param="tid")
+@auth(auth_label=const.AuthorizationLabel.COMPILE_REPORT_READ, read_only=True, environment_param="tid")
 @typedmethod(
     path="/compilereport/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
