@@ -677,7 +677,6 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return f"{const.PLUGINS_PACKAGE}.{module_name}"
 
     def log_pre_install_information(self, module_name: str, module_spec: list[InmantaModuleRequirement]) -> None:
-        # TODO: we lose quite some logging with bulk installs
         LOGGER.debug("Installing module %s (v2) %s.", module_name, super()._format_constraints(module_name, module_spec))
 
     def take_v2_modules_snapshot(self, header: Optional[str] = None) -> dict[str, packaging.version.Version]:
@@ -1498,7 +1497,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         should freeze lists. The following syntax should be used to specify a rule
         `<first-type>.<relation-name> before <then-type>.<relation-name>`. With this rule in
         place, the compiler will first freeze `first-type.relation-name` and only then `then-type.relation-name`.
-    :param strict_deps_check: Determines whether the compiler or inmanta tools that install/update module dependencies,
+    :param strict_deps_check: [Deprecated] Determines whether the compiler or inmanta tools that install/update module dependencies,
         should check the virtual environment for version conflicts in a strict way or not.
         A strict check means that all transitive dependencies will be checked for version conflicts and that any violation will
         result in an error.
@@ -1833,6 +1832,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         main_file: str = "main.cf",
         venv_path: Optional[Union[str, "env.VirtualEnv"]] = None,
         attach_cf_cache: bool = True,
+        # TODO: can this go or keep for backwards compat?
         strict_deps_check: Optional[bool] = None,
     ) -> None:
         """
@@ -1896,11 +1896,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.autostd = autostd
         if attach_cf_cache:
             cache_manager.attach_to_project(path)
-
-        if strict_deps_check is not None:
-            self.strict_deps_check = strict_deps_check
-        else:
-            self.strict_deps_check = self._metadata.strict_deps_check
 
         self._complete_ast: Optional[tuple[list[Statement], list[BasicBlock]]] = None
         # Cache for the complete ast
@@ -2008,8 +2003,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self.load_module_recursive(bypass_module_cache=bypass_module_cache)
 
-        self.verify()
-
     def load(self, install: bool = False) -> None:
         """
         Load this project's AST and plugins.
@@ -2024,7 +2017,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             self.get_complete_ast()
             self.loaded = True
             start = time()
-            self.verify()
             self.load_plugins()
             end = time()
             LOGGER.debug("Plugin loading took %0.03f seconds", end - start)
@@ -2337,129 +2329,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         for module in self.modules.values():
             module.load_plugins()
-
-    def verify(self) -> None:
-        """
-        Verifies the integrity of the loaded project, with respect to both inter-module requirements and the Python environment.
-        """
-        LOGGER.info("verifying project")
-        self.verify_modules_cache()
-        self.verify_module_version_compatibility()
-        self.verify_python_requires()
-
-    def verify_python_environment(self) -> None:
-        """
-        Verifies the integrity of the loaded project with respect to the Python environment, over which the project has no
-        direct control.
-        """
-        self.verify_modules_cache()
-        self.verify_python_requires()
-
-    def verify_modules_cache(self) -> None:
-        if not self._modules_cache_is_valid():
-            raise CompilerException(
-                "Not all modules were loaded correctly as a result of transitive dependencies. A recompile should load them"
-                " correctly."
-            )
-
-    def verify_module_version_compatibility(self) -> None:
-        """
-        Check if all the required modules for this module have been loaded. Assumes the modules cache is valid and up to date.
-
-        :raises CompilerException: When one or more of the requirements of the project is not satisfied.
-        """
-        requirements: dict[str, list[InmantaModuleRequirement]] = self.collect_requirements()
-
-        exc_message = ""
-        for name, spec in requirements.items():
-            if name not in self.modules:
-                # the module is in the project requirements but it is not part of the loaded AST so there is no need to verify
-                # its compatibility
-                LOGGER.warning("Module %s is present in requires but it is not used by the model.", name)
-                continue
-            module = self.modules[name]
-            current_version = Version(version=str(module.version))
-            for r in spec:
-                if current_version not in r:
-                    exc_message += f"\n\t* requirement {r} on module {name} not fulfilled, now at version {current_version}."
-
-        if exc_message:
-            exc_message = f"The following requirements were not satisfied:{exc_message}"
-            if self.metadata.install_mode == InstallMode.master:
-                exc_message += (
-                    "\nThe release type of the project is set to 'master'. Set it to a value that is "
-                    "appropriate for the version constraint or remove the version constraint. After that, "
-                    "run `inmanta project update` to resolve this issue."
-                )
-            else:
-                exc_message += "\nRun `inmanta project update` to resolve this."
-            raise CompilerException(exc_message)
-
-    def verify_python_requires(self) -> None:
-        """
-        Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
-        """
-        if self.strict_deps_check:
-            constraints: list[inmanta.util.CanonicalRequirement] = inmanta.util.parse_requirements(
-                self.collect_python_requirements()
-            )
-            env.process_env.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
-        else:
-            if not env.process_env.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
-                raise CompilerException(
-                    "Not all installed modules are compatible: requirements conflicts were found. Please resolve any conflicts"
-                    " before attempting another compile. Run `pip check` to check for any incompatibilities."
-                )
-
-    def _modules_cache_is_valid(self) -> bool:
-        """
-        Verify the modules cache after changes have been made to the Python environment. Returns False if any modules
-        somehow got installed as another generation or with another version as the one that has been loaded into the AST.
-
-        When this situation occurs, the compiler state is invalid and the compile needs to either abort or attempt recovery.
-        The modules cache, from which the AST was loaded, is out of date, therefore at least a partial AST regeneration
-        would be required to recover.
-
-        Scenario's that could trigger this state:
-            1.
-                - latest v2 mod a is installed
-                - some v1 mod depends on v2 mod b, which depends on a<2
-                - during loading, after a has been loaded, mod b is installed
-                - Python downgrades transitive dependency a to a<2
-            2.
-                - latest v2 mod a is installed
-                - some v1 (or even v2 when in install mode) mod depends on a<2
-                - after loading, during plugin requirements install, `pip install a<2` is run
-                - Python downgrades direct dependency a to a<2
-        In both cases, a<2 might be a valid version, but since it was installed transitively after the compiler has loaded
-        module a, steps would need to be taken to take this change into account.
-        """
-        result: bool = True
-        for name, module in self.modules.items():
-            installed: Optional[ModuleV2] = self.module_source.get_installed_module(self, name)
-            if installed is None:
-                if module.GENERATION == ModuleGeneration.V1:
-                    # Loaded module as V1 and no installed V2 module found: no issues with this module
-                    continue
-                raise CompilerException(
-                    f"Invalid state: compiler has loaded module {name} as v2 but it is nowhere to be found."
-                )
-            else:
-                if module.GENERATION == ModuleGeneration.V1:
-                    LOGGER.warning(
-                        "Compiler has loaded module %s as v1 but it has later been installed as v2 as a side effect.", name
-                    )
-                    result = False
-                elif installed.version != module.version:
-                    LOGGER.warning(
-                        "Compiler has loaded module %s==%s but %s==%s has later been installed as a side effect.",
-                        name,
-                        module.version,
-                        name,
-                        installed.version,
-                    )
-                    result = False
-        return result
 
     def is_using_virtual_env(self) -> bool:
         return self.virtualenv.is_using_virtual_env()
