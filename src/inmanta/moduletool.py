@@ -399,7 +399,7 @@ compatible with the dependencies specified by the updated modules.
         else:
             my_project = project
 
-        my_project.install_modules(update_dependencies=True)
+        my_project.install_modules(update=True)
 
 
 @stable_api

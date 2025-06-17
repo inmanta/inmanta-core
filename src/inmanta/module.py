@@ -1962,13 +1962,12 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
-    # TODO: name update_dependencies implies only dependencies, not modules
-    def install_modules(self, *, bypass_module_cache: bool = False, update_dependencies: bool = False) -> None:
+    def install_modules(self, *, bypass_module_cache: bool = False, update: bool = False) -> None:
         """
         Installs all modules.
 
         :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
-        :param update_dependencies: Update all Python dependencies (recursive) to their latest versions.
+        :param update: Update all modules and their Python dependencies (recursive) to their latest versions.
         """
         if not self.is_using_virtual_env():
             self.use_virtual_env()
@@ -1991,7 +1990,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                     dependencies,
                     constraint_files=[fd.name],
                     config=self.metadata.pip,
-                    upgrade=update_dependencies,
+                    upgrade=update,
                     upgrade_strategy=env.PipUpgradeStrategy.EAGER,
                 )
             self.module_source.log_snapshot_difference_v2_modules(
