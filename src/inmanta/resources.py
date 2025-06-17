@@ -254,9 +254,6 @@ class ReferenceCollector(ReferenceSubCollector):
             ).serialize()
         )
 
-    def collect_references(self, value: object, path: str) -> object:
-        return collect_references(self, value, path)
-
 
 def collect_references(value_reference_collector: ReferenceSubCollector | None, value: object, path: str) -> object:
     """Collect value references. This method also ensures that there are no values in the resources that are not serializable.
