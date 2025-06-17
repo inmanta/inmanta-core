@@ -1048,7 +1048,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                         msg=(
                             f"Value {value!r} for argument {arg.arg_name} of plugin "
                             f"{self.get_full_name()} has incompatible type."
-                            f" Expected type: {arg.resolved_type}"
+                            f" Expected type: {arg.resolved_type.type_string_internal()}"
                         ),
                         cause=e,
                     )
@@ -1085,7 +1085,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                         msg=(
                             f"Value {value} for argument {kwarg.arg_name} of plugin"
                             f" {self.get_full_name()} has incompatible type."
-                            f" Expected type: {kwarg.resolved_type}"
+                            f" Expected type: {kwarg.resolved_type.type_string_internal()}"
                         ),
                         cause=e,
                     )
@@ -1161,7 +1161,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 stmt=None,
                 msg=(
                     f"Return value {value} of plugin {self.get_full_name()} has incompatible type."
-                    f" Expected type: {self.return_type.resolved_type}"
+                    f" Expected type: {self.return_type.resolved_type.type_string_internal()}"
                 ),
                 cause=e,
             )
@@ -1209,7 +1209,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 stmt=None,
                 msg=(
                     f"Return value {value} of plugin {self.get_full_name()} has incompatible type."
-                    f" Expected type: {self.return_type.resolved_type}"
+                    f" Expected type: {self.return_type.resolved_type.type_string_internal()}"
                 ),
                 cause=e,
             )
