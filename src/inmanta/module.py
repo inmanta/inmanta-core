@@ -637,7 +637,6 @@ class ModuleSource(Generic[TModule]):
         return module_name
 
 
-# TODO: are these classes still used? Probably, at least by pytest-inmanta etc. Consider which methods / args can be removed.
 @stable_api
 class ModuleV2Source(ModuleSource["ModuleV2"]):
     def __init__(self, urls: Sequence[str] = []) -> None:
@@ -1746,7 +1745,6 @@ class ModuleLike(ABC, Generic[TMetadata]):
         """
         raise NotImplementedError()
 
-    # TODO: strict vs all distinction no longer relevant?
     def get_strict_python_requirements_as_list(self) -> list[str]:
         """
         Returns the strict python requirements specified by this module like, meaning all Python requirements excluding those on
@@ -2419,16 +2417,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             return [InmantaModuleRequirement.parse(name)]
 
         return {name: get_spec(name) for name in imports}
-
-    def collect_python_requirements(self) -> Sequence[str]:
-        """
-        Collect the list of all python requirements of all modules in this project, excluding those on inmanta modules.
-        """
-        reqs = chain(
-            chain.from_iterable([mod.get_strict_python_requirements_as_list() for mod in self.modules.values()]),
-            self.get_strict_python_requirements_as_list(),
-        )
-        return list(set(reqs))
 
     def get_root_namespace(self) -> Namespace:
         return self.root_ns

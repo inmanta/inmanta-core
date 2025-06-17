@@ -91,6 +91,7 @@ class CommandDeprecationWarning(inmanta.warnings.InmantaWarning, FutureWarning):
     pass
 
 
+# TODO: decprecate
 def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
     """
     Add the --no-strict-deps-check and --strict-deps-check options to the given parser.
