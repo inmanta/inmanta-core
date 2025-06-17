@@ -1510,7 +1510,7 @@ def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.METRICS_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.USER_READ, read_only=True)
 @typedmethod(path="/user", operation="GET", client_types=[ClientType.api], api_version=2)
 def list_users() -> list[model.User]:
     """List all users
@@ -1518,7 +1518,7 @@ def list_users() -> list[model.User]:
     :return: A list of all users"""
 
 
-@auth(auth_label=const.AuthorizationLabel.METRICS_READ, read_only=True)
+@auth(auth_label=const.AuthorizationLabel.USER_READ, read_only=True)
 @typedmethod(path="/current_user", operation="GET", client_types=[ClientType.api], api_version=2)
 def get_current_user() -> model.CurrentUser:
     """Get the current logged in user (based on the provided JWT) and server auth settings
@@ -1527,7 +1527,7 @@ def get_current_user() -> model.CurrentUser:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.AUTH_ADMIN, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.USER_WRITE, read_only=False)
 @typedmethod(path="/user/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def delete_user(username: str) -> None:
     """Delete a user from the system with given username.
@@ -1538,7 +1538,7 @@ def delete_user(username: str) -> None:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.AUTH_ADMIN, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.USER_WRITE, read_only=False)
 @typedmethod(path="/user", operation="POST", client_types=[ClientType.api], api_version=2)
 def add_user(username: str, password: str) -> model.User:
     """Add a new user to the system
@@ -1550,7 +1550,7 @@ def add_user(username: str, password: str) -> model.User:
     """
 
 
-@auth(auth_label=const.AuthorizationLabel.AUTH_CHANGE_PASSWORD, read_only=False)
+@auth(auth_label=const.AuthorizationLabel.USER_CHANGE_PASSWORD, read_only=False)
 @typedmethod(path="/user/<username>/password", operation="PATCH", client_types=[ClientType.api], api_version=2)
 def set_password(username: str, password: str) -> None:
     """Change the password of a user
