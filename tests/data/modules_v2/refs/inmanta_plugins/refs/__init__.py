@@ -146,7 +146,6 @@ class DictMade(Reference[str]):
         :param name: The name of the environment variable.
         """
         super().__init__()
-        breakpoint()
         self.name = name
 
     def resolve(self, logger: LoggerABC) -> str:

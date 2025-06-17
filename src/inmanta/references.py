@@ -333,11 +333,8 @@ class ReferenceLike:
                 case str() | int() | float() | bool() | None:
                     arguments.append(LiteralArgument(name=name, value=value))
                 case dict() | list():
-                    # TODO
-                    from inmanta.resources import ReferenceSubCollector, collect_references
-
                     collector = ReferenceSubCollector()
-                    cleaned_value = collect_references(collector, value, "")
+                    cleaned_value = inmanta.resources.collect_references(collector, value, "")
                     try:
                         if collector.references:
                             arguments.append(
@@ -583,3 +580,39 @@ def is_reference_of(instance: typing.Optional[object], type_class: type[object])
         return False
 
     return instance.get_reference_type() == type_class
+
+
+class ReferenceSubCollector:
+
+    def __init__(self) -> None:
+        self.references: dict[uuid.UUID, ReferenceModel] = {}
+        self.replacements: dict[str, ReferenceModel] = {}
+
+    def collect_reference(self, value: object) -> None:
+        """Add a value reference and recursively add any other references."""
+        match value:
+            case list():
+                for v in value:
+                    self.collect_reference(v)
+
+            case dict():
+                for k, v in value.items():
+                    self.collect_reference(v)
+
+            case Reference():
+                ref = value.serialize()
+                self.references[ref.id] = ref
+                for arg in value.arguments.values():
+                    self.collect_reference(arg)
+
+            case _:
+                pass
+
+    def add_reference(self, path: str, reference: "Reference[PrimitiveTypes]") -> None:
+        """Add a new attribute map to a value reference that we found at the given path.
+
+        :param path: The path where the value needs to be inserted
+        :param reference: The attribute reference
+        """
+        self.collect_reference(reference)
+        self.replacements[path] = reference.serialize()

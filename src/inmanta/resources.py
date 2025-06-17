@@ -195,43 +195,7 @@ class ResourceMeta(type):
 RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"}
 
 
-class ReferenceSubCollector:
-
-    def __init__(self) -> None:
-        self.references: dict[uuid.UUID, references.ReferenceModel] = {}
-        self.replacements: dict[str, references.ReferenceModel] = {}
-
-    def collect_reference(self, value: object) -> None:
-        """Add a value reference and recursively add any other references."""
-        match value:
-            case list():
-                for v in value:
-                    self.collect_reference(v)
-
-            case dict():
-                for k, v in value.items():
-                    self.collect_reference(v)
-
-            case references.Reference():
-                ref = value.serialize()
-                self.references[ref.id] = ref
-                for arg in value.arguments.values():
-                    self.collect_reference(arg)
-
-            case _:
-                pass
-
-    def add_reference(self, path: str, reference: "references.Reference[references.PrimitiveTypes]") -> None:
-        """Add a new attribute map to a value reference that we found at the given path.
-
-        :param path: The path where the value needs to be inserted
-        :param reference: The attribute reference
-        """
-        self.collect_reference(reference)
-        self.replacements[path] = reference.serialize()
-
-
-class ReferenceCollector(ReferenceSubCollector):
+class ReferenceCollector(references.ReferenceSubCollector):
     """Collect and organize all references and mutators"""
 
     def __init__(self, resource: "Resource") -> None:
@@ -258,7 +222,7 @@ class ReferenceCollector(ReferenceSubCollector):
         return collect_references(self, value, path)
 
 
-def collect_references(value_reference_collector: ReferenceSubCollector | None, value: object, path: str) -> object:
+def collect_references(value_reference_collector: references.ReferenceSubCollector | None, value: object, path: str) -> object:
     """Collect value references. This method also ensures that there are no values in the resources that are not serializable.
     This includes:
         - Unknowns
