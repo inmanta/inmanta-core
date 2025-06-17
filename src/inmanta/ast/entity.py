@@ -340,7 +340,7 @@ class Entity(NamedType, WithComment):
         return (not strict and superclass_candidate == self) or self.is_parent(superclass_candidate)
 
     def issubtype(self, other: "Type") -> bool:
-        return isinstance(other, Entity) and self.is_subclass(other, strict=False)
+        return isinstance(other, inm_Any) or isinstance(other, Entity) and self.is_subclass(other, strict=False)
 
     def issupertype(self, other: "Type") -> bool:
         if not isinstance(other, Entity):

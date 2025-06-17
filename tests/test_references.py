@@ -105,9 +105,9 @@ def test_references_in_model(
         # Test equals method
         subref = refs::create_string_reference(name="CWD")
 
-        test_ref = refs::create_all_refs_dataclass_reference(maybe_ref_value=subref)
+        test_ref = refs::dc::create_all_refs_dataclass_reference(maybe_ref_value=subref)
         # Test equals method, does not work on dataclasses
-        # test_ref = refs::create_all_refs_dataclass_reference(maybe_ref_value=refs::create_string_reference(name="CWD"))
+        # test_ref = refs::dc::create_all_refs_dataclass_reference(maybe_ref_value=refs::create_string_reference(name="CWD"))
 
         std::testing::NullResource(
             name="test",

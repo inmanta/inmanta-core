@@ -56,6 +56,7 @@ class Type(Locatable):
     types that are not relations. Instances of subclasses represent a type in the Inmanta language.
     """
 
+    # TODO: move this to Any()
     def validate(self, value: Optional[object]) -> bool:
         """
         Validate the given value to check if it satisfies the constraints associated with this type. Returns true iff
