@@ -361,6 +361,15 @@ class Entity(NamedType, WithComment):
         if not (value_definition is self or value_definition.is_subclass(self)):
             raise RuntimeException(None, f"Invalid class type for {value}, should be {self}")
 
+        # Note on references:
+        #
+        # References to dataclasses are a special case in the sense that they are represented as plain instances in the DSL.
+        # Their attributes get additional runtime validation on the boundary (see to_python()), so we can simply let them
+        # pass validation here.
+        #
+        # Even non-reference instances may contain reference attributes so they get additional runtime validation
+        # on plugin attribute access (see DynamicProxy.__getattr__). So these can be accepted here as well.
+
         return True
 
     def add_implementation(self, implement: "Implementation") -> None:

@@ -56,7 +56,6 @@ class Type(Locatable):
     types that are not relations. Instances of subclasses represent a type in the Inmanta language.
     """
 
-    # TODO: move this to Any()
     def validate(self, value: Optional[object]) -> bool:
         """
         Validate the given value to check if it satisfies the constraints associated with this type. Returns true iff
@@ -66,23 +65,15 @@ class Type(Locatable):
         to that stage. Translation-specific means that the value is definitely of this DSL type, but it can not be converted to
         the Python domain.
         """
-        # `object` / `"any"` allow all standard DSL values
-        # (and even not-officially-supported opaque values from plugin returns).
         # Special DSL values like references require an explicit annotation so we don't leak them where they aren't expected.
         # TODO(after-first-review): link ticket to do the same for Unknown
-        #
-        # References to dataclasses are even more of a special case in the sense that they are represented as plain instances
-        # in the DSL. Even non-reference instances may contain reference attributes so they get additional runtime validation
-        # on plugin attribute access (see DynamicProxy.__getattr__). So we can simply pass dataclass references along as
-        # the instances that they are in the DSL, without having to reject them here.
         if isinstance(value, references.Reference):
             raise UndeclaredReference(
                 reference=value,
+                # keep message generic, since this method is used for many types' super() call.
                 message=(
-                    "References are not allowed for values of type `object`. While the `object` Python is technically"
-                    " compatible with any value, references are considered special DSL values and are therefore guarded so"
-                    " that they don't accidentally show up where they are not expected. To work with references, explicitly"
-                    " declare support with a `object | Reference[object]` annotation."
+                    f"References are not allowed for values of type `{self.type_string_internal()}`. To work with references,"
+                    " explicitly declare support with a `... | Reference[...]` annotation."
                 ),
             )
         return True
@@ -525,6 +516,21 @@ class Any(Type):
 
     the Any class itself is neither the top nor the bottom type in the type hierarchy.
     """
+
+    def validate(self, value: Optional[object]) -> bool:
+        try:
+            return super().validate(value)
+        except UndeclaredReference as e:
+            raise UndeclaredReference(
+                reference=e.reference,
+                # custom error message for the "object" / "any" type
+                message=(
+                    "References are not allowed for values of type `object`. While the `object` Python type is technically"
+                    " compatible with any value, references are considered special DSL values and are therefore guarded so"
+                    " that they don't accidentally show up where they are not expected. To work with references,"
+                    " explicitly declare support with a `object | Reference[object]` annotation."
+                ),
+            )
 
     def corresponds_to(self, type: Type) -> bool:
         return True
