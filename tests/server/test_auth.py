@@ -29,7 +29,7 @@ import utils
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod, RoleAssignment
 from inmanta.protocol import common, rest
-from inmanta.protocol.auth import decorators, policy_engine, providers
+from inmanta.protocol.auth import decorators, policy_engine, providers, auth
 from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.server import config as server_config
 from inmanta.server import protocol
@@ -765,6 +765,50 @@ async def test_role_assignment(server: protocol.Server, client) -> None:
     result = await admin_client.list_roles()
     assert result.code == 200
     assert not result.result["data"]
+
+
+@pytest.mark.parametrize("authentication_method", [AuthMethod.database])
+@pytest.mark.parametrize("enable_auth", [True])
+async def test_multiple_roles_assigned(server: protocol.Server, client) -> None:
+    """
+    Verify that all roles are correctly set into the token.
+    """
+    env_id = uuid.UUID("11111111-1111-1111-1111-111111111111")
+    # Create client with admin privileges, that can update role assignment.
+    admin_client = utils.get_auth_client(env_to_role_dct={}, is_admin=True)
+
+    result = await admin_client.project_create(name="proj")
+    assert result.code == 200
+    project_id = result.result["data"]["id"]
+    result = await admin_client.environment_create(project_id=project_id, name="env", environment_id=env_id)
+    assert result.code == 200
+
+    # Create users
+    username = "username"
+    password = "password"
+    user = data.User(
+        username=username,
+        password_hash=nacl.pwhash.str(password.encode()).decode(),
+        auth_method=AuthMethod.database,
+    )
+    await user.insert()
+
+    result = await admin_client.create_role(name="role1")
+    assert result.code == 200
+    result = await admin_client.create_role(name="role2")
+    assert result.code == 200
+
+    result = await admin_client.assign_role(username=username, environment=env_id, role="role1")
+    assert result.code == 200
+    result = await admin_client.assign_role(username=username, environment=env_id, role="role2")
+    assert result.code == 200
+
+    result = await client.login(username=username, password=password)
+    assert result.code == 200
+    token = result.result["data"]["token"]
+    claims, _ = auth.decode_token(token)
+    assert set(claims[const.INMANTA_ROLES_URN][str(env_id)]) == {"role1", "role2"}
+    assert not claims[const.INMANTA_IS_ADMIN_URN]
 
 
 @pytest.mark.parametrize("enable_auth", [True])
