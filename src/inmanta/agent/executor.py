@@ -27,6 +27,7 @@ import logging
 import os
 import pathlib
 import shutil
+import traceback
 import typing
 import uuid
 from collections.abc import Mapping
@@ -49,9 +50,6 @@ from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
-
-FailedModules: typing.TypeAlias = dict[str, Exception]
-FailedInmantaModules: typing.TypeAlias = dict[str, FailedModules]
 
 
 class AgentInstance(abc.ABC):
@@ -674,3 +672,17 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         Any threadpools that need to be closed can be handed of to the parent via thread_pool_finalizer
         """
         pass
+
+# TODO move ModuleImportException + FailedInmantaModules + FailedModules somewhere else ?
+class ModuleImportException(Exception):
+
+    def __init__(self, base_exp: Exception, mod_name: str):
+        self.message = f"Failed to import module source {mod_name}:\n{str(base_exp)}.\n"
+        self.tb = "".join(traceback.format_tb(base_exp.__traceback__))
+
+    def get_message(self) -> str:
+        return self.message + self.tb
+
+
+FailedModules: typing.TypeAlias = dict[str, ModuleImportException]
+FailedInmantaModules: typing.TypeAlias = dict[str, FailedModules]

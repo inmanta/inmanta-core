@@ -98,7 +98,7 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport
+from inmanta.agent.executor import DeployReport, FailedInmantaModules, GetFactReport, ModuleImportException
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
 from inmanta.protocol.ipc_light import (
@@ -444,12 +444,11 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
             except Exception as e:
                 logger.info("Failed to import source: %s", module_source.metadata.name, exc_info=True)
                 inmanta_module_name = module_source.get_inmanta_module_name()
-                failed[inmanta_module_name][module_source.metadata.name] = Exception(
-                    f"Failed to import module source {module_source.metadata.name}: {e}."
-                    f"\n{''.join(traceback.format_tb(e.__traceback__))}"
-                )
+                failed[inmanta_module_name][module_source.metadata.name] = ModuleImportException(e, module_source.metadata.name)
+
 
         return failed
+
 
 
 class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
