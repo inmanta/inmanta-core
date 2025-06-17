@@ -51,7 +51,6 @@ from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 LOGGER = logging.getLogger(__name__)
 
 
-
 class AgentInstance(abc.ABC):
     eventloop: asyncio.AbstractEventLoop
     sessionid: uuid.UUID
@@ -672,6 +671,7 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
         Any threadpools that need to be closed can be handed of to the parent via thread_pool_finalizer
         """
         pass
+
 
 # TODO move ModuleImportException + FailedInmantaModules + FailedModules somewhere else ?
 class ModuleImportException(Exception):

@@ -196,10 +196,13 @@ class Deploy(Task):
                     # We don't raise it since the executor was successfully created for this resource
                     # but we want to log a warning  because not all handler code was successfully loaded.
                     exception = ModuleLoadingException(agent_name=agent, failed_modules=my_executor.failed_modules)
-                    failed_modules_warning_log_line = exception.create_log_line_for_failed_modules(level=logging.WARNING, verbose_message=True)
+                    failed_modules_warning_log_line = exception.create_log_line_for_failed_modules(
+                        level=logging.WARNING, verbose_message=True
+                    )
 
-                    failed_modules_warning_log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
-
+                    failed_modules_warning_log_line.write_to_logger_for_resource(
+                        agent, executor_resource_details.rvid, exc_info=True
+                    )
 
                 assert reason is not None  # Should always be set for deploy
                 # Deploy
@@ -335,27 +338,25 @@ class ModuleLoadingException(Exception):
         self.agent_name = agent_name
         super().__init__(self.msg)
 
-    def create_log_line_for_failed_modules(
-        self,
-        level: int = logging.ERROR,
-        *,
-        verbose_message: bool = False
-    ) -> data.LogLine:
+    def create_log_line_for_failed_modules(self, level: int = logging.ERROR, *, verbose_message: bool = False) -> data.LogLine:
         """
         Helper method to cleanly display module loading errors in the web console.
         """
         formatted_module_loading_errors = ""
 
-        N_FAILURES = sum(len(v) for v in  self.failed_modules.values())
+        N_FAILURES = sum(len(v) for v in self.failed_modules.values())
         failure_index = 1
 
         for _, failed_modules_data in self.failed_modules.items():
             for python_module, exception in failed_modules_data.items():
-                formatted_module_loading_errors+=f"Error {failure_index}/{N_FAILURES}:\n"
-                formatted_module_loading_errors+=f"In module {python_module}:\n"
-                formatted_module_loading_errors+=exception.get_message()
+                formatted_module_loading_errors += f"Error {failure_index}/{N_FAILURES}:\n"
+                formatted_module_loading_errors += f"In module {python_module}:\n"
+                formatted_module_loading_errors += exception.get_message()
                 failure_index += 1
-        message = "Agent %s failed loading the following modules: %s." % (self.agent_name, ", ".join(self.failed_modules.keys()))
+        message = "Agent %s failed loading the following modules: %s." % (
+            self.agent_name,
+            ", ".join(self.failed_modules.keys()),
+        )
         if verbose_message:
             message += f"\n{formatted_module_loading_errors}"
         return data.LogLine.log(

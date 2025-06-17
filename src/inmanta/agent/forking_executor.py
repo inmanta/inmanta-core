@@ -72,7 +72,6 @@ import os
 import pathlib
 import socket
 import threading
-import traceback
 import typing
 import uuid
 from asyncio import Future, transports
@@ -446,9 +445,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
                 inmanta_module_name = module_source.get_inmanta_module_name()
                 failed[inmanta_module_name][module_source.metadata.name] = ModuleImportException(e, module_source.metadata.name)
 
-
         return failed
-
 
 
 class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
