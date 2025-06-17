@@ -1830,7 +1830,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         main_file: str = "main.cf",
         venv_path: Optional[Union[str, "env.VirtualEnv"]] = None,
         attach_cf_cache: bool = True,
-        # TODO: can this go or keep for backwards compat?
         strict_deps_check: Optional[bool] = None,
     ) -> None:
         """
@@ -1849,8 +1848,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         :param path: The directory where the project is located
         :param venv_path: Path to the directory that will contain the Python virtualenv.
                           This can be an existing or a non-existing directory.
-        :param strict_deps_check: Overrides the strict_deps_check configuration option from the project.yml file if the
-                                  provided value is different from None.
+        :param strict_deps_check: [Deprecated] Overrides the strict_deps_check configuration option from the project.yml file if
+                                    the provided value is different from None.
         """
         if not os.path.exists(path):
             raise ProjectNotFoundException(f"Directory {path} doesn't exist")
@@ -1939,12 +1938,12 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             raise ProjectNotFoundException("Unable to find an inmanta project (project.yml expected)")
 
     @classmethod
-    def get(cls, main_file: str = "main.cf", strict_deps_check: Optional[bool] = None) -> "Project":
+    def get(cls, main_file: str = "main.cf") -> "Project":
         """
         Get the instance of the project
         """
         if cls._project is None:
-            cls._project = Project(cls.get_project_dir(os.curdir), main_file=main_file, strict_deps_check=strict_deps_check)
+            cls._project = Project(cls.get_project_dir(os.curdir), main_file=main_file)
 
         return cls._project
 

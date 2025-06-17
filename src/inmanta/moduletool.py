@@ -91,7 +91,6 @@ class CommandDeprecationWarning(inmanta.warnings.InmantaWarning, FutureWarning):
     pass
 
 
-# TODO: decprecate
 def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
     """
     Add the --no-strict-deps-check and --strict-deps-check options to the given parser.
@@ -102,8 +101,8 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=False,
         help=(
-            "When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
-            "All other version conflicts will result in a warning. This option is mutually exclusive with the "
+            "[Deprecated] When this option is enabled, only version conflicts in the direct dependencies will result in an"
+            " error. All other version conflicts will result in a warning. This option is mutually exclusive with the "
             r"\--strict-deps-check option."
         ),
     )
@@ -113,25 +112,10 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=False,
         help=(
-            "When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
-            r"This option is mutually exclusive with the \--no-strict-deps-check option."
+            "[Deprecated] When this option is enabled, a version conflict in any (transitive) dependency will results in an"
+            r" error. This option is mutually exclusive with the \--no-strict-deps-check option."
         ),
     )
-
-
-def get_strict_deps_check(no_strict_deps_check: bool, strict_deps_check: bool) -> Optional[bool]:
-    """
-    Perform input validation on the --no-strict-deps-check and --strict-deps-check options and
-    return True iff strict dependency checking should be used.
-    """
-    if no_strict_deps_check and strict_deps_check:
-        raise Exception("Options --no-strict-deps-check and --strict-deps-check cannot be set together")
-    if not no_strict_deps_check and not strict_deps_check:
-        # If none of the *strict_deps_check options are provided, use the value set in the project.yml file
-        return None
-    if no_strict_deps_check:
-        return False
-    return strict_deps_check
 
 
 class ModuleLikeTool:
@@ -154,8 +138,8 @@ class ModuleLikeTool:
                 msg = f"{cmd} does not exist."
             raise ShowUsageException(msg)
 
-    def get_project(self, load: bool = False, strict_deps_check: Optional[bool] = None) -> Project:
-        project = Project.get(strict_deps_check=strict_deps_check)
+    def get_project(self, load: bool = False) -> Project:
+        project = Project.get()
         if load:
             project.load()
         return project
@@ -396,8 +380,7 @@ compatible with the dependencies specified by the updated modules.
         """
         Install all modules the project requires.
         """
-        strict = get_strict_deps_check(no_strict_deps_check, strict_deps_check)
-        project: Project = self.get_project(load=False, strict_deps_check=strict)
+        project: Project = self.get_project(load=False)
         project.install_modules()
 
     def update(
@@ -410,10 +393,9 @@ compatible with the dependencies specified by the updated modules.
         """
         Update all modules to the latest version compatible with the given module version constraints.
         """
-        strict = get_strict_deps_check(no_strict_deps_check, strict_deps_check)
         if project is None:
             # rename var to make mypy happy
-            my_project = self.get_project(load=False, strict_deps_check=strict)
+            my_project = self.get_project(load=False)
         else:
             my_project = project
 
