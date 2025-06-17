@@ -33,7 +33,7 @@ from pydantic import ValidationError
 import inmanta
 import inmanta.resources
 from inmanta import util
-from inmanta.types import ResourceIdStr, StrictJson
+from inmanta.types import ResourceIdStr, StrictJson, JsonType
 from inmanta.util import dict_path
 
 ReferenceType = typing.Annotated[str, pydantic.StringConstraints(pattern="^([a-z0-9_]+::)+[A-Z][A-z0-9_-]*$")]
@@ -181,9 +181,9 @@ class MutatedJsonArgument(Argument):
         resource: "inmanta.resources.Resource",
         logger: "handler.LoggerABC",
     ) -> object:
-        start_value = self.value
-        for destination, value in self.references.items():
-            value = value.get_arg_value(resource, logger)
+        start_value: JsonType = self.value
+        for destination, valueref in self.references.items():
+            value = valueref.get_arg_value(resource, logger)
             dict_path_expr = dict_path.to_path(destination)
             dict_path_expr.set_element(start_value, value)
         return start_value
